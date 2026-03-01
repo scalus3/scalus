@@ -216,7 +216,11 @@ object MerklePatriciaForestry:
 
         if branch < 8 then
             if neighborNibble < 8 then
-                combine3(prefix, sparseMerkle8(branch, root, neighborNibble, neighborHash), NullHash8)
+                combine3(
+                  prefix,
+                  sparseMerkle8(branch, root, neighborNibble, neighborHash),
+                  NullHash8
+                )
             else
                 combine3(
                   prefix,

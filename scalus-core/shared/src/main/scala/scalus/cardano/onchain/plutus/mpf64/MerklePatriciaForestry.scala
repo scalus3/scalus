@@ -176,10 +176,8 @@ object MerklePatriciaForestry:
         val n4 = sliceByteString(96, Blake2b256DigestSize, neighbors)
         val n2 = sliceByteString(128, Blake2b256DigestSize, neighbors)
         val n1 = sliceByteString(160, Blake2b256DigestSize, neighbors)
-        if branch <= 31 then
-            combine3(prefix, merkle32(branch, root, n16, n8, n4, n2, n1), n32)
-        else
-            combine3(prefix, n32, merkle32(branch - 32, root, n16, n8, n4, n2, n1))
+        if branch <= 31 then combine3(prefix, merkle32(branch, root, n16, n8, n4, n2, n1), n32)
+        else combine3(prefix, n32, merkle32(branch - 32, root, n16, n8, n4, n2, n1))
 
     private def doFork(
         path: ByteString,

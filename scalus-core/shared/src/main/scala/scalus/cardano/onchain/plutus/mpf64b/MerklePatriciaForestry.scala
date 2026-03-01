@@ -11,8 +11,8 @@ import scalus.uplc.builtin.ByteString
   * single flat ByteString instead of List[ProofStep]. This eliminates per-step CBOR/Data overhead.
   *
   * Binary proof format (all fields fixed-size): Branch: 0x00 | skip[1] | neighbors[192] = 194 bytes
-  * Fork: 0x01 | skip[1] | index[1] | prefixLen[1] | halfLeft[32] | halfRight[32] = 68 bytes
-  * Leaf: 0x02 | skip[1] | key[32] | value[32] = 66 bytes
+  * Fork: 0x01 | skip[1] | index[1] | prefixLen[1] | halfLeft[32] | halfRight[32] = 68 bytes Leaf:
+  * 0x02 | skip[1] | key[32] | value[32] = 66 bytes
   */
 case class MerklePatriciaForestry(root: ByteString)
 
@@ -167,10 +167,8 @@ object MerklePatriciaForestry:
         val n4 = sliceByteString(96, Blake2b256DigestSize, neighbors)
         val n2 = sliceByteString(128, Blake2b256DigestSize, neighbors)
         val n1 = sliceByteString(160, Blake2b256DigestSize, neighbors)
-        if branch <= 31 then
-            combine3(prefix, merkle32(branch, root, n16, n8, n4, n2, n1), n32)
-        else
-            combine3(prefix, n32, merkle32(branch - 32, root, n16, n8, n4, n2, n1))
+        if branch <= 31 then combine3(prefix, merkle32(branch, root, n16, n8, n4, n2, n1), n32)
+        else combine3(prefix, n32, merkle32(branch - 32, root, n16, n8, n4, n2, n1))
 
     private def doFork(
         path: ByteString,
