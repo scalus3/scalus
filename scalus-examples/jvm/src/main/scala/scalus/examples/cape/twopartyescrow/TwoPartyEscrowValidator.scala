@@ -88,7 +88,11 @@ object TwoPartyEscrowValidator {
           referenceScript = Option.None
         )
 
-        val output = findSingleOutput(txInfo.outputs, ownAddress.credential)
+        val output = txInfo.outputs.filter(out =>
+            out.address.credential.toData == ownAddress.credential.toData
+        ) match
+            case List.Cons(head, List.Nil) => head
+            case _                         => fail("Expected exactly one script output")
         require(output.toData == expectedOutput.toData, "Output must match expected deposit output")
     }
 
@@ -146,22 +150,5 @@ object TwoPartyEscrowValidator {
         // No funds should remain in the script
         val scriptOutputs = txInfo.findOwnOutputsByCredential(ownCredential)
         require(scriptOutputs.isEmpty, "No funds should remain in script")
-    }
-
-    def findSingleOutput(
-        outputs: List[TxOut],
-        credential: Credential
-    ): TxOut = {
-        def go(outputs: List[TxOut], found: Option[TxOut]): TxOut = outputs match {
-            case List.Cons(head, tail) if head.address.credential.toData == credential.toData =>
-                found match
-                    case Option.Some(value) =>
-                        fail("Multiple script outputs found, expected only one")
-                    case Option.None => go(tail, Option.Some(head))
-            case List.Cons(head, tail) => go(tail, found)
-            case List.Nil              => found.getOrFail("Not found")
-        }
-
-        go(outputs, Option.None)
     }
 }
