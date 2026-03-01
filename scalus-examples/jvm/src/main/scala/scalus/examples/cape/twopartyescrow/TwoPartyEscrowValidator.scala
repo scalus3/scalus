@@ -4,6 +4,7 @@ import scalus.cardano.onchain
 import scalus.cardano.onchain.plutus
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
+import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.builtin.ByteString.*
@@ -65,8 +66,8 @@ object TwoPartyEscrowValidator {
         val ownAddress = ownInput.address
 
         if action == BigInt(0) then handleDeposit(txInfo, ownAddress)
-        else if action == BigInt(1) then handleAccept(datum, txInfo, ownAddress)
-        else if action == BigInt(2) then handleRefund(datum, txInfo, ownAddress)
+        else if action == BigInt(1) then handleAccept(datum, txInfo, ownAddress.credential)
+        else if action == BigInt(2) then handleRefund(datum, txInfo, ownAddress.credential)
         else fail("Invalid redeemer")
     }
 
@@ -88,9 +89,7 @@ object TwoPartyEscrowValidator {
           referenceScript = Option.None
         )
 
-        val output = txInfo.outputs.filter(out =>
-            out.address.credential.toData == ownAddress.credential.toData
-        ) match
+        val output = findOutputsByCredential(txInfo.outputs, ownAddress.credential) match
             case List.Cons(head, List.Nil) => head
             case _                         => fail("Expected exactly one script output")
         require(output.toData == expectedOutput.toData, "Output must match expected deposit output")
@@ -99,12 +98,11 @@ object TwoPartyEscrowValidator {
     inline def handleAccept(
         datum: Option[Data],
         txInfo: TxInfo,
-        ownAddress: Address
+        ownCredential: Credential
     ): Unit = {
         // Parse datum and verify state is Deposited
         val receivedData = datum.getOrFail("Datum not found")
         val escrowDatum = receivedData.to[EscrowDatum]
-        val ownCredential = ownAddress.credential
         escrowDatum.state match
             case EscrowState.Deposited => ()
             case _                     => fail("Escrow must be in Deposited state")
@@ -112,25 +110,24 @@ object TwoPartyEscrowValidator {
         require(txInfo.isSignedBy(sellerKeyHash), "Seller must sign accept")
 
         // Verify seller receives exactly escrow price
+        val outputs = txInfo.outputs
         val sellerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(sellerKeyHash))
+            findOutputsByCredential(outputs, Credential.PubKeyCredential(sellerKeyHash))
         val sellerAda = Utils.getAdaFromOutputs(sellerOutputs)
-        require(sellerAda === escrowPrice, "Seller must receive exactly escrow price")
+        require(sellerAda == escrowPrice, "Seller must receive exactly escrow price")
 
         // No funds should remain in the script
-        val scriptOutputs = txInfo.findOwnOutputsByCredential(ownCredential)
+        val scriptOutputs = findOutputsByCredential(outputs, ownCredential)
         require(scriptOutputs.isEmpty, "No funds should remain in script")
     }
 
     inline def handleRefund(
         datum: Option[Data],
         txInfo: TxInfo,
-        ownAddress: Address
+        ownCredential: Credential
     ): Unit = {
-        val ownCredential = ownAddress.credential
         // Parse datum and verify state is Deposited
-        val receivedData = datum.getOrFail("Datum not found")
-        val escrowDatum = receivedData.to[EscrowDatum]
+        val escrowDatum = datum.getOrFail("Datum not found").to[EscrowDatum]
         escrowDatum.state match
             case EscrowState.Deposited => ()
             case _                     => fail("Escrow must be in Deposited state")
@@ -141,14 +138,20 @@ object TwoPartyEscrowValidator {
         val deadline = escrowDatum.depositTime + deadlineSeconds
         require(txInfo.validRange.isEntirelyAfter(deadline), "Deadline has not passed")
 
+        val outputs = txInfo.outputs
         // Verify buyer receives exactly escrow price
-        val buyerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(buyerKeyHash))
-        val buyerAda = Utils.getAdaFromOutputs(buyerOutputs)
-        require(buyerAda === escrowPrice, "Buyer must receive exactly escrow price")
+        val cred = Credential.PubKeyCredential(buyerKeyHash).toData
+        val buyerAda = outputs.foldLeft(BigInt(0)): (sum, out) =>
+            if out.address.credential.toData == cred
+            then sum + out.value.lovelaceAmount
+            else sum
+        require(buyerAda == escrowPrice, "Buyer must receive exactly escrow price")
 
         // No funds should remain in the script
-        val scriptOutputs = txInfo.findOwnOutputsByCredential(ownCredential)
+        val scriptOutputs = findOutputsByCredential(outputs, ownCredential)
         require(scriptOutputs.isEmpty, "No funds should remain in script")
     }
+
+    def findOutputsByCredential(outputs: List[TxOut], cred: Credential): List[v2.TxOut] =
+        outputs.filter(_.address.credential.toData == cred.toData)
 }
