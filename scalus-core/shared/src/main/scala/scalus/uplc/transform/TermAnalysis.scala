@@ -53,16 +53,26 @@ object TermAnalysis:
           *   - Variables, constants, lambda abstractions, delays, and unapplied builtins
           *   - Constructors with all-value arguments (`Constr(tag, args)` where each arg is a
           *     value)
-          *   - Forced polymorphic builtins where all type arguments are supplied via Force (e.g.,
-          *     `Force(Builtin(HeadList))`, `Force(Force(Builtin(FstPair)))`)
+          *   - Unsaturated builtin applications: Force/Apply chains over a Builtin that have not
+          *     yet received all required arguments (e.g., `Force(Builtin(HeadList))`,
+          *     `Apply(Builtin(AddInteger), Const(1))`, `Apply(Force(Builtin(MkCons)), Const(d))`)
           */
         def isValueForm: Boolean = term match
             case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
             case Constr(_, args, _)                                    => args.forall(_.isValueForm)
-            case Force(Force(Builtin(bn, _), _), _) =>
-                Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 2
-            case Force(Builtin(bn, _), _) =>
-                Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 1
+            case _: Force | _: Apply =>
+                extractBuiltinInfo(term) match
+                    case Some((bn, numForces, numApplies, appliedArgs)) =>
+                        val ts = Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme
+                        // Not over-forced (would crash at runtime)
+                        numForces <= ts.numTypeVars
+                        // Value args only after all type args are supplied
+                        && (numApplies == 0 || numForces == ts.numTypeVars)
+                        // Not yet saturated (saturated builtins compute, not values)
+                        && numApplies < ts.arity
+                        // All applied arguments must themselves be values
+                        && appliedArgs.forall(_.isValueForm)
+                    case None => false
             case _ => false
 
         /** Returns the set of free variable names in a term.

@@ -485,9 +485,40 @@ class TermAnalysisTest extends AnyFunSuite:
         assert(!Force(Force(Builtin(HeadList))).isValueForm)
     }
 
+    test("isValueForm: unsaturated builtin application (no type args needed)") {
+        // AddInteger needs 0 type args + 2 value args; 1 applied → unsaturated
+        assert((AddInteger $ 1).isValueForm)
+        assert((MultiplyInteger $ 42).isValueForm)
+        assert((SubtractInteger $ vr"x").isValueForm)
+    }
+
+    test("isValueForm: unsaturated builtin application (type args + partial value args)") {
+        // MkCons needs 1 type arg + 2 value args; forced + 1 applied → unsaturated
+        assert((Force(Builtin(MkCons)) $ 42).isValueForm)
+        // IfThenElse needs 1 type arg + 3 value args
+        assert((Force(Builtin(IfThenElse)) $ true).isValueForm)
+        assert((Force(Builtin(IfThenElse)) $ true $ 1).isValueForm)
+    }
+
+    test("isValueForm: saturated builtin is not a value (it computes)") {
+        assert(!(AddInteger $ 1 $ 2).isValueForm)
+        assert(!(MultiplyInteger $ 3 $ 4).isValueForm)
+        assert(!(EqualsInteger $ 1 $ 1).isValueForm)
+    }
+
+    test("isValueForm: unsaturated builtin with non-value arg is not a value") {
+        // The arg (AddInteger $ 1 $ 2) is saturated — not a value form itself
+        assert(!(SubtractInteger $ (AddInteger $ 1 $ 2)).isValueForm)
+        assert(!(Force(Builtin(MkCons)) $ Error()).isValueForm)
+    }
+
+    test("isValueForm: value arg applied before type arg is not a value") {
+        // HeadList needs 1 type arg, applying a value arg without Force first is ill-formed
+        assert(!(Builtin(HeadList) $ vr"x").isValueForm)
+    }
+
     test("isValueForm: non-value forms") {
         assert(!Error().isValueForm)
-        assert(!(AddInteger $ 1 $ 2).isValueForm)
         assert(!Force(vr"x").isValueForm)
         assert(!Case(vr"x", List(vr"y")).isValueForm)
     }
