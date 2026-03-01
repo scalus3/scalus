@@ -74,7 +74,7 @@ object TwoPartyEscrowValidator {
         txInfo: TxInfo,
         ownAddress: Address
     ): Unit = {
-        require(txInfo.isSignedBy(buyerKeyHash), "Buyer must sign deposit")
+        requireSignedBy(txInfo.signatories, buyerKeyHash, "Buyer must sign deposit")
 
         val expectedDatum = EscrowDatum(
           state = EscrowState.Deposited,
@@ -106,7 +106,7 @@ object TwoPartyEscrowValidator {
             case EscrowState.Deposited => ()
             case _                     => fail("Escrow must be in Deposited state")
 
-        require(txInfo.isSignedBy(sellerKeyHash), "Seller must sign accept")
+        requireSignedBy(txInfo.signatories, sellerKeyHash, "Seller must sign accept")
 
         // Verify seller receives exactly escrow price
         val outputs = txInfo.outputs
@@ -133,7 +133,7 @@ object TwoPartyEscrowValidator {
             case EscrowState.Deposited => ()
             case _                     => fail("Escrow must be in Deposited state")
 
-        require(txInfo.isSignedBy(buyerKeyHash), "Buyer must sign refund")
+        requireSignedBy(txInfo.signatories, buyerKeyHash, "Buyer must sign refund")
 
         // Time check: valid range must be entirely after deadline
         val deadline = escrowDatum.depositTime + deadlineSeconds
@@ -164,4 +164,16 @@ object TwoPartyEscrowValidator {
 
     def findOutputsByCredential(outputs: List[TxOut], cred: Credential): List[v2.TxOut] =
         outputs.filter(_.address.credential.toData == cred.toData)
+
+    def requireSignedBy(
+        signatories: List[PubKeyHash],
+        party: PubKeyHash,
+        message: String
+    ): Unit = {
+        def go(signatories: List[PubKeyHash]): Unit = signatories match {
+            case List.Nil              => fail(message)
+            case List.Cons(head, tail) => if head.toData == party.toData then () else go(tail)
+        }
+        go(signatories)
+    }
 }
