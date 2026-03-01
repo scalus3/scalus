@@ -13,7 +13,7 @@ Scalus provides immutable collection types for organizing and manipulating data 
 Immutable singly-linked lists are the primary collection type in Plutus. Lists are recursive data structures ideal for sequential processing.
 
 ```scala
-import scalus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.List
 
 // Creating lists
 val empty = List.empty[BigInt]
@@ -171,7 +171,7 @@ val result = value.getOrFail("Key not found")
 `AssocMap` is an association list - a list of key-value pairs. It's an ordered map with O(n) lookup.
 
 ```scala
-import scalus.prelude.AssocMap
+import scalus.cardano.onchain.plutus.prelude.AssocMap
 
 // Creating association maps
 val empty = AssocMap.empty[ByteString, BigInt]
@@ -207,8 +207,8 @@ val filtered = map.filter { case (k, v) => v > 150 }
 Plutus `Data.Map` is the builtin map type for on-chain data, represented as a list of `(Data, Data)` pairs.
 
 ```scala
-import scalus.builtin.Data
-import scalus.builtin.Builtins
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Builtins
 
 // Creating maps
 val pairs = List(

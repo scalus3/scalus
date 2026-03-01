@@ -15,7 +15,7 @@ Define custom data types using Scala's case classes and enums, which compile to 
 Case classes define product types - structures with named fields.
 
 ```scala
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.ByteString
 
 // Simple case class
 case class Account(owner: ByteString, balance: BigInt)
@@ -76,7 +76,7 @@ enum MyList:
 ## Creating and Using Custom Types
 
 ```scala
-import scalus.prelude.{*, given}
+import scalus.cardano.onchain.plutus.prelude.{*, given}
 
 compile {
   // Create instances using constructors
@@ -107,7 +107,7 @@ Scalus automatically generates `ToData` and `FromData` instances for your custom
 ### Automatic Derivation
 
 ```scala
-import scalus.builtin.{Data, ToData, FromData}
+import scalus.uplc.builtin.{Data, ToData, FromData}
 
 case class Account(owner: ByteString, balance: BigInt)
 

@@ -80,8 +80,8 @@ val equals = BigInt(42) == BigInt(42)
 ByteStrings are immutable byte arrays, commonly used for hashes, cryptographic keys, and binary data.
 
 ```scala
-import scalus.builtin.ByteString
-import scalus.builtin.ByteString.*
+import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.ByteString.*
 
 // Creating ByteStrings
 val empty = ByteString.empty
@@ -129,8 +129,8 @@ val eq = "test" == "test"
 Think of `Data` as a universal serialization format similar to JSON, but optimized for blockchain use.
 
 ```scala
-import scalus.builtin.Data
-import scalus.builtin.Builtins
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Builtins
 
 // Creating Data values
 val intData = Builtins.iData(42)
@@ -155,7 +155,7 @@ val dataEq = intData == Builtins.iData(42)
 Scalus automatically generates `ToData` and `FromData` instances for case classes and enums, enabling seamless conversion:
 
 ```scala
-import scalus.builtin.Data.*
+import scalus.uplc.builtin.Data.*
 
 case class Account(owner: ByteString, balance: BigInt)
 
@@ -192,10 +192,10 @@ val sum = numbers.foldLeft(0)(_ + _)
 Pairs (2-tuples) hold exactly two values of potentially different types.
 
 ```scala
-import scalus.builtin.Pair
+import scalus.uplc.builtin.BuiltinPair
 
 // Creating pairs
-val pair = Pair(BigInt(42), ByteString.fromHex("deadbeef"))
+val pair = BuiltinPair(BigInt(42), ByteString.fromHex("deadbeef"))
 val tuple: (Boolean, Unit) = (true, ())
 
 // Accessing elements
@@ -209,11 +209,12 @@ val (a, b) = tuple  // destructuring
 Cryptographic elliptic curve types for advanced cryptography and zero-knowledge proofs.
 
 ```scala
-import scalus.builtin.*
+import scalus.uplc.builtin.Builtins
+import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
-val g1Point: BLS12_381_G1_Element = ??? // from bytestring
-val g2Point: BLS12_381_G2_Element = ??? // from bytestring
-val mlResult: BLS12_381_MlResult = Builtins.bls12_381_millerLoop(g1Point, g2Point)
+val g1Point: G1Element = ??? // from bytestring
+val g2Point: G2Element = ??? // from bytestring
+val mlResult: MLResult = Builtins.bls12_381_millerLoop(g1Point, g2Point)
 ```
 
 ## Type Safety

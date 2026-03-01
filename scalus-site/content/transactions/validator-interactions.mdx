@@ -24,7 +24,7 @@ This pattern is useful for atomic swaps, payment channels, and escrow services.
 One of TxBuilder's key advantages is code reuse. The same data types used in your validator can be used when building transactions:
 
 ```scala copy
-import scalus.builtin.{ByteString, ToData}
+import scalus.uplc.builtin.{ByteString, ToData}
 
 // Shared data types used in both validator and transaction building
 case class Config(

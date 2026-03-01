@@ -43,7 +43,7 @@ TxBuilder(env)
 When spending UTxOs locked by a validator script, you must provide a redeemer and the script itself:
 
 ```scala copy
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 
 val scriptUtxo: Utxo = // ... UTxO at script address
 val redeemer = MyRedeemer(...)  // Your redeemer type

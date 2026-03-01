@@ -279,10 +279,10 @@ object Bad extends Validator:
 @Compile
 object Good extends Validator:
   def spend(...) =
-    val data = scalus.prelude.List(1, 2, 3)  // ✅ Correct!
+    val data = scalus.cardano.onchain.plutus.prelude.List(1, 2, 3)  // ✅ Correct!
 ```
 
-Use `scalus.prelude.List`, not `scala.collection.List`.
+Use `scalus.cardano.onchain.plutus.prelude.List`, not `scala.collection.List`.
 </Callout>
 
 <Callout type="warning">

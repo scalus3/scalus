@@ -23,10 +23,10 @@ The result is a `PlutusV3[A]` (or `PlutusV1[A]`, `PlutusV2[A]`) object that wrap
 
 ```scala
 import scalus.*
-import scalus.builtin.{ByteString, Data}
-import scalus.builtin.Data.{FromData, ToData}
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 // Define the contract state (datum)
 case class ContractDatum(
@@ -51,7 +51,7 @@ object Action
 ### Step 2: Implement the Validator
 
 ```scala
-import scalus.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.Builtins.sha3_256
 
 @Compile
 object HtlcValidator extends Validator:

@@ -120,7 +120,7 @@ object DataProcessor:
 Simply import the module object and use its definitions:
 
 ```scala
-import scalus.prelude.{*, given}
+import scalus.cardano.onchain.plutus.prelude.{*, given}
 
 @Compile
 object Validation:
@@ -436,7 +436,7 @@ Modules can be packaged and distributed as JAR files for reuse across projects.
 package mylib
 
 import scalus.Compile
-import scalus.builtin.{Builtins, ByteString}
+import scalus.uplc.builtin.{Builtins, ByteString}
 
 @Compile
 object Validation:
@@ -477,7 +477,7 @@ libraryDependencies += "org.scalus" %% "scalus" % "0.8.0"
 libraryDependencies += "com.example" %% "mylib" % "1.0.0"
 
 // In your validator code
-import scalus.prelude.{*, given}
+import scalus.cardano.onchain.plutus.prelude.{*, given}
 import mylib.{Validation, TokenUtils}
 
 val validator = compile {
@@ -621,7 +621,7 @@ object DataProcessor:
 ```scala
 @Compile
 object Validation:
-  import scalus.builtin.Builtins
+  import scalus.uplc.builtin.Builtins
 
   inline val minAmount = BigInt(1000000)
   inline val maxAmount = BigInt(1000000000)

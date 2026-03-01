@@ -8,7 +8,7 @@ import { Callout } from 'nextra/components'
 
 # Builtin Functions
 
-Cardano Plutus provides built-in functions optimized for blockchain execution. Scalus exposes these functions through the [`Builtins`](https://scalus.org/api/scalus/builtin/Builtins$.html) object with familiar Scala syntax.
+Cardano Plutus provides built-in functions optimized for blockchain execution. Scalus exposes these functions through the [`Builtins`](https://scalus.org/api/scalus/uplc/builtin/Builtins$.html) object with familiar Scala syntax.
 
 These builtin functions are automatically recognized by the Scalus compiler and compiled to their corresponding Plutus operations for efficient on-chain execution.
 
@@ -25,7 +25,7 @@ Builtin functions are available in different Plutus versions:
 Arithmetic and comparison operations on arbitrary-precision integers (`BigInt`).
 
 ```scala
-import scalus.builtin.Builtins
+import scalus.uplc.builtin.Builtins
 
 // Arithmetic
 val sum = Builtins.addInteger(BigInt(10), BigInt(20))
@@ -57,7 +57,7 @@ Operations on immutable byte arrays, organized by category.
 ### Constructing
 
 ```scala
-import scalus.builtin.{Builtins, ByteString}
+import scalus.uplc.builtin.{Builtins, ByteString}
 
 // Append two ByteStrings
 val concatenated = Builtins.appendByteString(
@@ -198,7 +198,7 @@ val decoded = Builtins.decodeUtf8(encoded)
 Operations on immutable linked lists (`BuiltinList`).
 
 ```scala
-import scalus.builtin.{Builtins, BuiltinList}
+import scalus.uplc.builtin.{Builtins, BuiltinList}
 
 // Choose based on empty/non-empty
 val result = Builtins.chooseList(BuiltinList(1, 2, 3), "empty", "not empty")  // "not empty"
@@ -222,7 +222,7 @@ O(1) indexed access to elements. See [CIP-156](https://github.com/cardano-founda
 Arrays are created from lists and provide efficient random access, unlike linked lists which require O(n) traversal.
 
 ```scala
-import scalus.builtin.{Builtins, BuiltinList, BuiltinArray}
+import scalus.uplc.builtin.{Builtins, BuiltinList, BuiltinArray}
 
 // Convert list to array
 val list = BuiltinList(Builtins.iData(BigInt(10)), Builtins.iData(BigInt(20)), Builtins.iData(BigInt(30)))
@@ -245,7 +245,7 @@ val selected = Builtins.multiIndexArray(indices, array)  // [iData(10), iData(30
 Operations on pairs (2-tuples).
 
 ```scala
-import scalus.builtin.{Builtins, BuiltinPair}
+import scalus.uplc.builtin.{Builtins, BuiltinPair}
 
 val pair = BuiltinPair(BigInt(42), ByteString.fromHex("deadbeef"))
 
@@ -261,7 +261,7 @@ Operations for Plutus's universal `Data` type, used for serialization and intero
 ### Creating Data
 
 ```scala
-import scalus.builtin.{Builtins, Data}
+import scalus.uplc.builtin.{Builtins, Data}
 
 // Create Data from primitives
 val intData = Builtins.iData(BigInt(42))
@@ -358,11 +358,10 @@ For `verifyEcdsaSecp256k1Signature`, the message must be pre-hashed (32 bytes). 
 
 Advanced cryptographic operations for zero-knowledge proofs and pairing-based cryptography. See [CIP-381](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381) for specification.
 
-Scalus provides convenient wrappers in `scalus.prelude.crypto.bls12_381`:
+Scalus provides convenient wrappers in `scalus.cardano.onchain.plutus.prelude.crypto.bls12_381`:
 
 ```scala
-import scalus.prelude.crypto.bls12_381.{G1, G2, Scalar}
-import scalus.builtin.{BLS12_381_G1_Element, BLS12_381_G2_Element}
+import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.{G1, G2, Scalar}
 
 // G1 operations (48-byte compressed points)
 val g1Zero = G1.zero
@@ -386,7 +385,7 @@ val g2FromHash = G2.hashToGroup(message, dst)
 ### Low-level Builtin Functions
 
 ```scala
-import scalus.builtin.Builtins
+import scalus.uplc.builtin.Builtins
 
 // G1 Group operations
 val g1Sum = Builtins.bls12_381_G1_add(g1Point1, g1Point2)
@@ -462,8 +461,8 @@ Using bitwise operations for space-efficient on-chain state:
 
 ```scala
 import scalus.*
-import scalus.builtin.Builtins.*
-import scalus.builtin.ByteString
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString
 
 @Compile
 object BitFlags {
@@ -504,7 +503,7 @@ object BitFlags {
 - Most builtins have convenient operator syntax (e.g., `+`, `==`, `++`)
 - Builtin functions compile directly to Plutus opcodes for maximum efficiency
 - Check Plutus version compatibility when using newer builtins
-- See the [Builtins API documentation](https://scalus.org/api/scalus/builtin/Builtins$.html) for complete details
+- See the [Builtins API documentation](https://scalus.org/api/scalus/uplc/builtin/Builtins$.html) for complete details
 - Refer to the [Plutus specification](https://plutus.cardano.intersectmbo.org/resources/plutus-core-spec.pdf) for formal semantics
 
 ## Related CIPs

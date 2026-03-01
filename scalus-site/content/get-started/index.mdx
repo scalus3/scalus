@@ -112,9 +112,9 @@ This guide will help you set up your Scalus development environment and create y
 
     ```scala filename="HelloCardano.scala" copy showLineNumbers
     import scalus.*
-    import scalus.builtin.Data
-    import scalus.ledger.api.v3.{PubKeyHash, TxInfo, TxOutRef}
-    import scalus.prelude.*
+    import scalus.uplc.builtin.Data
+    import scalus.cardano.onchain.plutus.v3.{PubKeyHash, TxInfo, TxOutRef}
+    import scalus.cardano.onchain.plutus.prelude.*
 
     /** This validator demonstrates two key validation checks:
         * 1. It verifies that the transaction is signed by the owner's public key hash (stored in the datum)

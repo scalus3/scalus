@@ -66,11 +66,11 @@ Now let's implement. In Scalus, we define types with automatic serialization:
 
 ```scala
 import scalus.*
-import scalus.builtin.Builtins.sha3_256
-import scalus.builtin.{ByteString, Data}
-import scalus.builtin.Data.{FromData, ToData}
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
+import scalus.uplc.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 // Datum — stored when locking funds
 case class Config(
@@ -197,7 +197,7 @@ The `ScalusTest` trait provides helpers for creating script contexts and asserti
 
 ```scala
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.Builtins.sha3_256
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
@@ -344,11 +344,11 @@ Learn more: [Building Transactions](/docs/transactions/building-first-transactio
 ### The Transaction Builder
 
 ```scala
-import scalus.builtin.Data
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.ledger.api.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.uplc.PlutusV3
 import java.time.Instant
 

@@ -39,7 +39,7 @@ Two equivalent ways to convert:
 val myDatum = datumData.to[MyDatumType]
 
 // Using fromData function
-import scalus.builtin.Data.fromData
+import scalus.uplc.builtin.Data.fromData
 val myDatum = fromData[MyDatumType](datumData)
 ```
 
@@ -51,7 +51,7 @@ One caveat - you must always supply a companion object with @Compile annotation 
 This is because Scalus needs to compile the companion object to include the `FromData` instance in the UPLC script.
 
 ```scala mdoc:compile-only
-import scalus.builtin.*, Builtins.*, Data.*
+import scalus.uplc.builtin.*, Builtins.*, Data.*
 
 case class Account(hash: ByteString, balance: BigInt) derives FromData, ToData
 
@@ -70,7 +70,7 @@ object State
 Here's an example of converting standard and user-defined types to and from `Data`.
 
 ```scala mdoc:compile-only
-import scalus.builtin.*, Builtins.*, Data.*
+import scalus.uplc.builtin.*, Builtins.*, Data.*
 
 case class Account(hash: ByteString, balance: BigInt)
 

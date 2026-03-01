@@ -23,7 +23,7 @@ A minting policy is a Plutus script that controls when tokens can be created or 
 To mint tokens, use the `mint()` method with your minting policy script:
 
 ```scala copy
-import scalus.builtin.ByteString.hex
+import scalus.uplc.builtin.ByteString.hex
 import scalus.cardano.ledger.{AssetName, PolicyId}
 
 val mintingPolicy: Script.PlutusV3 = // ... your minting policy script

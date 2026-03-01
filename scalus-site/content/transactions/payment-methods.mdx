@@ -27,7 +27,7 @@ Send native tokens along with ADA:
 
 ```scala copy
 import scalus.cardano.ledger.{AssetName, PolicyId, MultiAsset, Value}
-import scalus.builtin.ByteString.hex
+import scalus.uplc.builtin.ByteString.hex
 import scala.collection.immutable.SortedMap
 
 val policyId = PolicyId(hex"...")
@@ -55,8 +55,8 @@ TxBuilder(env)
 Send funds to a script address with an inline datum:
 
 ```scala copy
-import scalus.builtin.Data
-import scalus.builtin.ToData
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.ToData
 
 case class MyDatum(owner: PubKeyHash, amount: Long) derives ToData
 
@@ -94,7 +94,7 @@ Use a precomputed datum hash:
 
 ```scala copy
 import scalus.cardano.ledger.DataHash
-import scalus.builtin.Builtins.{blake2b_256, serialiseData}
+import scalus.uplc.builtin.Builtins.{blake2b_256, serialiseData}
 
 val datum = MyDatum(ownerPubKeyHash, 1000)
 val datumHash = DataHash.fromByteString(

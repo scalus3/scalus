@@ -15,7 +15,7 @@ Scalus provides control flow constructs for directing program execution in smart
 The `if-then-else` expression is the primary conditional construct.
 
 ```scala
-import scalus.prelude.{*, given}
+import scalus.cardano.onchain.plutus.prelude.{*, given}
 
 compile {
   val balance = BigInt(1000)
@@ -162,7 +162,7 @@ compile {
 Guards add conditions to patterns using `if`:
 
 ```scala
-import scalus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 compile {
   def categorize(opt: Option[BigInt]): String =

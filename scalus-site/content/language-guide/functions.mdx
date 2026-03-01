@@ -13,7 +13,7 @@ Functions are first-class values in Scalus, enabling functional programming patt
 ### Basic Function Definition
 
 ```scala
-import scalus.prelude.{*, given}
+import scalus.cardano.onchain.plutus.prelude.{*, given}
 
 compile {
   // Simple function
@@ -218,7 +218,7 @@ def sum(numbers: BigInt*): BigInt =
   numbers.list.foldLeft(BigInt(0))(_ + _)
 ```
 
-You must convert a sequence to a `List` using `scalus.prelude.list` extension method
+You must convert a sequence to a `List` using the `.list` extension method
 before performing list operations.
 
 ## Function Overloading
