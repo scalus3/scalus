@@ -2,6 +2,7 @@ package scalus.examples.cape.twopartyescrow
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
+import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption}
@@ -48,8 +49,24 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     )
 
     test(s"Script size: ${compiled.script.script.size} bytes") {
-        assert(compiled.script.script.size > 0)
+        assert(compiled.script.script.size == 1910)
+        println(compiled.sir.showHighlighted)
+        println(compiled.program.showHighlighted)
     }
+
+    // Expected execution budgets for success tests
+    private val expectedBudgets: Map[String, ExUnits] = Map(
+      "deposit_successful" -> ExUnits(memory = 170882, steps = 49865582),
+      "accept_successful" -> ExUnits(memory = 167800, steps = 48180547),
+      "accept_with_multiple_inputs" -> ExUnits(memory = 177680, steps = 51194443),
+      "accept_with_datum_attached" -> ExUnits(memory = 167800, steps = 48180547),
+      "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 264893, steps = 74992507),
+      "refund_successful" -> ExUnits(memory = 182567, steps = 53659966),
+      "refund_after_exact_deadline" -> ExUnits(memory = 182567, steps = 53659966),
+      "refund_with_multiple_inputs" -> ExUnits(memory = 192447, steps = 56673862),
+      "refund_with_datum_attached" -> ExUnits(memory = 182567, steps = 53659966),
+      "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 279660, steps = 80471926)
+    )
 
     // Generate test cases from the JSON
     private val tests: Seq[ujson.Value] = testsJson("tests").arr.toSeq
@@ -85,7 +102,14 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
                 case "value" =>
                     result match {
-                        case Result.Success(term, budget, _, logs) => ()
+                        case Result.Success(term, budget, _, logs) =>
+                            val actual = ExUnits(memory = budget.memory, steps = budget.steps)
+                            expectedBudgets.get(testName).foreach { expected =>
+                                assert(
+                                  actual == expected,
+                                  s"$testName: expected $expected but got $actual"
+                                )
+                            }
                         case Result.Failure(ex, budget, _, logs) =>
                             fail(
                               s"$testName: Expected success but got error: $ex\nLogs: ${logs.mkString(", ")}"
