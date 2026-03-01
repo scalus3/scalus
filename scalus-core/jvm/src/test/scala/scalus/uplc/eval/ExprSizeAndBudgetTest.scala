@@ -8,6 +8,7 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
 import scalus.cardano.ledger.CardanoInfo
 import scalus.cardano.ledger.ExUnits.given
+import scalus.cardano.onchain.plutus
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.serialization.flat.Flat
@@ -57,26 +58,23 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
       "new scalus.cardano.onchain.plutus.prelude.List.Cons(true, scalus.cardano.onchain.plutus.prelude.List.Nil) size is 63"
     ) {
         val uplc = compile(
-          new scalus.cardano.onchain.plutus.prelude.List.Cons(
-            true,
-            scalus.cardano.onchain.plutus.prelude.List.Nil
-          )
+          plutus.prelude.List.Cons(true, plutus.prelude.List.Nil)
         ).toUplcOptimized()
-        assert(encoder.bitSize(uplc) == 83)
+        assert(encoder.bitSize(uplc) == 63)
     }
 
     test(
       "scalus.cardano.onchain.plutus.prelude.List.cons(true, scalus.cardano.onchain.plutus.prelude.List.Nil) size is 63"
     ) {
         val uplc =
-            compile(scalus.cardano.onchain.plutus.prelude.List.single(true)).toUplcOptimized()
-        assert(encoder.bitSize(uplc) == 83)
+            compile(plutus.prelude.List.single(true)).toUplcOptimized()
+        assert(encoder.bitSize(uplc) == 63)
     }
 
     test("scalus.cardano.onchain.plutus.prelude.List.single(true) size is 63") {
         val uplc =
-            compile(scalus.cardano.onchain.plutus.prelude.List.single(true)).toUplcOptimized()
-        assert(encoder.bitSize(uplc) == 83)
+            compile(plutus.prelude.List.single(true)).toUplcOptimized()
+        assert(encoder.bitSize(uplc) == 63)
     }
 
     test("Recursion cost") {

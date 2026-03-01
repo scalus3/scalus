@@ -56,45 +56,107 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
 
     def logs: Seq[String] = logger.getLogs.toSeq
 
-    /** Counts the number of free occurrences of a variable in a term.
+    /** Classifies how a variable occurs in a term body, distinguishing direct (always-evaluated)
+      * positions from guarded (deferred/conditional) positions.
       *
-      * This is used to determine if inlining a value is safe:
-      *   - 0 occurrences: dead code, can be eliminated if argument is pure
-      *   - 1 occurrence: safe to inline constants; other terms go through cheapness check
-      *   - Multiple occurrences: only inline if the value is small/cheap
-      *
-      * The count stops when the variable is shadowed by a lambda binding, as those occurrences
-      * refer to a different binding.
+      *   - '''Zero''': Variable does not occur — dead code, can be eliminated if argument is pure
+      *   - '''OnceDirect''': Occurs exactly once in a direct position (always evaluated, same
+      *     timing as the Apply site) — safe to inline any term
+      *   - '''OnceGuarded''': Occurs exactly once under a Delay, Case branch, or LamAbs body — safe
+      *     to inline values only (no side effects to defer/suppress)
+      *   - '''Many''': Multiple occurrences — only inline if the value is small/cheap
       */
-    private def countOccurrences(term: Term, name: String): Int = term match
-        case Var(NamedDeBruijn(n, _), _) => if n == name then 1 else 0
-        case LamAbs(n, body, _) =>
-            if n == name then 0 // Stop counting if shadowed
-            else countOccurrences(body, name)
-        case Apply(f, arg, _)   => countOccurrences(f, name) + countOccurrences(arg, name)
-        case Force(t, _)        => countOccurrences(t, name)
-        case Delay(t, _)        => countOccurrences(t, name)
-        case Constr(_, args, _) => args.map(countOccurrences(_, name)).sum
-        case Case(scrutinee, cases, _) =>
-            countOccurrences(scrutinee, name) + cases.map(countOccurrences(_, name)).sum
-        case _: Const | _: Builtin | _: Error => 0
+    private enum OccurrenceInfo:
+        case Zero
+        case OnceDirect
+        case OnceGuarded
+        case Many
 
-    /** Determines if a term is safe to inline based on its type and occurrence count.
+    private object OccurrenceInfo:
+        def combine(a: OccurrenceInfo, b: OccurrenceInfo): OccurrenceInfo =
+            (a, b) match
+                case (Zero, x) => x
+                case (x, Zero) => x
+                case _         => Many
+
+        def guard(info: OccurrenceInfo): OccurrenceInfo =
+            info match
+                case Zero => Zero
+                case _    => OnceGuarded
+
+    /** Analyzes how a variable occurs in a term, tracking whether occurrences are in direct
+      * (always-evaluated) or guarded (deferred/conditional) positions.
       *
-      *   - '''Variables''': Always safe to duplicate (no cost)
-      *   - '''Constants''': Always safe with single occurrence; safe to duplicate if ≤64 bits
-      *   - '''Builtins''': Always safe to duplicate (just references)
-      *   - '''Everything else''': Not safe to inline (may change semantics under Delay/Case, or
-      *     cause code size blowup under LamAbs)
+      * @param term
+      *   The term to analyze
+      * @param name
+      *   The variable name to look for
+      * @param guarded
+      *   Whether the current position is guarded (under Delay, Case branch, or LamAbs body)
+      * @return
+      *   The occurrence classification for the variable
       */
-    private def shouldInline(inlining: Term, occurrences: Int): Boolean =
-        inlining match
-            case Var(_, _) => true
-            case Const(c, _) =>
-                if occurrences == 1 then true
-                else flatConstant.bitSize(c) <= 64
-            case Builtin(_, _) => true
-            case _             => false
+    private def analyzeOccurrence(
+        term: Term,
+        name: String,
+        guarded: Boolean = false
+    ): OccurrenceInfo =
+        import OccurrenceInfo.*
+        term match
+            case Var(NamedDeBruijn(n, _), _) =>
+                if n == name then if guarded then OnceGuarded else OnceDirect else Zero
+            case LamAbs(n, body, _) =>
+                if n == name then Zero // shadowed
+                else analyzeOccurrence(body, name, guarded = true)
+            case Apply(f, arg, _) =>
+                val fInfo = analyzeOccurrence(f, name, guarded)
+                if fInfo == Many then Many
+                else combine(fInfo, analyzeOccurrence(arg, name, guarded))
+            case Force(t, _) => analyzeOccurrence(t, name, guarded)
+            case Delay(t, _) => analyzeOccurrence(t, name, guarded = true)
+            case Constr(_, args, _) =>
+                args.foldLeft(Zero: OccurrenceInfo) { (acc, a) =>
+                    if acc == Many then Many
+                    else combine(acc, analyzeOccurrence(a, name, guarded))
+                }
+            case Case(scrutinee, cases, _) =>
+                val sInfo = analyzeOccurrence(scrutinee, name, guarded)
+                if sInfo == Many then Many
+                else
+                    combine(
+                      sInfo,
+                      cases.foldLeft(Zero: OccurrenceInfo) { (acc, c) =>
+                          if acc == Many then Many
+                          else combine(acc, analyzeOccurrence(c, name, guarded = true))
+                      }
+                    )
+            case _: Const | _: Builtin | _: Error => Zero
+
+    /** Checks whether a term is a value (no computation needed to evaluate it). */
+    private def isValue(term: Term): Boolean = term match
+        case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
+        case Constr(_, Nil, _)                                     => true
+        case _                                                     => false
+
+    /** Determines if a term is safe to inline based on its type and occurrence info.
+      *
+      *   - '''OnceDirect''': Always safe — evaluation timing is unchanged
+      *   - '''OnceGuarded''': Safe only for values (no side effects to defer/suppress)
+      *   - '''Many''': Only safe for variables, small constants (≤64 bits), and builtins
+      *   - '''Zero''': Not inlined (dead code handled separately)
+      */
+    private def shouldInline(inlining: Term, occInfo: OccurrenceInfo): Boolean =
+        import OccurrenceInfo.*
+        occInfo match
+            case OnceDirect  => true
+            case OnceGuarded => isValue(inlining)
+            case Many =>
+                inlining match
+                    case Var(_, _)     => true
+                    case Const(c, _)   => flatConstant.bitSize(c) <= 64
+                    case Builtin(_, _) => true
+                    case _             => false
+            case Zero => false
 
     /** Performs capture-avoiding substitution `[x → s]t`.
       *
@@ -214,11 +276,11 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                     logger.log(s"Inlining identity function: $name")
                     inlinedArg
                 case LamAbs(name, body, _) =>
-                    val occurrences = countOccurrences(body, name)
-                    if occurrences == 0 && inlinedArg.isPure then
+                    val occInfo = analyzeOccurrence(body, name)
+                    if occInfo == OccurrenceInfo.Zero && inlinedArg.isPure then
                         logger.log(s"Eliminating dead code: $name")
                         go(body)
-                    else if shouldInline(inlinedArg, occurrences) then
+                    else if shouldInline(inlinedArg, occInfo) then
                         logger.log(s"Inlining $name with ${inlinedArg.show}")
                         go(substitute(body, name, inlinedArg))
                     else tryPartialEval(Apply(inlinedF, inlinedArg, ann))

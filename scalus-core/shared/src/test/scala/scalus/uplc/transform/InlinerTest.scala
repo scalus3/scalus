@@ -292,21 +292,64 @@ class InlinerTest extends AnyFunSuite {
     // shouldInline: single-occurrence non-trivial terms
     // ========================================================================
 
-    test("should not inline single-occurrence Delay argument") {
-        // Delay is not a value (Var/Const/Builtin), so shouldInline returns false.
-        // Inlining non-values under Delay/Case branches could change semantics
-        // (deferring or eliminating argument errors). tryPartialEval also cannot
-        // fold this because addInteger(Delay(42), 1) would error.
+    test("should inline single-occurrence Delay argument in direct position") {
+        // x occurs once in direct position (OnceDirect) → safe to inline any term.
+        // Delay(42) is the argument; after substitution: addInteger(Delay(42), 1)
         val term = λ("x")(AddInteger $ vr"x" $ 1) $ Delay(42.asTerm)
+        val expected = AddInteger $ Delay(42.asTerm) $ 1.asTerm
+        assert(Inliner(term) == expected)
+    }
+
+    test("should inline single-occurrence LamAbs argument in direct position") {
+        // (λf. f 1) (λy. addInteger y 2)
+        // f occurs once in direct position (OnceDirect) → inline.
+        // After substitution: (λy. addInteger y 2) 1 → folds to 3.
+        val term = λ("f")(vr"f" $ 1) $ λ("y")(AddInteger $ vr"y" $ 2)
+        assert(Inliner(term) == 3.asTerm)
+    }
+
+    // ========================================================================
+    // Guarded occurrence tests
+    // ========================================================================
+
+    test("should not inline non-value in guarded (Delay) position") {
+        // λx. Delay(x) applied to a non-value (addInteger 1 2 → 3, but consider Error)
+        // x occurs once under Delay → OnceGuarded. Error is not a value → not inlined.
+        val term = λ("x")(Delay(vr"x")) $ Error()
         assert(Inliner(term) == term)
     }
 
-    test("should partially evaluate single-occurrence LamAbs argument") {
-        // (λf. f 1) (λy. addInteger y 2)
-        // LamAbs is not inlined (not a Var/Const/Builtin), but the whole term is closed,
-        // so tryPartialEval folds it to 3 via CEK evaluation.
-        val term = λ("f")(vr"f" $ 1) $ λ("y")(AddInteger $ vr"y" $ 2)
-        assert(Inliner(term) == 3.asTerm)
+    test("should inline value in guarded (Delay) position") {
+        // λx. Delay(x) applied to Delay(42) — a value.
+        // x occurs once under Delay → OnceGuarded. Delay(42) is a value → inlined.
+        val term = λ("x")(Delay(vr"x")) $ Delay(42.asTerm)
+        val expected = Delay(Delay(42.asTerm))
+        assert(Inliner(term) == expected)
+    }
+
+    test("should not inline non-value in guarded (Case branch) position") {
+        // x occurs only inside a Case branch → OnceGuarded.
+        // (addInteger 1 2) is not a value → not inlined.
+        // But the whole expression is closed, so tryPartialEval may fold it.
+        val term = λ("x")(Case(Constr(Word64.Zero, Nil), List(vr"x"))) $ (AddInteger $ 1 $ 2)
+        val result = Inliner(term)
+        // After go: arg becomes 3 (small const, which IS a value), so OnceGuarded + value → inlined
+        assert(result == 3.asTerm)
+    }
+
+    test("should inline value in guarded (LamAbs body) position") {
+        // λx. λy. x applied to 42 — x occurs once under LamAbs → OnceGuarded.
+        // 42 (small const) is a value → inlined.
+        val term = λ("x")(λ("y")(vr"x")) $ 42
+        val expected = λ("y")(42.asTerm)
+        assert(Inliner(term) == expected)
+    }
+
+    test("should not inline non-value in guarded (LamAbs body) position") {
+        // λx. λy. x applied to Error — x under LamAbs → OnceGuarded.
+        // Error is not a value → not inlined. Also not pure → not dead code eliminated.
+        val term = λ("x")(λ("y")(vr"x")) $ Error()
+        assert(Inliner(term) == term)
     }
 
     // ========================================================================

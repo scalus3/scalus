@@ -40,7 +40,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(227_607113, 58961_964896L)
+                ExUnits(memory = 213_126911, steps = 56_645_041943L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -140,7 +140,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(609_627218, 151566_457180L)
+                ExUnits(memory = 590_157216, steps = 148_451_166227L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -242,7 +242,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(1230_889289, 302298_537175L)
+                ExUnits(memory = 1_201_246387, steps = 297_555_582222L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
