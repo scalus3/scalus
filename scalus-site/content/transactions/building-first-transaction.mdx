@@ -142,9 +142,9 @@ Add signatures to authorize spending the inputs. You can create a `TransactionSi
 **From a mnemonic phrase and derivation path:**
 
 ```scala copy
-import scalus.crypto.Bip32PrivateKey
+import scalus.cardano.wallet.BloxbeanAccount
 
-val mnemonic = "test " * 24 + "sauce"
+val mnemonic = "test " * 23 + "sauce"  // 24-word test mnemonic
 val derivationPath = "m/1852'/1815'/0'/0/0"  // Standard Cardano derivation path for the first ADA wallet
 
 val signer = BloxbeanAccount(network, mnemonic, derivationPath).signerForUtxos
@@ -227,6 +227,7 @@ For simpler cases, use `complete()` to let TxBuilder handle input selection auto
 val transaction = TxBuilder(cardanoInfo)
   .payTo(recipientAddress, Value.ada(10))
   .complete(provider, sponsorAddress)  // Automatic input selection and balancing
+  .await(30.seconds)
   .sign(signer)
   .transaction
 ```

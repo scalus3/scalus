@@ -17,7 +17,7 @@ SIR serves as a bridge between your high-level Scala code and the final Plutus C
 It's a good idea to print the SIR to understand what the compiler has generated.
 
 ```scala mdoc:compile-only copy showLineNumbers {3-4}
-import scalus.*, scalus.sir.SIR
+import scalus.*, scalus.compiler.sir.SIR
 val sir: SIR = ??? // from the previous example
 println(sir.show) // pretty-print the SIR
 println(sir.showHighlighted) // pretty-print the SIR with colorized syntax highlighting
@@ -25,11 +25,14 @@ println(sir.showHighlighted) // pretty-print the SIR with colorized syntax highl
 
 ## SIR optimisations
 
-Scalus Intermediate Representation (SIR) can be optimized. Currently,
-the only optimization is the `RemoveRecursivity` optimization that inlines `let` expressions.
+Several SIR optimizations are available:
+- `BooleanOptimizer` simplifies boolean expressions
+- `RemoveRecursivity` converts unnecessarily recursive let bindings to non-recursive ones
+- `RemoveTraces` strips trace calls for release builds
+- `AbbreviateErrorTraces` shortens error messages
 
 ```scala mdoc:compile-only copy showLineNumbers {3,5}
-import scalus.*, scalus.sir.*
+import scalus.*, scalus.compiler.sir.*
 val sir: SIR = ??? // from the previous example
 val optimized = BooleanOptimizer.optimize(sir)
 // or using the `|>` operator

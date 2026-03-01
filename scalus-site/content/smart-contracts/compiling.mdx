@@ -19,7 +19,7 @@ val compiled = PlutusV3.compile(MyValidator.validate)
 
 // Get the script for use in transactions
 val script = compiled.script
-val scriptHex = compiled.script.doubleCborHex
+val scriptHex = compiled.program.doubleCborHex
 ```
 
 The compilation flow: `PlutusV3.compile` takes a validator entry point and produces a `PlutusV3[A]` object containing the script, its hash, and address.
@@ -93,7 +93,7 @@ object MyContract {
 }
 
 // Get hex for use in transactions
-val scriptHex = MyContract.compiled.script.doubleCborHex
+val scriptHex = MyContract.compiled.program.doubleCborHex
 ```
 
 ## Encoding Options
@@ -101,19 +101,19 @@ val scriptHex = MyContract.compiled.script.doubleCborHex
 UPLC programs can be encoded in several formats:
 
 ```scala
-val script = compiled.script
+val program = compiled.program
 
 // Flat encoding (binary format)
-val flatEncoded = script.flatEncoded
+val flatEncoded = program.flatEncoded
 
 // CBOR encoding (wraps Flat)
-val cborEncoded = script.cborEncoded
+val cborEncoded = program.cborEncoded
 
 // Double CBOR encoding (standard for Cardano transactions)
-val doubleCborEncoded = script.doubleCborEncoded
+val doubleCborEncoded = program.doubleCborEncoded
 
 // Hex string of double CBOR (most commonly used in APIs)
-val hexString = script.doubleCborHex
+val hexString = program.doubleCborHex
 ```
 
 ## What's Next?

@@ -143,7 +143,7 @@ This validator enforces three rules:
 ```scala copy {3,6,7}
 object MintingPolicyGenerator {
     // Compile to CompiledPlutus (wraps SIR + UPLC + PlutusScript)
-    val compiled: PlutusV3[Data => Data => Unit] = PlutusV3.compile(compile(MintingPolicy.validate))
+    val compiled: PlutusV3[Data => Data => Unit] = PlutusV3.compile(MintingPolicy.validate)
 
     // Apply configuration to get a concrete minting policy
     def makeMintingPolicy(adminPubKeyHash: PubKeyHash, tokenName: TokenName): PlutusV3[Data => Unit] = {

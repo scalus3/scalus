@@ -60,6 +60,7 @@ val sponsorAddress = addr"addr_test1qz..."
 val lockTx = txBuilder
     .payTo(compiled, Value.ada(10), ownerPkh)  // 10 ADA with inline datum
     .complete(provider, sponsorAddress)
+    .await(30.seconds)
     .sign(signer)
     .transaction
 ```
@@ -78,9 +79,9 @@ To spend a UTxO locked at the script address, provide a redeemer and the compile
 val lockedUtxo: Utxo = // ... the UTxO locked at the script address
 
 val spendTx = txBuilder
-    .spend(lockedUtxo, (), compiled)                  // redeemer is Unit
-    .addRequiredSigner(ownerPkh.hash)                 // owner must sign
+    .spend(lockedUtxo, (), compiled, Set(ownerPkh.hash))  // redeemer is Unit, owner must sign
     .complete(provider, sponsorAddress)
+    .await(30.seconds)
     .sign(signer)
     .transaction
 ```
@@ -130,6 +131,7 @@ val ownerPkh: PubKeyHash = // ... owner's public key hash
 val lockTx = txBuilder
     .payTo(compiled, Value.ada(10), ownerPkh)
     .complete(provider, sponsorAddress)
+    .await(30.seconds)
     .sign(signer)
     .transaction
 
@@ -141,9 +143,9 @@ val lockedUtxo = scriptUtxos.head  // (Input, Output) pair
 
 // 5. Spend from the script address
 val spendTx = txBuilder
-    .spend(lockedUtxo, (), compiled)
-    .addRequiredSigner(ownerPkh.hash)
+    .spend(lockedUtxo, (), compiled, Set(ownerPkh.hash))
     .complete(provider, sponsorAddress)
+    .await(30.seconds)
     .sign(signer)
     .transaction
 

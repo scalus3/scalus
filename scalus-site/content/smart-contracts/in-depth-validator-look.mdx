@@ -26,27 +26,23 @@ A typical contract defines these functions, often just one. A successful contrac
 Let's take a look at an example contract, `HTLCValidator`, to illustrate the concepts above.
 
 ```scala
-import scalus.*
-import scalus.compiler.compile
-import scalus.builtin.Builtins.sha3_256
-import scalus.builtin.Data.{FromData, ToData}
-import scalus.builtin.{ByteString, Data, FromData, ToData}
-import scalus.cardano.blueprint.{Application, Blueprint}
-import scalus.ledger.api.v3.*
-import scalus.prelude.*
-import scalus.uplc.Program
+import scalus.Compile
+import scalus.uplc.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
 
 type Preimage = ByteString
 type Image = ByteString
-type PubKeyHash = ByteString
 
 // Contract Datum
-case class State(
-                          committer: PubKeyHash,
-                          receiver: PubKeyHash,
-                          image: Image,
-                          timeout: PosixTime
-                        ) derives FromData, ToData
+case class Config(
+    committer: PubKeyHash,
+    receiver: PubKeyHash,
+    image: Image,
+    timeout: PosixTime
+) derives FromData, ToData
 
 // Redeemer
 enum Action derives FromData, ToData:
@@ -54,36 +50,42 @@ enum Action derives FromData, ToData:
   case Reveal(preimage: Preimage)
 
 @Compile
-object HtlcValidator extends Validator:
+object HtlcValidator {
 
-  /*
-   * Spending script purpose validation
-   */
-  override def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit = {
-    val State(committer, receiver, image, timeout) =
-      datum.map(_.to[State]).getOrFail(InvalidDatum)
+  inline def validate(scData: Data): Unit = {
+    val ctx = scData.to[ScriptContext]
+    ctx.scriptInfo match
+      case ScriptInfo.SpendingScript(txOutRef, datum) =>
+        spend(datum, ctx.redeemer, ctx.txInfo, txOutRef)
+      case _ => fail(MustBeSpending)
+  }
 
+  /** Spending script purpose validation */
+  inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit = {
+    val config = datum.getOrFail(InvalidDatum).to[Config]
     redeemer.to[Action] match
       case Action.Timeout =>
-        require(tx.isSignedBy(committer), UnsignedCommitterTransaction)
-        require(tx.validRange.isAfter(timeout), InvalidCommitterTimePoint)
+        val validFrom = tx.validRange.from.finite(0)
+        require(config.timeout <= validFrom, InvalidCommitterTimePoint)
+        require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
 
       case Action.Reveal(preimage) =>
-        require(tx.isSignedBy(receiver), UnsignedReceiverTransaction)
-        require(!tx.validRange.isAfter(timeout), InvalidReceiverTimePoint)
-        require(sha3_256(preimage) === image, InvalidReceiverPreimage)
+        val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+        require(validTo <= config.timeout, InvalidReceiverTimePoint)
+        require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
+        require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
   }
 
   // Error messages
-  inline val InvalidDatum =
-    "Datum must be a HtlcValidator.ContractDatum(committer, receiver, image, timeout)"
-  inline val UnsignedCommitterTransaction = "Transaction must be signed by a committer"
-  inline val UnsignedReceiverTransaction = "Transaction must be signed by a receiver"
-  inline val InvalidCommitterTimePoint = "Committer Transaction must be exclusively after timeout"
-  inline val InvalidReceiverTimePoint = "Receiver Transaction must be inclusively before timeout"
-  inline val InvalidReceiverPreimage = "Invalid receiver preimage"
-
-end HtlcValidator
+  inline val MustBeSpending = "Must be a spending script"
+  inline val InvalidDatum = "Invalid Datum"
+  inline val ValidRangeMustBeBound = "ValidTo must be set"
+  inline val UnsignedCommitterTransaction = "Must be signed by a committer"
+  inline val UnsignedReceiverTransaction = "Must be signed by a receiver"
+  inline val InvalidCommitterTimePoint = "Must be exclusively after timeout"
+  inline val InvalidReceiverTimePoint = "Must be inclusively before timeout"
+  inline val InvalidReceiverPreimage = "Invalid preimage"
+}
 ```
 
 ### Import section and type definitions
@@ -92,12 +94,12 @@ At the very top of the file, you can see imports, which are present in most Scal
 Then, we declare *type aliases*, which enhance our types with semantics relevant to the contract.
 
 After that, we define the Datum and Redeemer types. `Derives` syntax allows us to convert the `Data` values from
-the script context into `State` and `Action` types to utilize the Scala type system.
+the script context into `Config` and `Action` types to utilize the Scala type system.
 
 ### Validator code
 
 In the body of the `object HtlcValidator`, where `object` is a Scala keyword that defines a singleton instance,
-we can see the `override spend` declaration, which contains the logic of the contract.
+we can see the `inline def spend` declaration, which contains the logic of the contract.
 
 ###### Decoding
 
@@ -137,6 +139,6 @@ correct key and the necessary amount of time has passed.
 This is neatly expressed in 2 lines of Scala code:
 
 ```scala
-require(tx.isSignedBy(committer), UnsignedCommitterTransaction)
-require(tx.validRange.isEntirelyAfter(timeout), InvalidCommitterTimePoint)
+require(config.timeout <= validFrom, InvalidCommitterTimePoint)
+require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
 ```

@@ -32,7 +32,7 @@ import scalus.testing.yaci.YaciDevKit
 class MyTest extends AnyFunSuite with YaciDevKit {
   test("submit transaction") {
     val ctx = createTestContext()
-    // ctx.cardanoInfo, ctx.provider, ctx.address, ctx.signer ready to use
+    // ctx.cardanoInfo, ctx.provider, ctx.alice.address, ctx.alice.signer ready to use
   }
 }
 ```
@@ -52,13 +52,13 @@ Yaci DevKit complements the Emulator for scenarios requiring **complete Cardano 
 
 ## Provider
 
-The `TestContext` includes a `BlockfrostProvider` connected to the container's Yaci Store API. This provides a Blockfrost-compatible interface locally — your [transaction building](/docs/transactions) code works the same against local devnet and real networks:
+The `IntegrationTestContext` includes a `BlockchainProvider` connected to the container's Yaci Store API. This provides a Blockfrost-compatible interface locally — your [transaction building](/docs/transactions) code works the same against local devnet and real networks:
 
 ```scala
 val ctx = createTestContext()
 
 // Same API as production Blockfrost
-val utxos = ctx.provider.fetchUtxos(ctx.address).await()
+val utxos = ctx.provider.findUtxos(ctx.alice.address).await()
 val params = ctx.provider.fetchLatestParams.await()
 ```
 
@@ -83,9 +83,9 @@ class MyIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     val tx = TxBuilder(ctx.cardanoInfo)
       .payTo(recipientAddress, Value.ada(10))
-      .complete(ctx.provider, ctx.address)
+      .complete(ctx.provider, ctx.alice.address)
       .await(30.seconds)
-      .sign(ctx.signer)
+      .sign(ctx.alice.signer)
       .transaction
 
     ctx.submitTx(tx) match {
@@ -99,18 +99,25 @@ class MyIntegrationTest extends AnyFunSuite with YaciDevKit {
 }
 ```
 
-## TestContext
+## IntegrationTestContext
 
-`createTestContext()` returns a `TestContext` containing everything needed for transaction building and submission:
+`createTestContext()` returns an `IntegrationTestContext` containing everything needed for transaction building and submission:
 
 ```scala
-case class TestContext(
-  cardanoInfo: CardanoInfo,      // Protocol params + network + slot config
-  provider: Provider,             // BlockfrostProvider to Yaci Store
-  account: BloxbeanAccount,       // HD wallet with key pairs
-  signer: TransactionSigner,      // Payment key signer
-  address: Address,               // Base address
-  stakeAddress: StakeAddress      // Stake address
+trait IntegrationTestContext {
+  def cardanoInfo: CardanoInfo          // Protocol params + network + slot config
+  def provider: BlockchainProvider      // BlockfrostProvider to Yaci Store
+  def parties: IndexedSeq[TestParty]    // Pre-funded test parties
+  def alice: TestParty                  // First test party
+  def bob: TestParty                    // Second test party
+  def eve: TestParty                    // Third test party
+}
+
+case class TestParty(
+  party: Party,
+  address: ShelleyAddress,
+  addrKeyHash: AddrKeyHash,
+  signer: TransactionSigner
 )
 ```
 
@@ -179,26 +186,25 @@ This 24-word mnemonic produces deterministic addresses that Yaci DevKit pre-fund
 
 ## Additional Signing
 
-Some operations require multiple signers. The default `ctx.signer` only includes the payment key. For stake operations or governance actions, construct a signer with additional keys:
+Some operations require multiple signers. The default `ctx.alice.signer` only includes the payment key. For stake operations or governance actions, construct a signer with additional keys from the `Party` object:
 
 ```scala
 // Stake delegation requires both payment and stake keys
 val stakeSigner = new TransactionSigner(
-  Set(ctx.account.paymentKeyPair, ctx.account.stakeKeyPair)
+  Set(Party.Alice.account.paymentKeyPair, Party.Alice.account.stakeKeyPair)
 )
 
 TxBuilder(ctx.cardanoInfo)
-  .delegateTo(ctx.stakeAddress, poolId)
-  .complete(ctx.provider, ctx.address)
+  .delegateTo(stakeAddress, poolId)
+  .complete(ctx.provider, ctx.alice.address)
   .await(30.seconds)
   .sign(stakeSigner)
   .transaction
 ```
 
-The `BloxbeanAccount` provides key pairs for different purposes:
+The `Party` account provides key pairs for different purposes:
 - `paymentKeyPair` - For transaction fees and payments
 - `stakeKeyPair` - For stake registration and delegation
-- `drepKeyPair` - For DRep registration and voting
 
 ## Example: Minting Tokens
 
@@ -225,10 +231,10 @@ test("mint tokens with PlutusV2 script") {
 
   val tx = TxBuilder(ctx.cardanoInfo)
     .mint(script, Map(assetName -> mintAmount), ())
-    .payTo(ctx.address, Value.asset(policyId, assetName, mintAmount, Coin.ada(2)))
-    .complete(ctx.provider, ctx.address)
+    .payTo(ctx.alice.address, Value.asset(policyId, assetName, mintAmount, Coin.ada(2)))
+    .complete(ctx.provider, ctx.alice.address)
     .await(30.seconds)
-    .sign(ctx.signer)
+    .sign(ctx.alice.signer)
     .transaction
 
   ctx.submitTx(tx) match {
@@ -237,7 +243,7 @@ test("mint tokens with PlutusV2 script") {
       ctx.waitForBlock()
 
       // Verify minted tokens appear in wallet
-      val utxos = ctx.provider.fetchUtxos(ctx.address).await()
+      val utxos = ctx.provider.findUtxos(ctx.alice.address).await()
       val hasMintedTokens = utxos.exists { utxo =>
         utxo.value.value.multiAsset.exists { case (pid, assets) =>
           pid == policyId && assets.get(assetName).contains(mintAmount)
@@ -274,13 +280,17 @@ test("mint tokens with PlutusV2 script") {
 
 ```
 scalus-testkit/
-├── shared/src/main/scala/scalus/testing/yaci/
-│   ├── YaciConfig.scala      # Configuration (cross-platform)
-│   └── TestContext.scala     # Test context abstraction
+├── shared/src/main/scala/scalus/testing/
+│   ├── yaci/YaciConfig.scala           # Configuration (cross-platform)
+│   └── kit/Party.scala                  # Test party definitions
 │
-└── jvm/src/main/scala/scalus/testing/yaci/
-    ├── YaciContainer.scala   # Docker container management (JVM-only)
-    └── YaciDevKit.scala      # ScalaTest integration (JVM-only)
+└── jvm/src/main/scala/scalus/testing/
+    ├── integration/
+    │   ├── IntegrationTestContext.scala  # Test context trait
+    │   └── YaciTestContext.scala         # Yaci implementation
+    └── yaci/
+        ├── YaciContainer.scala          # Docker container management (JVM-only)
+        └── YaciDevKit.scala             # ScalaTest integration (JVM-only)
 ```
 
 This split exists because Yaci DevKit requires Docker/testcontainers (JVM-only) and Bloxbean Cardano Client libraries (JVM-only). The cross-platform abstractions like `TestContext` allow future alternative implementations for other platforms if suitable devnet solutions emerge for JavaScript or Native.

@@ -19,7 +19,7 @@ When you compile a validator with specific values, those values are permanently 
 @Compile
 object TimeLock:
     inline def validate(deadline: PosixTime)(datum: Option[Data], redeemer: Data, tx: TxInfo, outRef: TxOutRef): Unit =
-        require(tx.validRange.isAfter(deadline), "Too early")
+        require(tx.validRange.isEntirelyAfter(deadline), "Too early")
         // ... rest of validation
 
 // Compile with a specific deadline
@@ -60,7 +60,7 @@ object Vesting:
         datum: Option[Data], redeemer: Data, tx: TxInfo, outRef: TxOutRef
     ): Unit =
         require(tx.signatories.contains(beneficiary), "Not beneficiary")
-        require(tx.validRange.isAfter(unlockTime), "Still locked")
+        require(tx.validRange.isEntirelyAfter(unlockTime), "Still locked")
 
 // Different vesting schedules
 val q1Vesting = compile(Vesting.validate(employee, PosixTime(1711929600000L)))

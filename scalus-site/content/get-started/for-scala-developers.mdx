@@ -116,7 +116,8 @@ class MyValidatorTest extends AnyFunSuite with ScalusTest:
       signatories = List(ownerPkh)
     )
 
-    val result = compile(MyValidator.spend).runScript(context)
+    val compiled = PlutusV3.compile(MyValidator.validate)
+    val result = compiled.runScript(context)
     assert(result.isSuccess)  // Familiar ScalaTest!
   }
 ```
@@ -232,28 +233,29 @@ See: [Advanced Optimizations](/docs/smart-contracts/optimisations)
 
 ### "How does error handling work?"
 
-**On-chain:** No try-catch, but you can `throw`:
+**On-chain:** No try-catch, but you can use `require` and `fail`:
 
 ```scala
-def spend(datum: Data, redeemer: Data, ctx: ScriptContext): Unit =
-  val owner = datum.to[PubKeyHash]
+inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit =
+  val owner = datum.getOrFail("Missing datum").to[PubKeyHash]
 
   // This throws if condition is false
-  require(ctx.txInfo.signatories.contains(owner), "Not signed by owner")
+  require(tx.signatories.contains(owner), "Not signed by owner")
 
-  // Explicit throw also works
-  if !validSignature then
-    throw new Exception("Invalid signature")
+  // Explicit fail also works
+  if !validCondition then
+    fail("Invalid condition")
 ```
 
 **Off-chain (testing):** Full Scala error handling:
 
 ```scala
 test("validator rejects invalid signature") {
-  val result = compile(MyValidator.spend).runScript(context)
+  val compiled = PlutusV3.compile(MyValidator.validate)
+  val result = compiled.runScript(context)
 
   assert(result.isFailure)  // Check it failed
-  assert(result.logs.contains("Invalid signature"))  // Check error message
+  assert(result.logs.exists(_.contains("Invalid signature")))  // Check error message
 }
 ```
 

@@ -148,7 +148,7 @@ val scriptHash = script.scriptHash
 
 // Script address for a network
 val mainnetAddress: Address = HtlcContract.address(Network.Mainnet)
-val preprodAddress: Address = HtlcContract.address(Network.Preprod)
+val testnetAddress: Address = HtlcContract.address(Network.Testnet)
 
 // The UPLC program
 val program: Program = HtlcContract.program
@@ -184,8 +184,9 @@ def lock(
     TxBuilder(env)
       .spend(inputUtxo)
       .payTo(HtlcContract, value, datum)
-      .changeTo(changeAddress)
-      .build()
+      .build(changeTo = changeAddress)
+      .sign(signer)
+      .transaction
 }
 ```
 
@@ -203,8 +204,9 @@ def unlock(
       .spend(lockedUtxo, redeemer.toData, HtlcContract)
       .payTo(recipientAddress, lockedUtxo.output.value)
       .collaterals(collateralUtxo)
-      .changeTo(recipientAddress)
-      .build()
+      .build(changeTo = recipientAddress)
+      .sign(signer)
+      .transaction
 }
 ```
 
@@ -276,7 +278,7 @@ lazy val HtlcBlueprint = Blueprint.plutusV3[ContractDatum, Action](
 For parameterized validators, include the parameter type:
 
 ```scala
-lazy val AuctionBlueprint = Blueprint.plutusV3[TxOutRef, Datum, Action](
+lazy val AuctionBlueprint = Blueprint.plutusV3[Data, Datum, Action](
     title = "Auction",
     description = "Parameterized auction validator",
     version = "1.0.0",
