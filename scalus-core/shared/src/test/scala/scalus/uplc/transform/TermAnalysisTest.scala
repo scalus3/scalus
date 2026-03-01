@@ -9,7 +9,7 @@ import DefaultFun.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.Word64
 import scalus.uplc.DefaultUni
-import TermAnalysis.isPure
+import TermAnalysis.{isPure, isValueForm}
 
 import scala.language.implicitConversions
 
@@ -430,4 +430,56 @@ class TermAnalysisTest extends AnyFunSuite:
         DefaultFun.values.foreach { bn =>
             bn.isTotal: Boolean // ensure match is exhaustive at runtime
         }
+    }
+
+    // ========================================================================
+    // isValueForm tests
+    // ========================================================================
+
+    test("isValueForm: basic value forms") {
+        assert(vr"x".isValueForm)
+        assert(42.asTerm.isValueForm)
+        assert("hello".asTerm.isValueForm)
+        assert(λ("x")(vr"x").isValueForm)
+        assert(Delay(vr"x").isValueForm)
+        assert(Builtin(AddInteger).isValueForm)
+    }
+
+    test("isValueForm: nullary Constr is a value") {
+        assert(Constr(Word64.Zero, Nil).isValueForm)
+    }
+
+    test("isValueForm: non-nullary Constr is not a value") {
+        assert(!Constr(Word64.Zero, List[Term](42)).isValueForm)
+    }
+
+    test("isValueForm: Force on polymorphic builtin with 1 type arg") {
+        assert(Force(Builtin(HeadList)).isValueForm)
+        assert(Force(Builtin(TailList)).isValueForm)
+        assert(Force(Builtin(NullList)).isValueForm)
+        assert(Force(Builtin(MkCons)).isValueForm)
+        assert(Force(Builtin(IfThenElse)).isValueForm)
+    }
+
+    test("isValueForm: Force(Force(Builtin)) with 2 type args") {
+        assert(Force(Force(Builtin(FstPair))).isValueForm)
+        assert(Force(Force(Builtin(SndPair))).isValueForm)
+        assert(Force(Force(Builtin(ChooseList))).isValueForm)
+    }
+
+    test("isValueForm: Force on non-polymorphic builtin is not a value") {
+        assert(!Force(Builtin(AddInteger)).isValueForm)
+        assert(!Force(Builtin(MultiplyInteger)).isValueForm)
+    }
+
+    test("isValueForm: double Force on single-type-arg builtin is not a value") {
+        // HeadList has 1 type arg, so Force(Force(HeadList)) is over-forced — not a value
+        assert(!Force(Force(Builtin(HeadList))).isValueForm)
+    }
+
+    test("isValueForm: non-value forms") {
+        assert(!Error().isValueForm)
+        assert(!(AddInteger $ 1 $ 2).isValueForm)
+        assert(!Force(vr"x").isValueForm)
+        assert(!Case(vr"x", List(vr"y")).isValueForm)
     }

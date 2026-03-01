@@ -4,7 +4,7 @@ import scalus.cardano.ledger.ExUnits
 import scalus.uplc.*
 import scalus.uplc.Term.*
 import scalus.uplc.eval.*
-import scalus.uplc.transform.TermAnalysis.freeVars
+import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
 
 /** Compile-time partial evaluator for UPLC terms.
   *
@@ -35,7 +35,7 @@ object PartialEvaluator {
       */
     def tryEval(term: Term, maxBudget: ExUnits = DefaultMaxBudget): Option[Term] = {
         // Skip terms already in normal form
-        if isValue(term) then return None
+        if term.isValueForm then return None
 
         // Must be closed (no free variables)
         if term.freeVars.nonEmpty then return None
@@ -67,15 +67,11 @@ object PartialEvaluator {
             false
         case _ => true
 
-    /** A term is already a value (in normal form). */
-    private def isValue(term: Term): Boolean = term match
-        case _: Const | _: LamAbs | _: Delay | _: Builtin => true
-        case _                                            => false
-
     /** Check if a term contains at least one reducible operation at the top level.
       *
-      * Only recurses into Constr args because Constr is not filtered by `isValue` but can contain
-      * reducible subexpressions. Other wrappers (Delay, LamAbs) are already filtered by `isValue`.
+      * Only recurses into Constr args because Constr is not filtered by `isValueForm` but can
+      * contain reducible subexpressions. Other wrappers (Delay, LamAbs) are already filtered by
+      * `isValueForm`.
       */
     private def hasReducibleOp(term: Term): Boolean = term match
         case _: Apply | _: Force | _: Case => true

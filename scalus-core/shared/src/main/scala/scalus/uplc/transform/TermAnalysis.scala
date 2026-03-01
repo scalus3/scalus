@@ -42,6 +42,28 @@ object TermAnalysis:
         go(term, 0, 0, List.empty)
 
     extension (term: Term)
+
+        /** Whether the term is in value form (weak head normal form).
+          *
+          * A value requires no further computation to evaluate. This is used by:
+          *   - [[PartialEvaluator]] to skip terms that are already fully reduced
+          *   - [[Inliner]] to decide if a term is safe to inline in guarded positions
+          *
+          * Value forms include:
+          *   - Variables, constants, lambda abstractions, delays, and unapplied builtins
+          *   - Nullary constructors (`Constr(tag, Nil)`)
+          *   - Forced polymorphic builtins where all type arguments are supplied via Force (e.g.,
+          *     `Force(Builtin(HeadList))`, `Force(Force(Builtin(FstPair)))`)
+          */
+        def isValueForm: Boolean = term match
+            case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
+            case Constr(_, Nil, _)                                     => true
+            case Force(Force(Builtin(bn, _), _), _) =>
+                Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 2
+            case Force(Builtin(bn, _), _) =>
+                Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 1
+            case _ => false
+
         /** Returns the set of free variable names in a term.
           *
           * A variable is free if it is not bound by an enclosing lambda abstraction. This is used

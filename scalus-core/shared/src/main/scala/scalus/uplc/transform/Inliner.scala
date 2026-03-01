@@ -4,7 +4,7 @@ import scalus.*
 import scalus.uplc.Constant.flatConstant
 import scalus.uplc.Term.*
 import scalus.uplc.eval.{Log, Logger}
-import scalus.uplc.transform.TermAnalysis.{freeVars, isPure}
+import scalus.uplc.transform.TermAnalysis.{freeVars, isPure, isValueForm}
 import scalus.uplc.{NamedDeBruijn, Term}
 
 /** Optimizer that performs function inlining, beta-reduction, and dead code elimination.
@@ -132,12 +132,6 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                     )
             case _: Const | _: Builtin | _: Error => Zero
 
-    /** Checks whether a term is a value (no computation needed to evaluate it). */
-    private def isValue(term: Term): Boolean = term match
-        case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
-        case Constr(_, Nil, _)                                     => true
-        case _                                                     => false
-
     /** Determines if a term is safe to inline based on its type and occurrence info.
       *
       *   - '''OnceDirect''': Always safe — evaluation timing is unchanged
@@ -149,7 +143,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
         import OccurrenceInfo.*
         occInfo match
             case OnceDirect  => true
-            case OnceGuarded => isValue(inlining)
+            case OnceGuarded => inlining.isValueForm
             case Many =>
                 inlining match
                     case Var(_, _)     => true
