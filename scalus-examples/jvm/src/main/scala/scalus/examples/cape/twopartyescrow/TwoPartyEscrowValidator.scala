@@ -48,11 +48,11 @@ object TwoPartyEscrowValidator {
 
     inline def validate(scData: Data): Unit = {
         val sc = scData.to[ScriptContext]
-        sc.scriptInfo match {
+        sc.scriptInfo match
             case ScriptInfo.SpendingScript(txOutRef, datum) =>
                 spend(datum, sc.redeemer, sc.txInfo, txOutRef)
             case _ => fail("Only spending scripts are supported by this validator")
-        }
+
     }
 
     inline def spend(
@@ -111,9 +111,11 @@ object TwoPartyEscrowValidator {
 
         // Verify seller receives exactly escrow price
         val outputs = txInfo.outputs
-        val sellerOutputs =
-            findOutputsByCredential(outputs, Credential.PubKeyCredential(sellerKeyHash))
-        val sellerAda = Utils.getAdaFromOutputs(sellerOutputs)
+        val cred = Credential.PubKeyCredential(sellerKeyHash).toData
+        val sellerAda = outputs.foldLeft(BigInt(0)): (sum, out) =>
+            if out.address.credential.toData == cred
+            then sum + out.value.lovelaceAmount
+            else sum
         require(sellerAda == escrowPrice, "Seller must receive exactly escrow price")
 
         // No funds should remain in the script

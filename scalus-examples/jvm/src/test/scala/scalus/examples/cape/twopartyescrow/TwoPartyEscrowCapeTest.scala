@@ -50,37 +50,37 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     )
 
     test(s"Script size: ${compiled.script.script.size} bytes") {
-        assert(compiled.script.script.size == 1870)
+        assert(compiled.script.script.size == 1557)
         println(compiled.sir.showHighlighted)
         println(compiled.program.showHighlighted)
     }
 
     // Expected execution budgets for success tests
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "deposit_successful" -> ExUnits(memory = 80751, steps = 29020997),
-      "accept_successful" -> ExUnits(memory = 154587, steps = 46023386),
-      "accept_with_multiple_inputs" -> ExUnits(memory = 164467, steps = 49037282),
-      "accept_with_datum_attached" -> ExUnits(memory = 154587, steps = 46023386),
-      "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 241493, steps = 71892668),
+      "deposit_successful" -> ExUnits(memory = 80451, steps = 28972997),
+      "accept_successful" -> ExUnits(memory = 88199, steps = 29323149),
+      "accept_with_multiple_inputs" -> ExUnits(memory = 98079, steps = 32337045),
+      "accept_with_datum_attached" -> ExUnits(memory = 88199, steps = 29323149),
+      "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 113145, steps = 39498048),
       "refund_successful" -> ExUnits(memory = 102966, steps = 34802568),
       "refund_after_exact_deadline" -> ExUnits(memory = 102966, steps = 34802568),
       "refund_with_multiple_inputs" -> ExUnits(memory = 112846, steps = 37816464),
       "refund_with_datum_attached" -> ExUnits(memory = 102966, steps = 34802568),
-      "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 127612, steps = 44929467)
+      "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 127912, steps = 44977467)
     )
 
     // Expected execution fees for success tests
     private val expectedFees: Map[String, Coin] = Map(
-      "deposit_successful" -> Coin(6752),
-      "accept_successful" -> Coin(12238),
-      "accept_with_multiple_inputs" -> Coin(13026),
-      "accept_with_datum_attached" -> Coin(12238),
-      "accept_with_multiple_outputs_to_seller" -> Coin(19118),
+      "deposit_successful" -> Coin(6731),
+      "accept_successful" -> Coin(7204),
+      "accept_with_multiple_inputs" -> Coin(7991),
+      "accept_with_datum_attached" -> Coin(7204),
+      "accept_with_multiple_outputs_to_seller" -> Coin(9377),
       "refund_successful" -> Coin(8451),
       "refund_after_exact_deadline" -> Coin(8451),
       "refund_with_multiple_inputs" -> Coin(9238),
       "refund_with_datum_attached" -> Coin(8451),
-      "refund_with_multiple_outputs_to_buyer" -> Coin(10603)
+      "refund_with_multiple_outputs_to_buyer" -> Coin(10624)
     )
 
     // Generate test cases from the JSON
