@@ -33,7 +33,7 @@ case class EscrowDatum(state: EscrowState, depositTime: BigInt) derives FromData
   *   [[https://github.com/IntersectMBO/UPLC-CAPE]]
   */
 @Compile
-object TwoPartyEscrowValidator extends Validator {
+object TwoPartyEscrowValidator {
 
     // CAPE parameters baked in as top-level inline defs so they are properly inlined
     // into the @Compile object
@@ -44,7 +44,16 @@ object TwoPartyEscrowValidator extends Validator {
     private inline def escrowPrice: Lovelace = BigInt(75_000_000)
     private inline def deadlineSeconds: BigInt = BigInt(1800)
 
-    inline override def spend(
+    inline def validate(scData: Data): Unit = {
+        val sc = scData.to[ScriptContext]
+        sc.scriptInfo match {
+            case ScriptInfo.SpendingScript(txOutRef, datum) =>
+                spend(datum, sc.redeemer, sc.txInfo, txOutRef)
+            case _ => fail("Only spending scripts are supported by this validator")
+        }
+    }
+
+    inline def spend(
         datum: Option[Data],
         redeemer: Data,
         txInfo: TxInfo,
