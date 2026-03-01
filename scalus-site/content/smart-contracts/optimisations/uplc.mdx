@@ -3,16 +3,128 @@ title: UPLC optimisations
 sidebarTitle: UPLC optimisations
 ---
 
-# UPLC optimisations
+import { Callout } from 'nextra/components'
 
-Scalus provides optimization capabilities for Untyped Plutus Core (UPLC) scripts, which can significantly reduce script size and execution costs. 
+# UPLC Optimisations
 
-The `EtaReduce` optimization identifies and eliminates unnecessary lambda abstractions. For example, it transforms expressions like `λx. f x` into just `f` when `x` is only used once as a direct argument. This simplification reduces the number of function applications during execution, making your scripts more efficient.
+Scalus optimizes Untyped Plutus Core (UPLC) scripts to reduce script size and execution costs. By default, `toUplcOptimized()` and `Options.default` apply the full optimization pipeline automatically.
 
-{/*Other available UPLC optimizations include constant folding, dead code elimination, and various term simplifications that can further improve script performance on the Cardano blockchain.*/}
+## Optimization Pipeline
 
-```scala mdoc:compile-only copy showLineNumbers {3-6}
-import scalus.uplc.Term, scalus.uplc.transform.*
-val uplc: Term = ???
-val opt = EtaReduce(uplc)
+The optimizer runs several passes in sequence:
+
+1. **EtaReduce** — eliminates redundant lambda wrappers (`λx. f x` → `f`)
+2. **Inliner** — beta-reduction, dead code elimination, constant folding (runs 3 times)
+3. **StrictIf** — converts eligible `if/then/else` to strict evaluation
+4. **ForcedBuiltinsExtractor** — hoists shared `Force(Builtin(...))` subexpressions
+5. **CaseConstrApply** — rewrites multi-argument application as `Case`/`Constr` nodes
+
+Steps 1–2 repeat three times to handle patterns created by earlier inlining.
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.*, scalus.uplc.Term
+
+val sir = compile: (x: BigInt) => x + BigInt(1)
+
+// Option 1: use toUplcOptimized() — optimization always on
+val optimized: Term = sir.toUplcOptimized()
+
+// Option 2: use toUplc() with explicit control
+val unoptimized: Term = sir.toUplc(optimizeUplc = false)
+
+// Option 3: apply individual passes manually
+import scalus.uplc.transform.*
+val manual: Term = sir.toUplc(optimizeUplc = false)
+  |> EtaReduce.apply |> Inliner.apply
 ```
+
+## EtaReduce
+
+Eliminates unnecessary lambda abstractions. Transforms `λx. f x` into `f` when `x` appears only as a direct argument and `f` is pure (won't crash if evaluated eagerly).
+
+## Inliner
+
+The Inliner is the core optimization pass. It performs:
+
+- **Beta-reduction** — `(λx. body) arg` → `body[x := arg]` when safe
+- **Identity elimination** — `(λx. x) t` → `t`
+- **Dead code elimination** — `(λx. body) arg` → `body` when `x` is unused and `arg` is pure
+- **Force/Delay cancellation** — `Force(Delay(t))` → `t`
+- **Constant folding** — closed subexpressions are evaluated at compile time via the CEK machine
+
+### Inlining Safety
+
+The Inliner uses occurrence analysis to decide when inlining is safe:
+
+| Occurrences | Action |
+|---|---|
+| **Zero** (unused) | Eliminate the argument if it's pure (can't crash) |
+| **Once, direct** | Always inline — evaluation timing is unchanged |
+| **Once, guarded** (under lambda/delay) | Inline only if the argument is a value (no side effects to defer) |
+| **Multiple** | Inline only small/cheap terms: variables, small constants (≤64 bits), builtins |
+
+### Compile-time Partial Evaluation
+
+When the Inliner encounters a closed subexpression (no free variables) that contains a reducible operation (function application, `Force`, or `Case`), it runs the CEK machine to evaluate it at compile time. If the result is a constant, the original expression is replaced with that constant.
+
+This means arithmetic on constants, pattern matching on known constructors, and even multi-step computations are all folded away during compilation:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.*
+
+// addInteger(2, 3) is folded to 5 at compile time
+val sir1 = compile: BigInt(2) + BigInt(3)
+
+// Case/Constr on known tag is eliminated at compile time
+val sir2 = compile:
+    val pair = (BigInt(1), BigInt(2))
+    pair._1 + pair._2  // folded to 3
+```
+
+<Callout>
+Partial evaluation has a budget cap to prevent slow compilation. If evaluation exceeds the budget or fails, the original term is kept unchanged. Expressions containing `Trace` are never folded because trace has a logging side effect.
+</Callout>
+
+## Closed Functions as Compile-time Macros
+
+Any function that doesn't depend on external (runtime) variables is effectively a **compile-time macro**. When such a function is applied to constant arguments inside `compile`, the entire computation — including recursion — is evaluated at compile time by the Inliner's partial evaluator. The result is a single constant embedded in the final script.
+
+This is powerful for precomputing values that would be expensive to calculate on-chain:
+
+```scala mdoc:compile-only copy showLineNumbers {5-9,12}
+import scalus.*, scalus.compiler.*
+import scala.annotation.tailrec
+
+@Compile
+object Fibonacci {
+    def fib(n: BigInt): BigInt =
+        @tailrec def f(n: BigInt, x: BigInt, y: BigInt): BigInt =
+            if n > 1 then f(n - 1, y, x + y) else y
+        f(n, 0, 1)
+}
+
+// fib(100) is fully evaluated at compile time!
+// The recursive computation runs during compilation,
+// and the final script contains just the constant.
+val sir = compile(Fibonacci.fib(100))
+val uplc = sir.toUplcOptimized()
+// uplc is now: (Const Integer 354224848179261915075)
+```
+
+Here `fib` is a closed function — it only uses its parameters and local bindings, with no references to runtime state. When called with `100`, the Inliner:
+
+1. Beta-reduces the function application, substituting `100` for `n`
+2. Recognizes the result as a closed, reducible expression
+3. Runs the CEK machine to fully evaluate the tail-recursive loop
+4. Replaces the entire expression with the constant `354224848179261915075`
+
+### Practical Uses
+
+This pattern works for any closed computation over constants:
+
+- **Precomputed lookup tables** — encode Fibonacci numbers, CRC tables, or fee schedules as a ByteString at compile time, then slice at runtime for O(1) lookups
+- **Derived configuration** — compute thresholds, epoch boundaries, or protocol parameters from base constants
+- **Hash preimages** — precompute hashes of known values so the on-chain code only needs to compare
+- **Mathematical constants** — compute precision values, powers, or factorials once at compile time
+
+The key insight: if you can express the computation in Scalus (`@Compile` annotated code) and all inputs are constants, it runs at compile time for free.
