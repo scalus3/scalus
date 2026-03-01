@@ -49,14 +49,14 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     )
 
     test(s"Script size: ${compiled.script.script.size} bytes") {
-        assert(compiled.script.script.size == 1939)
+        assert(compiled.script.script.size == 1947)
         println(compiled.sir.showHighlighted)
         println(compiled.program.showHighlighted)
     }
 
     // Expected execution budgets for success tests
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "deposit_successful" -> ExUnits(memory = 79297, steps = 27181916),
+      "deposit_successful" -> ExUnits(memory = 81587, steps = 29552651),
       "accept_successful" -> ExUnits(memory = 167366, steps = 47846270),
       "accept_with_multiple_inputs" -> ExUnits(memory = 177246, steps = 50860166),
       "accept_with_datum_attached" -> ExUnits(memory = 167366, steps = 47846270),
@@ -146,20 +146,21 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
             val mapPair: P[(Data, Data)] = self ~ (lexeme(P.char(':')) *> self)
             val mapData: P[Data] =
-                (lexeme(P.char('{')) *> mapPair.repSep0(lexeme(P.char(','))) <* lexeme(P.char('}'))).map {
-                    pairs =>
+                (lexeme(P.char('{')) *> mapPair.repSep0(lexeme(P.char(','))) <* lexeme(P.char('}')))
+                    .map { pairs =>
                         val pairsList = pairs.toList.foldRight(Builtins.mkNilPairData()) {
                             (pair, acc) =>
                                 Builtins.mkCons(Builtins.mkPairData(pair._1, pair._2), acc)
                         }
                         Builtins.mapData(pairsList)
-                }
+                    }
 
             val intOrConstr: P[Data] = lexeme(UplcParser.integer).flatMap { n =>
-                val constr = (lexeme(P.char('(')) *> self.rep0 <* lexeme(P.char(')'))).map { fields =>
-                    val fieldsList =
-                        fields.toList.foldRight(Builtins.mkNilData())(Builtins.mkCons(_, _))
-                    Builtins.constrData(n, fieldsList)
+                val constr = (lexeme(P.char('(')) *> self.rep0 <* lexeme(P.char(')'))).map {
+                    fields =>
+                        val fieldsList =
+                            fields.toList.foldRight(Builtins.mkNilData())(Builtins.mkCons(_, _))
+                        Builtins.constrData(n, fieldsList)
                 }
                 constr.backtrack.orElse(P.pure(Builtins.iData(n)))
             }

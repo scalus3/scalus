@@ -88,7 +88,8 @@ object TwoPartyEscrowValidator {
           referenceScript = Option.None
         )
 
-        findSingleOutput(txInfo.outputs, expectedOutput)
+        val output = findSingleOutput(txInfo.outputs, ownAddress.credential)
+        require(output.toData == expectedOutput.toData, "Output must match expected deposit output")
     }
 
     inline def handleAccept(
@@ -149,16 +150,16 @@ object TwoPartyEscrowValidator {
 
     def findSingleOutput(
         outputs: List[TxOut],
-        expected: TxOut
+        credential: Credential
     ): TxOut = {
         def go(outputs: List[TxOut], found: Option[TxOut]): TxOut = outputs match {
-            case List.Cons(head, tail) if head.toData == expected.toData =>
+            case List.Cons(head, tail) if head.address.credential.toData == credential.toData =>
                 found match
                     case Option.Some(value) =>
                         fail("Multiple script outputs found, expected only one")
                     case Option.None => go(tail, Option.Some(head))
-            case List.Cons(head, tail) if head.address.toData == expected.address.toData =>
-                fail("Unexpected output to script address")
+            case List.Cons(head, tail) =>
+                go(tail, found)
             case List.Cons(head, tail) => go(tail, found)
             case List.Nil              => found.getOrFail("Not found")
         }
