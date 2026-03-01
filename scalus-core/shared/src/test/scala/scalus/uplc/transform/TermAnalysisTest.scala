@@ -449,8 +449,16 @@ class TermAnalysisTest extends AnyFunSuite:
         assert(Constr(Word64.Zero, Nil).isValueForm)
     }
 
-    test("isValueForm: non-nullary Constr is not a value") {
-        assert(!Constr(Word64.Zero, List[Term](42)).isValueForm)
+    test("isValueForm: Constr with value args is a value") {
+        assert(Constr(Word64.Zero, List[Term](42, "hello")).isValueForm)
+        assert(Constr(Word64.One, List[Term](vr"x", Builtin(AddInteger))).isValueForm)
+        // Nested: Constr containing Constr with value args
+        assert(Constr(Word64.Zero, List(Constr(Word64.One, List[Term](42)))).isValueForm)
+    }
+
+    test("isValueForm: Constr with non-value arg is not a value") {
+        assert(!Constr(Word64.Zero, List(AddInteger $ 1 $ 2)).isValueForm)
+        assert(!Constr(Word64.Zero, List(Error())).isValueForm)
     }
 
     test("isValueForm: Force on polymorphic builtin with 1 type arg") {

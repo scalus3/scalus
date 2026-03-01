@@ -51,13 +51,14 @@ object TermAnalysis:
           *
           * Value forms include:
           *   - Variables, constants, lambda abstractions, delays, and unapplied builtins
-          *   - Nullary constructors (`Constr(tag, Nil)`)
+          *   - Constructors with all-value arguments (`Constr(tag, args)` where each arg is a
+          *     value)
           *   - Forced polymorphic builtins where all type arguments are supplied via Force (e.g.,
           *     `Force(Builtin(HeadList))`, `Force(Force(Builtin(FstPair)))`)
           */
         def isValueForm: Boolean = term match
             case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
-            case Constr(_, Nil, _)                                     => true
+            case Constr(_, args, _)                                    => args.forall(_.isValueForm)
             case Force(Force(Builtin(bn, _), _), _) =>
                 Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 2
             case Force(Builtin(bn, _), _) =>
