@@ -49,23 +49,23 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     )
 
     test(s"Script size: ${compiled.script.script.size} bytes") {
-        assert(compiled.script.script.size == 1852)
+        assert(compiled.script.script.size == 1939)
         println(compiled.sir.showHighlighted)
         println(compiled.program.showHighlighted)
     }
 
     // Expected execution budgets for success tests
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "deposit_successful" -> ExUnits(memory = 169548, steps = 49387305),
-      "accept_successful" -> ExUnits(memory = 166466, steps = 47702270),
-      "accept_with_multiple_inputs" -> ExUnits(memory = 176346, steps = 50716166),
-      "accept_with_datum_attached" -> ExUnits(memory = 166466, steps = 47702270),
-      "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 263559, steps = 74514230),
-      "refund_successful" -> ExUnits(memory = 181233, steps = 53181689),
-      "refund_after_exact_deadline" -> ExUnits(memory = 181233, steps = 53181689),
-      "refund_with_multiple_inputs" -> ExUnits(memory = 191113, steps = 56195585),
-      "refund_with_datum_attached" -> ExUnits(memory = 181233, steps = 53181689),
-      "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 278326, steps = 79993649)
+      "deposit_successful" -> ExUnits(memory = 79297, steps = 27181916),
+      "accept_successful" -> ExUnits(memory = 167366, steps = 47846270),
+      "accept_with_multiple_inputs" -> ExUnits(memory = 177246, steps = 50860166),
+      "accept_with_datum_attached" -> ExUnits(memory = 167366, steps = 47846270),
+      "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 264459, steps = 74658230),
+      "refund_successful" -> ExUnits(memory = 181833, steps = 53277689),
+      "refund_after_exact_deadline" -> ExUnits(memory = 181833, steps = 53277689),
+      "refund_with_multiple_inputs" -> ExUnits(memory = 191713, steps = 56291585),
+      "refund_with_datum_attached" -> ExUnits(memory = 181833, steps = 53277689),
+      "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 278926, steps = 80089649)
     )
 
     // Generate test cases from the JSON

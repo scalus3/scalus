@@ -1,13 +1,14 @@
 package scalus.examples.cape.twopartyescrow
 
-import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.uplc.builtin.ByteString.*
+import scalus.cardano.onchain
+import scalus.cardano.onchain.plutus
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.Validator
-import scalus.cardano.onchain.plutus.prelude.Option.*
+import scalus.uplc.builtin.ByteString.*
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.{show as _, *}
 
 // CAPE spec: datum is Constr(0, [state, depositTime])
@@ -61,51 +62,44 @@ object TwoPartyEscrowValidator {
     ): Unit = {
         val action = redeemer.to[BigInt]
         val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-        val ownCredential = ownInput.address.credential
+        val ownAddress = ownInput.address
 
-        if action == BigInt(0) then handleDeposit(txInfo, ownCredential)
-        else if action == BigInt(1) then handleAccept(datum, txInfo, ownCredential)
-        else if action == BigInt(2) then handleRefund(datum, txInfo, ownCredential)
+        if action == BigInt(0) then handleDeposit(txInfo, ownAddress)
+        else if action == BigInt(1) then handleAccept(datum, txInfo, ownAddress)
+        else if action == BigInt(2) then handleRefund(datum, txInfo, ownAddress)
         else fail("Invalid redeemer")
     }
 
-    private inline def handleDeposit(
+    inline def handleDeposit(
         txInfo: TxInfo,
-        ownCredential: Credential
+        ownAddress: Address
     ): Unit = {
         require(txInfo.isSignedBy(buyerKeyHash), "Buyer must sign deposit")
 
-        val scriptOutputs = txInfo.findOwnOutputsByCredential(ownCredential)
-        val outputAda = Utils.getAdaFromOutputs(scriptOutputs)
+        val expectedDatum = EscrowDatum(
+          state = EscrowState.Deposited,
+          depositTime = txInfo.getValidityStartTime
+        ).toData
 
-        require(outputAda === escrowPrice, "Output must be exactly escrow price")
+        val expectedOutput = TxOut(
+          address = ownAddress,
+          value = Value.lovelace(escrowPrice),
+          datum = OutputDatum.OutputDatum(expectedDatum),
+          referenceScript = Option.None
+        )
 
-        // Verify datum is set on script output
-        require(scriptOutputs.length === BigInt(1), "Expected one script output")
-        val scriptOutput = scriptOutputs.head
-        scriptOutput.datum match {
-            case OutputDatum.OutputDatum(inlineData) =>
-                val escrowDatum = inlineData.to[EscrowDatum]
-                escrowDatum.state match
-                    case EscrowState.Deposited =>
-                        // Verify deposit time matches tx valid range start
-                        require(
-                          escrowDatum.depositTime === txInfo.getValidityStartTime,
-                          "Deposit time must match validity start"
-                        )
-                    case _ => fail("Datum state must be Deposited")
-            case _ => fail("Expected inline datum on script output")
-        }
+        findSingleOutput(txInfo.outputs, expectedOutput)
     }
 
-    private inline def handleAccept(
+    inline def handleAccept(
         datum: Option[Data],
         txInfo: TxInfo,
-        ownCredential: Credential
+        ownAddress: Address
     ): Unit = {
         // Parse datum and verify state is Deposited
         val receivedData = datum.getOrFail("Datum not found")
         val escrowDatum = receivedData.to[EscrowDatum]
+        val ownCredential = ownAddress.credential
         escrowDatum.state match
             case EscrowState.Deposited => ()
             case _                     => fail("Escrow must be in Deposited state")
@@ -123,11 +117,12 @@ object TwoPartyEscrowValidator {
         require(scriptOutputs.isEmpty, "No funds should remain in script")
     }
 
-    private inline def handleRefund(
+    inline def handleRefund(
         datum: Option[Data],
         txInfo: TxInfo,
-        ownCredential: Credential
+        ownAddress: Address
     ): Unit = {
+        val ownCredential = ownAddress.credential
         // Parse datum and verify state is Deposited
         val receivedData = datum.getOrFail("Datum not found")
         val escrowDatum = receivedData.to[EscrowDatum]
@@ -150,5 +145,24 @@ object TwoPartyEscrowValidator {
         // No funds should remain in the script
         val scriptOutputs = txInfo.findOwnOutputsByCredential(ownCredential)
         require(scriptOutputs.isEmpty, "No funds should remain in script")
+    }
+
+    def findSingleOutput(
+        outputs: List[TxOut],
+        expected: TxOut
+    ): TxOut = {
+        def go(outputs: List[TxOut], found: Option[TxOut]): TxOut = outputs match {
+            case List.Cons(head, tail) if head.toData == expected.toData =>
+                found match
+                    case Option.Some(value) =>
+                        fail("Multiple script outputs found, expected only one")
+                    case Option.None => go(tail, Option.Some(head))
+            case List.Cons(head, tail) if head.address.toData == expected.address.toData =>
+                fail("Unexpected output to script address")
+            case List.Cons(head, tail) => go(tail, found)
+            case List.Nil              => found.getOrFail("Not found")
+        }
+
+        go(outputs, Option.None)
     }
 }
