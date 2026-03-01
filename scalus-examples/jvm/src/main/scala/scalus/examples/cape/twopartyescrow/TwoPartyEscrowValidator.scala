@@ -52,7 +52,6 @@ object TwoPartyEscrowValidator {
             case ScriptInfo.SpendingScript(txOutRef, datum) =>
                 spend(datum, sc.redeemer, sc.txInfo, txOutRef)
             case _ => fail("Only spending scripts are supported by this validator")
-
     }
 
     inline def spend(
@@ -62,7 +61,7 @@ object TwoPartyEscrowValidator {
         txOutRef: TxOutRef
     ): Unit = {
         val action = redeemer.to[BigInt]
-        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
+        val ownInput = findOwnInputOrFail(txInfo.inputs, txOutRef).resolved
         val ownAddress = ownInput.address
 
         if action == BigInt(0) then handleDeposit(txInfo, ownAddress)
@@ -152,6 +151,15 @@ object TwoPartyEscrowValidator {
         // No funds should remain in the script
         val scriptOutputs = findOutputsByCredential(outputs, ownCredential)
         require(scriptOutputs.isEmpty, "No funds should remain in script")
+    }
+
+    def findOwnInputOrFail(inputs: List[TxInInfo], txOutRef: TxOutRef): TxInInfo = {
+        def go(inputs: List[TxInInfo]): TxInInfo = inputs match
+            case List.Cons(head, tail) =>
+                if head.outRef.toData == txOutRef.toData then head
+                else go(tail)
+            case List.Nil => fail("Own input not found")
+        go(inputs)
     }
 
     def findOutputsByCredential(outputs: List[TxOut], cred: Credential): List[v2.TxOut] =
