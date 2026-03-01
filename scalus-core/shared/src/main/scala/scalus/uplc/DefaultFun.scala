@@ -1415,6 +1415,101 @@ enum DefaultFun extends Enum[DefaultFun]:
       */
     case ScaleValue
 
+    /** Whether this builtin is total, i.e. guaranteed to succeed for all well-typed inputs.
+      *
+      * Total builtins never throw [[scalus.uplc.eval.BuiltinException]] regardless of argument
+      * values. This is used by [[scalus.uplc.transform.TermAnalysis.isPure]] to treat saturated
+      * applications of total builtins as pure, enabling dead code elimination.
+      *
+      * Partial builtins (isTotal = false) can fail at runtime, e.g.:
+      *   - Division by zero: `DivideInteger`, `QuotientInteger`, `RemainderInteger`, `ModInteger`
+      *   - Out-of-range byte: `ConsByteString`, `ReplicateByte`
+      *   - Index out of bounds: `IndexByteString`, `ReadBit`, `WriteBits`, `IndexArray`,
+      *     `MultiIndexArray`
+      *   - Invalid encoding: `DecodeUtf8`, `IntegerToByteString`
+      *   - Wrong Data constructor: `UnConstrData`, `UnMapData`, `UnListData`, `UnIData`, `UnBData`,
+      *     `UnValueData`
+      *   - Empty list: `HeadList`, `TailList`
+      *   - Type mismatch: `MkCons`
+      *   - Invalid curve points: `Bls12_381_G1_uncompress`, `Bls12_381_G2_uncompress`
+      *   - Invalid inputs: `Bls12_381_G1_hashToGroup`, `Bls12_381_G2_hashToGroup`,
+      *     `Bls12_381_G1_multiScalarMul`, `Bls12_381_G2_multiScalarMul`
+      *   - Modular arithmetic: `ExpModInteger`
+      *   - Value operations: `InsertCoin` (name/symbol length, quantity overflow), `UnionValue`,
+      *     `ScaleValue` (amount overflow), `ValueContains` (negative amounts), `ValueData` (exceeds
+      *     max size of 40000 entries), `UnValueData` (invalid Data structure)
+      *   - Side effect: `Trace` (logging must not be eliminated)
+      */
+    def isTotal: Boolean = this match
+        // Integer arithmetic - total
+        case AddInteger | SubtractInteger | MultiplyInteger          => true
+        case EqualsInteger | LessThanInteger | LessThanEqualsInteger => true
+        // Integer division - division by zero
+        case DivideInteger | QuotientInteger | RemainderInteger | ModInteger => false
+        // ByteString operations - total
+        case AppendByteString | SliceByteString | LengthOfByteString          => true
+        case EqualsByteString | LessThanByteString | LessThanEqualsByteString => true
+        // ByteString operations - partial (out of range / invalid encoding)
+        case ConsByteString | IndexByteString | ReplicateByte => false
+        // String operations - total
+        case AppendString | EqualsString | EncodeUtf8 => true
+        // String operations - partial (invalid UTF-8)
+        case DecodeUtf8 => false
+        // Control flow - total
+        case IfThenElse | ChooseUnit | ChooseList | ChooseData => true
+        // Trace - side effect (logging must be preserved)
+        case Trace => false
+        // Pair operations - total
+        case FstPair | SndPair => true
+        // List operations - total
+        case NullList | DropList => true
+        // List operations - partial (empty list / type mismatch)
+        case HeadList | TailList | MkCons => false
+        // Data constructors - total
+        case ConstrData | MapData | ListData | IData | BData => true
+        case EqualsData | SerialiseData                      => true
+        case MkPairData | MkNilData | MkNilPairData          => true
+        // Data destructors - partial (wrong Data variant)
+        case UnConstrData | UnMapData | UnListData | UnIData | UnBData => false
+        // Hash functions - total
+        case Sha2_256 | Sha3_256 | Blake2b_256 | Keccak_256 | Blake2b_224 | Ripemd_160 => true
+        // Crypto verification - partial (invalid key/signature lengths)
+        case VerifyEd25519Signature | VerifyEcdsaSecp256k1Signature |
+            VerifySchnorrSecp256k1Signature =>
+            false
+        // Integer/ByteString conversion
+        case ByteStringToInteger => true
+        case IntegerToByteString => false // negative integer or doesn't fit
+        // Bitwise logical operations - total
+        case AndByteString | OrByteString | XorByteString | ComplementByteString => true
+        case ShiftByteString | RotateByteString | CountSetBits | FindFirstSetBit => true
+        // Bitwise operations - partial (index out of bounds)
+        case ReadBit | WriteBits => false
+        // Modular exponentiation - partial (modulus <= 0, non-invertible base)
+        case ExpModInteger => false
+        // BLS12-381 point operations - total
+        case Bls12_381_G1_add | Bls12_381_G1_neg | Bls12_381_G1_scalarMul         => true
+        case Bls12_381_G1_equal | Bls12_381_G1_compress                           => true
+        case Bls12_381_G2_add | Bls12_381_G2_neg | Bls12_381_G2_scalarMul         => true
+        case Bls12_381_G2_equal | Bls12_381_G2_compress                           => true
+        case Bls12_381_millerLoop | Bls12_381_mulMlResult | Bls12_381_finalVerify => true
+        // BLS12-381 operations - partial (invalid points / empty lists)
+        case Bls12_381_G1_uncompress | Bls12_381_G2_uncompress         => false
+        case Bls12_381_G1_hashToGroup | Bls12_381_G2_hashToGroup       => false
+        case Bls12_381_G1_multiScalarMul | Bls12_381_G2_multiScalarMul => false
+        // Array operations - total
+        case LengthOfArray | ListToArray => true
+        // Array operations - partial (index out of bounds)
+        case IndexArray | MultiIndexArray => false
+        // Value operations - total
+        case LookupCoin => true
+        // Value operations - partial
+        case InsertCoin => false // currency symbol/token name > 32 bytes, quantity overflow
+        case UnionValue | ScaleValue => false // amount overflow
+        case ValueContains           => false // negative amounts
+        case ValueData               => false // value exceeds maximum size (40000 entries)
+        case UnValueData             => false // invalid Data structure
+
 object DefaultFun {
     given Flat[DefaultFun] with
         def bitSize(a: DefaultFun): Int = 7

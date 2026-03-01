@@ -101,9 +101,11 @@ object TermAnalysis:
           *     and not a builtin awaiting type arguments. Forcing a non-delayed term will error at
           *     runtime. For example, `Force(Const(1))` will fail because you cannot force a
           *     constant. However, `Force(Delay(t))` is pure because it's a no-op.
-          *   - '''Saturated builtin applications''': Builtin applications where all required type
-          *     and value arguments are provided. These may fail depending on the arguments (e.g.,
-          *     `DivideInteger $ 1 $ 0` will error due to division by zero).
+          *   - '''Saturated partial builtin applications''': Builtin applications where all
+          *     required type and value arguments are provided and the builtin is not total. These
+          *     may fail depending on the arguments (e.g., `DivideInteger $ 1 $ 0` will error due to
+          *     division by zero). Note: saturated ''total'' builtins like `AddInteger $ 1 $ 2` are
+          *     pure.
           *   - '''Apply/Case with impure subterms''': If any subterm is impure, the whole term is
           *     considered impure
           *
@@ -138,7 +140,8 @@ object TermAnalysis:
           * // Builtins
           * Builtin(AddInteger).isPure             // true - unapplied builtin
           * Apply(Builtin(AddInteger), Const(1)).isPure  // true - partial application
-          * Apply(Apply(Builtin(AddInteger), Const(1)), Const(2)).isPure  // false - saturated
+          * Apply(Apply(Builtin(AddInteger), Const(1)), Const(2)).isPure  // true - saturated total
+          * Apply(Apply(Builtin(DivideInteger), Const(1)), Const(0)).isPure  // false - saturated partial
           *
           * Force(Builtin(HeadList)).isPure        // true - builtin needs type arg
           * Apply(Force(Builtin(HeadList)), list).isPure  // depends on list.isPure
@@ -167,8 +170,8 @@ object TermAnalysis:
                         // Saturated if all type and value arguments are applied
                         val isSaturated =
                             numForces >= requiredTypeArgs && numApplies >= requiredValueArgs
-                        // Pure if not saturated and all applied arguments are pure
-                        !isSaturated && appliedArgs.forall(_.isPure)
+                        // Pure if (not saturated OR builtin is total) and all args are pure
+                        (!isSaturated || bn.isTotal) && appliedArgs.forall(_.isPure)
                     case None => false
             // (lam x [(lam ...) x]) can be eta-reduced to (lam ...)
             case LamAbs(_, _, _) => true

@@ -147,11 +147,20 @@ class EtaReduceTest extends AnyFunSuite:
           )
         )
 
-    // Saturated builtin (impure)
-    test("(lam x [[(builtin addInteger) 1 2] x]) does not reduce (saturated builtin is impure)"):
-        val saturatedBuiltin = Builtin(AddInteger) $ 1 $ 2
+    // Saturated total builtin is now pure, so eta-reduction applies
+    test("(lam x [[(builtin addInteger) 1 2] x]) reduces (saturated total builtin is pure)"):
+        val saturatedTotal = Builtin(AddInteger) $ 1 $ 2
         assert(
-          etaReduce(λ("x")(saturatedBuiltin $ vr"x")) == λ("x")(saturatedBuiltin $ vr"x")
+          etaReduce(λ("x")(saturatedTotal $ vr"x")) == saturatedTotal
+        )
+
+    // Saturated partial builtin is impure, so eta-reduction does NOT apply
+    test(
+      "(lam x [[(builtin divideInteger) 1 0] x]) does not reduce (saturated partial builtin is impure)"
+    ):
+        val saturatedPartial = Builtin(DivideInteger) $ 1 $ 0
+        assert(
+          etaReduce(λ("x")(saturatedPartial $ vr"x")) == λ("x")(saturatedPartial $ vr"x")
         )
 
     // Constr is pure

@@ -103,23 +103,40 @@ class TermAnalysisTest extends AnyFunSuite:
         assert((SliceByteString $ 0 $ 2).isPure)
     }
 
-    // Saturated builtins (can fail)
-    test("Saturated builtin application is impure") {
-        // AddInteger needs 2 args, has 2 - saturated, impure
-        assert(!(AddInteger $ 1 $ 2).isPure)
+    // Saturated builtins - total vs partial
+    test("Saturated total builtin application is pure") {
+        // AddInteger is total - can never fail
+        assert((AddInteger $ 1 $ 2).isPure)
+        // MultiplyInteger is total
+        assert((MultiplyInteger $ 3 $ 4).isPure)
+        // EqualsByteString is total
+        val bs = Const(Constant.ByteString(hex"deadbeef"))
+        assert((EqualsByteString $ bs $ bs).isPure)
+    }
 
+    test("Saturated partial builtin application is impure") {
         // DivideInteger can fail with division by zero
         assert(!(DivideInteger $ 1 $ 0).isPure)
         assert(!(DivideInteger $ 10 $ 5).isPure)
-
-        // MultiplyInteger saturated
-        assert(!(MultiplyInteger $ 3 $ 4).isPure)
+        // QuotientInteger can fail
+        assert(!(QuotientInteger $ 7 $ 2).isPure)
     }
 
-    test("Saturated polymorphic builtin is impure") {
-        // HeadList with type arg and list arg - saturated, can fail
+    test("Saturated total builtin with impure arg is impure") {
+        // AddInteger is total, but arg is impure
+        assert(!(AddInteger $ Error() $ 2).isPure)
+        assert(!(AddInteger $ 1 $ Error()).isPure)
+    }
+
+    test("Saturated polymorphic partial builtin is impure") {
+        // HeadList with type arg and list arg - saturated, can fail on empty list
         val list = Const(Constant.List(DefaultUni.Integer, List()))
         assert(!(Force(Builtin(HeadList)) $ list).isPure)
+    }
+
+    test("Saturated Trace is impure (side effect)") {
+        // Trace has a side effect (logging), must not be eliminated
+        assert(!(Force(Builtin(Trace)) $ "hello" $ 42).isPure)
     }
 
     // Beta-redexes
@@ -253,7 +270,7 @@ class TermAnalysisTest extends AnyFunSuite:
           Error(),
           Force(Const(Constant.Integer(1))),
           Force(vr"x"),
-          AddInteger $ 1 $ 2 // saturated
+          DivideInteger $ 1 $ 0 // saturated partial builtin
         )
 
         impureTerms.foreach { term =>
@@ -262,5 +279,155 @@ class TermAnalysisTest extends AnyFunSuite:
             assert(!(λ("x")(vr"x") $ term).isPure)
             // Constructor with impure arg
             assert(!Constr(Word64.Zero, List(term)).isPure)
+        }
+    }
+
+    // ========================================================================
+    // isTotal tests
+    // ========================================================================
+
+    test("Arithmetic builtins are total") {
+        val totalArithmetic = List(
+          AddInteger,
+          SubtractInteger,
+          MultiplyInteger,
+          EqualsInteger,
+          LessThanInteger,
+          LessThanEqualsInteger
+        )
+        totalArithmetic.foreach { bn =>
+            assert(bn.isTotal, s"$bn should be total")
+        }
+    }
+
+    test("Division builtins are partial") {
+        val partialDivision =
+            List(DivideInteger, QuotientInteger, RemainderInteger, ModInteger)
+        partialDivision.foreach { bn =>
+            assert(!bn.isTotal, s"$bn should be partial")
+        }
+    }
+
+    test("Hash builtins are total") {
+        val totalHash = List(Sha2_256, Sha3_256, Blake2b_256, Keccak_256, Blake2b_224, Ripemd_160)
+        totalHash.foreach { bn =>
+            assert(bn.isTotal, s"$bn should be total")
+        }
+    }
+
+    test("Crypto verification builtins are partial") {
+        val partialCrypto = List(
+          VerifyEd25519Signature,
+          VerifyEcdsaSecp256k1Signature,
+          VerifySchnorrSecp256k1Signature
+        )
+        partialCrypto.foreach { bn =>
+            assert(!bn.isTotal, s"$bn should be partial")
+        }
+    }
+
+    test("List head/tail are partial, NullList is total") {
+        assert(!HeadList.isTotal)
+        assert(!TailList.isTotal)
+        assert(NullList.isTotal)
+    }
+
+    test("Data constructors are total, destructors are partial") {
+        val totalDataCtors = List(ConstrData, MapData, ListData, IData, BData)
+        totalDataCtors.foreach { bn =>
+            assert(bn.isTotal, s"$bn should be total")
+        }
+        val partialDataDtors = List(UnConstrData, UnMapData, UnListData, UnIData, UnBData)
+        partialDataDtors.foreach { bn =>
+            assert(!bn.isTotal, s"$bn should be partial")
+        }
+    }
+
+    test("BLS point operations are total, uncompress/hash/multiScalarMul are partial") {
+        val totalBls = List(
+          Bls12_381_G1_add,
+          Bls12_381_G1_neg,
+          Bls12_381_G1_scalarMul,
+          Bls12_381_G1_equal,
+          Bls12_381_G1_compress,
+          Bls12_381_G2_add,
+          Bls12_381_G2_neg,
+          Bls12_381_G2_scalarMul,
+          Bls12_381_G2_equal,
+          Bls12_381_G2_compress,
+          Bls12_381_millerLoop,
+          Bls12_381_mulMlResult,
+          Bls12_381_finalVerify
+        )
+        totalBls.foreach { bn =>
+            assert(bn.isTotal, s"$bn should be total")
+        }
+        val partialBls = List(
+          Bls12_381_G1_uncompress,
+          Bls12_381_G2_uncompress,
+          Bls12_381_G1_hashToGroup,
+          Bls12_381_G2_hashToGroup,
+          Bls12_381_G1_multiScalarMul,
+          Bls12_381_G2_multiScalarMul
+        )
+        partialBls.foreach { bn =>
+            assert(!bn.isTotal, s"$bn should be partial")
+        }
+    }
+
+    test("Bitwise operations: total vs partial") {
+        val totalBitwise = List(
+          AndByteString,
+          OrByteString,
+          XorByteString,
+          ComplementByteString,
+          ShiftByteString,
+          RotateByteString,
+          CountSetBits,
+          FindFirstSetBit
+        )
+        totalBitwise.foreach { bn =>
+            assert(bn.isTotal, s"$bn should be total")
+        }
+        val partialBitwise = List(ReadBit, WriteBits)
+        partialBitwise.foreach { bn =>
+            assert(!bn.isTotal, s"$bn should be partial")
+        }
+    }
+
+    test("Array operations: total vs partial") {
+        assert(LengthOfArray.isTotal)
+        assert(ListToArray.isTotal)
+        assert(!IndexArray.isTotal)
+        assert(!MultiIndexArray.isTotal)
+    }
+
+    test("Value operations: total vs partial") {
+        assert(LookupCoin.isTotal)
+        val partialValue =
+            List(InsertCoin, UnionValue, ValueContains, ValueData, ScaleValue, UnValueData)
+        partialValue.foreach { bn =>
+            assert(!bn.isTotal, s"$bn should be partial")
+        }
+    }
+
+    test("Trace is partial (side effect)") {
+        assert(!Trace.isTotal)
+    }
+
+    test("Control flow builtins are total") {
+        val totalControl = List(IfThenElse, ChooseUnit, ChooseList, ChooseData)
+        totalControl.foreach { bn =>
+            assert(bn.isTotal, s"$bn should be total")
+        }
+    }
+
+    test("ExpModInteger is partial") {
+        assert(!ExpModInteger.isTotal)
+    }
+
+    test("isTotal covers all DefaultFun values") {
+        DefaultFun.values.foreach { bn =>
+            bn.isTotal: Boolean // ensure match is exhaustive at runtime
         }
     }

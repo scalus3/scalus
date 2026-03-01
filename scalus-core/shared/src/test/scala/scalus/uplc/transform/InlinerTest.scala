@@ -471,6 +471,31 @@ class InlinerTest extends AnyFunSuite {
     // Logging
     // ========================================================================
 
+    // ========================================================================
+    // DCE with builtin totality
+    // ========================================================================
+
+    test("should eliminate dead saturated total builtin") {
+        // (λx. 42) (AddInteger $ 1 $ 2) => 42
+        // AddInteger is total, so the saturated application is pure and can be eliminated
+        val term = λ("x")(42) $ (AddInteger $ 1 $ 2)
+        assert(Inliner(term) == 42.asTerm)
+    }
+
+    test("should not eliminate dead saturated partial builtin") {
+        // (λx. 42) (DivideInteger $ 1 $ 0) stays unchanged
+        // DivideInteger is partial, so the saturated application is impure
+        val term = λ("x")(42) $ (DivideInteger $ 1 $ 0)
+        assert(Inliner(term) == term)
+    }
+
+    test("should not eliminate dead Trace (side effect)") {
+        // (λx. 42) (Force(Trace) $ "hello" $ 1) stays unchanged
+        // Trace has a side effect (logging), must be preserved
+        val term = λ("x")(42) $ (Force(Builtin(Trace)) $ "hello" $ 1)
+        assert(Inliner(term) == term)
+    }
+
     test("should produce log entries for optimizations") {
         val inliner = new Inliner()
         inliner(λ("x")(vr"x") $ (AddInteger $ 1 $ 2))
