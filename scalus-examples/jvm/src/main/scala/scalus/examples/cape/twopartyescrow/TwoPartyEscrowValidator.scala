@@ -17,22 +17,7 @@ enum EscrowState derives FromData, ToData:
     case Accepted
     case Refunded
 
-@Compile
-object EscrowState
-
 case class EscrowDatum(state: EscrowState, depositTime: BigInt) derives FromData, ToData
-
-@Compile
-object EscrowDatum
-
-// CAPE parameters baked in as top-level inline defs so they are properly inlined
-// into the @Compile object
-private inline def buyerKeyHash: PubKeyHash =
-    PubKeyHash(hex"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-private inline def sellerKeyHash: PubKeyHash =
-    PubKeyHash(hex"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
-private inline def escrowPrice: Lovelace = BigInt(75_000_000)
-private inline def deadlineSeconds: BigInt = BigInt(1800)
 
 /** UPLC-CAPE Two-Party Escrow Validator
   *
@@ -49,6 +34,15 @@ private inline def deadlineSeconds: BigInt = BigInt(1800)
   */
 @Compile
 object TwoPartyEscrowValidator extends Validator {
+
+    // CAPE parameters baked in as top-level inline defs so they are properly inlined
+    // into the @Compile object
+    private inline def buyerKeyHash: PubKeyHash =
+        PubKeyHash(hex"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+    private inline def sellerKeyHash: PubKeyHash =
+        PubKeyHash(hex"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb")
+    private inline def escrowPrice: Lovelace = BigInt(75_000_000)
+    private inline def deadlineSeconds: BigInt = BigInt(1800)
 
     inline override def spend(
         datum: Option[Data],

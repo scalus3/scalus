@@ -4,10 +4,11 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.*
 import scalus.uplc.builtin.{Builtins, ByteString, Data}
+import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.eval.*
 
@@ -19,12 +20,7 @@ import scalus.uplc.eval.*
   */
 class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
-    // Use POption to avoid conflicts with scala.Option
-    private type POption[A] = scalus.cardano.onchain.plutus.prelude.Option[A]
-    private val PSome = scalus.cardano.onchain.plutus.prelude.Option.Some
-    private val PNone = scalus.cardano.onchain.plutus.prelude.Option.None
-
-    private val compiled = TwoPartyEscrowContract
+    private val compiled = TwoPartyEscrowContract.compiled
     private val program = compiled.program
 
     // Parse the test file
@@ -40,29 +36,19 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
     // Script hash used for the escrow contract address
     private val scriptHash: ByteString =
-        ByteString.fromHex("1111111111111111111111111111111111111111111111111111111111")
+        hex"1111111111111111111111111111111111111111111111111111111111"
 
     // Default spending TxOutRef
-    private val defaultTxOutRef = TxOutRef(
-      TxId(
-        ByteString.fromHex(
-          "0000000000000000000000000000000000000000000000000000000000000000"
-        )
-      ),
-      0
-    )
+    private val defaultTxOutRef =
+        TxOutRef(TxId(hex"0000000000000000000000000000000000000000000000000000000000000000"), 0)
 
     // Default TxId
     private val defaultTxId = TxId(
-      ByteString.fromHex(
-        "0000000000000000000000000000000000000000000000000000000000000000"
-      )
+      hex"0000000000000000000000000000000000000000000000000000000000000000"
     )
 
     test(s"Script size: ${compiled.script.script.size} bytes") {
-        val size = compiled.script.script.size
-        println(s"Two-Party Escrow script size: $size bytes (Plinth baseline: 3233 bytes)")
-        assert(size > 0)
+        assert(compiled.script.script.size > 0)
     }
 
     // Generate test cases from the JSON
@@ -81,7 +67,7 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
             val scriptContextData: Data = inputType match {
                 case "builtin_data" =>
                     // Direct Data input (not a valid ScriptContext)
-                    parseBuiltinData(input("value").str)
+                    CapeDataParser.parse(input("value").str)
                 case "script_context" =>
                     buildScriptContext(input("script_context"))
             }
@@ -99,10 +85,7 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
                 case "value" =>
                     result match {
-                        case Result.Success(term, budget, _, logs) =>
-                            println(
-                              s"  $testName: CPU=${budget.steps}, Mem=${budget.memory}"
-                            )
+                        case Result.Success(term, budget, _, logs) => ()
                         case Result.Failure(ex, budget, _, logs) =>
                             fail(
                               s"$testName: Expected success but got error: $ex\nLogs: ${logs.mkString(", ")}"
@@ -114,75 +97,57 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
     // --- Helper methods ---
 
-    /** Parse CAPE builtin_data notation to Scalus Data */
-    private def parseBuiltinData(value: String): Data = {
-        val trimmed = value.trim
-        if trimmed.startsWith("#") then
-            // ByteString: #deadbeef
-            Builtins.bData(ByteString.fromHex(trimmed.drop(1)))
-        else if trimmed.startsWith("[") then
-            // List: [1 2 3]
-            val inner = trimmed.drop(1).dropRight(1).trim
-            val items =
-                if inner.isEmpty then scala.Nil
-                else inner.split("\\s+").map(s => parseBuiltinData(s.trim)).toList
-            Builtins.listData(items.foldRight(Builtins.mkNilData())(Builtins.mkCons(_, _)))
-        else if trimmed.startsWith("{") then
-            // Map: {1:42}
-            val inner = trimmed.drop(1).dropRight(1).trim
-            val pairs = inner.split(",").map { pair =>
-                val parts = pair.split(":")
-                (parseBuiltinData(parts(0).trim), parseBuiltinData(parts(1).trim))
-            }
-            val pairsList = pairs.foldRight(Builtins.mkNilPairData()) { (pair, acc) =>
-                Builtins.mkCons(Builtins.mkPairData(pair._1, pair._2), acc)
-            }
-            Builtins.mapData(pairsList)
-        else if trimmed.contains("(") then
-            // Constructor: 0(0() 1000) or 0()
-            val parenIdx = trimmed.indexOf('(')
-            val tag = BigInt(trimmed.substring(0, parenIdx).trim)
-            val inner = trimmed.substring(parenIdx + 1, trimmed.length - 1).trim
-            if inner.isEmpty then Builtins.constrData(tag, Builtins.mkNilData())
-            else
-                val fields = parseConstructorFields(inner)
-                val fieldsList = fields.foldRight(Builtins.mkNilData())(Builtins.mkCons(_, _))
-                Builtins.constrData(tag, fieldsList)
-        else
-            // Integer
-            Builtins.iData(BigInt(trimmed))
-    }
+    /** Parser for CAPE builtin_data notation using cats-parse.
+      *
+      * Format: `#hex` (bytestring), `[a b c]` (list), `{k:v,k:v}` (map), `tag(fields...)` (constr),
+      * or plain integer.
+      */
+    private object CapeDataParser {
+        import cats.parse.{Parser as P, Parser0}
 
-    /** Parse constructor fields like "0() 1000" into a list of Data */
-    private def parseConstructorFields(s: String): scala.List[Data] = {
-        val result = scala.collection.mutable.ListBuffer.empty[Data]
-        var i = 0
-        while i < s.length do
-            if s(i).isWhitespace then i += 1
-            else if s(i).isDigit || s(i) == '-' then
-                // Could be an integer or start of a constructor
-                val start = i
-                if s(i) == '-' then i += 1
-                while i < s.length && s(i).isDigit do i += 1
-                if i < s.length && s(i) == '(' then
-                    // Constructor: find matching paren
-                    var depth = 1
-                    i += 1
-                    while i < s.length && depth > 0 do
-                        if s(i) == '(' then depth += 1
-                        else if s(i) == ')' then depth -= 1
-                        i += 1
-                    result += parseBuiltinData(s.substring(start, i))
-                else
-                    // Plain integer
-                    result += parseBuiltinData(s.substring(start, i))
-            else if s(i) == '#' then
-                val start = i
-                i += 1
-                while i < s.length && !s(i).isWhitespace do i += 1
-                result += parseBuiltinData(s.substring(start, i))
-            else i += 1
-        result.toList
+        private val ws0: Parser0[Unit] = P.charIn(" \t\r\n").rep0.void
+        private def lexeme[A](p: P[A]): P[A] = p <* ws0
+
+        val data: P[Data] = P.recursive[Data] { self =>
+            val bsData: P[Data] =
+                lexeme((P.char('#') *> UplcParser.hexByte.rep0).map { bs =>
+                    Builtins.bData(ByteString(bs*))
+                })
+
+            val listData: P[Data] =
+                (lexeme(P.char('[')) *> self.rep0 <* lexeme(P.char(']'))).map { items =>
+                    val list = items.toList.foldRight(Builtins.mkNilData())(Builtins.mkCons(_, _))
+                    Builtins.listData(list)
+                }
+
+            val mapPair: P[(Data, Data)] = self ~ (lexeme(P.char(':')) *> self)
+            val mapData: P[Data] =
+                (lexeme(P.char('{')) *> mapPair.repSep0(lexeme(P.char(','))) <* lexeme(P.char('}'))).map {
+                    pairs =>
+                        val pairsList = pairs.toList.foldRight(Builtins.mkNilPairData()) {
+                            (pair, acc) =>
+                                Builtins.mkCons(Builtins.mkPairData(pair._1, pair._2), acc)
+                        }
+                        Builtins.mapData(pairsList)
+                }
+
+            val intOrConstr: P[Data] = lexeme(UplcParser.integer).flatMap { n =>
+                val constr = (lexeme(P.char('(')) *> self.rep0 <* lexeme(P.char(')'))).map { fields =>
+                    val fieldsList =
+                        fields.toList.foldRight(Builtins.mkNilData())(Builtins.mkCons(_, _))
+                    Builtins.constrData(n, fieldsList)
+                }
+                constr.backtrack.orElse(P.pure(Builtins.iData(n)))
+            }
+
+            bsData | listData | mapData | intOrConstr
+        }
+
+        def parse(s: String): Data =
+            data.parseAll(s.trim) match
+                case Right(result) => result
+                case Left(err) =>
+                    throw RuntimeException(s"Failed to parse CAPE builtin data '$s': $err")
     }
 
     /** Resolve a data value that may be a @reference or inline */
@@ -191,11 +156,11 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
             case ujson.Str(s) if s.startsWith("@") =>
                 val resolved = dataStructures(s.drop(1))
                 resolved("type").str match {
-                    case "builtin_data" => parseBuiltinData(resolved("value").str)
+                    case "builtin_data" => CapeDataParser.parse(resolved("value").str)
                     case other =>
                         throw new RuntimeException(s"Cannot resolve data ref of type $other")
                 }
-            case ujson.Str(s) => parseBuiltinData(s)
+            case ujson.Str(s) => CapeDataParser.parse(s)
             case _            => throw new RuntimeException(s"Unexpected data value: $v")
         }
     }
@@ -245,8 +210,8 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
         txOutRef: TxOutRef = defaultTxOutRef
     ) {
         def build(): Data = {
-            val sigs: PList[PubKeyHash] =
-                signatories.foldRight(PList.empty[PubKeyHash])((a, b) => PList.Cons(a, b))
+            val sigs: SList[PubKeyHash] =
+                signatories.foldRight(SList.empty[PubKeyHash])((a, b) => SList.Cons(a, b))
             // Ensure spending txOutRef has a matching input (for deposit, no is_own_input is set)
             val allInputs =
                 if inputs.exists(_.outRef == txOutRef) then inputs
@@ -254,15 +219,15 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
                     TxInInfo(
                       outRef = txOutRef,
                       resolved = TxOut(
-                        address = Address(Credential.ScriptCredential(scriptHash), PNone),
+                        address = Address(Credential.ScriptCredential(scriptHash), SOption.None),
                         value = Value.lovelace(BigInt(0)),
                         datum = OutputDatum.NoOutputDatum
                       )
                     ) :: inputs
-            val ins: PList[TxInInfo] =
-                allInputs.foldRight(PList.empty[TxInInfo])((a, b) => PList.Cons(a, b))
-            val outs: PList[TxOut] =
-                outputs.foldRight(PList.empty[TxOut])((a, b) => PList.Cons(a, b))
+            val ins: SList[TxInInfo] =
+                allInputs.foldRight(SList.empty[TxInInfo])((a, b) => SList.Cons(a, b))
+            val outs: SList[TxOut] =
+                outputs.foldRight(SList.empty[TxOut])((a, b) => SList.Cons(a, b))
 
             val txInfo = TxInfo(
               inputs = ins,
@@ -272,9 +237,9 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
               id = defaultTxId
             )
 
-            val datumOpt: POption[Data] = scriptDatum match {
-                case scala.Some(d) => PSome(d)
-                case scala.None    => PNone
+            val datumOpt: SOption[Data] = scriptDatum match {
+                case scala.Some(d) => SOption.Some(d)
+                case scala.None    => SOption.None
             }
 
             val sc = ScriptContext(
@@ -312,7 +277,7 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
         patch("op").str match {
             case "set_redeemer" =>
                 val redeemerStr = patch("redeemer").str
-                ctx.copy(redeemer = parseBuiltinData(redeemerStr))
+                ctx.copy(redeemer = CapeDataParser.parse(redeemerStr))
 
             case "add_signature" =>
                 val pkh = resolvePubKeyHash(patch("pubkey_hash"))
@@ -335,17 +300,16 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
                 val txOutRef = parseTxOutRef(utxoRefStr)
                 val address =
-                    if isOwnInput then Address(Credential.ScriptCredential(scriptHash), PNone)
+                    if isOwnInput then
+                        Address(Credential.ScriptCredential(scriptHash), SOption.None)
                     else
                         Address(
                           Credential.PubKeyCredential(
                             PubKeyHash(
-                              ByteString.fromHex(
-                                "0000000000000000000000000000000000000000000000000000000000000000"
-                              )
+                              hex"0000000000000000000000000000000000000000000000000000000000000000"
                             )
                           ),
-                          PNone
+                          SOption.None
                         )
 
                 val outputDatum = datumOpt match {
@@ -405,10 +369,10 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
         addrJson("type").str match {
             case "script" =>
                 val hash = ByteString.fromHex(addrJson("script_hash").str)
-                Address(Credential.ScriptCredential(hash), PNone)
+                Address(Credential.ScriptCredential(hash), SOption.None)
             case "pubkey" =>
                 val pkh = resolvePubKeyHash(addrJson("pubkey_hash"))
-                Address(Credential.PubKeyCredential(PubKeyHash(pkh)), PNone)
+                Address(Credential.PubKeyCredential(PubKeyHash(pkh)), SOption.None)
         }
     }
 }
