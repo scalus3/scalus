@@ -1,26 +1,26 @@
-package scalus.cardano.onchain.plutus.amt4
+package scalus.cardano.onchain.plutus.imt4
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.offchain.amt4.AppendOnlyMerkleTree4 as OffChainAmt4
+import scalus.cardano.offchain.imt4.IncrementalMerkleTree4 as OffChainImt4
 import scalus.cardano.onchain.RequirementError
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 
-class AppendOnlyMerkleTree4Test extends AnyFunSuite {
-    import AppendOnlyMerkleTree4.*
+class IncrementalMerkleTree4Test extends AnyFunSuite {
+    import IncrementalMerkleTree4.*
 
     private val depth = 2 // 4^2 = 16 slots
 
     test("empty tree root is deterministic") {
-        val tree1 = OffChainAmt4.empty(depth)
-        val tree2 = OffChainAmt4.empty(depth)
+        val tree1 = OffChainImt4.empty(depth)
+        val tree2 = OffChainImt4.empty(depth)
         assert(tree1.rootHash == tree2.rootHash)
         assert(tree1.rootHash.length == 32)
     }
 
     test("append and verify single member") {
         val key = ByteString.fromString("hello")
-        val tree0 = OffChainAmt4.empty(depth)
+        val tree0 = OffChainImt4.empty(depth)
         val tree1 = tree0.append(key)
 
         val proof = tree1.proveMembership(key)
@@ -30,7 +30,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
     }
 
     test("append and verify multiple members") {
-        var tree = OffChainAmt4.empty(depth)
+        var tree = OffChainImt4.empty(depth)
         val keys = (0 until 10).map(i => ByteString.fromString(s"key-$i"))
 
         for key <- keys do tree = tree.append(key)
@@ -44,7 +44,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
 
     test("append proof verifies on-chain") {
         val key = ByteString.fromString("first")
-        val tree0 = OffChainAmt4.empty(depth)
+        val tree0 = OffChainImt4.empty(depth)
 
         val appendProof = tree0.proveAppend()
         val newRoot = append(tree0.rootHash, BigInt(tree0.size), BigInt(depth), key, appendProof)
@@ -54,7 +54,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
     }
 
     test("multiple appends with on-chain verification") {
-        var tree = OffChainAmt4.empty(depth)
+        var tree = OffChainImt4.empty(depth)
         val keys = (0 until 5).map(i => ByteString.fromString(s"elem-$i"))
 
         for key <- keys do
@@ -66,7 +66,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
     }
 
     test("wrong key fails membership verification") {
-        val tree = OffChainAmt4.empty(depth).append(ByteString.fromString("real-key"))
+        val tree = OffChainImt4.empty(depth).append(ByteString.fromString("real-key"))
 
         val proof = tree.proveMembership(ByteString.fromString("real-key"))
         val slot = byteStringToInteger(true, sliceByteString(0, 3, proof))
@@ -84,7 +84,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
     }
 
     test("wrong slot fails membership verification") {
-        val tree = OffChainAmt4.empty(depth)
+        val tree = OffChainImt4.empty(depth)
             .append(ByteString.fromString("key-0"))
             .append(ByteString.fromString("key-1"))
 
@@ -103,7 +103,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
     }
 
     test("append to non-empty slot fails") {
-        val tree = OffChainAmt4.empty(depth).append(ByteString.fromString("first"))
+        val tree = OffChainImt4.empty(depth).append(ByteString.fromString("first"))
 
         val proof = tree.proveMembership(ByteString.fromString("first"))
         val siblings = sliceByteString(3, depth * 96, proof)
@@ -121,7 +121,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
 
     test("fill tree to capacity") {
         val smallDepth = 2 // 16 slots
-        var tree = OffChainAmt4.empty(smallDepth)
+        var tree = OffChainImt4.empty(smallDepth)
         val keys = (0 until 16).map(i => ByteString.fromString(s"k$i"))
 
         for key <- keys do tree = tree.append(key)
@@ -135,7 +135,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
 
     test("larger depth D=5") {
         val d = 5 // 1024 slots
-        var tree = OffChainAmt4.empty(d)
+        var tree = OffChainImt4.empty(d)
         val keys = (0 until 50).map(i => ByteString.fromString(s"element-$i"))
 
         for key <- keys do tree = tree.append(key)
@@ -150,7 +150,7 @@ class AppendOnlyMerkleTree4Test extends AnyFunSuite {
 
     test("proof sizes are correct") {
         val d = 8 // suitable for N=32K
-        val tree = OffChainAmt4.empty(d).append(ByteString.fromString("test"))
+        val tree = OffChainImt4.empty(d).append(ByteString.fromString("test"))
 
         val memberProof = tree.proveMembership(ByteString.fromString("test"))
         assert(

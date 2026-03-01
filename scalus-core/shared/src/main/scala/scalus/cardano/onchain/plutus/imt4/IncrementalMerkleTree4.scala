@@ -1,4 +1,4 @@
-package scalus.cardano.onchain.plutus.amt4
+package scalus.cardano.onchain.plutus.imt4
 
 import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.require
@@ -17,7 +17,7 @@ import scalus.uplc.builtin.ByteString.hex
   *   - Append: 2×D + 2 blake2b calls
   */
 @Compile
-object AppendOnlyMerkleTree4 {
+object IncrementalMerkleTree4 {
     val NullHash: ByteString =
         hex"0000000000000000000000000000000000000000000000000000000000000000"
 

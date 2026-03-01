@@ -1,4 +1,4 @@
-package scalus.cardano.offchain.amt4
+package scalus.cardano.offchain.imt4
 
 import scalus.uplc.builtin.Builtins.{blake2b_256, appendByteString, integerToByteString}
 import scalus.uplc.builtin.ByteString
@@ -10,7 +10,7 @@ import scalus.uplc.builtin.ByteString
   *
   * Leaves start at index `firstLeaf = (4^D - 1) / 3`.
   */
-class AppendOnlyMerkleTree4 private (
+class IncrementalMerkleTree4 private (
     val depth: Int,
     private val tree: Array[ByteString],
     val size: Int,
@@ -22,7 +22,7 @@ class AppendOnlyMerkleTree4 private (
 
     def capacity: Int = math.pow(4, depth).toInt
 
-    def append(key: ByteString): AppendOnlyMerkleTree4 = {
+    def append(key: ByteString): IncrementalMerkleTree4 = {
         require(size < capacity, s"Tree is full: size=$size, capacity=$capacity")
         val hashedKey = blake2b_256(key)
         require(!keyToSlot.contains(hashedKey), s"Key already exists in tree")
@@ -42,7 +42,7 @@ class AppendOnlyMerkleTree4 private (
               newTree(4 * idx + 4)
             )
 
-        new AppendOnlyMerkleTree4(depth, newTree, size + 1, firstLeaf, keyToSlot + (hashedKey -> size))
+        new IncrementalMerkleTree4(depth, newTree, size + 1, firstLeaf, keyToSlot + (hashedKey -> size))
     }
 
     /** Membership proof: slot (3 bytes BE) ++ siblings (D × 96 bytes). */
@@ -91,9 +91,9 @@ class AppendOnlyMerkleTree4 private (
         blake2b_256(appendByteString(appendByteString(appendByteString(c0, c1), c2), c3))
 }
 
-object AppendOnlyMerkleTree4 {
+object IncrementalMerkleTree4 {
 
-    def empty(depth: Int): AppendOnlyMerkleTree4 = {
+    def empty(depth: Int): IncrementalMerkleTree4 = {
         require(depth >= 1 && depth <= 10, s"Depth must be 1..10, got $depth")
         val cap = math.pow(4, depth).toInt
         val firstLeaf = (cap - 1) / 3
@@ -117,7 +117,7 @@ object AppendOnlyMerkleTree4 {
               )
             )
 
-        new AppendOnlyMerkleTree4(depth, tree, 0, firstLeaf, Map.empty)
+        new IncrementalMerkleTree4(depth, tree, 0, firstLeaf, Map.empty)
     }
 
     /** Minimum depth for a 4-ary tree to hold n elements. */

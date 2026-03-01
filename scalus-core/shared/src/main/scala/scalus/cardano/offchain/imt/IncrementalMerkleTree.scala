@@ -1,16 +1,16 @@
-package scalus.cardano.offchain.amt
+package scalus.cardano.offchain.imt
 
 import scalus.uplc.builtin.Builtins.{blake2b_256, appendByteString}
 import scalus.uplc.builtin.ByteString
 
-/** Off-chain append-only Merkle tree.
+/** Off-chain incremental Merkle tree.
   *
   * Fixed-depth D binary Merkle tree stored as a 1-indexed array: tree(1) = root, tree(2^D + i) =
   * leaf i.
   *
   * Leaves are appended sequentially. Each leaf stores blake2b_256(key) or EmptyLeafHash if unused.
   */
-class AppendOnlyMerkleTree private (
+class IncrementalMerkleTree private (
     val depth: Int,
     private val tree: Array[ByteString],
     val size: Int,
@@ -24,7 +24,7 @@ class AppendOnlyMerkleTree private (
     def capacity: Int = 1 << depth
 
     /** Append a new key to the next available slot. */
-    def append(key: ByteString): AppendOnlyMerkleTree = {
+    def append(key: ByteString): IncrementalMerkleTree = {
         require(size < capacity, s"Tree is full: size=$size, capacity=$capacity")
         val hashedKey = blake2b_256(key)
         require(!keyToSlot.contains(hashedKey), s"Key already exists in tree")
@@ -39,7 +39,7 @@ class AppendOnlyMerkleTree private (
             idx = idx / 2
             newTree(idx) = combine(newTree(2 * idx), newTree(2 * idx + 1))
 
-        new AppendOnlyMerkleTree(depth, newTree, size + 1, keyToSlot + (hashedKey -> size))
+        new IncrementalMerkleTree(depth, newTree, size + 1, keyToSlot + (hashedKey -> size))
     }
 
     /** Generate a membership proof for a key.
@@ -98,10 +98,10 @@ class AppendOnlyMerkleTree private (
         blake2b_256(appendByteString(left, right))
 }
 
-object AppendOnlyMerkleTree {
+object IncrementalMerkleTree {
 
     /** Create an empty tree with the given depth. */
-    def empty(depth: Int): AppendOnlyMerkleTree = {
+    def empty(depth: Int): IncrementalMerkleTree = {
         require(depth >= 1 && depth <= 20, s"Depth must be 1..20, got $depth")
         val capacity = 1 << depth
         val treeSize = 2 * capacity // 1-indexed, so indices 1..2*capacity-1
@@ -118,7 +118,7 @@ object AppendOnlyMerkleTree {
         for i <- (capacity - 1) to 1 by -1 do
             tree(i) = blake2b_256(appendByteString(tree(2 * i), tree(2 * i + 1)))
 
-        new AppendOnlyMerkleTree(depth, tree, 0, Map.empty)
+        new IncrementalMerkleTree(depth, tree, 0, Map.empty)
     }
 
     /** Compute the minimum depth needed to hold n elements. */

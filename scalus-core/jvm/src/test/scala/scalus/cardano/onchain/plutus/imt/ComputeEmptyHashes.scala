@@ -1,4 +1,4 @@
-package scalus.cardano.onchain.plutus.amt
+package scalus.cardano.onchain.plutus.imt
 
 import scalus.uplc.builtin.Builtins.{blake2b_256, appendByteString}
 import scalus.uplc.builtin.ByteString

@@ -1,4 +1,4 @@
-package scalus.cardano.onchain.plutus.amt
+package scalus.cardano.onchain.plutus.imt
 
 import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.require
@@ -6,7 +6,7 @@ import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.hex
 
-/** Append-only Merkle tree for oracle-managed sets.
+/** Incremental Merkle tree for oracle-managed sets.
   *
   * Fixed-depth D binary Merkle tree where leaves are appended sequentially. The tree is 1-indexed:
   * tree(1) = root, tree(2^D + i) = leaf i.
@@ -24,7 +24,7 @@ import scalus.uplc.builtin.ByteString.hex
   * Append proofs are flat ByteStrings: D consecutive 32-byte sibling hashes.
   */
 @Compile
-object AppendOnlyMerkleTree {
+object IncrementalMerkleTree {
     val NullHash: ByteString =
         hex"0000000000000000000000000000000000000000000000000000000000000000"
 
@@ -72,7 +72,7 @@ object AppendOnlyMerkleTree {
     ): Unit =
         val leafHash = blake2b_256(key)
         val computedRoot = merkleUp(proof, leafHash, BigInt(0), depth * 33)
-        require(computedRoot == root, "AMT: not a member")
+        require(computedRoot == root, "IMT: not a member")
 
     /** Append a new key at position `size`, returning the new root hash.
       *
@@ -108,7 +108,7 @@ object AppendOnlyMerkleTree {
         expectedRoot: ByteString
     ): ByteString =
         if offset == endOffset then
-            require(oldHash == expectedRoot, "AMT: slot not empty")
+            require(oldHash == expectedRoot, "IMT: slot not empty")
             newHash
         else
             val sibling = sliceByteString(offset, 32, siblings)

@@ -5,8 +5,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.cardano.offchain.amt.AppendOnlyMerkleTree as OffChainAmt
-import scalus.cardano.offchain.amt4.AppendOnlyMerkleTree4 as OffChainAmt4
+import scalus.cardano.offchain.imt.IncrementalMerkleTree as OffChainImt
+import scalus.cardano.offchain.imt4.IncrementalMerkleTree4 as OffChainImt4
 import scalus.cardano.txbuilder.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -15,15 +15,15 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.utils.await
 
-/** Benchmark for AMT (Append-Only Merkle Tree) operations through the emulator.
+/** Benchmark for IMT (Incremental Merkle Tree) operations through the emulator.
   *
   * Tagged with `scalus.testing.Benchmark` — excluded from default test runs. Run with:
   * {{{
-  * sbtn "scalusExamplesJVM/testOnly *AmtBenchEmulatorTest -- -n scalus.testing.Benchmark"
+  * sbtn "scalusExamplesJVM/testOnly *ImtBenchEmulatorTest -- -n scalus.testing.Benchmark"
   * }}}
   */
-class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
-    import AmtBenchEmulatorTest.*
+class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
+    import ImtBenchEmulatorTest.*
 
     private given env: CardanoInfo = TestUtil.testEnvironment
 
@@ -38,7 +38,7 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         }
     }
 
-    private val txHelper = AmtTransactions(env)
+    private val txHelper = ImtTransactions(env)
 
     private val allResults = collection.mutable.ArrayBuffer[BenchResult]()
 
@@ -48,7 +48,7 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         variant: String,
         n: Int,
         contract: PlutusV3[Data => Unit],
-        buildTree: Vector[ByteString] => AmtTree
+        buildTree: Vector[ByteString] => ImtTree
     ): Unit = {
         val keys = allKeys.take(n)
 
@@ -104,8 +104,8 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
             remaining -= K
             val newDatum =
-                AmtDatum(BigInt(remaining), tree.rootHash, BigInt(tree.size), BigInt(tree.depth))
-            val redeemer = AmtRedeemer.Withdraw(key, proofData).toData
+                ImtDatum(BigInt(remaining), tree.rootHash, BigInt(tree.size), BigInt(tree.depth))
+            val redeemer = ImtRedeemer.Withdraw(key, proofData).toData
 
             val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
             val tx = txHelper.withdraw(
@@ -161,7 +161,7 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         variant: String,
         n: Int,
         contract: PlutusV3[Data => Unit],
-        buildTree: Vector[ByteString] => AmtTree
+        buildTree: Vector[ByteString] => ImtTree
     ): Unit = {
         val keys = allKeys.take(n)
 
@@ -217,8 +217,8 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
             remaining += K
             val newDatum =
-                AmtDatum(BigInt(remaining), tree.rootHash, BigInt(tree.size), BigInt(tree.depth))
-            val redeemer = AmtRedeemer.Deposit(key, proofData).toData
+                ImtDatum(BigInt(remaining), tree.rootHash, BigInt(tree.size), BigInt(tree.depth))
+            val redeemer = ImtRedeemer.Deposit(key, proofData).toData
 
             val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
             val tx = txHelper.deposit(
@@ -273,7 +273,7 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         variant: String,
         n: Int,
         contract: PlutusV3[Data => Unit],
-        buildTree: Vector[ByteString] => AmtTree
+        buildTree: Vector[ByteString] => ImtTree
     ): Unit = {
         val keys = allKeys.take(n + SampleSize)
 
@@ -326,8 +326,8 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
             tree = tree.append(key)
             val newDatum =
-                AmtDatum(BigInt(remaining), tree.rootHash, BigInt(tree.size), BigInt(tree.depth))
-            val redeemer = AmtRedeemer.Add(key, proofData).toData
+                ImtDatum(BigInt(remaining), tree.rootHash, BigInt(tree.size), BigInt(tree.depth))
+            val redeemer = ImtRedeemer.Add(key, proofData).toData
 
             val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
             val tx = txHelper.add(
@@ -379,32 +379,32 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     // --- Tree builders ---
 
-    private def buildAmt(keys: Vector[ByteString]): AmtTree = {
-        val depth = OffChainAmt.depthForSize(keys.size)
-        var tree = OffChainAmt.empty(depth)
+    private def buildImt(keys: Vector[ByteString]): ImtTree = {
+        val depth = OffChainImt.depthForSize(keys.size)
+        var tree = OffChainImt.empty(depth)
         for key <- keys do tree = tree.append(key)
-        AmtTreeBinary(tree)
+        ImtTreeBinary(tree)
     }
 
-    private def buildAmt4(keys: Vector[ByteString]): AmtTree = {
-        val depth = OffChainAmt4.depthForSize(keys.size)
-        var tree = OffChainAmt4.empty(depth)
+    private def buildImt4(keys: Vector[ByteString]): ImtTree = {
+        val depth = OffChainImt4.depthForSize(keys.size)
+        var tree = OffChainImt4.empty(depth)
         for key <- keys do tree = tree.append(key)
-        AmtTree4(tree)
+        ImtTree4(tree)
     }
 
-    private def buildAmtForAdd(keys: Vector[ByteString]): AmtTree = {
-        val depth = OffChainAmt.depthForSize(keys.size + SampleSize)
-        var tree = OffChainAmt.empty(depth)
+    private def buildImtForAdd(keys: Vector[ByteString]): ImtTree = {
+        val depth = OffChainImt.depthForSize(keys.size + SampleSize)
+        var tree = OffChainImt.empty(depth)
         for key <- keys do tree = tree.append(key)
-        AmtTreeBinary(tree)
+        ImtTreeBinary(tree)
     }
 
-    private def buildAmt4ForAdd(keys: Vector[ByteString]): AmtTree = {
-        val depth = OffChainAmt4.depthForSize(keys.size + SampleSize)
-        var tree = OffChainAmt4.empty(depth)
+    private def buildImt4ForAdd(keys: Vector[ByteString]): ImtTree = {
+        val depth = OffChainImt4.depthForSize(keys.size + SampleSize)
+        var tree = OffChainImt4.empty(depth)
         for key <- keys do tree = tree.append(key)
-        AmtTree4(tree)
+        ImtTree4(tree)
     }
 
     // --- Helpers ---
@@ -435,167 +435,167 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         (fee, exUnits, txSize)
     }
 
-    // --- Tests: AMT (binary) ---
+    // --- Tests: IMT (binary) ---
 
-    test("AMT withdraw N=10", Benchmark) {
-        info("=== AMT withdraw N=10 ===")
-        benchWithdraw("AMT", 10, AmtContract.withErrorTraces, buildAmt)
+    test("IMT withdraw N=10", Benchmark) {
+        info("=== IMT withdraw N=10 ===")
+        benchWithdraw("IMT", 10, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT withdraw N=30", Benchmark) {
-        info("=== AMT withdraw N=30 ===")
-        benchWithdraw("AMT", 30, AmtContract.withErrorTraces, buildAmt)
+    test("IMT withdraw N=30", Benchmark) {
+        info("=== IMT withdraw N=30 ===")
+        benchWithdraw("IMT", 30, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT withdraw N=100", Benchmark) {
-        info("=== AMT withdraw N=100 ===")
-        benchWithdraw("AMT", 100, AmtContract.withErrorTraces, buildAmt)
+    test("IMT withdraw N=100", Benchmark) {
+        info("=== IMT withdraw N=100 ===")
+        benchWithdraw("IMT", 100, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT withdraw N=10K", Benchmark) {
-        info("=== AMT withdraw N=10000 ===")
-        benchWithdraw("AMT", 10000, AmtContract.withErrorTraces, buildAmt)
+    test("IMT withdraw N=10K", Benchmark) {
+        info("=== IMT withdraw N=10000 ===")
+        benchWithdraw("IMT", 10000, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT withdraw N=32K", Benchmark) {
-        info("=== AMT withdraw N=32000 ===")
-        benchWithdraw("AMT", 32000, AmtContract.withErrorTraces, buildAmt)
+    test("IMT withdraw N=32K", Benchmark) {
+        info("=== IMT withdraw N=32000 ===")
+        benchWithdraw("IMT", 32000, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT withdraw N=100K", Benchmark) {
-        info("=== AMT withdraw N=100000 ===")
-        benchWithdraw("AMT", 100000, AmtContract.withErrorTraces, buildAmt)
+    test("IMT withdraw N=100K", Benchmark) {
+        info("=== IMT withdraw N=100000 ===")
+        benchWithdraw("IMT", 100000, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT deposit N=10", Benchmark) {
-        info("=== AMT deposit N=10 ===")
-        benchDeposit("AMT", 10, AmtContract.withErrorTraces, buildAmt)
+    test("IMT deposit N=10", Benchmark) {
+        info("=== IMT deposit N=10 ===")
+        benchDeposit("IMT", 10, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT deposit N=30", Benchmark) {
-        info("=== AMT deposit N=30 ===")
-        benchDeposit("AMT", 30, AmtContract.withErrorTraces, buildAmt)
+    test("IMT deposit N=30", Benchmark) {
+        info("=== IMT deposit N=30 ===")
+        benchDeposit("IMT", 30, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT deposit N=100", Benchmark) {
-        info("=== AMT deposit N=100 ===")
-        benchDeposit("AMT", 100, AmtContract.withErrorTraces, buildAmt)
+    test("IMT deposit N=100", Benchmark) {
+        info("=== IMT deposit N=100 ===")
+        benchDeposit("IMT", 100, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT deposit N=10K", Benchmark) {
-        info("=== AMT deposit N=10000 ===")
-        benchDeposit("AMT", 10000, AmtContract.withErrorTraces, buildAmt)
+    test("IMT deposit N=10K", Benchmark) {
+        info("=== IMT deposit N=10000 ===")
+        benchDeposit("IMT", 10000, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT deposit N=32K", Benchmark) {
-        info("=== AMT deposit N=32000 ===")
-        benchDeposit("AMT", 32000, AmtContract.withErrorTraces, buildAmt)
+    test("IMT deposit N=32K", Benchmark) {
+        info("=== IMT deposit N=32000 ===")
+        benchDeposit("IMT", 32000, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT deposit N=100K", Benchmark) {
-        info("=== AMT deposit N=100000 ===")
-        benchDeposit("AMT", 100000, AmtContract.withErrorTraces, buildAmt)
+    test("IMT deposit N=100K", Benchmark) {
+        info("=== IMT deposit N=100000 ===")
+        benchDeposit("IMT", 100000, ImtContract.withErrorTraces, buildImt)
     }
 
-    test("AMT add N=10", Benchmark) {
-        info("=== AMT add N=10 ===")
-        benchAdd("AMT", 10, AmtContract.withErrorTraces, buildAmtForAdd)
+    test("IMT add N=10", Benchmark) {
+        info("=== IMT add N=10 ===")
+        benchAdd("IMT", 10, ImtContract.withErrorTraces, buildImtForAdd)
     }
 
-    test("AMT add N=32K", Benchmark) {
-        info("=== AMT add N=32000 ===")
-        benchAdd("AMT", 32000, AmtContract.withErrorTraces, buildAmtForAdd)
+    test("IMT add N=32K", Benchmark) {
+        info("=== IMT add N=32000 ===")
+        benchAdd("IMT", 32000, ImtContract.withErrorTraces, buildImtForAdd)
     }
 
-    test("AMT add N=100K", Benchmark) {
-        info("=== AMT add N=100000 ===")
-        benchAdd("AMT", 100000, AmtContract.withErrorTraces, buildAmtForAdd)
+    test("IMT add N=100K", Benchmark) {
+        info("=== IMT add N=100000 ===")
+        benchAdd("IMT", 100000, ImtContract.withErrorTraces, buildImtForAdd)
     }
 
-    // --- Tests: AMT-4 (4-ary) ---
+    // --- Tests: IMT-4 (4-ary) ---
 
-    test("AMT-4 withdraw N=10", Benchmark) {
-        info("=== AMT-4 withdraw N=10 ===")
-        benchWithdraw("AMT-4", 10, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 withdraw N=10", Benchmark) {
+        info("=== IMT-4 withdraw N=10 ===")
+        benchWithdraw("IMT-4", 10, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 withdraw N=30", Benchmark) {
-        info("=== AMT-4 withdraw N=30 ===")
-        benchWithdraw("AMT-4", 30, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 withdraw N=30", Benchmark) {
+        info("=== IMT-4 withdraw N=30 ===")
+        benchWithdraw("IMT-4", 30, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 withdraw N=100", Benchmark) {
-        info("=== AMT-4 withdraw N=100 ===")
-        benchWithdraw("AMT-4", 100, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 withdraw N=100", Benchmark) {
+        info("=== IMT-4 withdraw N=100 ===")
+        benchWithdraw("IMT-4", 100, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 withdraw N=10K", Benchmark) {
-        info("=== AMT-4 withdraw N=10000 ===")
-        benchWithdraw("AMT-4", 10000, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 withdraw N=10K", Benchmark) {
+        info("=== IMT-4 withdraw N=10000 ===")
+        benchWithdraw("IMT-4", 10000, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 withdraw N=32K", Benchmark) {
-        info("=== AMT-4 withdraw N=32000 ===")
-        benchWithdraw("AMT-4", 32000, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 withdraw N=32K", Benchmark) {
+        info("=== IMT-4 withdraw N=32000 ===")
+        benchWithdraw("IMT-4", 32000, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 withdraw N=100K", Benchmark) {
-        info("=== AMT-4 withdraw N=100000 ===")
-        benchWithdraw("AMT-4", 100000, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 withdraw N=100K", Benchmark) {
+        info("=== IMT-4 withdraw N=100000 ===")
+        benchWithdraw("IMT-4", 100000, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 deposit N=10", Benchmark) {
-        info("=== AMT-4 deposit N=10 ===")
-        benchDeposit("AMT-4", 10, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 deposit N=10", Benchmark) {
+        info("=== IMT-4 deposit N=10 ===")
+        benchDeposit("IMT-4", 10, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 deposit N=30", Benchmark) {
-        info("=== AMT-4 deposit N=30 ===")
-        benchDeposit("AMT-4", 30, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 deposit N=30", Benchmark) {
+        info("=== IMT-4 deposit N=30 ===")
+        benchDeposit("IMT-4", 30, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 deposit N=100", Benchmark) {
-        info("=== AMT-4 deposit N=100 ===")
-        benchDeposit("AMT-4", 100, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 deposit N=100", Benchmark) {
+        info("=== IMT-4 deposit N=100 ===")
+        benchDeposit("IMT-4", 100, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 deposit N=10K", Benchmark) {
-        info("=== AMT-4 deposit N=10000 ===")
-        benchDeposit("AMT-4", 10000, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 deposit N=10K", Benchmark) {
+        info("=== IMT-4 deposit N=10000 ===")
+        benchDeposit("IMT-4", 10000, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 deposit N=32K", Benchmark) {
-        info("=== AMT-4 deposit N=32000 ===")
-        benchDeposit("AMT-4", 32000, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 deposit N=32K", Benchmark) {
+        info("=== IMT-4 deposit N=32000 ===")
+        benchDeposit("IMT-4", 32000, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 deposit N=100K", Benchmark) {
-        info("=== AMT-4 deposit N=100000 ===")
-        benchDeposit("AMT-4", 100000, Amt4Contract.withErrorTraces, buildAmt4)
+    test("IMT-4 deposit N=100K", Benchmark) {
+        info("=== IMT-4 deposit N=100000 ===")
+        benchDeposit("IMT-4", 100000, Imt4Contract.withErrorTraces, buildImt4)
     }
 
-    test("AMT-4 add N=10", Benchmark) {
-        info("=== AMT-4 add N=10 ===")
-        benchAdd("AMT-4", 10, Amt4Contract.withErrorTraces, buildAmt4ForAdd)
+    test("IMT-4 add N=10", Benchmark) {
+        info("=== IMT-4 add N=10 ===")
+        benchAdd("IMT-4", 10, Imt4Contract.withErrorTraces, buildImt4ForAdd)
     }
 
-    test("AMT-4 add N=32K", Benchmark) {
-        info("=== AMT-4 add N=32000 ===")
-        benchAdd("AMT-4", 32000, Amt4Contract.withErrorTraces, buildAmt4ForAdd)
+    test("IMT-4 add N=32K", Benchmark) {
+        info("=== IMT-4 add N=32000 ===")
+        benchAdd("IMT-4", 32000, Imt4Contract.withErrorTraces, buildImt4ForAdd)
     }
 
-    test("AMT-4 add N=100K", Benchmark) {
-        info("=== AMT-4 add N=100000 ===")
-        benchAdd("AMT-4", 100000, Amt4Contract.withErrorTraces, buildAmt4ForAdd)
+    test("IMT-4 add N=100K", Benchmark) {
+        info("=== IMT-4 add N=100000 ===")
+        benchAdd("IMT-4", 100000, Imt4Contract.withErrorTraces, buildImt4ForAdd)
     }
 
     // --- Summary ---
 
-    test("AMT summary table", Benchmark) {
+    test("IMT summary table", Benchmark) {
         if allResults.isEmpty then info("No results collected (run individual benchmarks first)")
         else
             info("")
-            info("=== AMT Benchmark Summary (averages) ===")
+            info("=== IMT Benchmark Summary (averages) ===")
             val hdr =
                 f"${"Variant"}%-7s | ${"N"}%6s | ${"D"}%3s | ${"Op"}%-8s | ${"Fee (lovelace)"}%15s | ${"CPU"}%14s | ${"Memory"}%10s | ${"Tx Size"}%8s | ${"Proof (B)"}%10s | ${"Build (ms)"}%10s"
             info(hdr)
@@ -607,7 +607,7 @@ class AmtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     }
 }
 
-object AmtBenchEmulatorTest {
+object ImtBenchEmulatorTest {
     private[setbench] object Benchmark extends Tag("scalus.testing.Benchmark")
 
     private[setbench] case class BenchResult(
@@ -624,36 +624,36 @@ object AmtBenchEmulatorTest {
         buildTimeMs: Long
     )
 
-    /** Unified trait for binary and 4-ary AMT off-chain trees. */
-    private[setbench] trait AmtTree {
+    /** Unified trait for binary and 4-ary IMT off-chain trees. */
+    private[setbench] trait ImtTree {
         def rootHash: ByteString
         def size: Int
         def depth: Int
         def proveMembership(key: ByteString): ByteString
         def proveAppend(): ByteString
-        def append(key: ByteString): AmtTree
+        def append(key: ByteString): ImtTree
     }
 
-    private case class AmtTreeBinary(tree: OffChainAmt) extends AmtTree {
+    private case class ImtTreeBinary(tree: OffChainImt) extends ImtTree {
         def rootHash: ByteString = tree.rootHash
         def size: Int = tree.size
         def depth: Int = tree.depth
         def proveMembership(key: ByteString): ByteString = tree.proveMembership(key)
         def proveAppend(): ByteString = tree.proveAppend()
-        def append(key: ByteString): AmtTree = AmtTreeBinary(tree.append(key))
+        def append(key: ByteString): ImtTree = ImtTreeBinary(tree.append(key))
     }
 
-    private case class AmtTree4(tree: OffChainAmt4) extends AmtTree {
+    private case class ImtTree4(tree: OffChainImt4) extends ImtTree {
         def rootHash: ByteString = tree.rootHash
         def size: Int = tree.size
         def depth: Int = tree.depth
         def proveMembership(key: ByteString): ByteString = tree.proveMembership(key)
         def proveAppend(): ByteString = tree.proveAppend()
-        def append(key: ByteString): AmtTree = AmtTree4(tree.append(key))
+        def append(key: ByteString): ImtTree = ImtTree4(tree.append(key))
     }
 
-    /** Transaction builder for AMT contract operations. */
-    private[setbench] case class AmtTransactions(env: CardanoInfo) {
+    /** Transaction builder for IMT contract operations. */
+    private[setbench] case class ImtTransactions(env: CardanoInfo) {
         private val builder = TxBuilder(env)
 
         def publishScript(
@@ -686,7 +686,7 @@ object AmtBenchEmulatorTest {
             sponsor: Address,
             signer: TransactionSigner
         ): Transaction = {
-            val datum = AmtDatum(BigInt(totalLovelace), initialRoot, BigInt(size), BigInt(depth))
+            val datum = ImtDatum(BigInt(totalLovelace), initialRoot, BigInt(size), BigInt(depth))
             builder
                 .payTo(contract.address(env.network), Value.lovelace(totalLovelace), datum)
                 .complete(availableUtxos = utxos, sponsor = sponsor)
@@ -700,7 +700,7 @@ object AmtBenchEmulatorTest {
             refScriptUtxo: Utxo,
             contract: PlutusV3[Data => Unit],
             redeemer: Data,
-            newDatum: AmtDatum,
+            newDatum: ImtDatum,
             k: Long,
             withdrawTo: Address,
             sponsor: Address,
@@ -723,7 +723,7 @@ object AmtBenchEmulatorTest {
             refScriptUtxo: Utxo,
             contract: PlutusV3[Data => Unit],
             redeemer: Data,
-            newDatum: AmtDatum,
+            newDatum: ImtDatum,
             k: Long,
             sponsor: Address,
             signer: TransactionSigner
@@ -744,7 +744,7 @@ object AmtBenchEmulatorTest {
             refScriptUtxo: Utxo,
             contract: PlutusV3[Data => Unit],
             redeemer: Data,
-            newDatum: AmtDatum,
+            newDatum: ImtDatum,
             sponsor: Address,
             signer: TransactionSigner
         ): Transaction = {

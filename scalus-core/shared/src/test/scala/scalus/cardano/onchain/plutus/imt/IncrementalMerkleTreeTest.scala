@@ -1,25 +1,25 @@
-package scalus.cardano.onchain.plutus.amt
+package scalus.cardano.onchain.plutus.imt
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.offchain.amt.AppendOnlyMerkleTree as OffChainAmt
+import scalus.cardano.offchain.imt.IncrementalMerkleTree as OffChainImt
 import scalus.cardano.onchain.RequirementError
 import scalus.uplc.builtin.ByteString
 
-class AppendOnlyMerkleTreeTest extends AnyFunSuite {
-    import AppendOnlyMerkleTree.*
+class IncrementalMerkleTreeTest extends AnyFunSuite {
+    import IncrementalMerkleTree.*
 
     private val depth = 4 // small tree for unit tests (16 slots)
 
     test("empty tree root is deterministic") {
-        val tree1 = OffChainAmt.empty(depth)
-        val tree2 = OffChainAmt.empty(depth)
+        val tree1 = OffChainImt.empty(depth)
+        val tree2 = OffChainImt.empty(depth)
         assert(tree1.rootHash == tree2.rootHash)
         assert(tree1.rootHash.length == 32)
     }
 
     test("append and verify single member") {
         val key = ByteString.fromString("hello")
-        val tree0 = OffChainAmt.empty(depth)
+        val tree0 = OffChainImt.empty(depth)
         val tree1 = tree0.append(key)
 
         // verify membership on-chain
@@ -28,7 +28,7 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
     }
 
     test("append and verify multiple members") {
-        var tree = OffChainAmt.empty(depth)
+        var tree = OffChainImt.empty(depth)
         val keys = (0 until 10).map(i => ByteString.fromString(s"key-$i"))
 
         for key <- keys do tree = tree.append(key)
@@ -40,7 +40,7 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
 
     test("append proof verifies on-chain") {
         val key = ByteString.fromString("first")
-        val tree0 = OffChainAmt.empty(depth)
+        val tree0 = OffChainImt.empty(depth)
 
         val appendProof = tree0.proveAppend()
         val newRoot = append(tree0.rootHash, BigInt(tree0.size), BigInt(depth), key, appendProof)
@@ -50,7 +50,7 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
     }
 
     test("multiple appends with on-chain verification") {
-        var tree = OffChainAmt.empty(depth)
+        var tree = OffChainImt.empty(depth)
         val keys = (0 until 5).map(i => ByteString.fromString(s"elem-$i"))
 
         for key <- keys do
@@ -62,7 +62,7 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
     }
 
     test("wrong key fails membership verification") {
-        val tree = OffChainAmt.empty(depth).append(ByteString.fromString("real-key"))
+        val tree = OffChainImt.empty(depth).append(ByteString.fromString("real-key"))
 
         val proof = tree.proveMembership(ByteString.fromString("real-key"))
 
@@ -72,7 +72,7 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
     }
 
     test("wrong path fails membership verification") {
-        val tree = OffChainAmt.empty(depth)
+        val tree = OffChainImt.empty(depth)
             .append(ByteString.fromString("key-0"))
             .append(ByteString.fromString("key-1"))
 
@@ -90,10 +90,10 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
     }
 
     test("append to non-empty slot fails") {
-        val tree = OffChainAmt.empty(depth).append(ByteString.fromString("first"))
+        val tree = OffChainImt.empty(depth).append(ByteString.fromString("first"))
 
         // get siblings for slot 0 (already occupied) via proveAppend on empty tree
-        val emptyTree = OffChainAmt.empty(depth)
+        val emptyTree = OffChainImt.empty(depth)
         val siblings = emptyTree.proveAppend()
 
         assertThrows[RequirementError] {
@@ -103,7 +103,7 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
 
     test("fill tree to capacity") {
         val smallDepth = 3 // 8 slots
-        var tree = OffChainAmt.empty(smallDepth)
+        var tree = OffChainImt.empty(smallDepth)
         val keys = (0 until 8).map(i => ByteString.fromString(s"k$i"))
 
         for key <- keys do tree = tree.append(key)
@@ -116,7 +116,7 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
 
     test("larger depth D=10") {
         val d = 10
-        var tree = OffChainAmt.empty(d)
+        var tree = OffChainImt.empty(d)
         val keys = (0 until 50).map(i => ByteString.fromString(s"element-$i"))
 
         for key <- keys do tree = tree.append(key)
@@ -130,7 +130,7 @@ class AppendOnlyMerkleTreeTest extends AnyFunSuite {
 
     test("proof sizes are correct") {
         val d = 15
-        val tree = OffChainAmt.empty(d).append(ByteString.fromString("test"))
+        val tree = OffChainImt.empty(d).append(ByteString.fromString("test"))
 
         val memberProof = tree.proveMembership(ByteString.fromString("test"))
         assert(memberProof.length == d * 33, s"membership proof: expected ${d * 33}, got ${memberProof.length}")
