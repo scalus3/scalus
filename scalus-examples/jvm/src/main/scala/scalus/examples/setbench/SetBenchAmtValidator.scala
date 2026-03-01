@@ -1,7 +1,7 @@
 package scalus.examples.setbench
 
 import scalus.*
-import scalus.uplc.builtin.Builtins.{unBData, byteStringToInteger, sliceByteString}
+import scalus.uplc.builtin.Builtins.unBData
 import scalus.uplc.builtin.Data
 import scalus.cardano.onchain.plutus.v1.Value.getLovelace
 import scalus.cardano.onchain.plutus.v2.OutputDatum
@@ -37,27 +37,19 @@ object SetBenchAmtValidator extends Validator {
                 )
                 (nr, state.size + 1, BigInt(0))
             case AmtRedeemer.Deposit(key, proofData) =>
-                val proof = unBData(proofData)
-                val slot = byteStringToInteger(true, sliceByteString(0, 3, proof))
-                val siblings = sliceByteString(3, state.depth * 32, proof)
                 AppendOnlyMerkleTree.verifyMember(
                   state.root,
                   key,
-                  slot,
                   state.depth,
-                  siblings
+                  unBData(proofData)
                 )
                 (state.root, state.size, K)
             case AmtRedeemer.Withdraw(key, proofData) =>
-                val proof = unBData(proofData)
-                val slot = byteStringToInteger(true, sliceByteString(0, 3, proof))
-                val siblings = sliceByteString(3, state.depth * 32, proof)
                 AppendOnlyMerkleTree.verifyMember(
                   state.root,
                   key,
-                  slot,
                   state.depth,
-                  siblings
+                  unBData(proofData)
                 )
                 (state.root, state.size, -K)
 

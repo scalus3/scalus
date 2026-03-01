@@ -20,7 +20,8 @@ import scalus.uplc.builtin.ByteString.hex
   *   - append: oracle adds a new member (2*D + 2 blake2b, single pass)
   *   - verifyMember: user proves membership (D + 1 blake2b)
   *
-  * Proofs are flat ByteStrings: siblings are D consecutive 32-byte hashes.
+  * Membership proofs use interleaved format: D * (direction[1] + sibling[32]) = D*33 bytes.
+  * Append proofs are flat ByteStrings: D consecutive 32-byte sibling hashes.
   */
 @Compile
 object AppendOnlyMerkleTree {
@@ -35,47 +36,42 @@ object AppendOnlyMerkleTree {
     def combine(left: ByteString, right: ByteString): ByteString =
         blake2b_256(appendByteString(left, right))
 
-    /** Walk from a leaf at `slot` up to the root, combining `hash` with sibling hashes from
-      * `siblings` at each level.
+    /** Walk from a leaf up to the root using an interleaved proof.
       *
-      * siblings is a flat ByteString of D * 32 bytes, ordered from leaf level (level 0) to root
-      * level (level D-1).
+      * proof is a flat ByteString of D * 33 bytes: D repetitions of (direction[1] + sibling[32]).
+      * direction is 0 (left child) or 1 (right child).
       *
-      * At each level, if the current node is a left child (slot is even), the sibling is on the
-      * right; otherwise it's on the left.
-      *
-      * Uses offset tracking (offset increments by 32) instead of level * 32 multiplication
-      * to reduce per-level overhead.
+      * Uses path-byte encoding (indexByteString) instead of BigInt modInteger/quotientInteger
+      * to determine left/right at each level, and offset tracking (offset increments by 33).
       */
     def merkleUp(
-        siblings: ByteString,
-        slot: BigInt,
+        proof: ByteString,
         hash: ByteString,
         offset: BigInt,
         endOffset: BigInt
     ): ByteString =
         if offset == endOffset then hash
         else
-            val sibling = sliceByteString(offset, 32, siblings)
-            val parentSlot = quotientInteger(slot, 2)
+            val direction = indexByteString(proof, offset)
+            val sibling = sliceByteString(offset + 1, 32, proof)
             val parentHash =
-                if modInteger(slot, 2) == BigInt(0) then combine(hash, sibling)
+                if direction == BigInt(0) then combine(hash, sibling)
                 else combine(sibling, hash)
-            merkleUp(siblings, parentSlot, parentHash, offset + 32, endOffset)
+            merkleUp(proof, parentHash, offset + 33, endOffset)
 
-    /** Verify that `key` is a member of the tree at the given `slot`.
+    /** Verify that `key` is a member of the tree.
       *
+      * proof is D * 33 bytes: D repetitions of (direction[1] + sibling[32]).
       * Costs D + 1 blake2b calls.
       */
     def verifyMember(
         root: ByteString,
         key: ByteString,
-        slot: BigInt,
         depth: BigInt,
-        siblings: ByteString
+        proof: ByteString
     ): Unit =
         val leafHash = blake2b_256(key)
-        val computedRoot = merkleUp(siblings, slot, leafHash, BigInt(0), depth * 32)
+        val computedRoot = merkleUp(proof, leafHash, BigInt(0), depth * 33)
         require(computedRoot == root, "AMT: not a member")
 
     /** Append a new key at position `size`, returning the new root hash.

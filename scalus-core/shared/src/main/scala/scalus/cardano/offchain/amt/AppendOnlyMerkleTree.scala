@@ -1,6 +1,6 @@
 package scalus.cardano.offchain.amt
 
-import scalus.uplc.builtin.Builtins.{blake2b_256, appendByteString, integerToByteString}
+import scalus.uplc.builtin.Builtins.{blake2b_256, appendByteString}
 import scalus.uplc.builtin.ByteString
 
 /** Off-chain append-only Merkle tree.
@@ -44,15 +44,28 @@ class AppendOnlyMerkleTree private (
 
     /** Generate a membership proof for a key.
       *
-      * Returns slot (3 bytes big-endian) ++ siblings (D * 32 bytes).
+      * Returns D * 33 bytes: D repetitions of (direction[1] + sibling[32]). direction is 0 (left
+      * child) or 1 (right child).
       */
     def proveMembership(key: ByteString): ByteString = {
         val hashedKey = blake2b_256(key)
         val slot = keyToSlot.getOrElse(hashedKey, throw new NoSuchElementException(s"Key not found"))
-        val siblings = getSiblings(slot)
-        // encode slot as 3 bytes big-endian
-        val slotBytes = integerToByteString(true, 3, BigInt(slot))
-        appendByteString(slotBytes, siblings)
+        var result = ByteString.empty
+        var idx = capacity + slot
+        var level = 0
+        while level < depth do
+            val direction = idx & 1 // 0 = left child, 1 = right child
+            val siblingIdx = idx ^ 1
+            result = appendByteString(
+              result,
+              appendByteString(
+                ByteString.fromArray(Array(direction.toByte)),
+                tree(siblingIdx)
+              )
+            )
+            idx = idx / 2
+            level += 1
+        result
     }
 
     /** Generate an append proof for the next empty slot.
