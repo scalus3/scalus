@@ -1,0 +1,17 @@
+{
+  "version": "1.0.0",
+  "description": "Comprehensive fibonacci function testing across multiple input values",
+  "tests": [
+    { "name": "fibonacci_0",        "inputs": [{"type": "uplc", "value": "(con integer 0)"}],   "expected": {"type": "value", "content": "(con integer 0)"} },
+    { "name": "fibonacci_1",        "inputs": [{"type": "uplc", "value": "(con integer 1)"}],   "expected": {"type": "value", "content": "(con integer 1)"} },
+    { "name": "fibonacci_2",        "inputs": [{"type": "uplc", "value": "(con integer 2)"}],   "expected": {"type": "value", "content": "(con integer 1)"} },
+    { "name": "fibonacci_3",        "inputs": [{"type": "uplc", "value": "(con integer 3)"}],   "expected": {"type": "value", "content": "(con integer 2)"} },
+    { "name": "fibonacci_5",        "inputs": [{"type": "uplc", "value": "(con integer 5)"}],   "expected": {"type": "value", "content": "(con integer 5)"} },
+    { "name": "fibonacci_8",        "inputs": [{"type": "uplc", "value": "(con integer 8)"}],   "expected": {"type": "value", "content": "(con integer 21)"} },
+    { "name": "fibonacci_10",       "inputs": [{"type": "uplc", "value": "(con integer 10)"}],  "expected": {"type": "value", "content": "(con integer 55)"} },
+    { "name": "fibonacci_15",       "inputs": [{"type": "uplc", "value": "(con integer 15)"}],  "expected": {"type": "value", "content": "(con integer 610)"} },
+    { "name": "fibonacci_20",       "inputs": [{"type": "uplc", "value": "(con integer 20)"}],  "expected": {"type": "value", "content": "(con integer 6765)"} },
+    { "name": "fibonacci_25",       "inputs": [{"type": "uplc", "value": "(con integer 25)"}],  "expected": {"type": "value", "content": "(con integer 75025)"} },
+    { "name": "fibonacci_negative", "inputs": [{"type": "uplc", "value": "(con integer -1)"}],  "expected": {"type": "value", "content": "(con integer -1)"} }
+  ]
+}

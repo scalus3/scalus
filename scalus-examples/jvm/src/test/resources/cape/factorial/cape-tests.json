@@ -1,0 +1,16 @@
+{
+  "version": "1.0.0",
+  "description": "Comprehensive factorial function testing across multiple input values",
+  "tests": [
+    { "name": "factorial_0",        "inputs": [{"type": "uplc", "value": "(con integer 0)"}],   "expected": {"type": "value", "content": "(con integer 1)"} },
+    { "name": "factorial_1",        "inputs": [{"type": "uplc", "value": "(con integer 1)"}],   "expected": {"type": "value", "content": "(con integer 1)"} },
+    { "name": "factorial_2",        "inputs": [{"type": "uplc", "value": "(con integer 2)"}],   "expected": {"type": "value", "content": "(con integer 2)"} },
+    { "name": "factorial_3",        "inputs": [{"type": "uplc", "value": "(con integer 3)"}],   "expected": {"type": "value", "content": "(con integer 6)"} },
+    { "name": "factorial_4",        "inputs": [{"type": "uplc", "value": "(con integer 4)"}],   "expected": {"type": "value", "content": "(con integer 24)"} },
+    { "name": "factorial_5",        "inputs": [{"type": "uplc", "value": "(con integer 5)"}],   "expected": {"type": "value", "content": "(con integer 120)"} },
+    { "name": "factorial_8",        "inputs": [{"type": "uplc", "value": "(con integer 8)"}],   "expected": {"type": "value", "content": "(con integer 40320)"} },
+    { "name": "factorial_10",       "inputs": [{"type": "uplc", "value": "(con integer 10)"}],  "expected": {"type": "value", "content": "(con integer 3628800)"} },
+    { "name": "factorial_12",       "inputs": [{"type": "uplc", "value": "(con integer 12)"}],  "expected": {"type": "value", "content": "(con integer 479001600)"} },
+    { "name": "factorial_negative", "inputs": [{"type": "uplc", "value": "(con integer -5)"}],  "expected": {"type": "value", "content": "(con integer 1)"} }
+  ]
+}
