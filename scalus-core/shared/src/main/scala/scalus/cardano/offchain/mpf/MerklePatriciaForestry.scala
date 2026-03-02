@@ -19,10 +19,14 @@ private[mpf] object Node {
         val size: Int = 0
     }
 
-    /** A leaf node that stores the value and the full key. */
+    /** A leaf node that stores the value and the full key.
+      *
+      * @param skipStart
+      *   cursor position at creation; nibbles are derived via `nibbleAt(fullPath, skipStart + i)`
+      */
     case class Leaf(
         hash: ByteString,
-        skip: Vector[Int],
+        skipStart: Int,
         fullPath: ByteString,
         key: ByteString,
         value: ByteString
@@ -30,11 +34,20 @@ private[mpf] object Node {
         val size: Int = 1
     }
 
-    /** A branch node with up to 16 children. Stores the common prefix in [[skip]]. */
+    /** A branch node with up to 16 children.
+      *
+      * @param skipStart
+      *   cursor position at creation
+      * @param skipLen
+      *   number of common prefix nibbles
+      * @param repPath
+      *   any descendant leaf's fullPath (shared reference, used to read nibble values)
+      */
     case class Branch(
         hash: ByteString,
-        skip: Vector[Int],
-        // up to 16 children
+        skipStart: Int,
+        skipLen: Int,
+        repPath: ByteString,
         children: Vector[Node],
         size: Int
     ) extends Node
@@ -140,18 +153,10 @@ object MerklePatriciaForestry {
         combine(suffix(fullPath, cursor), blake2b_256(value))
 
     /** Branch hash: `combine3(prefix, halfLeft, halfRight)` — matches on-chain doBranch. */
-    private def branchHash(skip: Vector[Int], children: Vector[Node]): ByteString = {
-        val prefix = consByteString(skip.length, ByteString.empty)
+    private def branchHash(skipLen: Int, children: Vector[Node]): ByteString = {
+        val prefix = consByteString(skipLen, ByteString.empty)
         val (hL, hR) = merkleHalves(children.map(_.hash))
         combine3(prefix, hL, hR)
-    }
-
-    /** Compute merkle root from pre-computed hashes using binary tree reduction. */
-    private def merkleRootFromHashes(hashes: Vector[ByteString]): ByteString = {
-        var current = hashes
-        while current.length > 1 do
-            current = current.grouped(2).map { pair => combine(pair(0), pair(1)) }.toVector
-        current.head
     }
 
     /** Reduce hashes to two halves (left and right subtree roots). */
@@ -189,28 +194,56 @@ object MerklePatriciaForestry {
         if index % 2 == 0 then byte >> 4 else byte & 0x0f
     }
 
-    private def extractNibbles(path: ByteString, start: Int, end: Int): Vector[Int] =
-        (start until end).map(i => nibbleAt(path, i)).toVector
-
     private def mkLeaf(
-        skip: Vector[Int],
+        skipStart: Int,
         fullPath: ByteString,
-        cursor: Int,
         key: ByteString,
         value: ByteString
     ): Node.Leaf =
-        Node.Leaf(leafHash(fullPath, cursor, value), skip, fullPath, key, value)
+        Node.Leaf(leafHash(fullPath, skipStart, value), skipStart, fullPath, key, value)
 
-    private def mkBranch(skip: Vector[Int], children: Vector[Node]): Node.Branch =
-        Node.Branch(branchHash(skip, children), skip, children, children.map(_.size).sum)
+    private def mkBranch(
+        skipStart: Int,
+        skipLen: Int,
+        repPath: ByteString,
+        children: Vector[Node]
+    ): Node.Branch =
+        Node.Branch(
+          branchHash(skipLen, children),
+          skipStart,
+          skipLen,
+          repPath,
+          children,
+          children.map(_.size).sum
+        )
 
     private val emptyChildren: Vector[Node] = Vector.fill(16)(Node.Empty)
 
-    private def commonPrefixLen(a: Vector[Int], b: Vector[Int]): Int = {
-        val len = math.min(a.length, b.length)
+    /** Compare nibbles of two paths starting at `start`, up to `end` (exclusive).
+      * Returns the number of matching nibbles.
+      */
+    private def commonPrefixLen(
+        pathA: ByteString,
+        pathB: ByteString,
+        start: Int,
+        end: Int
+    ): Int = {
+        var i = start
+        while i < end && nibbleAt(pathA, i) == nibbleAt(pathB, i) do i += 1
+        i - start
+    }
+
+    /** Check whether the branch's skip prefix matches the given path at cursor. */
+    private def branchSkipMatchesPath(
+        branch: Node.Branch,
+        path: ByteString,
+        cursor: Int
+    ): Boolean = {
         var i = 0
-        while i < len && a(i) == b(i) do i += 1
-        i
+        while i < branch.skipLen do
+            if nibbleAt(branch.repPath, cursor + i) != nibbleAt(path, cursor + i) then return false
+            i += 1
+        true
     }
 
     private def doInsert(
@@ -221,65 +254,60 @@ object MerklePatriciaForestry {
         value: ByteString
     ): Node = node match
         case Node.Empty =>
-            mkLeaf(extractNibbles(path, cursor, PathNibbles), path, cursor, key, value)
+            mkLeaf(cursor, path, key, value)
 
         case leaf: Node.Leaf =>
-            val remaining = extractNibbles(path, cursor, PathNibbles)
-            val commonPrefix = commonPrefixLen(remaining, leaf.skip)
+            val remainingLen = PathNibbles - cursor
+            val cp = commonPrefixLen(path, leaf.fullPath, cursor, PathNibbles)
 
-            if commonPrefix == remaining.length && commonPrefix == leaf.skip.length then
+            if cp == remainingLen then
                 throw new IllegalArgumentException(s"Key already in trie: ${key.toHex}")
 
             // Split at the divergence point
-            val newNibble = remaining(commonPrefix)
-            val oldNibble = leaf.skip(commonPrefix)
-            val splitCursor = cursor + commonPrefix + 1
+            val newNibble = nibbleAt(path, cursor + cp)
+            val oldNibble = nibbleAt(leaf.fullPath, cursor + cp)
+            val splitCursor = cursor + cp + 1
 
-            val newLeaf = mkLeaf(remaining.drop(commonPrefix + 1), path, splitCursor, key, value)
-            val oldLeaf = mkLeaf(
-              leaf.skip.drop(commonPrefix + 1),
-              leaf.fullPath,
-              splitCursor,
-              leaf.key,
-              leaf.value
-            )
+            val newLeaf = mkLeaf(splitCursor, path, key, value)
+            val oldLeaf = mkLeaf(splitCursor, leaf.fullPath, leaf.key, leaf.value)
 
             val children = emptyChildren
                 .updated(newNibble, newLeaf)
                 .updated(oldNibble, oldLeaf)
-            mkBranch(remaining.take(commonPrefix), children)
+            mkBranch(cursor, cp, path, children)
 
         case branch: Node.Branch =>
-            val remaining = extractNibbles(path, cursor, cursor + branch.skip.length + 1)
-            val prefixPart = remaining.dropRight(1)
-            val cp = commonPrefixLen(prefixPart, branch.skip)
+            val cp = commonPrefixLen(path, branch.repPath, cursor, cursor + branch.skipLen)
 
-            if cp < branch.skip.length then
+            if cp < branch.skipLen then
                 // Path diverges within the branch's prefix -- split the branch
                 val splitCursor = cursor + cp + 1
-                val newNibble = prefixPart(cp)
-                val oldNibble = branch.skip(cp)
+                val newNibble = nibbleAt(path, cursor + cp)
+                val oldNibble = nibbleAt(branch.repPath, cursor + cp)
 
-                val newLeaf =
-                    mkLeaf(
-                      extractNibbles(path, splitCursor, PathNibbles),
-                      path,
-                      splitCursor,
-                      key,
-                      value
-                    )
-                val oldBranch = mkBranch(branch.skip.drop(cp + 1), branch.children)
+                val newLeaf = mkLeaf(splitCursor, path, key, value)
+                val oldBranch = mkBranch(
+                  branch.skipStart + cp + 1,
+                  branch.skipLen - cp - 1,
+                  branch.repPath,
+                  branch.children
+                )
 
                 val children = emptyChildren
                     .updated(newNibble, newLeaf)
                     .updated(oldNibble, oldBranch)
-                mkBranch(branch.skip.take(cp), children)
+                mkBranch(cursor, cp, path, children)
             else
                 // Prefix matches -- descend into the appropriate child
-                val childNibble = remaining.last
-                val childCursor = cursor + branch.skip.length + 1
+                val childNibble = nibbleAt(path, cursor + branch.skipLen)
+                val childCursor = cursor + branch.skipLen + 1
                 val newChild = doInsert(branch.children(childNibble), path, childCursor, key, value)
-                mkBranch(branch.skip, branch.children.updated(childNibble, newChild))
+                mkBranch(
+                  branch.skipStart,
+                  branch.skipLen,
+                  branch.repPath,
+                  branch.children.updated(childNibble, newChild)
+                )
 
     private def doGet(node: Node, path: ByteString, cursor: Int): Option[ByteString] =
         node match
@@ -287,11 +315,10 @@ object MerklePatriciaForestry {
             case leaf: Node.Leaf =>
                 if leaf.fullPath == path then Some(leaf.value) else None
             case branch: Node.Branch =>
-                val remaining = extractNibbles(path, cursor, cursor + branch.skip.length)
-                if remaining != branch.skip then None
+                if !branchSkipMatchesPath(branch, path, cursor) then None
                 else
-                    val childNibble = nibbleAt(path, cursor + branch.skip.length)
-                    doGet(branch.children(childNibble), path, cursor + branch.skip.length + 1)
+                    val childNibble = nibbleAt(path, cursor + branch.skipLen)
+                    doGet(branch.children(childNibble), path, cursor + branch.skipLen + 1)
 
     private def doDelete(node: Node, path: ByteString, cursor: Int): Node = node match
         case Node.Empty =>
@@ -302,11 +329,11 @@ object MerklePatriciaForestry {
             else throw new NoSuchElementException("Key not in trie")
 
         case branch: Node.Branch =>
-            val remaining = extractNibbles(path, cursor, cursor + branch.skip.length)
-            if remaining != branch.skip then throw new NoSuchElementException("Key not in trie")
+            if !branchSkipMatchesPath(branch, path, cursor) then
+                throw new NoSuchElementException("Key not in trie")
 
-            val childNibble = nibbleAt(path, cursor + branch.skip.length)
-            val childCursor = cursor + branch.skip.length + 1
+            val childNibble = nibbleAt(path, cursor + branch.skipLen)
+            val childCursor = cursor + branch.skipLen + 1
             val newChild = doDelete(branch.children(childNibble), path, childCursor)
             val newChildren = branch.children.updated(childNibble, newChild)
 
@@ -318,18 +345,17 @@ object MerklePatriciaForestry {
                     val (child, childIdx) = nonEmpty.head
                     child match
                         case leaf: Node.Leaf =>
-                            mkLeaf(
-                              branch.skip :+ childIdx :++ leaf.skip,
-                              leaf.fullPath,
-                              cursor,
-                              leaf.key,
-                              leaf.value
-                            )
+                            mkLeaf(cursor, leaf.fullPath, leaf.key, leaf.value)
                         case inner: Node.Branch =>
-                            mkBranch(branch.skip :+ childIdx :++ inner.skip, inner.children)
+                            mkBranch(
+                              cursor,
+                              branch.skipLen + 1 + inner.skipLen,
+                              inner.repPath,
+                              inner.children
+                            )
                         case Node.Empty => Node.Empty
                 case _ =>
-                    mkBranch(branch.skip, newChildren)
+                    mkBranch(branch.skipStart, branch.skipLen, branch.repPath, newChildren)
 
     /** Walk the trie root-to-leaf, collecting one [[ProofStep]] at each branch along the path.
       *
@@ -350,18 +376,17 @@ object MerklePatriciaForestry {
             (leaf.fullPath == path, Nil)
 
         case branch: Node.Branch =>
-            val skip = branch.skip.length
             // The nibble to branch on is after the common prefix (skip).
-            val childNibble = nibbleAt(path, cursor + skip)
+            val childNibble = nibbleAt(path, cursor + branch.skipLen)
             val child = branch.children(childNibble)
 
             // Recurse into the child we're following
             val (found, childSteps) = child match
                 case Node.Empty => (false, Nil)
-                case _          => doProve(child, path, cursor + skip + 1)
+                case _          => doProve(child, path, cursor + branch.skipLen + 1)
 
             // Emit a proof step that captures the siblings at this branch
-            val step = makeProofStep(branch, childNibble, skip)
+            val step = makeProofStep(branch, childNibble, branch.skipLen)
             (found, step :: childSteps)
 
     /** Emit the most compact [[ProofStep]] for a branch, based on sibling count. */
@@ -392,7 +417,7 @@ object MerklePatriciaForestry {
                       skip,
                       Neighbor(
                         nibble = neighborIdx,
-                        prefixLen = inner.skip.length,
+                        prefixLen = inner.skipLen,
                         halfLeft = hL,
                         halfRight = hR
                       )
