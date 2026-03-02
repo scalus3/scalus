@@ -72,7 +72,8 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
     }
 
     test("wrong path fails membership verification") {
-        val tree = OffChainImt.empty(depth)
+        val tree = OffChainImt
+            .empty(depth)
             .append(ByteString.fromString("key-0"))
             .append(ByteString.fromString("key-1"))
 
@@ -97,7 +98,13 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
         val siblings = emptyTree.proveAppend()
 
         assertThrows[RequirementError] {
-            append(tree.rootHash, BigInt(0), BigInt(depth), ByteString.fromString("second"), siblings)
+            append(
+              tree.rootHash,
+              BigInt(0),
+              BigInt(depth),
+              ByteString.fromString("second"),
+              siblings
+            )
         }
     }
 
@@ -133,9 +140,15 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
         val tree = OffChainImt.empty(d).append(ByteString.fromString("test"))
 
         val memberProof = tree.proveMembership(ByteString.fromString("test"))
-        assert(memberProof.length == d * 33, s"membership proof: expected ${d * 33}, got ${memberProof.length}")
+        assert(
+          memberProof.length == d * 33,
+          s"membership proof: expected ${d * 33}, got ${memberProof.length}"
+        )
 
         val appendProof = tree.proveAppend()
-        assert(appendProof.length == d * 32, s"append proof: expected ${d * 32}, got ${appendProof.length}")
+        assert(
+          appendProof.length == d * 32,
+          s"append proof: expected ${d * 32}, got ${appendProof.length}"
+        )
     }
 }

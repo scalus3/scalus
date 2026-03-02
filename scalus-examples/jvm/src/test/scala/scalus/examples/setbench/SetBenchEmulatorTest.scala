@@ -2,6 +2,8 @@ package scalus.examples.setbench
 
 import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.address.Address
+import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.offchain.mpf.MerklePatriciaForestry as Mpf16
@@ -9,7 +11,7 @@ import scalus.cardano.offchain.mpfo.MerklePatriciaForestry as Mpf16o
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
-import scalus.uplc.PlutusV3
+import scalus.uplc.{PlutusV3, Program}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
@@ -400,13 +402,202 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         )
     }
 
+    // --- Aiken MPF benchmark ---
+
+    private lazy val aikenScript: Script.PlutusV3 = {
+        val fname = "/scalus/examples/AikenMpfData/plutus.json"
+        val inputStream = this.getClass.getResourceAsStream(fname)
+        if inputStream == null then throw new RuntimeException(s"Resource not found: $fname")
+        val blueprint = Blueprint.fromJson(inputStream)
+        val program = blueprint.validators.head.compiledCode.map(Program.fromCborHex).get
+        Script.PlutusV3(program.cborByteString)
+    }
+
+    private lazy val aikenAddress: Address =
+        Address(env.network, Credential.ScriptHash(aikenScript.scriptHash))
+
+    private def benchAikenWithdraw(
+        n: Int,
+        buildTrie: Vector[(ByteString, ByteString)] => MpfTrie
+    ): Unit = {
+        val variant = "Aiken MPF"
+        val elems = allElements.take(n)
+
+        val t0 = System.nanoTime()
+        var trie = buildTrie(elems)
+        val buildMs = (System.nanoTime() - t0) / 1_000_000
+        info(s"$variant trie built in $buildMs ms (N=$n)")
+
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
+        var aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
+
+        val publishTx =
+            txHelper.publishScript(aliceUtxos, aikenScript, Bob.address, Alice.address, Alice.signer)
+        assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
+        val refScriptUtxo = findRefScriptUtxo(publishTx)
+
+        aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
+        val lockAmount = (SampleSize + 5) * K
+        val lockTx = txHelper.lock(
+          aliceUtxos, aikenAddress, lockAmount, trie.rootHash, Alice.address, Alice.signer
+        )
+        assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
+
+        var contractUtxo = findContractUtxoByAddress(lockTx, aikenAddress)
+        var remaining = lockAmount
+
+        val sampleIndices =
+            new scala.util.Random(42).shuffle((0 until n).toList).take(SampleSize)
+
+        var totalFee = 0L
+        var totalCpu = 0L
+        var totalMem = 0L
+        var totalTxSize = 0
+        var totalProofSize = 0
+        var totalProofMs = 0L
+
+        for (idx, i) <- sampleIndices.zipWithIndex do
+            val (key, value) = elems(idx)
+
+            val proofT0 = System.nanoTime()
+            val proofData = trie.proveExistsData(key)
+            val proofMs = (System.nanoTime() - proofT0) / 1_000_000
+            totalProofMs += proofMs
+            val proofSize = proofData.toCbor.length
+
+            trie = trie.delete(key)
+            remaining -= K
+            val newDatum = SetBenchDatum(BigInt(remaining), trie.rootHash)
+            val redeemer = SetBenchRedeemer.Withdraw(key, value, proofData).toData
+
+            val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
+            val tx = txHelper.withdraw(
+              sponsorUtxos, contractUtxo, refScriptUtxo, aikenAddress, redeemer,
+              newDatum, K, Bob.address, Alice.address, Alice.signer
+            )
+
+            val result = emulator.submit(tx).await()
+            assert(result.isRight, s"Withdraw $i failed: $result")
+
+            val (fee, exUnits, txSize) = extractMetrics(tx)
+            totalFee += fee
+            totalCpu += exUnits.steps
+            totalMem += exUnits.memory
+            totalTxSize += txSize
+            totalProofSize += proofSize
+
+            if i % 10 == 0 || i == SampleSize - 1 then
+                info(
+                  f"  [$i] fee=$fee%,d cpu=${exUnits.steps}%,d mem=${exUnits.memory}%,d txSize=$txSize proof=$proofSize%,dB ${proofMs}ms"
+                )
+
+            contractUtxo = findContractUtxoByAddress(tx, aikenAddress)
+
+        val avg = BenchResult(
+          variant, "withdraw", n,
+          totalFee / SampleSize, totalCpu / SampleSize, totalMem / SampleSize,
+          totalTxSize / SampleSize, totalProofSize / SampleSize, totalProofMs / SampleSize, buildMs
+        )
+        allResults += avg
+        info(
+          f"  AVG: fee=${avg.avgFee}%,d cpu=${avg.avgCpu}%,d mem=${avg.avgMem}%,d txSize=${avg.avgTxSize} proof=${avg.avgProofSize}B ${avg.avgProofGenMs}ms build=${avg.buildTimeMs}ms"
+        )
+    }
+
+    private def benchAikenDeposit(
+        n: Int,
+        buildTrie: Vector[(ByteString, ByteString)] => MpfTrie
+    ): Unit = {
+        val variant = "Aiken MPF"
+        val elems = allElements.take(n)
+        val newElems = allElements.slice(n, n + SampleSize)
+
+        val t0 = System.nanoTime()
+        var trie = buildTrie(elems)
+        val buildMs = (System.nanoTime() - t0) / 1_000_000
+        info(s"$variant trie built in $buildMs ms (N=$n)")
+
+        val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
+        var aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
+
+        val publishTx =
+            txHelper.publishScript(aliceUtxos, aikenScript, Bob.address, Alice.address, Alice.signer)
+        assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
+        val refScriptUtxo = findRefScriptUtxo(publishTx)
+
+        aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
+        val lockAmount = 10 * K
+        val lockTx = txHelper.lock(
+          aliceUtxos, aikenAddress, lockAmount, trie.rootHash, Alice.address, Alice.signer
+        )
+        assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
+
+        var contractUtxo = findContractUtxoByAddress(lockTx, aikenAddress)
+        var remaining = lockAmount
+
+        var totalFee = 0L
+        var totalCpu = 0L
+        var totalMem = 0L
+        var totalTxSize = 0
+        var totalProofSize = 0
+        var totalProofMs = 0L
+
+        for (elem, i) <- newElems.zipWithIndex do
+            val (key, value) = elem
+
+            val proofT0 = System.nanoTime()
+            val proofData = trie.proveMissingData(key)
+            val proofMs = (System.nanoTime() - proofT0) / 1_000_000
+            totalProofMs += proofMs
+            val proofSize = proofData.toCbor.length
+
+            trie = trie.insert(key, value)
+            remaining += K
+            val newDatum = SetBenchDatum(BigInt(remaining), trie.rootHash)
+            val redeemer = SetBenchRedeemer.Deposit(key, value, proofData).toData
+
+            val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
+            val tx = txHelper.deposit(
+              sponsorUtxos, contractUtxo, refScriptUtxo, aikenAddress, redeemer,
+              newDatum, K, Alice.address, Alice.signer
+            )
+
+            val result = emulator.submit(tx).await()
+            assert(result.isRight, s"Deposit $i failed: $result")
+
+            val (fee, exUnits, txSize) = extractMetrics(tx)
+            totalFee += fee
+            totalCpu += exUnits.steps
+            totalMem += exUnits.memory
+            totalTxSize += txSize
+            totalProofSize += proofSize
+
+            if i % 10 == 0 || i == SampleSize - 1 then
+                info(
+                  f"  [$i] fee=$fee%,d cpu=${exUnits.steps}%,d mem=${exUnits.memory}%,d txSize=$txSize proof=$proofSize%,dB ${proofMs}ms"
+                )
+
+            contractUtxo = findContractUtxoByAddress(tx, aikenAddress)
+
+        val avg = BenchResult(
+          variant, "deposit", n,
+          totalFee / SampleSize, totalCpu / SampleSize, totalMem / SampleSize,
+          totalTxSize / SampleSize, totalProofSize / SampleSize, totalProofMs / SampleSize, buildMs
+        )
+        allResults += avg
+        info(
+          f"  AVG: fee=${avg.avgFee}%,d cpu=${avg.avgCpu}%,d mem=${avg.avgMem}%,d txSize=${avg.avgTxSize} proof=${avg.avgProofSize}B ${avg.avgProofGenMs}ms build=${avg.buildTimeMs}ms"
+        )
+    }
+
     // --- Helpers ---
 
     private def findContractUtxo(
         tx: Transaction,
         contract: PlutusV3[Data => Unit]
-    ): Utxo = {
-        val scriptAddr = contract.address(env.network)
+    ): Utxo = findContractUtxoByAddress(tx, contract.address(env.network))
+
+    private def findContractUtxoByAddress(tx: Transaction, scriptAddr: Address): Utxo = {
         tx.utxos
             .find { case (_, txOut) => txOut.address == scriptAddr }
             .map(Utxo(_))
@@ -447,6 +638,21 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchMpfWithdraw("MPF-16b", 32000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
     }
 
+    test("MPF-16o-light withdraw N=32K", Benchmark) {
+        info("=== MPF-16o-light withdraw N=32000 ===")
+        benchMpfWithdraw("MPF-16o-light", 32000, Mpf16oLightContract.withErrorTraces, MpfTrie.wrap16o)
+    }
+
+    test("MPF-16b-light withdraw N=32K", Benchmark) {
+        info("=== MPF-16b-light withdraw N=32000 ===")
+        benchMpfWithdraw("MPF-16b-light", 32000, Mpf16bLightContract.withErrorTraces, MpfTrie.wrap16b)
+    }
+
+    test("Aiken MPF withdraw N=32K", Benchmark) {
+        info("=== Aiken MPF withdraw N=32000 ===")
+        benchAikenWithdraw(32000, MpfTrie.wrap16o)
+    }
+
     test("Accumulator withdraw N=32K", Benchmark) {
         info("=== Accumulator withdraw N=32000 ===")
         benchAccWithdraw(32000)
@@ -465,6 +671,21 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     test("MPF-16b deposit N=32K", Benchmark) {
         info("=== MPF-16b deposit N=32000 ===")
         benchMpfDeposit("MPF-16b", 32000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
+    }
+
+    test("MPF-16o-light deposit N=32K", Benchmark) {
+        info("=== MPF-16o-light deposit N=32000 ===")
+        benchMpfDeposit("MPF-16o-light", 32000, Mpf16oLightContract.withErrorTraces, MpfTrie.wrap16o)
+    }
+
+    test("MPF-16b-light deposit N=32K", Benchmark) {
+        info("=== MPF-16b-light deposit N=32000 ===")
+        benchMpfDeposit("MPF-16b-light", 32000, Mpf16bLightContract.withErrorTraces, MpfTrie.wrap16b)
+    }
+
+    test("Aiken MPF deposit N=32K", Benchmark) {
+        info("=== Aiken MPF deposit N=32000 ===")
+        benchAikenDeposit(32000, MpfTrie.wrap16o)
     }
 
     // --- N=100K ---

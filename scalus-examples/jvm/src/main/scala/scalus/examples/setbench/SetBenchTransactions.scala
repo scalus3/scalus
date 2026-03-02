@@ -100,4 +100,86 @@ case class SetBenchTransactions(env: CardanoInfo) {
             .sign(signer)
             .transaction
     }
+
+    // --- Raw script overloads (for external validators, e.g. Aiken-compiled) ---
+
+    def publishScript(
+        utxos: Utxos,
+        script: Script.PlutusV3,
+        holder: Address,
+        sponsor: Address,
+        signer: TransactionSigner
+    ): Transaction = {
+        val scriptOutput = TransactionOutput(
+          holder,
+          Value.lovelace(10_000_000L),
+          None,
+          Some(ScriptRef(script))
+        )
+        builder
+            .output(scriptOutput)
+            .complete(availableUtxos = utxos, sponsor = sponsor)
+            .sign(signer)
+            .transaction
+    }
+
+    def lock(
+        utxos: Utxos,
+        scriptAddress: Address,
+        totalLovelace: Long,
+        initialRoot: scalus.uplc.builtin.ByteString,
+        sponsor: Address,
+        signer: TransactionSigner
+    ): Transaction = {
+        val datum = SetBenchDatum(BigInt(totalLovelace), initialRoot)
+        builder
+            .payTo(scriptAddress, Value.lovelace(totalLovelace), datum)
+            .complete(availableUtxos = utxos, sponsor = sponsor)
+            .sign(signer)
+            .transaction
+    }
+
+    def withdraw(
+        utxos: Utxos,
+        contractUtxo: Utxo,
+        refScriptUtxo: Utxo,
+        scriptAddress: Address,
+        redeemer: Data,
+        newDatum: SetBenchDatum,
+        k: Long,
+        withdrawTo: Address,
+        sponsor: Address,
+        signer: TransactionSigner
+    ): Transaction = {
+        val newLovelace = contractUtxo.output.value.coin.value - k
+        builder
+            .references(refScriptUtxo)
+            .spend(contractUtxo, redeemer)
+            .payTo(withdrawTo, Value.lovelace(k))
+            .payTo(scriptAddress, Value.lovelace(newLovelace), newDatum)
+            .complete(availableUtxos = utxos, sponsor = sponsor)
+            .sign(signer)
+            .transaction
+    }
+
+    def deposit(
+        utxos: Utxos,
+        contractUtxo: Utxo,
+        refScriptUtxo: Utxo,
+        scriptAddress: Address,
+        redeemer: Data,
+        newDatum: SetBenchDatum,
+        k: Long,
+        sponsor: Address,
+        signer: TransactionSigner
+    ): Transaction = {
+        val newLovelace = contractUtxo.output.value.coin.value + k
+        builder
+            .references(refScriptUtxo)
+            .spend(contractUtxo, redeemer)
+            .payTo(scriptAddress, Value.lovelace(newLovelace), newDatum)
+            .complete(availableUtxos = utxos, sponsor = sponsor)
+            .sign(signer)
+            .transaction
+    }
 }
