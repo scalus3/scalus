@@ -17,11 +17,11 @@ object CardanoInfo {
 
     /** Cardano info for current Cardano Mainnet
       *
-      * We use protocol params from epoch 544, major protocol version 10 (Plomin hard fork)
+      * We use protocol params from epoch 616, major protocol version 10 (Plomin hard fork)
       */
     @threadUnsafe lazy val mainnet: CardanoInfo =
         CardanoInfo(
-          inlineProtocolParams("blockfrost-params-epoch-544.json"),
+          inlineProtocolParams("blockfrost-params-epoch-616.json"),
           Network.Mainnet,
           SlotConfig.mainnet
         )
