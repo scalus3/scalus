@@ -6,10 +6,8 @@ import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
 import scalus.cardano.offchain.mpf.MerklePatriciaForestry as Mpf16
-import scalus.cardano.offchain.mpf64.MerklePatriciaForestry as Mpf64
 import scalus.cardano.offchain.mpfo.MerklePatriciaForestry as Mpf16o
 import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry.{Proof as Mpf16Proof, ProofStep as Mpf16Step}
-import scalus.cardano.onchain.plutus.mpf64.MerklePatriciaForestry.{Proof as Mpf64Proof, ProofStep as Mpf64Step}
 import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.compiler.Options
@@ -24,8 +22,8 @@ import scalus.uplc.{Constant, PlutusV3, Term}
 import scalus.uplc.Term.asTerm
 
 /** Budget comparison for collection membership verification across multiple sizes: MPF16 (radix-16
-  * Merkle Patricia Forestry), MPF64 (radix-64), MPF16o (original, full nibble prefix), and
-  * bilinear accumulator (G1, Ethereum KZG ceremony).
+  * Merkle Patricia Forestry), MPF16o (original, full nibble prefix), and bilinear accumulator (G1,
+  * Ethereum KZG ceremony).
   *
   * Tagged with `scalus.testing.Benchmark` — excluded from default test runs. Run with:
   * {{{
@@ -86,28 +84,21 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             Constr(0, PList(I(skip), B(neighbors)))
         case Mpf16Step.Fork(skip, neighbor) =>
             val neighborData =
-                Constr(0, PList(I(neighbor.nibble), I(neighbor.prefixLen), B(neighbor.halfLeft), B(neighbor.halfRight)))
+                Constr(
+                  0,
+                  PList(
+                    I(neighbor.nibble),
+                    I(neighbor.prefixLen),
+                    B(neighbor.halfLeft),
+                    B(neighbor.halfRight)
+                  )
+                )
             Constr(1, PList(I(skip), neighborData))
         case Mpf16Step.Leaf(skip, key, value) =>
             Constr(2, PList(I(skip), B(key), B(value)))
 
     private def mpf16ProofToData(proof: Mpf16Proof): Data = {
         val steps = proof.toScalaList.map(mpf16StepToData)
-        Data.List(steps.foldRight(PList.Nil: PList[Data]) { (d, acc) => PList.Cons(d, acc) })
-    }
-
-    private def mpf64StepToData(step: Mpf64Step): Data = step match
-        case Mpf64Step.Branch(skip, neighbors) =>
-            Constr(0, PList(I(skip), B(neighbors)))
-        case Mpf64Step.Fork(skip, neighbor) =>
-            val neighborData =
-                Constr(0, PList(I(neighbor.index), I(neighbor.prefixLen), B(neighbor.halfLeft), B(neighbor.halfRight)))
-            Constr(1, PList(I(skip), neighborData))
-        case Mpf64Step.Leaf(skip, key, value) =>
-            Constr(2, PList(I(skip), B(key), B(value)))
-
-    private def mpf64ProofToData(proof: Mpf64Proof): Data = {
-        val steps = proof.toScalaList.map(mpf64StepToData)
         Data.List(steps.foldRight(PList.Nil: PList[Data]) { (d, acc) => PList.Cons(d, acc) })
     }
 
@@ -132,14 +123,6 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
             import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry
             import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry.*
-            val trie = MerklePatriciaForestry(unBData(rootD))
-            trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
-    }
-
-    private val mpf64HasProgram = PlutusV3.compile {
-        (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.mpf64.MerklePatriciaForestry
-            import scalus.cardano.onchain.plutus.mpf64.MerklePatriciaForestry.*
             val trie = MerklePatriciaForestry(unBData(rootD))
             trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
@@ -180,14 +163,6 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             trie.insert(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
-    private val mpf64InsertProgram = PlutusV3.compile {
-        (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.mpf64.MerklePatriciaForestry
-            import scalus.cardano.onchain.plutus.mpf64.MerklePatriciaForestry.*
-            val trie = MerklePatriciaForestry(unBData(rootD))
-            trie.insert(unBData(keyD), unBData(valueD), proofD.to[Proof])
-    }
-
     private val mpf16oInsertProgram = PlutusV3.compile {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
             import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry
@@ -218,10 +193,8 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
     /** Average budget per system for a given collection size and operation. */
     private case class AvgBudget(
         mpf16: ExUnits,
-        mpf64: ExUnits,
         mpf16o: ExUnits,
         proofSize16: Int = 0,
-        proofSize64: Int = 0,
         proofSize16o: Int = 0
     )
 
@@ -231,7 +204,6 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
     private def runHasBudget(n: Int, seed: Int): AvgBudget = {
         val elems = allElements.take(n)
         val mpf16 = Mpf16.fromList(elems)
-        val mpf64 = Mpf64.fromList(elems)
         val mpf16o = Mpf16o.fromList(elems)
 
         val sampleSize = math.min(SampleSize, n)
@@ -239,14 +211,12 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             new scala.util.Random(seed).shuffle((0 until n).toList).take(sampleSize)
 
         var totalMpf16 = ExUnits(0, 0)
-        var totalMpf64 = ExUnits(0, 0)
         var totalMpf16o = ExUnits(0, 0)
         var totalProof16 = 0L
-        var totalProof64 = 0L
         var totalProof16o = 0L
 
         val header =
-            f"${"Element"}%-12s | ${"MPF16 fee"}%10s | ${"MPF64 fee"}%10s | ${"MPF16o fee"}%10s"
+            f"${"Element"}%-12s | ${"MPF16 fee"}%10s | ${"MPF16o fee"}%10s"
         val sep = "-" * header.length
         info(header)
         info(sep)
@@ -255,17 +225,13 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             val (key, value) = elems(idx)
 
             val proof16Data = mpf16ProofToData(mpf16.proveExists(key))
-            val proof64Data = mpf64ProofToData(mpf64.proveExists(key))
             val proof16oData = mpf16oProofToData(mpf16o.proveExists(key))
 
             totalProof16 += proof16Data.toCbor.length
-            totalProof64 += proof64Data.toCbor.length
             totalProof16o += proof16oData.toCbor.length
 
             val mpf16Budget =
                 measureTrieOp(mpf16HasProgram, mpf16.rootHash, key, value, proof16Data)
-            val mpf64Budget =
-                measureTrieOp(mpf64HasProgram, mpf64.rootHash, key, value, proof64Data)
             val mpf16oBudget =
                 measureTrieOp(mpf16oHasProgram, mpf16o.rootHash, key, value, proof16oData)
 
@@ -273,41 +239,32 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
               totalMpf16.memory + mpf16Budget.memory,
               totalMpf16.steps + mpf16Budget.steps
             )
-            totalMpf64 = ExUnits(
-              totalMpf64.memory + mpf64Budget.memory,
-              totalMpf64.steps + mpf64Budget.steps
-            )
             totalMpf16o = ExUnits(
               totalMpf16o.memory + mpf16oBudget.memory,
               totalMpf16o.steps + mpf16oBudget.steps
             )
 
             info(
-              f"element-$idx%-12d | ${feeLovelace(mpf16Budget)}%10d | ${feeLovelace(mpf64Budget)}%10d | ${feeLovelace(mpf16oBudget)}%10d"
+              f"element-$idx%-12d | ${feeLovelace(mpf16Budget)}%10d | ${feeLovelace(mpf16oBudget)}%10d"
             )
 
         info(sep)
         val avgMpf16 = ExUnits(totalMpf16.memory / sampleSize, totalMpf16.steps / sampleSize)
-        val avgMpf64 = ExUnits(totalMpf64.memory / sampleSize, totalMpf64.steps / sampleSize)
         val avgMpf16o = ExUnits(totalMpf16o.memory / sampleSize, totalMpf16o.steps / sampleSize)
         val avgP16 = (totalProof16 / sampleSize).toInt
-        val avgP64 = (totalProof64 / sampleSize).toInt
         val avgP16o = (totalProof16o / sampleSize).toInt
         info(
-          f"${"AVERAGE"}%-12s | ${feeLovelace(avgMpf16)}%10d | ${feeLovelace(avgMpf64)}%10d | ${feeLovelace(avgMpf16o)}%10d"
+          f"${"AVERAGE"}%-12s | ${feeLovelace(avgMpf16)}%10d | ${feeLovelace(avgMpf16o)}%10d"
         )
         info(
-          f"Avg proof CBOR bytes:   MPF16=${avgP16}%5d  MPF64=${avgP64}%5d  MPF16o=${avgP16o}%5d"
+          f"Avg proof CBOR bytes:   MPF16=${avgP16}%5d  MPF16o=${avgP16o}%5d"
         )
-        info(f"MPF64/MPF16 cpu ratio:  ${totalMpf64.steps.toDouble / totalMpf16.steps}%.3f")
         info(f"MPF16o/MPF16 cpu ratio: ${totalMpf16o.steps.toDouble / totalMpf16.steps}%.3f")
 
         AvgBudget(
           avgMpf16,
-          avgMpf64,
           avgMpf16o,
           avgP16,
-          avgP64,
           avgP16o
         )
     }
@@ -318,7 +275,6 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
     private def runInsertBudget(n: Int, seed: Int): AvgBudget = {
         val elems = allElements.take(n)
         val mpf16 = Mpf16.fromList(elems)
-        val mpf64 = Mpf64.fromList(elems)
         val mpf16o = Mpf16o.fromList(elems)
 
         val sampleSize = math.min(SampleSize, n)
@@ -326,11 +282,10 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             new scala.util.Random(seed).shuffle((0 until n).toList).take(sampleSize)
 
         var totalMpf16 = ExUnits(0, 0)
-        var totalMpf64 = ExUnits(0, 0)
         var totalMpf16o = ExUnits(0, 0)
 
         val header =
-            f"${"Element"}%-12s | ${"MPF16 fee"}%10s | ${"MPF64 fee"}%10s | ${"MPF16o fee"}%10s"
+            f"${"Element"}%-12s | ${"MPF16 fee"}%10s | ${"MPF16o fee"}%10s"
         val sep = "-" * header.length
         info(header)
         info(sep)
@@ -338,7 +293,6 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         for idx <- sampleIndices do
             val (key, value) = elems(idx)
             val mpf16Without = mpf16.delete(key)
-            val mpf64Without = mpf64.delete(key)
             val mpf16oWithout = mpf16o.delete(key)
 
             val mpf16Budget = measureTrieOp(
@@ -347,13 +301,6 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
               key,
               value,
               mpf16ProofToData(mpf16Without.proveMissing(key))
-            )
-            val mpf64Budget = measureTrieOp(
-              mpf64InsertProgram,
-              mpf64Without.rootHash,
-              key,
-              value,
-              mpf64ProofToData(mpf64Without.proveMissing(key))
             )
             val mpf16oBudget = measureTrieOp(
               mpf16oInsertProgram,
@@ -367,30 +314,24 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
               totalMpf16.memory + mpf16Budget.memory,
               totalMpf16.steps + mpf16Budget.steps
             )
-            totalMpf64 = ExUnits(
-              totalMpf64.memory + mpf64Budget.memory,
-              totalMpf64.steps + mpf64Budget.steps
-            )
             totalMpf16o = ExUnits(
               totalMpf16o.memory + mpf16oBudget.memory,
               totalMpf16o.steps + mpf16oBudget.steps
             )
 
             info(
-              f"element-$idx%-12d | ${feeLovelace(mpf16Budget)}%10d | ${feeLovelace(mpf64Budget)}%10d | ${feeLovelace(mpf16oBudget)}%10d"
+              f"element-$idx%-12d | ${feeLovelace(mpf16Budget)}%10d | ${feeLovelace(mpf16oBudget)}%10d"
             )
 
         info(sep)
         val avgMpf16 = ExUnits(totalMpf16.memory / sampleSize, totalMpf16.steps / sampleSize)
-        val avgMpf64 = ExUnits(totalMpf64.memory / sampleSize, totalMpf64.steps / sampleSize)
         val avgMpf16o = ExUnits(totalMpf16o.memory / sampleSize, totalMpf16o.steps / sampleSize)
         info(
-          f"${"AVERAGE"}%-12s | ${feeLovelace(avgMpf16)}%10d | ${feeLovelace(avgMpf64)}%10d | ${feeLovelace(avgMpf16o)}%10d"
+          f"${"AVERAGE"}%-12s | ${feeLovelace(avgMpf16)}%10d | ${feeLovelace(avgMpf16o)}%10d"
         )
-        info(f"MPF64/MPF16 cpu ratio:  ${totalMpf64.steps.toDouble / totalMpf16.steps}%.3f")
         info(f"MPF16o/MPF16 cpu ratio: ${totalMpf16o.steps.toDouble / totalMpf16.steps}%.3f")
 
-        AvgBudget(avgMpf16, avgMpf64, avgMpf16o)
+        AvgBudget(avgMpf16, avgMpf16o)
     }
 
     // --- Tests ---
@@ -406,34 +347,34 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         info("")
         info("=== has() budget summary (averages) ===")
         val hdr =
-            f"${"N"}%6s | ${"MPF16 fee"}%10s | ${"MPF64 fee"}%10s | ${"MPF16o fee"}%10s | ${"MPF64/MPF16"}%12s"
+            f"${"N"}%6s | ${"MPF16 fee"}%10s | ${"MPF16o fee"}%10s"
         info(hdr)
         info("-" * hdr.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${feeLovelace(avg.mpf16)}%10d | ${feeLovelace(avg.mpf64)}%10d | ${feeLovelace(avg.mpf16o)}%10d | ${feeLovelace(avg.mpf64).toDouble / feeLovelace(avg.mpf16)}%12.3f"
+              f"${n}%6d | ${feeLovelace(avg.mpf16)}%10d | ${feeLovelace(avg.mpf16o)}%10d"
             )
 
         info("")
         info("=== has() average proof size (CBOR bytes) ===")
         val proofHdr =
-            f"${"N"}%6s | ${"MPF16"}%7s | ${"MPF64"}%7s | ${"MPF16o"}%7s"
+            f"${"N"}%6s | ${"MPF16"}%7s | ${"MPF16o"}%7s"
         info(proofHdr)
         info("-" * proofHdr.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${avg.proofSize16}%7d | ${avg.proofSize64}%7d | ${avg.proofSize16o}%7d"
+              f"${n}%6d | ${avg.proofSize16}%7d | ${avg.proofSize16o}%7d"
             )
 
         info("")
         info("=== has() raw CPU/mem (for comparison with Aiken MPF) ===")
         val cpuHdr =
-            f"${"N"}%6s | ${"MPF16 cpu"}%12s | ${"MPF16 mem"}%10s | ${"MPF64 cpu"}%12s | ${"MPF64 mem"}%10s | ${"MPF16o cpu"}%12s | ${"MPF16o mem"}%10s"
+            f"${"N"}%6s | ${"MPF16 cpu"}%12s | ${"MPF16 mem"}%10s | ${"MPF16o cpu"}%12s | ${"MPF16o mem"}%10s"
         info(cpuHdr)
         info("-" * cpuHdr.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${avg.mpf16.steps}%12d | ${avg.mpf16.memory}%10d | ${avg.mpf64.steps}%12d | ${avg.mpf64.memory}%10d | ${avg.mpf16o.steps}%12d | ${avg.mpf16o.memory}%10d"
+              f"${n}%6d | ${avg.mpf16.steps}%12d | ${avg.mpf16.memory}%10d | ${avg.mpf16o.steps}%12d | ${avg.mpf16o.memory}%10d"
             )
     }
 
@@ -446,23 +387,23 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         info("")
         info("=== insert() budget summary (averages) ===")
         val hdr =
-            f"${"N"}%6s | ${"MPF16 fee"}%10s | ${"MPF64 fee"}%10s | ${"MPF16o fee"}%10s | ${"MPF64/MPF16"}%12s"
+            f"${"N"}%6s | ${"MPF16 fee"}%10s | ${"MPF16o fee"}%10s"
         info(hdr)
         info("-" * hdr.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${feeLovelace(avg.mpf16)}%10d | ${feeLovelace(avg.mpf64)}%10d | ${feeLovelace(avg.mpf16o)}%10d | ${feeLovelace(avg.mpf64).toDouble / feeLovelace(avg.mpf16)}%12.3f"
+              f"${n}%6d | ${feeLovelace(avg.mpf16)}%10d | ${feeLovelace(avg.mpf16o)}%10d"
             )
 
         info("")
         info("=== insert() raw CPU/mem (for comparison with Aiken MPF) ===")
         val cpuHdr2 =
-            f"${"N"}%6s | ${"MPF16 cpu"}%12s | ${"MPF16 mem"}%10s | ${"MPF64 cpu"}%12s | ${"MPF64 mem"}%10s | ${"MPF16o cpu"}%12s | ${"MPF16o mem"}%10s"
+            f"${"N"}%6s | ${"MPF16 cpu"}%12s | ${"MPF16 mem"}%10s | ${"MPF16o cpu"}%12s | ${"MPF16o mem"}%10s"
         info(cpuHdr2)
         info("-" * cpuHdr2.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${avg.mpf16.steps}%12d | ${avg.mpf16.memory}%10d | ${avg.mpf64.steps}%12d | ${avg.mpf64.memory}%10d | ${avg.mpf16o.steps}%12d | ${avg.mpf16o.memory}%10d"
+              f"${n}%6d | ${avg.mpf16.steps}%12d | ${avg.mpf16.memory}%10d | ${avg.mpf16o.steps}%12d | ${avg.mpf16o.memory}%10d"
             )
     }
 

@@ -24,8 +24,6 @@ N=32K elements. Measured via emulator with reference scripts.
 | MPF-16b | 298,408 | 138,685,033 | 500,607 | 1,112 B | 572 B | 1.6 s  |
 | MPF-16  | 299,371 | 139,988,080 | 489,897 | 1,132 B | 593 B | 1.9 s  |
 | MPF-16o | 299,725 | 145,367,344 | 513,754 | 1,132 B | 593 B | 2.1 s  |
-| MPF-64b | 309,229 | 140,495,512 | 508,371 | 1,162 B | 623 B | 4.6 s  |
-| MPF-64  | 310,040 | 141,325,773 | 500,202 | 1,177 B | 637 B | 5.1 s  |
 | IMT-D15 | 321,609 | 206,565,785 | 726,368 | 1,597 B | 1065 B | 2.4 s |
 
 ### Deposit
@@ -35,8 +33,6 @@ N=32K elements. Measured via emulator with reference scripts.
 | MPF-16b | 294,319 | 133,210,115 | 480,891 | 1,054 B | 552 B | 1.6 s  |
 | MPF-16  | 295,274 | 134,525,277 | 470,412 | 1,074 B | 572 B | 1.6 s  |
 | MPF-16o | 295,627 | 139,938,302 | 494,204 | 1,074 B | 572 B | 1.8 s  |
-| MPF-64b | 305,955 | 136,830,623 | 495,333 | 1,111 B | 609 B | 5.2 s  |
-| MPF-64  | 306,771 | 137,708,421 | 487,181 | 1,125 B | 624 B | 4.5 s  |
 | IMT-D15 | 318,600 | 201,541,379 | 712,144 | 1,555 B | 1062 B | 2.2 s |
 
 ## Why IMT Loses
@@ -62,16 +58,14 @@ significantly more blake2b calls per operation.
 ### MPF (Merkle Patricia Forestry)
 
 Adaptive radix trie with path compression. Proof steps follow the trie structure:
-each step is Branch (dense, 16 or 64 children), Fork (sparse, 2 children), or
+each step is Branch (dense, 16 children), Fork (sparse, 2 children), or
 Leaf. Proof size scales with trie depth, which is O(log_r N) with path compression
 making it even shorter in practice.
 
 Variants:
 - **MPF-16**: Radix-16, `List[ProofStep]` encoding
 - **MPF-16o**: Radix-16, original Aiken-compatible encoding
-- **MPF-64**: Radix-64, `List[ProofStep]` encoding
 - **MPF-16b**: Radix-16, binary (flat `ByteString`) proof encoding
-- **MPF-64b**: Radix-64, binary proof encoding
 
 ### IMT (Indexed Merkle Tree)
 
