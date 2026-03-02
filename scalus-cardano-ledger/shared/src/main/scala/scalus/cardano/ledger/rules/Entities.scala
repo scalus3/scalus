@@ -36,7 +36,7 @@ case class State(
 
 case class UtxoEnv(slot: SlotNo, params: ProtocolParams, certState: CertState, network: Network)
 object UtxoEnv {
-    // Delegates to platform-specific UtxoEnvDefaults (JVM loads from resources, JS embeds JSON)
+    // Uses CardanoInfo.mainnet.protocolParams (inlined at compile time via macro)
     // TODO: remove
     @threadUnsafe lazy val default: UtxoEnv = UtxoEnvDefaults.default
 
