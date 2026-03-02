@@ -18,7 +18,7 @@ case class MerklePatriciaForestry(root: ByteString)
 
 @Compile
 object MerklePatriciaForestry:
-    import Merkling.*
+    import scalus.cardano.onchain.plutus.mpf.Merkling.*
 
     private val Blake2b256DigestSize: BigInt = 32
     private val NeighborSize: BigInt = 128

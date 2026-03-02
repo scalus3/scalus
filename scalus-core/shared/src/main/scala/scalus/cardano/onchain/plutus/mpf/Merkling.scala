@@ -1,4 +1,4 @@
-package scalus.cardano.onchain.plutus.mpfb
+package scalus.cardano.onchain.plutus.mpf
 
 import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.*
@@ -35,6 +35,25 @@ object Merkling:
             // Odd cursor: drop (cursor+1)/2 bytes, prepend low nibble and 0x00
             val dropped = sliceByteString((cursor + 1) / 2, lengthOfByteString(path), path)
             consByteString(0, consByteString(nibble(path, cursor), dropped))
+
+    /** Computes nibbles for a given branch node between start and end positions.
+      *
+      * @param path
+      *   The source ByteString to extract nibbles from
+      * @param start
+      *   Starting position
+      * @param end
+      *   Ending position (exclusive)
+      * @return
+      *   ByteString containing the extracted nibbles
+      */
+    def nibbles(path: ByteString, start: BigInt, end: BigInt): ByteString =
+        if start >= end then ByteString.empty
+        else
+            consByteString(
+              nibble(path, start),
+              nibbles(path, addInteger(start, 1), end)
+            )
 
     /** Extracts a nibble (4-bit value) from a specific position in the ByteString. */
     def nibble(self: ByteString, index: BigInt): BigInt =

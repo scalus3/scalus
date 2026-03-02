@@ -1,44 +1,43 @@
-package scalus.cardano.offchain.mpfb
+package scalus.cardano.offchain.mpfo
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.mpf.Merkling
-import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry as OnChainBinary
+import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry as OnChainMpfo
 import scalus.uplc.builtin.ByteString
 
 class MerklePatriciaForestryTest extends AnyFunSuite {
 
-    // The fruit dataset from the on-chain MerklePatriciaForestryTest
     private val fruitEntries: Seq[(String, String)] = Seq(
-      "apple[uid: 58]" -> "🍎",
-      "apricot[uid: 0]" -> "🤷",
-      "banana[uid: 218]" -> "🍌",
-      "blueberry[uid: 0]" -> "🫐",
-      "cherry[uid: 0]" -> "🍒",
-      "coconut[uid: 0]" -> "🥥",
-      "cranberry[uid: 0]" -> "🤷",
-      "fig[uid: 68267]" -> "🤷",
-      "grapefruit[uid: 0]" -> "🤷",
-      "grapes[uid: 0]" -> "🍇",
-      "guava[uid: 344]" -> "🤷",
-      "kiwi[uid: 0]" -> "🥝",
-      "kumquat[uid: 0]" -> "🤷",
-      "lemon[uid: 0]" -> "🍋",
-      "lime[uid: 0]" -> "🤷",
-      "mango[uid: 0]" -> "🥭",
-      "orange[uid: 0]" -> "🍊",
-      "papaya[uid: 0]" -> "🤷",
-      "passionfruit[uid: 0]" -> "🤷",
-      "peach[uid: 0]" -> "🍑",
-      "pear[uid: 0]" -> "🍐",
-      "pineapple[uid: 12577]" -> "🍍",
-      "plum[uid: 15492]" -> "🤷",
-      "pomegranate[uid: 0]" -> "🤷",
-      "raspberry[uid: 0]" -> "🤷",
-      "strawberry[uid: 2532]" -> "🍓",
-      "tangerine[uid: 11]" -> "🍊",
-      "tomato[uid: 83468]" -> "🍅",
-      "watermelon[uid: 0]" -> "🍉",
-      "yuzu[uid: 0]" -> "🤷"
+      "apple[uid: 58]" -> "\uD83C\uDF4E",
+      "apricot[uid: 0]" -> "\uD83E\uDD37",
+      "banana[uid: 218]" -> "\uD83C\uDF4C",
+      "blueberry[uid: 0]" -> "\uD83E\uDED0",
+      "cherry[uid: 0]" -> "\uD83C\uDF52",
+      "coconut[uid: 0]" -> "\uD83E\uDD65",
+      "cranberry[uid: 0]" -> "\uD83E\uDD37",
+      "fig[uid: 68267]" -> "\uD83E\uDD37",
+      "grapefruit[uid: 0]" -> "\uD83E\uDD37",
+      "grapes[uid: 0]" -> "\uD83C\uDF47",
+      "guava[uid: 344]" -> "\uD83E\uDD37",
+      "kiwi[uid: 0]" -> "\uD83E\uDD5D",
+      "kumquat[uid: 0]" -> "\uD83E\uDD37",
+      "lemon[uid: 0]" -> "\uD83C\uDF4B",
+      "lime[uid: 0]" -> "\uD83E\uDD37",
+      "mango[uid: 0]" -> "\uD83E\uDD6D",
+      "orange[uid: 0]" -> "\uD83C\uDF4A",
+      "papaya[uid: 0]" -> "\uD83E\uDD37",
+      "passionfruit[uid: 0]" -> "\uD83E\uDD37",
+      "peach[uid: 0]" -> "\uD83C\uDF51",
+      "pear[uid: 0]" -> "\uD83C\uDF50",
+      "pineapple[uid: 12577]" -> "\uD83C\uDF4D",
+      "plum[uid: 15492]" -> "\uD83E\uDD37",
+      "pomegranate[uid: 0]" -> "\uD83E\uDD37",
+      "raspberry[uid: 0]" -> "\uD83E\uDD37",
+      "strawberry[uid: 2532]" -> "\uD83C\uDF53",
+      "tangerine[uid: 11]" -> "\uD83C\uDF4A",
+      "tomato[uid: 83468]" -> "\uD83C\uDF45",
+      "watermelon[uid: 0]" -> "\uD83C\uDF49",
+      "yuzu[uid: 0]" -> "\uD83E\uDD37"
     )
 
     private val fruitBs: Seq[(ByteString, ByteString)] = fruitEntries.map { case (k, v) =>
@@ -62,10 +61,6 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         assert(!trie.isEmpty)
         assert(trie.get(ByteString.fromString("hello")).contains(ByteString.fromString("world")))
         assert(trie.get(ByteString.fromString("other")).isEmpty)
-    }
-
-    test("fruit trie root hash matches expected") {
-        assert(fullTrie.rootHash == expectedRoot, s"got ${fullTrie.rootHash.toHex}")
     }
 
     test("fruit trie has correct size") {
@@ -120,71 +115,59 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         assert(trie.rootHash == expectedRoot)
     }
 
-    // --- Binary proof tests (mpfb) ---
+    // --- Proof tests (mpfo) ---
 
-    test("binary proofs verify membership via mpfb on-chain") {
-        val onChain = OnChainBinary(fullTrie.rootHash)
+    test("proofs verify membership via mpfo on-chain") {
+        val onChain = OnChainMpfo(fullTrie.rootHash)
         for (key, value) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
+            val proof = fullTrie.proveExists(key)
             assert(
               onChain.has(key, value, proof),
-              s"binary on-chain has() failed for ${key.toHex}"
+              s"on-chain has() failed for ${key.toHex}"
             )
     }
 
-    test("binary proofs support on-chain delete via mpfb") {
-        val onChain = OnChainBinary(fullTrie.rootHash)
+    test("proofs support on-chain delete via mpfo") {
+        val onChain = OnChainMpfo(fullTrie.rootHash)
         for (key, value) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
+            val proof = fullTrie.proveExists(key)
             val without = fullTrie.delete(key)
             val deleted = onChain.delete(key, value, proof)
             assert(
               deleted.root == without.rootHash,
-              s"binary on-chain delete root mismatch for ${key.toHex}"
+              s"on-chain delete root mismatch for ${key.toHex}"
             )
     }
 
-    test("binary proofs support on-chain insert via mpfb") {
+    test("proofs support on-chain insert via mpfo") {
         for (key, value) <- fruitBs do
             val without = fullTrie.delete(key)
-            val proof = without.proveMissingBinary(key)
-            val onChainWithout = OnChainBinary(without.rootHash)
+            val proof = without.proveMissing(key)
+            val onChainWithout = OnChainMpfo(without.rootHash)
             val inserted = onChainWithout.insert(key, value, proof)
             assert(
               inserted.root == expectedRoot,
-              s"binary on-chain insert root mismatch for ${key.toHex}"
+              s"on-chain insert root mismatch for ${key.toHex}"
             )
     }
 
-    test("binary proofs support on-chain update via mpfb") {
-        val onChain = OnChainBinary(fullTrie.rootHash)
+    test("proofs support on-chain update via mpfo") {
+        val onChain = OnChainMpfo(fullTrie.rootHash)
         val newValue = ByteString.fromString("updated")
         for (key, oldValue) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
+            val proof = fullTrie.proveExists(key)
             val updated = onChain.update(key, proof, oldValue, newValue)
             assert(updated.has(key, newValue, proof))
     }
 
-    test("binary proveMissing for absent key via mpfb") {
+    test("proveMissing for absent key via mpfo") {
         val key = ByteString.fromString("nonexistent")
         val value = ByteString.fromString("somevalue")
-        val proof = fullTrie.proveMissingBinary(key)
-        val onChain = OnChainBinary(fullTrie.rootHash)
+        val proof = fullTrie.proveMissing(key)
+        val onChain = OnChainMpfo(fullTrie.rootHash)
         val inserted = onChain.insert(key, value, proof)
         val offChainInserted = fullTrie.insert(key, value)
         assert(inserted.root == offChainInserted.rootHash)
-    }
-
-    test("binary proof is compact") {
-        for (key, _) <- fruitBs.take(5) do
-            val binaryProof = fullTrie.proveExistsBinary(key)
-            // Binary proofs should be non-empty
-            assert(binaryProof.length > 0, s"empty proof for ${key.toHex}")
-            // Each step is at most 130 bytes (Branch), with at most ~16 steps for a 30-element trie
-            assert(
-              binaryProof.length < 2000,
-              s"unexpectedly large proof (${binaryProof.length}B) for ${key.toHex}"
-            )
     }
 
     test("two elements with long shared prefix") {
@@ -198,9 +181,9 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
         assert(trie.get(k1).contains(v1))
         assert(trie.get(k2).contains(v2))
 
-        val onChain = OnChainBinary(trie.rootHash)
-        val proof1 = trie.proveExistsBinary(k1)
-        val proof2 = trie.proveExistsBinary(k2)
+        val onChain = OnChainMpfo(trie.rootHash)
+        val proof1 = trie.proveExists(k1)
+        val proof2 = trie.proveExists(k2)
         assert(onChain.has(k1, v1, proof1))
         assert(onChain.has(k2, v2, proof2))
 
