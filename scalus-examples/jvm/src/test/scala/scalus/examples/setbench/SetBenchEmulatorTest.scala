@@ -32,19 +32,17 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     private val SampleSize = 10
     private val K = 2_000_000L
-    private val MaxN = 100_000 + SampleSize
 
-    private lazy val allElements: Vector[(ByteString, ByteString)] = {
+    /** Generate `count` deterministic (key, value) pairs. Uses a fixed seed so results are
+      * reproducible, but each call creates a fresh vector of exactly the right size.
+      */
+    private def generateElements(count: Int): Vector[(ByteString, ByteString)] = {
         val rng = new scala.util.Random(42)
-        Vector.tabulate(MaxN) { i =>
+        Vector.tabulate(count) { i =>
             val key = ByteString.fromString(s"element-${rng.nextInt()}-$i")
             val value = ByteString.fromString(s"value-$i")
             (key, value)
         }
-    }
-
-    private lazy val accElements: Vector[BigInt] = allElements.map { (k, _) =>
-        byteStringToInteger(true, blake2b_256(k))
     }
 
     private lazy val ceremony: CollectionMembershipBudgetTest.EthereumCeremony =
@@ -70,7 +68,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         contract: PlutusV3[Data => Unit],
         buildTrie: Vector[(ByteString, ByteString)] => MpfTrie
     ): Unit = {
-        val elems = allElements.take(n)
+        val elems = generateElements(n)
 
         val t0 = System.nanoTime()
         var trie = buildTrie(elems)
@@ -183,8 +181,9 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         contract: PlutusV3[Data => Unit],
         buildTrie: Vector[(ByteString, ByteString)] => MpfTrie
     ): Unit = {
-        val elems = allElements.take(n)
-        val newElems = allElements.slice(n, n + SampleSize)
+        val allElems = generateElements(n + SampleSize)
+        val elems = allElems.take(n)
+        val newElems = allElems.slice(n, n + SampleSize)
 
         val t0 = System.nanoTime()
         var trie = buildTrie(elems)
@@ -290,7 +289,9 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     private def benchAccWithdraw(n: Int): Unit = {
         val variant = "Acc (G1)"
         val contract = AccContract.withErrorTraces
-        val accElems = accElements.take(n)
+        val accElems = generateElements(n).map { (k, _) =>
+            byteStringToInteger(true, blake2b_256(k))
+        }
 
         val t0 = System.nanoTime()
         var fullSet = accElems
@@ -421,7 +422,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         buildTrie: Vector[(ByteString, ByteString)] => MpfTrie
     ): Unit = {
         val variant = "Aiken MPF"
-        val elems = allElements.take(n)
+        val elems = generateElements(n)
 
         val t0 = System.nanoTime()
         var trie = buildTrie(elems)
@@ -509,8 +510,9 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         buildTrie: Vector[(ByteString, ByteString)] => MpfTrie
     ): Unit = {
         val variant = "Aiken MPF"
-        val elems = allElements.take(n)
-        val newElems = allElements.slice(n, n + SampleSize)
+        val allElems = generateElements(n + SampleSize)
+        val elems = allElems.take(n)
+        val newElems = allElems.slice(n, n + SampleSize)
 
         val t0 = System.nanoTime()
         var trie = buildTrie(elems)
