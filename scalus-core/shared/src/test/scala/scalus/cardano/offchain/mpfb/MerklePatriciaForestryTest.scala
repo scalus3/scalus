@@ -1,7 +1,7 @@
-package scalus.cardano.offchain.mpf
+package scalus.cardano.offchain.mpfb
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.onchain.plutus.mpf.Merkling
+import scalus.cardano.onchain.plutus.mpfb.Merkling
 import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry as OnChainBinary
 import scalus.uplc.builtin.ByteString
 
@@ -114,94 +114,6 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
             )
     }
 
-    test("generated proofs verify membership on-chain") {
-        val onChain = fullTrie.toOnChain
-        for (key, value) <- fruitBs do
-            val proof = fullTrie.proveExists(key)
-            assert(
-              onChain.has(key, value, proof),
-              s"on-chain has() failed for ${key.toHex}"
-            )
-    }
-
-    test("generated proofs support on-chain delete") {
-        val onChain = fullTrie.toOnChain
-        for (key, value) <- fruitBs do
-            val proof = fullTrie.proveExists(key)
-            val without = fullTrie.delete(key)
-            val deleted = onChain.delete(key, value, proof)
-            assert(
-              deleted.root == without.rootHash,
-              s"on-chain delete root mismatch for ${key.toHex}"
-            )
-    }
-
-    test("generated proofs support on-chain insert") {
-        for (key, value) <- fruitBs do
-            val without = fullTrie.delete(key)
-            val proof = without.proveMissing(key)
-            val onChainWithout = without.toOnChain
-            val inserted = onChainWithout.insert(key, value, proof)
-            assert(
-              inserted.root == expectedRoot,
-              s"on-chain insert root mismatch for ${key.toHex}"
-            )
-    }
-
-    test("generated proofs support on-chain update") {
-        val onChain = fullTrie.toOnChain
-        val newValue = ByteString.fromString("updated")
-        for (key, oldValue) <- fruitBs do
-            val proof = fullTrie.proveExists(key)
-            val updated = onChain.update(key, proof, oldValue, newValue)
-            assert(updated.has(key, newValue, proof))
-    }
-
-    test("proveMissing for absent key") {
-        val key = ByteString.fromString("nonexistent")
-        val value = ByteString.fromString("somevalue")
-        val proof = fullTrie.proveMissing(key)
-        val onChain = fullTrie.toOnChain
-        val inserted = onChain.insert(key, value, proof)
-        val offChainInserted = fullTrie.insert(key, value)
-        assert(inserted.root == offChainInserted.rootHash)
-    }
-
-    test("proveMissing throws for existing key") {
-        val (key, _) = fruitBs.head
-        assertThrows[IllegalArgumentException] {
-            fullTrie.proveMissing(key)
-        }
-    }
-
-    test("proveExists throws for missing key") {
-        assertThrows[NoSuchElementException] {
-            fullTrie.proveExists(ByteString.fromString("nonexistent"))
-        }
-    }
-
-    test("two elements with long shared prefix") {
-        val k1 = ByteString.fromString("aaaa")
-        val k2 = ByteString.fromString("aaab")
-        val v1 = ByteString.fromString("v1")
-        val v2 = ByteString.fromString("v2")
-
-        val trie = MerklePatriciaForestry.empty.insert(k1, v1).insert(k2, v2)
-        assert(trie.size == 2)
-        assert(trie.get(k1).contains(v1))
-        assert(trie.get(k2).contains(v2))
-
-        val onChain = trie.toOnChain
-        val proof1 = trie.proveExists(k1)
-        val proof2 = trie.proveExists(k2)
-        assert(onChain.has(k1, v1, proof1))
-        assert(onChain.has(k2, v2, proof2))
-
-        val trie1 = trie.delete(k1)
-        assert(trie1.size == 1)
-        assert(trie1.get(k2).contains(v2))
-    }
-
     test("insertion order does not affect root hash") {
         val shuffled = scala.util.Random(42).shuffle(fruitBs)
         val trie = MerklePatriciaForestry.fromList(shuffled)
@@ -273,5 +185,27 @@ class MerklePatriciaForestryTest extends AnyFunSuite {
               binaryProof.length < 2000,
               s"unexpectedly large proof (${binaryProof.length}B) for ${key.toHex}"
             )
+    }
+
+    test("two elements with long shared prefix") {
+        val k1 = ByteString.fromString("aaaa")
+        val k2 = ByteString.fromString("aaab")
+        val v1 = ByteString.fromString("v1")
+        val v2 = ByteString.fromString("v2")
+
+        val trie = MerklePatriciaForestry.empty.insert(k1, v1).insert(k2, v2)
+        assert(trie.size == 2)
+        assert(trie.get(k1).contains(v1))
+        assert(trie.get(k2).contains(v2))
+
+        val onChain = OnChainBinary(trie.rootHash)
+        val proof1 = trie.proveExistsBinary(k1)
+        val proof2 = trie.proveExistsBinary(k2)
+        assert(onChain.has(k1, v1, proof1))
+        assert(onChain.has(k2, v2, proof2))
+
+        val trie1 = trie.delete(k1)
+        assert(trie1.size == 1)
+        assert(trie1.get(k2).contains(v2))
     }
 }

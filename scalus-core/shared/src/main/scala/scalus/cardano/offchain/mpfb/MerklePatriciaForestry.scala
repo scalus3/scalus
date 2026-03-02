@@ -1,18 +1,16 @@
-package scalus.cardano.offchain.mpf
+package scalus.cardano.offchain.mpfb
 
-import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry as OnChainForestry
-import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry.{Neighbor, Proof, ProofStep}
-import scalus.cardano.onchain.plutus.mpf.Merkling.*
-import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.cardano.onchain.plutus.mpfb.Merkling.*
+import scalus.cardano.onchain.plutus.mpfb.{MerklePatriciaForestry as OnChainBinary}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 
-private[mpf] sealed trait Node {
+private[mpfb] sealed trait Node {
     def hash: ByteString
     def size: Int
 }
 
-private[mpf] object Node {
+private[mpfb] object Node {
 
     case object Empty extends Node {
         val hash: ByteString = NullHash
@@ -53,10 +51,20 @@ private[mpf] object Node {
     ) extends Node
 }
 
-/** Off-chain Merkle Patricia Forestry implementation.
-  *
-  * Allows lookup, insertion, deletion, and generation of succinct and on-chain MPF compatible
-  * inclusion/exclusion proofs.
+/** Internal proof step representation used only for proof generation before binary serialization.
+  * Not the on-chain types — just intermediate representation.
+  */
+private[mpfb] sealed trait InternalProofStep
+
+private[mpfb] object InternalProofStep {
+    case class Branch(skip: Int, neighbors: ByteString) extends InternalProofStep
+    case class Fork(skip: Int, nibble: Int, prefixLen: Int, halfLeft: ByteString, halfRight: ByteString)
+        extends InternalProofStep
+    case class Leaf(skip: Int, key: ByteString, value: ByteString) extends InternalProofStep
+}
+
+/** Off-chain Merkle Patricia Forestry implementation producing binary proofs for the `mpfb`
+  * on-chain verifier.
   */
 case class MerklePatriciaForestry(root: Node) {
     import MerklePatriciaForestry.*
@@ -64,7 +72,7 @@ case class MerklePatriciaForestry(root: Node) {
     /** The hash of this MPF */
     def rootHash: ByteString = root.hash
 
-    /** The amount of elements in the tree. Note that the */
+    /** The amount of elements in the tree. */
     def size: Int = root.size
 
     /** `true` if this trie has no elements, `false` otherwise */
@@ -90,31 +98,6 @@ case class MerklePatriciaForestry(root: Node) {
         doGet(root, path, 0)
     }
 
-    /** Creates a succinct, on-chain compatible proof of inclusion of an element by this [[key]].
-      *
-      * Proofs are compact because branch nodes with 2+ siblings use a sparse merkle tree encoding
-      * (4 hashes / 128 bytes) rather than storing all 15 sibling hashes. Branches with a single
-      * sibling are encoded as a [[ProofStep.Fork]] or [[ProofStep.Leaf]], requiring even less
-      * space.
-      *
-      * If there's no element by this key, throws an exception.
-      */
-    def proveExists(key: ByteString): Proof = {
-        val path = blake2b_256(key)
-        val (found, steps) = doProve(root, path, 0)
-        if !found then throw new NoSuchElementException(s"Key not in trie: ${key.toHex}")
-        toProof(steps)
-    }
-
-    def proveMissing(key: ByteString): Proof = {
-        if get(key).isDefined then
-            throw new IllegalArgumentException(s"Key already in trie: ${key.toHex}")
-        // Insert with a dummy value, then prove in the expanded trie.
-        // The proof's `excluding` mode will reconstruct the original root.
-        val expanded = insert(key, ByteString.empty)
-        expanded.proveExists(key)
-    }
-
     /** Creates a binary-encoded proof of inclusion, suitable for the `mpfb` on-chain verifier. */
     def proveExistsBinary(key: ByteString): ByteString = {
         val path = blake2b_256(key)
@@ -131,8 +114,8 @@ case class MerklePatriciaForestry(root: Node) {
         expanded.proveExistsBinary(key)
     }
 
-    /** Wrap the root hash as an on-chain [[OnChainForestry]] value. */
-    def toOnChain: OnChainForestry = OnChainForestry(rootHash)
+    /** Wrap the root hash as an on-chain `mpfb` value. */
+    def toOnChain: OnChainBinary = OnChainBinary(rootHash)
 }
 
 object MerklePatriciaForestry {
@@ -167,8 +150,8 @@ object MerklePatriciaForestry {
         (current(0), current(1))
     }
 
-    /** Extract the 4 sibling hashes needed for a [[ProofStep.Branch]] step. These are the
-      * `neighbor8, neighbor4, neighbor2, neighbor1` values expected by on-chain `merkle16`.
+    /** Extract the 4 sibling hashes needed for a Branch step. These are the `neighbor8, neighbor4,
+      * neighbor2, neighbor1` values expected by on-chain `merkle16`.
       */
     private def merkleProof4(children: Vector[Node], branch: Int): ByteString = {
         val hashes = children.map(_.hash)
@@ -219,8 +202,8 @@ object MerklePatriciaForestry {
 
     private val emptyChildren: Vector[Node] = Vector.fill(16)(Node.Empty)
 
-    /** Compare nibbles of two paths starting at `start`, up to `end` (exclusive).
-      * Returns the number of matching nibbles.
+    /** Compare nibbles of two paths starting at `start`, up to `end` (exclusive). Returns the
+      * number of matching nibbles.
       */
     private def commonPrefixLen(
         pathA: ByteString,
@@ -357,98 +340,75 @@ object MerklePatriciaForestry {
                 case _ =>
                     mkBranch(branch.skipStart, branch.skipLen, branch.repPath, newChildren)
 
-    /** Walk the trie root-to-leaf, collecting one [[ProofStep]] at each branch along the path.
-      *
-      * At each branch we record just enough information about the *siblings* for the on-chain
-      * verifier to reconstruct the branch hash.
+    /** Walk the trie root-to-leaf, collecting one [[InternalProofStep]] at each branch along the
+      * path.
       */
     private def doProve(
         node: Node,
         path: ByteString,
         cursor: Int
-    ): (Boolean, scala.List[ProofStep]) = node match
+    ): (Boolean, scala.List[InternalProofStep]) = node match
         case Node.Empty =>
             (false, Nil)
 
         case leaf: Node.Leaf =>
-            // Reached a leaf -- the key is present if and only if the full path matches.
-            // No proof step here, leaves are terminal.
             (leaf.fullPath == path, Nil)
 
         case branch: Node.Branch =>
-            // The nibble to branch on is after the common prefix (skip).
             val childNibble = nibbleAt(path, cursor + branch.skipLen)
             val child = branch.children(childNibble)
 
-            // Recurse into the child we're following
             val (found, childSteps) = child match
                 case Node.Empty => (false, Nil)
                 case _          => doProve(child, path, cursor + branch.skipLen + 1)
 
-            // Emit a proof step that captures the siblings at this branch
             val step = makeProofStep(branch, childNibble, branch.skipLen)
             (found, step :: childSteps)
 
-    /** Emit the most compact [[ProofStep]] for a branch, based on sibling count. */
-    private def makeProofStep(branch: Node.Branch, targetIndex: Int, skip: Int): ProofStep = {
-        // Siblings = non-empty children other than the one we're descending into
+    /** Emit the most compact [[InternalProofStep]] for a branch, based on sibling count. */
+    private def makeProofStep(
+        branch: Node.Branch,
+        targetIndex: Int,
+        skip: Int
+    ): InternalProofStep = {
         val siblings = branch.children.zipWithIndex.filter { case (child, idx) =>
             child != Node.Empty && idx != targetIndex
         }
 
         if siblings.length >= 2 then
-            // Dense case: 2+ siblings. Encode via the binary merkle tree over all 16 slots and
-            // extract 4 neighbor hashes (128 bytes). The on-chain merkle16 reconstructs the full
-            // 16-slot root from these 4 hashes plus the target child's hash.
-            ProofStep.Branch(skip, merkleProof4(branch.children, targetIndex))
+            InternalProofStep.Branch(skip, merkleProof4(branch.children, targetIndex))
         else if siblings.length == 1 then
-            // Sparse case: exactly one sibling. We can avoid the 128-byte merkle proof entirely.
             val (neighbor, neighborIdx) = siblings.head
             neighbor match
                 case leaf: Node.Leaf =>
-                    // Sibling is a leaf: record its full path and hashed value.
-                    // The on-chain verifier uses sparseMerkle16 to place both entries.
-                    ProofStep.Leaf(skip, leaf.fullPath, blake2b_256(leaf.value))
+                    InternalProofStep.Leaf(skip, leaf.fullPath, blake2b_256(leaf.value))
                 case inner: Node.Branch =>
-                    // Sibling is a branch: record its index, skip prefix length,
-                    // and the two merkle halves (64 bytes).
                     val (hL, hR) = merkleHalves(inner.children.map(_.hash))
-                    ProofStep.Fork(
-                      skip,
-                      Neighbor(
-                        nibble = neighborIdx,
-                        prefixLen = inner.skipLen,
-                        halfLeft = hL,
-                        halfRight = hR
-                      )
-                    )
+                    InternalProofStep.Fork(skip, neighborIdx, inner.skipLen, hL, hR)
                 case Node.Empty =>
                     throw new IllegalStateException("Unexpected empty neighbor")
         else throw new IllegalStateException("Branch with fewer than 2 children")
     }
 
-    private def toProof(steps: scala.List[ProofStep]): Proof =
-        steps.foldRight(PList.Nil: Proof) { (step, acc) => PList.Cons(step, acc) }
-
     /** Serialize proof steps into the compact binary format used by `mpfb`. */
-    private def proofToBinary(steps: scala.List[ProofStep]): ByteString = {
+    private def proofToBinary(steps: scala.List[InternalProofStep]): ByteString = {
         val buf = new java.io.ByteArrayOutputStream()
         for step <- steps do
             step match
-                case ProofStep.Branch(skip, neighbors) =>
+                case InternalProofStep.Branch(skip, neighbors) =>
                     buf.write(0)
-                    buf.write(skip.toInt)
+                    buf.write(skip)
                     buf.write(neighbors.bytes)
-                case ProofStep.Fork(skip, Neighbor(nibble, prefixLen, halfLeft, halfRight)) =>
+                case InternalProofStep.Fork(skip, nibble, prefixLen, halfLeft, halfRight) =>
                     buf.write(1)
-                    buf.write(skip.toInt)
-                    buf.write(nibble.toInt)
-                    buf.write(prefixLen.toInt)
+                    buf.write(skip)
+                    buf.write(nibble)
+                    buf.write(prefixLen)
                     buf.write(halfLeft.bytes)
                     buf.write(halfRight.bytes)
-                case ProofStep.Leaf(skip, key, value) =>
+                case InternalProofStep.Leaf(skip, key, value) =>
                     buf.write(2)
-                    buf.write(skip.toInt)
+                    buf.write(skip)
                     buf.write(key.bytes)
                     buf.write(value.bytes)
         ByteString.unsafeFromArray(buf.toByteArray)

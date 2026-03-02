@@ -1,13 +1,12 @@
-package scalus.cardano.offchain.mpf
+package scalus.cardano.offchain.mpfb
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry as OnChain
-import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry.{Proof, ProofStep}
+import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry as OnChainBinary
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.{PlutusV3, Program}
 import scalus.uplc.Term.asTerm
-import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.eval.{PlutusVM, Result}
 
@@ -21,30 +20,30 @@ class MerklePatriciaForestryBenchmarkTest extends AnyFunSuite {
     )
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    // Compile on-chain functions once, outside any loop.
+    // Compile on-chain binary functions once, outside any loop.
     private val hasProgram = PlutusV3.compile { (root: Data, key: Data, value: Data, proof: Data) =>
-        OnChain(root.to[ByteString]).has(
+        OnChainBinary(root.to[ByteString]).has(
           key.to[ByteString],
           value.to[ByteString],
-          proof.to[Proof]
+          proof.to[OnChainBinary.Proof]
         )
     }.program
 
     private val insertProgram = PlutusV3.compile {
         (root: Data, key: Data, value: Data, proof: Data) =>
-            OnChain(root.to[ByteString]).insert(
+            OnChainBinary(root.to[ByteString]).insert(
               key.to[ByteString],
               value.to[ByteString],
-              proof.to[Proof]
+              proof.to[OnChainBinary.Proof]
             )
     }.program
 
     private val deleteProgram = PlutusV3.compile {
         (root: Data, key: Data, value: Data, proof: Data) =>
-            OnChain(root.to[ByteString]).delete(
+            OnChainBinary(root.to[ByteString]).delete(
               key.to[ByteString],
               value.to[ByteString],
-              proof.to[Proof]
+              proof.to[OnChainBinary.Proof]
             )
     }.program
 
@@ -54,7 +53,7 @@ class MerklePatriciaForestryBenchmarkTest extends AnyFunSuite {
         root: ByteString,
         key: ByteString,
         value: ByteString,
-        proof: Proof
+        proof: ByteString
     ): (Long, Long) = {
         val applied =
             program.term $
@@ -82,9 +81,7 @@ class MerklePatriciaForestryBenchmarkTest extends AnyFunSuite {
         (trie, benchKey, value)
     }
 
-    private def proofSize(proof: Proof): Int = proof.toData.toCbor.length
-
-    ignore("benchmark MPF operations at various trie sizes") {
+    ignore("benchmark MPFb operations at various trie sizes") {
         val sizes = (2 to 9).map(math.pow(10, _).toInt)
 
         // Header
@@ -97,19 +94,19 @@ class MerklePatriciaForestryBenchmarkTest extends AnyFunSuite {
         for n <- sizes do
             print(f"$n%10d  building..."); Console.flush()
             val (trie, key, value) = buildTrie(n)
-            val onChain = trie.toOnChain
+            val onChainRoot = trie.rootHash
 
             print(" proving..."); Console.flush()
-            val proof = trie.proveExists(key)
-            val psize = proofSize(proof)
+            val proof = trie.proveExistsBinary(key)
+            val psize = proof.length
 
             print(" measuring..."); Console.flush()
-            val (hasMem, hasCpu) = measure(hasProgram, onChain.root, key, value, proof)
+            val (hasMem, hasCpu) = measure(hasProgram, onChainRoot, key, value, proof)
 
             val withoutKey = trie.delete(key)
-            val insertProof = withoutKey.proveMissing(key)
+            val insertProof = withoutKey.proveMissingBinary(key)
             val (insMem, insCpu) =
-                measure(insertProgram, withoutKey.toOnChain.root, key, value, insertProof)
+                measure(insertProgram, withoutKey.rootHash, key, value, insertProof)
 
             println(
               f"\r$n%10d  $psize%10d  $hasMem%12d  $hasCpu%14d  $insMem%12d  $insCpu%14d"

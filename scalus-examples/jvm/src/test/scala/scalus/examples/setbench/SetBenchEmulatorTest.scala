@@ -6,7 +6,7 @@ import scalus.cardano.address.Address
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.cardano.offchain.mpf.MerklePatriciaForestry as Mpf16
+import scalus.cardano.offchain.mpfb.MerklePatriciaForestry as Mpf16b
 import scalus.cardano.offchain.mpfo.MerklePatriciaForestry as Mpf16o
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.testing.kit.Party.{Alice, Bob}
@@ -623,11 +623,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     // --- N=32K ---
 
-    test("MPF-16 withdraw N=32K", Benchmark) {
-        info("=== MPF-16 withdraw N=32000 ===")
-        benchMpfWithdraw("MPF-16", 32000, Mpf16Contract.withErrorTraces, MpfTrie.wrap16)
-    }
-
     test("MPF-16o withdraw N=32K", Benchmark) {
         info("=== MPF-16o withdraw N=32000 ===")
         benchMpfWithdraw("MPF-16o", 32000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
@@ -658,11 +653,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchAccWithdraw(32000)
     }
 
-    test("MPF-16 deposit N=32K", Benchmark) {
-        info("=== MPF-16 deposit N=32000 ===")
-        benchMpfDeposit("MPF-16", 32000, Mpf16Contract.withErrorTraces, MpfTrie.wrap16)
-    }
-
     test("MPF-16o deposit N=32K", Benchmark) {
         info("=== MPF-16o deposit N=32000 ===")
         benchMpfDeposit("MPF-16o", 32000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
@@ -690,11 +680,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     // --- N=100K ---
 
-    test("MPF-16 withdraw N=100K", Benchmark) {
-        info("=== MPF-16 withdraw N=100000 ===")
-        benchMpfWithdraw("MPF-16", 100000, Mpf16Contract.withErrorTraces, MpfTrie.wrap16)
-    }
-
     test("MPF-16o withdraw N=100K", Benchmark) {
         info("=== MPF-16o withdraw N=100000 ===")
         benchMpfWithdraw("MPF-16o", 100000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
@@ -703,11 +688,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     test("MPF-16b withdraw N=100K", Benchmark) {
         info("=== MPF-16b withdraw N=100000 ===")
         benchMpfWithdraw("MPF-16b", 100000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
-    }
-
-    test("MPF-16 deposit N=100K", Benchmark) {
-        info("=== MPF-16 deposit N=100000 ===")
-        benchMpfDeposit("MPF-16", 100000, Mpf16Contract.withErrorTraces, MpfTrie.wrap16)
     }
 
     test("MPF-16o deposit N=100K", Benchmark) {
@@ -722,11 +702,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     // --- N=1M ---
 
-    test("MPF-16 withdraw N=1M", Benchmark) {
-        info("=== MPF-16 withdraw N=1000000 ===")
-        benchMpfWithdraw("MPF-16", 1000000, Mpf16Contract.withErrorTraces, MpfTrie.wrap16)
-    }
-
     test("MPF-16o withdraw N=1M", Benchmark) {
         info("=== MPF-16o withdraw N=1000000 ===")
         benchMpfWithdraw("MPF-16o", 1000000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
@@ -735,11 +710,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     test("MPF-16b withdraw N=1M", Benchmark) {
         info("=== MPF-16b withdraw N=1000000 ===")
         benchMpfWithdraw("MPF-16b", 1000000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
-    }
-
-    test("MPF-16 deposit N=1M", Benchmark) {
-        info("=== MPF-16 deposit N=1000000 ===")
-        benchMpfDeposit("MPF-16", 1000000, Mpf16Contract.withErrorTraces, MpfTrie.wrap16)
     }
 
     test("MPF-16o deposit N=1M", Benchmark) {
@@ -796,26 +766,12 @@ object SetBenchEmulatorTest {
     }
 
     private[setbench] object MpfTrie {
-        import scalus.cardano.onchain.plutus.prelude.List.given
-
-        def wrap16(elems: Vector[(ByteString, ByteString)]): MpfTrie =
-            Mpf16Wrapper(Mpf16.fromList(elems))
 
         def wrap16o(elems: Vector[(ByteString, ByteString)]): MpfTrie =
             Mpf16oWrapper(Mpf16o.fromList(elems))
 
         def wrap16b(elems: Vector[(ByteString, ByteString)]): MpfTrie =
-            Mpf16bWrapper(Mpf16.fromList(elems))
-
-        private case class Mpf16Wrapper(trie: Mpf16) extends MpfTrie {
-            import scalus.cardano.onchain.plutus.mpf.MerklePatriciaForestry.*
-            def rootHash: ByteString = trie.rootHash
-            def proveExistsData(key: ByteString): Data = trie.proveExists(key).toData
-            def proveMissingData(key: ByteString): Data = trie.proveMissing(key).toData
-            def delete(key: ByteString): MpfTrie = Mpf16Wrapper(trie.delete(key))
-            def insert(key: ByteString, value: ByteString): MpfTrie =
-                Mpf16Wrapper(trie.insert(key, value))
-        }
+            Mpf16bWrapper(Mpf16b.fromList(elems))
 
         private case class Mpf16oWrapper(trie: Mpf16o) extends MpfTrie {
             import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry.*
@@ -827,7 +783,7 @@ object SetBenchEmulatorTest {
                 Mpf16oWrapper(trie.insert(key, value))
         }
 
-        private case class Mpf16bWrapper(trie: Mpf16) extends MpfTrie {
+        private case class Mpf16bWrapper(trie: Mpf16b) extends MpfTrie {
             def rootHash: ByteString = trie.rootHash
             def proveExistsData(key: ByteString): Data = Data.B(trie.proveExistsBinary(key))
             def proveMissingData(key: ByteString): Data = Data.B(trie.proveMissingBinary(key))

@@ -1,11 +1,11 @@
-package scalus.cardano.onchain.plutus.mpf
+package scalus.cardano.onchain.plutus.mpfb
 
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalacheck.{Arbitrary, Gen}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.hex
-import scalus.cardano.onchain.plutus.mpf.Merkling.*
+import scalus.cardano.onchain.plutus.mpfb.Merkling.*
 import scalus.testing.kit.EvalTestKit
 
 class MerklingTest extends AnyFunSuite with EvalTestKit {

@@ -1,4 +1,4 @@
-package scalus.cardano.onchain.plutus.mpf
+package scalus.cardano.onchain.plutus.mpfb
 
 import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.*
