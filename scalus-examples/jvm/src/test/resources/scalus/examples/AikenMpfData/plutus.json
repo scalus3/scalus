@@ -1,0 +1,117 @@
+{
+  "preamble": {
+    "title": "aiken-lang/merkle-patricia-forestry",
+    "description": "Aiken contracts for project 'aiken-lang/merkle-patricia-forestry'",
+    "version": "main/on-chain",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.21+42babe5"
+    },
+    "license": "MPL-2.0"
+  },
+  "validators": [
+    {
+      "title": "mpf.mpf.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/mpf~1SetBenchDatum"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/mpf~1SetBenchRedeemer"
+        }
+      },
+      "compiledCode": "59026c01010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cdc3a400530070024888966002600460106ea800e26466453001159800980098059baa0028cc004c96600266e1cdc6800a408110018b2016375c601c601e60186ea8c038c030dd5001488c966002600800313232332259800980b001c01a2c80a0dd718098009bad30130023013001300f37540071598009804000c4c8cc8966002602a00313259800980418091baa00189919194c004dd7180c000cdd6980c001cdd7180c0012444b3001301c00480645901a0c060004c05c004c04cdd5000c59011180a000c590131bad30120013013001300f375400715980099b874801000626464653001375c6028003375a6028007375c60280049112cc004c06001201116405830140013013001300f3754007164034806900d18069baa002911919800800801911980180098010012444b30013004300e3754015132323322330053758602a602c00644b30010028a51899804180b80109800980c001202c375c60260026eb8c04c008c04c004c03cdd500544c8c8cc88cc014dd6180a980b001912cc00400a2946266010602e00426002603000480b0dd718098009bae30130023013001300f37540148069164029300b375400f300e003488966002600800513232329800980a000cdd7180a001cdd7180a0012444b30013018004804c590160c050004c04c004c03cdd50054566002601000513232329800980a000cdd7180a001cdd7180a0012444b30013018004804c590160c050004c04c004c03cdd500545900d201a180618068009b8748000c024dd5001c590070c01c004c00cdd5003c52689b2b200201",
+      "hash": "47c42a4d2d54a8e5b2e86133dc40ffeb3307703cbdde7074023adcc5"
+    },
+    {
+      "title": "mpf.mpf.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "59026c01010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cdc3a400530070024888966002600460106ea800e26466453001159800980098059baa0028cc004c96600266e1cdc6800a408110018b2016375c601c601e60186ea8c038c030dd5001488c966002600800313232332259800980b001c01a2c80a0dd718098009bad30130023013001300f37540071598009804000c4c8cc8966002602a00313259800980418091baa00189919194c004dd7180c000cdd6980c001cdd7180c0012444b3001301c00480645901a0c060004c05c004c04cdd5000c59011180a000c590131bad30120013013001300f375400715980099b874801000626464653001375c6028003375a6028007375c60280049112cc004c06001201116405830140013013001300f3754007164034806900d18069baa002911919800800801911980180098010012444b30013004300e3754015132323322330053758602a602c00644b30010028a51899804180b80109800980c001202c375c60260026eb8c04c008c04c004c03cdd500544c8c8cc88cc014dd6180a980b001912cc00400a2946266010602e00426002603000480b0dd718098009bae30130023013001300f37540148069164029300b375400f300e003488966002600800513232329800980a000cdd7180a001cdd7180a0012444b30013018004804c590160c050004c04c004c03cdd50054566002601000513232329800980a000cdd7180a001cdd7180a0012444b30013018004804c590160c050004c04c004c03cdd500545900d201a180618068009b8748000c024dd5001c590070c01c004c00cdd5003c52689b2b200201",
+      "hash": "47c42a4d2d54a8e5b2e86133dc40ffeb3307703cbdde7074023adcc5"
+    }
+  ],
+  "definitions": {
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Data": {
+      "title": "Data",
+      "description": "Any Plutus data."
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "mpf/SetBenchDatum": {
+      "title": "SetBenchDatum",
+      "description": "Matches SetBenchDatum: Constr(0, [remaining, root])",
+      "anyOf": [
+        {
+          "title": "SetBenchDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "remaining",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "root",
+              "$ref": "#/definitions/ByteArray"
+            }
+          ]
+        }
+      ]
+    },
+    "mpf/SetBenchRedeemer": {
+      "title": "SetBenchRedeemer",
+      "description": "Matches SetBenchRedeemer: Withdraw = Constr(0, ...), Deposit = Constr(1, ...)",
+      "anyOf": [
+        {
+          "title": "Withdraw",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "key",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "value",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "proof_data",
+              "$ref": "#/definitions/Data"
+            }
+          ]
+        },
+        {
+          "title": "Deposit",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": [
+            {
+              "title": "key",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "value",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "proof_data",
+              "$ref": "#/definitions/Data"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
