@@ -20,8 +20,8 @@ import scalus.uplc.builtin.ByteString.hex
   *   - append: oracle adds a new member (2*D + 2 blake2b, single pass)
   *   - verifyMember: user proves membership (D + 1 blake2b)
   *
-  * Membership proofs use interleaved format: D * (direction[1] + sibling[32]) = D*33 bytes.
-  * Append proofs are flat ByteStrings: D consecutive 32-byte sibling hashes.
+  * Membership proofs use interleaved format: D * (direction[1] + sibling[32]) = D*33 bytes. Append
+  * proofs are flat ByteStrings: D consecutive 32-byte sibling hashes.
   */
 @Compile
 object IncrementalMerkleTree {
@@ -41,8 +41,8 @@ object IncrementalMerkleTree {
       * proof is a flat ByteString of D * 33 bytes: D repetitions of (direction[1] + sibling[32]).
       * direction is 0 (left child) or 1 (right child).
       *
-      * Uses path-byte encoding (indexByteString) instead of BigInt modInteger/quotientInteger
-      * to determine left/right at each level, and offset tracking (offset increments by 33).
+      * Uses path-byte encoding (indexByteString) instead of BigInt modInteger/quotientInteger to
+      * determine left/right at each level, and offset tracking (offset increments by 33).
       */
     def merkleUp(
         proof: ByteString,
@@ -61,8 +61,8 @@ object IncrementalMerkleTree {
 
     /** Verify that `key` is a member of the tree.
       *
-      * proof is D * 33 bytes: D repetitions of (direction[1] + sibling[32]).
-      * Costs D + 1 blake2b calls.
+      * proof is D * 33 bytes: D repetitions of (direction[1] + sibling[32]). Costs D + 1 blake2b
+      * calls.
       */
     def verifyMember(
         root: ByteString,
@@ -95,8 +95,8 @@ object IncrementalMerkleTree {
     /** Combined single-pass: verify empty slot and compute new root simultaneously.
       *
       * Carries both `oldHash` (expected empty path) and `newHash` (new key path) up the tree in a
-      * single recursive walk. Uses offset tracking (offset increments by 32) instead of
-      * level * 32 multiplication.
+      * single recursive walk. Uses offset tracking (offset increments by 32) instead of level * 32
+      * multiplication.
       */
     private def appendUp(
         siblings: ByteString,

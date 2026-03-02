@@ -1,6 +1,6 @@
 package scalus.cardano.offchain.imt
 
-import scalus.uplc.builtin.Builtins.{blake2b_256, appendByteString}
+import scalus.uplc.builtin.Builtins.{appendByteString, blake2b_256}
 import scalus.uplc.builtin.ByteString
 
 /** Off-chain incremental Merkle tree.
@@ -49,7 +49,8 @@ class IncrementalMerkleTree private (
       */
     def proveMembership(key: ByteString): ByteString = {
         val hashedKey = blake2b_256(key)
-        val slot = keyToSlot.getOrElse(hashedKey, throw new NoSuchElementException(s"Key not found"))
+        val slot =
+            keyToSlot.getOrElse(hashedKey, throw new NoSuchElementException(s"Key not found"))
         var result = ByteString.empty
         var idx = capacity + slot
         var level = 0

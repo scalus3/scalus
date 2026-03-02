@@ -7,9 +7,7 @@ import scalus.cardano.node.Emulator
 import scalus.cardano.offchain.mpf.MerklePatriciaForestry as Mpf16
 import scalus.cardano.offchain.mpf64.MerklePatriciaForestry as Mpf64
 import scalus.cardano.offchain.mpfo.MerklePatriciaForestry as Mpf16o
-import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
-import scalus.examples.CollectionMembershipBudgetTest
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.uplc.PlutusV3
@@ -34,8 +32,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     private val SampleSize = 10
     private val K = 2_000_000L
     private val MaxN = 100_000 + SampleSize
-    private val EnableAccumulator =
-        sys.props.getOrElse("setbench.accumulator", "false").toBoolean
 
     private lazy val allElements: Vector[(ByteString, ByteString)] = {
         val rng = new scala.util.Random(42)
@@ -463,10 +459,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     }
 
     test("Accumulator withdraw N=32K", Benchmark) {
-        assume(
-          EnableAccumulator,
-          "Accumulator disabled (pass -Dsetbench.accumulator=true to enable)"
-        )
         info("=== Accumulator withdraw N=32000 ===")
         benchAccWithdraw(32000)
     }
