@@ -5,6 +5,7 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.*
 import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
+import scalus.cardano.offchain.mpfb.MerklePatriciaForestry as Mpf16b
 import scalus.cardano.offchain.mpfo.MerklePatriciaForestry as Mpf16o
 import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
 import scalus.cardano.onchain.plutus.prelude.List as PList
@@ -20,8 +21,11 @@ import scalus.uplc.{Constant, PlutusV3, Term}
 import scalus.uplc.Term.asTerm
 
 /** Budget comparison for collection membership verification across multiple sizes: MPF16o
-  * (Aiken-compatible Merkle Patricia Forestry) and bilinear accumulator (G1, Ethereum KZG
+  * (Aiken-compatible), MPF16b (binary proofs), and bilinear accumulator (G1, Ethereum KZG
   * ceremony).
+  *
+  * Note: the Aiken MPF validator is a full spending validator (takes ScriptContext) and cannot be
+  * measured as a standalone UPLC function. See `SetBenchEmulatorTest` for Aiken MPF benchmarks.
   *
   * Tagged with `scalus.testing.Benchmark` — excluded from default test runs. Run with:
   * {{{
@@ -102,6 +106,14 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
+    private val mpf16bHasProgram = PlutusV3.compile {
+        (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
+            import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry.*
+            val trie = MerklePatriciaForestry(unBData(rootD))
+            trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
+    }
+
     // G1 Accumulator: full on-chain checkMembership (includes getG2Commitment)
     @annotation.nowarn("msg=unused import")
     private val accFullProgram = PlutusV3.compile {
@@ -130,6 +142,14 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             trie.insert(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
+    private val mpf16bInsertProgram = PlutusV3.compile {
+        (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
+            import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry.*
+            val trie = MerklePatriciaForestry(unBData(rootD))
+            trie.insert(unBData(keyD), unBData(valueD), proofD.to[Proof])
+    }
+
     // --- Measurement helpers ---
 
     private def measureTrieOp(
@@ -149,10 +169,12 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             case Result.Failure(ex, _, _, _)      => fail(s"trie op failed: ${ex.getMessage}")
     }
 
-    /** Average budget for a given collection size and operation. */
+    /** Average budget per system for a given collection size and operation. */
     private case class AvgBudget(
         mpf16o: ExUnits,
-        proofSize16o: Int = 0
+        mpf16b: ExUnits,
+        proofSize16o: Int = 0,
+        proofSize16b: Int = 0
     )
 
     /** Build tries of the given size, sample elements, measure has() budgets, print table, return
@@ -161,16 +183,19 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
     private def runHasBudget(n: Int, seed: Int): AvgBudget = {
         val elems = allElements.take(n)
         val mpf16o = Mpf16o.fromList(elems)
+        val mpf16b = Mpf16b.fromList(elems)
 
         val sampleSize = math.min(SampleSize, n)
         val sampleIndices =
             new scala.util.Random(seed).shuffle((0 until n).toList).take(sampleSize)
 
         var totalMpf16o = ExUnits(0, 0)
+        var totalMpf16b = ExUnits(0, 0)
         var totalProof16o = 0L
+        var totalProof16b = 0L
 
         val header =
-            f"${"Element"}%-12s | ${"MPF16o fee"}%10s"
+            f"${"Element"}%-12s | ${"MPF16o fee"}%10s | ${"MPF16b fee"}%10s"
         val sep = "-" * header.length
         info(header)
         info(sep)
@@ -179,32 +204,43 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             val (key, value) = elems(idx)
 
             val proof16oData = mpf16oProofToData(mpf16o.proveExists(key))
+            val proof16bData = B(mpf16b.proveExistsBinary(key))
 
             totalProof16o += proof16oData.toCbor.length
+            totalProof16b += proof16bData.toCbor.length
 
             val mpf16oBudget =
                 measureTrieOp(mpf16oHasProgram, mpf16o.rootHash, key, value, proof16oData)
+            val mpf16bBudget =
+                measureTrieOp(mpf16bHasProgram, mpf16b.rootHash, key, value, proof16bData)
 
             totalMpf16o = ExUnits(
               totalMpf16o.memory + mpf16oBudget.memory,
               totalMpf16o.steps + mpf16oBudget.steps
             )
+            totalMpf16b = ExUnits(
+              totalMpf16b.memory + mpf16bBudget.memory,
+              totalMpf16b.steps + mpf16bBudget.steps
+            )
 
             info(
-              f"element-$idx%-12d | ${feeLovelace(mpf16oBudget)}%10d"
+              f"element-$idx%-12d | ${feeLovelace(mpf16oBudget)}%10d | ${feeLovelace(mpf16bBudget)}%10d"
             )
 
         info(sep)
         val avgMpf16o = ExUnits(totalMpf16o.memory / sampleSize, totalMpf16o.steps / sampleSize)
+        val avgMpf16b = ExUnits(totalMpf16b.memory / sampleSize, totalMpf16b.steps / sampleSize)
         val avgP16o = (totalProof16o / sampleSize).toInt
+        val avgP16b = (totalProof16b / sampleSize).toInt
         info(
-          f"${"AVERAGE"}%-12s | ${feeLovelace(avgMpf16o)}%10d"
+          f"${"AVERAGE"}%-12s | ${feeLovelace(avgMpf16o)}%10d | ${feeLovelace(avgMpf16b)}%10d"
         )
         info(
-          f"Avg proof CBOR bytes:   MPF16o=${avgP16o}%5d"
+          f"Avg proof CBOR bytes:   MPF16o=${avgP16o}%5d  MPF16b=${avgP16b}%5d"
         )
+        info(f"MPF16b/MPF16o cpu ratio: ${totalMpf16b.steps.toDouble / totalMpf16o.steps}%.3f")
 
-        AvgBudget(avgMpf16o, avgP16o)
+        AvgBudget(avgMpf16o, avgMpf16b, avgP16o, avgP16b)
     }
 
     /** Build tries of the given size, sample elements, measure insert() budgets, print table,
@@ -213,15 +249,17 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
     private def runInsertBudget(n: Int, seed: Int): AvgBudget = {
         val elems = allElements.take(n)
         val mpf16o = Mpf16o.fromList(elems)
+        val mpf16b = Mpf16b.fromList(elems)
 
         val sampleSize = math.min(SampleSize, n)
         val sampleIndices =
             new scala.util.Random(seed).shuffle((0 until n).toList).take(sampleSize)
 
         var totalMpf16o = ExUnits(0, 0)
+        var totalMpf16b = ExUnits(0, 0)
 
         val header =
-            f"${"Element"}%-12s | ${"MPF16o fee"}%10s"
+            f"${"Element"}%-12s | ${"MPF16o fee"}%10s | ${"MPF16b fee"}%10s"
         val sep = "-" * header.length
         info(header)
         info(sep)
@@ -229,6 +267,7 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         for idx <- sampleIndices do
             val (key, value) = elems(idx)
             val mpf16oWithout = mpf16o.delete(key)
+            val mpf16bWithout = mpf16b.delete(key)
 
             val mpf16oBudget = measureTrieOp(
               mpf16oInsertProgram,
@@ -237,23 +276,36 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
               value,
               mpf16oProofToData(mpf16oWithout.proveMissing(key))
             )
+            val mpf16bBudget = measureTrieOp(
+              mpf16bInsertProgram,
+              mpf16bWithout.rootHash,
+              key,
+              value,
+              B(mpf16bWithout.proveMissingBinary(key))
+            )
 
             totalMpf16o = ExUnits(
               totalMpf16o.memory + mpf16oBudget.memory,
               totalMpf16o.steps + mpf16oBudget.steps
             )
+            totalMpf16b = ExUnits(
+              totalMpf16b.memory + mpf16bBudget.memory,
+              totalMpf16b.steps + mpf16bBudget.steps
+            )
 
             info(
-              f"element-$idx%-12d | ${feeLovelace(mpf16oBudget)}%10d"
+              f"element-$idx%-12d | ${feeLovelace(mpf16oBudget)}%10d | ${feeLovelace(mpf16bBudget)}%10d"
             )
 
         info(sep)
         val avgMpf16o = ExUnits(totalMpf16o.memory / sampleSize, totalMpf16o.steps / sampleSize)
+        val avgMpf16b = ExUnits(totalMpf16b.memory / sampleSize, totalMpf16b.steps / sampleSize)
         info(
-          f"${"AVERAGE"}%-12s | ${feeLovelace(avgMpf16o)}%10d"
+          f"${"AVERAGE"}%-12s | ${feeLovelace(avgMpf16o)}%10d | ${feeLovelace(avgMpf16b)}%10d"
         )
+        info(f"MPF16b/MPF16o cpu ratio: ${totalMpf16b.steps.toDouble / totalMpf16o.steps}%.3f")
 
-        AvgBudget(avgMpf16o)
+        AvgBudget(avgMpf16o, avgMpf16b)
     }
 
     // --- Tests ---
@@ -269,34 +321,34 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         info("")
         info("=== has() budget summary (averages) ===")
         val hdr =
-            f"${"N"}%6s | ${"MPF16o fee"}%10s"
+            f"${"N"}%6s | ${"MPF16o fee"}%10s | ${"MPF16b fee"}%10s"
         info(hdr)
         info("-" * hdr.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${feeLovelace(avg.mpf16o)}%10d"
+              f"${n}%6d | ${feeLovelace(avg.mpf16o)}%10d | ${feeLovelace(avg.mpf16b)}%10d"
             )
 
         info("")
         info("=== has() average proof size (CBOR bytes) ===")
         val proofHdr =
-            f"${"N"}%6s | ${"MPF16o"}%7s"
+            f"${"N"}%6s | ${"MPF16o"}%7s | ${"MPF16b"}%7s"
         info(proofHdr)
         info("-" * proofHdr.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${avg.proofSize16o}%7d"
+              f"${n}%6d | ${avg.proofSize16o}%7d | ${avg.proofSize16b}%7d"
             )
 
         info("")
         info("=== has() raw CPU/mem ===")
         val cpuHdr =
-            f"${"N"}%6s | ${"MPF16o cpu"}%12s | ${"MPF16o mem"}%10s"
+            f"${"N"}%6s | ${"MPF16o cpu"}%12s | ${"MPF16o mem"}%10s | ${"MPF16b cpu"}%12s | ${"MPF16b mem"}%10s"
         info(cpuHdr)
         info("-" * cpuHdr.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${avg.mpf16o.steps}%12d | ${avg.mpf16o.memory}%10d"
+              f"${n}%6d | ${avg.mpf16o.steps}%12d | ${avg.mpf16o.memory}%10d | ${avg.mpf16b.steps}%12d | ${avg.mpf16b.memory}%10d"
             )
     }
 
@@ -309,23 +361,23 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         info("")
         info("=== insert() budget summary (averages) ===")
         val hdr =
-            f"${"N"}%6s | ${"MPF16o fee"}%10s"
+            f"${"N"}%6s | ${"MPF16o fee"}%10s | ${"MPF16b fee"}%10s"
         info(hdr)
         info("-" * hdr.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${feeLovelace(avg.mpf16o)}%10d"
+              f"${n}%6d | ${feeLovelace(avg.mpf16o)}%10d | ${feeLovelace(avg.mpf16b)}%10d"
             )
 
         info("")
         info("=== insert() raw CPU/mem ===")
         val cpuHdr2 =
-            f"${"N"}%6s | ${"MPF16o cpu"}%12s | ${"MPF16o mem"}%10s"
+            f"${"N"}%6s | ${"MPF16o cpu"}%12s | ${"MPF16o mem"}%10s | ${"MPF16b cpu"}%12s | ${"MPF16b mem"}%10s"
         info(cpuHdr2)
         info("-" * cpuHdr2.length)
         for (n, avg) <- results do
             info(
-              f"${n}%6d | ${avg.mpf16o.steps}%12d | ${avg.mpf16o.memory}%10d"
+              f"${n}%6d | ${avg.mpf16o.steps}%12d | ${avg.mpf16o.memory}%10d | ${avg.mpf16b.steps}%12d | ${avg.mpf16b.memory}%10d"
             )
     }
 
@@ -333,15 +385,17 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         val AccN = 32000
         val elems32k = allElements.take(AccN)
         val mpf16o = Mpf16o.fromList(elems32k)
+        val mpf16b = Mpf16b.fromList(elems32k)
 
         val sampleIndices =
             new scala.util.Random(123).shuffle((0 until AccN).toList).take(SampleSize)
 
         // Average MPF16o has() for comparison
         var totalMpf16o = ExUnits(0, 0)
+        var totalMpf16b = ExUnits(0, 0)
         for idx <- sampleIndices do
             val (key, value) = elems32k(idx)
-            val budget = measureTrieOp(
+            val budgetO = measureTrieOp(
               mpf16oHasProgram,
               mpf16o.rootHash,
               key,
@@ -349,10 +403,22 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
               mpf16oProofToData(mpf16o.proveExists(key))
             )
             totalMpf16o = ExUnits(
-              totalMpf16o.memory + budget.memory,
-              totalMpf16o.steps + budget.steps
+              totalMpf16o.memory + budgetO.memory,
+              totalMpf16o.steps + budgetO.steps
+            )
+            val budgetB = measureTrieOp(
+              mpf16bHasProgram,
+              mpf16b.rootHash,
+              key,
+              value,
+              B(mpf16b.proveExistsBinary(key))
+            )
+            totalMpf16b = ExUnits(
+              totalMpf16b.memory + budgetB.memory,
+              totalMpf16b.steps + budgetB.steps
             )
         val avgMpf16o = ExUnits(totalMpf16o.memory / SampleSize, totalMpf16o.steps / SampleSize)
+        val avgMpf16b = ExUnits(totalMpf16b.memory / SampleSize, totalMpf16b.steps / SampleSize)
 
         // Accumulator
         val accElems32k = accElements.take(AccN)
@@ -407,13 +473,19 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
           f"  MPF16o average:        mem=${avgMpf16o.memory}%10d  cpu=${avgMpf16o.steps}%14d  fee=${feeLovelace(avgMpf16o)}%,8d lovelace"
         )
         info(
+          f"  MPF16b average:        mem=${avgMpf16b.memory}%10d  cpu=${avgMpf16b.steps}%14d  fee=${feeLovelace(avgMpf16b)}%,8d lovelace"
+        )
+        info(
           f"  Accumulator (full):    mem=${accFullBudget.memory}%10d  cpu=${accFullBudget.steps}%14d  fee=${feeLovelace(accFullBudget)}%,8d lovelace"
         )
         info(
           f"  Accumulator (pairing): mem=${accPairingBudget.memory}%10d  cpu=${accPairingBudget.steps}%14d  fee=${feeLovelace(accPairingBudget)}%,8d lovelace"
         )
         info(
-          f"  Acc(full)/MPF16o ratio: mem=${accFullBudget.memory.toDouble / avgMpf16o.memory}%.3f  cpu=${accFullBudget.steps.toDouble / avgMpf16o.steps}%.3f"
+          f"  MPF16b/MPF16o ratio:   cpu=${avgMpf16b.steps.toDouble / avgMpf16o.steps}%.3f"
+        )
+        info(
+          f"  Acc(full)/MPF16b ratio: mem=${accFullBudget.memory.toDouble / avgMpf16b.memory}%.3f  cpu=${accFullBudget.steps.toDouble / avgMpf16b.steps}%.3f"
         )
     }
 }
