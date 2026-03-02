@@ -6,7 +6,6 @@ import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.offchain.imt.IncrementalMerkleTree as OffChainImt
-import scalus.cardano.offchain.imt4.IncrementalMerkleTree4 as OffChainImt4
 import scalus.cardano.txbuilder.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -386,25 +385,11 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         ImtTreeBinary(tree)
     }
 
-    private def buildImt4(keys: Vector[ByteString]): ImtTree = {
-        val depth = OffChainImt4.depthForSize(keys.size)
-        var tree = OffChainImt4.empty(depth)
-        for key <- keys do tree = tree.append(key)
-        ImtTree4(tree)
-    }
-
     private def buildImtForAdd(keys: Vector[ByteString]): ImtTree = {
         val depth = OffChainImt.depthForSize(keys.size + SampleSize)
         var tree = OffChainImt.empty(depth)
         for key <- keys do tree = tree.append(key)
         ImtTreeBinary(tree)
-    }
-
-    private def buildImt4ForAdd(keys: Vector[ByteString]): ImtTree = {
-        val depth = OffChainImt4.depthForSize(keys.size + SampleSize)
-        var tree = OffChainImt4.empty(depth)
-        for key <- keys do tree = tree.append(key)
-        ImtTree4(tree)
     }
 
     // --- Helpers ---
@@ -512,83 +497,6 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchAdd("IMT", 100000, ImtContract.withErrorTraces, buildImtForAdd)
     }
 
-    // --- Tests: IMT-4 (4-ary) ---
-
-    test("IMT-4 withdraw N=10", Benchmark) {
-        info("=== IMT-4 withdraw N=10 ===")
-        benchWithdraw("IMT-4", 10, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 withdraw N=30", Benchmark) {
-        info("=== IMT-4 withdraw N=30 ===")
-        benchWithdraw("IMT-4", 30, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 withdraw N=100", Benchmark) {
-        info("=== IMT-4 withdraw N=100 ===")
-        benchWithdraw("IMT-4", 100, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 withdraw N=10K", Benchmark) {
-        info("=== IMT-4 withdraw N=10000 ===")
-        benchWithdraw("IMT-4", 10000, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 withdraw N=32K", Benchmark) {
-        info("=== IMT-4 withdraw N=32000 ===")
-        benchWithdraw("IMT-4", 32000, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 withdraw N=100K", Benchmark) {
-        info("=== IMT-4 withdraw N=100000 ===")
-        benchWithdraw("IMT-4", 100000, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 deposit N=10", Benchmark) {
-        info("=== IMT-4 deposit N=10 ===")
-        benchDeposit("IMT-4", 10, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 deposit N=30", Benchmark) {
-        info("=== IMT-4 deposit N=30 ===")
-        benchDeposit("IMT-4", 30, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 deposit N=100", Benchmark) {
-        info("=== IMT-4 deposit N=100 ===")
-        benchDeposit("IMT-4", 100, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 deposit N=10K", Benchmark) {
-        info("=== IMT-4 deposit N=10000 ===")
-        benchDeposit("IMT-4", 10000, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 deposit N=32K", Benchmark) {
-        info("=== IMT-4 deposit N=32000 ===")
-        benchDeposit("IMT-4", 32000, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 deposit N=100K", Benchmark) {
-        info("=== IMT-4 deposit N=100000 ===")
-        benchDeposit("IMT-4", 100000, Imt4Contract.withErrorTraces, buildImt4)
-    }
-
-    test("IMT-4 add N=10", Benchmark) {
-        info("=== IMT-4 add N=10 ===")
-        benchAdd("IMT-4", 10, Imt4Contract.withErrorTraces, buildImt4ForAdd)
-    }
-
-    test("IMT-4 add N=32K", Benchmark) {
-        info("=== IMT-4 add N=32000 ===")
-        benchAdd("IMT-4", 32000, Imt4Contract.withErrorTraces, buildImt4ForAdd)
-    }
-
-    test("IMT-4 add N=100K", Benchmark) {
-        info("=== IMT-4 add N=100000 ===")
-        benchAdd("IMT-4", 100000, Imt4Contract.withErrorTraces, buildImt4ForAdd)
-    }
-
     // --- Summary ---
 
     test("IMT summary table", Benchmark) {
@@ -641,15 +549,6 @@ object ImtBenchEmulatorTest {
         def proveMembership(key: ByteString): ByteString = tree.proveMembership(key)
         def proveAppend(): ByteString = tree.proveAppend()
         def append(key: ByteString): ImtTree = ImtTreeBinary(tree.append(key))
-    }
-
-    private case class ImtTree4(tree: OffChainImt4) extends ImtTree {
-        def rootHash: ByteString = tree.rootHash
-        def size: Int = tree.size
-        def depth: Int = tree.depth
-        def proveMembership(key: ByteString): ByteString = tree.proveMembership(key)
-        def proveAppend(): ByteString = tree.proveAppend()
-        def append(key: ByteString): ImtTree = ImtTree4(tree.append(key))
     }
 
     /** Transaction builder for IMT contract operations. */
