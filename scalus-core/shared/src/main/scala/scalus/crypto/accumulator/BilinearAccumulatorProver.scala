@@ -3,7 +3,7 @@ package scalus.crypto.accumulator
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.onchain.plutus.prelude.crypto.accumulator.{G1Accumulator, G2Accumulator}
 import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.{G1, G2, Scalar}
-import scalus.uplc.builtin.Builtins.{bls12_381_G1_add, bls12_381_G1_scalarMul, bls12_381_G2_add, bls12_381_G2_scalarMul}
+import scalus.uplc.builtin.Builtins.{bls12_381_G1_multiScalarMul, bls12_381_G1_scalarMul, bls12_381_G2_multiScalarMul, bls12_381_G2_scalarMul}
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 
 /** Off-chain prover for the BLS12-381 Bilinear Accumulator.
@@ -241,10 +241,7 @@ object BilinearAccumulatorProver {
         val coeffs = poly.coefficients
         require(coeffs.nonEmpty, "Cannot commit to zero polynomial")
         require(coeffs.length <= g1Powers.length, "Not enough G1 CRS points for polynomial degree")
-        var acc = bls12_381_G1_scalarMul(coeffs(0), g1Powers(0))
-        for i <- 1 until coeffs.length do
-            acc = bls12_381_G1_add(acc, bls12_381_G1_scalarMul(coeffs(i), g1Powers(i)))
-        acc
+        bls12_381_G1_multiScalarMul(coeffs, g1Powers.take(coeffs.length))
     }
 
     /** Compute polynomial commitment on G2: sum(coeff_i * g2Powers_i). */
@@ -252,10 +249,7 @@ object BilinearAccumulatorProver {
         val coeffs = poly.coefficients
         require(coeffs.nonEmpty, "Cannot commit to zero polynomial")
         require(coeffs.length <= g2Powers.length, "Not enough G2 CRS points for polynomial degree")
-        var acc = bls12_381_G2_scalarMul(coeffs(0), g2Powers(0))
-        for i <- 1 until coeffs.length do
-            acc = bls12_381_G2_add(acc, bls12_381_G2_scalarMul(coeffs(i), g2Powers(i)))
-        acc
+        bls12_381_G2_multiScalarMul(coeffs, g2Powers.take(coeffs.length))
     }
 
     private[accumulator] def toScalusList[A](vec: Vector[A]): PList[A] =
