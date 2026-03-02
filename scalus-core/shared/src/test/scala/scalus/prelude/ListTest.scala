@@ -1218,24 +1218,24 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          List.empty[BigInt].findMap(x => if x > BigInt(1) then Some(x + BigInt(1)) else None),
+          (list: List[BigInt]) => list.findMap(x => if x > 1 then Some(x + 1) else None),
+          List.empty[BigInt],
           None,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 6064, steps = 1_103027)
         )
 
         assertEvalWithBudget(
-          List.single(BigInt(1))
-              .findMap(x => if x > BigInt(1) then Some(x + BigInt(1)) else None),
+          (list: List[BigInt]) => list.findMap(x => if x > 1 then Some(x + 1) else None),
+          List.single(1),
           None,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 14162, steps = 3_253880)
         )
 
         assertEvalWithBudget(
-          Cons(BigInt(1), Cons(BigInt(2), Nil)).findMap(x =>
-              if x > BigInt(1) then Some(x + BigInt(1)) else None
-          ),
+          (list: List[BigInt]) => list.findMap(x => if x > 1 then Some(x + 1) else None),
+          Cons(1, Cons(2, Nil)),
           Some(BigInt(3)),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 20694, steps = 5_145096)
         )
     }
 
