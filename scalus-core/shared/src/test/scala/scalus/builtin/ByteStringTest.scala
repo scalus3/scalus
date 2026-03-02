@@ -3,86 +3,60 @@ package scalus.builtin
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.ledger.ExUnits
-import scalus.compiler.Options
-import scalus.compiler.sir.TargetLoweringBackend
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.eval.BuiltinException
 
-class ByteStringTest extends AnyFunSuite with EvalTestKit:
+class ByteStringTest extends AnyFunSuite with EvalTestKit {
 
-    // Disable optimizer: partial evaluation folds these closed builtin applications
-    // to constants, making budget assertions meaningless (just measuring startup cost).
-    override protected def compilerOptions: Options = Options(
-      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-      generateErrorTraces = true,
-      optimizeUplc = false,
-      debug = false
-    )
-
-    test("fromBigIntBigEndian"):
+    test("fromBigIntBigEndian") {
         assertEvalWithBudget(
-          fromBigIntBigEndian(1_000_000, 3),
+          (n: BigInt) => fromBigIntBigEndian(n, 3),
+          1_000_000,
           hex"0f4240",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 1233, steps = 1_519451)
         )
         assertEvalWithBudget(
-          fromBigIntBigEndian(1_000_000, 5),
+          (n: BigInt) => fromBigIntBigEndian(n, 5),
+          1_000_000,
           hex"00000f4240",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 1233, steps = 1_519451)
         )
         assertEvalWithBudget(
-          fromBigIntBigEndian(0, 8),
+          (n: BigInt) => fromBigIntBigEndian(n, 8),
+          0,
           hex"0000000000000000",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 1233, steps = 1_519451)
         )
         assertEvalFails[BuiltinException](fromBigIntBigEndian(1_000_000, 1))
+    }
 
-    test("fromBigIntLittleEndian"):
+    test("fromBigIntLittleEndian") {
         assertEvalWithBudget(
-          fromBigIntLittleEndian(1_000_000, 3),
+          (n: BigInt) => fromBigIntLittleEndian(n, 3),
+          1_000_000,
           hex"40420f",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 1233, steps = 1_519451)
         )
         assertEvalWithBudget(
-          fromBigIntLittleEndian(1_000_000, 5),
+          (n: BigInt) => fromBigIntLittleEndian(n, 5),
+          1_000_000,
           hex"40420f0000",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 1233, steps = 1_519451)
         )
         assertEvalWithBudget(
-          fromBigIntLittleEndian(0, 8),
+          (n: BigInt) => fromBigIntLittleEndian(n, 8),
+          0,
           hex"0000000000000000",
-          ExUnits(memory = 1401, steps = 1530707)
+          ExUnits(memory = 1233, steps = 1_519451)
         )
         assertEvalFails[BuiltinException](fromBigIntLittleEndian(1_000_000, 1))
+    }
 
-    test("utf8 string interpolator"):
-        // Test simple ASCII string
-        assertEvalWithBudget(
-          utf8"hello",
-          fromString("hello"),
-          ExUnits(memory = 200, steps = 16100)
-        )
-
-        // Test with special characters
-        assertEvalWithBudget(
-          utf8"Hello, World!",
-          fromString("Hello, World!"),
-          ExUnits(memory = 200, steps = 16100)
-        )
-
-        // Test with Unicode
-        assertEvalWithBudget(
-          utf8"Hello, 世界",
-          fromString("Hello, 世界"),
-          ExUnits(memory = 200, steps = 16100)
-        )
-
-        // Test empty string
-        assertEvalWithBudget(utf8"", fromString(""), ExUnits(memory = 200, steps = 16100))
-
-        // Test numbers and symbols
-        assertEvalWithBudget(
-          utf8"123!@#$$%^&*()",
-          fromString("123!@#$%^&*()"),
-          ExUnits(memory = 200, steps = 16100)
-        )
+    test("utf8 string interpolator") {
+        assertEvalEq(utf8"hello", fromString("hello"))
+        assertEvalEq(utf8"Hello, World!", fromString("Hello, World!"))
+        assertEvalEq(utf8"Hello, 世界", fromString("Hello, 世界"))
+        assertEvalEq(utf8"", fromString(""))
+        assertEvalEq(utf8"123!@#$$%^&*()", fromString("123!@#$%^&*()"))
+    }
+}

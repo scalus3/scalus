@@ -3,17 +3,16 @@ package scalus.prelude
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.RequirementError
 import scalus.cardano.onchain.plutus.prelude.{identity, Eq, List, Option, Ord, SortedMap, These}
-import scalus.uplc.builtin.Data.{fromData, toData, FromData}
+import scalus.uplc.builtin.Data.{fromData, toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
 import scalus.testing.kit.EvalTestKit
 
 class SortedMapTest extends AnyFunSuite with EvalTestKit {
 
     test("empty") {
-        assertEvalWithBudget(
+        assertEvalEq(
           SortedMap.empty[BigInt, BigInt].toList,
-          List.empty[(BigInt, BigInt)],
-          ExUnits(memory = 200, steps = 16100)
+          List.empty[(BigInt, BigInt)]
         )
     }
 
@@ -23,9 +22,10 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).toList,
+          (m: SortedMap[BigInt, BigInt]) => m.toList,
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           List.single((BigInt(1), BigInt(1))),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 10084, steps = 2_597798)
         )
     }
 
@@ -37,19 +37,16 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap
-              .unsafeFromList(
-                List.Cons(
-                  (BigInt(1), BigInt(1)),
-                  List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
-                )
-              )
-              .toList,
+          (list: List[(BigInt, BigInt)]) => SortedMap.unsafeFromList(list).toList,
           List.Cons(
             (BigInt(1), BigInt(1)),
             List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
           ),
-          ExUnits(memory = 200, steps = 16100)
+          List.Cons(
+            (BigInt(1), BigInt(1)),
+            List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
+          ),
+          ExUnits(memory = 38068, steps = 11_931097)
         )
     }
 
@@ -61,16 +58,13 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap
-              .fromList(
-                List.Cons(
-                  (BigInt(2), BigInt(2)),
-                  List.Cons((BigInt(2), BigInt(3)), List.Cons((BigInt(1), BigInt(1)), List.Nil))
-                )
-              )
-              .toList,
+          (list: List[(BigInt, BigInt)]) => SortedMap.fromList(list).toList,
+          List.Cons(
+            (BigInt(2), BigInt(2)),
+            List.Cons((BigInt(2), BigInt(3)), List.Cons((BigInt(1), BigInt(1)), List.Nil))
+          ),
           List.Cons((BigInt(1), BigInt(1)), List.Cons((BigInt(2), BigInt(2)), List.Nil)),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 125364, steps = 37_374722)
         )
     }
 
@@ -393,16 +387,14 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
             result === expected
         }
 
-        assertEvalWithBudget(
+        assertEvalEq(
           SortedMap.empty[BigInt, BigInt],
-          SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.empty[BigInt, BigInt]
         )
 
-        assertEvalWithBudget(
+        assertEvalEq(
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          SortedMap.singleton(BigInt(1), BigInt(1)),
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.singleton(BigInt(1), BigInt(1))
         )
 
         assertEvalWithBudget(
@@ -564,15 +556,17 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          fromData[SortedMap[BigInt, BigInt]](SortedMap.empty[BigInt, BigInt].toData),
+          (m: SortedMap[BigInt, BigInt]) => fromData[SortedMap[BigInt, BigInt]](m.toData),
           SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.empty[BigInt, BigInt],
+          ExUnits(memory = 500, steps = 64100)
         )
 
         assertEvalWithBudget(
-          fromData[SortedMap[BigInt, BigInt]](SortedMap.singleton(BigInt(1), BigInt(1)).toData),
+          (m: SortedMap[BigInt, BigInt]) => fromData[SortedMap[BigInt, BigInt]](m.toData),
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.singleton(BigInt(1), BigInt(1)),
+          ExUnits(memory = 500, steps = 64100)
         )
 
         assertEvalWithBudget(
@@ -693,15 +687,17 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].length,
+          (m: SortedMap[BigInt, BigInt]) => m.length,
+          SortedMap.empty[BigInt, BigInt],
           BigInt(0),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 3864, steps = 749717)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).length,
+          (m: SortedMap[BigInt, BigInt]) => m.length,
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           BigInt(1),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 6430, steps = 1_465582)
         )
 
         assertEvalWithBudget(
@@ -727,15 +723,17 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].size,
+          (m: SortedMap[BigInt, BigInt]) => m.size,
+          SortedMap.empty[BigInt, BigInt],
           BigInt(0),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 3864, steps = 749717)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).size,
+          (m: SortedMap[BigInt, BigInt]) => m.size,
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           BigInt(1),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 6430, steps = 1_465582)
         )
 
         assertEvalWithBudget(
@@ -761,15 +759,17 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].keys,
+          (m: SortedMap[BigInt, BigInt]) => m.keys,
+          SortedMap.empty[BigInt, BigInt],
           List.Nil,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 5996, steps = 1_111650)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), "1").keys,
+          (m: SortedMap[BigInt, BigInt]) => m.keys,
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           List.single(BigInt(1)),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 16600, steps = 4_361718)
         )
 
         assertEvalWithBudget(
@@ -795,15 +795,17 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].values,
+          (m: SortedMap[BigInt, BigInt]) => m.values,
+          SortedMap.empty[BigInt, BigInt],
           List.Nil,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 5996, steps = 1_111650)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), "1").values,
-          List.single("1"),
-          ExUnits(memory = 200, steps = 16100)
+          (m: SortedMap[BigInt, BigInt]) => m.values,
+          SortedMap.singleton(BigInt(1), BigInt(1)),
+          List.single(BigInt(1)),
+          ExUnits(memory = 16832, steps = 4_475381)
         )
 
         assertEvalWithBudget(
@@ -919,15 +921,17 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].mapValues(_ + 1),
+          (m: SortedMap[BigInt, BigInt]) => m.mapValues(_ + 1),
           SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.empty[BigInt, BigInt],
+          ExUnits(memory = 5796, steps = 1_121963)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).mapValues(_ + 1),
+          (m: SortedMap[BigInt, BigInt]) => m.mapValues(_ + 1),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           SortedMap.fromStrictlyAscendingList(List.single((BigInt(1), BigInt(2)))),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 15940, steps = 4_403365)
         )
 
         assertEvalWithBudget(
@@ -959,15 +963,17 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].filter(_ => true),
+          (m: SortedMap[BigInt, BigInt]) => m.filter(_ => true),
           SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.empty[BigInt, BigInt],
+          ExUnits(memory = 6096, steps = 1_169963)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).filter(_._1 > 0),
+          (m: SortedMap[BigInt, BigInt]) => m.filter(_._1 > 0),
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.singleton(BigInt(1), BigInt(1)),
+          ExUnits(memory = 13482, steps = 3_480276)
         )
 
         assertEvalWithBudget(
@@ -1007,15 +1013,17 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].filterNot(_ => true),
+          (m: SortedMap[BigInt, BigInt]) => m.filterNot(_ => true),
           SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.empty[BigInt, BigInt],
+          ExUnits(memory = 6696, steps = 1_265963)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).filterNot(_._1 > 0),
+          (m: SortedMap[BigInt, BigInt]) => m.filterNot(_._1 > 0),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 14219, steps = 3_528813)
         )
 
         assertEvalWithBudget(
@@ -1061,21 +1069,24 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].find(_._1 === BigInt(1)),
+          (m: SortedMap[BigInt, BigInt]) => m.find(_._1 === BigInt(1)),
+          SortedMap.empty[BigInt, BigInt],
           Option.None,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 5864, steps = 1_069717)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).find(_._1 === BigInt(1)),
+          (m: SortedMap[BigInt, BigInt]) => m.find(_._1 === BigInt(1)),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.Some((BigInt(1), BigInt(1))),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 12610, steps = 3_600479)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).find(_._1 === BigInt(0)),
+          (m: SortedMap[BigInt, BigInt]) => m.find(_._1 === BigInt(0)),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.None,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 12586, steps = 3_135561)
         )
 
         assertEvalWithBudget(
@@ -1118,25 +1129,30 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].findMap { case (k, v) => Option.Some(v) },
+          (m: SortedMap[BigInt, BigInt]) => m.findMap { case (k, v) => Option.Some(v) },
+          SortedMap.empty[BigInt, BigInt],
           Option.None,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 5864, steps = 1_069717)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).findMap { case (k, v) =>
-              if k === BigInt(1) then Option.Some(v) else Option.None
-          },
+          (m: SortedMap[BigInt, BigInt]) =>
+              m.findMap { case (k, v) =>
+                  if k === BigInt(1) then Option.Some(v) else Option.None
+              },
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.Some(BigInt(1)),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 14044, steps = 3_986750)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).findMap { case (k, v) =>
-              if k === BigInt(0) then Option.Some(v) else Option.None
-          },
+          (m: SortedMap[BigInt, BigInt]) =>
+              m.findMap { case (k, v) =>
+                  if k === BigInt(0) then Option.Some(v) else Option.None
+              },
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.None,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 14452, steps = 3_718426)
         )
 
         assertEvalWithBudget(
@@ -1175,17 +1191,19 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].foldLeft(BigInt(0)) { case (acc, (k, v)) => acc + k + v },
+          (m: SortedMap[BigInt, BigInt]) =>
+              m.foldLeft(BigInt(0)) { case (acc, (k, v)) => acc + k + v },
+          SortedMap.empty[BigInt, BigInt],
           BigInt(0),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 5996, steps = 1_106461)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).foldLeft(BigInt(0)) { case (acc, (k, v)) =>
-              acc + k + v
-          },
+          (m: SortedMap[BigInt, BigInt]) =>
+              m.foldLeft(BigInt(0)) { case (acc, (k, v)) => acc + k + v },
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           BigInt(2),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 23056, steps = 6_119963)
         )
 
         assertEvalWithBudget(
@@ -1211,19 +1229,19 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].foldRight(BigInt(0)) { case ((k, v), acc) =>
-              acc + k + v
-          },
+          (m: SortedMap[BigInt, BigInt]) =>
+              m.foldRight(BigInt(0)) { case ((k, v), acc) => acc + k + v },
+          SortedMap.empty[BigInt, BigInt],
           BigInt(0),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 5996, steps = 1_106461)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).foldRight(BigInt(0)) { case ((k, v), acc) =>
-              acc + k + v
-          },
+          (m: SortedMap[BigInt, BigInt]) =>
+              m.foldRight(BigInt(0)) { case ((k, v), acc) => acc + k + v },
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           BigInt(2),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 18996, steps = 5_157423)
         )
 
         assertEvalWithBudget(
@@ -1251,21 +1269,24 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].get(BigInt(1)),
+          (m: SortedMap[BigInt, BigInt]) => m.get(BigInt(1)),
+          SortedMap.empty[BigInt, BigInt],
           Option.None,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 5264, steps = 973717)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).get(BigInt(1)),
+          (m: SortedMap[BigInt, BigInt]) => m.get(BigInt(1)),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.Some(BigInt(1)),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 12860, steps = 3_431831)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).get(BigInt(0)),
+          (m: SortedMap[BigInt, BigInt]) => m.get(BigInt(0)),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.None,
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 9528, steps = 2_291710)
         )
 
         assertEvalWithBudget(
@@ -1452,18 +1473,20 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].insert(BigInt(1), BigInt(1)),
+          (m: SortedMap[BigInt, BigInt]) => m.insert(BigInt(1), BigInt(1)),
+          SortedMap.empty[BigInt, BigInt],
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 5096, steps = 1_009963)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).insert(BigInt(2), BigInt(2)),
+          (m: SortedMap[BigInt, BigInt]) => m.insert(BigInt(2), BigInt(2)),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
           SortedMap
               .fromStrictlyAscendingList(
                 List.Cons((BigInt(1), BigInt(1)), List.Cons((BigInt(2), BigInt(2)), List.Nil))
               ),
-          ExUnits(memory = 200, steps = 16100)
+          ExUnits(memory = 14192, steps = 3_758591)
         )
 
         assertEvalWithBudget(
@@ -1497,21 +1520,24 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
 
         assertEvalWithBudget(
-          SortedMap.empty[BigInt, BigInt].delete(BigInt(1)),
+          (m: SortedMap[BigInt, BigInt]) => m.delete(BigInt(1)),
           SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.empty[BigInt, BigInt],
+          ExUnits(memory = 5096, steps = 1_009963)
         )
 
         assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).delete(BigInt(1)),
-          SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 200, steps = 16100)
-        )
-
-        assertEvalWithBudget(
-          SortedMap.singleton(BigInt(1), BigInt(1)).delete(BigInt(2)),
+          (m: SortedMap[BigInt, BigInt]) => m.delete(BigInt(1)),
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          ExUnits(memory = 200, steps = 16100)
+          SortedMap.empty[BigInt, BigInt],
+          ExUnits(memory = 11828, steps = 3_185235)
+        )
+
+        assertEvalWithBudget(
+          (m: SortedMap[BigInt, BigInt]) => m.delete(BigInt(2)),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
+          SortedMap.singleton(BigInt(1), BigInt(1)),
+          ExUnits(memory = 14192, steps = 3_758591)
         )
 
         assertEvalWithBudget(

@@ -144,15 +144,17 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                        |budget: $budget;
                        |costs: ${costs.toMap}""".stripMargin)
 
-    /** Assert that a function evaluates to expected value with exact budget match.
-      * The argument is passed as Data at runtime, preventing compile-time constant folding.
+    /** Assert that a function evaluates to expected value with exact budget match. The argument is
+      * passed as Data at runtime, preventing compile-time constant folding.
       */
     protected final inline def assertEvalWithBudget[A1, T: Eq](
         inline code: A1 => T,
         arg1: A1,
         inline expected: T,
         budget: ExUnits
-    )(using vm: PlutusVM, options: Options)(implicit
+    )(using
+        vm: PlutusVM,
+        options: Options,
         inline a1FromData: FromData[A1],
         inline a1ToData: ToData[A1]
     ): Unit =

@@ -51,8 +51,6 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
 
     test(s"Script size: ${compiled.script.script.size} bytes") {
         assert(compiled.script.script.size == 1550)
-        println(compiled.sir.showHighlighted)
-        println(compiled.program.showHighlighted)
     }
 
     // Expected execution budgets for success tests
