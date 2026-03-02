@@ -212,6 +212,103 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         assert(md(Word64(1234L)) == Metadatum.Int(42L))
     }
 
+    test("TxBuilder mint ignores zero-amount entries in assets map") {
+        val redeemer = Data.List(PList.Nil)
+        val assetName1 = AssetName(hex"deadbeef")
+        val assetName2 = AssetName(hex"cafebabe")
+        val assets = Map(
+          assetName1 -> 100L,
+          assetName2 -> 0L // should be ignored
+        )
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(20)).sample.get
+
+        val tx = txBuilder
+            .spend(utxo)
+            .mint(mintingPolicy, assets, redeemer)
+            .payTo(Bob.address, Value.asset(mintingPolicy.scriptHash, assetName1, 100, Coin.ada(2)))
+            .build(changeTo = Alice.address)
+            .transaction
+
+        assert(tx.body.value.mint.isDefined)
+        val mint = tx.body.value.mint.get
+        val mintedAssets = mint.assets(mintingPolicy.scriptHash)
+        assert(mintedAssets.get(assetName1).contains(100L))
+        assert(!mintedAssets.contains(assetName2), "Zero-amount asset should not be minted")
+    }
+
+    test("TxBuilder mint with all zero amounts produces no mint steps") {
+        val redeemer = Data.List(PList.Nil)
+        val assets = Map(
+          AssetName(hex"deadbeef") -> 0L,
+          AssetName(hex"cafebabe") -> 0L
+        )
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(20)).sample.get
+
+        val tx = txBuilder
+            .spend(utxo)
+            .mint(mintingPolicy, assets, redeemer)
+            .payTo(Bob.address, Value.ada(2))
+            .build(changeTo = Alice.address)
+            .transaction
+
+        assert(tx.body.value.mint.isEmpty, "No mint should be present when all amounts are zero")
+    }
+
+    test("TxBuilder mint with reference script ignores zero amounts") {
+        val policyId: PolicyId = mintingPolicy.scriptHash
+        val redeemer = Data.List(PList.Nil)
+        val assets = Map(
+          AssetName(hex"deadbeef") -> 50L,
+          AssetName(hex"cafebabe") -> 0L
+        )
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(20)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
+        val refScriptUtxo = (
+          Arbitrary.arbitrary[TransactionInput].sample.get,
+          Output(Alice.address, Value.ada(5), None, Some(ScriptRef(mintingPolicy)))
+        )
+
+        val tx = txBuilder
+            .spend(utxo)
+            .collaterals(collateralUtxo)
+            .references(Utxo(refScriptUtxo))
+            .mint(policyId, assets, redeemer)
+            .payTo(Bob.address, Value.asset(policyId, AssetName(hex"deadbeef"), 50, Coin.ada(2)))
+            .build(changeTo = Alice.address)
+            .transaction
+
+        assert(tx.body.value.mint.isDefined)
+        val mintedAssets = tx.body.value.mint.get.assets(policyId)
+        assert(mintedAssets.size == 1, "Only non-zero asset should be minted")
+    }
+
+    test("TxBuilder mint with ScriptWitness API ignores zero amounts") {
+        import TwoArgumentPlutusScriptWitness.*
+
+        val policyId: PolicyId = mintingPolicy.scriptHash
+        val assets = Map(
+          AssetName(hex"deadbeef") -> 100L,
+          AssetName(hex"cafebabe") -> 0L
+        )
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(20)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
+
+        val tx = txBuilder
+            .spend(utxo)
+            .collaterals(collateralUtxo)
+            .mint(policyId, assets, attached(mintingPolicy, Data.unit))
+            .payTo(Bob.address, Value.asset(policyId, AssetName(hex"deadbeef"), 100, Coin.ada(2)))
+            .build(changeTo = Alice.address)
+            .transaction
+
+        assert(tx.body.value.mint.isDefined)
+        val mintedAssets = tx.body.value.mint.get.assets(policyId)
+        assert(
+          !mintedAssets.contains(AssetName(hex"cafebabe")),
+          "Zero-amount asset should be filtered"
+        )
+    }
+
     test("TxBuilder sends specified TransactionOutput") {
         val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(10)).sample.get
 

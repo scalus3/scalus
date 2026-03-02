@@ -689,7 +689,8 @@ case class TxBuilder(
       * @param policyId
       *   the policy ID (script hash) of the minting policy
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemer
       *   redeemer to pass to the minting policy script
       * @tparam T
@@ -710,7 +711,8 @@ case class TxBuilder(
       * @param policyId
       *   the policy ID (script hash) of the minting policy
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemer
       *   redeemer to pass to the minting policy script
       * @param requiredSigners
@@ -724,17 +726,18 @@ case class TxBuilder(
         redeemer: T,
         requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
-        val mintSteps = assets.map { case (assetName, amount) =>
-            TransactionBuilderStep.Mint(
-              scriptHash = policyId,
-              assetName = assetName,
-              amount = amount,
-              witness = TwoArgumentPlutusScriptWitness(
-                scriptSource = ScriptSource.PlutusScriptAttached,
-                redeemer = redeemer.toData,
-                additionalSigners = requiredSigners.map(ExpectedSigner.apply)
-              )
-            )
+        val mintSteps = assets.collect {
+            case (assetName, amount) if amount != 0 =>
+                TransactionBuilderStep.Mint(
+                  scriptHash = policyId,
+                  assetName = assetName,
+                  amount = amount,
+                  witness = TwoArgumentPlutusScriptWitness(
+                    scriptSource = ScriptSource.PlutusScriptAttached,
+                    redeemer = redeemer.toData,
+                    additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+                  )
+                )
         }.toSeq
 
         addSteps(mintSteps*)
@@ -751,7 +754,8 @@ case class TxBuilder(
       * @param script
       *   the minting policy script
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemer
       *   redeemer to pass to the minting policy script
       * @tparam T
@@ -770,7 +774,8 @@ case class TxBuilder(
       * @param script
       *   the minting policy script
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemer
       *   redeemer to pass to the minting policy script
       * @param requiredSigners
@@ -784,17 +789,18 @@ case class TxBuilder(
         redeemer: T,
         requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
-        val mintSteps = assets.map { case (assetName, amount) =>
-            TransactionBuilderStep.Mint(
-              scriptHash = script.scriptHash,
-              assetName = assetName,
-              amount = amount,
-              witness = TwoArgumentPlutusScriptWitness(
-                scriptSource = ScriptSource.PlutusScriptValue(script),
-                redeemer = redeemer.toData,
-                additionalSigners = requiredSigners.map(ExpectedSigner.apply)
-              )
-            )
+        val mintSteps = assets.collect {
+            case (assetName, amount) if amount != 0 =>
+                TransactionBuilderStep.Mint(
+                  scriptHash = script.scriptHash,
+                  assetName = assetName,
+                  amount = amount,
+                  witness = TwoArgumentPlutusScriptWitness(
+                    scriptSource = ScriptSource.PlutusScriptValue(script),
+                    redeemer = redeemer.toData,
+                    additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+                  )
+                )
         }.toSeq
 
         addSteps(mintSteps*)
@@ -808,7 +814,8 @@ case class TxBuilder(
       * @param compiled
       *   compiled Plutus script (carries SIR for diagnostic replay)
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemer
       *   redeemer to pass to the minting policy script
       */
@@ -825,7 +832,8 @@ case class TxBuilder(
       * @param compiled
       *   compiled Plutus script (carries SIR for diagnostic replay)
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemer
       *   redeemer to pass to the minting policy script
       * @param requiredSigners
@@ -845,7 +853,8 @@ case class TxBuilder(
       * @param compiled
       *   compiled Plutus script (carries SIR for diagnostic replay)
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemerBuilder
       *   function that computes the redeemer from the assembled transaction
       */
@@ -863,7 +872,8 @@ case class TxBuilder(
       * @param compiled
       *   compiled Plutus script (carries SIR for diagnostic replay)
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemerBuilder
       *   function that computes the redeemer from the assembled transaction
       * @param requiredSigners
@@ -892,7 +902,8 @@ case class TxBuilder(
       * @param script
       *   the minting policy script
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemerBuilder
       *   function that computes the redeemer from the assembled transaction
       */
@@ -908,7 +919,8 @@ case class TxBuilder(
       * @param script
       *   the minting policy script
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemerBuilder
       *   function that computes the redeemer from the assembled transaction
       * @param requiredSigners
@@ -920,17 +932,18 @@ case class TxBuilder(
         redeemerBuilder: Transaction => Data,
         requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
-        val mintSteps = assets.map { case (assetName, amount) =>
-            TransactionBuilderStep.Mint(
-              scriptHash = script.scriptHash,
-              assetName = assetName,
-              amount = amount,
-              witness = TwoArgumentPlutusScriptWitness(
-                scriptSource = ScriptSource.PlutusScriptValue(script),
-                redeemerBuilder = redeemerBuilder,
-                additionalSigners = requiredSigners.map(ExpectedSigner.apply)
-              )
-            )
+        val mintSteps = assets.collect {
+            case (assetName, amount) if amount != 0 =>
+                TransactionBuilderStep.Mint(
+                  scriptHash = script.scriptHash,
+                  assetName = assetName,
+                  amount = amount,
+                  witness = TwoArgumentPlutusScriptWitness(
+                    scriptSource = ScriptSource.PlutusScriptValue(script),
+                    redeemerBuilder = redeemerBuilder,
+                    additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+                  )
+                )
         }.toSeq
 
         addSteps(mintSteps*)
@@ -951,7 +964,8 @@ case class TxBuilder(
       * @param policyId
       *   the policy ID (script hash) of the minting policy
       * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning)
+      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
+      *   are silently ignored
       * @param redeemerBuilder
       *   function that computes the redeemer from the assembled transaction
       */
@@ -960,17 +974,18 @@ case class TxBuilder(
         assets: collection.Map[AssetName, Long],
         redeemerBuilder: Transaction => Data
     ): TxBuilder = {
-        val mintSteps = assets.map { case (assetName, amount) =>
-            TransactionBuilderStep.Mint(
-              scriptHash = policyId,
-              assetName = assetName,
-              amount = amount,
-              witness = TwoArgumentPlutusScriptWitness(
-                scriptSource = ScriptSource.PlutusScriptAttached,
-                redeemerBuilder = redeemerBuilder,
-                additionalSigners = Set.empty
-              )
-            )
+        val mintSteps = assets.collect {
+            case (assetName, amount) if amount != 0 =>
+                TransactionBuilderStep.Mint(
+                  scriptHash = policyId,
+                  assetName = assetName,
+                  amount = amount,
+                  witness = TwoArgumentPlutusScriptWitness(
+                    scriptSource = ScriptSource.PlutusScriptAttached,
+                    redeemerBuilder = redeemerBuilder,
+                    additionalSigners = Set.empty
+                  )
+                )
         }.toSeq
 
         addSteps(mintSteps*)
@@ -1000,7 +1015,8 @@ case class TxBuilder(
       * @param policyId
       *   the minting policy ID (script hash)
       * @param assets
-      *   map of asset names to amounts (positive to mint, negative to burn)
+      *   map of asset names to amounts (positive to mint, negative to burn); zero amounts are
+      *   silently ignored
       * @param witness
       *   the script witness authorizing the mint (NativeScriptWitness or
       *   TwoArgumentPlutusScriptWitness)
@@ -1010,13 +1026,14 @@ case class TxBuilder(
         assets: collection.Map[AssetName, Long],
         witness: ScriptWitness
     ): TxBuilder = {
-        val mintSteps = assets.map { case (assetName, amount) =>
-            TransactionBuilderStep.Mint(
-              scriptHash = policyId,
-              assetName = assetName,
-              amount = amount,
-              witness = witness
-            )
+        val mintSteps = assets.collect {
+            case (assetName, amount) if amount != 0 =>
+                TransactionBuilderStep.Mint(
+                  scriptHash = policyId,
+                  assetName = assetName,
+                  amount = amount,
+                  witness = witness
+                )
         }
         addSteps(mintSteps.toSeq*)
     }
