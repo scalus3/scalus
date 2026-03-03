@@ -5,13 +5,12 @@ import org.scalacheck.Arbitrary.arbitrary
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.compiler.compile
 import scalus.uplc.builtin.Data
+import scalus.uplc.{PlutusV1, PlutusV2, PlutusV3}
 import scalus.cardano.address.*
 import scalus.cardano.address.Network.Testnet
 
 import scala.collection.immutable.SortedMap
 
-// TODO: shared
-//  not immediately possible because of a dependency on `compile`
 class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTestKit {
 
     test(
@@ -1162,23 +1161,11 @@ class PlutusScriptsTransactionMutatorTest extends AnyFunSuite, ValidatorRulesTes
         assert(result.isLeft, "PlutusV1 should reject transaction with Byron address in output")
     }
 
-    private def validPlutusV1Script = {
-        import scalus.*
-        val program = compile((data1: Data, data2: Data, data3: Data) => ()).toUplc(true).plutusV1
-        Script.PlutusV1(program.cborByteString)
-    }
+    private def validPlutusV1Script = PlutusV1.alwaysOk.withErrorTraces.script
 
-    private def validPlutusV2Script = {
-        import scalus.*
-        val program = compile((data1: Data, data2: Data, data3: Data) => ()).toUplc(true).plutusV2
-        Script.PlutusV2(program.cborByteString)
-    }
+    private def validPlutusV2Script = PlutusV2.alwaysOk.withErrorTraces.script
 
-    private def validPlutusV3Script = {
-        import scalus.*
-        val program = compile((data: Data) => ()).toUplc(true).plutusV3
-        Script.PlutusV3(program.cborByteString)
-    }
+    private def validPlutusV3Script = PlutusV3.alwaysOk.withErrorTraces.script
 
     private def invalidPlutusV3Script = {
         import scalus.*

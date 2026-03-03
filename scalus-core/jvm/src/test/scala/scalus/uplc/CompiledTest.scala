@@ -35,24 +35,21 @@ class CompiledTest extends AnyFunSuite {
     }
 
     test("PlutusV1 should produce correct script hash prefix") {
-        val validator = PlutusV1.compile((_: Data) => ())
-        assert(validator.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV1])
+        assert(PlutusV1.alwaysOk.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV1])
     }
 
     test("PlutusV2 should produce correct script hash prefix") {
-        val validator = PlutusV2.compile((_: Data) => ())
-        assert(validator.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV2])
+        assert(PlutusV2.alwaysOk.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV2])
     }
 
     test("PlutusV3 should produce correct script hash prefix") {
-        val validator = PlutusV3.compile((_: Data) => ())
-        assert(validator.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV3])
+        assert(PlutusV3.alwaysOk.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV3])
     }
 
     test("withErrorTraces should work for all versions") {
-        val v1 = PlutusV1.compile((_: Data) => ())
-        val v2 = PlutusV2.compile((_: Data) => ())
-        val v3 = PlutusV3.compile((_: Data) => ())
+        val v1 = PlutusV1.alwaysOk
+        val v2 = PlutusV2.alwaysOk
+        val v3 = PlutusV3.alwaysOk
 
         assert(!v1.options.generateErrorTraces)
         assert(!v2.options.generateErrorTraces)

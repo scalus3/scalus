@@ -39,10 +39,7 @@ class DiagnosticReplayTest extends AnyFunSuite {
         }
     }
 
-    val alwaysOkScript: PlutusV3[Data => Unit] = {
-        given Options = Options.release
-        PlutusV3.compile((sc: Data) => ())
-    }
+    val alwaysOkScript: PlutusV3[Data => Unit] = PlutusV3.alwaysOk
 
     def createScriptLockedUtxo(script: PlutusScript): Utxo = {
         val utxo = genAdaOnlyPubKeyUtxo(Alice).sample.get

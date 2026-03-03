@@ -31,10 +31,7 @@ class TxBuilderDemo extends AnyFunSuite {
     def adaOutput(address: Address, ada: Int): TransactionOutput =
         Output(address, Value.ada(ada))
 
-    val alwaysOkScript: Script.PlutusV3 = {
-        val alwaysOk = PlutusV3.compile((sc: Data) => ())
-        alwaysOk.script
-    }
+    val alwaysOkScript: Script.PlutusV3 = PlutusV3.alwaysOk.script
 
     val emulator = Emulator(
       Map(

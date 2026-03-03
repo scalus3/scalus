@@ -2,13 +2,13 @@ package scalus.cardano.txbuilder
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.PlutusV3
 import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.ledger.Value.ada
 import scalus.cardano.ledger.rules.ValidatorRulesTestKit
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.compiler.compileInline
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.toUplc
@@ -28,11 +28,7 @@ class TxBuilderPerformanceTest extends AnyFunSuite, ValidatorRulesTestKit {
     val genesisHash: TransactionHash =
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
-    val alwaysOkScript: Script.PlutusV3 = {
-        val alwaysOk = compileInline((sc: Data) => ())
-        val alwaysOkCborBytes = alwaysOk.toUplc().plutusV3.cborByteString
-        Script.PlutusV3(alwaysOkCborBytes)
-    }
+    val alwaysOkScript: Script.PlutusV3 = PlutusV3.alwaysOk.script
 
     val policyId: ScriptHash = alwaysOkScript.scriptHash
 

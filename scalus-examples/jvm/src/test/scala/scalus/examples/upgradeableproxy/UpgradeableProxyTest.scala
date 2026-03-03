@@ -55,7 +55,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
     private val proxyValue = Value.ada(10)
 
     // Always-succeeds script to mint tokens, register script addresses, etc.
-    private val alwaysSucceeds = PlutusV3.compile((_: Data) => ()).withErrorTraces
+    private val alwaysSucceeds = PlutusV3.alwaysOk.withErrorTraces
     private val alwaysSucceedsWitness =
         TwoArgumentPlutusScriptWitness.attached(alwaysSucceeds.script, Data.unit)
     private val alwaysSucceedsStakeAddress =

@@ -1,8 +1,8 @@
 package scalus.cardano.ledger
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.compiler.compile
 import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.PlutusV3
 import scalus.cardano.address.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
@@ -16,11 +16,7 @@ class ByronAddressInScriptContextTest extends AnyFunSuite {
     val genesisHash: TransactionHash =
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
-    private val alwaysSucceedsScript = {
-        import scalus.*
-        val program = compile((data: Data) => ()).toUplc(true).plutusV3
-        Script.PlutusV3(program.cborByteString)
-    }
+    private val alwaysSucceedsScript = PlutusV3.alwaysOk.withErrorTraces.script
     private val scriptAddress =
         Address(testEnv.network, Credential.ScriptHash(alwaysSucceedsScript.scriptHash))
 

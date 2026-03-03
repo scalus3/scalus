@@ -7,7 +7,6 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, TxBuilder}
-import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
 import scalus.utils.await
@@ -61,9 +60,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val emulator = Emulator(initialUtxos)
 
         val (withdrawZeroStakeAddress, withdrawZeroScript, withdrawZeroScriptWitness) = {
-            given Options = Options.release
-
-            val alwaysOkScript = PlutusV3.compile((sc: Data) => ())
+            val alwaysOkScript = PlutusV3.alwaysOk
             val stakeAddress =
                 StakeAddress(Network.Testnet, StakePayload.Script(alwaysOkScript.script.scriptHash))
             val witness = TwoArgumentPlutusScriptWitness(

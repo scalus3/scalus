@@ -6,10 +6,10 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
-import scalus.compiler.compileInline
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.toUplc
 import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.PlutusV3
 import scalus.utils.await
 
 import java.time.Instant
@@ -40,10 +40,7 @@ class MultiScriptFeeEstimationTest extends AnyFunSuite {
     private val genesisHash: TransactionHash =
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
-    private val alwaysOkScript: Script.PlutusV3 = {
-        val alwaysOk = compileInline((sc: Data) => ())
-        Script.PlutusV3(alwaysOk.toUplc().plutusV3.cborByteString)
-    }
+    private val alwaysOkScript: Script.PlutusV3 = PlutusV3.alwaysOk.script
 
     private val scriptAddress: ShelleyAddress = ShelleyAddress(
       network = env.network,

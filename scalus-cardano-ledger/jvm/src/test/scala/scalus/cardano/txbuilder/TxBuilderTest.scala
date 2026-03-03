@@ -5,13 +5,13 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString.{hex, utf8}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.PlutusV3
 import scalus.cardano.address.Address
 import scalus.cardano.address.Network.Mainnet
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.DatumOption.Inline
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.txBuilder
-import scalus.compiler.compile
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
@@ -30,11 +30,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
     // Test scripts for validation - using PlutusV3
-    val script1: Script.PlutusV3 = {
-        val alwaysOk = compile((sc: Data) => ())
-        val alwaysOkCborBytes = alwaysOk.toUplc().plutusV3.cborByteString
-        Script.PlutusV3(alwaysOkCborBytes)
-    }
+    val script1: Script.PlutusV3 = PlutusV3.alwaysOk.script
 
     val mintingPolicy: Script.PlutusV3 = script1
 

@@ -7,6 +7,7 @@ import scalus.compiler.sir.lowering.SirToUplcV3Lowering
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.compiler.sir.{AnnotationsDecl, RemoveTraces, SIR, SIRType, TargetLoweringBackend}
 import scalus.compiler.{compileInlineWithOptions, Options}
+import scalus.uplc.builtin.Data
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.transform.*
 
@@ -180,6 +181,13 @@ object PlutusV1 {
         PlutusV1(() => code, sir, opts, new V1V2Optimizer())
     }
 
+    /** @return
+      *   the simplest script that always succeeds regardless of the datum, redeemer, and context
+      *   passed
+      */
+    def alwaysOk: PlutusV1[Data => Data => Data => Unit] =
+        compile((_: Data) => (_: Data) => (_: Data) => ())(using Options.release)
+
     /** Extension methods for applying arguments to compiled Plutus V1 functions.
       *
       * Enables partial application of compiled validators at the UPLC level.
@@ -294,6 +302,13 @@ object PlutusV2 {
         val sir = compileInlineWithOptions(opts, code)
         PlutusV2(() => code, sir, opts, new V1V2Optimizer())
     }
+
+    /** @return
+      *   the simplest script that always succeeds regardless of the datum, redeemer, and context
+      *   passed
+      */
+    def alwaysOk: PlutusV2[Data => Data => Data => Unit] =
+        compile((_: Data) => (_: Data) => (_: Data) => ())(using Options.release)
 
     /** Extension methods for applying arguments to compiled Plutus V2 functions.
       *
@@ -415,6 +430,12 @@ object PlutusV3 {
         val sir = compileInlineWithOptions(opts, code)
         PlutusV3(() => code, sir, opts, new V3Optimizer())
     }
+
+    /** @return
+      *   the simplest script that always succeeds regardless of the
+      *   [[scalus.cardano.onchain.plutus.ScriptContext]] passed
+      */
+    def alwaysOk: PlutusV3[Data => Unit] = compile((_: Data) => ())(using Options.release)
 
     /** Extension methods for applying arguments to compiled Plutus V3 functions.
       *
