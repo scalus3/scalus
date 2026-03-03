@@ -5,8 +5,8 @@ import scalus.cardano.address.Address
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.cardano.offchain.crypto.trie.BinaryMerklePatriciaTrie as Mpf16b
-import scalus.cardano.offchain.crypto.trie.MerklePatriciaTrie as Mpf16o
+import scalus.crypto.trie.BinaryMerklePatriciaTrie as Mpf16b
+import scalus.crypto.trie.MerklePatriciaTrie as Mpf16o
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}

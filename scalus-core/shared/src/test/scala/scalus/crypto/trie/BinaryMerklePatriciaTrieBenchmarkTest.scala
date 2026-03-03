@@ -1,4 +1,4 @@
-package scalus.cardano.offchain.crypto.trie
+package scalus.crypto.trie
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie as OnChainBinary

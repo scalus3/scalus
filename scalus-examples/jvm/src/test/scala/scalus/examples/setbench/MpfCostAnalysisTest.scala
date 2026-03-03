@@ -3,7 +3,7 @@ package scalus.examples.setbench
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
-import scalus.cardano.offchain.crypto.trie.MerklePatriciaTrie as Mpf16o
+import scalus.crypto.trie.MerklePatriciaTrie as Mpf16o
 import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.onchain.plutus.prelude.Option as POption

@@ -1,4 +1,4 @@
-package scalus.cardano.offchain.crypto.trie
+package scalus.crypto.trie
 import scalus.cardano.onchain.plutus.crypto.trie.Merkling.*
 import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie as OnChainBinary
 import scalus.uplc.builtin.Builtins.*
@@ -84,7 +84,7 @@ object BinaryMerklePatriciaTrie extends MerklePatriciaTrieBase {
         entries.foldLeft(empty) { case (trie, (k, v)) => trie.insert(k, v) }
 
     /** Branch hash: `combine3(prefix, halfLeft, halfRight)` — matches on-chain doBranch. */
-    private[offchain] def branchHash(
+    private[trie] def branchHash(
         skipStart: Int,
         skipLen: Int,
         repPath: ByteString,

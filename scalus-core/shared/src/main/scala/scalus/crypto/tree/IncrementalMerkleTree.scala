@@ -1,4 +1,4 @@
-package scalus.cardano.offchain.crypto.tree
+package scalus.crypto.tree
 
 import scalus.uplc.builtin.Builtins.{appendByteString, blake2b_256}
 import scalus.uplc.builtin.ByteString

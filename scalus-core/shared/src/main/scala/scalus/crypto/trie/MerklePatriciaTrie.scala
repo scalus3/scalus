@@ -1,4 +1,4 @@
-package scalus.cardano.offchain.crypto.trie
+package scalus.crypto.trie
 import scalus.cardano.onchain.plutus.crypto.trie.Merkling.*
 import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie as OnChainForestry
 import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.{Neighbor, Proof, ProofStep}
@@ -90,7 +90,7 @@ object MerklePatriciaTrie extends MerklePatriciaTrieBase {
         ByteString.unsafeFromArray(Array.tabulate(len)(i => nibbleAt(path, start + i).toByte))
 
     /** Branch hash: `combine(nibblesAsBytes(skip), merkleRoot16(children))` */
-    private[offchain] def branchHash(
+    private[trie] def branchHash(
         skipStart: Int,
         skipLen: Int,
         repPath: ByteString,

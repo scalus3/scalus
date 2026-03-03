@@ -1,7 +1,7 @@
 package scalus.cardano.onchain.plutus.crypto.tree
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.offchain.crypto.tree.IncrementalMerkleTree as OffChainImt
+import scalus.crypto.tree.IncrementalMerkleTree as OffChainImt
 import scalus.cardano.onchain.RequirementError
 import scalus.uplc.builtin.ByteString
 

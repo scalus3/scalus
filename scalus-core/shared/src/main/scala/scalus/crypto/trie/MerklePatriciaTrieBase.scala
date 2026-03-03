@@ -1,4 +1,4 @@
-package scalus.cardano.offchain.crypto.trie
+package scalus.crypto.trie
 
 import scalus.cardano.onchain.plutus.crypto.trie.Merkling.*
 import scalus.uplc.builtin.Builtins.*
@@ -63,33 +63,33 @@ object Node {
   *
   * Subclasses override `branchHash` to produce the correct hash for their on-chain verifier format.
   */
-private[offchain] abstract class MerklePatriciaTrieBase {
+private[trie] abstract class MerklePatriciaTrieBase {
 
     /** Compute the hash of a branch node. Each variant encodes the skip prefix differently. */
-    private[offchain] def branchHash(
+    private[trie] def branchHash(
         skipStart: Int,
         skipLen: Int,
         repPath: ByteString,
         children: Vector[Node]
     ): ByteString
 
-    private[offchain] final val PathNibbles = 64
+    private[trie] final val PathNibbles = 64
 
-    private[offchain] final val emptyChildren: Vector[Node] = Vector.fill(16)(Node.Empty)
+    private[trie] final val emptyChildren: Vector[Node] = Vector.fill(16)(Node.Empty)
 
-    private[offchain] final def leafHash(
+    private[trie] final def leafHash(
         fullPath: ByteString,
         cursor: Int,
         value: ByteString
     ): ByteString =
         combine(suffix(fullPath, cursor), blake2b_256(value))
 
-    private[offchain] final def nibbleAt(path: ByteString, index: Int): Int = {
+    private[trie] final def nibbleAt(path: ByteString, index: Int): Int = {
         val byte = path.bytes(index / 2) & 0xff
         if index % 2 == 0 then byte >> 4 else byte & 0x0f
     }
 
-    private[offchain] final def commonPrefixLen(
+    private[trie] final def commonPrefixLen(
         pathA: ByteString,
         pathB: ByteString,
         start: Int,
@@ -100,7 +100,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
         i - start
     }
 
-    private[offchain] final def branchSkipMatchesPath(
+    private[trie] final def branchSkipMatchesPath(
         branch: Node.Branch,
         path: ByteString,
         cursor: Int
@@ -118,7 +118,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
       * Computes only the 11 combines needed for the 4 siblings (not all 14 in the full tree). Uses
       * bit-flip indexing to find sibling subtree roots without intermediate allocations.
       */
-    private[offchain] final def merkleProof4(children: Vector[Node], branch: Int): ByteString = {
+    private[trie] final def merkleProof4(children: Vector[Node], branch: Int): ByteString = {
         // sibling1: direct pair partner (flip bit 0)
         val s1 = children(branch ^ 1).hash
 
@@ -150,7 +150,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
         s8.concat(s4).concat(s2).concat(s1)
     }
 
-    private[offchain] final def mkLeaf(
+    private[trie] final def mkLeaf(
         skipStart: Int,
         fullPath: ByteString,
         key: ByteString,
@@ -158,7 +158,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
     ): Node.Leaf =
         Node.Leaf(skipStart, fullPath, key, value)
 
-    private[offchain] final def mkBranch(
+    private[trie] final def mkBranch(
         skipStart: Int,
         skipLen: Int,
         repPath: ByteString,
@@ -174,7 +174,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
           () => branchHash(skipStart, skipLen, repPath, children)
         )
 
-    private[offchain] final def doInsert(
+    private[trie] final def doInsert(
         node: Node,
         path: ByteString,
         cursor: Int,
@@ -239,7 +239,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
                   branch.size + 1
                 )
 
-    private[offchain] final def doGet(
+    private[trie] final def doGet(
         node: Node,
         path: ByteString,
         cursor: Int
@@ -254,7 +254,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
                     val childNibble = nibbleAt(path, cursor + branch.skipLen)
                     doGet(branch.children(childNibble), path, cursor + branch.skipLen + 1)
 
-    private[offchain] final def doDelete(node: Node, path: ByteString, cursor: Int): Node =
+    private[trie] final def doDelete(node: Node, path: ByteString, cursor: Int): Node =
         node match
             case Node.Empty =>
                 throw new NoSuchElementException("Key not in trie")
@@ -307,7 +307,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
     /** Walk the trie root-to-leaf, collecting one proof step at each branch along the path.
       * Parameterized on proof step type — each variant provides its own `mkStep` function.
       */
-    private[offchain] final def doProve[S](
+    private[trie] final def doProve[S](
         node: Node,
         path: ByteString,
         cursor: Int,

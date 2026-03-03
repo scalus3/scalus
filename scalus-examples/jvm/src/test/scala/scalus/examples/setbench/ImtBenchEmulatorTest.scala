@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.cardano.offchain.crypto.tree.IncrementalMerkleTree as OffChainImt
+import scalus.crypto.tree.IncrementalMerkleTree as OffChainImt
 import scalus.cardano.txbuilder.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}

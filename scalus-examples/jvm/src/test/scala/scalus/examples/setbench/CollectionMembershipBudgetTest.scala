@@ -4,8 +4,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
-import scalus.cardano.offchain.crypto.trie.BinaryMerklePatriciaTrie as Mpf16b
-import scalus.cardano.offchain.crypto.trie.MerklePatriciaTrie as Mpf16o
+import scalus.crypto.trie.BinaryMerklePatriciaTrie as Mpf16b
+import scalus.crypto.trie.MerklePatriciaTrie as Mpf16o
 import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.compiler.Options
