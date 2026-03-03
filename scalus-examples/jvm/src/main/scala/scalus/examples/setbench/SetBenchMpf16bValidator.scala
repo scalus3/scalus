@@ -17,11 +17,11 @@ object SetBenchMpf16bValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
-        import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry
-        import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry.*
+        import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie
+        import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie.*
 
         val state = datum.getOrFail("No datum").to[SetBenchDatum]
-        val trie = MerklePatriciaForestry(state.root)
+        val trie = BinaryMerklePatriciaTrie(state.root)
         val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
         val contractAddr = ownInput.address
         val K = BigInt(2_000_000)

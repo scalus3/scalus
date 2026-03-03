@@ -1,8 +1,8 @@
 package scalus.crypto.accumulator
 
 import scalus.cardano.onchain.plutus.prelude.List as PList
-import scalus.cardano.onchain.plutus.prelude.crypto.accumulator.{G1Accumulator, G2Accumulator}
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.{G1, G2, Scalar}
+import scalus.cardano.onchain.plutus.crypto.accumulator.{G1Accumulator, G2Accumulator}
+import scalus.cardano.onchain.plutus.prelude.bls12_381.{G1, G2, Scalar}
 import scalus.uplc.builtin.Builtins.{bls12_381_G1_multiScalarMul, bls12_381_G1_scalarMul, bls12_381_G2_multiScalarMul, bls12_381_G2_scalarMul}
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 

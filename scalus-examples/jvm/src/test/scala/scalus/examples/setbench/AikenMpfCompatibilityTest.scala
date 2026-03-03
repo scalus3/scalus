@@ -5,8 +5,8 @@ import scalus.cardano.address.Address
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.cardano.offchain.mpfo.MerklePatriciaForestry as Mpf16o
-import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry.*
+import scalus.cardano.offchain.crypto.trie.MerklePatriciaTrie as Mpf16o
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
 import scalus.cardano.txbuilder.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -15,8 +15,8 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.utils.await
 
-/** Cross-implementation compatibility test: runs our off-chain MPF-16o proofs against
-  * an Aiken-compiled MPF validator to verify proof encoding is identical.
+/** Cross-implementation compatibility test: runs our off-chain MPF-16o proofs against an
+  * Aiken-compiled MPF validator to verify proof encoding is identical.
   *
   * The Aiken validator was compiled from https://github.com/aiken-lang/merkle-patricia-forestry
   * with a thin SetBench-compatible wrapper (same datum/redeemer types).
@@ -169,8 +169,15 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
 
             val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
             val tx = withdrawAiken(
-              sponsorUtxos, contractUtxo, refScriptUtxo, redeemer, newDatum,
-              K, Bob.address, Alice.address, Alice.signer
+              sponsorUtxos,
+              contractUtxo,
+              refScriptUtxo,
+              redeemer,
+              newDatum,
+              K,
+              Bob.address,
+              Alice.address,
+              Alice.signer
             )
 
             val result = emulator.submit(tx).await()
@@ -226,8 +233,14 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
 
             val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
             val tx = depositAiken(
-              sponsorUtxos, contractUtxo, refScriptUtxo, redeemer, newDatum,
-              K, Alice.address, Alice.signer
+              sponsorUtxos,
+              contractUtxo,
+              refScriptUtxo,
+              redeemer,
+              newDatum,
+              K,
+              Alice.address,
+              Alice.signer
             )
 
             val result = emulator.submit(tx).await()

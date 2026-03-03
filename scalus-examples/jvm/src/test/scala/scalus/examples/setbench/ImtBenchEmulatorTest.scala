@@ -1,11 +1,10 @@
 package scalus.examples.setbench
 
-import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.cardano.offchain.imt.IncrementalMerkleTree as OffChainImt
+import scalus.cardano.offchain.crypto.tree.IncrementalMerkleTree as OffChainImt
 import scalus.cardano.txbuilder.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -23,6 +22,7 @@ import scalus.utils.await
   */
 class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     import ImtBenchEmulatorTest.*
+    import scalus.testing.Benchmark
 
     private given env: CardanoInfo = TestUtil.testEnvironment
 
@@ -516,8 +516,6 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 }
 
 object ImtBenchEmulatorTest {
-    private[setbench] object Benchmark extends Tag("scalus.testing.Benchmark")
-
     private[setbench] case class BenchResult(
         variant: String,
         op: String,

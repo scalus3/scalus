@@ -1,6 +1,6 @@
 package scalus.crypto.accumulator
 
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.Scalar
+import scalus.cardano.onchain.plutus.prelude.bls12_381.Scalar
 
 import java.math.BigInteger as JBigInt
 

@@ -17,7 +17,7 @@ object SetBenchImtValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
-        import scalus.cardano.onchain.plutus.imt.IncrementalMerkleTree
+        import scalus.cardano.onchain.plutus.crypto.tree.IncrementalMerkleTree
 
         val state = datum.getOrFail("No datum").to[ImtDatum]
         val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved

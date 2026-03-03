@@ -1,13 +1,12 @@
 package scalus.examples.setbench
 
-import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.cardano.offchain.mpfb.MerklePatriciaForestry as Mpf16b
-import scalus.cardano.offchain.mpfo.MerklePatriciaForestry as Mpf16o
+import scalus.cardano.offchain.crypto.trie.BinaryMerklePatriciaTrie as Mpf16b
+import scalus.cardano.offchain.crypto.trie.MerklePatriciaTrie as Mpf16o
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -27,6 +26,7 @@ import scalus.utils.await
   */
 class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     import SetBenchEmulatorTest.*
+    import scalus.testing.Benchmark
 
     private given env: CardanoInfo = TestUtil.testEnvironment
 
@@ -433,14 +433,25 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         var aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
 
         val publishTx =
-            txHelper.publishScript(aliceUtxos, aikenScript, Bob.address, Alice.address, Alice.signer)
+            txHelper.publishScript(
+              aliceUtxos,
+              aikenScript,
+              Bob.address,
+              Alice.address,
+              Alice.signer
+            )
         assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
         val refScriptUtxo = findRefScriptUtxo(publishTx)
 
         aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
         val lockAmount = (SampleSize + 5) * K
         val lockTx = txHelper.lock(
-          aliceUtxos, aikenAddress, lockAmount, trie.rootHash, Alice.address, Alice.signer
+          aliceUtxos,
+          aikenAddress,
+          lockAmount,
+          trie.rootHash,
+          Alice.address,
+          Alice.signer
         )
         assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
 
@@ -473,8 +484,16 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
             val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
             val tx = txHelper.withdraw(
-              sponsorUtxos, contractUtxo, refScriptUtxo, aikenAddress, redeemer,
-              newDatum, K, Bob.address, Alice.address, Alice.signer
+              sponsorUtxos,
+              contractUtxo,
+              refScriptUtxo,
+              aikenAddress,
+              redeemer,
+              newDatum,
+              K,
+              Bob.address,
+              Alice.address,
+              Alice.signer
             )
 
             val result = emulator.submit(tx).await()
@@ -495,9 +514,16 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
             contractUtxo = findContractUtxoByAddress(tx, aikenAddress)
 
         val avg = BenchResult(
-          variant, "withdraw", n,
-          totalFee / SampleSize, totalCpu / SampleSize, totalMem / SampleSize,
-          totalTxSize / SampleSize, totalProofSize / SampleSize, totalProofMs / SampleSize, buildMs
+          variant,
+          "withdraw",
+          n,
+          totalFee / SampleSize,
+          totalCpu / SampleSize,
+          totalMem / SampleSize,
+          totalTxSize / SampleSize,
+          totalProofSize / SampleSize,
+          totalProofMs / SampleSize,
+          buildMs
         )
         allResults += avg
         info(
@@ -523,14 +549,25 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         var aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
 
         val publishTx =
-            txHelper.publishScript(aliceUtxos, aikenScript, Bob.address, Alice.address, Alice.signer)
+            txHelper.publishScript(
+              aliceUtxos,
+              aikenScript,
+              Bob.address,
+              Alice.address,
+              Alice.signer
+            )
         assert(emulator.submit(publishTx).await().isRight, "Publish script failed")
         val refScriptUtxo = findRefScriptUtxo(publishTx)
 
         aliceUtxos = emulator.findUtxos(Alice.address).await().toOption.get
         val lockAmount = 10 * K
         val lockTx = txHelper.lock(
-          aliceUtxos, aikenAddress, lockAmount, trie.rootHash, Alice.address, Alice.signer
+          aliceUtxos,
+          aikenAddress,
+          lockAmount,
+          trie.rootHash,
+          Alice.address,
+          Alice.signer
         )
         assert(emulator.submit(lockTx).await().isRight, "Lock tx failed")
 
@@ -560,8 +597,15 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
             val sponsorUtxos = emulator.findUtxos(Alice.address).await().toOption.get
             val tx = txHelper.deposit(
-              sponsorUtxos, contractUtxo, refScriptUtxo, aikenAddress, redeemer,
-              newDatum, K, Alice.address, Alice.signer
+              sponsorUtxos,
+              contractUtxo,
+              refScriptUtxo,
+              aikenAddress,
+              redeemer,
+              newDatum,
+              K,
+              Alice.address,
+              Alice.signer
             )
 
             val result = emulator.submit(tx).await()
@@ -582,9 +626,16 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
             contractUtxo = findContractUtxoByAddress(tx, aikenAddress)
 
         val avg = BenchResult(
-          variant, "deposit", n,
-          totalFee / SampleSize, totalCpu / SampleSize, totalMem / SampleSize,
-          totalTxSize / SampleSize, totalProofSize / SampleSize, totalProofMs / SampleSize, buildMs
+          variant,
+          "deposit",
+          n,
+          totalFee / SampleSize,
+          totalCpu / SampleSize,
+          totalMem / SampleSize,
+          totalTxSize / SampleSize,
+          totalProofSize / SampleSize,
+          totalProofMs / SampleSize,
+          buildMs
         )
         allResults += avg
         info(
@@ -637,12 +688,22 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     test("MPF-16o-light withdraw N=32K", Benchmark) {
         info("=== MPF-16o-light withdraw N=32000 ===")
-        benchMpfWithdraw("MPF-16o-light", 32000, Mpf16oLightContract.withErrorTraces, MpfTrie.wrap16o)
+        benchMpfWithdraw(
+          "MPF-16o-light",
+          32000,
+          Mpf16oLightContract.withErrorTraces,
+          MpfTrie.wrap16o
+        )
     }
 
     test("MPF-16b-light withdraw N=32K", Benchmark) {
         info("=== MPF-16b-light withdraw N=32000 ===")
-        benchMpfWithdraw("MPF-16b-light", 32000, Mpf16bLightContract.withErrorTraces, MpfTrie.wrap16b)
+        benchMpfWithdraw(
+          "MPF-16b-light",
+          32000,
+          Mpf16bLightContract.withErrorTraces,
+          MpfTrie.wrap16b
+        )
     }
 
     test("Aiken MPF withdraw N=32K", Benchmark) {
@@ -667,12 +728,22 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     test("MPF-16o-light deposit N=32K", Benchmark) {
         info("=== MPF-16o-light deposit N=32000 ===")
-        benchMpfDeposit("MPF-16o-light", 32000, Mpf16oLightContract.withErrorTraces, MpfTrie.wrap16o)
+        benchMpfDeposit(
+          "MPF-16o-light",
+          32000,
+          Mpf16oLightContract.withErrorTraces,
+          MpfTrie.wrap16o
+        )
     }
 
     test("MPF-16b-light deposit N=32K", Benchmark) {
         info("=== MPF-16b-light deposit N=32000 ===")
-        benchMpfDeposit("MPF-16b-light", 32000, Mpf16bLightContract.withErrorTraces, MpfTrie.wrap16b)
+        benchMpfDeposit(
+          "MPF-16b-light",
+          32000,
+          Mpf16bLightContract.withErrorTraces,
+          MpfTrie.wrap16b
+        )
     }
 
     test("Aiken MPF deposit N=32K", Benchmark) {
@@ -741,8 +812,6 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 }
 
 object SetBenchEmulatorTest {
-    private[setbench] object Benchmark extends Tag("scalus.testing.Benchmark")
-
     private[setbench] case class BenchResult(
         variant: String,
         op: String,
@@ -776,7 +845,7 @@ object SetBenchEmulatorTest {
             Mpf16bWrapper(Mpf16b.fromList(elems))
 
         private case class Mpf16oWrapper(trie: Mpf16o) extends MpfTrie {
-            import scalus.cardano.onchain.plutus.mpfo.MerklePatriciaForestry.*
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
             def rootHash: ByteString = trie.rootHash
             def proveExistsData(key: ByteString): Data = trie.proveExists(key).toData
             def proveMissingData(key: ByteString): Data = trie.proveMissing(key).toData

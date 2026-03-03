@@ -9,8 +9,8 @@ import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
-import scalus.cardano.onchain.plutus.prelude.crypto.accumulator.G1Accumulator
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
+import scalus.cardano.onchain.plutus.crypto.accumulator.G1Accumulator
+import scalus.cardano.onchain.plutus.prelude.bls12_381.G2
 
 @Compile
 object SetBenchAccValidator extends Validator {

@@ -1,10 +1,10 @@
-package scalus.cardano.onchain.plutus.prelude.crypto.bls12_381
+package scalus.cardano.onchain.plutus.prelude.bls12_381
 
 import org.scalatest.funsuite.AnyFunSuiteLike
 import scalus.uplc.builtin.ByteString
 import scalus.cardano.onchain.plutus.prelude.Option
 import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.Scalar.*
+import scalus.cardano.onchain.plutus.prelude.bls12_381.Scalar.*
 
 class ScalarTest extends AnyFunSuiteLike:
 

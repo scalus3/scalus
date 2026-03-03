@@ -9,9 +9,8 @@ import scalus.cardano.onchain.plutus.prelude.Option.*
 
 /** Light MPF-16b validator — only validates the Merkle proof, no business logic.
   *
-  * Matches the Aiken merkle-patricia-forestry validator structure:
-  * read datum root, parse redeemer, call delete/insert, done.
-  * Used for fair Scalus-vs-Aiken on-chain cost comparison.
+  * Matches the Aiken merkle-patricia-forestry validator structure: read datum root, parse redeemer,
+  * call delete/insert, done. Used for fair Scalus-vs-Aiken on-chain cost comparison.
   */
 @Compile
 object SetBenchMpf16bLightValidator extends Validator {
@@ -21,11 +20,11 @@ object SetBenchMpf16bLightValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
-        import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry
-        import scalus.cardano.onchain.plutus.mpfb.MerklePatriciaForestry.*
+        import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie
+        import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie.*
 
         val state = datum.getOrFail("No datum").to[SetBenchDatum]
-        val trie = MerklePatriciaForestry(state.root)
+        val trie = BinaryMerklePatriciaTrie(state.root)
 
         val action = redeemer.to[SetBenchRedeemer]
         action match

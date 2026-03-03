@@ -1,7 +1,7 @@
 package scalus.crypto.accumulator
 
 import java.math.BigInteger as JBigInt
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.Scalar
+import scalus.cardano.onchain.plutus.prelude.bls12_381.Scalar
 
 /** Fixed 256-bit Montgomery arithmetic for the BLS12-381 scalar field.
   *
