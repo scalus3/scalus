@@ -28,13 +28,22 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     private val SampleSize = 10
     private val K = 2_000_000L
-    private val MaxN = 100_000 + SampleSize
 
-    private lazy val allKeys: Vector[ByteString] = {
+    /** Generate `count` deterministic keys. Uses a fixed seed so results are reproducible, but each
+      * call creates a fresh vector of exactly the right size.
+      */
+    private def generateKeys(count: Int): Vector[ByteString] = {
         val rng = new scala.util.Random(42)
-        Vector.tabulate(MaxN) { i =>
+        Vector.tabulate(count) { i =>
             ByteString.fromString(s"element-${rng.nextInt()}-$i")
         }
+    }
+
+    /** Pick `SampleSize` random distinct indices from `[0, n)`. */
+    private def sampleIndices(n: Int): List[Int] = {
+        val rng = new scala.util.Random(42)
+        if n <= SampleSize * 3 then rng.shuffle((0 until n).toList).take(SampleSize)
+        else Iterator.continually(rng.nextInt(n)).distinct.take(SampleSize).toList
     }
 
     private val txHelper = ImtTransactions(env)
@@ -49,7 +58,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         contract: PlutusV3[Data => Unit],
         buildTree: Vector[ByteString] => ImtTree
     ): Unit = {
-        val keys = allKeys.take(n)
+        val keys = generateKeys(n)
 
         val t0 = System.nanoTime()
         val tree = buildTree(keys)
@@ -81,8 +90,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         var contractUtxo = findContractUtxo(lockTx, contract)
         var remaining = lockAmount
 
-        val sampleIndices =
-            new scala.util.Random(42).shuffle((0 until n).toList).take(SampleSize)
+        val samples = sampleIndices(n)
 
         var totalFee = 0L
         var totalCpu = 0L
@@ -91,7 +99,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         var totalProofSize = 0
         var totalProofMs = 0L
 
-        for (idx, i) <- sampleIndices.zipWithIndex do
+        for (idx, i) <- samples.zipWithIndex do
             val key = keys(idx)
 
             val proofT0 = System.nanoTime()
@@ -162,7 +170,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         contract: PlutusV3[Data => Unit],
         buildTree: Vector[ByteString] => ImtTree
     ): Unit = {
-        val keys = allKeys.take(n)
+        val keys = generateKeys(n)
 
         val t0 = System.nanoTime()
         val tree = buildTree(keys)
@@ -194,8 +202,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         var contractUtxo = findContractUtxo(lockTx, contract)
         var remaining = lockAmount
 
-        val sampleIndices =
-            new scala.util.Random(42).shuffle((0 until n).toList).take(SampleSize)
+        val samples = sampleIndices(n)
 
         var totalFee = 0L
         var totalCpu = 0L
@@ -204,7 +211,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         var totalProofSize = 0
         var totalProofMs = 0L
 
-        for (idx, i) <- sampleIndices.zipWithIndex do
+        for (idx, i) <- samples.zipWithIndex do
             val key = keys(idx)
 
             val proofT0 = System.nanoTime()
@@ -274,7 +281,7 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         contract: PlutusV3[Data => Unit],
         buildTree: Vector[ByteString] => ImtTree
     ): Unit = {
-        val keys = allKeys.take(n + SampleSize)
+        val keys = generateKeys(n + SampleSize)
 
         val t0 = System.nanoTime()
         var tree = buildTree(keys.take(n))
@@ -379,17 +386,12 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     // --- Tree builders ---
 
     private def buildImt(keys: Vector[ByteString]): ImtTree = {
-        val depth = OffChainImt.depthForSize(keys.size)
-        var tree = OffChainImt.empty(depth)
-        for key <- keys do tree = tree.append(key)
-        ImtTreeBinary(tree)
+        ImtTreeBinary(OffChainImt.fromKeys(keys))
     }
 
     private def buildImtForAdd(keys: Vector[ByteString]): ImtTree = {
         val depth = OffChainImt.depthForSize(keys.size + SampleSize)
-        var tree = OffChainImt.empty(depth)
-        for key <- keys do tree = tree.append(key)
-        ImtTreeBinary(tree)
+        ImtTreeBinary(OffChainImt.fromKeys(keys, depth))
     }
 
     // --- Helpers ---
@@ -452,6 +454,11 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchWithdraw("IMT", 100000, ImtContract, buildImt)
     }
 
+    test("IMT withdraw N=1M", Benchmark) {
+        info("=== IMT withdraw N=1000000 ===")
+        benchWithdraw("IMT", 1000000, ImtContract, buildImt)
+    }
+
     test("IMT deposit N=10", Benchmark) {
         info("=== IMT deposit N=10 ===")
         benchDeposit("IMT", 10, ImtContract, buildImt)
@@ -482,6 +489,11 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchDeposit("IMT", 100000, ImtContract, buildImt)
     }
 
+    test("IMT deposit N=1M", Benchmark) {
+        info("=== IMT deposit N=1000000 ===")
+        benchDeposit("IMT", 1000000, ImtContract, buildImt)
+    }
+
     test("IMT add N=10", Benchmark) {
         info("=== IMT add N=10 ===")
         benchAdd("IMT", 10, ImtContract, buildImtForAdd)
@@ -495,6 +507,11 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     test("IMT add N=100K", Benchmark) {
         info("=== IMT add N=100000 ===")
         benchAdd("IMT", 100000, ImtContract, buildImtForAdd)
+    }
+
+    test("IMT add N=1M", Benchmark) {
+        info("=== IMT add N=1000000 ===")
+        benchAdd("IMT", 1000000, ImtContract, buildImtForAdd)
     }
 
     // --- Summary ---

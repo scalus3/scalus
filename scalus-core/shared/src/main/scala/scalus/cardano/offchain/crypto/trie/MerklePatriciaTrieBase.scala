@@ -18,20 +18,27 @@ object Node {
 
     /** A leaf node that stores the value and the full key.
       *
+      * Hash is computed lazily — only when first accessed (e.g. for rootHash or proof generation).
+      * This avoids redundant blake2b_256 calls during bulk trie construction.
+      *
       * @param skipStart
       *   cursor position at creation; nibbles are derived via `nibbleAt(fullPath, skipStart + i)`
       */
-    case class Leaf(
-        hash: ByteString,
-        skipStart: Int,
-        fullPath: ByteString,
-        key: ByteString,
-        value: ByteString
+    final class Leaf(
+        val skipStart: Int,
+        val fullPath: ByteString,
+        val key: ByteString,
+        val value: ByteString
     ) extends Node {
+        lazy val hash: ByteString = combine(suffix(fullPath, skipStart), blake2b_256(value))
         val size: Int = 1
     }
 
     /** A branch node with up to 16 children.
+      *
+      * Hash is computed lazily via the provided thunk, which calls the variant-specific branchHash.
+      * This avoids redundant blake2b_256 calls during bulk trie construction — intermediate branch
+      * hashes that get replaced on the next insert are never computed.
       *
       * @param skipStart
       *   cursor position at creation
@@ -40,14 +47,16 @@ object Node {
       * @param repPath
       *   any descendant leaf's fullPath (shared reference, used to read nibble values)
       */
-    case class Branch(
-        hash: ByteString,
-        skipStart: Int,
-        skipLen: Int,
-        repPath: ByteString,
-        children: Vector[Node],
-        size: Int
-    ) extends Node
+    final class Branch(
+        val skipStart: Int,
+        val skipLen: Int,
+        val repPath: ByteString,
+        val children: Vector[Node],
+        val size: Int,
+        computeHash: () => ByteString
+    ) extends Node {
+        lazy val hash: ByteString = computeHash()
+    }
 }
 
 /** Shared base for off-chain Merkle Patricia Forestry trie implementations.
@@ -105,24 +114,40 @@ private[offchain] abstract class MerklePatriciaTrieBase {
 
     /** Extract the 4 sibling hashes needed for a Branch proof step. These are the `neighbor8,
       * neighbor4, neighbor2, neighbor1` values expected by on-chain `merkle16`.
+      *
+      * Computes only the 11 combines needed for the 4 siblings (not all 14 in the full tree). Uses
+      * bit-flip indexing to find sibling subtree roots without intermediate allocations.
       */
     private[offchain] final def merkleProof4(children: Vector[Node], branch: Int): ByteString = {
-        val hashes = children.map(_.hash)
-        // Binary tree levels: 16 -> 8 -> 4 -> 2 -> 1
-        val level1 = hashes.grouped(2).map { p => combine(p(0), p(1)) }.toVector
-        val level2 = level1.grouped(2).map { p => combine(p(0), p(1)) }.toVector
-        val level3 = level2.grouped(2).map { p => combine(p(0), p(1)) }.toVector
+        // sibling1: direct pair partner (flip bit 0)
+        val s1 = children(branch ^ 1).hash
 
-        val sibling8 = if branch < 8 then level3(1) else level3(0)
-        val sibling4 =
-            if branch % 8 < 4 then level2(branch / 8 * 2 + 1) else level2(branch / 8 * 2)
-        val sibling2 =
-            if branch % 4 < 2 then level1(branch / 4 * 2 + 1) else level1(branch / 4 * 2)
-        val sibling1 =
-            if branch % 2 == 0 then hashes(branch + 1) else hashes(branch - 1)
+        // sibling2: sibling pair in group of 4 (flip bit 1)
+        val p = ((branch >> 1) ^ 1) << 1
+        val s2 = combine(children(p).hash, children(p + 1).hash)
 
-        // 128 bytes total, 32 per sibling
-        sibling8.concat(sibling4).concat(sibling2).concat(sibling1)
+        // sibling4: sibling quad in group of 8 (flip bit 2)
+        val q = ((branch >> 2) ^ 1) << 2
+        val s4 = combine(
+          combine(children(q).hash, children(q + 1).hash),
+          combine(children(q + 2).hash, children(q + 3).hash)
+        )
+
+        // sibling8: sibling octet (flip bit 3)
+        val o = ((branch >> 3) ^ 1) << 3
+        val s8 = combine(
+          combine(
+            combine(children(o).hash, children(o + 1).hash),
+            combine(children(o + 2).hash, children(o + 3).hash)
+          ),
+          combine(
+            combine(children(o + 4).hash, children(o + 5).hash),
+            combine(children(o + 6).hash, children(o + 7).hash)
+          )
+        )
+
+        // 128 bytes: neighbor8 ++ neighbor4 ++ neighbor2 ++ neighbor1
+        s8.concat(s4).concat(s2).concat(s1)
     }
 
     private[offchain] final def mkLeaf(
@@ -131,21 +156,22 @@ private[offchain] abstract class MerklePatriciaTrieBase {
         key: ByteString,
         value: ByteString
     ): Node.Leaf =
-        Node.Leaf(leafHash(fullPath, skipStart, value), skipStart, fullPath, key, value)
+        Node.Leaf(skipStart, fullPath, key, value)
 
     private[offchain] final def mkBranch(
         skipStart: Int,
         skipLen: Int,
         repPath: ByteString,
-        children: Vector[Node]
+        children: Vector[Node],
+        size: Int
     ): Node.Branch =
         Node.Branch(
-          branchHash(skipStart, skipLen, repPath, children),
           skipStart,
           skipLen,
           repPath,
           children,
-          children.map(_.size).sum
+          size,
+          () => branchHash(skipStart, skipLen, repPath, children)
         )
 
     private[offchain] final def doInsert(
@@ -176,7 +202,7 @@ private[offchain] abstract class MerklePatriciaTrieBase {
             val children = emptyChildren
                 .updated(newNibble, newLeaf)
                 .updated(oldNibble, oldLeaf)
-            mkBranch(cursor, cp, path, children)
+            mkBranch(cursor, cp, path, children, 2)
 
         case branch: Node.Branch =>
             val cp = commonPrefixLen(path, branch.repPath, cursor, cursor + branch.skipLen)
@@ -192,13 +218,14 @@ private[offchain] abstract class MerklePatriciaTrieBase {
                   branch.skipStart + cp + 1,
                   branch.skipLen - cp - 1,
                   branch.repPath,
-                  branch.children
+                  branch.children,
+                  branch.size
                 )
 
                 val children = emptyChildren
                     .updated(newNibble, newLeaf)
                     .updated(oldNibble, oldBranch)
-                mkBranch(cursor, cp, path, children)
+                mkBranch(cursor, cp, path, children, branch.size + 1)
             else
                 // Prefix matches -- descend into the appropriate child
                 val childNibble = nibbleAt(path, cursor + branch.skipLen)
@@ -208,7 +235,8 @@ private[offchain] abstract class MerklePatriciaTrieBase {
                   branch.skipStart,
                   branch.skipLen,
                   branch.repPath,
-                  branch.children.updated(childNibble, newChild)
+                  branch.children.updated(childNibble, newChild),
+                  branch.size + 1
                 )
 
     private[offchain] final def doGet(
@@ -244,25 +272,37 @@ private[offchain] abstract class MerklePatriciaTrieBase {
                 val newChild = doDelete(branch.children(childNibble), path, childCursor)
                 val newChildren = branch.children.updated(childNibble, newChild)
 
-                // If only one child remains, collapse the branch
-                val nonEmpty = newChildren.zipWithIndex.filter(_._1 != Node.Empty)
-                nonEmpty.size match
-                    case 0 => Node.Empty
-                    case 1 =>
-                        val (child, childIdx) = nonEmpty.head
-                        child match
-                            case leaf: Node.Leaf =>
-                                mkLeaf(cursor, leaf.fullPath, leaf.key, leaf.value)
-                            case inner: Node.Branch =>
-                                mkBranch(
-                                  cursor,
-                                  branch.skipLen + 1 + inner.skipLen,
-                                  inner.repPath,
-                                  inner.children
-                                )
-                            case Node.Empty => Node.Empty
-                    case _ =>
-                        mkBranch(branch.skipStart, branch.skipLen, branch.repPath, newChildren)
+                // Count non-empty children to decide whether to collapse
+                var nonEmptyCount = 0
+                var lastNonEmptyIdx = 0
+                var i = 0
+                while i < 16 do
+                    if newChildren(i) != Node.Empty then
+                        nonEmptyCount += 1
+                        lastNonEmptyIdx = i
+                    i += 1
+
+                if nonEmptyCount == 1 then
+                    newChildren(lastNonEmptyIdx) match
+                        case leaf: Node.Leaf =>
+                            mkLeaf(cursor, leaf.fullPath, leaf.key, leaf.value)
+                        case inner: Node.Branch =>
+                            mkBranch(
+                              cursor,
+                              branch.skipLen + 1 + inner.skipLen,
+                              inner.repPath,
+                              inner.children,
+                              inner.size
+                            )
+                        case Node.Empty => Node.Empty
+                else
+                    mkBranch(
+                      branch.skipStart,
+                      branch.skipLen,
+                      branch.repPath,
+                      newChildren,
+                      branch.size - 1
+                    )
 
     /** Walk the trie root-to-leaf, collecting one proof step at each branch along the path.
       * Parameterized on proof step type — each variant provides its own `mkStep` function.
