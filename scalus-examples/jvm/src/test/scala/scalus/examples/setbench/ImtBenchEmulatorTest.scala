@@ -424,77 +424,77 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     test("IMT withdraw N=10", Benchmark) {
         info("=== IMT withdraw N=10 ===")
-        benchWithdraw("IMT", 10, ImtContract.withErrorTraces, buildImt)
+        benchWithdraw("IMT", 10, ImtContract, buildImt)
     }
 
     test("IMT withdraw N=30", Benchmark) {
         info("=== IMT withdraw N=30 ===")
-        benchWithdraw("IMT", 30, ImtContract.withErrorTraces, buildImt)
+        benchWithdraw("IMT", 30, ImtContract, buildImt)
     }
 
     test("IMT withdraw N=100", Benchmark) {
         info("=== IMT withdraw N=100 ===")
-        benchWithdraw("IMT", 100, ImtContract.withErrorTraces, buildImt)
+        benchWithdraw("IMT", 100, ImtContract, buildImt)
     }
 
     test("IMT withdraw N=10K", Benchmark) {
         info("=== IMT withdraw N=10000 ===")
-        benchWithdraw("IMT", 10000, ImtContract.withErrorTraces, buildImt)
+        benchWithdraw("IMT", 10000, ImtContract, buildImt)
     }
 
     test("IMT withdraw N=32K", Benchmark) {
         info("=== IMT withdraw N=32000 ===")
-        benchWithdraw("IMT", 32000, ImtContract.withErrorTraces, buildImt)
+        benchWithdraw("IMT", 32000, ImtContract, buildImt)
     }
 
     test("IMT withdraw N=100K", Benchmark) {
         info("=== IMT withdraw N=100000 ===")
-        benchWithdraw("IMT", 100000, ImtContract.withErrorTraces, buildImt)
+        benchWithdraw("IMT", 100000, ImtContract, buildImt)
     }
 
     test("IMT deposit N=10", Benchmark) {
         info("=== IMT deposit N=10 ===")
-        benchDeposit("IMT", 10, ImtContract.withErrorTraces, buildImt)
+        benchDeposit("IMT", 10, ImtContract, buildImt)
     }
 
     test("IMT deposit N=30", Benchmark) {
         info("=== IMT deposit N=30 ===")
-        benchDeposit("IMT", 30, ImtContract.withErrorTraces, buildImt)
+        benchDeposit("IMT", 30, ImtContract, buildImt)
     }
 
     test("IMT deposit N=100", Benchmark) {
         info("=== IMT deposit N=100 ===")
-        benchDeposit("IMT", 100, ImtContract.withErrorTraces, buildImt)
+        benchDeposit("IMT", 100, ImtContract, buildImt)
     }
 
     test("IMT deposit N=10K", Benchmark) {
         info("=== IMT deposit N=10000 ===")
-        benchDeposit("IMT", 10000, ImtContract.withErrorTraces, buildImt)
+        benchDeposit("IMT", 10000, ImtContract, buildImt)
     }
 
     test("IMT deposit N=32K", Benchmark) {
         info("=== IMT deposit N=32000 ===")
-        benchDeposit("IMT", 32000, ImtContract.withErrorTraces, buildImt)
+        benchDeposit("IMT", 32000, ImtContract, buildImt)
     }
 
     test("IMT deposit N=100K", Benchmark) {
         info("=== IMT deposit N=100000 ===")
-        benchDeposit("IMT", 100000, ImtContract.withErrorTraces, buildImt)
+        benchDeposit("IMT", 100000, ImtContract, buildImt)
     }
 
     test("IMT add N=10", Benchmark) {
         info("=== IMT add N=10 ===")
-        benchAdd("IMT", 10, ImtContract.withErrorTraces, buildImtForAdd)
+        benchAdd("IMT", 10, ImtContract, buildImtForAdd)
     }
 
     test("IMT add N=32K", Benchmark) {
         info("=== IMT add N=32000 ===")
-        benchAdd("IMT", 32000, ImtContract.withErrorTraces, buildImtForAdd)
+        benchAdd("IMT", 32000, ImtContract, buildImtForAdd)
     }
 
     test("IMT add N=100K", Benchmark) {
         info("=== IMT add N=100000 ===")
-        benchAdd("IMT", 100000, ImtContract.withErrorTraces, buildImtForAdd)
+        benchAdd("IMT", 100000, ImtContract, buildImtForAdd)
     }
 
     // --- Summary ---

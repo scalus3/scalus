@@ -51,23 +51,29 @@ object MerklePatriciaTrie:
         def has(key: ByteString, value: ByteString, proof: Proof): Boolean =
             MerklePatriciaTrie.including(key, value, proof) == self.root
 
-        /** Insert an element with proof Fails if the proof is invalid or element already exists
+        /** Insert an element with proof using single-pass: parse proof once, compute both excluding
+          * (verify absent) and including (new root) simultaneously.
           */
         def insert(key: ByteString, value: ByteString, proof: Proof): MerklePatriciaTrie =
-            require(
-              MerklePatriciaTrie.excluding(key, proof) == self.root,
-              "Invalid proof or element exists"
-            )
-            MerklePatriciaTrie(MerklePatriciaTrie.including(key, value, proof))
+            val path = blake2b_256(key)
+            val hValue = blake2b_256(value)
+            val both = MerklePatriciaTrie.doCombined(path, hValue, 0, proof)
+            val exclRoot = sliceByteString(0, Blake2b256DigestSize, both)
+            val inclRoot = sliceByteString(Blake2b256DigestSize, Blake2b256DigestSize, both)
+            require(exclRoot == self.root, "Invalid proof or element exists")
+            MerklePatriciaTrie(inclRoot)
 
-        /** Delete an element with proof Fails if the proof is invalid or element doesn't exist
+        /** Delete an element with proof using single-pass: parse proof once, compute both including
+          * (verify present) and excluding (new root) simultaneously.
           */
         def delete(key: ByteString, value: ByteString, proof: Proof): MerklePatriciaTrie =
-            require(
-              MerklePatriciaTrie.including(key, value, proof) == self.root,
-              "Invalid proof or element missing"
-            )
-            MerklePatriciaTrie(MerklePatriciaTrie.excluding(key, proof))
+            val path = blake2b_256(key)
+            val hValue = blake2b_256(value)
+            val both = MerklePatriciaTrie.doCombined(path, hValue, 0, proof)
+            val exclRoot = sliceByteString(0, Blake2b256DigestSize, both)
+            val inclRoot = sliceByteString(Blake2b256DigestSize, Blake2b256DigestSize, both)
+            require(inclRoot == self.root, "Invalid proof or element missing")
+            MerklePatriciaTrie(exclRoot)
 
         /** Update an element's value with proof More efficient than separate delete+insert
           */
@@ -127,53 +133,6 @@ object MerklePatriciaTrie:
                     )
                     doFork(path, cursor, nextCursor, root, neighbor)
 
-    /** Compute root hash excluding element */
-    private def excluding(key: ByteString, proof: Proof): ByteString =
-        doExcluding(blake2b_256(key), 0, proof)
-
-    private def doExcluding(
-        path: ByteString,
-        cursor: BigInt,
-        proof: Proof
-    ): ByteString = proof match
-        case List.Nil => NullHash
-        case List.Cons(step, steps) =>
-            step match
-                case ProofStep.Branch(skip, neighbors) =>
-                    val nextCursor = cursor + 1 + skip
-                    val root = doExcluding(path, nextCursor, steps)
-                    doBranch(path, cursor, nextCursor, root, neighbors)
-
-                case ProofStep.Fork(skip, neighbor) =>
-                    steps match
-                        case List.Nil =>
-                            if skip == BigInt(0) then
-                                val prefix = consByteString(neighbor.nibble, neighbor.prefix)
-                                combine(prefix, neighbor.root)
-                            else
-                                val originalPrefix = appendByteString(
-                                  nibbles(path, cursor, cursor + skip),
-                                  consByteString(neighbor.nibble, neighbor.prefix)
-                                )
-                                combine(originalPrefix, neighbor.root)
-                        case _ =>
-                            val nextCursor = cursor + 1 + skip
-                            val root = doExcluding(path, nextCursor, steps)
-                            doFork(path, cursor, nextCursor, root, neighbor)
-
-                case ProofStep.Leaf(skip, key, value) =>
-                    steps match
-                        case List.Nil => combine(suffix(key, cursor), value)
-                        case _ =>
-                            val nextCursor = cursor + 1 + skip
-                            val root = doExcluding(path, nextCursor, steps)
-                            val neighbor = Neighbor(
-                              nibble = nibble(key, nextCursor - 1),
-                              prefix = suffix(key, nextCursor),
-                              root = value
-                            )
-                            doFork(path, cursor, nextCursor, root, neighbor)
-
     private def doBranch(
         path: ByteString,
         cursor: BigInt,
@@ -216,4 +175,120 @@ object MerklePatriciaTrie:
             neighbor.nibble,
             combine(neighbor.prefix, neighbor.root)
           )
+        )
+
+    // --- Combined single-pass: compute excluding and including simultaneously ---
+    // Returns a 64-byte ByteString: excl[32] || incl[32]
+
+    /** Combined proof traversal: parse each proof step once, compute both excluding and including
+      * hashes simultaneously. Saves one full proof traversal (proof parsing, recursion, path
+      * computations) and one blake2b_256(key) call.
+      */
+    private def doCombined(
+        path: ByteString,
+        value: ByteString,
+        cursor: BigInt,
+        proof: Proof
+    ): ByteString = proof match
+        case List.Nil =>
+            appendByteString(NullHash, combine(suffix(path, cursor), value))
+
+        case List.Cons(step, steps) =>
+            step match
+                case ProofStep.Branch(skip, neighbors) =>
+                    val nextCursor = cursor + 1 + skip
+                    val both = doCombined(path, value, nextCursor, steps)
+                    doBranch2(path, cursor, nextCursor, both, neighbors)
+
+                case ProofStep.Fork(skip, neighbor) =>
+                    steps match
+                        case List.Nil =>
+                            // Last step: excluding has special prefix reconstruction
+                            val nextCursor = cursor + 1 + skip
+                            val exclResult =
+                                if skip == BigInt(0) then
+                                    combine(
+                                      consByteString(neighbor.nibble, neighbor.prefix),
+                                      neighbor.root
+                                    )
+                                else
+                                    combine(
+                                      appendByteString(
+                                        nibbles(path, cursor, cursor + skip),
+                                        consByteString(neighbor.nibble, neighbor.prefix)
+                                      ),
+                                      neighbor.root
+                                    )
+                            val inclChild = combine(suffix(path, nextCursor), value)
+                            val inclResult =
+                                doFork(path, cursor, nextCursor, inclChild, neighbor)
+                            appendByteString(exclResult, inclResult)
+                        case _ =>
+                            val nextCursor = cursor + 1 + skip
+                            val both = doCombined(path, value, nextCursor, steps)
+                            doFork2(path, cursor, nextCursor, both, neighbor)
+
+                case ProofStep.Leaf(skip, key, neighborValue) =>
+                    steps match
+                        case List.Nil =>
+                            // Last step: excluding returns neighbor leaf promoted up
+                            val exclResult = combine(suffix(key, cursor), neighborValue)
+                            val nextCursor = cursor + 1 + skip
+                            val inclChild = combine(suffix(path, nextCursor), value)
+                            val neighbor = Neighbor(
+                              nibble = nibble(key, nextCursor - 1),
+                              prefix = suffix(key, nextCursor),
+                              root = neighborValue
+                            )
+                            val inclResult =
+                                doFork(path, cursor, nextCursor, inclChild, neighbor)
+                            appendByteString(exclResult, inclResult)
+                        case _ =>
+                            val nextCursor = cursor + 1 + skip
+                            val neighbor = Neighbor(
+                              nibble = nibble(key, nextCursor - 1),
+                              prefix = suffix(key, nextCursor),
+                              root = neighborValue
+                            )
+                            val both = doCombined(path, value, nextCursor, steps)
+                            doFork2(path, cursor, nextCursor, both, neighbor)
+
+    /** Branch step for combined pass: shares branch, prefix, and neighbor slices. */
+    private def doBranch2(
+        path: ByteString,
+        cursor: BigInt,
+        nextCursor: BigInt,
+        both: ByteString,
+        neighbors: ByteString
+    ): ByteString =
+        val exclChild = sliceByteString(0, Blake2b256DigestSize, both)
+        val inclChild = sliceByteString(Blake2b256DigestSize, Blake2b256DigestSize, both)
+        val branch = nibble(path, nextCursor - 1)
+        val prefix = nibbles(path, cursor, nextCursor - 1)
+        val n8 = sliceByteString(0, Blake2b256DigestSize, neighbors)
+        val n4 = sliceByteString(32, Blake2b256DigestSize, neighbors)
+        val n2 = sliceByteString(64, Blake2b256DigestSize, neighbors)
+        val n1 = sliceByteString(96, Blake2b256DigestSize, neighbors)
+        appendByteString(
+          combine(prefix, merkle16(branch, exclChild, n8, n4, n2, n1)),
+          combine(prefix, merkle16(branch, inclChild, n8, n4, n2, n1))
+        )
+
+    /** Fork step for combined pass: shares branch, prefix, neighborHash. */
+    private def doFork2(
+        path: ByteString,
+        cursor: BigInt,
+        nextCursor: BigInt,
+        both: ByteString,
+        neighbor: Neighbor
+    ): ByteString =
+        val exclChild = sliceByteString(0, Blake2b256DigestSize, both)
+        val inclChild = sliceByteString(Blake2b256DigestSize, Blake2b256DigestSize, both)
+        val branch = nibble(path, nextCursor - 1)
+        val prefix = nibbles(path, cursor, nextCursor - 1)
+        require(branch != neighbor.nibble)
+        val neighborHash = combine(neighbor.prefix, neighbor.root)
+        appendByteString(
+          combine(prefix, sparseMerkle16(branch, exclChild, neighbor.nibble, neighborHash)),
+          combine(prefix, sparseMerkle16(branch, inclChild, neighbor.nibble, neighborHash))
         )

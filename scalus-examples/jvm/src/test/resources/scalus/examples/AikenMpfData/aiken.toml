@@ -1,0 +1,24 @@
+name = "scalus/mpf-bench"
+version = "0.0.0"
+plutus = "v3"
+description = "Thin SetBench-compatible wrapper around aiken-lang/merkle-patricia-forestry"
+
+[repository]
+user = "scalus"
+project = "mpf-bench"
+platform = "github"
+
+[[dependencies]]
+name = "aiken-lang/merkle-patricia-forestry"
+version = "main"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/stdlib"
+version = "v2"
+source = "github"
+
+[[dependencies]]
+name = "aiken-lang/fuzz"
+version = "v2"
+source = "github"

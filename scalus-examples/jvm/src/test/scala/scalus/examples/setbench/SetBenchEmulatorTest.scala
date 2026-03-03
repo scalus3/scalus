@@ -288,7 +288,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     private def benchAccWithdraw(n: Int): Unit = {
         val variant = "Acc (G1)"
-        val contract = AccContract.withErrorTraces
+        val contract = AccContract
         val accElems = generateElements(n).map { (k, _) =>
             byteStringToInteger(true, blake2b_256(k))
         }
@@ -678,12 +678,12 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     test("MPF-16o withdraw N=32K", Benchmark) {
         info("=== MPF-16o withdraw N=32000 ===")
-        benchMpfWithdraw("MPF-16o", 32000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
+        benchMpfWithdraw("MPF-16o", 32000, Mpf16oContract, MpfTrie.wrap16o)
     }
 
     test("MPF-16b withdraw N=32K", Benchmark) {
         info("=== MPF-16b withdraw N=32000 ===")
-        benchMpfWithdraw("MPF-16b", 32000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
+        benchMpfWithdraw("MPF-16b", 32000, Mpf16bContract, MpfTrie.wrap16b)
     }
 
     test("MPF-16o-light withdraw N=32K", Benchmark) {
@@ -691,7 +691,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchMpfWithdraw(
           "MPF-16o-light",
           32000,
-          Mpf16oLightContract.withErrorTraces,
+          Mpf16oLightContract,
           MpfTrie.wrap16o
         )
     }
@@ -701,7 +701,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchMpfWithdraw(
           "MPF-16b-light",
           32000,
-          Mpf16bLightContract.withErrorTraces,
+          Mpf16bLightContract,
           MpfTrie.wrap16b
         )
     }
@@ -718,12 +718,12 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     test("MPF-16o deposit N=32K", Benchmark) {
         info("=== MPF-16o deposit N=32000 ===")
-        benchMpfDeposit("MPF-16o", 32000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
+        benchMpfDeposit("MPF-16o", 32000, Mpf16oContract, MpfTrie.wrap16o)
     }
 
     test("MPF-16b deposit N=32K", Benchmark) {
         info("=== MPF-16b deposit N=32000 ===")
-        benchMpfDeposit("MPF-16b", 32000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
+        benchMpfDeposit("MPF-16b", 32000, Mpf16bContract, MpfTrie.wrap16b)
     }
 
     test("MPF-16o-light deposit N=32K", Benchmark) {
@@ -731,7 +731,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchMpfDeposit(
           "MPF-16o-light",
           32000,
-          Mpf16oLightContract.withErrorTraces,
+          Mpf16oLightContract,
           MpfTrie.wrap16o
         )
     }
@@ -741,7 +741,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchMpfDeposit(
           "MPF-16b-light",
           32000,
-          Mpf16bLightContract.withErrorTraces,
+          Mpf16bLightContract,
           MpfTrie.wrap16b
         )
     }
@@ -755,44 +755,44 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
 
     test("MPF-16o withdraw N=100K", Benchmark) {
         info("=== MPF-16o withdraw N=100000 ===")
-        benchMpfWithdraw("MPF-16o", 100000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
+        benchMpfWithdraw("MPF-16o", 100000, Mpf16oContract, MpfTrie.wrap16o)
     }
 
     test("MPF-16b withdraw N=100K", Benchmark) {
         info("=== MPF-16b withdraw N=100000 ===")
-        benchMpfWithdraw("MPF-16b", 100000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
+        benchMpfWithdraw("MPF-16b", 100000, Mpf16bContract, MpfTrie.wrap16b)
     }
 
     test("MPF-16o deposit N=100K", Benchmark) {
         info("=== MPF-16o deposit N=100000 ===")
-        benchMpfDeposit("MPF-16o", 100000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
+        benchMpfDeposit("MPF-16o", 100000, Mpf16oContract, MpfTrie.wrap16o)
     }
 
     test("MPF-16b deposit N=100K", Benchmark) {
         info("=== MPF-16b deposit N=100000 ===")
-        benchMpfDeposit("MPF-16b", 100000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
+        benchMpfDeposit("MPF-16b", 100000, Mpf16bContract, MpfTrie.wrap16b)
     }
 
     // --- N=1M ---
 
     test("MPF-16o withdraw N=1M", Benchmark) {
         info("=== MPF-16o withdraw N=1000000 ===")
-        benchMpfWithdraw("MPF-16o", 1000000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
+        benchMpfWithdraw("MPF-16o", 1000000, Mpf16oContract, MpfTrie.wrap16o)
     }
 
     test("MPF-16b withdraw N=1M", Benchmark) {
         info("=== MPF-16b withdraw N=1000000 ===")
-        benchMpfWithdraw("MPF-16b", 1000000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
+        benchMpfWithdraw("MPF-16b", 1000000, Mpf16bContract, MpfTrie.wrap16b)
     }
 
     test("MPF-16o deposit N=1M", Benchmark) {
         info("=== MPF-16o deposit N=1000000 ===")
-        benchMpfDeposit("MPF-16o", 1000000, Mpf16oContract.withErrorTraces, MpfTrie.wrap16o)
+        benchMpfDeposit("MPF-16o", 1000000, Mpf16oContract, MpfTrie.wrap16o)
     }
 
     test("MPF-16b deposit N=1M", Benchmark) {
         info("=== MPF-16b deposit N=1000000 ===")
-        benchMpfDeposit("MPF-16b", 1000000, Mpf16bContract.withErrorTraces, MpfTrie.wrap16b)
+        benchMpfDeposit("MPF-16b", 1000000, Mpf16bContract, MpfTrie.wrap16b)
     }
 
     test("Summary table", Benchmark) {

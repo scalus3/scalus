@@ -12,10 +12,14 @@ object Merkling:
       */
     val NullHash: ByteString = hex"0000000000000000000000000000000000000000000000000000000000000000"
 
-    // Pre-computed null hashes for optimization
-    val NullHash2: ByteString = combine(NullHash, NullHash)
-    val NullHash4: ByteString = combine(NullHash2, NullHash2)
-    val NullHash8: ByteString = combine(NullHash4, NullHash4)
+    // Pre-computed null hashes — blake2b_256(NullHash ++ NullHash), etc.
+    // Embedded as literals to avoid 3 runtime blake2b_256 calls.
+    val NullHash2: ByteString =
+        hex"0eb923b0cbd24df54401d998531feead35a47a99f4deed205de4af81120f9761"
+    val NullHash4: ByteString =
+        hex"85c09af929492a871e4fae32d9d5c36e352471cd659bcdb61de08f1722acc3b1"
+    val NullHash8: ByteString =
+        hex"b22df1a126b5ba4e33c16fd6157507610e55ffce20dae7ac44cae168a463612a"
 
     /** Combines two ByteStrings by concatenating them and taking their Blake2b hash */
     def combine(left: ByteString, right: ByteString): ByteString =
