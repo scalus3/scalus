@@ -65,10 +65,10 @@ TxBuilder(env)
 If your validator requires additional signatures:
 
 ```scala copy
-val requiredSigners = Set(pubKeyHash1, pubKeyHash2)
-
 TxBuilder(env)
-  .spend(scriptUtxo, redeemer, script, requiredSigners)
+  .spend(scriptUtxo, redeemer, script)
+  .requireSignature(pubKeyHash1)
+  .requireSignature(pubKeyHash2)
   .collaterals(collateralUtxo)
   .payTo(recipient, scriptUtxo.output.value)
   .build(changeTo = changeAddress)
@@ -76,7 +76,7 @@ TxBuilder(env)
   .sign(signer2)  // Must provide all required signatures
 ```
 
-The `requiredSigners` set is added to the transaction's required signers field, and the validator can check for these signatures in the transaction context.
+Required signers appear in `TxInfo.signatories`, so on-chain validators can verify these signatures.
 
 ## Spending with Attached Scripts
 
@@ -267,7 +267,7 @@ val tx = TxBuilder(env)
 
 // With delayed redeemer (computed from final transaction)
 val tx = TxBuilder(env)
-  .spend(scriptUtxo, attached(validatorScript, tx => computeRedeemer(tx), DatumInlined, requiredSigners))
+  .spend(scriptUtxo, attached(validatorScript, tx => computeRedeemer(tx), DatumInlined))
   .collaterals(collateralUtxo)
   .payTo(recipient, scriptUtxo.output.value)
   .build(changeTo = changeAddress)
@@ -280,18 +280,16 @@ The `ThreeArgumentPlutusScriptWitness` companion object provides these factory m
 | Method | Description |
 |--------|-------------|
 | `attached(script, redeemer, datum)` | Attach script with immediate redeemer |
-| `attached(script, redeemer, datum, signers)` | Attach script with signers |
-| `attached(script, redeemerBuilder, datum, signers)` | Attach script with delayed redeemer |
+| `attached(script, redeemerBuilder, datum)` | Attach script with delayed redeemer |
 | `reference(redeemer, datum)` | Use reference script with immediate redeemer |
-| `reference(redeemer, datum, signers)` | Use reference script with signers |
-| `reference(redeemerBuilder, datum, signers)` | Use reference script with delayed redeemer |
+| `reference(redeemerBuilder, datum)` | Use reference script with delayed redeemer |
 
 The `datum` parameter specifies how the datum is provided:
 - `DatumInlined` - The datum is stored inline in the UTxO (most common)
 - `DatumValue(data)` - Provide the datum value explicitly (for UTxOs with datum hashes)
 
 <Callout type="info">
-  The factory methods automatically convert your redeemer type to `Data` using the `ToData` typeclass, and wrap signers in `ExpectedSigner`.
+  The factory methods automatically convert your redeemer type to `Data` using the `ToData` typeclass.
 </Callout>
 
 ## Next Steps

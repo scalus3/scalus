@@ -13,8 +13,8 @@ import scalus.utils.await
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration.*
+import scala.concurrent.ExecutionContext.Implicits.global
 import scalus.cardano.address.StakePayload
-import scalus.compiler.Options
 import scalus.uplc.PlutusV3
 
 /** Integration tests for TxBuilder with Yaci DevKit
@@ -283,10 +283,9 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
             // Value to send with minted tokens (must include min ADA)
             val mintedValue = Value.asset(policyId, assetName, mintAmount, Coin.ada(2))
 
-            // Create native script witness with the expected signer
+            // Create native script witness
             val nativeScriptWitness = NativeScriptWitness(
-              ScriptSource.NativeScriptValue(nativeScript),
-              Set(ExpectedSigner(paymentKeyHash))
+              ScriptSource.NativeScriptValue(nativeScript)
             )
 
             TxBuilder(ctx.cardanoInfo)
@@ -298,6 +297,7 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
                     witness = nativeScriptWitness
                   )
                 )
+                .requireSignature(paymentKeyHash)
                 .payTo(ctx.alice.address, mintedValue)
                 .complete(ctx.provider, ctx.alice.address)
                 .await(30.seconds)
@@ -313,14 +313,12 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
     // 1. Register the script-based stake address
     // 2. Withdraw zero to trigger the stake validator script
     private lazy val (withdrawZeroStakeAddress, withdrawZeroScriptWitness) = {
-        given Options = Options.release
-        val alwaysOkScript = PlutusV3.compile((sc: Data) => ())
+        val alwaysOkScript = PlutusV3.alwaysOk
         val stakeAddress =
             StakeAddress(Network.Testnet, StakePayload.Script(alwaysOkScript.script.scriptHash))
         val witness = TwoArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptValue(alwaysOkScript.script),
-          Data.unit,
-          Set.empty
+          Data.unit
         )
         (stakeAddress, witness)
     }
