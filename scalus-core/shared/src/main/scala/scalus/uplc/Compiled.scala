@@ -133,8 +133,7 @@ final case class PlutusV1[A] private[uplc] (
     protected def makeProgram(term: Term): Program = Program.plutusV1(term)
 
     /** Creates a Plutus V1 script. */
-    protected def makeScript(program: Program): Script.PlutusV1 =
-        Script.PlutusV1(program.cborByteString)
+    protected def makeScript(program: Program): Script.PlutusV1 = Script.PlutusV1(program)
 
     /** The serialized Plutus V1 script. Lazily computed on first access. */
     override lazy val script: Script.PlutusV1 = makeScript(program)
@@ -249,8 +248,7 @@ final case class PlutusV2[A] private[uplc] (
     protected def makeProgram(term: Term): Program = Program.plutusV2(term)
 
     /** Creates a Plutus V2 script. */
-    protected def makeScript(program: Program): Script.PlutusV2 =
-        Script.PlutusV2(program.cborByteString)
+    protected def makeScript(program: Program): Script.PlutusV2 = Script.PlutusV2(program)
 
     /** The serialized Plutus V2 script. Lazily computed on first access. */
     override lazy val script: Script.PlutusV2 = makeScript(program)
@@ -370,8 +368,7 @@ final case class PlutusV3[A] private[uplc] (
     protected def makeProgram(term: Term): Program = Program.plutusV3(term)
 
     /** Creates a Plutus V3 script. */
-    protected def makeScript(program: Program): Script.PlutusV3 =
-        Script.PlutusV3(program.cborByteString)
+    protected def makeScript(program: Program): Script.PlutusV3 = Script.PlutusV3(program)
 
     /** The serialized Plutus V3 script. Lazily computed on first access. */
     override lazy val script: Script.PlutusV3 = makeScript(program)

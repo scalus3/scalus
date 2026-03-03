@@ -5,7 +5,7 @@ import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import io.bullet.borer.derivation.key
 import org.typelevel.paiges.Doc
 import scalus.uplc.builtin.{platform, ByteString}
-import scalus.uplc.{DeBruijnedProgram, ProgramFlatCodec}
+import scalus.uplc.{DeBruijnedProgram, Program, ProgramFlatCodec}
 import scalus.utils.{Pretty, Style}
 
 import scala.util.control.NonFatal
@@ -22,9 +22,21 @@ sealed trait PlutusScript extends Script {
     /** Get script language */
     def language: Language
 
-    /** Get the De Bruijn-indexed program from the script bytes */
-    def deBruijnedProgram: DeBruijnedProgram =
-        DeBruijnedProgram.fromCbor(script.bytes)
+    /** Cached in-memory program, set via companion factory to avoid CBOR round-trip. */
+    @transient @volatile private[ledger] var _cachedProgram: Program | Null = null
+
+    /** Get the program, preferring the cached in-memory version over CBOR deserialization. */
+    def program: Program = {
+        val p = _cachedProgram
+        if p != null then p
+        else
+            val deserialized = Program.fromCborByteString(script)
+            _cachedProgram = deserialized
+            deserialized
+    }
+
+    /** Get the De Bruijn-indexed program, preserving source annotations when available. */
+    def deBruijnedProgram: DeBruijnedProgram = program.deBruijnedProgram
 
     def toHex: String = script.toHex
 
@@ -77,6 +89,16 @@ object Script {
         def language: Language = Language.PlutusV1
     }
 
+    object PlutusV1 {
+
+        /** Create from an in-memory Program, caching it to preserve source annotations. */
+        def apply(program: Program): PlutusV1 = {
+            val s = new PlutusV1(program.cborByteString)
+            s._cachedProgram = program
+            s
+        }
+    }
+
     /** Plutus V2 script */
     @key(2) final case class PlutusV2(override val script: ByteString) extends PlutusScript
         derives Codec {
@@ -89,6 +111,16 @@ object Script {
         def language: Language = Language.PlutusV2
     }
 
+    object PlutusV2 {
+
+        /** Create from an in-memory Program, caching it to preserve source annotations. */
+        def apply(program: Program): PlutusV2 = {
+            val s = new PlutusV2(program.cborByteString)
+            s._cachedProgram = program
+            s
+        }
+    }
+
     /** Plutus V3 script */
     @key(3) final case class PlutusV3(override val script: ByteString) extends PlutusScript
         derives Codec {
@@ -99,6 +131,16 @@ object Script {
         )
 
         def language: Language = Language.PlutusV3
+    }
+
+    object PlutusV3 {
+
+        /** Create from an in-memory Program, caching it to preserve source annotations. */
+        def apply(program: Program): PlutusV3 = {
+            val s = new PlutusV3(program.cborByteString)
+            s._cachedProgram = program
+            s
+        }
     }
 
     given Codec[Script] = deriveCodec

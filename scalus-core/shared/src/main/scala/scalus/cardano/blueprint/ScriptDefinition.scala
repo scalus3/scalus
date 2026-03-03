@@ -79,7 +79,7 @@ class PlutusV3CompiledContract(
       "PlutusV3Contract must have UPLC version 1.1.0"
     )
 
-    override val script: Script.PlutusV3 = Script.PlutusV3(program.cborByteString)
+    override val script: Script.PlutusV3 = Script.PlutusV3(program)
 
     override lazy val describeValidator: Validator = {
         Validator(

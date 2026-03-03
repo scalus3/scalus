@@ -1,16 +1,16 @@
 package scalus.cardano.ledger
 
-import scalus.uplc.builtin.Data.toData
-import scalus.uplc.builtin.{platform, Data}
-import scalus.uplc.DebugScript
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.Language.*
 import scalus.cardano.ledger.LedgerToPlutusTranslation.*
 import scalus.cardano.ledger.utils.{AllNeededScriptHashes, AllResolvedScripts}
 import scalus.cardano.onchain.plutus
 import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{platform, Data}
 import scalus.uplc.eval.*
-import scalus.uplc.{DeBruijnedProgram, Term}
+import scalus.uplc.{DeBruijnedProgram, DebugScript, Term}
+import scalus.utils.ScalusSourcePos
 import scribe.Logger
 
 import scala.annotation.threadUnsafe
@@ -24,8 +24,14 @@ class PlutusScriptEvaluationException(
     message: String,
     cause: Throwable,
     val logs: Array[String],
-    val failedScriptHash: ScriptHash
-) extends RuntimeException(s"$message\nlogs: ${logs.mkString("\n")}", cause)
+    val failedScriptHash: ScriptHash,
+    val failedSourcePosition: Option[ScalusSourcePos] = None
+) extends RuntimeException(
+      s"$message" +
+          failedSourcePosition.fold("")(pos => s"\nat ${pos.show}") +
+          s"\nlogs: ${logs.mkString("\n")}",
+      cause
+    )
 
 /** Evaluates Plutus V1, V2 or V3 scripts using the provided transaction and UTxO set.
   *
@@ -614,7 +620,8 @@ object PlutusScriptEvaluator {
                       e.getMessage,
                       e,
                       finalLogs,
-                      hash
+                      hash,
+                      failedSourcePosition = Some(e.sourcePos)
                     )
                 case NonFatal(e) =>
                     val logs = logger.getLogs
