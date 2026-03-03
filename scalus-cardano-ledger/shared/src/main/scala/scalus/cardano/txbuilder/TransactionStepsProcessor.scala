@@ -137,6 +137,9 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
         case submitVotingProcedure: SubmitVotingProcedure =>
             useSubmitVotingProcedure(submitVotingProcedure)
+
+        case requireSignature: TransactionBuilderStep.RequireSignature =>
+            useRequireSignature(requireSignature)
     }
 
     // -------------------------------------------------------------------------
@@ -208,7 +211,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           native.scriptSource,
                           spend
                         )
-                    } yield useNativeScript(native.scriptSource, native.additionalSigners)
+                    } yield useNativeScript(native.scriptSource)
 
                 // Case 3: Plutus script-locked input
                 // Ensure the hash matches the witness, handle the output components,
@@ -226,7 +229,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           plutus.scriptSource,
                           spend
                         )
-                        _ = usePlutusScript(plutus.scriptSource, plutus.additionalSigners)
+                        _ = usePlutusScript(plutus.scriptSource)
 
                         detachedRedeemer = DetachedRedeemer(
                           DelayedRedeemerPlaceholder,
@@ -925,7 +928,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           cred,
                           step
                         )
-                    } yield useNativeScript(witness.scriptSource, witness.additionalSigners)
+                    } yield useNativeScript(witness.scriptSource)
                 case witness: TwoArgumentPlutusScriptWitness =>
                     for {
                         _ <- assertCredentialMatchesWitness(
@@ -935,7 +938,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           step
                         )
                     } yield {
-                        usePlutusScript(witness.scriptSource, witness.additionalSigners)
+                        usePlutusScript(witness.scriptSource)
                         val purpose = credAction match {
                             case Operation.Withdraw(stakeAddress) =>
                                 RedeemerPurpose.ForReward(RewardAccount(stakeAddress))
@@ -1062,12 +1065,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         modify0(Focus[Context](_.expectedSigners).modify(_ + expectedSigner))
 
     private def useNativeScript(
-        nativeScript: ScriptSource[Script.Native],
-        additionalSigners: Set[ExpectedSigner]
+        nativeScript: ScriptSource[Script.Native]
     ): Unit = {
-        // Regardless of how the witness is passed, add the additional signers
-        modify0(Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners))
-
         nativeScript match {
             case ScriptSource.NativeScriptValue(ns) =>
                 modify0(
@@ -1091,22 +1090,22 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         then Left(InputAlreadyExists(input, step))
         else Ok
 
-    private def usePlutusScript(
-        plutusScript: ScriptSource[PlutusScript],
-        additionalSigners: Set[ExpectedSigner]
-    ): Unit = {
-        // Add script's additional signers to txBody.requiredSigners
+    private def useRequireSignature(
+        step: TransactionBuilderStep.RequireSignature
+    ): Result[Unit] = {
+        val hash = step.signer
         modify0(
           (Focus[Context](_.transaction) >>> txBodyL)
               .refocus(_.requiredSigners)
-              .modify((s: TaggedSortedSet[AddrKeyHash]) =>
-                  TaggedSortedSet.from(s.toSet ++ additionalSigners.map(_.hash))
-              )
+              .modify((s: TaggedSortedSet[AddrKeyHash]) => TaggedSortedSet.from(s.toSet + hash))
         )
+        modify0(Focus[Context](_.expectedSigners).modify(_ + ExpectedSigner(hash)))
+        Ok
+    }
 
-        // Add to expected signers
-        modify0(Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners))
-
+    private def usePlutusScript(
+        plutusScript: ScriptSource[PlutusScript]
+    ): Unit = {
         plutusScript match {
             case ScriptSource.PlutusScriptValue(ps: PlutusScript) =>
                 // Add the script value to the appropriate field

@@ -591,7 +591,8 @@ class AuctionInstance(
             // Spend the oneShot UTxO and mint the auction NFT
             tx <- TxBuilder(env)
                 .spend(oneShotUtxo) // Spend the one-shot UTxO (pubkey-protected)
-                .mint(compiledContract, Map(nftAsset -> 1L), redeemer, Set(sellerAddrKeyHash))
+                .mint(compiledContract, Map(nftAsset -> 1L), redeemer)
+                .requireSignature(sellerAddrKeyHash)
                 .payTo(scriptAddress, LedgerValue(initialValue) + mintedValue, datum)
                 .validTo(Instant.ofEpochMilli(auctionEndTime.toLong - 1000))
                 .complete(provider, sellerAddress)

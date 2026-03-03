@@ -872,7 +872,7 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
             .spend(utxo)
             .collaterals(collateralUtxo)
             .references(refUtxo)
-            .registerStake(scriptStakeAddress, reference(Data.unit, Set.empty))
+            .registerStake(scriptStakeAddress, reference(Data.unit))
             .validFrom(validFrom)
             .validTo(validTo)
             .build(changeTo = Alice.address)

@@ -4,7 +4,6 @@ import io.bullet.borer.Cbor
 import monocle.syntax.all.*
 import monocle.{Focus, Lens}
 import org.scalacheck.Arbitrary.arbitrary
-import org.scalacheck.{Arbitrary, Gen}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.Data.toData
@@ -74,20 +73,14 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     val skhUtxo = Utxo(input1, skhOutput)
 
     val ns: Script.Native = Script.Native(AllOf(IndexedSeq.empty))
-    val nsSigners: Set[ExpectedSigner] =
-        Gen.listOf(arbitrary[AddrKeyHash]).sample.get.toSet.map(ExpectedSigner(_))
 
-    val nsWitness = NativeScriptWitness(NativeScriptValue(ns), nsSigners)
-
-    val script2Signers: Set[ExpectedSigner] =
-        Gen.listOf(arbitrary[AddrKeyHash]).sample.get.toSet.map(ExpectedSigner(_))
+    val nsWitness = NativeScriptWitness(NativeScriptValue(ns))
 
     val plutusScript2Witness =
         ThreeArgumentPlutusScriptWitness(
           PlutusScriptValue(script2),
           Data.List(PList.Nil),
-          DatumInlined,
-          script2Signers
+          DatumInlined
         )
 
     private def withScriptAddr(scriptHash: ScriptHash, utxo: Utxo): Utxo = {
@@ -122,9 +115,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         withScriptAddr(script2.scriptHash, utxo)
     }
 
-    // Expected Signers for the plutus script1 ref witness
-    val psRefWitnessExpectedSigners: Set[ExpectedSigner] =
-        Gen.listOf(arbitrary[AddrKeyHash]).sample.get.toSet.map(ExpectedSigner(_))
+    // No additional signers needed for ref witnesses
 
     private def withRefScript(script: Script, utxo: Utxo): Utxo = {
         val newOutput = utxo.output match
@@ -154,22 +145,19 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     val plutusScript1RefWitness = ThreeArgumentPlutusScriptWitness(
       PlutusScriptAttached,
       Data.List(PList.Nil),
-      DatumInlined,
-      psRefWitnessExpectedSigners
+      DatumInlined
     )
 
     val plutusScript1RefSpentWitness = ThreeArgumentPlutusScriptWitness(
       PlutusScriptAttached,
       Data.List(PList.Nil),
-      DatumInlined,
-      psRefWitnessExpectedSigners
+      DatumInlined
     )
 
     val plutusScript2RefWitness = ThreeArgumentPlutusScriptWitness(
       PlutusScriptAttached,
       Data.List(PList.Nil),
-      DatumInlined,
-      psRefWitnessExpectedSigners
+      DatumInlined
     )
 
     ///////////////////////////////////////////////////////////////
@@ -266,8 +254,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           witness = ThreeArgumentPlutusScriptWitness(
             scriptSource = PlutusScriptValue(script1),
             redeemerBuilder = redeemerBuilder,
-            datum = DatumInlined,
-            additionalSigners = Set.empty
+            datum = DatumInlined
           )
         )
 
@@ -313,11 +300,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               .replace(TaggedSortedSet(script1Utxo.input))
           |> (transactionL >>> txReferenceInputsL)
               .replace(TaggedSortedSet(utxoWithScript1ReferenceScript.input))
-          |> (transactionL >>> txRequiredSignersL)
-              .replace(TaggedSortedSet.from(psRefWitnessExpectedSigners.map(_.hash)))
           |> (transactionL >>> txRedeemersL)
               .replace(redeemers(unitRedeemer(RedeemerTag.Spend, 0)))
-          |> expectedSignersL.replace(psRefWitnessExpectedSigners)
           |> resolvedUtxosL
               .replace(
                 fromRight(
@@ -348,15 +332,10 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                   .replace(
                     TaggedSortedSet(utxoWithScript1ReferenceScript.input, script1Utxo.input)
                   )
-              |> (transactionL >>> txRequiredSignersL)
-                  // We add the required signers for script1
-                  .replace(
-                    TaggedSortedSet.from(psRefWitnessExpectedSigners.map(_.hash))
-                  )
               |> expectedSignersL
-                  // Add the expected signers for the script and the expected signer for spending the utxo with the script
-                  .replace(
-                    psRefWitnessExpectedSigners + ExpectedSigner(
+                  // Add the expected signer for spending the utxo with the script
+                  .modify(
+                    _ + ExpectedSigner(
                       utxoWithScript1ReferenceScript.output.address.keyHashOption.get
                           .asInstanceOf[AddrKeyHash]
                     )
@@ -430,10 +409,10 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               witness = nsWitness
             )
 
-        // Signers are what we expect for a transaction built with this step
+        // Witnesses no longer carry signers, so expectedSigners should be empty
         assert(
           build(Mainnet, List(step)).map(_.expectedSigners) ==
-              Right(step.witness.asInstanceOf[NativeScriptWitness].additionalSigners)
+              Right(Set.empty[ExpectedSigner])
         )
     }
 
@@ -457,24 +436,16 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
         val built = fromRight(build(Mainnet, List(step)))
 
-        // Signers are what we expect for a transaction built with this step
-        assert(
-          built.expectedSigners ==
-              step.witness.asInstanceOf[ThreeArgumentPlutusScriptWitness].additionalSigners
-        )
+        // Witnesses no longer carry signers, so expectedSigners should be empty
+        assert(built.expectedSigners == Set.empty[ExpectedSigner])
 
-        // signers are added to the `requiredSigners` field in tx body
+        // requiredSigners in tx body should be empty since witnesses don't carry signers
         val obtained =
             built.toTuple |> transactionL.andThen(txBodyL).refocus(_.requiredSigners).get |> (s =>
                 s.toSet.toSet
             )
 
-        val expected = step.witness
-            .asInstanceOf[ThreeArgumentPlutusScriptWitness]
-            .additionalSigners
-            .map(_.hash)
-
-        assert(obtained == expected)
+        assert(obtained == Set.empty)
     }
 
     // =======================================================================
@@ -492,33 +463,27 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         assert(witness.scriptSource == PlutusScriptValue(script1))
         assert(witness.redeemerBuilder(Transaction.empty) == redeemer)
         assert(witness.datum == DatumInlined)
-        assert(witness.additionalSigners.isEmpty)
     }
 
-    test("ThreeArgumentPlutusScriptWitness.attached with immediate redeemer and signers") {
+    test("ThreeArgumentPlutusScriptWitness.attached with immediate redeemer and datum value") {
         val redeemer = Data.I(42)
-        val signers = Set(arbitrary[AddrKeyHash].sample.get)
         val witness = ThreeArgumentPlutusScriptWitness.attached(
           script = script1,
           redeemer = redeemer,
-          datum = Datum.DatumValue(Data.I(100)),
-          signers = signers
+          datum = Datum.DatumValue(Data.I(100))
         )
 
         assert(witness.scriptSource == PlutusScriptValue(script1))
         assert(witness.redeemerBuilder(Transaction.empty) == redeemer)
         assert(witness.datum == Datum.DatumValue(Data.I(100)))
-        assert(witness.additionalSigners == signers.map(ExpectedSigner.apply))
     }
 
     test("ThreeArgumentPlutusScriptWitness.attached with delayed redeemer") {
-        val signers = Set(arbitrary[AddrKeyHash].sample.get)
         val redeemerBuilder: Transaction => Data = tx => Data.I(tx.body.value.inputs.toSeq.size)
         val witness = ThreeArgumentPlutusScriptWitness.attached(
           script = script1,
           redeemerBuilder = redeemerBuilder,
-          datum = DatumInlined,
-          signers = signers
+          datum = DatumInlined
         )
 
         assert(witness.scriptSource == PlutusScriptValue(script1))
@@ -526,7 +491,6 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val txWithInputs = txInputsL.replace(TaggedSortedSet(input1, input2))(Transaction.empty)
         assert(witness.redeemerBuilder(txWithInputs) == Data.I(2))
         assert(witness.datum == DatumInlined)
-        assert(witness.additionalSigners == signers.map(ExpectedSigner.apply))
     }
 
     test("ThreeArgumentPlutusScriptWitness.reference with immediate redeemer") {
@@ -539,31 +503,25 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         assert(witness.scriptSource == PlutusScriptAttached)
         assert(witness.redeemerBuilder(Transaction.empty) == redeemer)
         assert(witness.datum == DatumInlined)
-        assert(witness.additionalSigners.isEmpty)
     }
 
-    test("ThreeArgumentPlutusScriptWitness.reference with immediate redeemer and signers") {
+    test("ThreeArgumentPlutusScriptWitness.reference with immediate redeemer and datum value") {
         val redeemer = Data.I(99)
-        val signers = Set(arbitrary[AddrKeyHash].sample.get)
         val witness = ThreeArgumentPlutusScriptWitness.reference(
           redeemer = redeemer,
-          datum = Datum.DatumValue(Data.I(200)),
-          signers = signers
+          datum = Datum.DatumValue(Data.I(200))
         )
 
         assert(witness.scriptSource == PlutusScriptAttached)
         assert(witness.redeemerBuilder(Transaction.empty) == redeemer)
         assert(witness.datum == Datum.DatumValue(Data.I(200)))
-        assert(witness.additionalSigners == signers.map(ExpectedSigner.apply))
     }
 
     test("ThreeArgumentPlutusScriptWitness.reference with delayed redeemer") {
-        val signers = Set(arbitrary[AddrKeyHash].sample.get)
         val redeemerBuilder: Transaction => Data = tx => Data.I(tx.body.value.outputs.size)
         val witness = ThreeArgumentPlutusScriptWitness.reference(
           redeemerBuilder = redeemerBuilder,
-          datum = DatumInlined,
-          signers = signers
+          datum = DatumInlined
         )
 
         assert(witness.scriptSource == PlutusScriptAttached)
@@ -573,7 +531,6 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         )(Transaction.empty)
         assert(witness.redeemerBuilder(txWithOutputs) == Data.I(3))
         assert(witness.datum == DatumInlined)
-        assert(witness.additionalSigners == signers.map(ExpectedSigner.apply))
     }
 
     test("ThreeArgumentPlutusScriptWitness factory methods work in Spend step") {
@@ -626,8 +583,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           amount = 1L,
           witness = TwoArgumentPlutusScriptWitness(
             PlutusScriptValue(script1),
-            redeemer = Data.List(PList.Nil),
-            additionalSigners = Set.empty
+            redeemer = Data.List(PList.Nil)
           )
         )
       ),
@@ -673,8 +629,6 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           )
     )
 
-    val mintSigners = Set(ExpectedSigner(Arbitrary.arbitrary[AddrKeyHash].sample.get))
-
     // Mint the given amount of tokens from script 1
     def mintScript1(amount: Long, redeemer: Data = Data.List(PList.Nil)): Mint =
         Mint(
@@ -683,8 +637,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           amount = amount,
           witness = TwoArgumentPlutusScriptWitness(
             scriptSource = PlutusScriptValue(script1),
-            redeemer = redeemer,
-            additionalSigners = mintSigners
+            redeemer = redeemer
           )
         )
 
@@ -705,10 +658,6 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                   .andThen(txWitnessSetL)
                   .refocus(_.plutusV1Scripts)
                   .modify(s => TaggedSortedStrictMap.from(s.toSet + script1))
-              |> (transactionL >>> txBodyL
-                  .refocus(_.requiredSigners))
-                  .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
-              |> expectedSignersL.replace(mintSigners)
     )
 
     testBuilderSteps(
@@ -722,10 +671,6 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                   .andThen(txWitnessSetL)
                   .refocus(_.plutusV1Scripts)
                   .modify(s => TaggedSortedStrictMap.from(s.toSet + script1))
-              |> (transactionL >>> txBodyL
-                  .refocus(_.requiredSigners))
-                  .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
-              |> expectedSignersL.replace(mintSigners)
     )
 
     testBuilderSteps(
@@ -737,10 +682,6 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           |> (transactionL >>> txWitnessSetL)
               .refocus(_.plutusV1Scripts)
               .modify(s => TaggedSortedStrictMap.from(s.toSet + script1))
-          |> (transactionL >>> txBodyL
-              .refocus(_.requiredSigners))
-              .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
-          |> expectedSignersL.replace(mintSigners)
           |> (transactionL >>> txWitnessSetL)
               .refocus(_.redeemers)
               .replace(
@@ -776,10 +717,6 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           |> (transactionL >>> txWitnessSetL)
               .refocus(_.plutusV1Scripts)
               .modify(s => TaggedSortedStrictMap.from(s.toSet + script1))
-          |> (transactionL >>> txBodyL
-              .refocus(_.requiredSigners))
-              .replace(TaggedSortedSet.from(mintSigners.map(_.hash)))
-          |> expectedSignersL.replace(mintSigners)
           |> (transactionL >>> txWitnessSetL)
               .refocus(_.redeemers)
               .replace(
@@ -814,8 +751,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             amount = 1,
             witness = TwoArgumentPlutusScriptWitness(
               PlutusScriptValue(script1),
-              redeemerBuilder = redeemerBuilder,
-              additionalSigners = Set.empty
+              redeemerBuilder = redeemerBuilder
             )
           ),
           Send(Output(pkhOutput.address, Value.ada(1)))
@@ -840,8 +776,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
             amount = 1,
             witness = TwoArgumentPlutusScriptWitness(
               PlutusScriptValue(script1),
-              redeemer = staticRedeemer, // Uses backwards compatible apply
-              additionalSigners = Set.empty
+              redeemer = staticRedeemer // Uses backwards compatible apply
             )
           )
         )
@@ -1234,8 +1169,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           cert = Certificate.UnregCert(Credential.ScriptHash(script1.scriptHash), coin = None),
           witness = TwoArgumentPlutusScriptWitness(
             PlutusScriptValue(script1),
-            Data.List(PList.Nil),
-            Set.empty
+            Data.List(PList.Nil)
           )
         )
       ),
@@ -1273,7 +1207,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     )
 
     val witness =
-        TwoArgumentPlutusScriptWitness(PlutusScriptValue(script1), Data.List(PList.Nil), Set.empty)
+        TwoArgumentPlutusScriptWitness(PlutusScriptValue(script1), Data.List(PList.Nil))
 
     testBuilderStepsFail(
       label = "Deregistering stake credential with unneeded witness fails",
@@ -1290,8 +1224,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           cert = UnregCert(Credential.ScriptHash(script2.scriptHash), coin = None),
           witness = TwoArgumentPlutusScriptWitness(
             PlutusScriptValue(script1),
-            Data.List(PList.Nil),
-            Set.empty
+            Data.List(PList.Nil)
           )
         )
         testBuilderStepsFail(

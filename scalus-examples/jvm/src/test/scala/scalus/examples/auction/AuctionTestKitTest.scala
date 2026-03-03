@@ -687,8 +687,8 @@ class AuctionTestKitTest extends AnyFunSuite {
             }
 
             var builder = TxBuilder(reader.cardanoInfo)
-                .spend(state.utxo1, redeemerBuilder1, state.script, Set.empty)
-                .spend(state.utxo2, redeemerBuilder2, state.script, Set.empty)
+                .spend(state.utxo1, redeemerBuilder1, state.script)
+                .spend(state.utxo2, redeemerBuilder2, state.script)
                 .validFrom(Instant.ofEpochMilli(state.datum1.auctionEndTime.toLong + 1000))
 
             // Pay sellers correctly (twice if same seller) and each winner gets their own NFT
@@ -791,8 +791,8 @@ class AuctionTestKitTest extends AnyFunSuite {
                         }
 
                         var attackBuilder = TxBuilder(reader.cardanoInfo)
-                            .spend(state.utxo1, attackRedeemerBuilder1, state.script, Set.empty)
-                            .spend(state.utxo2, attackRedeemerBuilder2, state.script, Set.empty)
+                            .spend(state.utxo1, attackRedeemerBuilder1, state.script)
+                            .spend(state.utxo2, attackRedeemerBuilder2, state.script)
                             .validFrom(
                               Instant.ofEpochMilli(state.datum1.auctionEndTime.toLong + 1000)
                             )
@@ -1256,7 +1256,7 @@ object AuctionTestKitTest {
                 }
                 Data.toData(Action.End(BigInt(inputIdx), BigInt(sellerIdx), BigInt(winnerIdx)))
             }
-            builder = builder.spend(utxo, redeemerBuilder, script, Set.empty)
+            builder = builder.spend(utxo, redeemerBuilder, script)
 
         // Winner outputs: each auction's NFT goes to its winner separately
         for (_, datum) <- utxosWithDatum do
@@ -1617,7 +1617,7 @@ object AuctionTestKitTest {
                                 )
                             }
                             val stealBuilder = TxBuilder(reader.cardanoInfo)
-                                .spend(state.utxo, redeemerBuilder, state.script, Set.empty)
+                                .spend(state.utxo, redeemerBuilder, state.script)
                                 .payTo(winnerAddr, Value.lovelace(2_000_000L) + nftValue)
                                 .validFrom(
                                   Instant.ofEpochMilli(state.datum.auctionEndTime.toLong + 1000)
@@ -1649,7 +1649,7 @@ object AuctionTestKitTest {
                                 )
                             }
                             val wrongAddrBuilder = TxBuilder(reader.cardanoInfo)
-                                .spend(state.utxo, redeemerBuilder, state.script, Set.empty)
+                                .spend(state.utxo, redeemerBuilder, state.script)
                                 .payTo(bidder2Address, Value.lovelace(2_000_000L) + nftValue)
                                 .payTo(sellerAddr, Value.lovelace(state.datum.highestBid.toLong))
                                 .validFrom(

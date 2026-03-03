@@ -429,20 +429,20 @@ object CrowdfundingEmulatorTest extends ScalusTest {
                 donorKeyHash = AddrKeyHash.fromByteString(donorPkh.hash)
 
                 // Build the malicious transaction
-                builderWithCampaign = TxBuilder(provider.cardanoInfo).spend(
-                  campaignUtxo,
-                  redeemerBuilder = maliciousRedeemer,
-                  crowdfundingContract.script,
-                  Set(donorKeyHash)
-                )
+                builderWithCampaign = TxBuilder(provider.cardanoInfo)
+                    .spend(
+                      campaignUtxo,
+                      redeemerBuilder = maliciousRedeemer,
+                      crowdfundingContract.script
+                    )
+                    .requireSignature(donorKeyHash)
 
                 builderWithDonations = donationUtxos.foldLeft(builderWithCampaign) {
                     (builder, utxo) =>
                         builder.spend(
                           utxo,
                           maliciousRedeemer,
-                          crowdfundingContract.script,
-                          Set.empty
+                          crowdfundingContract.script
                         )
                 }
 

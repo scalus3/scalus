@@ -65,7 +65,8 @@ case class VestingTransactions(
         val contractAmount = vestingUtxo.output.value.coin.value
 
         val b = withdrawBuilder
-            .spend(vestingUtxo, redeemer, contract, Set(beneficiaryPkh))
+            .spend(vestingUtxo, redeemer, contract)
+            .requireSignature(beneficiaryPkh)
             .payTo(beneficiaryAddress, Value.lovelace(amount))
             .validFrom(validFrom)
 

@@ -307,9 +307,9 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .spend(
               proxyUtxo,
               ProxyRedeemer.Upgrade(mustMintHash),
-              txCreator.script,
-              Set(Bob.addrKeyHash)
+              txCreator.script
             )
+            .requireSignature(Bob.addrKeyHash)
             .payTo(txCreator.scriptAddress, proxyUtxo.output.value, newDatum)
             .complete(availableUtxos = utxos, sponsor = Bob.address)
             .sign(Bob.signer)
@@ -329,9 +329,9 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .spend(
               proxyUtxo,
               ProxyRedeemer.Upgrade(mustMintHash),
-              txCreator.script,
-              Set(Alice.addrKeyHash)
+              txCreator.script
             )
+            .requireSignature(Alice.addrKeyHash)
             .payTo(txCreator.scriptAddress, proxyUtxo.output.value, oldDatum)
             .complete(availableUtxos = utxos, sponsor = Alice.address)
             .sign(Alice.signer)
@@ -351,9 +351,9 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .spend(
               proxyUtxo,
               ProxyRedeemer.Upgrade(mustMintHash),
-              txCreator.script,
-              Set(Alice.addrKeyHash)
+              txCreator.script
             )
+            .requireSignature(Alice.addrKeyHash)
             .payTo(txCreator.scriptAddress, Value.ada(5), newDatum)
             .complete(availableUtxos = utxos, sponsor = Alice.address)
             .sign(Alice.signer)

@@ -182,7 +182,7 @@ case class EditableNftTransactions(
         }
 
         TxBuilder(env, evaluator)
-            .spend(refNftUtxo, buildBurnSpendRedeemer, parameterizedScript, Set.empty)
+            .spend(refNftUtxo, buildBurnSpendRedeemer, parameterizedScript)
             .spend(userNftUtxo)
             .mint(
               parameterizedScript,

@@ -103,7 +103,8 @@ case class EscrowTransactions(
         // Note: The buyer output is created as change by the TxBuilder when sponsor == buyerAddress.
         // If sponsor != buyerAddress, an explicit buyer output would need to be added.
         builder
-            .spend(escrowUtxo, Action.Deposit, contract, Set(buyer))
+            .spend(escrowUtxo, Action.Deposit, contract)
+            .requireSignature(buyer)
             .payTo(
               scriptAddress,
               Value.lovelace(totalAmount),
@@ -154,7 +155,8 @@ case class EscrowTransactions(
 
         // Note: The buyer output is created as change by the TxBuilder when sponsor == buyerAddress.
         builder
-            .spend(escrowUtxo, Action.Pay, contract, Set(buyer))
+            .spend(escrowUtxo, Action.Pay, contract)
+            .requireSignature(buyer)
             .payTo(sellerAddress, Value.lovelace(paymentAmount))
             .complete(availableUtxos = utxos, sponsor)
             .sign(signer)
@@ -199,7 +201,8 @@ case class EscrowTransactions(
         val escrowDatum = datum.to[Config]
 
         builder
-            .spend(escrowUtxo, Action.Refund, contract, Set(seller))
+            .spend(escrowUtxo, Action.Refund, contract)
+            .requireSignature(seller)
             .payTo(buyerAddress, Value.lovelace(escrowDatum.escrowAmount.toLong))
             .payTo(sellerAddress, Value.lovelace(escrowDatum.initializationAmount.toLong))
             .complete(availableUtxos = utxos, sponsor)

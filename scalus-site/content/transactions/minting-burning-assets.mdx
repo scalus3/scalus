@@ -110,13 +110,12 @@ This avoids including the script in the transaction, reducing transaction size.
 If your minting policy requires specific signatures:
 
 ```scala copy
-val requiredSigners = Set(pubKeyHash)
-
 val assets = Map(assetName -> 1000L)
 
 TxBuilder(env)
   .spend(utxo)
-  .mint(mintingPolicy, assets, redeemer, requiredSigners)
+  .mint(mintingPolicy, assets, redeemer)
+  .requireSignature(pubKeyHash)
   .payTo(recipient, Value.asset(mintingPolicy.scriptHash, assetName, 1000L, Coin.ada(2)))
   .build(changeTo = changeAddress)
   .sign(signer)  // Must provide required signature

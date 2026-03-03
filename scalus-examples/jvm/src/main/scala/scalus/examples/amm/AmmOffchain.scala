@@ -93,7 +93,7 @@ case class AmmOffchain(
         val mintRedeemer = ().toData
 
         TxBuilder(env, evaluator)
-            .spend(poolUtxo, _ => spendRedeemer, script, Set.empty)
+            .spend(poolUtxo, _ => spendRedeemer, script)
             .mint(script, Map(lpAssetName -> lpMinted), _ => mintRedeemer)
             .payTo(scriptAddress, newValue, newDatum)
             .complete(utxos, sponsor)
@@ -122,7 +122,7 @@ case class AmmOffchain(
         val mintRedeemer = ().toData
 
         TxBuilder(env, evaluator)
-            .spend(poolUtxo, _ => spendRedeemer, script, Set.empty)
+            .spend(poolUtxo, _ => spendRedeemer, script)
             .mint(script, Map(lpAssetName -> -lp), _ => mintRedeemer)
             .payTo(scriptAddress, newValue, newDatum)
             .complete(utxos, sponsor)
@@ -156,7 +156,7 @@ case class AmmOffchain(
             AmmRedeemer.Swap(t0In, BigInt(amountIn), BigInt(minAmountOut)).toData
 
         TxBuilder(env, evaluator)
-            .spend(poolUtxo, _ => spendRedeemer, script, Set.empty)
+            .spend(poolUtxo, _ => spendRedeemer, script)
             .payTo(scriptAddress, newValue, newDatum)
             .complete(utxos, sponsor)
             .sign(signer)

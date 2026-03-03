@@ -65,11 +65,9 @@ case object PubKeyWitness extends SpendWitness {
     def witnessKind: WitnessKind = WitnessKind.KeyBased
 }
 
-/** Witnesses for native scripts. Can appear several times, but with the same [[additionalSigners]].
-  */
+/** Witnesses for native scripts. */
 case class NativeScriptWitness(
-    scriptSource: ScriptSource[Script.Native],
-    additionalSigners: Set[ExpectedSigner]
+    scriptSource: ScriptSource[Script.Native]
 ) extends SpendWitness {
     def witnessKind: WitnessKind = WitnessKind.ScriptBased
 }
@@ -82,39 +80,24 @@ object NativeScriptWitness {
       *
       * @param script
       *   the native script to attach
-      * @param signers
-      *   additional signers required by the script
       */
     def attached(
-        script: Script.Native,
-        signers: Set[AddrKeyHash] = Set.empty
+        script: Script.Native
     ): NativeScriptWitness =
-        NativeScriptWitness(
-          ScriptSource.NativeScriptValue(script),
-          signers.map(ExpectedSigner.apply)
-        )
+        NativeScriptWitness(ScriptSource.NativeScriptValue(script))
 
     /** Creates a witness for a reference native script.
       *
       * The script must be provided via a reference input (using `references` method).
-      *
-      * @param signers
-      *   additional signers required by the script
       */
-    def reference(
-        signers: Set[AddrKeyHash] = Set.empty
-    ): NativeScriptWitness =
-        NativeScriptWitness(
-          ScriptSource.NativeScriptAttached,
-          signers.map(ExpectedSigner.apply)
-        )
+    def reference(): NativeScriptWitness =
+        NativeScriptWitness(ScriptSource.NativeScriptAttached)
 }
 
 // For operations that only take a redeemer and script context
 case class TwoArgumentPlutusScriptWitness(
     scriptSource: ScriptSource[PlutusScript],
-    redeemerBuilder: Transaction => Data,
-    additionalSigners: Set[ExpectedSigner]
+    redeemerBuilder: Transaction => Data
 ) extends Witness {
     def witnessKind: WitnessKind = WitnessKind.ScriptBased
 }
@@ -122,10 +105,9 @@ case class TwoArgumentPlutusScriptWitness(
 object TwoArgumentPlutusScriptWitness {
     def apply(
         scriptSource: ScriptSource[PlutusScript],
-        redeemer: Data,
-        additionalSigners: Set[ExpectedSigner]
+        redeemer: Data
     ): TwoArgumentPlutusScriptWitness =
-        apply(scriptSource, _ => redeemer, additionalSigners)
+        apply(scriptSource, _ => redeemer)
 
     /** Creates a witness for an attached Plutus script with immediate redeemer.
       *
@@ -135,18 +117,14 @@ object TwoArgumentPlutusScriptWitness {
       *   the Plutus script to attach
       * @param redeemer
       *   the redeemer data
-      * @param signers
-      *   additional signers required by the script
       */
     def attached[T: ToData](
         script: PlutusScript,
-        redeemer: T,
-        signers: Set[AddrKeyHash] = Set.empty
+        redeemer: T
     ): TwoArgumentPlutusScriptWitness =
         TwoArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptValue(script),
-          redeemer.toData,
-          signers.map(ExpectedSigner.apply)
+          redeemer.toData
         )
 
     /** Creates a witness for an attached Plutus script with delayed redeemer.
@@ -158,18 +136,14 @@ object TwoArgumentPlutusScriptWitness {
       *   the Plutus script to attach
       * @param redeemerBuilder
       *   function to compute redeemer from the built transaction
-      * @param signers
-      *   additional signers required by the script
       */
     def attached(
         script: PlutusScript,
-        redeemerBuilder: Transaction => Data,
-        signers: Set[AddrKeyHash]
+        redeemerBuilder: Transaction => Data
     ): TwoArgumentPlutusScriptWitness =
         TwoArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptValue(script),
-          redeemerBuilder,
-          signers.map(ExpectedSigner.apply)
+          redeemerBuilder
         )
 
     /** Creates a witness for a reference Plutus script with immediate redeemer.
@@ -178,17 +152,13 @@ object TwoArgumentPlutusScriptWitness {
       *
       * @param redeemer
       *   the redeemer data
-      * @param signers
-      *   additional signers required by the script
       */
     def reference[T: ToData](
-        redeemer: T,
-        signers: Set[AddrKeyHash] = Set.empty
+        redeemer: T
     ): TwoArgumentPlutusScriptWitness =
         TwoArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptAttached,
-          redeemer.toData,
-          signers.map(ExpectedSigner.apply)
+          redeemer.toData
         )
 
     /** Creates a witness for a reference Plutus script with delayed redeemer.
@@ -198,17 +168,13 @@ object TwoArgumentPlutusScriptWitness {
       *
       * @param redeemerBuilder
       *   function to compute redeemer from the built transaction
-      * @param signers
-      *   additional signers required by the script
       */
     def reference(
-        redeemerBuilder: Transaction => Data,
-        signers: Set[AddrKeyHash]
+        redeemerBuilder: Transaction => Data
     ): TwoArgumentPlutusScriptWitness =
         TwoArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptAttached,
-          redeemerBuilder,
-          signers.map(ExpectedSigner.apply)
+          redeemerBuilder
         )
 }
 
@@ -216,8 +182,7 @@ object TwoArgumentPlutusScriptWitness {
 case class ThreeArgumentPlutusScriptWitness(
     scriptSource: ScriptSource[PlutusScript],
     redeemerBuilder: Transaction => Data,
-    datum: Datum,
-    additionalSigners: Set[ExpectedSigner]
+    datum: Datum
 ) extends SpendWitness {
     def witnessKind: WitnessKind = WitnessKind.ScriptBased
 }
@@ -226,10 +191,9 @@ object ThreeArgumentPlutusScriptWitness {
     def apply(
         scriptSource: ScriptSource[PlutusScript],
         redeemer: Data,
-        datum: Datum,
-        additionalSigners: Set[ExpectedSigner]
+        datum: Datum
     ): ThreeArgumentPlutusScriptWitness =
-        apply(scriptSource, tx => redeemer, datum, additionalSigners)
+        apply(scriptSource, tx => redeemer, datum)
 
     /** Creates a witness for an attached Plutus script with immediate redeemer.
       *
@@ -241,20 +205,16 @@ object ThreeArgumentPlutusScriptWitness {
       *   the redeemer data
       * @param datum
       *   the datum specification (inline or value)
-      * @param signers
-      *   additional signers required by the script
       */
     def attached[T: ToData](
         script: PlutusScript,
         redeemer: T,
-        datum: Datum,
-        signers: Set[AddrKeyHash] = Set.empty
+        datum: Datum
     ): ThreeArgumentPlutusScriptWitness =
         ThreeArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptValue(script),
           redeemer.toData,
-          datum,
-          signers.map(ExpectedSigner.apply)
+          datum
         )
 
     /** Creates a witness for an attached Plutus script with delayed redeemer.
@@ -268,20 +228,16 @@ object ThreeArgumentPlutusScriptWitness {
       *   function to compute redeemer from the built transaction
       * @param datum
       *   the datum specification (inline or value)
-      * @param signers
-      *   additional signers required by the script
       */
     def attached(
         script: PlutusScript,
         redeemerBuilder: Transaction => Data,
-        datum: Datum,
-        signers: Set[AddrKeyHash]
+        datum: Datum
     ): ThreeArgumentPlutusScriptWitness =
         ThreeArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptValue(script),
           redeemerBuilder,
-          datum,
-          signers.map(ExpectedSigner.apply)
+          datum
         )
 
     /** Creates a witness for a reference Plutus script with immediate redeemer.
@@ -292,19 +248,15 @@ object ThreeArgumentPlutusScriptWitness {
       *   the redeemer data
       * @param datum
       *   the datum specification (inline or value)
-      * @param signers
-      *   additional signers required by the script
       */
     def reference[T: ToData](
         redeemer: T,
-        datum: Datum,
-        signers: Set[AddrKeyHash] = Set.empty
+        datum: Datum
     ): ThreeArgumentPlutusScriptWitness =
         ThreeArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptAttached,
           redeemer.toData,
-          datum,
-          signers.map(ExpectedSigner.apply)
+          datum
         )
 
     /** Creates a witness for a reference Plutus script with delayed redeemer.
@@ -316,19 +268,15 @@ object ThreeArgumentPlutusScriptWitness {
       *   function to compute redeemer from the built transaction
       * @param datum
       *   the datum specification (inline or value)
-      * @param signers
-      *   additional signers required by the script
       */
     def reference(
         redeemerBuilder: Transaction => Data,
-        datum: Datum,
-        signers: Set[AddrKeyHash]
+        datum: Datum
     ): ThreeArgumentPlutusScriptWitness =
         ThreeArgumentPlutusScriptWitness(
           ScriptSource.PlutusScriptAttached,
           redeemerBuilder,
-          datum,
-          signers.map(ExpectedSigner.apply)
+          datum
         )
 }
 
@@ -390,13 +338,11 @@ object Datum {
 // ExpectedSigner
 // -----------------------------------------------------------------------------
 
-/** An [[scalus.cardano.ledger.AddrKeyHash]] that is expected to sign some
-  * [[scalus.cardano.ledger.Transaction]].
+/** Tracks a pubkey hash expected to sign the transaction, used for fee estimation.
   *
-  * The purpose for signing is not presently tracked. For a sketch, see commit
-  * https://github.com/cardano-hydrozoa/hydrozoa/commit/1a8c9c73fbfb33e79456a0a8b9f08688ef39b749
+  * To add on-chain required signers, use [[TransactionBuilderStep.RequireSignature]] instead.
   */
-case class ExpectedSigner(hash: AddrKeyHash)
+private[txbuilder] case class ExpectedSigner(hash: AddrKeyHash)
 
 // -----------------------------------------------------------------------------
 // Transaction Builder
@@ -541,12 +487,6 @@ object TransactionBuilder {
           this.expectedSigners,
           this.resolvedUtxos
         )
-
-        /** Add additional signers to the Context.
-          */
-        def addSigners(additionalSigners: Set[ExpectedSigner]): Context = {
-            this |> Focus[Context](_.expectedSigners).modify(_ ++ additionalSigners)
-        }
 
         def replaceRedeemers(newRedeemers: Seq[DetachedRedeemer]): Context = {
             this |> Focus[Context](_.redeemers).replace(newRedeemers)

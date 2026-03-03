@@ -82,8 +82,8 @@ class MultiScriptFeeEstimationTest extends AnyFunSuite {
         }
 
         val signedTx = TxBuilder(env)
-            .spend(scriptUtxo1, redeemer1, alwaysOkScript, Set.empty)
-            .spend(scriptUtxo2, redeemer2, alwaysOkScript, Set.empty)
+            .spend(scriptUtxo1, redeemer1, alwaysOkScript)
+            .spend(scriptUtxo2, redeemer2, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
             .payTo(Charles.address, Value.ada(5))
             .validFrom(Instant.ofEpochSecond(1000))
@@ -138,8 +138,8 @@ class MultiScriptFeeEstimationTest extends AnyFunSuite {
         }
 
         val completed = TxBuilder(env)
-            .spend(scriptUtxo1, redeemer1, alwaysOkScript, Set.empty)
-            .spend(scriptUtxo2, redeemer2, alwaysOkScript, Set.empty)
+            .spend(scriptUtxo1, redeemer1, alwaysOkScript)
+            .spend(scriptUtxo2, redeemer2, alwaysOkScript)
             .payTo(Bob.address, Value.ada(5))
             .payTo(Charles.address, Value.ada(5))
             .validFrom(Instant.ofEpochSecond(1000))

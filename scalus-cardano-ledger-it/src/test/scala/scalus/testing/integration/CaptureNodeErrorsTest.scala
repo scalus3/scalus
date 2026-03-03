@@ -94,7 +94,7 @@ class CaptureNodeErrorsTest extends AnyFunSuite with YaciDevKit {
         val bobUtxos = ctx.provider.findUtxos(ctx.bob.address).await().toOption.get
         val tx = TxBuilder
             .withConstMaxBudgetEvaluator(env)
-            .spend(lockedUtxo, Data.unit, script, Set(ctx.bob.addrKeyHash))
+            .spend(lockedUtxo, Data.unit, script).requireSignature(ctx.bob.addrKeyHash)
             .payTo(ctx.bob.address, lockedUtxo.output.value)
             .complete(availableUtxos = bobUtxos, sponsor = ctx.bob.address)
             .sign(ctx.bob.signer)
@@ -149,7 +149,7 @@ class CaptureNodeErrorsTest extends AnyFunSuite with YaciDevKit {
         val bobUtxos = ctx.provider.findUtxos(ctx.bob.address).await().toOption.get
         val tx = TxBuilder
             .withConstMaxBudgetEvaluator(env)
-            .spend(lockedUtxo, Data.unit, loggingScript, Set(ctx.bob.addrKeyHash))
+            .spend(lockedUtxo, Data.unit, loggingScript).requireSignature(ctx.bob.addrKeyHash)
             .payTo(ctx.bob.address, lockedUtxo.output.value)
             .complete(availableUtxos = bobUtxos, sponsor = ctx.bob.address)
             .sign(ctx.bob.signer)

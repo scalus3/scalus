@@ -184,7 +184,7 @@ case class LinkedListOffchain(
             ListAction.Deinit(BigInt(inputIndex(tx, rootUtxo))).toData
 
         TxBuilder(env, evaluator)
-            .spend(rootUtxo, buildRedeemer, script, Set.empty)
+            .spend(rootUtxo, buildRedeemer, script)
             .mint(script, Map(rootAssetName -> -1L), buildRedeemer)
             .complete(availableUtxos = utxos, sponsor)
             .sign(signer)
@@ -217,7 +217,7 @@ case class LinkedListOffchain(
                 .toData
 
         TxBuilder(env, evaluator)
-            .spend(anchorUtxo, buildRedeemer, script, Set.empty)
+            .spend(anchorUtxo, buildRedeemer, script)
             .mint(script, Map(newAssetName -> 1L), buildRedeemer)
             .payTo(scriptAddress, anchorUtxo.output.value, contAnchorDatum)
             .payTo(scriptAddress, Value.asset(policyId, newAssetName, 1), newElemDatum)
@@ -252,7 +252,7 @@ case class LinkedListOffchain(
                 .toData
 
         TxBuilder(env, evaluator)
-            .spend(anchorUtxo, buildRedeemer, script, Set.empty)
+            .spend(anchorUtxo, buildRedeemer, script)
             .mint(script, Map(newAssetName -> 1L), buildRedeemer)
             .payTo(scriptAddress, anchorUtxo.output.value, contAnchorDatum)
             .payTo(scriptAddress, Value.asset(policyId, newAssetName, 1), newElemDatum)
@@ -286,7 +286,7 @@ case class LinkedListOffchain(
                 .toData
 
         TxBuilder(env, evaluator)
-            .spend(rootUtxo, buildRedeemer, script, Set.empty)
+            .spend(rootUtxo, buildRedeemer, script)
             .mint(script, Map(newAssetName -> 1L), buildRedeemer)
             .payTo(scriptAddress, rootUtxo.output.value, contRootDatum)
             .payTo(scriptAddress, Value.asset(policyId, newAssetName, 1), newElemDatum)
@@ -324,8 +324,8 @@ case class LinkedListOffchain(
                 .toData
 
         TxBuilder(env, evaluator)
-            .spend(rootUtxo, buildRedeemer, script, Set.empty)
-            .spend(headUtxo, _ => ListAction.Spend.toData, script, Set.empty)
+            .spend(rootUtxo, buildRedeemer, script)
+            .spend(headUtxo, _ => ListAction.Spend.toData, script)
             .mint(script, Map(headAssetName -> -1L), buildRedeemer)
             .payTo(scriptAddress, rootUtxo.output.value, contRootDatum)
             .complete(availableUtxos = utxos, sponsor)
@@ -358,8 +358,8 @@ case class LinkedListOffchain(
                 .toData
 
         TxBuilder(env, evaluator)
-            .spend(anchorUtxo, buildRedeemer, script, Set.empty)
-            .spend(nodeUtxo, _ => ListAction.Spend.toData, script, Set.empty)
+            .spend(anchorUtxo, buildRedeemer, script)
+            .spend(nodeUtxo, _ => ListAction.Spend.toData, script)
             .mint(script, Map(nodeAssetName -> -1L), buildRedeemer)
             .payTo(scriptAddress, anchorUtxo.output.value, contAnchorDatum)
             .complete(availableUtxos = utxos, sponsor)

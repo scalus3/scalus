@@ -74,7 +74,8 @@ case class ProxyTransactions(
         val oldDatum = proxyUtxo.output.requireInlineDatum.to[ProxyDatum]
         val newDatum = oldDatum.copy(logicHash = newLogicHash)
         TxBuilder(env, evaluator)
-            .spend(proxyUtxo, ProxyRedeemer.Upgrade(newLogicHash), script, Set(ownerPkh))
+            .spend(proxyUtxo, ProxyRedeemer.Upgrade(newLogicHash), script)
+            .requireSignature(ownerPkh)
             .payTo(scriptAddress, proxyUtxo.output.value, newDatum)
             .complete(availableUtxos = utxos, sponsor = sponsor)
             .sign(signer)

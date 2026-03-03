@@ -319,7 +319,7 @@ object CrowdfundingScalaCheckCommandTest {
         }
 
         TxBuilder(reader.cardanoInfo)
-            .spend(campaignUtxo, donateRedeemer, crowdfundingScript, Set.empty)
+            .spend(campaignUtxo, donateRedeemer, crowdfundingScript)
             .mint(donationScript, Map(donationAsset -> 1L), donateRedeemer)
             .payTo(scriptAddress, newCampaignValue, newDatum)
             .payTo(scriptAddress, donationUtxoValue, donationDatum)
@@ -380,11 +380,11 @@ object CrowdfundingScalaCheckCommandTest {
                   .spend(
                     campaignUtxo,
                     withdrawRedeemer,
-                    crowdfundingScript,
-                    Set(recipientKeyHash)
+                    crowdfundingScript
                   )
+                  .requireSignature(recipientKeyHash)
             ) { (b, utxo) =>
-                b.spend(utxo, withdrawRedeemer, crowdfundingScript, Set.empty)
+                b.spend(utxo, withdrawRedeemer, crowdfundingScript)
             }
             .mint(donationScript, burnMap, withdrawRedeemer)
             .payTo(recipientAddress, Value.lovelace(totalWithdrawAmount.toLong))
@@ -471,9 +471,10 @@ object CrowdfundingScalaCheckCommandTest {
           donationUtxos
               .foldLeft(
                 TxBuilder(reader.cardanoInfo)
-                    .spend(campaignUtxo, reclaimRedeemer, crowdfundingScript, donorKeyHashes)
+                    .spend(campaignUtxo, reclaimRedeemer, crowdfundingScript)
+                    .requireSignatures(donorKeyHashes)
               ) { (b, utxo) =>
-                  b.spend(utxo, reclaimRedeemer, crowdfundingScript, Set.empty)
+                  b.spend(utxo, reclaimRedeemer, crowdfundingScript)
               }
               .mint(donationScript, burnMap, reclaimRedeemer)
         ) { case (b, (donorAddr, _, _, utxoLovelace, _)) =>
@@ -561,7 +562,8 @@ object CrowdfundingScalaCheckCommandTest {
         val tx = Await.result(
           TxBuilder(emulator.cardanoInfo)
               .spend(seedUtxo)
-              .mint(crowdfundingScript, Map(nftAsset -> 1L), redeemer, Set(recipientKeyHash))
+              .mint(crowdfundingScript, Map(nftAsset -> 1L), redeemer)
+              .requireSignature(recipientKeyHash)
               .payTo(scriptAddress, Value(Coin(2_000_000L)) + mintedValue, datum)
               .validTo(Instant.ofEpochMilli(deadline - 1000))
               .complete(emulator, recipientP.address)

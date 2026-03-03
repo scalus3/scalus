@@ -66,7 +66,8 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
 
         // Alice must be a required signer so her pkh appears in tx.signatories
         val tx = TxBuilder(summon[CardanoInfo])
-            .spend(Utxo(scriptUtxoEntry), redeemer, script, Set(alicePkh))
+            .spend(Utxo(scriptUtxoEntry), redeemer, script)
+            .requireSignature(alicePkh)
             .spend(Utxo(feePayerUtxo))
             .payTo(Party.Bob.address, Value.lovelace(10_000_000L))
             .changeTo(TransactionOutput(Party.Alice.address, Value.lovelace(0L)))
@@ -116,7 +117,8 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
 
         assertThrows[scalus.cardano.txbuilder.TxBuilderException.BalancingException] {
             TxBuilder(summon[CardanoInfo])
-                .spend(Utxo(scriptUtxoEntry), redeemer, script, Set(davePkh))
+                .spend(Utxo(scriptUtxoEntry), redeemer, script)
+                .requireSignature(davePkh)
                 .spend(Utxo(feePayerUtxo))
                 .payTo(Party.Alice.address, Value.lovelace(10_000_000L))
                 .changeTo(TransactionOutput(Party.Dave.address, Value.lovelace(0L)))

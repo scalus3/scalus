@@ -31,8 +31,8 @@ object TransactionBuilderStep {
       *   if amount is zero
       *
       * WARNING: If you do a reciprocal pair of mint/burn of the same amount (i.e., Mint 4, Mint
-      * -4), you will nullify the mint amount, but the additionalSigners/requiredSigners/witnesses
-      * will not be removed.
+      * -4), you will nullify the mint amount, but the requiredSigners/witnesses will not be
+      * removed.
       */
     case class Mint(
         scriptHash: ScriptHash,
@@ -114,4 +114,7 @@ object TransactionBuilderStep {
         witness: PubKeyWitness.type | NativeScriptWitness | TwoArgumentPlutusScriptWitness =
             PubKeyWitness
     ) extends TransactionBuilderStep
+
+    /** Requires a public key hash to sign the transaction. */
+    case class RequireSignature(signer: AddrKeyHash) extends TransactionBuilderStep
 }

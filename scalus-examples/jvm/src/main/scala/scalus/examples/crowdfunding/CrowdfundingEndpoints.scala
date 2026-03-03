@@ -256,7 +256,7 @@ class CrowdfundingEndpoints(
             }
 
             tx <- TxBuilder(env)
-                .spend(campaignUtxo, donateRedeemer, crowdfundingContract, Set.empty)
+                .spend(campaignUtxo, donateRedeemer, crowdfundingContract)
                 .mint(donationScript, Map(donationAsset -> 1L), donateRedeemer)
                 .payTo(scriptAddress, newCampaignValue, newDatum) // Updated campaign UTxO
                 // Unified donation UTxO: ADA + donation token + DonationDatum (at script address)
@@ -377,16 +377,17 @@ class CrowdfundingEndpoints(
             }
 
             // Build transaction: spend campaign UTxO
-            builderWithCampaign = TxBuilder(env).spend(
-              campaignUtxo,
-              redeemerBuilder = withdrawRedeemer,
-              crowdfundingContract,
-              Set(recipientAddrKeyHash)
-            )
+            builderWithCampaign = TxBuilder(env)
+                .spend(
+                  campaignUtxo,
+                  redeemerBuilder = withdrawRedeemer,
+                  crowdfundingContract
+                )
+                .requireSignature(recipientAddrKeyHash)
 
             // Spend donation UTxOs (at script address - no donor signatures needed)
             builderWithDonations = donationUtxos.foldLeft(builderWithCampaign) { (builder, utxo) =>
-                builder.spend(utxo, withdrawRedeemer, crowdfundingContract, Set.empty)
+                builder.spend(utxo, withdrawRedeemer, crowdfundingContract)
             }
 
             // Burn donation tokens
@@ -536,16 +537,17 @@ class CrowdfundingEndpoints(
             }
 
             // Build transaction: spend campaign UTxO
-            builderWithCampaign = TxBuilder(env).spend(
-              campaignUtxo,
-              redeemerBuilder = reclaimRedeemer,
-              crowdfundingContract,
-              donorKeyHashes // Include donor key hashes for fee estimation
-            )
+            builderWithCampaign = TxBuilder(env)
+                .spend(
+                  campaignUtxo,
+                  redeemerBuilder = reclaimRedeemer,
+                  crowdfundingContract
+                )
+                .requireSignatures(donorKeyHashes)
 
             // Spend donation UTxOs (at script address)
             builderWithDonations = donationUtxos.foldLeft(builderWithCampaign) { (builder, utxo) =>
-                builder.spend(utxo, reclaimRedeemer, crowdfundingContract, Set.empty)
+                builder.spend(utxo, reclaimRedeemer, crowdfundingContract)
             }
 
             // Burn donation tokens

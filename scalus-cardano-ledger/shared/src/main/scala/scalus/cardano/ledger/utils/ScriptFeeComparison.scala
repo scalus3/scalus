@@ -3,7 +3,8 @@ package scalus.cardano.ledger.utils
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.*
+import scalus.cardano.ledger.AddrKeyHash
+import scalus.cardano.txbuilder.TxBuilder
 import scalus.compiler.sir.TargetLoweringBackend.{ScottEncodingLowering, SirToUplcV3Lowering, SumOfProductsLowering}
 import scalus.compiler.{compileInlineWithOptions, Options}
 import scalus.toUplc
@@ -49,7 +50,7 @@ object ScriptFeeComparison {
         redeemer: Data,
         datum: Option[DatumOption],
         env: CardanoInfo,
-        additionalSigners: Set[ExpectedSigner] = Set.empty,
+        requiredSigners: Set[AddrKeyHash] = Set.empty,
         scriptValue: Value = Value.ada(10)
     ): Either[String, FeeComparison] = {
 
@@ -99,11 +100,11 @@ object ScriptFeeComparison {
         val collateralUtxo = Utxo(collateralUtxoInput, collateralUtxoOutput)
 
         def createDirect = {
-            val additionalSignerHashes = additionalSigners.map(_.hash)
             TxBuilder(env)
                 .spend(fundingUtxo)
                 .collaterals(collateralUtxo)
-                .spend(scriptUtxo, redeemer, script, additionalSignerHashes)
+                .spend(scriptUtxo, redeemer, script)
+                .requireSignatures(requiredSigners)
                 .payTo(arbAddress(env), scriptValue)
                 .build(changeTo = arbAddress(env))
                 .transaction
@@ -122,12 +123,12 @@ object ScriptFeeComparison {
             )
             val refScriptUtxo = Utxo(refScriptUtxoInput, refScriptUtxoOutput)
 
-            val additionalSignerHashes = additionalSigners.map(_.hash)
             TxBuilder(env)
                 .spend(fundingUtxo)
                 .collaterals(collateralUtxo)
                 .references(refScriptUtxo)
-                .spend(scriptUtxo, redeemer, additionalSignerHashes)
+                .spend[Data](scriptUtxo, redeemer)
+                .requireSignatures(requiredSigners)
                 .payTo(arbAddress(env), scriptValue)
                 .build(changeTo = arbAddress(env))
                 .transaction
@@ -147,12 +148,12 @@ object ScriptFeeComparison {
         redeemer: Data,
         datum: Option[DatumOption],
         env: CardanoInfo,
-        additionalSigners: Set[ExpectedSigner] = Set.empty,
+        requiredSigners: Set[AddrKeyHash] = Set.empty,
         scriptValue: Value = Value.ada(10)
     ): Map[Options, ComparisonResult] = enumerateOptions
         .groupMap(identity) { options =>
             val plutusV3 = makePlutusV3(options, code)
-            compareFees(plutusV3, redeemer, datum, env, additionalSigners, scriptValue) match {
+            compareFees(plutusV3, redeemer, datum, env, requiredSigners, scriptValue) match {
                 case Right(comparison)  => ComparisonResult.Ok(comparison, options)
                 case Left(errorMessage) => ComparisonResult.Fail(errorMessage, options)
             }

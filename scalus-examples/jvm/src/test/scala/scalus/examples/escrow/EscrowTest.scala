@@ -231,7 +231,8 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         // Try to pay seller less than required amount
         assertScriptFail("Seller must receive exactly escrow amount plus initialization amount") {
             builder
-                .spend(fundedUtxo, Action.Pay, contract.script, Set(Bob.addrKeyHash))
+                .spend(fundedUtxo, Action.Pay, contract.script)
+                .requireSignature(Bob.addrKeyHash)
                 .payTo(
                   Alice.address,
                   Value.ada(5)
@@ -313,7 +314,8 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         // Try to refund buyer less than required amount
         assertScriptFail("Buyer must receive exactly the escrow amount back") {
             builder
-                .spend(fundedUtxo, Action.Refund, contract.script, Set(Alice.addrKeyHash))
+                .spend(fundedUtxo, Action.Refund, contract.script)
+                .requireSignature(Alice.addrKeyHash)
                 .payTo(Bob.address, Value.ada(5)) // Wrong: should be escrowAmount (10 ADA)
                 .payTo(Alice.address, Value.ada(1))
                 .complete(availableUtxos = utxos, sponsor = Alice.address)

@@ -49,7 +49,8 @@ case class HtlcTransactions(
         val redeemer = Action.Reveal(preimage)
 
         builder
-            .spend(lockedUtxo, redeemer, contract, Set(receiverPkh))
+            .spend(lockedUtxo, redeemer, contract)
+            .requireSignature(receiverPkh)
             .payTo(payeeAddress, lockedUtxo.output.value)
             .validTo(validTo)
             .complete(availableUtxos = utxos, sponsor)
@@ -69,7 +70,8 @@ case class HtlcTransactions(
         val redeemer = Action.Timeout
 
         builder
-            .spend(lockedUtxo, redeemer, contract, Set(committerPkh))
+            .spend(lockedUtxo, redeemer, contract)
+            .requireSignature(committerPkh)
             .payTo(payeeAddress, lockedUtxo.output.value)
             .validFrom(validFrom)
             .complete(availableUtxos = utxos, sponsor)

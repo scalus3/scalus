@@ -317,7 +317,8 @@ object LotteryScalaCheckCommandTest {
         val redeemer = Action.RevealPlayerOne(info.preimage1)
 
         TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(p1Pkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(p1Pkh)
             .payTo(scriptAddress, utxo.output.value, newState)
             .validTo(Instant.ofEpochMilli(info.revealDeadline))
             .complete(reader, info.player1.address)
@@ -343,7 +344,8 @@ object LotteryScalaCheckCommandTest {
         val redeemer = Action.RevealPlayerTwo(info.preimage2)
 
         TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(p2Pkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(p2Pkh)
             .payTo(scriptAddress, utxo.output.value, newState)
             .validTo(Instant.ofEpochMilli(info.revealDeadline))
             .complete(reader, info.player2.address)
@@ -359,7 +361,8 @@ object LotteryScalaCheckCommandTest {
         val redeemer = Action.RevealPlayerOne(info.preimage1)
 
         TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(p1Pkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(p1Pkh)
             .payTo(info.player1.address, utxo.output.value)
             .validTo(Instant.ofEpochMilli(info.revealDeadline))
             .complete(reader, info.player1.address)
@@ -375,7 +378,8 @@ object LotteryScalaCheckCommandTest {
         val redeemer = Action.RevealPlayerTwo(info.preimage2)
 
         TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(p2Pkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(p2Pkh)
             .payTo(info.player2.address, utxo.output.value)
             .validTo(Instant.ofEpochMilli(info.revealDeadline))
             .complete(reader, info.player2.address)
@@ -399,7 +403,8 @@ object LotteryScalaCheckCommandTest {
         }
 
         TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(loserPkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(loserPkh)
             .payTo(winnerAddr, utxo.output.value)
             .complete(reader, loser.address)
             .map(_.sign(loser.signer).transaction)
@@ -416,7 +421,8 @@ object LotteryScalaCheckCommandTest {
         val redeemer = Action.Timeout(claimantPreimage)
 
         TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(claimantPkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(claimantPkh)
             .payTo(claimant.address, utxo.output.value)
             .validFrom(Instant.ofEpochMilli(info.revealDeadline + 1000))
             .complete(reader, claimant.address)

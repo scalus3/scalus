@@ -65,8 +65,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
                 StakeAddress(Network.Testnet, StakePayload.Script(alwaysOkScript.script.scriptHash))
             val witness = TwoArgumentPlutusScriptWitness(
               ScriptSource.PlutusScriptValue(alwaysOkScript.script),
-              Data.unit,
-              Set.empty
+              Data.unit
             )
             (stakeAddress, alwaysOkScript, witness)
         }
@@ -75,8 +74,7 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
               withdrawZeroStakeAddress,
               TwoArgumentPlutusScriptWitness.attached(
                 withdrawZeroScript.script,
-                Data.unit,
-                Set.empty
+                Data.unit
               )
             )
             .withdrawRewards(withdrawZeroStakeAddress, Coin.zero, withdrawZeroScriptWitness)

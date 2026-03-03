@@ -271,7 +271,8 @@ object LotteryScenarioTest {
         val redeemer = Action.RevealPlayerOne(info.preimage1)
 
         val tx = TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(p1Pkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(p1Pkh)
             .payTo(scriptAddress, utxo.output.value, newState)
             .validTo(Instant.ofEpochMilli(info.revealDeadline))
             .complete(reader, p1Addr)
@@ -308,7 +309,8 @@ object LotteryScenarioTest {
         val redeemer = Action.RevealPlayerTwo(info.preimage2)
 
         val tx = TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(p2Pkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(p2Pkh)
             .payTo(scriptAddress, utxo.output.value, newState)
             .validTo(Instant.ofEpochMilli(info.revealDeadline))
             .complete(reader, p2Addr)
@@ -333,7 +335,8 @@ object LotteryScenarioTest {
         val redeemer = Action.RevealPlayerOne(info.preimage1)
 
         val tx = TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(p1Pkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(p1Pkh)
             .payTo(p1Addr, utxo.output.value)
             .validTo(Instant.ofEpochMilli(info.revealDeadline))
             .complete(reader, p1Addr)
@@ -358,7 +361,8 @@ object LotteryScenarioTest {
         val redeemer = Action.RevealPlayerTwo(info.preimage2)
 
         val tx = TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(p2Pkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(p2Pkh)
             .payTo(p2Addr, utxo.output.value)
             .validTo(Instant.ofEpochMilli(info.revealDeadline))
             .complete(reader, p2Addr)
@@ -396,7 +400,8 @@ object LotteryScenarioTest {
         }
 
         val tx = TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(loserPkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(loserPkh)
             .payTo(winnerAddr, utxo.output.value)
             .complete(reader, loserAddr)
             .await
@@ -428,7 +433,8 @@ object LotteryScenarioTest {
         val redeemer = Action.Timeout(claimantPreimage)
 
         val tx = TxBuilder(reader.cardanoInfo)
-            .spend(utxo, redeemer, lotteryScript, Set(claimantPkh))
+            .spend(utxo, redeemer, lotteryScript)
+            .requireSignature(claimantPkh)
             .payTo(claimantAddr, utxo.output.value)
             .validFrom(Instant.ofEpochMilli(info.revealDeadline + 1000))
             .complete(reader, claimantAddr)

@@ -239,24 +239,27 @@ case class TxBuilder(
       *   utxo to spend
       * @param redeemer
       *   redeemer to pass to the script to unlock the inputs
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
       */
     def spend[T: ToData](
         utxo: Utxo,
-        redeemer: T,
-        requiredSigners: Set[AddrKeyHash] = Set.empty
+        redeemer: T
     ): TxBuilder = {
         val datum = buildDatumWitness(utxo)
 
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptAttached,
           redeemer = redeemer.toData,
-          datum = datum,
-          additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+          datum = datum
         )
         spend(utxo, witness)
     }
+
+    @deprecated("use spend(utxo, redeemer).requireSignatures(requiredSigners) instead", "0.15.1")
+    def spend[T: ToData](
+        utxo: Utxo,
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = spend(utxo, redeemer).requireSignatures(requiredSigners)
 
     /** Adds the specified script-protected utxo with a delayed redeemer that is computed from the
       * built transaction.
@@ -281,8 +284,7 @@ case class TxBuilder(
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptAttached,
           redeemerBuilder = redeemerBuilder,
-          datum = datum,
-          additionalSigners = Set.empty
+          datum = datum
         )
         spend(utxo, witness)
     }
@@ -305,40 +307,27 @@ case class TxBuilder(
         redeemerBuilder: Transaction => Data,
         script: PlutusScript
     ): TxBuilder = {
-        spend(utxo, redeemerBuilder, script, Set.empty)
-    }
-
-    /** Spends a script-protected UTXO with a delayed redeemer computed from the built transaction.
-      *
-      * Use this method when the redeemer depends on the final transaction structure (e.g., for
-      * self-referential scripts that need to know input/output indices). The redeemer is computed
-      * after the transaction is assembled but before script evaluation.
-      *
-      * @param utxo
-      *   the UTXO to spend
-      * @param redeemerBuilder
-      *   function that computes the redeemer from the assembled transaction
-      * @param script
-      *   the Plutus script that protects the UTXO
-      * @param requiredSigners
-      *   * set of public key hashes that must sign the transaction
-      */
-    def spend(
-        utxo: Utxo,
-        redeemerBuilder: Transaction => Data,
-        script: PlutusScript,
-        requiredSigners: Set[AddrKeyHash]
-    ): TxBuilder = {
         val datum = buildDatumWitness(utxo)
 
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemerBuilder = redeemerBuilder,
-          datum = datum,
-          additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+          datum = datum
         )
         spend(utxo, witness)
     }
+
+    @deprecated(
+      "use spend(utxo, redeemerBuilder, script).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
+    def spend(
+        utxo: Utxo,
+        redeemerBuilder: Transaction => Data,
+        script: PlutusScript,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder =
+        spend(utxo, redeemerBuilder, script).requireSignatures(requiredSigners)
 
     /** Adds the specified script-protected utxo to the list of inputs and the specified redeemer to
       * the witness set.
@@ -360,46 +349,27 @@ case class TxBuilder(
         redeemer: T,
         script: PlutusScript
     ): TxBuilder = {
-        spend(utxo, redeemer, script, Set.empty)
-    }
-
-    /** Adds the specified script-protected utxo to the list of inputs and the specified redeemer to
-      * the witness set, with additional required signers.
-      *
-      * Use this method when the validator script requires specific signatures beyond the spender.
-      * The public key hashes in `additionalSigners` will be added to the transaction's required
-      * signers field.
-      *
-      * If the specified `script` fails with the specified redeemer, [[build]] is going to throw.
-      *
-      * If the sum of outputs exceeds the sum of spent inputs, the change is going to be handled
-      * according to the `changeTo` or `diffHandler` parameter of [[build]].
-      *
-      * @param utxo
-      *   utxo to spend
-      * @param redeemer
-      *   redeemer to pass to the script to unlock the inputs
-      * @param script
-      *   script that protects the `utxo`
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
-      */
-    def spend[T: ToData](
-        utxo: Utxo,
-        redeemer: T,
-        script: PlutusScript,
-        requiredSigners: Set[AddrKeyHash]
-    ): TxBuilder = {
         val datum = buildDatumWitness(utxo)
 
         val witness = ThreeArgumentPlutusScriptWitness(
           scriptSource = ScriptSource.PlutusScriptValue(script),
           redeemer = redeemer.toData,
-          datum = datum,
-          additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+          datum = datum
         )
         addSteps(TransactionBuilderStep.Spend(utxo, witness))
     }
+
+    @deprecated(
+      "use spend(utxo, redeemer, script).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
+    def spend[T: ToData](
+        utxo: Utxo,
+        redeemer: T,
+        script: PlutusScript,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder =
+        spend(utxo, redeemer, script).requireSignatures(requiredSigners)
 
     /** Spends a script-protected UTXO using a [[CompiledPlutus]] script.
       *
@@ -423,25 +393,16 @@ case class TxBuilder(
         registerDebugScript(compiled).spend(utxo, redeemer, compiled.script)
     }
 
-    /** Spends a script-protected UTXO using a [[CompiledPlutus]] script with required signers.
-      *
-      * @param utxo
-      *   the UTXO to spend
-      * @param redeemer
-      *   redeemer to pass to the script
-      * @param compiled
-      *   compiled Plutus script (carries SIR for diagnostic replay)
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
-      */
+    @deprecated(
+      "use spend(utxo, redeemer, compiled).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
     def spend[T: ToData](
         utxo: Utxo,
         redeemer: T,
         compiled: CompiledPlutus[?],
         requiredSigners: Set[AddrKeyHash]
-    ): TxBuilder = {
-        registerDebugScript(compiled).spend(utxo, redeemer, compiled.script, requiredSigners)
-    }
+    ): TxBuilder = spend(utxo, redeemer, compiled).requireSignatures(requiredSigners)
 
     /** Spends a script-protected UTXO with a delayed redeemer using a [[CompiledPlutus]] script.
       *
@@ -456,30 +417,18 @@ case class TxBuilder(
         utxo: Utxo,
         redeemerBuilder: Transaction => Data,
         compiled: CompiledPlutus[?]
-    ): TxBuilder = {
-        registerDebugScript(compiled).spend(utxo, redeemerBuilder, compiled.script)
-    }
+    ): TxBuilder = registerDebugScript(compiled).spend(utxo, redeemerBuilder, compiled.script)
 
-    /** Spends a script-protected UTXO with a delayed redeemer using a [[CompiledPlutus]] script
-      * with required signers.
-      *
-      * @param utxo
-      *   the UTXO to spend
-      * @param redeemerBuilder
-      *   function that computes the redeemer from the assembled transaction
-      * @param compiled
-      *   compiled Plutus script (carries SIR for diagnostic replay)
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
-      */
+    @deprecated(
+      "use spend(utxo, redeemerBuilder, compiled).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
     def spend(
         utxo: Utxo,
         redeemerBuilder: Transaction => Data,
         compiled: CompiledPlutus[?],
         requiredSigners: Set[AddrKeyHash]
-    ): TxBuilder = {
-        registerDebugScript(compiled).spend(utxo, redeemerBuilder, compiled.script, requiredSigners)
-    }
+    ): TxBuilder = spend(utxo, redeemerBuilder, compiled).requireSignatures(requiredSigners)
 
     /** Adds the specified utxos to the list of reference inputs.
       *
@@ -700,31 +649,6 @@ case class TxBuilder(
         policyId: PolicyId,
         assets: collection.Map[AssetName, Long],
         redeemer: T
-    ): TxBuilder = mint(policyId, assets, redeemer, Set.empty[AddrKeyHash])
-
-    /** Mints or burns native tokens under a minting policy with required signers (reference
-      * script).
-      *
-      * Use positive amounts to mint tokens and negative amounts to burn tokens. The minting policy
-      * script must be present as a reference input (via [[references]]) for this to work.
-      *
-      * @param policyId
-      *   the policy ID (script hash) of the minting policy
-      * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
-      *   are silently ignored
-      * @param redeemer
-      *   redeemer to pass to the minting policy script
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
-      * @tparam T
-      *   type of the redeemer (must have a ToData instance)
-      */
-    def mint[T: ToData](
-        policyId: PolicyId,
-        assets: collection.Map[AssetName, Long],
-        redeemer: T,
-        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
         val mintSteps = assets.collect {
             case (assetName, amount) if amount != 0 =>
@@ -734,14 +658,24 @@ case class TxBuilder(
                   amount = amount,
                   witness = TwoArgumentPlutusScriptWitness(
                     scriptSource = ScriptSource.PlutusScriptAttached,
-                    redeemer = redeemer.toData,
-                    additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+                    redeemer = redeemer.toData
                   )
                 )
         }.toSeq
 
         addSteps(mintSteps*)
     }
+
+    @deprecated(
+      "use mint(policyId, assets, redeemer).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
+    def mint[T: ToData](
+        policyId: PolicyId,
+        assets: collection.Map[AssetName, Long],
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder = mint(policyId, assets, redeemer).requireSignatures(requiredSigners)
 
     // -------------------------------------------------------------------------
     // Minting API - Attached script variants (script first, policyId derived)
@@ -765,29 +699,6 @@ case class TxBuilder(
         script: PlutusScript,
         assets: collection.Map[AssetName, Long],
         redeemer: T
-    ): TxBuilder = mint(script, assets, redeemer, Set.empty[AddrKeyHash])
-
-    /** Mints or burns native tokens with the script provided inline and required signers.
-      *
-      * Use positive amounts to mint tokens and negative amounts to burn tokens.
-      *
-      * @param script
-      *   the minting policy script
-      * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
-      *   are silently ignored
-      * @param redeemer
-      *   redeemer to pass to the minting policy script
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
-      * @tparam T
-      *   type of the redeemer (must have a ToData instance)
-      */
-    def mint[T: ToData](
-        script: PlutusScript,
-        assets: collection.Map[AssetName, Long],
-        redeemer: T,
-        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
         val mintSteps = assets.collect {
             case (assetName, amount) if amount != 0 =>
@@ -797,14 +708,25 @@ case class TxBuilder(
                   amount = amount,
                   witness = TwoArgumentPlutusScriptWitness(
                     scriptSource = ScriptSource.PlutusScriptValue(script),
-                    redeemer = redeemer.toData,
-                    additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+                    redeemer = redeemer.toData
                   )
                 )
         }.toSeq
 
         addSteps(mintSteps*)
     }
+
+    @deprecated(
+      "use mint(script, assets, redeemer).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
+    def mint[T: ToData](
+        script: PlutusScript,
+        assets: collection.Map[AssetName, Long],
+        redeemer: T,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder =
+        mint(script, assets, redeemer).requireSignatures(requiredSigners)
 
     /** Mints or burns native tokens using a [[CompiledPlutus]] script.
       *
@@ -827,26 +749,17 @@ case class TxBuilder(
         registerDebugScript(compiled).mint(compiled.script, assets, redeemer)
     }
 
-    /** Mints or burns native tokens using a [[CompiledPlutus]] script with required signers.
-      *
-      * @param compiled
-      *   compiled Plutus script (carries SIR for diagnostic replay)
-      * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
-      *   are silently ignored
-      * @param redeemer
-      *   redeemer to pass to the minting policy script
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
-      */
+    @deprecated(
+      "use mint(compiled, assets, redeemer).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
     def mint[T: ToData](
         compiled: CompiledPlutus[?],
         assets: collection.Map[AssetName, Long],
         redeemer: T,
         requiredSigners: Set[AddrKeyHash]
-    ): TxBuilder = {
-        registerDebugScript(compiled).mint(compiled.script, assets, redeemer, requiredSigners)
-    }
+    ): TxBuilder =
+        mint(compiled, assets, redeemer).requireSignatures(requiredSigners)
 
     /** Mints or burns native tokens with a delayed redeemer using a [[CompiledPlutus]] script.
       *
@@ -866,32 +779,17 @@ case class TxBuilder(
         registerDebugScript(compiled).mint(compiled.script, assets, redeemerBuilder)
     }
 
-    /** Mints or burns native tokens with a delayed redeemer and required signers using a
-      * [[CompiledPlutus]] script.
-      *
-      * @param compiled
-      *   compiled Plutus script (carries SIR for diagnostic replay)
-      * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
-      *   are silently ignored
-      * @param redeemerBuilder
-      *   function that computes the redeemer from the assembled transaction
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
-      */
+    @deprecated(
+      "use mint(compiled, assets, redeemerBuilder).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
     def mint(
         compiled: CompiledPlutus[?],
         assets: collection.Map[AssetName, Long],
         redeemerBuilder: Transaction => Data,
         requiredSigners: Set[AddrKeyHash]
-    ): TxBuilder = {
-        registerDebugScript(compiled).mint(
-          compiled.script,
-          assets,
-          redeemerBuilder,
-          requiredSigners
-        )
-    }
+    ): TxBuilder =
+        mint(compiled, assets, redeemerBuilder).requireSignatures(requiredSigners)
 
     /** Mints or burns native tokens with a delayed redeemer and attached script.
       *
@@ -911,26 +809,6 @@ case class TxBuilder(
         script: PlutusScript,
         assets: collection.Map[AssetName, Long],
         redeemerBuilder: Transaction => Data
-    ): TxBuilder = mint(script, assets, redeemerBuilder, Set.empty[AddrKeyHash])
-
-    /** Mints or burns native tokens with a delayed redeemer and required signers, with attached
-      * script.
-      *
-      * @param script
-      *   the minting policy script
-      * @param assets
-      *   map of asset names to amounts (positive for minting, negative for burning); zero amounts
-      *   are silently ignored
-      * @param redeemerBuilder
-      *   function that computes the redeemer from the assembled transaction
-      * @param requiredSigners
-      *   set of public key hashes that must sign the transaction
-      */
-    def mint(
-        script: PlutusScript,
-        assets: collection.Map[AssetName, Long],
-        redeemerBuilder: Transaction => Data,
-        requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = {
         val mintSteps = assets.collect {
             case (assetName, amount) if amount != 0 =>
@@ -940,14 +818,25 @@ case class TxBuilder(
                   amount = amount,
                   witness = TwoArgumentPlutusScriptWitness(
                     scriptSource = ScriptSource.PlutusScriptValue(script),
-                    redeemerBuilder = redeemerBuilder,
-                    additionalSigners = requiredSigners.map(ExpectedSigner.apply)
+                    redeemerBuilder = redeemerBuilder
                   )
                 )
         }.toSeq
 
         addSteps(mintSteps*)
     }
+
+    @deprecated(
+      "use mint(script, assets, redeemerBuilder).requireSignatures(requiredSigners) instead",
+      "0.15.1"
+    )
+    def mint(
+        script: PlutusScript,
+        assets: collection.Map[AssetName, Long],
+        redeemerBuilder: Transaction => Data,
+        requiredSigners: Set[AddrKeyHash]
+    ): TxBuilder =
+        mint(script, assets, redeemerBuilder).requireSignatures(requiredSigners)
 
     // -------------------------------------------------------------------------
     // Minting API - Reference script variants (delayed redeemer)
@@ -982,8 +871,7 @@ case class TxBuilder(
                   amount = amount,
                   witness = TwoArgumentPlutusScriptWitness(
                     scriptSource = ScriptSource.PlutusScriptAttached,
-                    redeemerBuilder = redeemerBuilder,
-                    additionalSigners = Set.empty
+                    redeemerBuilder = redeemerBuilder
                   )
                 )
         }.toSeq
@@ -2020,6 +1908,14 @@ case class TxBuilder(
             debugScripts + (compiled.script.scriptHash -> DebugScript.fromCompiled(compiled))
         )
     }
+
+    /** Requires the given public key hash to sign the transaction. */
+    def requireSignature(signer: AddrKeyHash): TxBuilder =
+        addSteps(TransactionBuilderStep.RequireSignature(signer))
+
+    /** Requires multiple public key hashes to sign the transaction. */
+    def requireSignatures(signers: Set[AddrKeyHash]): TxBuilder =
+        addSteps(signers.toSeq.map(TransactionBuilderStep.RequireSignature.apply)*)
 
     /** Appends transaction building steps to this builder.
       *

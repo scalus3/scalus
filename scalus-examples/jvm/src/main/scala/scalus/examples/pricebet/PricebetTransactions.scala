@@ -84,10 +84,10 @@ case class PricebetTransactions(
               Map(AssetName(oracleConfig.beaconName) -> 1L),
               TwoArgumentPlutusScriptWitness.attached(
                 oracleContract.script,
-                mintRedeemer,
-                Set(AddrKeyHash(oracleConfig.authorizedSigner.hash))
+                mintRedeemer
               )
             )
+            .requireSignature(AddrKeyHash(oracleConfig.authorizedSigner.hash))
             .payTo(oracleScriptAddress, value, datum)
             .complete(availableUtxos = utxos, sponsor)
             .sign(signer)
@@ -114,8 +114,7 @@ case class PricebetTransactions(
             .spend(
               oracleUtxo,
               spendRedeemer,
-              oracleContract,
-              Set(AddrKeyHash(oracleConfig.authorizedSigner.hash))
+              oracleContract
             )
             .collaterals(collateralUtxo)
             .mint(
@@ -123,10 +122,10 @@ case class PricebetTransactions(
               Map(AssetName(oracleConfig.beaconName) -> -1L),
               TwoArgumentPlutusScriptWitness.attached(
                 oracleContract.script,
-                mintRedeemer,
-                Set(AddrKeyHash(oracleConfig.authorizedSigner.hash))
+                mintRedeemer
               )
             )
+            .requireSignature(AddrKeyHash(oracleConfig.authorizedSigner.hash))
             .complete(availableUtxos = utxos, sponsor)
             .sign(signer)
             .transaction
@@ -157,9 +156,9 @@ case class PricebetTransactions(
             .spend(
               oracleUtxo,
               redeemer,
-              oracleContract,
-              Set(AddrKeyHash(oracleConfig.authorizedSigner.hash))
+              oracleContract
             )
+            .requireSignature(AddrKeyHash(oracleConfig.authorizedSigner.hash))
             .payTo(oracleScriptAddress, oracleUtxo.output.value, newState)
             .validFrom(validFrom)
             .validTo(validTo)
@@ -213,7 +212,8 @@ case class PricebetTransactions(
         val newDatum = oldDatum.copy(player = Option.Some(PubKeyHash(playerPkh)))
 
         TxBuilder(env, evaluator)
-            .spend(pricebetUtxo, redeemer, pricebetContract, Set(playerPkh))
+            .spend(pricebetUtxo, redeemer, pricebetContract)
+            .requireSignature(playerPkh)
             .payTo(pricebetScriptAddress, Value.lovelace(betAmount * 2), newDatum)
             .complete(availableUtxos = utxos, sponsor)
             .sign(signer)
@@ -239,7 +239,8 @@ case class PricebetTransactions(
 
         TxBuilder(env, evaluator)
             .references(oracleUtxo)
-            .spend(pricebetUtxo, redeemer, pricebetContract, Set(AddrKeyHash(playerPkh)))
+            .spend(pricebetUtxo, redeemer, pricebetContract)
+            .requireSignature(AddrKeyHash(playerPkh))
             .payTo(playerAddress, pricebetUtxo.output.value)
             .validFrom(validFrom)
             .validTo(validTo)
@@ -263,7 +264,8 @@ case class PricebetTransactions(
         val ownerPkh = datum.owner.hash
 
         TxBuilder(env, evaluator)
-            .spend(pricebetUtxo, redeemer, pricebetContract, Set(AddrKeyHash(ownerPkh)))
+            .spend(pricebetUtxo, redeemer, pricebetContract)
+            .requireSignature(AddrKeyHash(ownerPkh))
             .payTo(ownerAddress, pricebetUtxo.output.value)
             .validFrom(validFrom)
             .complete(availableUtxos = utxos, sponsor)

@@ -245,9 +245,10 @@ object CrowdfundingScenarioTest {
     ): TxBuilder =
         donationUtxos.foldLeft(
           TxBuilder(cardanoInfo)
-              .spend(campaignUtxo, redeemer, crowdfundingScript, requiredSigners)
+              .spend(campaignUtxo, redeemer, crowdfundingScript)
+              .requireSignatures(requiredSigners)
         ) { (b, utxo) =>
-            b.spend(utxo, redeemer, crowdfundingScript, Set.empty)
+            b.spend(utxo, redeemer, crowdfundingScript)
         }
 
     private def withUpdatedCampaign(
@@ -309,7 +310,8 @@ object CrowdfundingScenarioTest {
 
         val tx = TxBuilder(reader.cardanoInfo)
             .spend(seedUtxo)
-            .mint(crowdfundingScript, Map(nftAsset -> 1L), redeemer, Set(recipientKeyHash))
+            .mint(crowdfundingScript, Map(nftAsset -> 1L), redeemer)
+            .requireSignature(recipientKeyHash)
             .payTo(scriptAddress, Value(Coin(2_000_000L)) + mintedValue, datum)
             .validTo(Instant.ofEpochMilli(deadline - 1000))
             .complete(reader, recipientAddr)
@@ -375,7 +377,7 @@ object CrowdfundingScenarioTest {
         }
 
         val tx = TxBuilder(reader.cardanoInfo)
-            .spend(campaignUtxo, donateRedeemer, crowdfundingScript, Set.empty)
+            .spend(campaignUtxo, donateRedeemer, crowdfundingScript)
             .mint(donationScript, Map(donationAsset -> 1L), donateRedeemer)
             .payTo(scriptAddress, newCampaignValue, newDatum)
             .payTo(scriptAddress, donationUtxoValue, donationDatum)

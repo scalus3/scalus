@@ -250,9 +250,9 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
             .spend(
               oracleUtxo,
               redeemer,
-              txCreator.oracleScript,
-              Set(Alice.addrKeyHash) // Wrong signer - Alice instead of Oracle
+              txCreator.oracleScript
             )
+            .requireSignature(Alice.addrKeyHash) // Wrong signer - Alice instead of Oracle
             .payTo(txCreator.oracleScriptAddress, oracleUtxo.output.value, newState)
             .validFrom(updateValidFrom)
             .validTo(updateValidTo)
@@ -351,17 +351,16 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
             .spend(
               oracleUtxo,
               SpendOracleRedeemer.Burn,
-              txCreator.oracleScript,
-              Set(Alice.addrKeyHash) // Wrong signer
+              txCreator.oracleScript
             )
+            .requireSignature(Alice.addrKeyHash) // Wrong signer
             .collaterals(collateralUtxo)
             .mint(
               ScriptHash.fromByteString(txCreator.beaconPolicyId),
               Map(AssetName(beaconTokenName) -> -1L),
               TwoArgumentPlutusScriptWitness.attached(
                 txCreator.oracleScript,
-                MintOracleRedeemer.Burn,
-                Set(Alice.addrKeyHash) // Wrong signer
+                MintOracleRedeemer.Burn
               )
             )
             .complete(availableUtxos = aliceUtxos, Alice.address)

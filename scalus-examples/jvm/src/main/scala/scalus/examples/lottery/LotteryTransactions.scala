@@ -80,7 +80,8 @@ case class LotteryTransactions(
         )
 
         TxBuilder(env, evaluator)
-            .spend(lotteryUtxo, redeemer, contract, Set(playerOnePkh))
+            .spend(lotteryUtxo, redeemer, contract)
+            .requireSignature(playerOnePkh)
             .payTo(scriptAddress, lotteryUtxo.output.value, newState)
             .validTo(validTo)
             .complete(availableUtxos = utxos, sponsor)
@@ -114,7 +115,8 @@ case class LotteryTransactions(
         )
 
         TxBuilder(env, evaluator)
-            .spend(lotteryUtxo, redeemer, contract, Set(playerTwoPkh))
+            .spend(lotteryUtxo, redeemer, contract)
+            .requireSignature(playerTwoPkh)
             .payTo(scriptAddress, lotteryUtxo.output.value, newState)
             .validTo(validTo)
             .complete(availableUtxos = utxos, sponsor)
@@ -136,7 +138,8 @@ case class LotteryTransactions(
         val redeemer = Action.Timeout(preimage)
 
         TxBuilder(env, evaluator)
-            .spend(lotteryUtxo, redeemer, contract, Set(claimantPkh))
+            .spend(lotteryUtxo, redeemer, contract)
+            .requireSignature(claimantPkh)
             .payTo(payeeAddress, lotteryUtxo.output.value)
             .validFrom(validFrom)
             .complete(availableUtxos = utxos, sponsor)
@@ -159,7 +162,8 @@ case class LotteryTransactions(
         val redeemer = Action.Lose(preimage, winnerOutputIdx)
 
         TxBuilder(env, evaluator)
-            .spend(lotteryUtxo, redeemer, contract, Set(loserPkh))
+            .spend(lotteryUtxo, redeemer, contract)
+            .requireSignature(loserPkh)
             .payTo(winnerAddress, lotteryUtxo.output.value)
             .validTo(validTo)
             .complete(availableUtxos = utxos, sponsor)

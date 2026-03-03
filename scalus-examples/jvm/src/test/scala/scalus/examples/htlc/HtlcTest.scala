@@ -73,9 +73,9 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
             .spend(
               lockedUtxo,
               redeemer = Action.Reveal(validPreimage),
-              script = contract.script,
-              requiredSigners = Set(Bob.addrKeyHash)
+              script = contract.script
             )
+            .requireSignature(Bob.addrKeyHash)
             .payTo(Bob.address, Value.ada(10))
             .validTo(timeout)
             .draft
