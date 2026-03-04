@@ -58,7 +58,8 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                         event.id,
                         e.getMessage,
                         e.logs.toSeq,
-                        Some(e.failedScriptHash)
+                        spentBudget = e.spentBudget,
+                        scriptHash = Some(e.failedScriptHash)
                       )
                     )
                 else

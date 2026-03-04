@@ -347,7 +347,7 @@ class DiagnosticReplayTest extends AnyFunSuite {
 
         assert(result.isLeft, "Transaction should fail")
         result.left.foreach {
-            case NodeSubmitError.ScriptFailure(_, logs, _) =>
+            case NodeSubmitError.ScriptFailure(_, logs, _, _) =>
                 assert(
                   logs.nonEmpty,
                   "Emulator submitSync with debug scripts should produce diagnostic logs"

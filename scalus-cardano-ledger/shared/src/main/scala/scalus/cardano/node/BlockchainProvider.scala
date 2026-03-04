@@ -459,7 +459,8 @@ object NodeSubmitError {
     case class ScriptFailure(
         message: String,
         logs: Seq[String] = Seq.empty,
-        scriptHash: Option[ScriptHash] = None
+        scriptHash: Option[ScriptHash] = None,
+        spentBudget: ExUnits = ExUnits.zero
     ) extends NodeSubmitError
 
     /** Other node validation errors (catch-all for unrecognized validation errors) */
@@ -602,7 +603,12 @@ object SubmitError {
         case e: TransactionException.NativeScriptsException =>
             ScriptFailure(e.explain)
         case e: TransactionException.PlutusScriptValidationException =>
-            ScriptFailure(e.explain, logs = e.logs, scriptHash = e.scriptHash)
+            ScriptFailure(
+              e.explain,
+              logs = e.logs,
+              scriptHash = e.scriptHash,
+              spentBudget = e.spentBudget
+            )
         case e =>
             ValidationError(e.explain)
 }

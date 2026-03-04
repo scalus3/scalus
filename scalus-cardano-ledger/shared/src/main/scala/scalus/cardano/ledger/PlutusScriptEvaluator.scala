@@ -25,10 +25,12 @@ class PlutusScriptEvaluationException(
     cause: Throwable,
     val logs: Array[String],
     val failedScriptHash: ScriptHash,
+    val spentBudget: ExUnits,
     val failedSourcePosition: Option[ScalusSourcePos] = None
 ) extends RuntimeException(
       s"$message" +
           failedSourcePosition.fold("")(pos => s"\nat ${pos.show}") +
+          s"\nspent budget: ${spentBudget.showJson}" +
           s"\nlogs: ${logs.mkString("\n")}",
       cause
     )
@@ -621,6 +623,7 @@ object PlutusScriptEvaluator {
                       e,
                       finalLogs,
                       hash,
+                      spentBudget = spender.getSpentBudget,
                       failedSourcePosition = Some(e.sourcePos)
                     )
                 case NonFatal(e) =>
@@ -632,7 +635,8 @@ object PlutusScriptEvaluator {
                       e.getMessage,
                       e,
                       finalLogs,
-                      hash
+                      hash,
+                      spentBudget = spender.getSpentBudget
                     )
         }
 

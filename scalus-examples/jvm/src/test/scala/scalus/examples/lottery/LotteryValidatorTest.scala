@@ -830,7 +830,7 @@ object LotteryValidatorTest extends ScalusTest {
 
         assert(directResult.isFailure, "Direct validator call should have failed but succeeded")
         submissionResult match {
-            case Left(SubmitError.ScriptFailure(message, _, _)) =>
+            case Left(SubmitError.ScriptFailure(message, _, _, _)) =>
                 assert(
                   message.contains(expectedError),
                   s"Expected error '$expectedError' but got '$message'"

@@ -401,6 +401,7 @@ object TransactionException {
         transactionId: TransactionHash,
         message: String,
         logs: Seq[String],
+        spentBudget: ExUnits,
         scriptHash: Option[ScriptHash] = None
     ) extends TransactionException(
           s"Plutus script validation failed for transactionId $transactionId: $message"

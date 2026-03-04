@@ -103,7 +103,7 @@ class JEmulator(
                 js.Dynamic.literal(isSuccess = true, txHash = txHash.toHex)
             case Left(submitError) =>
                 submitError match {
-                    case NodeSubmitError.ScriptFailure(msg, logs, _) if logs.nonEmpty =>
+                    case NodeSubmitError.ScriptFailure(msg, logs, _, _) if logs.nonEmpty =>
                         js.Dynamic.literal(
                           isSuccess = false,
                           error = msg,
