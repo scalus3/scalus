@@ -575,6 +575,49 @@ case class TxBuilder(
     def payTo(compiled: CompiledPlutus[?], value: Value, datumHash: DataHash): TxBuilder =
         registerDebugScript(compiled).payTo(compiled.address(env.network), value, datumHash)
 
+    /** Sends the specified value to an address with an inline datum based on the transaction.
+      *
+      * Use this method when the datum depends on the final transaction structure. The datum is
+      * computed after the transaction is assembled but before script evaluation.
+      *
+      * @param address
+      *   recipient address
+      * @param value
+      *   amount to send
+      * @param datumBuilder
+      *   function from the final transaction to the inline datum
+      */
+    def payTo(address: Address, value: Value, datumBuilder: Transaction => Data): TxBuilder =
+        addSteps(
+          TransactionBuilderStep.SendWithDatumBuilder(
+            TransactionOutput(address, value, None, None),
+            datumBuilder
+          )
+        )
+
+    /** Sends the specified value to a compiled script's address with an inline datum based on the
+      * transaction.
+      *
+      * Use this method when the datum depends on the final transaction structure. The datum is
+      * computed after the transaction is assembled but before script evaluation.
+      *
+      * The address is derived from the compiled script's hash. The debug script is registered
+      * automatically, enabling diagnostic replay if a script at this address fails.
+      *
+      * @param compiled
+      *   the compiled Plutus script
+      * @param value
+      *   amount to send
+      * @param datumBuilder
+      *   function from the final transaction to the inline datum
+      */
+    def payTo(
+        compiled: CompiledPlutus[?],
+        value: Value,
+        datumBuilder: Transaction => Data
+    ): TxBuilder =
+        registerDebugScript(compiled).payTo(compiled.address(env.network), value, datumBuilder)
+
     /** Specifies an output that will receive change during transaction balancing.
       *
       * The output specifies the MINIMUM amount it must contain. During balancing, any excess ADA

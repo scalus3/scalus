@@ -14,7 +14,8 @@ import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.txBuilder
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.Party
-import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.testing.kit.Party.{Alice, Bob, Charles}
+import scalus.cardano.ledger.rules.Context as LedgerContext
 import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
 import scalus.toUplc
 import scalus.utils.await
@@ -1086,5 +1087,100 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
           s"Transaction must have at least one input, but has none. " +
               s"Outputs: ${tx.body.value.outputs.size}, Fee: ${tx.body.value.fee}"
         )
+    }
+
+    private def mkEmulator(utxos: (TransactionInput, TransactionOutput)*): Emulator =
+        Emulator(
+          initialUtxos = Map(utxos*),
+          initialContext = LedgerContext.testMainnet()
+        )
+
+    private def aliceUtxo(index: Int = 0): (TransactionInput, TransactionOutput) =
+        Input(genesisHash, index) -> TransactionOutput.Babbage(
+          Alice.address,
+          Value.lovelace(100_000_000L)
+        )
+
+    test("payTo with datum builder embeds the computed datum as inline datum") {
+        val em = mkEmulator(aliceUtxo())
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(5), _ => Data.I(42))
+            .complete(em, Alice.address)
+            .await()
+            .sign(Alice.signer)
+            .transaction
+
+        val outputToBob = tx.body.value.outputs.find(_.value.address == Bob.address)
+        assert(outputToBob.isDefined, "No output to Bob found")
+        assert(outputToBob.get.value.datumOption == Some(Inline(Data.I(42))))
+    }
+
+    test("payTo datum builder receives the final transaction and can inspect output indices") {
+        val em = mkEmulator(aliceUtxo())
+
+        val tx = TxBuilder(testEnv)
+            .payTo(
+              Bob.address,
+              Value.ada(5),
+              tx => Data.I(tx.body.value.outputs.indexWhere(_.value.address == Bob.address).toLong)
+            )
+            .complete(em, Alice.address)
+            .await()
+            .sign(Alice.signer)
+            .transaction
+
+        val bobIdx = tx.body.value.outputs.indexWhere(_.value.address == Bob.address)
+        assert(
+          tx.body.value.outputs(bobIdx).value.datumOption == Some(Inline(Data.I(bobIdx.toLong)))
+        )
+    }
+
+    test("multiple datum builders are resolved independently") {
+        val em = mkEmulator(aliceUtxo())
+
+        val tx = TxBuilder(testEnv)
+            .payTo(
+              Bob.address,
+              Value.ada(5),
+              tx => Data.I(tx.body.value.outputs.indexWhere(_.value.address == Bob.address).toLong)
+            )
+            .payTo(
+              Charles.address,
+              Value.ada(5),
+              tx =>
+                  Data.I(
+                    tx.body.value.outputs.indexWhere(_.value.address == Charles.address).toLong
+                  )
+            )
+            .complete(em, Alice.address)
+            .await()
+            .sign(Alice.signer)
+            .transaction
+
+        val outputs = tx.body.value.outputs
+        val bobIdx = outputs.indexWhere(_.value.address == Bob.address)
+        val charlesIdx = outputs.indexWhere(_.value.address == Charles.address)
+
+        assert(bobIdx >= 0 && charlesIdx >= 0 && bobIdx != charlesIdx)
+        assert(outputs(bobIdx).value.datumOption == Some(Inline(Data.I(bobIdx.toLong))))
+        assert(outputs(charlesIdx).value.datumOption == Some(Inline(Data.I(charlesIdx.toLong))))
+    }
+
+    test("payTo(CompiledPlutus, value, datumBuilder) sends to script address with computed datum") {
+        val compiled = PlutusV3.alwaysOk
+        val em = mkEmulator(aliceUtxo())
+
+        val tx = TxBuilder(testEnv)
+            .payTo(compiled, Value.ada(5), _ => Data.I(7))
+            .complete(em, Alice.address)
+            .await()
+            .sign(Alice.signer)
+            .transaction
+
+        val output =
+            tx.body.value.outputs.find(_.value.address == compiled.address(testEnv.network))
+        assert(output.isDefined, "No output to script address found")
+        assert(output.get.value.datumOption == Some(Inline(Data.I(7))))
     }
 }

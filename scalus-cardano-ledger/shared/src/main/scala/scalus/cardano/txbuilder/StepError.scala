@@ -107,6 +107,12 @@ object StepError {
             s"Failed to compute delayed redeemer: $message"
     }
 
+    case class DatumComputationFailed(message: String, step: TransactionBuilderStep)
+        extends StepError {
+        override def explain: String =
+            s"Failed to compute delayed datum: $message"
+    }
+
     case class WrongOutputType(
         expectedType: WitnessKind,
         utxo: Utxo,

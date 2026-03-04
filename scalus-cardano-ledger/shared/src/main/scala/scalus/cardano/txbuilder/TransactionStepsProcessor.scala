@@ -57,6 +57,14 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     }
                 else Ok
 
+            // Replace delayed datum placeholders AFTER redeemers (same sorted tx)
+            _ <-
+                if ctx.delayedDatumSpecs.nonEmpty then
+                    replaceDelayedDatums(ctx.transaction, ctx.delayedDatumSpecs).map { updatedTx =>
+                        modify0(Focus[Context](_.transaction).replace(updatedTx))
+                    }
+                else Ok
+
             // Now finalize with correct redeemers
             res <- TransactionConversion
                 .fromEditableTransactionSafe(
@@ -101,6 +109,9 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
         case send: Send =>
             useSend(send)
+
+        case sendWithBuilder: SendWithDatumBuilder =>
+            useSendWithDatumBuilder(sendWithBuilder)
 
         case mint: TransactionBuilderStep.Mint =>
             useMint(mint)
@@ -301,6 +312,30 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                   // Intentionally not using pushUnique: we can create multiple outputs of the same shape
                   .modify(outputs => outputs :+ Sized(send.output))
             )
+        } yield ()
+
+    private def useSendWithDatumBuilder(send: SendWithDatumBuilder): Result[Unit] =
+        for {
+            _ <- assertNetworkId(send.output.address, send)
+            _ = {
+                // Record the index where this output will land, then append a placeholder output.
+                // We use Babbage format so the datum field is always present.
+                val outputIndex = ctx.transaction.body.value.outputs.size
+                val placeholder = TransactionOutput.Babbage(
+                  address = send.output.address,
+                  value = send.output.value,
+                  datumOption = Some(DatumOption.Inline(Data.unit)),
+                  scriptRef = send.output.scriptRef
+                )
+                modify0(c =>
+                    c.addDelayedDatum(DelayedDatumSpec(outputIndex, send.datumBuilder, send))
+                )
+                modify0(
+                  unsafeCtxBodyL
+                      .refocus(_.outputs)
+                      .modify(outputs => outputs :+ Sized(placeholder))
+                )
+            }
         } yield ()
 
     // -------------------------------------------------------------------------

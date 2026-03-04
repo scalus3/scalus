@@ -1,6 +1,7 @@
 package scalus.cardano.onchain.plutus.v1
 
 import scalus.Compile
+import scalus.cardano.ledger.{TransactionHash, TransactionInput}
 import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Builtins.*
 import scalus.cardano.onchain.plutus.prelude.{<=>, ===, Eq, List, Option, Ord, Order}
@@ -441,6 +442,15 @@ object TxOutRef {
 
     given FromData[TxOutRef] = FromData.derived
 
+    extension (outRef: TxOutRef) {
+
+        /** Converts this TxOutRef into the off-chain ledger TransactionInput. */
+        @Ignore
+        def toOffchain: TransactionInput = TransactionInput(
+          TransactionHash.fromByteString(outRef.id.hash),
+          outRef.idx.toInt
+        )
+    }
 }
 
 case class PubKeyHash(hash: Hash) {

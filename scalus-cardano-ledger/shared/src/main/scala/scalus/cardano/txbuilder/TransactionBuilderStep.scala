@@ -2,6 +2,7 @@ package scalus.cardano.txbuilder
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
+import scalus.uplc.builtin.Data
 
 sealed trait TransactionBuilderStep
 
@@ -22,6 +23,18 @@ object TransactionBuilderStep {
 
     /** Send some funds/data to an address. Multiple identical steps are acceptable. */
     case class Send(output: TransactionOutput) extends TransactionBuilderStep
+
+    /** Like [[Send]], but the inline datum is computed from the fully-assembled transaction.
+      *
+      * The [[datumBuilder]] receives the sorted, finalised [[Transaction]] (same object passed to
+      * delayed-redeemer builders) and must return the [[Data]] to embed as an inline datum. The
+      * output is first added with a placeholder datum; the placeholder is replaced just before the
+      * transaction is finalised, after all delayed redeemers have also been resolved.
+      */
+    case class SendWithDatumBuilder(
+        output: TransactionOutput,
+        datumBuilder: Transaction => Data
+    ) extends TransactionBuilderStep
 
     /** Mint/burn tokens using a native/plutus script. Additive - sum monoid over amount. You should
       * determine your aggregate mint amount _outside_ of the builder. Chaining steps together to

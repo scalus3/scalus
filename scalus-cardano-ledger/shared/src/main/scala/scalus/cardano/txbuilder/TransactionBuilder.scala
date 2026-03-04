@@ -13,7 +13,7 @@ import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.*
-import scalus.cardano.ledger.*
+import scalus.cardano.ledger.{Transaction, *}
 import scalus.cardano.ledger.rules.STS.Validator
 import scalus.cardano.ledger.rules.{Context as SContext, State as SState, UtxoEnv}
 import scalus.cardano.ledger.utils.{CollateralSufficient, MinCoinSizedTransactionOutput, MinTransactionFee, TxBalance}
@@ -29,9 +29,27 @@ import scala.util.Try
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
 type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
 
+/** Redeemer whose value is computed from the final transaction.
+  *
+  * Registered when a spend/mint step receives a `Transaction => Data` builder. After all steps are
+  * processed, [[replaceDelayedRedeemers]] invokes the builder with the sorted [[Transaction]] and
+  * patches the placeholder.
+  */
 case class DelayedRedeemerSpec(
     purpose: RedeemerPurpose,
     redeemerBuilder: Transaction => Data,
+    step: TransactionBuilderStep
+)
+
+/** Inline datum whose value is computed from the final transaction.
+  *
+  * Registered when [[TransactionBuilderStep.SendWithDatumBuilder]] is processed. After all steps
+  * are processed, [[replaceDelayedDatums]] invokes the builder and patches the placeholder output
+  * at `outputIndex`.
+  */
+case class DelayedDatumSpec(
+    outputIndex: Int,
+    datumBuilder: Transaction => Data,
     step: TransactionBuilderStep
 )
 
@@ -610,6 +628,7 @@ object TransactionBuilder {
           */
         resolvedUtxos: ResolvedUtxos,
         delayedRedeemerSpecs: Seq[DelayedRedeemerSpec] = Seq.empty,
+        delayedDatumSpecs: Seq[DelayedDatumSpec] = Seq.empty,
         /** Optional address for collateral return output. If not set, defaults to first collateral
           * input's address when collateral return is needed.
           */
@@ -640,6 +659,10 @@ object TransactionBuilder {
 
         def addDelayedRedeemer(spec: DelayedRedeemerSpec): Context = {
             this |> Focus[Context](_.delayedRedeemerSpecs).modify(_ :+ spec)
+        }
+
+        def addDelayedDatum(spec: DelayedDatumSpec): Context = {
+            this |> Focus[Context](_.delayedDatumSpecs).modify(_ :+ spec)
         }
 
         /** Ensure that all transaction outputs in the context have min ada. */
@@ -937,6 +960,50 @@ object TransactionBuilder {
                 } catch {
                     case e: Exception =>
                         Left(RedeemerComputationFailed(e.getMessage, spec.step))
+                }
+            }
+        }
+    }
+
+    /** Replace delayed datum placeholders in the transaction outputs with their computed values.
+      *
+      * Called after [[replaceDelayedRedeemers]] so that datum builders see the same finalized
+      * transaction as redeemer builders.
+      */
+    def replaceDelayedDatums(
+        tx: Transaction,
+        specs: Seq[DelayedDatumSpec]
+    ): Either[StepError, Transaction] = {
+        specs.foldLeft[Either[StepError, Transaction]](Right(tx)) { (acc, spec) =>
+            acc.flatMap { currentTx =>
+                try {
+                    val realDatum = spec.datumBuilder(currentTx)
+                    val outputs = txOutputsL.get(currentTx)
+                    if spec.outputIndex < 0 || spec.outputIndex >= outputs.size then
+                        Left(
+                          DatumComputationFailed(
+                            s"Output index ${spec.outputIndex} is out of range (outputs size: ${outputs.size})",
+                            spec.step
+                          )
+                        )
+                    else
+                        val updatedOutputs: IndexedSeq[Sized[TransactionOutput]] =
+                            outputs.zipWithIndex.map { case (sized, idx) =>
+                                if idx == spec.outputIndex then
+                                    val old = sized.value
+                                    val updated: TransactionOutput = TransactionOutput.Babbage(
+                                      address = old.address,
+                                      value = old.value,
+                                      datumOption = Some(DatumOption.Inline(realDatum)),
+                                      scriptRef = old.scriptRef
+                                    )
+                                    Sized(updated)
+                                else sized
+                            }
+                        Right(txOutputsL.replace(updatedOutputs)(currentTx))
+                } catch {
+                    case e: Exception =>
+                        Left(DatumComputationFailed(e.getMessage, spec.step))
                 }
             }
         }
@@ -1406,8 +1473,6 @@ def txRequiredSignersL: Lens[Transaction, TaggedSortedSet[AddrKeyHash]] = {
 def txRedeemersL: Lens[Transaction, Option[KeepRaw[Redeemers]]] = {
     txWitnessSetL.refocus(_.redeemers)
 }
-
-// ---
 
 extension [S, A, B](lens: Lens[S, A])
     def >>>[C](other: Lens[A, C]): Lens[S, C] =
