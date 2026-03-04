@@ -71,6 +71,7 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
         val action = redeemer.to[MembershipRedeemer]
         action match
             case MembershipRedeemer.Mint(proofData) =>
+                require(txInfo.signatories.length > BigInt(0), "No signatories")
                 val signer = txInfo.signatories.head
                 val proof = unBData(proofData)
                 MerkleTree.verifyMembership(merkleRoot, signer.hash, proof)

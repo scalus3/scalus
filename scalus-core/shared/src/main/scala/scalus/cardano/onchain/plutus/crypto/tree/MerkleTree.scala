@@ -30,6 +30,7 @@ object MerkleTree {
     def verifyMembership(root: ByteString, element: ByteString, proof: ByteString): Unit = {
         val leafHash = blake2b_256(element)
         val proofLen = lengthOfByteString(proof)
+        require(modInteger(proofLen, 33) == BigInt(0), "MerkleTree: malformed proof length")
         val computedRoot = merkleUp(proof, leafHash, BigInt(0), proofLen)
         require(computedRoot == root, "MerkleTree: not a member")
     }

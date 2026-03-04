@@ -141,15 +141,8 @@ private[builtin] object PippengerMSM {
     }
 
     /** Extract c bits from scalar starting at bitOffset. */
-    private def extractWindow(scalar: BigInteger, bitOffset: Int, c: Int, mask: Int): Int = {
-        // Shift right by bitOffset, then mask to c bits
-        val wordIndex = bitOffset >> 5 // bitOffset / 32
-        val bitIndex = bitOffset & 31 // bitOffset % 32
-        val mag = scalar.toByteArray
-        // BigInteger.toByteArray is big-endian, signed. Convert to little-endian word access.
-        // Use shiftRight + intValue for correctness and simplicity.
+    private def extractWindow(scalar: BigInteger, bitOffset: Int, c: Int, mask: Int): Int =
         scalar.shiftRight(bitOffset).intValue() & mask
-    }
 
     /** Add b into a, handling null (identity) cases. Returns the combined point. */
     private def nullableAdd[P <: AnyRef](

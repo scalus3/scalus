@@ -70,8 +70,13 @@ object IncrementalMerkleTree {
         depth: BigInt,
         proof: ByteString
     ): Unit =
+        val expectedLen = depth * 33
+        require(
+          lengthOfByteString(proof) == expectedLen,
+          "IMT: invalid proof length"
+        )
         val leafHash = blake2b_256(key)
-        val computedRoot = merkleUp(proof, leafHash, BigInt(0), depth * 33)
+        val computedRoot = merkleUp(proof, leafHash, BigInt(0), expectedLen)
         require(computedRoot == root, "IMT: not a member")
 
     /** Append a new key at position `size`, returning the new root hash.
@@ -89,8 +94,13 @@ object IncrementalMerkleTree {
         key: ByteString,
         siblings: ByteString
     ): ByteString =
+        val expectedLen = depth * 32
+        require(
+          lengthOfByteString(siblings) == expectedLen,
+          "IMT: invalid append proof length"
+        )
         val leafHash = blake2b_256(key)
-        appendUp(siblings, size, EmptyLeafHash, leafHash, BigInt(0), depth * 32, root)
+        appendUp(siblings, size, EmptyLeafHash, leafHash, BigInt(0), expectedLen, root)
 
     /** Combined single-pass: verify empty slot and compute new root simultaneously.
       *
