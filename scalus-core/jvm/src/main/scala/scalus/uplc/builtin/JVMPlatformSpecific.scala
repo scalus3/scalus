@@ -230,14 +230,18 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         scalars: Seq[BigInt],
         points: Seq[G1Element]
     ): G1Element = {
-        // Use zip behavior: take minimum length, return identity for empty
         val period = PlatformSpecific.bls12_381_scalar_period.bigInteger
-        val result = new P1(PlatformSpecific.bls12_381_G1_compressed_zero.bytes)
-        scalars.zip(points).foreach { case (scalar, point) =>
-            val reducedScalar = scalar.bigInteger.mod(period)
-            val product = point.value.dup.mult(reducedScalar)
-            result.add(product)
-        }
+        val scalarArr = scalars.iterator.map(_.bigInteger.mod(period)).toArray
+        val pointArr = points.iterator.map(_.value).toArray
+        val result = PippengerMSM.msm[P1](
+          scalarArr,
+          pointArr,
+          identity = new P1(PlatformSpecific.bls12_381_G1_compressed_zero.bytes),
+          dup = _.dup(),
+          addInPlace = (a, b) => a.add(b),
+          dblInPlace = _.dbl(),
+          mulScalar = (p, s) => p.dup().mult(s)
+        )
         G1Element(result)
     }
 
@@ -245,14 +249,18 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         scalars: Seq[BigInt],
         points: Seq[G2Element]
     ): G2Element = {
-        // Use zip behavior: take minimum length, return identity for empty
         val period = PlatformSpecific.bls12_381_scalar_period.bigInteger
-        val result = new P2(PlatformSpecific.bls12_381_G2_compressed_zero.bytes)
-        scalars.zip(points).foreach { case (scalar, point) =>
-            val reducedScalar = scalar.bigInteger.mod(period)
-            val product = point.value.dup.mult(reducedScalar)
-            result.add(product)
-        }
+        val scalarArr = scalars.iterator.map(_.bigInteger.mod(period)).toArray
+        val pointArr = points.iterator.map(_.value).toArray
+        val result = PippengerMSM.msm[P2](
+          scalarArr,
+          pointArr,
+          identity = new P2(PlatformSpecific.bls12_381_G2_compressed_zero.bytes),
+          dup = _.dup(),
+          addInPlace = (a, b) => a.add(b),
+          dblInPlace = _.dbl(),
+          mulScalar = (p, s) => p.dup().mult(s)
+        )
         G2Element(result)
     }
 

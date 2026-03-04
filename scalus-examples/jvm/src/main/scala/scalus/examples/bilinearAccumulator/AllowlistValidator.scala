@@ -7,8 +7,8 @@ import scalus.uplc.builtin.{Builtins, ByteString, Data}
 import scalus.uplc.builtin.bls12_381.G1Element
 import scalus.uplc.builtin.bls12_381.G1Element.g1
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.prelude.crypto.accumulator.G2Accumulator
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
+import scalus.cardano.onchain.plutus.crypto.accumulator.G2Accumulator
+import scalus.cardano.onchain.plutus.prelude.bls12_381.G2
 import scalus.cardano.onchain.plutus.v3.{ParameterizedValidator, TxInfo, TxOutRef}
 
 /** Hardcoded CRS (Common Reference String) for the allowlist validator.
@@ -57,7 +57,7 @@ object AllowlistValidator extends ParameterizedValidator[ByteString] {
         val element = Builtins.byteStringToInteger(true, memberPkh.hash)
         val subset = List.single(element)
         require(
-          G2Accumulator.checkMembership(AllowlistCRS.powersOfTau, acc, subset, proof),
+          G2Accumulator.verifyMembership(AllowlistCRS.powersOfTau, acc, subset, proof),
           "Membership proof verification failed"
         )
     }

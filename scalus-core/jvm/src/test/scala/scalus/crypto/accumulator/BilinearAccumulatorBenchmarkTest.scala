@@ -4,7 +4,7 @@ import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.*
 import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.{G1, G2}
+import scalus.cardano.onchain.plutus.prelude.bls12_381.{G1, G2}
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
@@ -96,7 +96,6 @@ class BilinearAccumulatorBenchmarkTest extends AnyFunSuite {
 
 object BilinearAccumulatorBenchmarkTest {
 
-    /** Tag matching scalus.testing.Benchmark for excluding from default runs. */
     private object Benchmark extends Tag("scalus.testing.Benchmark")
 
     /** JSON structure matching the Ethereum KZG ceremony format. */

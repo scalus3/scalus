@@ -8,8 +8,8 @@ import scalus.uplc.builtin.Data.ToData
 import scalus.uplc.builtin.FromData
 import scalus.uplc.builtin.ToData
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1.*
+import scalus.cardano.onchain.plutus.prelude.bls12_381.G1
+import scalus.cardano.onchain.plutus.prelude.bls12_381.G1.*
 
 import scala.annotation.tailrec
 

@@ -358,10 +358,10 @@ For `verifyEcdsaSecp256k1Signature`, the message must be pre-hashed (32 bytes). 
 
 Advanced cryptographic operations for zero-knowledge proofs and pairing-based cryptography. See [CIP-381](https://github.com/cardano-foundation/CIPs/tree/master/CIP-0381) for specification.
 
-Scalus provides convenient wrappers in `scalus.cardano.onchain.plutus.prelude.crypto.bls12_381`:
+Scalus provides convenient wrappers in `scalus.cardano.onchain.plutus.prelude.bls12_381`:
 
 ```scala
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.{G1, G2, Scalar}
+import scalus.cardano.onchain.plutus.prelude.bls12_381.{G1, G2, Scalar}
 
 // G1 operations (48-byte compressed points)
 val g1Zero = G1.zero

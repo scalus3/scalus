@@ -279,6 +279,40 @@ class DiagnosticReplayTest extends AnyFunSuite {
         )
     }
 
+    test("TxBuilder uses release script on-chain, not withErrorTraces") {
+        val release = failingScriptRelease
+        val traced = release.withErrorTraces
+        // Sanity: release and traced produce different script hashes
+        assert(
+          release.script.scriptHash != traced.script.scriptHash,
+          "Release and traced scripts should have different hashes"
+        )
+
+        val scriptUtxo = createScriptLockedUtxo(release.script)
+        val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val collateralUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(5)).sample.get
+
+        // Use noop evaluator so the build doesn't fail on script evaluation
+        val tx = TxBuilder(env, PlutusScriptEvaluator.noop)
+            .spend(paymentUtxo)
+            .collaterals(collateralUtxo)
+            .spend(scriptUtxo, Data.unit, release)
+            .payTo(Bob.address, Value.ada(1))
+            .build(changeTo = Alice.address)
+            .transaction
+
+        // The witness set should contain the release script hash, not the traced one
+        val v3Scripts = tx.witnessSet.plutusV3Scripts.toSortedMap
+        assert(
+          v3Scripts.contains(release.script.scriptHash),
+          "Witness set should contain the release script"
+        )
+        assert(
+          !v3Scripts.contains(traced.script.scriptHash),
+          "Witness set should NOT contain the traced (withErrorTraces) script"
+        )
+    }
+
     test("DebugScript from raw PlutusScript via Emulator submitSync") {
         val scriptUtxo = createScriptLockedUtxo(failingScriptRelease.script)
         val paymentUtxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get

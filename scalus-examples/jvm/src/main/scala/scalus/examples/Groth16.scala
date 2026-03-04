@@ -9,8 +9,8 @@ import scalus.uplc.builtin.Data.ToData
 import scalus.uplc.builtin.FromData
 import scalus.uplc.builtin.ToData
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.{G1, G2}
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G1.*
+import scalus.cardano.onchain.plutus.prelude.bls12_381.{G1, G2}
+import scalus.cardano.onchain.plutus.prelude.bls12_381.G1.*
 
 /** Groth16 Zero-Knowledge Proof Verification Implementation
   *

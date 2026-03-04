@@ -7,7 +7,7 @@ import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.bls12_381.G2Element
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.plutus.prelude.List
-import scalus.cardano.onchain.plutus.prelude.crypto.bls12_381.G2
+import scalus.cardano.onchain.plutus.prelude.bls12_381.G2
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.eval.PlutusVM
 
