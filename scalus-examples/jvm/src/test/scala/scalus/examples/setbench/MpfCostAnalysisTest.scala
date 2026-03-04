@@ -76,8 +76,11 @@ class MpfCostAnalysisTest extends AnyFunSuite {
     private lazy val aikenProgram: Program = {
         val fname = "/scalus/examples/AikenMpfData/plutus.json"
         val inputStream = this.getClass.getResourceAsStream(fname)
-        val blueprint = Blueprint.fromJson(inputStream)
-        blueprint.validators.head.compiledCode.map(Program.fromCborHex).get
+        if inputStream == null then throw new RuntimeException(s"Resource not found: $fname")
+        try
+            val blueprint = Blueprint.fromJson(inputStream)
+            blueprint.validators.head.compiledCode.map(Program.fromCborHex).get
+        finally inputStream.close()
     }
 
     private def buildTrieAndProof(n: Int, elemIdx: Int = 42) = {
