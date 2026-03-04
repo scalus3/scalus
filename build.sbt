@@ -518,8 +518,9 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      // Exclude integration tests from default test runs (require external services)
-      Test / testOptions += Tests.Argument("-l", "scalus.testing.IntegrationTest")
+      // Exclude integration tests and benchmarks from default test runs
+      Test / testOptions += Tests.Argument("-l", "scalus.testing.IntegrationTest"),
+      Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark")
     )
     .configurePlatform(JVMPlatform)(
       _.dependsOn(`scalus-bloxbean-cardano-client-lib`, scalusDesignPatterns)

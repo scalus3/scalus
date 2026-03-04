@@ -1,6 +1,7 @@
 package scalus.examples.setbench
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.Benchmark
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
 import scalus.crypto.trie.MerklePatriciaTrie as Mpf16o
@@ -130,7 +131,7 @@ class MpfCostAnalysisTest extends AnyFunSuite {
         )
     }
 
-    test("Scalus MPF16o has() per-builtin cost breakdown (N=1000)") {
+    test("Scalus MPF16o has() per-builtin cost breakdown (N=1000)", Benchmark) {
         val (trie, key, value, proofData) = buildTrieAndProof(1000)
 
         val applied = mpf16oHasProgram.program.term $
@@ -151,7 +152,7 @@ class MpfCostAnalysisTest extends AnyFunSuite {
                 fail(ex)
     }
 
-    test("Scalus MPF16o has() per-builtin cost breakdown (N=32000)") {
+    test("Scalus MPF16o has() per-builtin cost breakdown (N=32000)", Benchmark) {
         val (trie, key, value, proofData) = buildTrieAndProof(32000)
 
         val applied = mpf16oHasProgram.program.term $
@@ -172,7 +173,7 @@ class MpfCostAnalysisTest extends AnyFunSuite {
                 fail(ex)
     }
 
-    test("Dump UPLC to files for comparison") {
+    test("Dump UPLC to files for comparison", Benchmark) {
         val scalusUplc = mpf16oHasProgram.program.show
         val aikenUplc = aikenProgram.show
 
@@ -216,7 +217,7 @@ class MpfCostAnalysisTest extends AnyFunSuite {
             merkle4(branch, root, neighbor2, neighbor1)
     }
 
-    test("Dump individual function UPLC for side-by-side comparison") {
+    test("Dump individual function UPLC for side-by-side comparison", Benchmark) {
         val dir = java.io.File("/tmp/uplc-compare")
         dir.mkdirs()
 
@@ -252,7 +253,7 @@ class MpfCostAnalysisTest extends AnyFunSuite {
             )
     }
 
-    test("UPLC term count comparison") {
+    test("UPLC term count comparison", Benchmark) {
         def countTerms(term: Term): Int = term match
             case Term.Var(_, _)            => 1
             case Term.LamAbs(_, body, _)   => 1 + countTerms(body)
@@ -342,11 +343,11 @@ class MpfCostAnalysisTest extends AnyFunSuite {
         (builtinCpu, builtinMem, builtinCount, cekCpu, cekMem, cekCount)
     }
 
-    test("Side-by-side full-validator comparison (N=1000)") {
+    test("Side-by-side full-validator comparison (N=1000)", Benchmark) {
         sideBySideComparison(1000)
     }
 
-    test("Side-by-side full-validator comparison (N=32000)") {
+    test("Side-by-side full-validator comparison (N=32000)", Benchmark) {
         sideBySideComparison(32000)
     }
 
