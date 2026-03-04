@@ -176,11 +176,12 @@ class MpfCostAnalysisTest extends AnyFunSuite {
         val scalusUplc = mpf16oHasProgram.program.show
         val aikenUplc = aikenProgram.show
 
-        val scalusFile = java.io.File("/tmp/scalus_mpf16o.uplc")
+        val tmpDir = System.getProperty("java.io.tmpdir")
+        val scalusFile = java.io.File(tmpDir, "scalus_mpf16o.uplc")
         java.nio.file.Files.writeString(scalusFile.toPath, scalusUplc)
         info(s"Scalus UPLC written to ${scalusFile.getAbsolutePath} (${scalusUplc.length} chars)")
 
-        val aikenFile = java.io.File("/tmp/aiken_mpf.uplc")
+        val aikenFile = java.io.File(tmpDir, "aiken_mpf.uplc")
         java.nio.file.Files.writeString(aikenFile.toPath, aikenUplc)
         info(s"Aiken UPLC written to ${aikenFile.getAbsolutePath} (${aikenUplc.length} chars)")
     }
