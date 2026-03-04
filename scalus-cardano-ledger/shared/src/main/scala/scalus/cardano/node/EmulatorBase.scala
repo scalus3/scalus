@@ -147,4 +147,22 @@ object EmulatorBase {
             Input(genesisHash, index) -> Output(address, initialValue)
         }.toMap
     }
+
+    /** Builds a [[CertState]] with the given credentials pre-registered.
+      *
+      * Each credential is inserted into both `deposits` (using the protocol parameter deposit
+      * amount) and `rewards` (with a zero balance), which is sufficient for the ledger to treat
+      * them as registered stake addresses without requiring an explicit registration transaction.
+      */
+    def certStateWithRegisteredCredentials(
+        stakeCredentials: Seq[Credential],
+        context: Context
+    ): CertState = {
+        val deposit = Coin(context.env.params.stakeAddressDeposit)
+        val dstate = DelegationState(
+          deposits = stakeCredentials.map(_ -> deposit).toMap,
+          rewards = stakeCredentials.map(_ -> Coin.zero).toMap
+        )
+        CertState(dstate = dstate)
+    }
 }

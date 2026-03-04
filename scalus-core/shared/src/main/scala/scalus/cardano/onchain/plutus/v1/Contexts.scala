@@ -1,6 +1,6 @@
 package scalus.cardano.onchain.plutus.v1
 
-import scalus.Compile
+import scalus.{Compile, Ignore}
 import scalus.cardano.ledger.{TransactionHash, TransactionInput}
 import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Builtins.*

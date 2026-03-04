@@ -21,9 +21,11 @@ class Emulator(
     initialUtxos: Utxos = Map.empty,
     initialContext: Context = Context.testMainnet(),
     val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
-    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
+    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
+    initialCertState: CertState = CertState.empty
 ) extends EmulatorBase {
-    private val stateRef = new AtomicReference[State](State(initialUtxos))
+    private val stateRef =
+        new AtomicReference[State](State(initialUtxos, certState = initialCertState))
     private val contextRef = new AtomicReference[Context](initialContext)
 
     def utxos: Utxos = stateRef.get().utxos
@@ -78,7 +80,8 @@ class Emulator(
       initialUtxos = this.utxos,
       initialContext = this.contextRef.get(),
       validators = this.validators,
-      mutators = this.mutators
+      mutators = this.mutators,
+      initialCertState = this.stateRef.get().certState
     )
 }
 
@@ -103,6 +106,36 @@ object Emulator {
           initialUtxos = EmulatorBase.createInitialUtxos(addresses, initialValue),
           initialContext = Context.testMainnet(),
           mutators = defaultMutators
+        )
+    }
+
+    /** Creates an Emulator with pre-registered stake credentials.
+      *
+      * Useful for the zero-withdrawal trick: the staking address must be registered before a
+      * zero-value withdrawal can trigger a script reward validator, without needing a registration
+      * transaction.
+      *
+      * @param initialUtxos
+      *   Initial UTxO set
+      * @param stakeCredentials
+      *   Credentials to pre-register (added to deposits and rewards maps)
+      * @param initialContext
+      *   Context (default: testMainnet)
+      * @return
+      *   An Emulator with the credentials already registered
+      */
+    def withRegisteredStakeCredentials(
+        initialUtxos: Utxos,
+        stakeCredentials: Seq[Credential],
+        initialContext: Context = Context.testMainnet()
+    ): Emulator = {
+        Emulator(
+          initialUtxos = initialUtxos,
+          initialContext = initialContext,
+          initialCertState = EmulatorBase.certStateWithRegisteredCredentials(
+            stakeCredentials,
+            initialContext
+          )
         )
     }
 }
