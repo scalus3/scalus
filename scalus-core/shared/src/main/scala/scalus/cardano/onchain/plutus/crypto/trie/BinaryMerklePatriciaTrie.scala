@@ -31,6 +31,20 @@ object BinaryMerklePatriciaTrie:
         def has(key: ByteString, value: ByteString, proof: Proof): Boolean =
             BinaryMerklePatriciaTrie.including(key, value, proof) == self.root
 
+        /** Verify membership of a key-value pair, throwing if the proof is invalid */
+        def verifyMembership(key: ByteString, value: ByteString, proof: Proof): Unit =
+            require(
+              BinaryMerklePatriciaTrie.including(key, value, proof) == self.root,
+              "Membership verification failed"
+            )
+
+        /** Verify non-membership of a key, throwing if the proof is invalid */
+        def verifyNonMembership(key: ByteString, proof: Proof): Unit =
+            require(
+              BinaryMerklePatriciaTrie.excluding(key, proof) == self.root,
+              "Non-membership verification failed"
+            )
+
         /** Insert key/value using combined single-pass: parse proof once, compute both excluding
           * (verify absent) and including (new root) simultaneously.
           */

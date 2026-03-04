@@ -51,6 +51,20 @@ object MerklePatriciaTrie:
         def has(key: ByteString, value: ByteString, proof: Proof): Boolean =
             MerklePatriciaTrie.including(key, value, proof) == self.root
 
+        /** Verify membership of a key-value pair, throwing if the proof is invalid */
+        def verifyMembership(key: ByteString, value: ByteString, proof: Proof): Unit =
+            require(
+              MerklePatriciaTrie.including(key, value, proof) == self.root,
+              "Membership verification failed"
+            )
+
+        /** Verify non-membership of a key, throwing if the proof is invalid */
+        def verifyNonMembership(key: ByteString, proof: Proof): Unit =
+            val path = blake2b_256(key)
+            val both = MerklePatriciaTrie.doCombined(path, NullHash, 0, proof)
+            val exclRoot = sliceByteString(0, Blake2b256DigestSize, both)
+            require(exclRoot == self.root, "Non-membership verification failed")
+
         /** Insert an element with proof using single-pass: parse proof once, compute both excluding
           * (verify absent) and including (new root) simultaneously.
           */

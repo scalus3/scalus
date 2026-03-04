@@ -170,6 +170,38 @@ class MerklePatriciaTrieTest extends AnyFunSuite {
         assert(inserted.root == offChainInserted.rootHash)
     }
 
+    test("verifyMembership succeeds for present key") {
+        val onChain = OnChainMpfo(fullTrie.rootHash)
+        for (key, value) <- fruitBs do
+            val proof = fullTrie.proveMembership(key)
+            onChain.verifyMembership(key, value, proof)
+    }
+
+    test("verifyMembership fails for wrong value") {
+        val onChain = OnChainMpfo(fullTrie.rootHash)
+        val (key, _) = fruitBs.head
+        val proof = fullTrie.proveMembership(key)
+        assertThrows[Exception] {
+            onChain.verifyMembership(key, ByteString.fromString("wrong"), proof)
+        }
+    }
+
+    test("verifyNonMembership succeeds for absent key") {
+        val key = ByteString.fromString("nonexistent")
+        val proof = fullTrie.proveNonMembership(key)
+        val onChain = OnChainMpfo(fullTrie.rootHash)
+        onChain.verifyNonMembership(key, proof)
+    }
+
+    test("verifyNonMembership fails for present key") {
+        val onChain = OnChainMpfo(fullTrie.rootHash)
+        val (key, _) = fruitBs.head
+        val proof = fullTrie.proveMembership(key)
+        assertThrows[Exception] {
+            onChain.verifyNonMembership(key, proof)
+        }
+    }
+
     test("two elements with long shared prefix") {
         val k1 = ByteString.fromString("aaaa")
         val k2 = ByteString.fromString("aaab")
