@@ -45,6 +45,7 @@ object SetBenchImtValidator extends Validator {
                 )
                 (state.root, state.size, K)
             case ImtRedeemer.Withdraw(key, proofData) =>
+                require(state.remaining >= K, "Insufficient remaining for withdrawal")
                 IncrementalMerkleTree.verifyMembership(
                   state.root,
                   key,

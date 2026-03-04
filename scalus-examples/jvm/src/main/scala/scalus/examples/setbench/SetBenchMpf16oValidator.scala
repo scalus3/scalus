@@ -33,8 +33,10 @@ object SetBenchMpf16oValidator extends Validator {
                 trie.insert(key, value, proofData.to[Proof])
 
         val delta = action match
-            case _: SetBenchRedeemer.Withdraw => -K
-            case _: SetBenchRedeemer.Deposit  => K
+            case _: SetBenchRedeemer.Withdraw =>
+                require(state.remaining >= K, "Insufficient remaining for withdrawal")
+                -K
+            case _: SetBenchRedeemer.Deposit => K
 
         val outputs = txInfo.findOwnOutputsByCredential(contractAddr.credential)
         require(outputs.length === BigInt(1), "Expected one continuing output")

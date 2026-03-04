@@ -38,6 +38,7 @@ object SetBenchAccValidator extends Validator {
 
         // After deletion, membership proof IS the new accumulator
         val newRoot = bls12_381_G1_compress(proof)
+        require(state.remaining >= K, "Insufficient remaining for withdrawal")
         val newRemaining = state.remaining - K
 
         val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
