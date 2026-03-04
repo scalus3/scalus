@@ -18,7 +18,7 @@ import scalus.uplc.builtin.ByteString.hex
   *
   * Operations:
   *   - append: oracle adds a new member (2*D + 2 blake2b, single pass)
-  *   - verifyMember: user proves membership (D + 1 blake2b)
+  *   - verifyMembership: user proves membership (D + 1 blake2b)
   *
   * Membership proofs use interleaved format: D * (direction[1] + sibling[32]) = D*33 bytes. Append
   * proofs are flat ByteStrings: D consecutive 32-byte sibling hashes.
@@ -64,7 +64,7 @@ object IncrementalMerkleTree {
       * proof is D * 33 bytes: D repetitions of (direction[1] + sibling[32]). Costs D + 1 blake2b
       * calls.
       */
-    def verifyMember(
+    def verifyMembership(
         root: ByteString,
         key: ByteString,
         depth: BigInt,

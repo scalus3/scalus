@@ -160,7 +160,7 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
         val sampleIndices = rng.shuffle((0 until n).toList).take(5)
         for (idx, i) <- sampleIndices.zipWithIndex do
             val (key, value) = elems(idx)
-            val proofData = trie.proveExists(key).toData
+            val proofData = trie.proveMembership(key).toData
 
             trie = trie.delete(key)
             remaining -= K
@@ -224,7 +224,7 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
         }
 
         for ((key, value), i) <- newElems.zipWithIndex do
-            val proofData = trie.proveMissing(key).toData
+            val proofData = trie.proveNonMembership(key).toData
 
             trie = trie.insert(key, value)
             remaining += K

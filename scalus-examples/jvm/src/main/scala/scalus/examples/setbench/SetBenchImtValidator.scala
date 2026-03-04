@@ -37,7 +37,7 @@ object SetBenchImtValidator extends Validator {
                 )
                 (nr, state.size + 1, BigInt(0))
             case ImtRedeemer.Deposit(key, proofData) =>
-                IncrementalMerkleTree.verifyMember(
+                IncrementalMerkleTree.verifyMembership(
                   state.root,
                   key,
                   state.depth,
@@ -45,7 +45,7 @@ object SetBenchImtValidator extends Validator {
                 )
                 (state.root, state.size, K)
             case ImtRedeemer.Withdraw(key, proofData) =>
-                IncrementalMerkleTree.verifyMember(
+                IncrementalMerkleTree.verifyMembership(
                   state.root,
                   key,
                   state.depth,

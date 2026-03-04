@@ -89,7 +89,7 @@ class MpfCostAnalysisTest extends AnyFunSuite {
         }
         val trie = Mpf16o.fromList(elems)
         val (key, value) = elems(elemIdx)
-        val proofData = mpf16oProofToData(trie.proveExists(key))
+        val proofData = mpf16oProofToData(trie.proveMembership(key))
         (trie, key, value, proofData)
     }
 

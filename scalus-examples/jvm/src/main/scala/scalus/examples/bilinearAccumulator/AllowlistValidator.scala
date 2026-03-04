@@ -57,7 +57,7 @@ object AllowlistValidator extends ParameterizedValidator[ByteString] {
         val element = Builtins.byteStringToInteger(true, memberPkh.hash)
         val subset = List.single(element)
         require(
-          G2Accumulator.checkMembership(AllowlistCRS.powersOfTau, acc, subset, proof),
+          G2Accumulator.verifyMembership(AllowlistCRS.powersOfTau, acc, subset, proof),
           "Membership proof verification failed"
         )
     }

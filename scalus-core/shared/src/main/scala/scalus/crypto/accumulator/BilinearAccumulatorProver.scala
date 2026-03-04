@@ -106,7 +106,7 @@ object BilinearAccumulatorProver {
     ): Boolean = {
         val setupList = toScalusList(setup.g1Powers)
         val subsetList = toScalusList(subset)
-        G2Accumulator.checkMembership(setupList, acc, subsetList, proof)
+        G2Accumulator.verifyMembership(setupList, acc, subsetList, proof)
     }
 
     /** Verify G2 non-membership proof by delegating to on-chain verifier. */
@@ -118,7 +118,7 @@ object BilinearAccumulatorProver {
     ): Boolean = {
         val setupList = toScalusList(setup.g1Powers)
         val disjointList = toScalusList(disjointSet)
-        G2Accumulator.checkNonMembership(
+        G2Accumulator.verifyNonMembership(
           setupList,
           setup.g2Generator,
           acc,
@@ -172,7 +172,7 @@ object BilinearAccumulatorProver {
     ): Boolean = {
         val setupList = toScalusList(setup.g2Powers)
         val subsetList = toScalusList(subset)
-        G1Accumulator.checkMembership(setupList, acc, subsetList, proof)
+        G1Accumulator.verifyMembership(setupList, acc, subsetList, proof)
     }
 
     /** Verify G1 non-membership proof by delegating to on-chain verifier. */
@@ -184,7 +184,7 @@ object BilinearAccumulatorProver {
     ): Boolean = {
         val setupList = toScalusList(setup.g2Powers)
         val disjointList = toScalusList(disjointSet)
-        G1Accumulator.checkNonMembership(
+        G1Accumulator.verifyNonMembership(
           setupList,
           setup.g1Generator,
           acc,

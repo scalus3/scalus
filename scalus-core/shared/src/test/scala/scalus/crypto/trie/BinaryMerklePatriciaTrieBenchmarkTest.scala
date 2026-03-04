@@ -97,14 +97,14 @@ class BinaryMerklePatriciaTrieBenchmarkTest extends AnyFunSuite {
             val onChainRoot = trie.rootHash
 
             print(" proving..."); Console.flush()
-            val proof = trie.proveExistsBinary(key)
+            val proof = trie.proveMembership(key)
             val psize = proof.length
 
             print(" measuring..."); Console.flush()
             val (hasMem, hasCpu) = measure(hasProgram, onChainRoot, key, value, proof)
 
             val withoutKey = trie.delete(key)
-            val insertProof = withoutKey.proveMissingBinary(key)
+            val insertProof = withoutKey.proveNonMembership(key)
             val (insMem, insCpu) =
                 measure(insertProgram, withoutKey.rootHash, key, value, insertProof)
 

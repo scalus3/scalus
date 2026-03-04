@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.crypto.tree.IncrementalMerkleTree as OffChainImt
+import scalus.crypto.tree.{FrontierMerkleTree, IncrementalMerkleTree as OffChainImt}
 import scalus.cardano.txbuilder.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -394,6 +394,15 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         ImtTreeBinary(OffChainImt.fromKeys(keys, depth))
     }
 
+    private def buildFrontierForAdd(keys: Vector[ByteString]): ImtTree = {
+        val depth = OffChainImt.depthForSize(keys.size + SampleSize)
+        ImtTreeFrontier(FrontierMerkleTree.fromKeys(keys, depth))
+    }
+
+    private def buildFrontierForAddWithDepth(depth: Int)(keys: Vector[ByteString]): ImtTree = {
+        ImtTreeFrontier(FrontierMerkleTree.fromKeys(keys, depth))
+    }
+
     // --- Helpers ---
 
     private def findContractUtxo(
@@ -514,6 +523,38 @@ class ImtBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchAdd("IMT", 1000000, ImtContract, buildImtForAdd)
     }
 
+    // --- Tests: Frontier IMT (append-only) ---
+
+    test("Frontier add N=10", Benchmark) {
+        info("=== Frontier add N=10 ===")
+        benchAdd("Frontier", 10, ImtContract, buildFrontierForAdd)
+    }
+
+    test("Frontier add N=32K", Benchmark) {
+        info("=== Frontier add N=32000 ===")
+        benchAdd("Frontier", 32000, ImtContract, buildFrontierForAdd)
+    }
+
+    test("Frontier add N=100K", Benchmark) {
+        info("=== Frontier add N=100000 ===")
+        benchAdd("Frontier", 100000, ImtContract, buildFrontierForAdd)
+    }
+
+    test("Frontier add N=1M", Benchmark) {
+        info("=== Frontier add N=1000000 ===")
+        benchAdd("Frontier", 1000000, ImtContract, buildFrontierForAdd)
+    }
+
+    test("Frontier add N=10 D=64", Benchmark) {
+        info("=== Frontier add N=10 D=64 ===")
+        benchAdd("Fro-D64", 10, ImtContract, buildFrontierForAddWithDepth(64))
+    }
+
+    test("Frontier add N=10 D=256", Benchmark) {
+        info("=== Frontier add N=10 D=256 ===")
+        benchAdd("Fro-D256", 10, ImtContract, buildFrontierForAddWithDepth(256))
+    }
+
     // --- Summary ---
 
     test("IMT summary table", Benchmark) {
@@ -564,6 +605,18 @@ object ImtBenchEmulatorTest {
         def proveMembership(key: ByteString): ByteString = tree.proveMembership(key)
         def proveAppend(): ByteString = tree.proveAppend()
         def append(key: ByteString): ImtTree = ImtTreeBinary(tree.append(key))
+    }
+
+    private case class ImtTreeFrontier(tree: FrontierMerkleTree) extends ImtTree {
+        def rootHash: ByteString = tree.rootHash
+        def size: Int = tree.size.toInt
+        def depth: Int = tree.depth
+        def proveMembership(key: ByteString): ByteString =
+            throw new UnsupportedOperationException(
+              "FrontierMerkleTree does not support proveMembership"
+            )
+        def proveAppend(): ByteString = tree.proveAppend()
+        def append(key: ByteString): ImtTree = ImtTreeFrontier(tree.append(key)._1)
     }
 
     /** Transaction builder for IMT contract operations. */

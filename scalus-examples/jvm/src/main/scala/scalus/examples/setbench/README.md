@@ -45,7 +45,7 @@ Append-only fixed-depth D binary Merkle tree. Leaves are appended sequentially
 (tree is 1-indexed: `tree(2^D + i) = leaf i`). State is `(root, size)`.
 
 Operations:
-- **verifyMember**: user proves membership via D sibling hashes (D+1 blake2b)
+- **verifyMembership**: user proves membership via D sibling hashes (D+1 blake2b)
 - **append**: oracle adds a new key at position `size` (2D+2 blake2b, single pass)
 
 Tradeoff: cheapest per-operation cost, but append-only — elements cannot be

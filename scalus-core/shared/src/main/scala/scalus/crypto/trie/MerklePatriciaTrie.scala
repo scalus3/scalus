@@ -9,7 +9,7 @@ import scalus.uplc.builtin.ByteString
 /** Off-chain original Merkle Patricia Forestry implementation (full nibble prefix encoding).
   *
   * Allows lookup, insertion, deletion, and generation of succinct and on-chain MPF compatible
-  * inclusion/exclusion proofs.
+  * membership/non-membership proofs.
   */
 case class MerklePatriciaTrie(root: Node) {
     import MerklePatriciaTrie.*
@@ -52,20 +52,20 @@ case class MerklePatriciaTrie(root: Node) {
       *
       * If there's no element by this key, throws an exception.
       */
-    def proveExists(key: ByteString): Proof = {
+    def proveMembership(key: ByteString): Proof = {
         val path = blake2b_256(key)
         val (found, steps) = doProve(root, path, 0, makeProofStep)
         if !found then throw new NoSuchElementException(s"Key not in trie: ${key.toHex}")
         toProof(steps)
     }
 
-    def proveMissing(key: ByteString): Proof = {
+    def proveNonMembership(key: ByteString): Proof = {
         if get(key).isDefined then
             throw new IllegalArgumentException(s"Key already in trie: ${key.toHex}")
         // Insert with a dummy value, then prove in the expanded trie.
         // The proof's `excluding` mode will reconstruct the original root.
         val expanded = insert(key, ByteString.empty)
-        expanded.proveExists(key)
+        expanded.proveMembership(key)
     }
 
     /** Wrap the root hash as an on-chain [[OnChainForestry]] value. */

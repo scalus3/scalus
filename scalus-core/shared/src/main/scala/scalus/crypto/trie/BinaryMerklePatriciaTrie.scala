@@ -57,7 +57,7 @@ case class BinaryMerklePatriciaTrie(root: Node) {
     }
 
     /** Creates a binary-encoded proof of inclusion, suitable for the `mpfb` on-chain verifier. */
-    def proveExistsBinary(key: ByteString): ByteString = {
+    def proveMembership(key: ByteString): ByteString = {
         val path = blake2b_256(key)
         val (found, steps) = doProve(root, path, 0, makeProofStep)
         if !found then throw new NoSuchElementException(s"Key not in trie: ${key.toHex}")
@@ -65,11 +65,11 @@ case class BinaryMerklePatriciaTrie(root: Node) {
     }
 
     /** Creates a binary-encoded proof of exclusion, suitable for the `mpfb` on-chain verifier. */
-    def proveMissingBinary(key: ByteString): ByteString = {
+    def proveNonMembership(key: ByteString): ByteString = {
         if get(key).isDefined then
             throw new IllegalArgumentException(s"Key already in trie: ${key.toHex}")
         val expanded = insert(key, ByteString.empty)
-        expanded.proveExistsBinary(key)
+        expanded.proveMembership(key)
     }
 
     /** Wrap the root hash as an on-chain `mpfb` value. */

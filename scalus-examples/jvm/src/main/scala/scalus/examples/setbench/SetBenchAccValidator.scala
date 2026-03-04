@@ -32,7 +32,7 @@ object SetBenchAccValidator extends Validator {
         val crs = List(g2_0, g2_1)
 
         require(
-          G1Accumulator.checkMembership(crs, acc, List(action.element), proof),
+          G1Accumulator.verifyMembership(crs, acc, List(action.element), proof),
           "Membership proof failed"
         )
 

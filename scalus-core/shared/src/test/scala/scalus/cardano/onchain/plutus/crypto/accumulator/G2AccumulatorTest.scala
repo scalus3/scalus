@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.Compile
 import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.prelude.List
-import scalus.cardano.onchain.plutus.crypto.accumulator.G2Accumulator.{checkMembership, checkNonMembership}
+import scalus.cardano.onchain.plutus.crypto.accumulator.G2Accumulator.{verifyMembership, verifyNonMembership}
 import scalus.cardano.onchain.plutus.crypto.accumulator.Poly.getFinalPoly
 import scalus.cardano.onchain.plutus.prelude.bls12_381.G2
 import scalus.compiler.Options
@@ -102,7 +102,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
             val proof =
                 g2"809875352e4cd02184ecd07429198ca87364ca0c4bf895482fb8364662bce1945d33c599b47b7d2b34724f45fa17fab8141afa380d192a9134d7f1238e17475af8f6c862c1eecf9666bb5e00b17461ad33112ef2f8dd9580c178b36300cb6dd8"
 
-            checkMembership(crsG1, accumulator, subset, proof)
+            verifyMembership(crsG1, accumulator, subset, proof)
 
         assert(compiled.code)
         val result = compiled.program.term.evaluateDebug
@@ -123,7 +123,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
         val proof =
             g2"b76700b0abce4e02d6db4924de6456b75ef1b363eb500edf51cc5fe1d1b5d98f82c64addf79966d0987af855069bafb5019ea2ad533f77ebe01e2e80298284d6996cbdff304f1adac62011273be8863742162b3f73b2100ae4ec35d46941c6e6"
 
-        assert(checkMembership(crsG1, accumulator, subset, proof))
+        assert(verifyMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership three elements") {
@@ -140,7 +140,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
         val proof =
             g2"99bdb2c73ea6cd3daf1ec82ec2549fa080effb1d5b747106e349f342ab35b8134f62eab0b72a57075b4b4bfcf8e21df801d3b10210069523bde5a7bc8d6644d78a04d85fdbd2b2b810bf4c40b9b8e10e60f2128fb97b455bebcebead449dc899"
 
-        assert(checkMembership(crsG1, accumulator, subset, proof))
+        assert(verifyMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership five elements") {
@@ -159,7 +159,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
         val proof =
             g2"b5bd19004a0d0457e002699522f80d753f6bac6dc6bbea3c2cb8d7b514aeb1a5b263ad576fac8dc8c155fab84ca0922116d1084023cc9f42928003ca9ed6784dab341567ac42cfd5f3a8eae7daad58f89541bc60ba7d6f782c646e11cbaad0fd"
 
-        assert(checkMembership(crsG1, accumulator, subset, proof))
+        assert(verifyMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check membership forty five elements") {
@@ -218,7 +218,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
         val proof =
             g2"b0c2ead18e582d3b4a39e06afaf32615d356215c4d80743920adbaefddf7bef00c3507e78743d43a600c9eac833fdf470c75456a845da33996237866b3e274c70650bcfb85270ca415f64123f6da13eaed668e9b0f51b45617fc5833d0337475"
 
-        assert(checkMembership(crsG1, accumulator, subset, proof))
+        assert(verifyMembership(crsG1, accumulator, subset, proof))
     }
 
     test("check non membership one elements") {
@@ -234,7 +234,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
           g2"87fa45b2f91ceb469308014c86941e1ab4112cd3658544b828e89d5254d0e396148543add5966146b8b39dafe321ba0705a311ed9d4209807339759a53aa2a8367820c41ee009a5a94707f7ea30e516aac804fa314d9854af83f1c73f0f64650"
         )
 
-        assert(checkNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
+        assert(verifyNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
     }
 
     test("check non membership three elements") {
@@ -250,7 +250,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
           g2"8f7982b01230da7b7dfe9019b0878068ef6187b7cf4cb44fabf4a658f73ac809adf0a4f0ca2c73a87f498e3122e95c8701b0f43892d5d7b2cd947c1d0c0350126957e358505dbaf268306f2a550483e2ae98a2216c38025cf6d0f1accbb16b46"
         )
 
-        assert(checkNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
+        assert(verifyNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
     }
 
     test("check non membership five elements") {
@@ -266,7 +266,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
           g2"b421e762c8ea34b4725f78adb88acf34812661291a16b76fb705aa7407318e3d50bb0717c0daf104180c60e1bbede6471727bd91ccdf90db30ba1e67abaf27f9043bee44293f41e909dd327d0582484e5b0db8c05b597f8c4792894fb5ff7b31"
         )
 
-        assert(checkNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
+        assert(verifyNonMembership(crsG1, crsG2, accumulator, disjointSet, proof))
     }
 
     test("getFinalPoly 100 elements budget") {

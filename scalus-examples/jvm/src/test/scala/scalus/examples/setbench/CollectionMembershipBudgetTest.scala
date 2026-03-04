@@ -114,7 +114,7 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
-    // G1 Accumulator: full on-chain checkMembership (includes getG2Commitment)
+    // G1 Accumulator: full on-chain verifyMembership (includes getG2Commitment)
     @annotation.nowarn("msg=unused import")
     private val accFullProgram = PlutusV3.compile {
         (g2_0: G2Element, g2_1: G2Element, acc: G1Element, element: BigInt, proof: G1Element) =>
@@ -122,7 +122,7 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             import scalus.cardano.onchain.plutus.prelude.List
             val crs = List(g2_0, g2_1)
             val subset = List(element)
-            G1Accumulator.checkMembership(crs, acc, subset, proof)
+            G1Accumulator.verifyMembership(crs, acc, subset, proof)
     }
 
     // G1 Accumulator: pairing only (G2 commitment pre-computed off-chain)
@@ -203,8 +203,8 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         for idx <- sampleIndices do
             val (key, value) = elems(idx)
 
-            val proof16oData = mpf16oProofToData(mpf16o.proveExists(key))
-            val proof16bData = B(mpf16b.proveExistsBinary(key))
+            val proof16oData = mpf16oProofToData(mpf16o.proveMembership(key))
+            val proof16bData = B(mpf16b.proveMembership(key))
 
             totalProof16o += proof16oData.toCbor.length
             totalProof16b += proof16bData.toCbor.length
@@ -274,14 +274,14 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
               mpf16oWithout.rootHash,
               key,
               value,
-              mpf16oProofToData(mpf16oWithout.proveMissing(key))
+              mpf16oProofToData(mpf16oWithout.proveNonMembership(key))
             )
             val mpf16bBudget = measureTrieOp(
               mpf16bInsertProgram,
               mpf16bWithout.rootHash,
               key,
               value,
-              B(mpf16bWithout.proveMissingBinary(key))
+              B(mpf16bWithout.proveNonMembership(key))
             )
 
             totalMpf16o = ExUnits(
@@ -400,7 +400,7 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
               mpf16o.rootHash,
               key,
               value,
-              mpf16oProofToData(mpf16o.proveExists(key))
+              mpf16oProofToData(mpf16o.proveMembership(key))
             )
             totalMpf16o = ExUnits(
               totalMpf16o.memory + budgetO.memory,
@@ -411,7 +411,7 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
               mpf16b.rootHash,
               key,
               value,
-              B(mpf16b.proveExistsBinary(key))
+              B(mpf16b.proveMembership(key))
             )
             totalMpf16b = ExUnits(
               totalMpf16b.memory + budgetB.memory,

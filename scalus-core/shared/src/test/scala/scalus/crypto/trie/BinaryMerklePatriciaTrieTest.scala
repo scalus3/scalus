@@ -125,7 +125,7 @@ class BinaryMerklePatriciaTrieTest extends AnyFunSuite {
     test("binary proofs verify membership via mpfb on-chain") {
         val onChain = OnChainBinary(fullTrie.rootHash)
         for (key, value) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
+            val proof = fullTrie.proveMembership(key)
             assert(
               onChain.has(key, value, proof),
               s"binary on-chain has() failed for ${key.toHex}"
@@ -135,7 +135,7 @@ class BinaryMerklePatriciaTrieTest extends AnyFunSuite {
     test("binary proofs support on-chain delete via mpfb") {
         val onChain = OnChainBinary(fullTrie.rootHash)
         for (key, value) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
+            val proof = fullTrie.proveMembership(key)
             val without = fullTrie.delete(key)
             val deleted = onChain.delete(key, value, proof)
             assert(
@@ -147,7 +147,7 @@ class BinaryMerklePatriciaTrieTest extends AnyFunSuite {
     test("binary proofs support on-chain insert via mpfb") {
         for (key, value) <- fruitBs do
             val without = fullTrie.delete(key)
-            val proof = without.proveMissingBinary(key)
+            val proof = without.proveNonMembership(key)
             val onChainWithout = OnChainBinary(without.rootHash)
             val inserted = onChainWithout.insert(key, value, proof)
             assert(
@@ -160,15 +160,15 @@ class BinaryMerklePatriciaTrieTest extends AnyFunSuite {
         val onChain = OnChainBinary(fullTrie.rootHash)
         val newValue = ByteString.fromString("updated")
         for (key, oldValue) <- fruitBs do
-            val proof = fullTrie.proveExistsBinary(key)
+            val proof = fullTrie.proveMembership(key)
             val updated = onChain.update(key, proof, oldValue, newValue)
             assert(updated.has(key, newValue, proof))
     }
 
-    test("binary proveMissing for absent key via mpfb") {
+    test("binary proveNonMembership for absent key via mpfb") {
         val key = ByteString.fromString("nonexistent")
         val value = ByteString.fromString("somevalue")
-        val proof = fullTrie.proveMissingBinary(key)
+        val proof = fullTrie.proveNonMembership(key)
         val onChain = OnChainBinary(fullTrie.rootHash)
         val inserted = onChain.insert(key, value, proof)
         val offChainInserted = fullTrie.insert(key, value)
@@ -177,7 +177,7 @@ class BinaryMerklePatriciaTrieTest extends AnyFunSuite {
 
     test("binary proof is compact") {
         for (key, _) <- fruitBs.take(5) do
-            val binaryProof = fullTrie.proveExistsBinary(key)
+            val binaryProof = fullTrie.proveMembership(key)
             // Binary proofs should be non-empty
             assert(binaryProof.length > 0, s"empty proof for ${key.toHex}")
             // Each step is at most 130 bytes (Branch), with at most ~16 steps for a 30-element trie
@@ -199,8 +199,8 @@ class BinaryMerklePatriciaTrieTest extends AnyFunSuite {
         assert(trie.get(k2).contains(v2))
 
         val onChain = OnChainBinary(trie.rootHash)
-        val proof1 = trie.proveExistsBinary(k1)
-        val proof2 = trie.proveExistsBinary(k2)
+        val proof1 = trie.proveMembership(k1)
+        val proof2 = trie.proveMembership(k2)
         assert(onChain.has(k1, v1, proof1))
         assert(onChain.has(k2, v2, proof2))
 

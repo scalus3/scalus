@@ -24,7 +24,7 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
 
         // verify membership on-chain
         val proof = tree1.proveMembership(key)
-        verifyMember(tree1.rootHash, key, BigInt(depth), proof)
+        verifyMembership(tree1.rootHash, key, BigInt(depth), proof)
     }
 
     test("append and verify multiple members") {
@@ -35,7 +35,7 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
 
         for key <- keys do
             val proof = tree.proveMembership(key)
-            verifyMember(tree.rootHash, key, BigInt(depth), proof)
+            verifyMembership(tree.rootHash, key, BigInt(depth), proof)
     }
 
     test("append proof verifies on-chain") {
@@ -67,7 +67,7 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
         val proof = tree.proveMembership(ByteString.fromString("real-key"))
 
         assertThrows[RequirementError] {
-            verifyMember(tree.rootHash, ByteString.fromString("fake-key"), BigInt(depth), proof)
+            verifyMembership(tree.rootHash, ByteString.fromString("fake-key"), BigInt(depth), proof)
         }
     }
 
@@ -81,7 +81,7 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
         val proof1 = tree.proveMembership(ByteString.fromString("key-1"))
 
         assertThrows[RequirementError] {
-            verifyMember(
+            verifyMembership(
               tree.rootHash,
               ByteString.fromString("key-0"),
               BigInt(depth),
@@ -118,7 +118,7 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
         // verify all
         for key <- keys do
             val proof = tree.proveMembership(key)
-            verifyMember(tree.rootHash, key, BigInt(smallDepth), proof)
+            verifyMembership(tree.rootHash, key, BigInt(smallDepth), proof)
     }
 
     test("larger depth D=10") {
@@ -132,7 +132,7 @@ class IncrementalMerkleTreeTest extends AnyFunSuite {
         for i <- Seq(0, 10, 25, 49) do
             val key = keys(i)
             val proof = tree.proveMembership(key)
-            verifyMember(tree.rootHash, key, BigInt(d), proof)
+            verifyMembership(tree.rootHash, key, BigInt(d), proof)
     }
 
     test("proof sizes are correct") {

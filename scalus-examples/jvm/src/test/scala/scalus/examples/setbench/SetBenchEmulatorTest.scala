@@ -113,7 +113,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
             val (key, value) = elems(idx)
 
             val proofT0 = System.nanoTime()
-            val proofData = trie.proveExistsData(key)
+            val proofData = trie.proveMembershipData(key)
             val proofMs = (System.nanoTime() - proofT0) / 1_000_000
             totalProofMs += proofMs
             val proofSize = proofData.toCbor.length
@@ -225,7 +225,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
             val (key, value) = elem
 
             val proofT0 = System.nanoTime()
-            val proofData = trie.proveMissingData(key)
+            val proofData = trie.proveNonMembershipData(key)
             val proofMs = (System.nanoTime() - proofT0) / 1_000_000
             totalProofMs += proofMs
             val proofSize = proofData.toCbor.length
@@ -472,7 +472,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
             val (key, value) = elems(idx)
 
             val proofT0 = System.nanoTime()
-            val proofData = trie.proveExistsData(key)
+            val proofData = trie.proveMembershipData(key)
             val proofMs = (System.nanoTime() - proofT0) / 1_000_000
             totalProofMs += proofMs
             val proofSize = proofData.toCbor.length
@@ -585,7 +585,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
             val (key, value) = elem
 
             val proofT0 = System.nanoTime()
-            val proofData = trie.proveMissingData(key)
+            val proofData = trie.proveNonMembershipData(key)
             val proofMs = (System.nanoTime() - proofT0) / 1_000_000
             totalProofMs += proofMs
             val proofSize = proofData.toCbor.length
@@ -830,8 +830,8 @@ object SetBenchEmulatorTest {
       */
     private[setbench] trait MpfTrie {
         def rootHash: ByteString
-        def proveExistsData(key: ByteString): Data
-        def proveMissingData(key: ByteString): Data
+        def proveMembershipData(key: ByteString): Data
+        def proveNonMembershipData(key: ByteString): Data
         def delete(key: ByteString): MpfTrie
         def insert(key: ByteString, value: ByteString): MpfTrie
     }
@@ -847,8 +847,8 @@ object SetBenchEmulatorTest {
         private case class Mpf16oWrapper(trie: Mpf16o) extends MpfTrie {
             import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
             def rootHash: ByteString = trie.rootHash
-            def proveExistsData(key: ByteString): Data = trie.proveExists(key).toData
-            def proveMissingData(key: ByteString): Data = trie.proveMissing(key).toData
+            def proveMembershipData(key: ByteString): Data = trie.proveMembership(key).toData
+            def proveNonMembershipData(key: ByteString): Data = trie.proveNonMembership(key).toData
             def delete(key: ByteString): MpfTrie = Mpf16oWrapper(trie.delete(key))
             def insert(key: ByteString, value: ByteString): MpfTrie =
                 Mpf16oWrapper(trie.insert(key, value))
@@ -856,8 +856,8 @@ object SetBenchEmulatorTest {
 
         private case class Mpf16bWrapper(trie: Mpf16b) extends MpfTrie {
             def rootHash: ByteString = trie.rootHash
-            def proveExistsData(key: ByteString): Data = Data.B(trie.proveExistsBinary(key))
-            def proveMissingData(key: ByteString): Data = Data.B(trie.proveMissingBinary(key))
+            def proveMembershipData(key: ByteString): Data = Data.B(trie.proveMembership(key))
+            def proveNonMembershipData(key: ByteString): Data = Data.B(trie.proveNonMembership(key))
             def delete(key: ByteString): MpfTrie = Mpf16bWrapper(trie.delete(key))
             def insert(key: ByteString, value: ByteString): MpfTrie =
                 Mpf16bWrapper(trie.insert(key, value))

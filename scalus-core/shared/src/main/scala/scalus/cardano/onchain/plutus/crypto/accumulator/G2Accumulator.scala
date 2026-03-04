@@ -34,7 +34,7 @@ object G2Accumulator {
       * @return
       *   true if the subset is in the accumulated set
       */
-    def checkMembership(
+    def verifyMembership(
         setup: List[G1Element],
         acc: G2Element,
         subset: List[BigInt],
@@ -64,7 +64,7 @@ object G2Accumulator {
       * @return
       *   true if the disjoint set has no elements in common with the accumulated set
       */
-    def checkNonMembership(
+    def verifyNonMembership(
         setup: List[G1Element],
         g2: G2Element,
         acc: G2Element,
