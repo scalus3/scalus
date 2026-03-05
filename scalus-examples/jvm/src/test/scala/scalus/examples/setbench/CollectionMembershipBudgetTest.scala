@@ -4,9 +4,9 @@ import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
-import scalus.crypto.trie.BinaryMerklePatriciaTrie as Mpf16b
-import scalus.crypto.trie.MerklePatriciaTrie as Mpf16o
-import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
+import scalus.crypto.trie.PressedMerklePatriciaForestry as Mpf16b
+import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
@@ -100,17 +100,17 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
 
     private val mpf16oHasProgram = PlutusV3.compile {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie
-            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
-            val trie = MerklePatriciaTrie(unBData(rootD))
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
+            val trie = MerklePatriciaForestry(unBData(rootD))
             trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
     private val mpf16bHasProgram = PlutusV3.compile {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie
-            import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie.*
-            val trie = BinaryMerklePatriciaTrie(unBData(rootD))
+            import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry.*
+            val trie = PressedMerklePatriciaForestry(unBData(rootD))
             trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
@@ -136,17 +136,17 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
 
     private val mpf16oInsertProgram = PlutusV3.compile {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie
-            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
-            val trie = MerklePatriciaTrie(unBData(rootD))
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
+            val trie = MerklePatriciaForestry(unBData(rootD))
             trie.insert(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
     private val mpf16bInsertProgram = PlutusV3.compile {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie
-            import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie.*
-            val trie = BinaryMerklePatriciaTrie(unBData(rootD))
+            import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry.*
+            val trie = PressedMerklePatriciaForestry(unBData(rootD))
             trie.insert(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
