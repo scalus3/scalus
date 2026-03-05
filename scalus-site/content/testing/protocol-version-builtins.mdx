@@ -1,0 +1,97 @@
+---
+title: Plutus Builtins and Protocol Versions
+sidebarTitle: Protocol Version & Builtins
+description: How the Scalus Emulator enforces Plutus builtin availability per protocol version, and how to configure the protocol version in tests.
+---
+
+# Plutus Builtins and Protocol Versions
+
+The Scalus Emulator supports all Plutus builtins across all protocol versions. By default, `Emulator.withAddresses` and `Context.testMainnet()` use the latest mainnet protocol parameters, so builtins from recent hard forks are available without any extra configuration.
+
+## How Builtin Availability Is Enforced
+
+Before a script executes, the emulator checks that every builtin it uses was available at the current protocol version, which mimics the ledger behavior.
+In particular, Scalus places this check in `ScriptsWellFormedValidator`, which calls `PlutusScript.isWellFormed`:
+
+```scala
+val collectedBuiltins = term.collectBuiltins
+val allowedBuiltins = Builtins.findBuiltinsIntroducedIn(language, majorProtocolVersion)
+collectedBuiltins.subsetOf(allowedBuiltins)
+```
+
+A script using a builtin not yet available at the configured protocol version is rejected with a respective `ValidationError`.
+
+## Verifying Rejection at an Older Protocol Version
+
+Suppose you want to confirm that a script using `Ripemd_160` (introduced at Plomin, PV10) is correctly rejected by a node running at Chang (PV9).
+ Configure the emulator with earlier protocol parameters:
+
+```scala
+import scalus.cardano.ledger.{AssetName, ProtocolVersion, Value}
+import scalus.cardano.ledger.rules.Context
+import scalus.cardano.node.Emulator
+import scalus.cardano.txbuilder.TxBuilder
+import scalus.compiler.Options
+import scalus.uplc.PlutusV3
+import scalus.uplc.builtin.Builtins.{equalsInteger, lengthOfByteString, ripemd_160}
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.cardano.onchain.plutus.prelude.require
+
+// Compile a script that uses ripemd_160.
+val script = {
+    given Options = Options.debug
+    PlutusV3.compile { (_: Data) =>
+        val hash = ripemd_160(ByteString.fromHex("deadbeef"))
+        require(equalsInteger(lengthOfByteString(hash), BigInt(20)))
+    }.script
+}
+
+// Build a transaction that includes the script.
+val policyId = script.scriptHash
+val tx = TxBuilder(testEnv)
+    .mint(script, Map(AssetName.fromString("token") -> 1L), Data.unit)
+    .payTo(Alice.address, Value.asset(policyId, AssetName.fromString("token"), 1L))
+    .complete(initialUtxos, Alice.address)
+    .sign(Alice.signer)
+    .transaction
+
+val previousVersionContext = Context.testMainnet().copy(
+  env = Context.testMainnet().env.copy(
+    params = Context.testMainnet().env.params.copy(
+      protocolVersion = ProtocolVersion(9, 0)
+    )
+  )
+)
+
+val emulator = Emulator(initialUtxos = initialUtxos, initialContext = previousVersionContext)
+val result = emulator.submit(tx).await()
+
+assert(result.isLeft)
+assert(result.swap.toOption.get.message.contains("Ill-formed scripts"))
+```
+
+## Accepting the Same Script With Latest Parameters
+
+The default emulator, which is configured with the latest mainnet parameters, accepts the same transaction without issue:
+
+```scala
+val emulator = Emulator.withAddresses(Seq(Alice.address))
+val utxos = emulator.findUtxos(Alice.address).await().toOption.get
+val tx = TxBuilder(testEnv)
+    .mint(script, Map(AssetName.fromString("token") -> 1L), Data.unit)
+    .payTo(Alice.address, Value.asset(policyId, AssetName.fromString("token"), 1L))
+    .complete(utxos, Alice.address)
+    .sign(Alice.signer)
+    .transaction
+
+val result = emulator.submit(tx).await()
+
+assert(result.isRight)
+```
+
+This is the default. No configuration is needed to use the latest builtins.
+
+## See Also
+
+- [Emulator](/docs/testing/emulator) -- Emulator setup and usage
+- [Ledger Rules](/docs/ledger/ledger-rules) -- Transaction validation rules

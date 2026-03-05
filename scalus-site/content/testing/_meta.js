@@ -6,4 +6,5 @@ export default {
   'js-emulator': 'JS/TS Emulator',
   testkit: 'Boundary Testing',
   'local-devnet': 'Local Devnet',
+  'protocol-version-builtins': 'Protocol Version & Builtins',
 }
