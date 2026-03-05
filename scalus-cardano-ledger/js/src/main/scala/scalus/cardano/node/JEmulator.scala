@@ -14,12 +14,14 @@ import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
 
 /** JavaScript wrapper for the Emulator.
   *
-  * Provides a JavaScript-friendly API for the Cardano emulator.
+  * Provides a JavaScript-friendly API for the Cardano emulator. Allows to pre-register a number of
+  * stake addresses, which simplifies withdraw-zero based flows.
   */
 @JSExportTopLevel("Emulator")
 class JEmulator(
     initialUtxosCbor: Uint8Array,
-    slotConfig: SlotConfig
+    slotConfig: SlotConfig,
+    registeredScriptHashHexes: js.Array[String] = js.Array()
 ) extends js.Object {
 
     private val emulator: Emulator = {
@@ -28,12 +30,22 @@ class JEmulator(
             if slotConfig == SlotConfig.mainnet then UtxoEnv.testMainnet()
             else UtxoEnv.default
         val context = new Context(env = env, slotConfig = slotConfig)
-        new Emulator(
-          initialUtxos = utxos,
-          initialContext = context,
-          validators = Emulator.defaultValidators,
-          mutators = Emulator.defaultMutators
-        )
+        val credentials = registeredScriptHashHexes.toSeq.map { hex =>
+            Credential.ScriptHash(ScriptHash.fromHex(hex))
+        }
+        if credentials.isEmpty then
+            new Emulator(
+              initialUtxos = utxos,
+              initialContext = context,
+              validators = Emulator.defaultValidators,
+              mutators = Emulator.defaultMutators
+            )
+        else
+            Emulator.withRegisteredStakeCredentials(
+              initialUtxos = utxos,
+              stakeCredentials = credentials,
+              initialContext = context
+            )
     }
 
     /** Submit a transaction to the emulator.
@@ -161,7 +173,8 @@ class JEmulator(
         val cbor = Cbor.encode(snapshotEmulator.utxos).toByteArray
         new JEmulator(
           new Uint8Array(byteArray2Int8Array(cbor).buffer),
-          emulator.currentContext.slotConfig
+          emulator.currentContext.slotConfig,
+          registeredScriptHashHexes
         )
     }
 }

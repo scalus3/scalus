@@ -99,6 +99,29 @@ describe("Emulator", () => {
         expect(aliceTotal).toBeLessThan(BigInt(85_000_000));
     });
 
+    it("should execute withdraw zero trick with pre-registered stake credential", () => {
+        // alwaysOk PlutusV3 script hash
+        const scriptHashHex = "186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4";
+
+        // Alice starts with 5k ADA
+        const preRegInitialUtxosCborHex =
+            "a182582000000000000000000000000000000000000000000000000000000000000000000082581d61c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81b000000012a05f200";
+
+        // Withdraw 0 ADA directly, without a pre-registration tx
+        const preRegWithdrawTxCborHex =
+            "84a600d9010281825820000000000000000000000000000000000000000000000000000000000000000000018182581d61c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81b000000012a0358d1021a0002992f05a1581df1186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4000b58203915d1a691174fddd60c82e48d3e9eee08ecb12fc510bc2ee8256de2a0e44a0a0dd9010281825820000000000000000000000000000000000000000000000000000000000000000000a300d90102818258206ea31d27d585439ea8fd9cd8e6664ed83e605c06aec24d32dfaba488e49287d9584002f84c7b1b080caadf51d52ab1d11b65371d07ebd818f7ec4c651a3f459346b0921eb77848e7b85365eefddd94a4983c9d67dfa6d323588a082168ff108b4d0605a182030082d87980821901f419fa6407d901028146450101002499f5f6";
+
+        const emulator = new Emulator(
+            hexToBytes(preRegInitialUtxosCborHex),
+            SlotConfig.mainnet,
+            [scriptHashHex]
+        );
+
+        const result = emulator.submitTx(hexToBytes(preRegWithdrawTxCborHex));
+        expect(result.isSuccess).toBe(true);
+        expect(result.txHash).toBeDefined();
+    });
+
     it("should execute withdraw zero trick with staking script", () => {
         // Alice starts with 5k ADA
         const withdrawZeroInitialUtxosCborHex =
