@@ -115,6 +115,22 @@ object LedgerToPlutusTranslation {
                 )
     }
 
+    /** Create TxOutRef for Plutus V1 from transaction input.
+      *
+      * TxOutRef identifies a specific output in a transaction by its ID and index.
+      */
+    def getTxOutRefV1(input: TransactionInput): v1.TxOutRef = {
+        v1.TxOutRef(v1.TxId(input.transactionId), input.index)
+    }
+
+    /** Create TxOutRef for Plutus V2 from transaction input.
+      *
+      * TxOutRef identifies a specific output in a transaction by its ID and index.
+      */
+    def getTxOutRefV2(input: TransactionInput): v2.TxOutRef = {
+        v2.TxOutRef(v2.TxId(input.transactionId), input.index)
+    }
+
     /** Create TxOutRef for Plutus V3 from transaction input.
       *
       * TxOutRef identifies a specific output in a transaction by its ID and index.
@@ -170,10 +186,7 @@ object LedgerToPlutusTranslation {
         val output =
             utxos.getOrElse(input, throw new IllegalStateException(s"Input UTxO not found: $input"))
 
-        val txOutRef = v1.TxOutRef(
-          v1.TxId(input.transactionId),
-          input.index
-        )
+        val txOutRef = getTxOutRefV2(input)
 
         val txOut = output match
             case TransactionOutput.Shelley(address, value, datumHash) =>
