@@ -25,8 +25,14 @@ import scalus.cardano.onchain.plutus.prelude.*
   *   - Heavy computation logic can be optimized in the stake validator
   *
   * Usage: This pattern is particularly useful for batch auctions where multiple bids need to be
-  * processed in a single transaction. See [[scalus.examples.BatchAuctionExample]] for an example.
+  * processed in a single transaction. See [[scalus.examples.BatchAuctionExample]] for a single
+  * withdraw-zero example, and [[scalus.examples.MultiPoolDexExample]] for an example with multiple
+  * withdraw-zero scripts (one per liquidity pool) in a single transaction.
   *
+  * @see
+  *   [[scalus.examples.BatchAuctionExample]]
+  * @see
+  *   [[scalus.examples.MultiPoolDexExample]]
   * @see
   *   [[https://github.com/Anastasia-Labs/design-patterns/blob/main/merkelized-validators/merkelized-validators.md]]
   */
