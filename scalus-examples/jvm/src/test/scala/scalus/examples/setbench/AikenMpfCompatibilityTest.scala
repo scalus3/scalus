@@ -5,8 +5,8 @@ import scalus.cardano.address.Address
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.crypto.trie.MerklePatriciaTrie as Mpf16o
-import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
+import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
 import scalus.cardano.txbuilder.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}

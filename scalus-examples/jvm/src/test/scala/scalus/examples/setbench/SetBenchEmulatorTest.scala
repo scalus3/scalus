@@ -5,8 +5,8 @@ import scalus.cardano.address.Address
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.crypto.trie.BinaryMerklePatriciaTrie as Mpf16b
-import scalus.crypto.trie.MerklePatriciaTrie as Mpf16o
+import scalus.crypto.trie.PressedMerklePatriciaForestry as Mpf16b
+import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -845,7 +845,7 @@ object SetBenchEmulatorTest {
             Mpf16bWrapper(Mpf16b.fromList(elems))
 
         private case class Mpf16oWrapper(trie: Mpf16o) extends MpfTrie {
-            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
             def rootHash: ByteString = trie.rootHash
             def proveMembershipData(key: ByteString): Data = trie.proveMembership(key).toData
             def proveNonMembershipData(key: ByteString): Data = trie.proveNonMembership(key).toData

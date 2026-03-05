@@ -1,6 +1,6 @@
 package scalus.crypto.trie
 import scalus.cardano.onchain.plutus.crypto.trie.Merkling.*
-import scalus.cardano.onchain.plutus.crypto.trie.BinaryMerklePatriciaTrie as OnChainBinary
+import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry as OnChainBinary
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 
@@ -24,8 +24,8 @@ private[trie] object InternalProofStep {
 /** Off-chain Merkle Patricia Forestry implementation producing binary proofs for the `mpfb`
   * on-chain verifier.
   */
-case class BinaryMerklePatriciaTrie(root: Node) {
-    import BinaryMerklePatriciaTrie.*
+case class PressedMerklePatriciaForestry(root: Node) {
+    import PressedMerklePatriciaForestry.*
 
     /** The hash of this MPF */
     def rootHash: ByteString = root.hash
@@ -37,17 +37,17 @@ case class BinaryMerklePatriciaTrie(root: Node) {
     def isEmpty: Boolean = root == Node.Empty
 
     /** Inserts a new element into this trie */
-    def insert(key: ByteString, value: ByteString): BinaryMerklePatriciaTrie = {
+    def insert(key: ByteString, value: ByteString): PressedMerklePatriciaForestry = {
         val path = blake2b_256(key)
-        BinaryMerklePatriciaTrie(doInsert(root, path, 0, key, value))
+        PressedMerklePatriciaForestry(doInsert(root, path, 0, key, value))
     }
 
     /** Deletes an element by the specified key from the trie. If this key is missing from the trie,
       * throws an exception.
       */
-    def delete(key: ByteString): BinaryMerklePatriciaTrie = {
+    def delete(key: ByteString): PressedMerklePatriciaForestry = {
         val path = blake2b_256(key)
-        BinaryMerklePatriciaTrie(doDelete(root, path, 0))
+        PressedMerklePatriciaForestry(doDelete(root, path, 0))
     }
 
     /** Returns the value stored by the specified key, or `None` */
@@ -76,11 +76,11 @@ case class BinaryMerklePatriciaTrie(root: Node) {
     def toOnChain: OnChainBinary = OnChainBinary(rootHash)
 }
 
-object BinaryMerklePatriciaTrie extends MerklePatriciaTrieBase {
+object PressedMerklePatriciaForestry extends MerklePatriciaForestryBase {
 
-    def empty: BinaryMerklePatriciaTrie = BinaryMerklePatriciaTrie(Node.Empty)
+    def empty: PressedMerklePatriciaForestry = PressedMerklePatriciaForestry(Node.Empty)
 
-    def fromList(entries: Iterable[(ByteString, ByteString)]): BinaryMerklePatriciaTrie =
+    def fromList(entries: Iterable[(ByteString, ByteString)]): PressedMerklePatriciaForestry =
         entries.foldLeft(empty) { case (trie, (k, v)) => trie.insert(k, v) }
 
     /** Branch hash: `combine3(prefix, halfLeft, halfRight)` — matches on-chain doBranch. */

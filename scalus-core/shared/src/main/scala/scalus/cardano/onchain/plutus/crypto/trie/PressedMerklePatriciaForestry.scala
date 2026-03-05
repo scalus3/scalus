@@ -5,7 +5,7 @@ import scalus.cardano.onchain.plutus.prelude.require
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 
-/** Binary-proof Merkle Patricia Trie (radix-16).
+/** Pressed Merkle Patricia Forestry (radix-16).
   *
   * Proofs are encoded as a single flat ByteString instead of List[ProofStep]. This eliminates
   * per-step CBOR/Data overhead.
@@ -14,10 +14,10 @@ import scalus.uplc.builtin.ByteString
   * Fork: 0x01 | skip[1] | nibble[1] | prefixLen[1] | halfLeft[32] | halfRight[32] = 68 bytes Leaf:
   * 0x02 | skip[1] | key[32] | value[32] = 66 bytes
   */
-case class BinaryMerklePatriciaTrie(root: ByteString)
+case class PressedMerklePatriciaForestry(root: ByteString)
 
 @Compile
-object BinaryMerklePatriciaTrie:
+object PressedMerklePatriciaForestry:
     import scalus.cardano.onchain.plutus.crypto.trie.Merkling.*
 
     private val Blake2b256DigestSize: BigInt = 32
@@ -25,67 +25,77 @@ object BinaryMerklePatriciaTrie:
 
     type Proof = ByteString
 
-    extension (self: BinaryMerklePatriciaTrie)
+    extension (self: PressedMerklePatriciaForestry)
         def isEmpty: Boolean = self.root == NullHash
 
         def has(key: ByteString, value: ByteString, proof: Proof): Boolean =
-            BinaryMerklePatriciaTrie.including(key, value, proof) == self.root
+            PressedMerklePatriciaForestry.including(key, value, proof) == self.root
 
         /** Verify membership of a key-value pair, throwing if the proof is invalid */
         def verifyMembership(key: ByteString, value: ByteString, proof: Proof): Unit =
             require(
-              BinaryMerklePatriciaTrie.including(key, value, proof) == self.root,
+              PressedMerklePatriciaForestry.including(key, value, proof) == self.root,
               "Membership verification failed"
             )
 
         /** Verify non-membership of a key, throwing if the proof is invalid */
         def verifyNonMembership(key: ByteString, proof: Proof): Unit =
             require(
-              BinaryMerklePatriciaTrie.excluding(key, proof) == self.root,
+              PressedMerklePatriciaForestry.excluding(key, proof) == self.root,
               "Non-membership verification failed"
             )
 
         /** Insert key/value using combined single-pass: parse proof once, compute both excluding
           * (verify absent) and including (new root) simultaneously.
           */
-        def insert(key: ByteString, value: ByteString, proof: Proof): BinaryMerklePatriciaTrie =
+        def insert(
+            key: ByteString,
+            value: ByteString,
+            proof: Proof
+        ): PressedMerklePatriciaForestry =
             val path = blake2b_256(key)
             val hValue = blake2b_256(value)
-            val both = BinaryMerklePatriciaTrie.doCombined(path, hValue, 0, proof, 0)
+            val both = PressedMerklePatriciaForestry.doCombined(path, hValue, 0, proof, 0)
             val exclRoot = sliceByteString(0, Blake2b256DigestSize, both)
             val inclRoot = sliceByteString(Blake2b256DigestSize, Blake2b256DigestSize, both)
             require(exclRoot == self.root, "Invalid proof or element exists")
-            BinaryMerklePatriciaTrie(inclRoot)
+            PressedMerklePatriciaForestry(inclRoot)
 
         /** Delete key/value using combined single-pass: parse proof once, compute both including
           * (verify present) and excluding (new root) simultaneously.
           */
-        def delete(key: ByteString, value: ByteString, proof: Proof): BinaryMerklePatriciaTrie =
+        def delete(
+            key: ByteString,
+            value: ByteString,
+            proof: Proof
+        ): PressedMerklePatriciaForestry =
             val path = blake2b_256(key)
             val hValue = blake2b_256(value)
-            val both = BinaryMerklePatriciaTrie.doCombined(path, hValue, 0, proof, 0)
+            val both = PressedMerklePatriciaForestry.doCombined(path, hValue, 0, proof, 0)
             val exclRoot = sliceByteString(0, Blake2b256DigestSize, both)
             val inclRoot = sliceByteString(Blake2b256DigestSize, Blake2b256DigestSize, both)
             require(inclRoot == self.root, "Invalid proof or element missing")
-            BinaryMerklePatriciaTrie(exclRoot)
+            PressedMerklePatriciaForestry(exclRoot)
 
         def update(
             key: ByteString,
             proof: Proof,
             oldValue: ByteString,
             newValue: ByteString
-        ): BinaryMerklePatriciaTrie =
+        ): PressedMerklePatriciaForestry =
             require(
-              BinaryMerklePatriciaTrie.including(key, oldValue, proof) == self.root,
+              PressedMerklePatriciaForestry.including(key, oldValue, proof) == self.root,
               "Invalid proof or old value missing"
             )
-            BinaryMerklePatriciaTrie(BinaryMerklePatriciaTrie.including(key, newValue, proof))
+            PressedMerklePatriciaForestry(
+              PressedMerklePatriciaForestry.including(key, newValue, proof)
+            )
 
-    def empty: BinaryMerklePatriciaTrie = BinaryMerklePatriciaTrie(NullHash)
+    def empty: PressedMerklePatriciaForestry = PressedMerklePatriciaForestry(NullHash)
 
-    def apply(root: ByteString): BinaryMerklePatriciaTrie =
+    def apply(root: ByteString): PressedMerklePatriciaForestry =
         require(lengthOfByteString(root) == Blake2b256DigestSize, "Root must be 32 bytes")
-        new BinaryMerklePatriciaTrie(root)
+        new PressedMerklePatriciaForestry(root)
 
     private def including(key: ByteString, value: ByteString, proof: Proof): ByteString =
         doIncluding(blake2b_256(key), blake2b_256(value), 0, proof, 0)

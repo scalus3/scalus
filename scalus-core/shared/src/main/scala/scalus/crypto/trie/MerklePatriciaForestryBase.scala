@@ -63,7 +63,7 @@ object Node {
   *
   * Subclasses override `branchHash` to produce the correct hash for their on-chain verifier format.
   */
-private[trie] abstract class MerklePatriciaTrieBase {
+private[trie] abstract class MerklePatriciaForestryBase {
 
     /** Compute the hash of a branch node. Each variant encodes the skip prefix differently. */
     private[trie] def branchHash(

@@ -4,8 +4,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.testing.Benchmark
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
-import scalus.crypto.trie.MerklePatriciaTrie as Mpf16o
-import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
+import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.onchain.plutus.prelude.Option as POption
 import scalus.cardano.onchain.plutus.v3.*
@@ -65,10 +65,10 @@ class MpfCostAnalysisTest extends AnyFunSuite {
 
     private val mpf16oHasProgram = PlutusV3.compile {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie
-            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
             import scalus.uplc.builtin.Builtins.*
-            val trie = MerklePatriciaTrie(unBData(rootD))
+            val trie = MerklePatriciaForestry(unBData(rootD))
             trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 

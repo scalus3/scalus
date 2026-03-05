@@ -19,11 +19,11 @@ object SetBenchMpf16oLightValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
-        import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie
-        import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaTrie.*
+        import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry
+        import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
 
         val state = datum.getOrFail("No datum").to[SetBenchDatum]
-        val trie = MerklePatriciaTrie(state.root)
+        val trie = MerklePatriciaForestry(state.root)
 
         val action = redeemer.to[SetBenchRedeemer]
         action match
