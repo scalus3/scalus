@@ -527,7 +527,11 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark")
     )
     .configurePlatform(JVMPlatform)(
-      _.dependsOn(`scalus-bloxbean-cardano-client-lib`, scalusDesignPatterns, scalusEthereumKzgCeremony)
+      _.dependsOn(
+        `scalus-bloxbean-cardano-client-lib`,
+        scalusDesignPatterns,
+        scalusEthereumKzgCeremony
+      )
     )
     .jvmSettings(
       Test / fork := true,
