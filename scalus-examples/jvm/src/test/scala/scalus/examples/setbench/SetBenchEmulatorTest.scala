@@ -5,7 +5,7 @@ import scalus.cardano.address.Address
 import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
-import scalus.crypto.trie.PressedMerklePatriciaForestry as Mpf16b
+import scalus.crypto.trie.FusedMerklePatriciaForestry as Mpf16b
 import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
 import scalus.crypto.accumulator.EthereumKzgCeremony
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*

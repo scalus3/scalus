@@ -2,7 +2,7 @@ package scalus.examples.setbench
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
-import scalus.crypto.trie.PressedMerklePatriciaForestry as Mpf16b
+import scalus.crypto.trie.FusedMerklePatriciaForestry as Mpf16b
 import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
 import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
 import scalus.cardano.onchain.plutus.prelude.List as PList
@@ -106,9 +106,9 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
 
     private val mpf16bHasProgram = PlutusV3.compile {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry
-            import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry.*
-            val trie = PressedMerklePatriciaForestry(unBData(rootD))
+            import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry.*
+            val trie = FusedMerklePatriciaForestry(unBData(rootD))
             trie.has(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 
@@ -142,9 +142,9 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
 
     private val mpf16bInsertProgram = PlutusV3.compile {
         (rootD: Data, keyD: Data, valueD: Data, proofD: Data) =>
-            import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry
-            import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry.*
-            val trie = PressedMerklePatriciaForestry(unBData(rootD))
+            import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry
+            import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry.*
+            val trie = FusedMerklePatriciaForestry(unBData(rootD))
             trie.insert(unBData(keyD), unBData(valueD), proofD.to[Proof])
     }
 

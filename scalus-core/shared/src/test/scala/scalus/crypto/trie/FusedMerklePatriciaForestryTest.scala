@@ -2,12 +2,12 @@ package scalus.crypto.trie
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.crypto.trie.Merkling
-import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry as OnChainBinary
+import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry as OnChainBinary
 import scalus.uplc.builtin.ByteString
 
-class PressedMerklePatriciaForestryTest extends AnyFunSuite {
+class FusedMerklePatriciaForestryTest extends AnyFunSuite {
 
-    // The fruit dataset from the on-chain PressedMerklePatriciaForestryTest
+    // The fruit dataset from the on-chain FusedMerklePatriciaForestryTest
     private val fruitEntries: Seq[(String, String)] = Seq(
       "apple[uid: 58]" -> "🍎",
       "apricot[uid: 0]" -> "🤷",
@@ -45,18 +45,18 @@ class PressedMerklePatriciaForestryTest extends AnyFunSuite {
         (ByteString.fromString(k), ByteString.fromString(v))
     }
 
-    private val fullTrie = PressedMerklePatriciaForestry.fromList(fruitBs)
+    private val fullTrie = FusedMerklePatriciaForestry.fromList(fruitBs)
     private val expectedRoot = fullTrie.rootHash
 
     test("empty trie has null hash") {
-        val trie = PressedMerklePatriciaForestry.empty
+        val trie = FusedMerklePatriciaForestry.empty
         assert(trie.rootHash == Merkling.NullHash)
         assert(trie.size == 0)
         assert(trie.isEmpty)
     }
 
     test("single element trie") {
-        val trie = PressedMerklePatriciaForestry.empty
+        val trie = FusedMerklePatriciaForestry.empty
             .insert(ByteString.fromString("hello"), ByteString.fromString("world"))
         assert(trie.size == 1)
         assert(!trie.isEmpty)
@@ -116,7 +116,7 @@ class PressedMerklePatriciaForestryTest extends AnyFunSuite {
 
     test("insertion order does not affect root hash") {
         val shuffled = scala.util.Random(42).shuffle(fruitBs)
-        val trie = PressedMerklePatriciaForestry.fromList(shuffled)
+        val trie = FusedMerklePatriciaForestry.fromList(shuffled)
         assert(trie.rootHash == expectedRoot)
     }
 
@@ -225,7 +225,7 @@ class PressedMerklePatriciaForestryTest extends AnyFunSuite {
         val v1 = ByteString.fromString("v1")
         val v2 = ByteString.fromString("v2")
 
-        val trie = PressedMerklePatriciaForestry.empty.insert(k1, v1).insert(k2, v2)
+        val trie = FusedMerklePatriciaForestry.empty.insert(k1, v1).insert(k2, v2)
         assert(trie.size == 2)
         assert(trie.get(k1).contains(v1))
         assert(trie.get(k2).contains(v2))

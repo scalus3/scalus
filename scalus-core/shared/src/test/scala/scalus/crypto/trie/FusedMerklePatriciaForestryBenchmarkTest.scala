@@ -1,7 +1,7 @@
 package scalus.crypto.trie
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.onchain.plutus.crypto.trie.PressedMerklePatriciaForestry as OnChainBinary
+import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry as OnChainBinary
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.{PlutusV3, Program}
@@ -10,7 +10,7 @@ import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.eval.{PlutusVM, Result}
 
-class PressedMerklePatriciaForestryBenchmarkTest extends AnyFunSuite {
+class FusedMerklePatriciaForestryBenchmarkTest extends AnyFunSuite {
 
     private given compilerOptions: Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
@@ -67,10 +67,10 @@ class PressedMerklePatriciaForestryBenchmarkTest extends AnyFunSuite {
     }
 
     /** Build a trie of n elements. Keys are 4-byte big-endian ints, value is a fixed byte. */
-    private def buildTrie(n: Int): (PressedMerklePatriciaForestry, ByteString, ByteString) = {
+    private def buildTrie(n: Int): (FusedMerklePatriciaForestry, ByteString, ByteString) = {
         val value = ByteString.fromArray(Array[Byte](1))
         val benchKey = ByteString.fromArray(Array[Byte](0, 0, 0, 0))
-        var trie = PressedMerklePatriciaForestry.empty
+        var trie = FusedMerklePatriciaForestry.empty
         var i = 0
         while i < n do
             val k = ByteString.fromArray(
