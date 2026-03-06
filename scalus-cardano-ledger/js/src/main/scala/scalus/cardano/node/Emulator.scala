@@ -26,6 +26,7 @@ class Emulator(
     private var context: Context = initialContext
 
     def utxos: Utxos = state.utxos
+    def certState: CertState = state.certState
     def currentContext: Context = context
 
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
@@ -93,7 +94,7 @@ object Emulator {
         )
     }
 
-    /** Creates an Emulator with pre-registered stake credentials.
+    /** Creates an Emulator with pre-registered stake credentials and specified reward balances.
       *
       * Useful for the zero-withdrawal trick: the staking address must be registered before a
       * zero-value withdrawal can trigger a script reward validator, without needing a registration
@@ -101,8 +102,8 @@ object Emulator {
       *
       * @param initialUtxos
       *   Initial UTxO set
-      * @param stakeCredentials
-      *   Credentials to pre-register (added to deposits and rewards maps)
+      * @param initialStakeRewards
+      *   Map from stake credential to its initial reward balance
       * @param initialContext
       *   Context (default: testMainnet)
       * @return
@@ -110,14 +111,14 @@ object Emulator {
       */
     def withRegisteredStakeCredentials(
         initialUtxos: Utxos,
-        stakeCredentials: Seq[Credential],
+        initialStakeRewards: Map[Credential, Coin],
         initialContext: Context = Context.testMainnet()
     ): Emulator = {
         Emulator(
           initialUtxos = initialUtxos,
           initialContext = initialContext,
           initialCertState = EmulatorBase.certStateWithRegisteredCredentials(
-            stakeCredentials,
+            initialStakeRewards,
             initialContext
           )
         )

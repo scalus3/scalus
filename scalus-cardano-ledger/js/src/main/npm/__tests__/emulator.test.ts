@@ -99,6 +99,21 @@ describe("Emulator", () => {
         expect(aliceTotal).toBeLessThan(BigInt(85_000_000));
     });
 
+    it("should expose pre-registered stake reward via getStakeReward", () => {
+        const scriptHashHex = "186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4";
+        const preRegInitialUtxosCborHex =
+            "a182582000000000000000000000000000000000000000000000000000000000000000000082581d61c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81b000000012a05f200";
+
+        const emulator = new Emulator(
+            hexToBytes(preRegInitialUtxosCborHex),
+            SlotConfig.mainnet,
+            { [scriptHashHex]: "42000000" }
+        );
+
+        expect(emulator.getStakeReward(scriptHashHex)).toBe(BigInt(42_000_000));
+        expect(emulator.getStakeReward("0".repeat(56))).toBeNull();
+    });
+
     it("should execute withdraw zero trick with pre-registered stake credential", () => {
         // alwaysOk PlutusV3 script hash
         const scriptHashHex = "186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4";
@@ -114,7 +129,7 @@ describe("Emulator", () => {
         const emulator = new Emulator(
             hexToBytes(preRegInitialUtxosCborHex),
             SlotConfig.mainnet,
-            [scriptHashHex]
+            { [scriptHashHex]: "0" }
         );
 
         const result = emulator.submitTx(hexToBytes(preRegWithdrawTxCborHex));

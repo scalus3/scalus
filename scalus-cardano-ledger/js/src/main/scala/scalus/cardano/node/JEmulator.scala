@@ -14,14 +14,21 @@ import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
 
 /** JavaScript wrapper for the Emulator.
   *
-  * Provides a JavaScript-friendly API for the Cardano emulator. Allows to pre-register a number of
-  * stake addresses, which simplifies withdraw-zero based flows.
+  * Provides a JavaScript-friendly API for the Cardano emulator.
+  *
+  * @param initialUtxosCbor
+  *   CBOR-encoded initial UTxO set
+  * @param slotConfig
+  *   Slot configuration
+  * @param initialStakeRewards
+  *   Optional map from script hash hex to lovelace amount (as a numeric string), pre-registering
+  *   stake credentials with the given reward balances. Use `"0"` for the zero-withdrawal trick.
   */
 @JSExportTopLevel("Emulator")
 class JEmulator(
     initialUtxosCbor: Uint8Array,
     slotConfig: SlotConfig,
-    registeredScriptHashHexes: js.Array[String] = js.Array()
+    initialStakeRewards: js.Dictionary[String] = js.Dictionary()
 ) extends js.Object {
 
     private val emulator: Emulator = {
@@ -30,10 +37,11 @@ class JEmulator(
             if slotConfig == SlotConfig.mainnet then UtxoEnv.testMainnet()
             else UtxoEnv.default
         val context = new Context(env = env, slotConfig = slotConfig)
-        val credentials = registeredScriptHashHexes.toSeq.map { hex =>
-            Credential.ScriptHash(ScriptHash.fromHex(hex))
+        val rewardsMap: Map[Credential, Coin] = initialStakeRewards.toMap.map {
+            case (hashHex, lovelace) =>
+                Credential.ScriptHash(ScriptHash.fromHex(hashHex)) -> Coin(lovelace.toLong)
         }
-        if credentials.isEmpty then
+        if rewardsMap.isEmpty then
             new Emulator(
               initialUtxos = utxos,
               initialContext = context,
@@ -43,7 +51,7 @@ class JEmulator(
         else
             Emulator.withRegisteredStakeCredentials(
               initialUtxos = utxos,
-              stakeCredentials = credentials,
+              initialStakeRewards = rewardsMap,
               initialContext = context
             )
     }
@@ -164,6 +172,20 @@ class JEmulator(
         result
     }
 
+    /** Get the reward balance for a script-based stake credential.
+      *
+      * @param scriptHashHex
+      *   Hex-encoded script hash
+      * @return
+      *   Reward amount in lovelace as BigInt, or null if not registered
+      */
+    def getStakeReward(scriptHashHex: String): js.BigInt | Null = {
+        val cred = Credential.ScriptHash(ScriptHash.fromHex(scriptHashHex))
+        emulator.certState.dstate.rewards.get(cred) match
+            case Some(Coin(amount)) => js.BigInt(amount.toString)
+            case None               => null
+    }
+
     def setSlot(slot: Double): Unit = {
         emulator.setSlot(slot.toLong)
     }
@@ -174,7 +196,7 @@ class JEmulator(
         new JEmulator(
           new Uint8Array(byteArray2Int8Array(cbor).buffer),
           emulator.currentContext.slotConfig,
-          registeredScriptHashHexes
+          initialStakeRewards
         )
     }
 }

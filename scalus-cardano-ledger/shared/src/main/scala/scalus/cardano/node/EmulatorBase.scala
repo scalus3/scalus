@@ -23,6 +23,7 @@ trait EmulatorBase extends BlockchainProvider {
 
     // Abstract - platform-specific state access
     def utxos: Utxos
+    def certState: CertState
     protected def currentContext: Context
 
     // Abstract - platform-specific state modification
@@ -148,20 +149,25 @@ object EmulatorBase {
         }.toMap
     }
 
-    /** Builds a [[CertState]] with the given credentials pre-registered.
+    /** Builds a [[CertState]] with the given stake credentials pre-registered.
       *
-      * Each credential is inserted into both `deposits` (using the protocol parameter deposit
-      * amount) and `rewards` (with a zero balance), which is sufficient for the ledger to treat
-      * them as registered stake addresses without requiring an explicit registration transaction.
+      * Each credential is inserted into `deposits` (using the protocol parameter deposit amount)
+      * and `rewards` with the provided balance, so the ledger treats them as registered stake
+      * addresses without requiring an explicit registration transaction.
+      *
+      * @param initialStakeRewards
+      *   map from stake credential to its initial reward balance
+      * @param context
+      *   the emulator context (used to read the key deposit amount from protocol params)
       */
     def certStateWithRegisteredCredentials(
-        stakeCredentials: Seq[Credential],
+        initialStakeRewards: Map[Credential, Coin],
         context: Context
     ): CertState = {
         val deposit = Coin(context.env.params.stakeAddressDeposit)
         val dstate = DelegationState(
-          deposits = stakeCredentials.map(_ -> deposit).toMap,
-          rewards = stakeCredentials.map(_ -> Coin.zero).toMap
+          deposits = initialStakeRewards.map { case (cred, _) => cred -> deposit },
+          rewards = initialStakeRewards
         )
         CertState(dstate = dstate)
     }
