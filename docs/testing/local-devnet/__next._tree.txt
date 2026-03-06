@@ -1,5 +1,5 @@
 :HL["/_next/static/chunks/97664fbfea4c54a5.css","style"]
 :HL["/_next/static/chunks/221ce6682042a4f8.css","style"]
-:HL["/_next/static/chunks/3a0b589c59b6112e.css","style"]
+:HL["/_next/static/chunks/59a7e12ca2cc3bcf.css","style"]
 :HL["/scalus-logo-dark.png","image"]
-0:{"buildId":"VM1HFiTSfEh24oAWJRphc","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"docs","paramType":null,"paramKey":"docs","hasRuntimePrefetch":false,"slots":{"children":{"name":"mdxPath","paramType":"oc","paramKey":"testing/local-devnet","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+0:{"buildId":"OJPO5Xm8LpiHOGTHEh2wZ","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"docs","paramType":null,"paramKey":"docs","hasRuntimePrefetch":false,"slots":{"children":{"name":"mdxPath","paramType":"oc","paramKey":"testing/local-devnet","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
