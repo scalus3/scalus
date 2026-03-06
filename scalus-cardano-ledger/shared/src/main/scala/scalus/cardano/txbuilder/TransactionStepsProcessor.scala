@@ -1132,7 +1132,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         modify0(
           (Focus[Context](_.transaction) >>> txBodyL)
               .refocus(_.requiredSigners)
-              .modify((s: TaggedSortedSet[AddrKeyHash]) => TaggedSortedSet.from(s.toSet + hash))
+              .modify((s: TaggedSortedSet[AddrKeyHash]) => TaggedSortedSet(s.toSet + hash))
         )
         modify0(Focus[Context](_.expectedSigners).modify(_ + hash))
         Ok

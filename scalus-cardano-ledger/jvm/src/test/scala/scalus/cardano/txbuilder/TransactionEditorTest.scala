@@ -16,11 +16,7 @@ import scalus.|>
 private def addInput(input: TransactionInput): Transaction => Transaction =
     txBodyL
         .refocus(_.inputs)
-        .modify((is: TaggedSortedSet[TransactionInput]) =>
-            TaggedSortedSet.from(
-              is.toSet + input
-            )
-        )
+        .modify((is: TaggedSortedSet[TransactionInput]) => TaggedSortedSet(is.toSet + input))
 
 class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
@@ -74,9 +70,7 @@ class TransactionEditorTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           editTransaction(
             txBodyL
                 .refocus(_.inputs)
-                .modify((i: TaggedSortedSet[TransactionInput]) =>
-                    TaggedSortedSet.from(i.toSeq :+ input2)
-                )
+                .modify((i: TaggedSortedSet[TransactionInput]) => TaggedSortedSet(i.toSet + input2))
           )(
             oneInput
           ) == expectedTx
