@@ -1139,9 +1139,9 @@ object AuctionTestKitTest {
                     .spend(
                       auctionUtxo,
                       redeemerBuilder,
-                      script,
-                      Set(AddrKeyHash.fromByteString(bidderPkh.hash))
+                      script
                     )
+                    .requireSignature(AddrKeyHash.fromByteString(bidderPkh.hash))
                     .payTo(scriptAddress, Value.lovelace(newBidAmount) + nftValue, newDatum)
                     .validTo(Instant.ofEpochMilli(datum.auctionEndTime.toLong - 1000))
 
@@ -1193,7 +1193,8 @@ object AuctionTestKitTest {
                 val redeemerBuilder = buildEndRedeemer(auctionUtxo, sellerAddr, winnerAddr)
 
                 var builder = TxBuilder(reader.cardanoInfo)
-                    .spend(auctionUtxo, redeemerBuilder, script, spendSigners)
+                    .spend(auctionUtxo, redeemerBuilder, script)
+                    .requireSignatures(spendSigners)
                     .validFrom(Instant.ofEpochMilli(datum.auctionEndTime.toLong + 1000))
 
                 builder = winnerAddr match
@@ -1388,9 +1389,9 @@ object AuctionTestKitTest {
                 .spend(
                   state.utxo,
                   redeemerBuilder,
-                  state.script,
-                  Set(AddrKeyHash.fromByteString(bidderPkh.hash))
+                  state.script
                 )
+                .requireSignature(AddrKeyHash.fromByteString(bidderPkh.hash))
                 .payTo(state.scriptAddress, newAuctionValue, newDatum)
                 .validTo(Instant.ofEpochMilli(state.datum.auctionEndTime.toLong - 1000))
 
@@ -1429,9 +1430,9 @@ object AuctionTestKitTest {
                             .spend(
                               state.utxo,
                               redeemerBuilder,
-                              state.script,
-                              Set(AddrKeyHash.fromByteString(bidderPkh.hash))
+                              state.script
                             )
+                            .requireSignature(AddrKeyHash.fromByteString(bidderPkh.hash))
                             .payTo(bidderAddress, Value.lovelace(bidAmount))
                             .validTo(Instant.ofEpochMilli(state.datum.auctionEndTime.toLong - 1000))
                         TxTemplate(stealBuilder, bidderAddress, bidderSigner).complete(reader)
@@ -1465,9 +1466,9 @@ object AuctionTestKitTest {
                             .spend(
                               state.utxo,
                               redeemerBuilder,
-                              state.script,
-                              Set(AddrKeyHash.fromByteString(bidderPkh.hash))
+                              state.script
                             )
+                            .requireSignature(AddrKeyHash.fromByteString(bidderPkh.hash))
                             .payTo(state.scriptAddress, Value.lovelace(lowBid) + nftValue, newDatum)
                             .validTo(Instant.ofEpochMilli(state.datum.auctionEndTime.toLong - 1000))
                         TxTemplate(lowBuilder, bidderAddress, bidderSigner).complete(reader)
@@ -1496,9 +1497,9 @@ object AuctionTestKitTest {
                             .spend(
                               state.utxo,
                               redeemerBuilder,
-                              state.script,
-                              Set(AddrKeyHash.fromByteString(bidderPkh.hash))
+                              state.script
                             )
+                            .requireSignature(AddrKeyHash.fromByteString(bidderPkh.hash))
                             .payTo(
                               state.scriptAddress,
                               Value.lovelace(bidAmount) + nftValue,
@@ -1580,7 +1581,8 @@ object AuctionTestKitTest {
             val redeemerBuilder = buildEndRedeemer(state.utxo, sellerAddr, winnerAddr)
 
             var builder = TxBuilder(reader.cardanoInfo)
-                .spend(state.utxo, redeemerBuilder, state.script, spendRequiredSigners)
+                .spend(state.utxo, redeemerBuilder, state.script)
+                .requireSignatures(spendRequiredSigners)
                 .validFrom(Instant.ofEpochMilli(state.datum.auctionEndTime.toLong + 1000))
 
             builder = winnerAddr match

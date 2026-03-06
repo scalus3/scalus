@@ -621,7 +621,7 @@ object TransactionBuilder {
         transaction: Transaction,
         redeemers: Seq[DetachedRedeemer],
         network: Network,
-        expectedSigners: Set[ExpectedSigner],
+        expectedSigners: Set[AddrKeyHash],
         /** Invariants:
           *   - The union of transaction.body.value.inputs, transaction.body.value.referenceInputs,
           *     and transaction.body.value.collateralInputs must exactly match resolvedUtxos.inputs
@@ -643,7 +643,7 @@ object TransactionBuilder {
             Transaction,
             Seq[DetachedRedeemer],
             Network,
-            Set[ExpectedSigner],
+            Set[AddrKeyHash],
             ResolvedUtxos
         ) = (
           this.transaction,

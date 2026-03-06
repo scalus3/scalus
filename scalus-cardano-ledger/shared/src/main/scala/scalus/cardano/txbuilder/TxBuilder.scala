@@ -1594,7 +1594,7 @@ case class TxBuilder(
         val signedTx = signer.sign(transaction)
         // Filter witnesses to only include expected signers.
         // Extra signatures would make the tx larger than the fee estimate accounts for.
-        val expectedHashes = context.expectedSigners.map(_.hash)
+        val expectedHashes = context.expectedSigners
         val filteredWitnesses = TaggedSortedSet(
           signedTx.witnessSet.vkeyWitnesses.toSet.filter(w => expectedHashes.contains(w.vkeyHash))
         )
@@ -1871,11 +1871,11 @@ case class TxBuilder(
     }
 
     /** Extract sponsor's expected signer from address if it's a pubkey address. */
-    private def extractSponsorSigner(sponsor: Address): Option[ExpectedSigner] = {
+    private def extractSponsorSigner(sponsor: Address): Option[AddrKeyHash] = {
         sponsor match {
             case sa: ShelleyAddress =>
                 sa.payment match {
-                    case ShelleyPaymentPart.Key(hash) => Some(ExpectedSigner(hash))
+                    case ShelleyPaymentPart.Key(hash) => Some(hash)
                     case _                            => None
                 }
             case _ => None
