@@ -5,8 +5,8 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 
-/** Loads the Ethereum KZG ceremony trusted setup (32768 G1 points, 65 G2 points) and converts it
-  * to a [[BilinearAccumulatorProver.Setup]].
+/** Loads the Ethereum KZG ceremony trusted setup (32768 G1 points, 65 G2 points) and converts it to
+  * a [[BilinearAccumulatorProver.Setup]].
   */
 object EthereumKzgCeremony {
 
