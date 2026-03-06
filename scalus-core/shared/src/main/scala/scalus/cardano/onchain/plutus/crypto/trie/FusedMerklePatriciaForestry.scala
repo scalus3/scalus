@@ -119,13 +119,11 @@ object FusedMerklePatriciaForestry:
             else if stepType == BigInt(1) then // Fork
                 val neighborNibble = indexByteString(proof, offset + 2)
                 val neighborPrefixLen = indexByteString(proof, offset + 3)
-                val neighborHalfLeft = sliceByteString(offset + 4, Blake2b256DigestSize, proof)
-                val neighborHalfRight = sliceByteString(offset + 36, Blake2b256DigestSize, proof)
+                val neighborData = sliceByteString(offset + 4, 64, proof)
                 val root = doIncluding(path, value, nextCursor, proof, offset + 68)
-                val neighborHash = combine3(
+                val neighborHash = combine(
                   consByteString(neighborPrefixLen, ByteString.empty),
-                  neighborHalfLeft,
-                  neighborHalfRight
+                  neighborData
                 )
                 doFork(path, cursor, nextCursor, root, neighborNibble, neighborHash)
             else // Leaf (stepType == 2)
@@ -157,21 +155,18 @@ object FusedMerklePatriciaForestry:
             else if stepType == BigInt(1) then // Fork
                 val neighborNibble = indexByteString(proof, offset + 2)
                 val neighborPrefixLen = indexByteString(proof, offset + 3)
-                val neighborHalfLeft = sliceByteString(offset + 4, Blake2b256DigestSize, proof)
-                val neighborHalfRight = sliceByteString(offset + 36, Blake2b256DigestSize, proof)
+                val neighborData = sliceByteString(offset + 4, 64, proof)
                 val nextOffset = offset + 68
                 if nextOffset >= lengthOfByteString(proof) then
-                    combine3(
+                    combine(
                       consByteString(skip + 1 + neighborPrefixLen, ByteString.empty),
-                      neighborHalfLeft,
-                      neighborHalfRight
+                      neighborData
                     )
                 else
                     val root = doExcluding(path, nextCursor, proof, nextOffset)
-                    val neighborHash = combine3(
+                    val neighborHash = combine(
                       consByteString(neighborPrefixLen, ByteString.empty),
-                      neighborHalfLeft,
-                      neighborHalfRight
+                      neighborData
                     )
                     doFork(path, cursor, nextCursor, root, neighborNibble, neighborHash)
             else // Leaf (stepType == 2)
@@ -267,20 +262,17 @@ object FusedMerklePatriciaForestry:
             else if stepType == BigInt(1) then // Fork
                 val neighborNibble = indexByteString(proof, offset + 2)
                 val neighborPrefixLen = indexByteString(proof, offset + 3)
-                val neighborHalfLeft = sliceByteString(offset + 4, Blake2b256DigestSize, proof)
-                val neighborHalfRight = sliceByteString(offset + 36, Blake2b256DigestSize, proof)
+                val neighborData = sliceByteString(offset + 4, 64, proof)
                 val nextOffset = offset + 68
-                val neighborHash = combine3(
+                val neighborHash = combine(
                   consByteString(neighborPrefixLen, ByteString.empty),
-                  neighborHalfLeft,
-                  neighborHalfRight
+                  neighborData
                 )
                 if nextOffset >= lengthOfByteString(proof) then
                     // Last step: excluding has special prefix adjustment
-                    val exclResult = combine3(
+                    val exclResult = combine(
                       consByteString(skip + 1 + neighborPrefixLen, ByteString.empty),
-                      neighborHalfLeft,
-                      neighborHalfRight
+                      neighborData
                     )
                     val inclChild = combine(suffix(path, nextCursor), value)
                     val inclResult =

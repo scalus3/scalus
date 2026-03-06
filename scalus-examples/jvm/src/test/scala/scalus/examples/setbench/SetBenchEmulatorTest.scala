@@ -6,7 +6,11 @@ import scalus.cardano.blueprint.Blueprint
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.crypto.trie.FusedMerklePatriciaForestry as Mpf16b
+import scalus.crypto.trie.FusedMerklePatriciaForestry2 as Mpf2b
+import scalus.crypto.trie.FusedMerklePatriciaForestry64 as Mpf64b
 import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
+import scalus.crypto.trie.MerklePatriciaForestry2 as Mpf2o
+import scalus.crypto.trie.MerklePatriciaForestry64 as Mpf64o
 import scalus.crypto.accumulator.EthereumKzgCeremony
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.testing.kit.Party.{Alice, Bob}
@@ -686,6 +690,26 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         benchMpfWithdraw("MPF-16b", 32000, Mpf16bContract, MpfTrie.wrap16b)
     }
 
+    test("MPF-64o withdraw N=32K", Benchmark) {
+        info("=== MPF-64o withdraw N=32000 ===")
+        benchMpfWithdraw("MPF-64o", 32000, Mpf64oContract, MpfTrie.wrap64o)
+    }
+
+    test("MPF-64b withdraw N=32K", Benchmark) {
+        info("=== MPF-64b withdraw N=32000 ===")
+        benchMpfWithdraw("MPF-64b", 32000, Mpf64bContract, MpfTrie.wrap64b)
+    }
+
+    test("MPF-2o withdraw N=32K", Benchmark) {
+        info("=== MPF-2o withdraw N=32000 ===")
+        benchMpfWithdraw("MPF-2o", 32000, Mpf2oContract, MpfTrie.wrap2o)
+    }
+
+    test("MPF-2b withdraw N=32K", Benchmark) {
+        info("=== MPF-2b withdraw N=32000 ===")
+        benchMpfWithdraw("MPF-2b", 32000, Mpf2bContract, MpfTrie.wrap2b)
+    }
+
     test("MPF-16o-light withdraw N=32K", Benchmark) {
         info("=== MPF-16o-light withdraw N=32000 ===")
         benchMpfWithdraw(
@@ -724,6 +748,26 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
     test("MPF-16b deposit N=32K", Benchmark) {
         info("=== MPF-16b deposit N=32000 ===")
         benchMpfDeposit("MPF-16b", 32000, Mpf16bContract, MpfTrie.wrap16b)
+    }
+
+    test("MPF-64o deposit N=32K", Benchmark) {
+        info("=== MPF-64o deposit N=32000 ===")
+        benchMpfDeposit("MPF-64o", 32000, Mpf64oContract, MpfTrie.wrap64o)
+    }
+
+    test("MPF-64b deposit N=32K", Benchmark) {
+        info("=== MPF-64b deposit N=32000 ===")
+        benchMpfDeposit("MPF-64b", 32000, Mpf64bContract, MpfTrie.wrap64b)
+    }
+
+    test("MPF-2o deposit N=32K", Benchmark) {
+        info("=== MPF-2o deposit N=32000 ===")
+        benchMpfDeposit("MPF-2o", 32000, Mpf2oContract, MpfTrie.wrap2o)
+    }
+
+    test("MPF-2b deposit N=32K", Benchmark) {
+        info("=== MPF-2b deposit N=32000 ===")
+        benchMpfDeposit("MPF-2b", 32000, Mpf2bContract, MpfTrie.wrap2b)
     }
 
     test("MPF-16o-light deposit N=32K", Benchmark) {
@@ -808,6 +852,19 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
                 info(
                   f"${r.n}%6d | ${r.variant}%-10s | ${r.op}%-8s | ${r.avgFee}%,12d | ${r.avgCpu}%,14d | ${r.avgMem}%,10d | ${r.avgTxSize}%8d | ${r.avgProofSize}%10d | ${r.buildTimeMs}%10d"
                 )
+
+            // Save results to JSON file for future reference
+            val outDir = new java.io.File("target/bench-results")
+            outDir.mkdirs()
+            val timestamp = java.time.LocalDateTime.now().toString.replace(":", "-")
+            val outFile = new java.io.File(outDir, s"setbench-emulator-$timestamp.json")
+            val json = allResults
+                .map { r =>
+                    s"""  {"n":${r.n},"variant":"${r.variant}","op":"${r.op}","fee":${r.avgFee},"cpu":${r.avgCpu},"mem":${r.avgMem},"txSize":${r.avgTxSize},"proof":${r.avgProofSize},"proofGenMs":${r.avgProofGenMs},"buildMs":${r.buildTimeMs}}"""
+                }
+                .mkString("[\n", ",\n", "\n]")
+            java.nio.file.Files.writeString(outFile.toPath, json)
+            info(s"Results saved to ${outFile.getPath}")
     }
 }
 
@@ -844,6 +901,18 @@ object SetBenchEmulatorTest {
         def wrap16b(elems: Vector[(ByteString, ByteString)]): MpfTrie =
             Mpf16bWrapper(Mpf16b.fromList(elems))
 
+        def wrap64o(elems: Vector[(ByteString, ByteString)]): MpfTrie =
+            Mpf64oWrapper(Mpf64o.fromList(elems))
+
+        def wrap64b(elems: Vector[(ByteString, ByteString)]): MpfTrie =
+            Mpf64bWrapper(Mpf64b.fromList(elems))
+
+        def wrap2o(elems: Vector[(ByteString, ByteString)]): MpfTrie =
+            Mpf2oWrapper(Mpf2o.fromList(elems))
+
+        def wrap2b(elems: Vector[(ByteString, ByteString)]): MpfTrie =
+            Mpf2bWrapper(Mpf2b.fromList(elems))
+
         private case class Mpf16oWrapper(trie: Mpf16o) extends MpfTrie {
             import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
             def rootHash: ByteString = trie.rootHash
@@ -854,6 +923,26 @@ object SetBenchEmulatorTest {
                 Mpf16oWrapper(trie.insert(key, value))
         }
 
+        private case class Mpf2oWrapper(trie: Mpf2o) extends MpfTrie {
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry2.*
+            def rootHash: ByteString = trie.rootHash
+            def proveMembershipData(key: ByteString): Data = trie.proveMembership(key).toData
+            def proveNonMembershipData(key: ByteString): Data = trie.proveNonMembership(key).toData
+            def delete(key: ByteString): MpfTrie = Mpf2oWrapper(trie.delete(key))
+            def insert(key: ByteString, value: ByteString): MpfTrie =
+                Mpf2oWrapper(trie.insert(key, value))
+        }
+
+        private case class Mpf64oWrapper(trie: Mpf64o) extends MpfTrie {
+            import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry64.*
+            def rootHash: ByteString = trie.rootHash
+            def proveMembershipData(key: ByteString): Data = trie.proveMembership(key).toData
+            def proveNonMembershipData(key: ByteString): Data = trie.proveNonMembership(key).toData
+            def delete(key: ByteString): MpfTrie = Mpf64oWrapper(trie.delete(key))
+            def insert(key: ByteString, value: ByteString): MpfTrie =
+                Mpf64oWrapper(trie.insert(key, value))
+        }
+
         private case class Mpf16bWrapper(trie: Mpf16b) extends MpfTrie {
             def rootHash: ByteString = trie.rootHash
             def proveMembershipData(key: ByteString): Data = Data.B(trie.proveMembership(key))
@@ -861,6 +950,24 @@ object SetBenchEmulatorTest {
             def delete(key: ByteString): MpfTrie = Mpf16bWrapper(trie.delete(key))
             def insert(key: ByteString, value: ByteString): MpfTrie =
                 Mpf16bWrapper(trie.insert(key, value))
+        }
+
+        private case class Mpf64bWrapper(trie: Mpf64b) extends MpfTrie {
+            def rootHash: ByteString = trie.rootHash
+            def proveMembershipData(key: ByteString): Data = Data.B(trie.proveMembership(key))
+            def proveNonMembershipData(key: ByteString): Data = Data.B(trie.proveNonMembership(key))
+            def delete(key: ByteString): MpfTrie = Mpf64bWrapper(trie.delete(key))
+            def insert(key: ByteString, value: ByteString): MpfTrie =
+                Mpf64bWrapper(trie.insert(key, value))
+        }
+
+        private case class Mpf2bWrapper(trie: Mpf2b) extends MpfTrie {
+            def rootHash: ByteString = trie.rootHash
+            def proveMembershipData(key: ByteString): Data = Data.B(trie.proveMembership(key))
+            def proveNonMembershipData(key: ByteString): Data = Data.B(trie.proveNonMembership(key))
+            def delete(key: ByteString): MpfTrie = Mpf2bWrapper(trie.delete(key))
+            def insert(key: ByteString, value: ByteString): MpfTrie =
+                Mpf2bWrapper(trie.insert(key, value))
         }
     }
 }
