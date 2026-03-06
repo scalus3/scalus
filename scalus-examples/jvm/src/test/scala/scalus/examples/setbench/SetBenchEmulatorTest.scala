@@ -7,6 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.crypto.trie.PressedMerklePatriciaForestry as Mpf16b
 import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
+import scalus.crypto.accumulator.EthereumKzgCeremony
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.{ScalusTest, TestUtil}
@@ -45,8 +46,7 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
         }
     }
 
-    private lazy val ceremony: CollectionMembershipBudgetTest.EthereumCeremony =
-        CollectionMembershipBudgetTest.loadCeremony()
+    private lazy val ceremony = EthereumKzgCeremony.loadCeremony()
 
     private lazy val accSetup: Setup = {
         val t0 = System.nanoTime()

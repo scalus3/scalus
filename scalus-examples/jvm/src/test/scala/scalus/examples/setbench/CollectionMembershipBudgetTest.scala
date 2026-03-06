@@ -1,7 +1,5 @@
 package scalus.examples.setbench
 
-import com.github.plokhotnyuk.jsoniter_scala.core.*
-import com.github.plokhotnyuk.jsoniter_scala.macros.*
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
 import scalus.crypto.trie.PressedMerklePatriciaForestry as Mpf16b
@@ -10,6 +8,7 @@ import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.{Proof a
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
+import scalus.crypto.accumulator.EthereumKzgCeremony
 import scalus.crypto.accumulator.BilinearAccumulatorProver.*
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.{B, Constr, I}
@@ -32,7 +31,6 @@ import scalus.uplc.Term.asTerm
   * }}}
   */
 class CollectionMembershipBudgetTest extends AnyFunSuite {
-    import CollectionMembershipBudgetTest.*
     import scalus.testing.Benchmark
 
     private given Options = Options(
@@ -69,7 +67,7 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         byteStringToInteger(true, blake2b_256(k))
     }
 
-    private lazy val ceremony: EthereumCeremony = loadCeremony()
+    private lazy val ceremony = EthereumKzgCeremony.loadCeremony()
 
     private lazy val accSetup: Setup = {
         val t0 = System.nanoTime()
@@ -487,44 +485,5 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         info(
           f"  Acc(full)/MPF16b ratio: mem=${accFullBudget.memory.toDouble / avgMpf16b.memory}%.3f  cpu=${accFullBudget.steps.toDouble / avgMpf16b.steps}%.3f"
         )
-    }
-}
-
-object CollectionMembershipBudgetTest {
-
-    private[examples] case class EthereumCeremony(
-        g1Monomial: List[G1Element],
-        g2Monomial: List[G2Element]
-    )
-
-    private given JsonValueCodec[G1Element] = new JsonValueCodec[G1Element] {
-        def decodeValue(in: JsonReader, default: G1Element): G1Element = {
-            val hex = in.readString("")
-            G1Element(ByteString.fromHex(hex.substring(2)))
-        }
-        def encodeValue(x: G1Element, out: JsonWriter): Unit = ???
-        def nullValue: G1Element = null.asInstanceOf[G1Element]
-    }
-
-    private given JsonValueCodec[G2Element] = new JsonValueCodec[G2Element] {
-        def decodeValue(in: JsonReader, default: G2Element): G2Element = {
-            val hex = in.readString("")
-            G2Element(ByteString.fromHex(hex.substring(2)))
-        }
-        def encodeValue(x: G2Element, out: JsonWriter): Unit = ???
-        def nullValue: G2Element = null.asInstanceOf[G2Element]
-    }
-
-    private given JsonValueCodec[EthereumCeremony] = JsonCodecMaker.make(
-      CodecMakerConfig
-          .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
-          .withSkipUnexpectedFields(false)
-    )
-
-    private[examples] def loadCeremony(): EthereumCeremony = {
-        val input = getClass.getResourceAsStream("/trusted_setup_32768.json")
-        require(input != null, "trusted_setup_32768.json not found in test resources")
-        try readFromStream[EthereumCeremony](input)
-        finally input.close()
     }
 }

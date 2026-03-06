@@ -158,6 +158,7 @@ lazy val root: Project = project
       scalusDesignPatterns,
       bench,
       `scalus-bloxbean-cardano-client-lib`,
+      scalusEthereumKzgCeremony,
       docs
     )
     .settings(
@@ -178,6 +179,7 @@ lazy val jvm: Project = project
       scalusDesignPatterns,
       bench,
       `scalus-bloxbean-cardano-client-lib`,
+      scalusEthereumKzgCeremony,
     )
     .settings(
       publish / skip := true
@@ -347,7 +349,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test,
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
-      libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0"
+      libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
+      // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
+      Test / unmanagedResourceDirectories += (LocalRootProject / baseDirectory).value / "scalus-ethereum-kzg-ceremony" / "src" / "main" / "resources"
     )
     .jsSettings(
       // Add JS-specific settings here
@@ -523,7 +527,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark")
     )
     .configurePlatform(JVMPlatform)(
-      _.dependsOn(`scalus-bloxbean-cardano-client-lib`, scalusDesignPatterns)
+      _.dependsOn(`scalus-bloxbean-cardano-client-lib`, scalusDesignPatterns, scalusEthereumKzgCeremony)
     )
     .jvmSettings(
       Test / fork := true,
@@ -712,6 +716,18 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       }
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
+
+// Ethereum KZG ceremony trusted setup for bilinear accumulators
+lazy val scalusEthereumKzgCeremony = project
+    .in(file("scalus-ethereum-kzg-ceremony"))
+    .dependsOn(scalus.jvm)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-ethereum-kzg-ceremony",
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.8",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.8" % "compile",
+    )
 
 lazy val scalusCardanoLedgerIt = project
     .in(file("scalus-cardano-ledger-it"))

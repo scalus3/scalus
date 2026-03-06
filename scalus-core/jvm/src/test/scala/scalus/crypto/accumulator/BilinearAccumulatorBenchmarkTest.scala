@@ -42,9 +42,6 @@ class BilinearAccumulatorBenchmarkTest extends AnyFunSuite {
     }
 
     test("full G1 accumulator E2E with 32000 elements (Ethereum ceremony)", Benchmark) {
-        // G1 accumulator: acc on G1 (needs G1 powers for accumulation/proofs),
-        // on-chain verification uses G2 powers (only needs degree of subset).
-        // Ethereum ceremony: 32768 G1 points (supports degree 32767), 65 G2 points.
         val n = 32000
         val rng = new scala.util.Random(123)
         val elements = Vector.fill(n)(BigInt(256, rng).mod(BilinearAccumulatorProver.p))
@@ -130,7 +127,7 @@ object BilinearAccumulatorBenchmarkTest {
 
     private def loadCeremony(): EthereumCeremony = {
         val input = getClass.getResourceAsStream("/trusted_setup_32768.json")
-        require(input != null, "trusted_setup_32768.json not found in test resources")
+        require(input != null, "trusted_setup_32768.json not found on classpath")
         try readFromStream[EthereumCeremony](input)
         finally input.close()
     }
