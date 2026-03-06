@@ -1,5 +1,73 @@
 # Changelog
 
+## 0.16.0 (2026-03-06)
+
+### Added
+
+- compile-time partial evaluation in UPLC optimizer with occurrence analysis for smarter inlining
+- source positions in UPLC Term and CEK error reporting for precise error diagnostics
+- diagnostic replay for release scripts — `DebugScript` API re-evaluates stripped scripts with full
+  traces for debugging
+- `strip trace/log` statements for release builds
+- `PairList` type to avoid `SumDataList`/`SumDataPairList` per-element conversions, used internally
+  in `SortedMap` and `Value.zero` for cheaper on-chain operations
+- `lovelaceAmount` on `Value` for efficient lovelace extraction via `PairList.head`
+- `LinkedList` library implementation with on-chain validator and off-chain utilities
+- Merkle Patricia Forestry variants (mpfb, mpfo) with on-chain `verifyMembership`/`verifyNonMembership`,
+  off-chain trie operations, and Aiken cross-implementation compatibility
+- `FrontierMerkleTree`, `MerkleTree`, `MembershipToken` data structures
+- `IncrementalMerkleTree` (formerly AppendOnlyMerkleTree) with path-byte encoding optimization
+- bilinear accumulator allowlist validator with `scalus-ethereum-kzg-ceremony` subproject
+- Pippenger MSM optimization for BLS12-381 with allocation-free Montgomery NTT
+- constant product AMM contract example
+- multi-pool DEX example with multiple withdraw-zero scripts
+- anonymous data contract with on-chain reading via reference inputs
+- `DecentralizedIdentity` on-chain contract with `CompiledPlutus` mint and required signers
+- upgradable proxy validator
+- CAPE two-party escrow benchmark with factorial and fibonacci benchmarks
+- `payTo` overloads for `CompiledPlutus` in `TxBuilder`
+- `checkTransaction`, `pollForConfirmation`, and `submitAndPoll` on `BlockchainProvider`
+- `ProtocolParams.diff` and `CardanoInfo.verify`
+- `UtxoEnvDefaults` for inlined protocol parameters
+- emulator stake state pre-initialization with `Map[Address, Coin]` and JS APIs
+- `->` operator support in Scalus compiler plugin
+- `assertEvalWithBudget` lambda overload to prevent constant folding in budget tests
+- builtin totality annotations for improved dead code elimination
+- Cardano protocol parameters updated to epoch 616
+- `datumBuilder` for outputs with datums that depend on the final transaction shape
+
+### Changed
+
+- reorganized crypto packages — `crypto/trie`, `crypto/tree`, `crypto/accumulator`; flattened
+  `bls12_381`
+- moved off-chain crypto from `cardano.offchain.crypto` to `scalus.crypto`
+- renamed `MerklePatriciaTrie` to `MerklePatriciaForestry`, `BinaryMerklePatriciaTrie` to
+  `FusedMerklePatriciaForestry`
+- merged `Compiled[A]` trait into `CompiledPlutus[A]`
+- `requiredSigners` is now a transaction-wide concept; per-step `requiredSigners` APIs deprecated
+- replaced `PlutusV4` with `PlutusV3` + `targetProtocolVersion`
+- replaced `sourcePos` with `UplcAnnotation` in UPLC Term
+- optimized `List.at` with direct tail-recursive traversal
+- `List.single` and `PairList.single` are now `inline` for cheaper on-chain operations
+- use `TaggedSortedSet.apply` instead of `TaggedSortedSet.from` for zero-cost wrapping of SortedSets
+- removed deprecated code from 0.13.x and earlier
+- removed unused `scalusPluginTests` project
+
+### Fixed
+
+- UPLC optimizer now uses position-ignoring equality to avoid false mismatches
+- `Force(Delay)` elimination after inner optimization in Inliner
+- free variable tracking in `substitute` to avoid name capture
+- `Constr` with value args recognized as WHNF in `isValueForm`
+- unsaturated builtin applications recognized as WHNF
+- propagate `inlinedFrom` in `compileThrowException` for inline `require`
+- `Math.sqrt` optimized with `log2`/`exp2` initial guess
+- deterministic validator iteration order using `SortedSet`
+- validate seed `TxOutRef` on-chain and harden off-chain helpers
+- propagate spent budget through CEK/emulator error chain
+- ignore zero-amount entries in assets map during minting
+- fetch Yaci DevKit slot config from admin API instead of hardcoding
+
 ## 0.15.1 (2026-02-13)
 
 ### Added
