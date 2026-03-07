@@ -118,13 +118,9 @@ object FusedMerklePatriciaForestry2:
                 val (left, right) = ordered(b, root, neighborHash)
                 combine3(prefix, left, right)
             else if stepType == BigInt(1) then // Fork
-                val neighborPrefixLen = indexByteString(proof, offset + 2)
-                val neighborData = sliceByteString(offset + 3, 64, proof)
                 val root = doIncluding(path, value, nextCursor, proof, offset + 67)
-                val neighborHash = combine(
-                  consByteString(neighborPrefixLen, ByteString.empty),
-                  neighborData
-                )
+                // prefixLen[1] ++ halfLeft[32] ++ halfRight[32] = 65 contiguous bytes
+                val neighborHash = blake2b_256(sliceByteString(offset + 2, 65, proof))
                 val (left, right) = ordered(b, root, neighborHash)
                 combine3(prefix, left, right)
             else // Leaf (stepType == 2)
@@ -164,15 +160,12 @@ object FusedMerklePatriciaForestry2:
                   combine3(prefix, inL, inR)
                 )
             else if stepType == BigInt(1) then // Fork
-                val neighborPrefixLen = indexByteString(proof, offset + 2)
-                val neighborData = sliceByteString(offset + 3, 64, proof)
                 val nextOffset = offset + 67
-                val neighborHash = combine(
-                  consByteString(neighborPrefixLen, ByteString.empty),
-                  neighborData
-                )
+                val neighborHash = blake2b_256(sliceByteString(offset + 2, 65, proof))
                 if nextOffset >= lengthOfByteString(proof) then
                     // Last step: excluding = neighbor promoted up with combined skip
+                    val neighborPrefixLen = indexByteString(proof, offset + 2)
+                    val neighborData = sliceByteString(offset + 3, 64, proof)
                     val exclResult = combine(
                       consByteString(skip + 1 + neighborPrefixLen, ByteString.empty),
                       neighborData

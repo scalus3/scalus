@@ -37,8 +37,10 @@ object Merkling:
             consByteString(0xff, dropped)
         else
             // Odd cursor: drop (cursor+1)/2 bytes, prepend low nibble and 0x00
+            // Inline nibble(path, cursor) for odd cursor: modInteger(byte, 16)
             val dropped = sliceByteString((cursor + 1) / 2, lengthOfByteString(path), path)
-            consByteString(0, consByteString(nibble(path, cursor), dropped))
+            val lowNibble = modInteger(indexByteString(path, cursor / 2), 16)
+            consByteString(0, consByteString(lowNibble, dropped))
 
     /** Computes nibbles for a given branch node between start and end positions.
       *
@@ -201,3 +203,4 @@ object Merkling:
               merkle2(neighbor, neighborHash, NullHash),
               merkle2(me - 2, meHash, NullHash)
             )
+
