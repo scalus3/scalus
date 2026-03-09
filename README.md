@@ -1,6 +1,6 @@
 # Scalus - DApps Development Platform for Cardano
 
-![CI/Release](https://github.com/nau/scalus/actions/workflows/release.yml/badge.svg)
+![CI/Release](https://github.com/scalus3/scalus/actions/workflows/release.yml/badge.svg)
 ![Maven Central](https://img.shields.io/maven-central/v/org.scalus/scalus_3)
 [![Discord](https://img.shields.io/discord/1105852427346911252.svg?label=&logo=discord&logoColor=ffffff&color=404244&labelColor=6A7EC2)](https://discord.gg/ygwtuBybsy)
 
@@ -39,6 +39,12 @@ Write efficient and compact smart contracts and squeeze the most out of the Card
 * Plutus V1, V2 and V3 support
 * Plutus VM Interpreter and execution budget calculation for Plutus V1, V2 and V3
 * Plutus VM library works on JVM, JavaScript and Native platforms!
+* UPLC optimizer with compile-time partial evaluation for smaller and cheaper scripts
+* Source position tracking and diagnostic replay for easier debugging
+* Cross-platform transaction builder (TxBuilder) for JVM and JavaScript
+* Emulator for off-chain transaction testing without a running node
+* Conway era ledger rules support
+* HD wallet with BIP-39/BIP32-Ed25519/CIP-1852
 * Property-based testing library
 * Untyped Plutus Core (UPLC) data types and functions
 * Flat, CBOR, JSON serialization
@@ -55,33 +61,34 @@ Clone the repository and follow the instructions in the README.
 
 ### Hello Cardano Validator Example
 
-Here is A simple validator that checks if the redeemer is "Hello, Cardano!" and if the transaction is signed by the
+Here is a simple validator that checks if the redeemer is "Hello, World!" and if the transaction is signed by the
 owner. Below example is taken
-from [HelloCardano](https://github.com/nau/scalus/blob/3bc95e16c46ef32126f156af37dc22ed6b8b42c2/scalus-examples/shared/src/main/scala/scalus/examples/HelloCardano.scala#L16)
+from [HelloCardano](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/HelloCardano.scala).
 
 ```scala 3
 @Compile
 object HelloCardano extends Validator {
-  override def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit = {
-    val Some(ownerData) = datum: @unchecked
-    val owner = ownerData.to[PubKeyHash]
-    val signed = tx.signatories.contains(owner)
-    require(signed, "Must be signed")
-    val saysHello = redeemer.to[String] == "Hello, Cardano!"
-    require(saysHello, "Invalid redeemer")
-  }
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
+        val signed = tx.signatories.contains(owner)
+        require(signed, "Must be signed")
+        val saysHello = redeemer.to[String] == "Hello, World!"
+        require(saysHello, "Invalid redeemer")
+    }
 }
 
 // compile to Untyped Plutus Core (UPLC)
-// create a validator script - Plutus V3 program
-val validator = compile(HelloCardano.validate).plutusV3.toUplc()
-// HEX encoded Plutus script, ready to be used in with cardano-cli or Blockfrost
-val plutusScript = validator.doubleCborHex
-// Create a Cardano .plutus file for this validator
-validator.writePlutusFile(path, PlutusLedgerLanguage.PlutusV3)
+val compiled = PlutusV3.compile(HelloCardano.validate)
+// HEX encoded Plutus script, ready to be used with cardano-cli or Blockfrost
+val plutusScript = compiled.program.doubleCborHex
 ```
 
-Look at [SendTx](https://github.com/nau/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/SendTx.scala#L25)
+Look at [SendTx](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/SendTx.scala)
 example for a full example of how to create a transaction with this validator.
 
 ### Scalus for budget calculation with Cardano Client Lib
@@ -130,10 +137,10 @@ It has a set of tests that check the contract logic and its execution costs.
 
 Here is a full example of a token minting/burning validator that works on both JVM and JavaScript:
 
-[MintingPolicy.scala](https://github.com/nau/scalus/blob/master/scalus-examples/shared/src/main/scala/scalus/examples/MintingPolicy.scala)
+[MintingPolicy.scala](https://github.com/scalus3/scalus/blob/master/scalus-examples/shared/src/main/scala/scalus/examples/MintingPolicy.scala)
 
 And here is a project that uses it in web frontend:
-[Scalus Minting Example](https://github.com/nau/scalus/tree/master/scalus-examples/js/)
+[Scalus Minting Example](https://github.com/scalus3/scalus/tree/master/scalus-examples/js/)
 
 ### Minimal Size Withdrawal Validator
 
@@ -162,6 +169,8 @@ All from the same Scala codebase.
 
 ### Scalus on TypeScript/JavaScript via Scala.js
 
+The Scalus npm package provides a JavaScript/TypeScript API for evaluating Plutus scripts and building transactions.
+
 Here's how you can evaluate a Plutus script from a TypeScript program:
 
 ```typescript
@@ -174,15 +183,11 @@ console.log(result);
 console.log(result.budget.memory);
 ```
 
-### Building a JavaScript library
-
-The following command will build a JavaScript library that you can use in your TypeScript or JavaScript projects:
+Install the `scalus` npm package:
 
 ```shell
-sbt  scalusJS/copyBundle
+npm install scalus
 ```
-
-The output will be in the `scalus-core/js/src/main/npm` directory.
 
 ### Scalus Native
 
@@ -191,14 +196,14 @@ Here's how you can evaluate a Plutus script from a C program:
 ```c
 #include "scalus.h"
 // Plutus V3, protocol version 10
-machine_params* params = scalus_get_default_machine_params(3, 10); 
+machine_params* params = scalus_get_default_machine_params(3, 10);
 ex_budget budget;
 char logs_buffer[1024];
 char error[1024];
 int ret = scalus_evaluate_script(
     script, // script hex
     3, // Plutus V3
-    params2, // machine params
+    params, // machine params
     &budget,
     logs_buffer, sizeof(logs_buffer),
     error, sizeof(error));
@@ -214,7 +219,7 @@ if (ret == 0) {
 }
 ```
 
-See the full example in the [main.c](https://github.com/nau/scalus/blob/master/examples-native/main.c) file.
+See the full example in the [main.c](https://github.com/scalus3/scalus/blob/master/scalus-examples/native/main.c) file.
 
 ### How to build a native library
 
@@ -222,18 +227,9 @@ See the full example in the [main.c](https://github.com/nau/scalus/blob/master/e
 sbt scalusNative/nativeLink
 ```
 
-will produce a shared library in the `native/target/scala-3.3.4` directory.
+will produce a static library in the `scalus-core/native/target/scala-3.3.7` directory.
 
 ## Roadmap
-
-### Efficiently convert user defined data types from/to Plutus Data
-
-Now, Scalus takes the same approach as PlutusTx.
-This change makes it similar to Aiken, which will result in smaller and more efficient Plutus scripts in most cases.
-
-### Single transaction building and signing API for backend and frontend
-
-This will allow you to build and sign transactions in Scala and JavaScript using the same code.
 
 ### DApp development framework
 
@@ -273,7 +269,7 @@ With Scalus you can do the same and much more but in Scala, and produce JavaScri
 
 ### Scalus
 
-Scalus aimes to be a better version of all the above.
+Scalus aims to be a better version of all the above.
 
 * You can actually reuse Scala code for your validator, frontend and backend!
   The goal that PlutusTx failed to achieve.
@@ -288,12 +284,21 @@ Scalus aimes to be a better version of all the above.
 
 * Debugger! It works!
 
+* UPLC optimizer with compile-time partial evaluation produces competitive script sizes,
+  often smaller than hand-optimized Aiken or Plutarch scripts.
+
+* Full emulator for testing smart contracts without a running Cardano node.
+
+* Cross-platform transaction builder (TxBuilder) that works on JVM and JavaScript.
+
+* Source position tracking in error messages makes debugging failed scripts easy.
+
 * Scalus allows only a limited subset of Scala, that can be reasonably efficiently
   compiled to UPLC without bloating the code.
 
 * It's compiled to a fairly high-level human-readable intermediate representation, SIR.
 
-* The huge part of any usefull script is `ScriptContext` deserialization from `Data` representation.
+* The huge part of any useful script is `ScriptContext` deserialization from `Data` representation.
   Scalus also provides primitives to do your custom deserialization to reduce validator size.
 
 ## Support
@@ -301,8 +306,8 @@ Scalus aimes to be a better version of all the above.
 You can ask questions on Scalus Discord: https://discord.gg/ygwtuBybsy
 
 The project is looking for funding to make it production ready.
-If you are interested, please contact me at [@atlanter](https://twitter.com/atlanter) on Twitter.
-Follow the official Scalus Twitter account: [@Scalus3](https://twitter.com/Scalus3).
+If you are interested, please contact me at [@atlanter](https://x.com/atlanter) on X.
+Follow the official Scalus account on X: [@Scalus3](https://x.com/Scalus3).
 
 You can support the project by donating ADA or BTC to the following addresses:
 

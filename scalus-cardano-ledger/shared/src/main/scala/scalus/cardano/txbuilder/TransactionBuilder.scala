@@ -1432,7 +1432,7 @@ def txWitnessSetL: Lens[Transaction, TransactionWitnessSet] = {
 def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction =
     tx.withWitness(ws =>
         ws.copy(vkeyWitnesses =
-            TaggedSortedSet.from(ws.vkeyWitnesses.toSet ++ generateUniqueKeys(numberOfKeys))
+            TaggedSortedSet(ws.vkeyWitnesses.toSet ++ generateUniqueKeys(numberOfKeys))
         )
     )
 
@@ -1440,7 +1440,7 @@ def addDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction =
 def removeDummySignatures(numberOfKeys: Int, tx: Transaction): Transaction =
     tx.withWitness(ws =>
         ws.copy(vkeyWitnesses =
-            TaggedSortedSet.from(ws.vkeyWitnesses.toSet -- generateUniqueKeys(numberOfKeys))
+            TaggedSortedSet(ws.vkeyWitnesses.toSet -- generateUniqueKeys(numberOfKeys))
         )
     )
 

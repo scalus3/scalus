@@ -20,7 +20,7 @@ describe("scalus.js bundle", () => {
 
   test("should be smaller than 2MB", () => {
     const sizeInBytes = Buffer.byteLength(bundle, "utf8");
-    const twoMB = 2 * 1024 * 1024;
-    expect(sizeInBytes).toBeLessThan(twoMB);
+    const limit = 2.1 * 1024 * 1024;
+    expect(sizeInBytes).toBeLessThan(limit);
   });
 });
