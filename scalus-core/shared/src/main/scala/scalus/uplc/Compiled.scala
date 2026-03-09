@@ -83,15 +83,26 @@ sealed abstract class CompiledPlutus[A](
         val backend = options.targetLoweringBackend
         val uplc = backend match
             case TargetLoweringBackend.ScottEncodingLowering =>
-                ScottEncodingLowering(sirToLower, options.generateErrorTraces).lower()
+                ScottEncodingLowering(
+                  sir = sirToLower,
+                  generateErrorTraces = options.generateErrorTraces,
+                  targetLanguage = language,
+                  targetProtocolVersion = options.targetProtocolVersion
+                ).lower()
             case TargetLoweringBackend.SumOfProductsLowering =>
-                SumOfProductsLowering(sirToLower, options.generateErrorTraces).lower()
+                SumOfProductsLowering(
+                  sir = sirToLower,
+                  generateErrorTraces = options.generateErrorTraces,
+                  targetLanguage = language,
+                  targetProtocolVersion = options.targetProtocolVersion
+                ).lower()
             case TargetLoweringBackend.SirToUplcV3Lowering =>
                 SirToUplcV3Lowering(
-                  sirToLower,
+                  sir = sirToLower,
                   generateErrorTraces = options.generateErrorTraces,
                   debug = options.debug,
-                  targetLanguage = language
+                  targetLanguage = language,
+                  targetProtocolVersion = options.targetProtocolVersion
                 ).lower()
         if options.optimizeUplc then optimizer(uplc) else uplc
     }
