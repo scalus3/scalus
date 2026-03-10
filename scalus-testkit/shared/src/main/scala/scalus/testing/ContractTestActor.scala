@@ -6,50 +6,50 @@ import scalus.cardano.txbuilder.TxBuilderException
 
 import scala.concurrent.{ExecutionContext, Future}
 
-/** An agent that interacts with a contract under test.
+/** An actor (participant) that interacts with a contract under test.
   *
-  * Each agent represents a participant (or role) in the contract interaction. Given the current
-  * blockchain state, an agent generates the actions it can take — transactions to submit and/or
-  * slot delays to wait.
+  * Each actor represents a role in the contract interaction — a bidder, a donor, an attacker, etc.
+  * Given the current blockchain state, an actor generates the actions it can take — transactions to
+  * submit and/or slot delays to wait.
   *
-  * Use agents with [[ContractStepVariations.fromAgents]] to compose multi-agent test scenarios.
+  * Use actors with [[ContractStepVariations.fromActors]] to compose multi-actor test scenarios.
   *
   * @tparam S
   *   the contract state type
   */
-trait ContractTestAgent[S] {
+trait ContractTestActor[S] {
 
     /** Human-readable name for diagnostics. */
     def name: String
 
-    /** Generate actions this agent can take given current state.
+    /** Generate actions this actor can take given current state.
       *
-      * Returns empty if the agent cannot act in the current state.
+      * Returns empty if the actor cannot act in the current state.
       */
     def actions(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[StepAction]]
 }
 
-object ContractTestAgent {
+object ContractTestActor {
 
-    /** Create an agent that builds a base transaction and applies variations (attack patterns).
+    /** Create an actor that builds a base transaction and applies variations (attack patterns).
       *
-      * When `baseTx` returns `None`, the agent produces no actions (it cannot act in the current
-      * state). When it returns `Some(template)`, the agent produces the base transaction plus all
+      * When `baseTx` returns `None`, the actor produces no actions (it cannot act in the current
+      * state). When it returns `Some(template)`, the actor produces the base transaction plus all
       * variation transactions.
       *
-      * @param agentName
+      * @param actorName
       *   human-readable name
       * @param baseTx
-      *   builds the base transaction template, or None if the agent cannot act
+      *   builds the base transaction template, or None if the actor cannot act
       * @param txVariations
       *   variations to apply to the base template (default: empty)
       */
     def withVariations[S](
-        agentName: String,
+        actorName: String,
         baseTx: (BlockchainReader, S) => Future[Option[TxTemplate]],
         txVariations: TxVariations[S] = TxVariations.empty[S]
-    ): ContractTestAgent[S] = new ContractTestAgent[S] {
-        override def name: String = agentName
+    ): ContractTestActor[S] = new ContractTestActor[S] {
+        override def name: String = actorName
 
         override def actions(reader: BlockchainReader, state: S)(using
             ExecutionContext
@@ -76,21 +76,21 @@ object ContractTestAgent {
             }
     }
 
-    /** Create an agent from a simple transaction builder. No variations.
+    /** Create an actor from a simple transaction builder. No variations.
       *
-      * When `buildTx` returns `None`, the agent produces no actions. When it returns
-      * `Some(transaction)`, the agent produces a single `Submit` action.
+      * When `buildTx` returns `None`, the actor produces no actions. When it returns
+      * `Some(transaction)`, the actor produces a single `Submit` action.
       *
-      * @param agentName
+      * @param actorName
       *   human-readable name
       * @param buildTx
-      *   builds a completed, signed transaction, or None if the agent cannot act
+      *   builds a completed, signed transaction, or None if the actor cannot act
       */
     def simple[S](
-        agentName: String,
+        actorName: String,
         buildTx: (BlockchainReader, S) => Future[Option[Transaction]]
-    ): ContractTestAgent[S] = new ContractTestAgent[S] {
-        override def name: String = agentName
+    ): ContractTestActor[S] = new ContractTestActor[S] {
+        override def name: String = actorName
 
         override def actions(reader: BlockchainReader, state: S)(using
             ExecutionContext
@@ -103,20 +103,20 @@ object ContractTestAgent {
                 .recover { case _: TxBuilderException => Seq.empty }
     }
 
-    /** Create an agent that produces multiple transactions.
+    /** Create an actor that produces multiple transactions.
       *
-      * When `buildTxs` returns empty, the agent produces no actions.
+      * When `buildTxs` returns empty, the actor produces no actions.
       *
-      * @param agentName
+      * @param actorName
       *   human-readable name
       * @param buildTxs
       *   builds completed, signed transactions
       */
     def multi[S](
-        agentName: String,
+        actorName: String,
         buildTxs: (BlockchainReader, S) => Future[Seq[Transaction]]
-    ): ContractTestAgent[S] = new ContractTestAgent[S] {
-        override def name: String = agentName
+    ): ContractTestActor[S] = new ContractTestActor[S] {
+        override def name: String = actorName
 
         override def actions(reader: BlockchainReader, state: S)(using
             ExecutionContext

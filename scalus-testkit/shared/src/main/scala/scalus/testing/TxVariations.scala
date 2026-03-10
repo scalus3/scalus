@@ -140,24 +140,24 @@ trait TxSamplingVariations[S] extends TxVariations[S] {
   */
 object ContractStepVariations {
 
-    /** Create a [[ContractStepVariations]] from a set of agents.
+    /** Create a [[ContractStepVariations]] from a set of actors.
       *
-      * Each agent independently generates actions based on the current state. All agents' actions
+      * Each actor independently generates actions based on the current state. All actors' actions
       * are combined, along with slot delays.
       *
-      * This is the recommended way to build multi-agent test scenarios where different participants
+      * This is the recommended way to build multi-actor test scenarios where different participants
       * (honest users, attackers, time-based claimants) interact with the same contract.
       *
       * @param extract
       *   extract contract state from blockchain
-      * @param agents
-      *   agents that interact with the contract
+      * @param actors
+      *   actors that interact with the contract
       * @param delays
       *   slot delays to explore at each step (default: none)
       */
-    def fromAgents[S](
+    def fromActors[S](
         extract: BlockchainReader => ExecutionContext ?=> Future[S],
-        agents: Seq[ContractTestAgent[S]],
+        actors: Seq[ContractTestActor[S]],
         delays: S => Seq[Long] = (_: S) => Seq.empty[Long]
     ): ContractStepVariations[S] = new ContractStepVariations[S] {
 
@@ -186,12 +186,12 @@ object ContractStepVariations {
             reader: BlockchainReader,
             state: S
         )(using ExecutionContext): Future[Seq[StepAction]] = {
-            val agentFutures = agents.map { agent =>
-                agent
+            val actorFutures = actors.map { actor =>
+                actor
                     .actions(reader, state)
                     .recover { case _: TxBuilderException => Seq.empty }
             }
-            Future.sequence(agentFutures).map { actionSeqs =>
+            Future.sequence(actorFutures).map { actionSeqs =>
                 actionSeqs.flatten ++ slotDelays(state).map(StepAction.Wait(_))
             }
         }

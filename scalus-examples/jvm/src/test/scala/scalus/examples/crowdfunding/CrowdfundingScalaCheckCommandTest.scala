@@ -129,14 +129,14 @@ object CrowdfundingScalaCheckCommandTest {
     )
 
     // =========================================================================
-    // Agents
+    // Actors
     // =========================================================================
 
-    /** Agent that donates to the campaign before the deadline. Selects a rotating subset of donors
+    /** Actor that donates to the campaign before the deadline. Selects a rotating subset of donors
       * based on current donation count.
       */
-    class DonorGroupAgent(allDonors: IndexedSeq[Participant], perStep: Int)
-        extends ContractTestAgent[CrowdfundingState] {
+    class DonorGroupActor(allDonors: IndexedSeq[Participant], perStep: Int)
+        extends ContractTestActor[CrowdfundingState] {
         override def name: String = "donor-group"
 
         override def actions(reader: BlockchainReader, state: CrowdfundingState)(using
@@ -162,8 +162,8 @@ object CrowdfundingScalaCheckCommandTest {
                     }
     }
 
-    /** Agent that withdraws funds after deadline when goal is reached. */
-    class WithdrawAgent(recipient: Participant) extends ContractTestAgent[CrowdfundingState] {
+    /** Actor that withdraws funds after deadline when goal is reached. */
+    class WithdrawActor(recipient: Participant) extends ContractTestActor[CrowdfundingState] {
         override def name: String = s"withdraw-${recipient.index}"
 
         override def actions(reader: BlockchainReader, state: CrowdfundingState)(using
@@ -185,9 +185,9 @@ object CrowdfundingScalaCheckCommandTest {
                     }
     }
 
-    /** Agent that reclaims donations after deadline when goal is not reached. */
-    class ReclaimAgent(participantByPkhHash: Map[ByteString, Participant])
-        extends ContractTestAgent[CrowdfundingState] {
+    /** Actor that reclaims donations after deadline when goal is not reached. */
+    class ReclaimActor(participantByPkhHash: Map[ByteString, Participant])
+        extends ContractTestActor[CrowdfundingState] {
         override def name: String = "reclaim"
 
         override def actions(reader: BlockchainReader, state: CrowdfundingState)(using
@@ -210,19 +210,19 @@ object CrowdfundingScalaCheckCommandTest {
     }
 
     // =========================================================================
-    // Step (built from agents)
+    // Step (built from actors)
     // =========================================================================
 
     private def makeCrowdfundingStep(
         campaignId: ByteString
     ): ContractStepVariations[CrowdfundingState] = {
-        val agents: Seq[ContractTestAgent[CrowdfundingState]] = Seq(
-          new DonorGroupAgent(donors, donorsPerStep),
-          new WithdrawAgent(recipientP),
-          new ReclaimAgent(participantByPkhHash)
+        val actors: Seq[ContractTestActor[CrowdfundingState]] = Seq(
+          new DonorGroupActor(donors, donorsPerStep),
+          new WithdrawActor(recipientP),
+          new ReclaimActor(participantByPkhHash)
         )
 
-        ContractStepVariations.fromAgents[CrowdfundingState](
+        ContractStepVariations.fromActors[CrowdfundingState](
           extract = reader =>
               for
                   campaignUtxo <- findCampaignUtxo(reader, campaignId)
@@ -236,7 +236,7 @@ object CrowdfundingScalaCheckCommandTest {
                           )
                       case None => Future.successful(Seq.empty)
               yield CrowdfundingState(campaignId, campaignUtxo, datum, donationUtxos),
-          agents = agents,
+          actors = actors,
           delays = _ => Seq(20L, 50L)
         )
     }

@@ -171,11 +171,11 @@ object LotteryScalaCheckCommandTest {
         }
 
     // =========================================================================
-    // Agents
+    // Actors
     // =========================================================================
 
-    /** Agent that reveals player 1's preimage in a game where no one has revealed yet. */
-    class RevealP1Agent(info: GameInfo) extends ContractTestAgent[LotteryTestState] {
+    /** Actor that reveals player 1's preimage in a game where no one has revealed yet. */
+    class RevealP1Actor(info: GameInfo) extends ContractTestActor[LotteryTestState] {
         override def name: String = s"reveal-p1-${info.player1.index}"
 
         override def actions(reader: BlockchainReader, state: LotteryTestState)(using
@@ -195,8 +195,8 @@ object LotteryScalaCheckCommandTest {
             }
     }
 
-    /** Agent that reveals player 2's preimage in a game where no one has revealed yet. */
-    class RevealP2Agent(info: GameInfo) extends ContractTestAgent[LotteryTestState] {
+    /** Actor that reveals player 2's preimage in a game where no one has revealed yet. */
+    class RevealP2Actor(info: GameInfo) extends ContractTestActor[LotteryTestState] {
         override def name: String = s"reveal-p2-${info.player2.index}"
 
         override def actions(reader: BlockchainReader, state: LotteryTestState)(using
@@ -216,14 +216,14 @@ object LotteryScalaCheckCommandTest {
             }
     }
 
-    /** Agent that reveals the second player after one has already revealed, or claims a lose. */
-    class SecondRevealOrLoseAgent(
+    /** Actor that reveals the second player after one has already revealed, or claims a lose. */
+    class SecondRevealOrLoseActor(
         info: GameInfo,
         player: Participant,
         preimage: Preimage,
         opponentAddr: ShelleyAddress,
         checkRevealed: LotteryState => Option[BigInt]
-    ) extends ContractTestAgent[LotteryTestState] {
+    ) extends ContractTestActor[LotteryTestState] {
         override def name: String = s"second-reveal-or-lose-${player.index}"
 
         override def actions(reader: BlockchainReader, state: LotteryTestState)(using
@@ -261,9 +261,9 @@ object LotteryScalaCheckCommandTest {
             }
     }
 
-    /** Agent that claims a timeout after the deadline has passed. */
-    class TimeoutAgent(info: GameInfo, claimant: Participant, claimantPreimage: Preimage)
-        extends ContractTestAgent[LotteryTestState] {
+    /** Actor that claims a timeout after the deadline has passed. */
+    class TimeoutActor(info: GameInfo, claimant: Participant, claimantPreimage: Preimage)
+        extends ContractTestActor[LotteryTestState] {
         override def name: String = s"timeout-${claimant.index}"
 
         override def actions(reader: BlockchainReader, state: LotteryTestState)(using
@@ -284,7 +284,7 @@ object LotteryScalaCheckCommandTest {
     }
 
     // =========================================================================
-    // Step (built from agents)
+    // Step (built from actors)
     // =========================================================================
 
     private def makeLotteryStep(
@@ -296,11 +296,11 @@ object LotteryScalaCheckCommandTest {
         // Limit to 3 active games per step to keep the action space manageable
         val activeGameInfos = allGameInfos.take(3)
 
-        val agents: Seq[ContractTestAgent[LotteryTestState]] = activeGameInfos.flatMap { info =>
+        val actors: Seq[ContractTestActor[LotteryTestState]] = activeGameInfos.flatMap { info =>
             Seq(
-              new RevealP1Agent(info),
-              new RevealP2Agent(info),
-              new SecondRevealOrLoseAgent(
+              new RevealP1Actor(info),
+              new RevealP2Actor(info),
+              new SecondRevealOrLoseActor(
                 info,
                 player = info.player2,
                 preimage = info.preimage2,
@@ -310,7 +310,7 @@ object LotteryScalaCheckCommandTest {
                     case _                                      => None
                 }
               ),
-              new SecondRevealOrLoseAgent(
+              new SecondRevealOrLoseActor(
                 info,
                 player = info.player1,
                 preimage = info.preimage1,
@@ -320,12 +320,12 @@ object LotteryScalaCheckCommandTest {
                     case _                                      => None
                 }
               ),
-              new TimeoutAgent(info, info.player1, info.preimage1),
-              new TimeoutAgent(info, info.player2, info.preimage2)
+              new TimeoutActor(info, info.player1, info.preimage1),
+              new TimeoutActor(info, info.player2, info.preimage2)
             )
         }
 
-        ContractStepVariations.fromAgents[LotteryTestState](
+        ContractStepVariations.fromActors[LotteryTestState](
           extract = reader =>
               findAllGameUtxos(reader).map { utxoMap =>
                   val games = utxoMap.flatMap { case (secrets, utxo) =>
@@ -336,7 +336,7 @@ object LotteryScalaCheckCommandTest {
                   }
                   LotteryTestState(games)
               },
-          agents = agents,
+          actors = actors,
           delays = _ => Seq(5L, 30L)
         )
     }
