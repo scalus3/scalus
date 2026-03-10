@@ -828,6 +828,14 @@ addCommandAlias(
   "bench/Jmh/run -i 5 -wi 4 -f 1 -t 1 -rff last-bench-result.txt  .*(JIT|Cek).*"
 )
 addCommandAlias(
+  "benchmark-cek",
+  "bench/Jmh/run -i 3 -wi 3 -f 1 -t 1 .*CekJVMBenchmark"
+)
+addCommandAlias(
+  "benchmark-hybrid",
+  "bench/Jmh/run -i 3 -wi 3 -f 1 -t 1 .*JITHybridBenchmark"
+)
+addCommandAlias(
   "it",
   "clean;scalusCardanoLedgerIt/clean;scalusCardanoLedgerIt/Test/compile;scalusCardanoLedgerIt/test"
 )
