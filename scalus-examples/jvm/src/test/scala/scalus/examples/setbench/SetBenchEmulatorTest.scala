@@ -850,12 +850,20 @@ class SetBenchEmulatorTest extends AnyFunSuite with ScalusTest {
                     info(
                       f"  ${base.variant} → ${fused.variant} ${base.op} N=${base.n}: Δfee = $dFee%,d lovelace"
                     )
-                    info(f"    Tx size  (Δproof=${fused.avgProofSize - base.avgProofSize}%+dB): $dTxSize%,+d lovelace")
-                    info(f"    CPU      (${fused.avgCpu - base.avgCpu}%,+d steps):  $dCpu%,+d lovelace")
-                    info(f"    Memory   (${fused.avgMem - base.avgMem}%,+d units):  $dMem%,+d lovelace")
+                    info(
+                      f"    Tx size  (Δproof=${fused.avgProofSize - base.avgProofSize}%+dB): $dTxSize%,+d lovelace"
+                    )
+                    info(
+                      f"    CPU      (${fused.avgCpu - base.avgCpu}%,+d steps):  $dCpu%,+d lovelace"
+                    )
+                    info(
+                      f"    Memory   (${fused.avgMem - base.avgMem}%,+d units):  $dMem%,+d lovelace"
+                    )
                     info(f"    RefScript (residual):                    $dRefScript%,+d lovelace")
                     if dFee != 0 then
-                        info(f"    %% of Δfee: txSize=${100.0 * dTxSize / dFee}%.1f%% cpu=${100.0 * dCpu / dFee}%.1f%% mem=${100.0 * dMem / dFee}%.1f%% refScript=${100.0 * dRefScript / dFee}%.1f%%")
+                        info(
+                          f"    %% of Δfee: txSize=${100.0 * dTxSize / dFee}%.1f%% cpu=${100.0 * dCpu / dFee}%.1f%% mem=${100.0 * dMem / dFee}%.1f%% refScript=${100.0 * dRefScript / dFee}%.1f%%"
+                        )
 
             // Save results to JSON file for future reference
             val outDir = new java.io.File("target/bench-results")

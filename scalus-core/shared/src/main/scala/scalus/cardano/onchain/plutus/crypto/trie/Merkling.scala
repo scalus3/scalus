@@ -203,4 +203,3 @@ object Merkling:
               merkle2(neighbor, neighborHash, NullHash),
               merkle2(me - 2, meHash, NullHash)
             )
-

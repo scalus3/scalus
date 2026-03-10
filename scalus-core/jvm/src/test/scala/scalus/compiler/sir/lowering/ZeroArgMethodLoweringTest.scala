@@ -11,10 +11,9 @@ import scalus.uplc.eval.PlutusVM
 
 /** Parameterless (zero-arg) method defined in a @Compile object.
   *
-  * Regression test: calling a zero-arg method like `foo()` inside a @Compile object
-  * used to produce `foo((), ())` in the SIR — applying the ByteString result as a
-  * function with a Unit argument, causing:
-  *   LoweringException: Expected function type, but have: ByteString
+  * Regression test: calling a zero-arg method like `foo()` inside a @Compile object used to produce
+  * `foo((), ())` in the SIR — applying the ByteString result as a function with a Unit argument,
+  * causing: LoweringException: Expected function type, but have: ByteString
   *
   * See: CompactMerklePatriciaForestry.nullHashes() failure.
   */

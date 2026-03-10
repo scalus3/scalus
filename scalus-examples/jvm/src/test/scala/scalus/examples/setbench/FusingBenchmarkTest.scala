@@ -4,10 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
 import scalus.crypto.trie.FusedMerklePatriciaForestry as Mpf16b
 import scalus.crypto.trie.MerklePatriciaForestry as Mpf16o
-import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.{
-    Proof as Mpf16oProof,
-    ProofStep as Mpf16oStep
-}
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.{Proof as Mpf16oProof, ProofStep as Mpf16oStep}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend

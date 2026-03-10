@@ -212,8 +212,12 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         val avgP16o = (totalProof16o / sampleSize).toInt
         val avgP16b = (totalProof16b / sampleSize).toInt
 
-        info(f"  MPF-16o: cpu=${avg16o.steps}%,14d  mem=${avg16o.memory}%,10d  fee=${feeLovelace(avg16o)}%,8d  proof=${avgP16o}%4dB")
-        info(f"  MPF-16b: cpu=${avg16b.steps}%,14d  mem=${avg16b.memory}%,10d  fee=${feeLovelace(avg16b)}%,8d  proof=${avgP16b}%4dB")
+        info(
+          f"  MPF-16o: cpu=${avg16o.steps}%,14d  mem=${avg16o.memory}%,10d  fee=${feeLovelace(avg16o)}%,8d  proof=${avgP16o}%4dB"
+        )
+        info(
+          f"  MPF-16b: cpu=${avg16b.steps}%,14d  mem=${avg16b.memory}%,10d  fee=${feeLovelace(avg16b)}%,8d  proof=${avgP16b}%4dB"
+        )
         info(f"  MPF-16b/16o cpu: ${total16b.steps.toDouble / total16o.steps}%.3f")
 
         AvgBudget(avg16o, avg16b, avgP16o, avgP16b)
@@ -239,8 +243,20 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
             val w16o = trie16o.delete(key)
             val w16b = trie16b.delete(key)
 
-            val b16o = measureTrieOp(mpf16oInsertProgram, w16o.rootHash, key, value, mpf16oProofToData(w16o.proveNonMembership(key)))
-            val b16b = measureTrieOp(mpf16bInsertProgram, w16b.rootHash, key, value, B(w16b.proveNonMembership(key)))
+            val b16o = measureTrieOp(
+              mpf16oInsertProgram,
+              w16o.rootHash,
+              key,
+              value,
+              mpf16oProofToData(w16o.proveNonMembership(key))
+            )
+            val b16b = measureTrieOp(
+              mpf16bInsertProgram,
+              w16b.rootHash,
+              key,
+              value,
+              B(w16b.proveNonMembership(key))
+            )
 
             total16o = ExUnits(total16o.memory + b16o.memory, total16o.steps + b16o.steps)
             total16b = ExUnits(total16b.memory + b16b.memory, total16b.steps + b16b.steps)
@@ -248,8 +264,12 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         val avg16o = ExUnits(total16o.memory / sampleSize, total16o.steps / sampleSize)
         val avg16b = ExUnits(total16b.memory / sampleSize, total16b.steps / sampleSize)
 
-        info(f"  MPF-16o: cpu=${avg16o.steps}%,14d  mem=${avg16o.memory}%,10d  fee=${feeLovelace(avg16o)}%,8d")
-        info(f"  MPF-16b: cpu=${avg16b.steps}%,14d  mem=${avg16b.memory}%,10d  fee=${feeLovelace(avg16b)}%,8d")
+        info(
+          f"  MPF-16o: cpu=${avg16o.steps}%,14d  mem=${avg16o.memory}%,10d  fee=${feeLovelace(avg16o)}%,8d"
+        )
+        info(
+          f"  MPF-16b: cpu=${avg16b.steps}%,14d  mem=${avg16b.memory}%,10d  fee=${feeLovelace(avg16b)}%,8d"
+        )
         info(f"  MPF-16b/16o cpu: ${total16b.steps.toDouble / total16o.steps}%.3f")
 
         AvgBudget(avg16o, avg16b)
@@ -261,10 +281,16 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
         val timestamp = java.time.LocalDateTime.now().toString.replace(":", "-")
         val outFile = new java.io.File(outDir, s"budget-$op-$timestamp.json")
         def j(name: String, eu: ExUnits, proof: Int) =
-            s""""$name":{"cpu":${eu.steps},"mem":${eu.memory},"fee":${feeLovelace(eu)},"proof":$proof}"""
+            s""""$name":{"cpu":${eu.steps},"mem":${eu.memory},"fee":${feeLovelace(
+                  eu
+                )},"proof":$proof}"""
         val json = results
             .map { (n, avg) =>
-                s"""  {"n":$n,${j("mpf16o", avg.mpf16o, avg.proofSize16o)},${j("mpf16b", avg.mpf16b, avg.proofSize16b)}}"""
+                s"""  {"n":$n,${j("mpf16o", avg.mpf16o, avg.proofSize16o)},${j(
+                      "mpf16b",
+                      avg.mpf16b,
+                      avg.proofSize16b
+                    )}}"""
             }
             .mkString("[\n", ",\n", "\n]")
         java.nio.file.Files.writeString(outFile.toPath, json)
@@ -302,13 +328,16 @@ class CollectionMembershipBudgetTest extends AnyFunSuite {
           ("MPF-16o", (a: AvgBudget) => a.mpf16o, (a: AvgBudget) => a.proofSize16o),
           ("MPF-16b", (a: AvgBudget) => a.mpf16b, (a: AvgBudget) => a.proofSize16b),
         )
-        val hdr = f"${"N"}%6s | ${"Variant"}%-8s | ${"CPU"}%14s | ${"Memory"}%10s | ${"Fee"}%8s | ${"Proof (B)"}%10s"
+        val hdr =
+            f"${"N"}%6s | ${"Variant"}%-8s | ${"CPU"}%14s | ${"Memory"}%10s | ${"Fee"}%8s | ${"Proof (B)"}%10s"
         info(hdr)
         info("-" * hdr.length)
         for (n, avg) <- results do
             for (name, euFn, proofFn) <- variants do
                 val eu = euFn(avg)
-                info(f"${n}%6d | ${name}%-8s | ${eu.steps}%,14d | ${eu.memory}%,10d | ${feeLovelace(eu)}%,8d | ${proofFn(avg)}%10d")
+                info(
+                  f"${n}%6d | ${name}%-8s | ${eu.steps}%,14d | ${eu.memory}%,10d | ${feeLovelace(eu)}%,8d | ${proofFn(avg)}%10d"
+                )
     }
 
     test("32K accumulator budget", Benchmark) {
