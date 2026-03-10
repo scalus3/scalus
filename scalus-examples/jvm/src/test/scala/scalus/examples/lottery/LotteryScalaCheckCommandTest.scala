@@ -9,6 +9,7 @@ import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.cardano.wallet.hd.{HdAccount, HdKeyPair}
 import scalus.crypto.ed25519.given
+import scalus.cardano.txbuilder.TxBuilderException
 import scalus.testing.*
 import scalus.uplc.builtin.Builtins.sha2_256
 import scalus.uplc.builtin.Data.toData
@@ -31,7 +32,7 @@ class LotteryScalaCheckCommandTest extends AnyFunSuite {
 
     test("lottery: invariants hold under random action sequences with many concurrent games") {
         val (emulator, gameInfos) = createEmulatorWithGames()
-        val step = new LotteryStep(gameInfos)
+        val step = makeLotteryStep(gameInfos)
 
         val commands = ContractScalaCheckCommands(emulator, step) { (reader, state) =>
             Future.successful {
@@ -170,128 +171,174 @@ object LotteryScalaCheckCommandTest {
         }
 
     // =========================================================================
-    // Step
+    // Agents
     // =========================================================================
 
-    class LotteryStep(allGameInfos: IndexedSeq[GameInfo])
-        extends ContractStepVariations[LotteryTestState] {
+    /** Agent that reveals player 1's preimage in a game where no one has revealed yet. */
+    class RevealP1Agent(info: GameInfo) extends ContractTestAgent[LotteryTestState] {
+        override def name: String = s"reveal-p1-${info.player1.index}"
 
-        private val gameInfoBySecrets: Map[(Secret, Secret), GameInfo] =
-            allGameInfos.map(g => (g.secret1, g.secret2) -> g).toMap
-
-        override def extractState(reader: BlockchainReader)(using
+        override def actions(reader: BlockchainReader, state: LotteryTestState)(using
             ExecutionContext
-        ): Future[LotteryTestState] =
-            findAllGameUtxos(reader).map { utxoMap =>
-                val games = utxoMap.flatMap { case (secrets, utxo) =>
-                    gameInfoBySecrets.get(secrets).map { info =>
-                        val datum = utxo.output.requireInlineDatum.to[State]
-                        secrets -> GameOnChain(utxo, datum, info)
-                    }
-                }
-                LotteryTestState(games)
-            }
-
-        override def makeBaseTx(reader: BlockchainReader, state: LotteryTestState)(using
-            ExecutionContext
-        ): Future[TxTemplate] =
-            Future.successful(
-              TxTemplate(
-                TxBuilder(reader.cardanoInfo),
-                participants.head.address,
-                participants.head.signer
-              )
-            )
-
-        override def variations: TxVariations[LotteryTestState] = TxVariations.empty
-
-        override def allVariations(
-            reader: BlockchainReader,
-            state: LotteryTestState
-        )(using ExecutionContext): Future[Seq[Transaction]] = {
+        ): Future[Seq[StepAction]] =
             reader.currentSlot.flatMap { currentSlot =>
                 val slotTime = reader.cardanoInfo.slotConfig.slotToTime(currentSlot)
-
-                val activeGames = state.games.toSeq.take(3)
-
-                val txFutures = activeGames.flatMap { case (secrets, gameOnChain) =>
-                    val info = gameOnChain.info
-                    val datum = gameOnChain.datum
-                    val utxo = gameOnChain.utxo
-                    val beforeDeadline = slotTime < info.revealDeadline
-
-                    datum.lotteryState match
-                        case LotteryState.Empty =>
-                            val txs = Seq.newBuilder[Future[Option[Transaction]]]
-                            if beforeDeadline then
-                                txs += buildRevealP1Tx(reader, utxo, info)
-                                    .map(Some(_))
-                                    .recover { case _ => None }
-                                txs += buildRevealP2Tx(reader, utxo, info)
-                                    .map(Some(_))
-                                    .recover { case _ => None }
-                            txs.result()
-
-                        case LotteryState.PlayerOneRevealed(p1Len, _) =>
-                            val txs = Seq.newBuilder[Future[Option[Transaction]]]
-                            if beforeDeadline then
-                                val totalLen = p1Len.toInt + info.preimage2.bytes.length
-                                if totalLen % 2 == 0 then
-                                    txs += buildSecondRevealP2Tx(reader, utxo, info)
-                                        .map(Some(_))
-                                        .recover { case _ => None }
-                                txs += buildLoseTx(
-                                  reader,
-                                  utxo,
-                                  info,
-                                  loser = info.player2,
-                                  loserPreimage = info.preimage2,
-                                  winnerAddr = info.player1.address
-                                ).map(Some(_)).recover { case _ => None }
-                            if slotTime > info.revealDeadline then
-                                txs += buildTimeoutTx(
-                                  reader,
-                                  utxo,
-                                  info,
-                                  claimant = info.player1,
-                                  claimantPreimage = info.preimage1
-                                ).map(Some(_)).recover { case _ => None }
-                            txs.result()
-
-                        case LotteryState.PlayerTwoRevealed(p2Len, _) =>
-                            val txs = Seq.newBuilder[Future[Option[Transaction]]]
-                            if beforeDeadline then
-                                val totalLen = p2Len.toInt + info.preimage1.bytes.length
-                                if totalLen % 2 == 0 then
-                                    txs += buildSecondRevealP1Tx(reader, utxo, info)
-                                        .map(Some(_))
-                                        .recover { case _ => None }
-                                txs += buildLoseTx(
-                                  reader,
-                                  utxo,
-                                  info,
-                                  loser = info.player1,
-                                  loserPreimage = info.preimage1,
-                                  winnerAddr = info.player2.address
-                                ).map(Some(_)).recover { case _ => None }
-                            if slotTime > info.revealDeadline then
-                                txs += buildTimeoutTx(
-                                  reader,
-                                  utxo,
-                                  info,
-                                  claimant = info.player2,
-                                  claimantPreimage = info.preimage2
-                                ).map(Some(_)).recover { case _ => None }
-                            txs.result()
-                }
-
-                val futures = txFutures
-                if futures.isEmpty then Future.successful(Seq.empty)
-                else Future.sequence(futures).map(_.flatten)
+                val secrets = (info.secret1, info.secret2)
+                state.games.get(secrets) match
+                    case Some(game)
+                        if game.datum.lotteryState == LotteryState.Empty &&
+                            slotTime < info.revealDeadline =>
+                        buildRevealP1Tx(reader, game.utxo, info)
+                            .map(tx => Seq(StepAction.Submit(tx)))
+                            .recover { case _: TxBuilderException => Seq.empty }
+                    case _ => Future.successful(Seq.empty)
             }
+    }
+
+    /** Agent that reveals player 2's preimage in a game where no one has revealed yet. */
+    class RevealP2Agent(info: GameInfo) extends ContractTestAgent[LotteryTestState] {
+        override def name: String = s"reveal-p2-${info.player2.index}"
+
+        override def actions(reader: BlockchainReader, state: LotteryTestState)(using
+            ExecutionContext
+        ): Future[Seq[StepAction]] =
+            reader.currentSlot.flatMap { currentSlot =>
+                val slotTime = reader.cardanoInfo.slotConfig.slotToTime(currentSlot)
+                val secrets = (info.secret1, info.secret2)
+                state.games.get(secrets) match
+                    case Some(game)
+                        if game.datum.lotteryState == LotteryState.Empty &&
+                            slotTime < info.revealDeadline =>
+                        buildRevealP2Tx(reader, game.utxo, info)
+                            .map(tx => Seq(StepAction.Submit(tx)))
+                            .recover { case _: TxBuilderException => Seq.empty }
+                    case _ => Future.successful(Seq.empty)
+            }
+    }
+
+    /** Agent that reveals the second player after one has already revealed, or claims a lose. */
+    class SecondRevealOrLoseAgent(
+        info: GameInfo,
+        player: Participant,
+        preimage: Preimage,
+        opponentAddr: ShelleyAddress,
+        checkRevealed: LotteryState => Option[BigInt]
+    ) extends ContractTestAgent[LotteryTestState] {
+        override def name: String = s"second-reveal-or-lose-${player.index}"
+
+        override def actions(reader: BlockchainReader, state: LotteryTestState)(using
+            ExecutionContext
+        ): Future[Seq[StepAction]] =
+            reader.currentSlot.flatMap { currentSlot =>
+                val slotTime = reader.cardanoInfo.slotConfig.slotToTime(currentSlot)
+                val secrets = (info.secret1, info.secret2)
+                state.games.get(secrets) match
+                    case Some(game) if slotTime < info.revealDeadline =>
+                        checkRevealed(game.datum.lotteryState) match
+                            case Some(revealedLen) =>
+                                val txs = Seq.newBuilder[Future[Option[Transaction]]]
+                                val totalLen = revealedLen.toInt + preimage.bytes.length
+                                if totalLen % 2 == 0 then
+                                    val buildSecondReveal =
+                                        if player == info.player1 then buildSecondRevealP1Tx
+                                        else buildSecondRevealP2Tx
+                                    txs += buildSecondReveal(reader, game.utxo, info)
+                                        .map(Some(_))
+                                        .recover { case _: TxBuilderException => None }
+                                txs += buildLoseTx(
+                                  reader,
+                                  game.utxo,
+                                  info,
+                                  loser = player,
+                                  loserPreimage = preimage,
+                                  winnerAddr = opponentAddr
+                                ).map(Some(_)).recover { case _: TxBuilderException => None }
+                                Future
+                                    .sequence(txs.result())
+                                    .map(_.flatten.map(StepAction.Submit(_)))
+                            case None => Future.successful(Seq.empty)
+                    case _ => Future.successful(Seq.empty)
+            }
+    }
+
+    /** Agent that claims a timeout after the deadline has passed. */
+    class TimeoutAgent(info: GameInfo, claimant: Participant, claimantPreimage: Preimage)
+        extends ContractTestAgent[LotteryTestState] {
+        override def name: String = s"timeout-${claimant.index}"
+
+        override def actions(reader: BlockchainReader, state: LotteryTestState)(using
+            ExecutionContext
+        ): Future[Seq[StepAction]] =
+            reader.currentSlot.flatMap { currentSlot =>
+                val slotTime = reader.cardanoInfo.slotConfig.slotToTime(currentSlot)
+                val secrets = (info.secret1, info.secret2)
+                state.games.get(secrets) match
+                    case Some(game)
+                        if slotTime > info.revealDeadline &&
+                            game.datum.lotteryState != LotteryState.Empty =>
+                        buildTimeoutTx(reader, game.utxo, info, claimant, claimantPreimage)
+                            .map(tx => Seq(StepAction.Submit(tx)))
+                            .recover { case _: TxBuilderException => Seq.empty }
+                    case _ => Future.successful(Seq.empty)
+            }
+    }
+
+    // =========================================================================
+    // Step (built from agents)
+    // =========================================================================
+
+    private def makeLotteryStep(
+        allGameInfos: IndexedSeq[GameInfo]
+    ): ContractStepVariations[LotteryTestState] = {
+        val gameInfoBySecrets: Map[(Secret, Secret), GameInfo] =
+            allGameInfos.map(g => (g.secret1, g.secret2) -> g).toMap
+
+        // Limit to 3 active games per step to keep the action space manageable
+        val activeGameInfos = allGameInfos.take(3)
+
+        val agents: Seq[ContractTestAgent[LotteryTestState]] = activeGameInfos.flatMap { info =>
+            Seq(
+              new RevealP1Agent(info),
+              new RevealP2Agent(info),
+              new SecondRevealOrLoseAgent(
+                info,
+                player = info.player2,
+                preimage = info.preimage2,
+                opponentAddr = info.player1.address,
+                checkRevealed = {
+                    case LotteryState.PlayerOneRevealed(len, _) => Some(len)
+                    case _                                      => None
+                }
+              ),
+              new SecondRevealOrLoseAgent(
+                info,
+                player = info.player1,
+                preimage = info.preimage1,
+                opponentAddr = info.player2.address,
+                checkRevealed = {
+                    case LotteryState.PlayerTwoRevealed(len, _) => Some(len)
+                    case _                                      => None
+                }
+              ),
+              new TimeoutAgent(info, info.player1, info.preimage1),
+              new TimeoutAgent(info, info.player2, info.preimage2)
+            )
         }
 
-        override def slotDelays(state: LotteryTestState): Seq[Long] = Seq(5L, 30L)
+        ContractStepVariations.fromAgents[LotteryTestState](
+          extract = reader =>
+              findAllGameUtxos(reader).map { utxoMap =>
+                  val games = utxoMap.flatMap { case (secrets, utxo) =>
+                      gameInfoBySecrets.get(secrets).map { info =>
+                          val datum = utxo.output.requireInlineDatum.to[State]
+                          secrets -> GameOnChain(utxo, datum, info)
+                      }
+                  }
+                  LotteryTestState(games)
+              },
+          agents = agents,
+          delays = _ => Seq(5L, 30L)
+        )
     }
 
     // =========================================================================

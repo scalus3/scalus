@@ -9,6 +9,7 @@ import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.cardano.wallet.hd.{HdAccount, HdKeyPair}
 import scalus.crypto.ed25519.given
+import scalus.cardano.txbuilder.TxBuilderException
 import scalus.testing.*
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
@@ -30,7 +31,7 @@ class CrowdfundingScalaCheckCommandTest extends AnyFunSuite {
 
     test("crowdfunding: invariants hold under random action sequences with many participants") {
         val (emulator, campaignId) = createEmulatorWithCampaign()
-        val step = new CrowdfundingStep(campaignId)
+        val step = makeCrowdfundingStep(campaignId)
 
         val commands = ContractScalaCheckCommands(emulator, step) { (reader, state) =>
             Future.successful {
@@ -128,84 +129,116 @@ object CrowdfundingScalaCheckCommandTest {
     )
 
     // =========================================================================
-    // Step
+    // Agents
     // =========================================================================
 
-    class CrowdfundingStep(campaignId: ByteString)
-        extends ContractStepVariations[CrowdfundingState] {
+    /** Agent that donates to the campaign before the deadline. Selects a rotating subset of donors
+      * based on current donation count.
+      */
+    class DonorGroupAgent(allDonors: IndexedSeq[Participant], perStep: Int)
+        extends ContractTestAgent[CrowdfundingState] {
+        override def name: String = "donor-group"
 
-        override def extractState(reader: BlockchainReader)(using
+        override def actions(reader: BlockchainReader, state: CrowdfundingState)(using
             ExecutionContext
-        ): Future[CrowdfundingState] =
-            for
-                campaignUtxo <- findCampaignUtxo(reader, campaignId)
-                datum = campaignUtxo.flatMap(_.output.inlineDatum.map(_.to[CampaignDatum]))
-                donationUtxos <- datum match
-                    case Some(d) =>
-                        findDonationUtxos(
-                          reader,
-                          campaignId,
-                          ScriptHash.fromByteString(d.donationPolicyId)
-                        )
-                    case None => Future.successful(Seq.empty)
-            yield CrowdfundingState(campaignId, campaignUtxo, datum, donationUtxos)
-
-        // Not used directly since allVariations is overridden
-        override def makeBaseTx(reader: BlockchainReader, state: CrowdfundingState)(using
-            ExecutionContext
-        ): Future[TxTemplate] =
-            Future.successful(
-              TxTemplate(TxBuilder(reader.cardanoInfo), donors.head.address, donors.head.signer)
-            )
-
-        override def variations: TxVariations[CrowdfundingState] = TxVariations.empty
-
-        override def allVariations(
-            reader: BlockchainReader,
-            state: CrowdfundingState
-        )(using ExecutionContext): Future[Seq[Transaction]] =
+        ): Future[Seq[StepAction]] =
             state.datum match
                 case None => Future.successful(Seq.empty)
                 case Some(d) =>
                     reader.currentSlot.flatMap { currentSlot =>
                         val slotTime = reader.cardanoInfo.slotConfig.slotToTime(currentSlot)
-                        val beforeDeadline = slotTime < d.deadline.toLong
+                        if slotTime < d.deadline.toLong && state.campaignUtxo.isDefined then
+                            val offset = state.donationUtxos.size
+                            val selected = (0 until perStep).map { i =>
+                                allDonors((offset + i * 37) % allDonors.size)
+                            }
+                            val txFutures = selected.map { donor =>
+                                buildDonateTx(reader, state, donor)
+                                    .map(tx => Some(StepAction.Submit(tx)))
+                                    .recover { case _: TxBuilderException => None }
+                            }
+                            Future.sequence(txFutures).map(_.flatten)
+                        else Future.successful(Seq.empty)
+                    }
+    }
+
+    /** Agent that withdraws funds after deadline when goal is reached. */
+    class WithdrawAgent(recipient: Participant) extends ContractTestAgent[CrowdfundingState] {
+        override def name: String = s"withdraw-${recipient.index}"
+
+        override def actions(reader: BlockchainReader, state: CrowdfundingState)(using
+            ExecutionContext
+        ): Future[Seq[StepAction]] =
+            state.datum match
+                case None => Future.successful(Seq.empty)
+                case Some(d) =>
+                    reader.currentSlot.flatMap { currentSlot =>
+                        val slotTime = reader.cardanoInfo.slotConfig.slotToTime(currentSlot)
                         val afterDeadline = slotTime > d.deadline.toLong
                         val goalReached = d.totalSum >= d.goal
                         val hasDonations = state.donationUtxos.nonEmpty
-
-                        val txFutures = Seq.newBuilder[Future[Option[Transaction]]]
-
-                        // Donate: select a rotating subset of donors
-                        if beforeDeadline && state.campaignUtxo.isDefined then
-                            val offset = state.donationUtxos.size
-                            val selected = (0 until donorsPerStep).map { i =>
-                                donors((offset + i * 37) % donors.size)
-                            }
-                            selected.foreach { donor =>
-                                txFutures += buildDonateTx(reader, state, donor)
-                                    .map(Some(_))
-                                    .recover { case _ => None }
-                            }
-
-                        // Withdraw (batch)
                         if afterDeadline && goalReached && hasDonations then
-                            txFutures += buildWithdrawTx(reader, state)
-                                .map(Some(_))
-                                .recover { case _ => None }
-
-                        // Reclaim (batch)
-                        if afterDeadline && !goalReached && hasDonations then
-                            txFutures += buildReclaimTx(reader, state)
-                                .map(Some(_))
-                                .recover { case _ => None }
-
-                        val futures = txFutures.result()
-                        if futures.isEmpty then Future.successful(Seq.empty)
-                        else Future.sequence(futures).map(_.flatten)
+                            buildWithdrawTx(reader, state)
+                                .map(tx => Seq(StepAction.Submit(tx)))
+                                .recover { case _: TxBuilderException => Seq.empty }
+                        else Future.successful(Seq.empty)
                     }
+    }
 
-        override def slotDelays(state: CrowdfundingState): Seq[Long] = Seq(20L, 50L)
+    /** Agent that reclaims donations after deadline when goal is not reached. */
+    class ReclaimAgent(participantByPkhHash: Map[ByteString, Participant])
+        extends ContractTestAgent[CrowdfundingState] {
+        override def name: String = "reclaim"
+
+        override def actions(reader: BlockchainReader, state: CrowdfundingState)(using
+            ExecutionContext
+        ): Future[Seq[StepAction]] =
+            state.datum match
+                case None => Future.successful(Seq.empty)
+                case Some(d) =>
+                    reader.currentSlot.flatMap { currentSlot =>
+                        val slotTime = reader.cardanoInfo.slotConfig.slotToTime(currentSlot)
+                        val afterDeadline = slotTime > d.deadline.toLong
+                        val goalReached = d.totalSum >= d.goal
+                        val hasDonations = state.donationUtxos.nonEmpty
+                        if afterDeadline && !goalReached && hasDonations then
+                            buildReclaimTx(reader, state)
+                                .map(tx => Seq(StepAction.Submit(tx)))
+                                .recover { case _: TxBuilderException => Seq.empty }
+                        else Future.successful(Seq.empty)
+                    }
+    }
+
+    // =========================================================================
+    // Step (built from agents)
+    // =========================================================================
+
+    private def makeCrowdfundingStep(
+        campaignId: ByteString
+    ): ContractStepVariations[CrowdfundingState] = {
+        val agents: Seq[ContractTestAgent[CrowdfundingState]] = Seq(
+          new DonorGroupAgent(donors, donorsPerStep),
+          new WithdrawAgent(recipientP),
+          new ReclaimAgent(participantByPkhHash)
+        )
+
+        ContractStepVariations.fromAgents[CrowdfundingState](
+          extract = reader =>
+              for
+                  campaignUtxo <- findCampaignUtxo(reader, campaignId)
+                  datum = campaignUtxo.flatMap(_.output.inlineDatum.map(_.to[CampaignDatum]))
+                  donationUtxos <- datum match
+                      case Some(d) =>
+                          findDonationUtxos(
+                            reader,
+                            campaignId,
+                            ScriptHash.fromByteString(d.donationPolicyId)
+                          )
+                      case None => Future.successful(Seq.empty)
+              yield CrowdfundingState(campaignId, campaignUtxo, datum, donationUtxos),
+          agents = agents,
+          delays = _ => Seq(20L, 50L)
+        )
     }
 
     // =========================================================================

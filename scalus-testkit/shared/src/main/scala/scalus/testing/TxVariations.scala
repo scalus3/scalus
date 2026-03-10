@@ -4,6 +4,8 @@ import org.scalacheck.Gen
 import scalus.cardano.ledger.Transaction
 import scalus.cardano.node.BlockchainReader
 
+import scalus.cardano.txbuilder.TxBuilderException
+
 import scala.concurrent.{ExecutionContext, Future}
 
 /** Transaction variations generator for property-based and exhaustive testing.
@@ -136,6 +138,66 @@ trait TxSamplingVariations[S] extends TxVariations[S] {
   * @tparam S
   *   the contract state type
   */
+object ContractStepVariations {
+
+    /** Create a [[ContractStepVariations]] from a set of agents.
+      *
+      * Each agent independently generates actions based on the current state. All agents' actions
+      * are combined, along with slot delays.
+      *
+      * This is the recommended way to build multi-agent test scenarios where different participants
+      * (honest users, attackers, time-based claimants) interact with the same contract.
+      *
+      * @param extract
+      *   extract contract state from blockchain
+      * @param agents
+      *   agents that interact with the contract
+      * @param delays
+      *   slot delays to explore at each step (default: none)
+      */
+    def fromAgents[S](
+        extract: BlockchainReader => ExecutionContext ?=> Future[S],
+        agents: Seq[ContractTestAgent[S]],
+        delays: S => Seq[Long] = (_: S) => Seq.empty[Long]
+    ): ContractStepVariations[S] = new ContractStepVariations[S] {
+
+        override def extractState(reader: BlockchainReader)(using
+            ExecutionContext
+        ): Future[S] =
+            extract(reader)
+
+        // Not used — allVariations and allActions are overridden
+        override def makeBaseTx(reader: BlockchainReader, state: S)(using
+            ExecutionContext
+        ): Future[TxTemplate] =
+            Future.failed(UnsupportedOperationException("Use allActions instead"))
+
+        override def variations: TxVariations[S] = TxVariations.empty
+
+        override def slotDelays(state: S): Seq[Long] = delays(state)
+
+        override def allVariations(
+            reader: BlockchainReader,
+            state: S
+        )(using ExecutionContext): Future[Seq[Transaction]] =
+            allActions(reader, state).map(_.collect { case StepAction.Submit(tx) => tx })
+
+        override def allActions(
+            reader: BlockchainReader,
+            state: S
+        )(using ExecutionContext): Future[Seq[StepAction]] = {
+            val agentFutures = agents.map { agent =>
+                agent
+                    .actions(reader, state)
+                    .recover { case _: TxBuilderException => Seq.empty }
+            }
+            Future.sequence(agentFutures).map { actionSeqs =>
+                actionSeqs.flatten ++ slotDelays(state).map(StepAction.Wait(_))
+            }
+        }
+    }
+}
+
 trait ContractStepVariations[S] {
 
     /** Extract contract state from the blockchain.

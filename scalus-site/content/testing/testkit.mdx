@@ -28,6 +28,83 @@ You can run boundary tests in three modes:
 - **ScalaCheck Commands** — random multi-step sequences, scales to large state spaces
 - **Scenario** — exhaustive exploration at bounded depth, full coverage of small state spaces
 
+## Agents
+
+In practice, contracts are tested by multiple **agents** (participants) doing different things — a donor donating, a recipient withdrawing, an attacker trying to steal funds. The agent model makes this explicit:
+
+1. **Contract under test** — the smart contract validator
+2. **Agents** — participants that interact with the contract, each generates actions based on state
+3. **Test configuration** = state extraction + set of agents + slot delays
+
+Each agent is a `ContractTestAgent[S]` that, given the current blockchain state, returns the actions it can take:
+
+```scala
+trait ContractTestAgent[S] {
+    def name: String
+    def actions(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[StepAction]]
+}
+```
+
+### Creating Agents
+
+Three factory methods cover common patterns:
+
+```scala
+// Simple agent — builds one transaction (or none if it can't act)
+val bidder = ContractTestAgent.simple[AuctionState](
+    "bidder-alice",
+    (reader, state) => buildBidTx(reader, state).map(Some(_)).recover { case _ => None }
+)
+
+// Multi-action agent — builds multiple transactions
+val donorGroup = ContractTestAgent.multi[CampaignState](
+    "donor-group",
+    (reader, state) => buildDonateTxs(reader, state)
+)
+
+// Agent with attack variations — base tx + standard attack patterns
+val attacker = ContractTestAgent.withVariations[AuctionState](
+    "attacker",
+    baseTx = (reader, state) => buildAttackerBaseTx(reader, state).map(Some(_)),
+    txVariations = TxVariations.standard.default(
+        extractUtxo = _.auctionUtxo,
+        extractDatum = s => updatedDatum(s),
+        redeemer = _ => BidRedeemer.toData,
+        script = auctionScript
+    )
+)
+```
+
+### Composing Agents into a Step
+
+Use `ContractStepVariations.fromAgents` to combine agents into a single step:
+
+```scala
+val step = ContractStepVariations.fromAgents[AuctionState](
+    extract = (reader, ec) => extractAuctionState(reader)(using ec),
+    agents = Seq(
+        HonestBidderAgent(alice),
+        HonestBidderAgent(bob),
+        attackerAgent   // attack txs should be rejected by the contract
+    ),
+    delays = _ => Seq(10L, 50L)
+)
+
+// Use with ScalaCheck Commands or Scenario as usual
+val commands = ContractScalaCheckCommands(emulator, step) { (reader, state) =>
+    Future.successful(Prop(state.currentBid >= 0) :| "bid non-negative")
+}
+```
+
+The key pattern: mix honest agents with attacker agents. The contract should reject all attack transactions while accepting honest ones. If an attacker's transaction gets accepted, the invariant check fails and ScalaCheck reports the minimal failing sequence.
+
+### Two Paths
+
+- **Simple (single interaction type):** Implement `ContractStepVariations` directly with `makeBaseTx` + `variations`
+- **Multi-agent:** Define agents, compose with `ContractStepVariations.fromAgents`
+
+Both produce a `ContractStepVariations[S]` that works with ScalaCheck Commands and Scenario exploration.
+
 ## Quick Start
 
 ### 1. Define Observable State
@@ -753,6 +830,40 @@ val state = ScenarioState(immutableEmulator, org.scalacheck.rng.Seed(42L))
 val results = Scenario.continueAll(state)(scenario)     // all results
 val first = Scenario.continueFirst(state)(scenario)     // first result
 ```
+
+### ContractTestAgent
+
+```scala
+trait ContractTestAgent[S] {
+    def name: String
+    def actions(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[StepAction]]
+}
+
+object ContractTestAgent {
+    // Agent with base tx + attack variations
+    def withVariations[S](agentName: String, baseTx: ..., txVariations: TxVariations[S] = TxVariations.empty): ContractTestAgent[S]
+
+    // Agent from a single optional transaction
+    def simple[S](agentName: String, buildTx: (BlockchainReader, S) => Future[Option[Transaction]]): ContractTestAgent[S]
+
+    // Agent from multiple transactions
+    def multi[S](agentName: String, buildTxs: (BlockchainReader, S) => Future[Seq[Transaction]]): ContractTestAgent[S]
+}
+```
+
+### ContractStepVariations.fromAgents
+
+```scala
+object ContractStepVariations {
+    def fromAgents[S](
+        extract: (BlockchainReader, ExecutionContext) => Future[S],
+        agents: Seq[ContractTestAgent[S]],
+        delays: S => Seq[Long] = _ => Seq.empty
+    ): ContractStepVariations[S]
+}
+```
+
+Combines all agents' actions with slot delays into a single `ContractStepVariations`. The resulting step overrides `allActions` directly — `makeBaseTx`/`variations` are not used.
 
 ### ContractScalaCheckCommands
 
