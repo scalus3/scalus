@@ -218,6 +218,7 @@ lazy val scalusPlugin = project
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       name := "scalus-plugin",
+      crossVersion := CrossVersion.full,
       scalacOptions ++= commonScalacOptions,
 //      scalacOptions += "-Wunused:all",
       // Manually set a fixed version to avoid recompilation on every commit

@@ -69,7 +69,7 @@ object Compiler:
           "This method call is handled by the Scalus compiler plugin. " +
               "If you see this message at runtime, the compiler plugin is not enabled. " +
               "Try adding the compiler plugin to your build.sbt: " +
-              "compilerPlugin(\"scalus\" %% \"scalus-plugin\" % scalusPluginVersion)"
+              "compilerPlugin(\"org.scalus\" % \"scalus-plugin\" % scalusPluginVersion cross CrossVersion.full)"
         )
 
     @deprecated("Use scalus.compiler.compileInline instead", "0.14.2")

@@ -59,9 +59,9 @@ import { Steps, Tabs } from 'nextra/components'
       <Tabs.Tab>
        If you already have a sbt project, you can add Scalus to it. Add the following configuration to your `build.sbt`:
        ```scala copy
-         scalaVersion := "3.3.5"
-         libraryDependencies += "org.scalus" %% "scalus" % "0.8.5"
-         addCompilerPlugin("org.scalus" %% "scalus-plugin" % "0.8.5")
+         scalaVersion := "3.3.7"
+         libraryDependencies += "org.scalus" %% "scalus" % "0.16.0"
+         addCompilerPlugin("org.scalus" % "scalus-plugin" % "0.16.0" cross CrossVersion.full)
        ```
        That's it! You can now start using Scalus in your project.
       </Tabs.Tab>

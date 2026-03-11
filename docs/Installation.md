@@ -98,7 +98,7 @@ Add the following to your `build.sbt` file:
 ```scala
 scalaVersion := "@SCALA3_VERSION@"
 libraryDependencies += "org.scalus" %% "scalus" % "@VERSION@"
-addCompilerPlugin("org.scalus" %% "scalus-plugin" % "@VERSION@")
+addCompilerPlugin("org.scalus" % "scalus-plugin" % "@VERSION@" cross CrossVersion.full)
 ```
 
 That's it! You can now start using Scalus in your project.
