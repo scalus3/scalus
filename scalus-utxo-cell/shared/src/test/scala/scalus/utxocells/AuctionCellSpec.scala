@@ -59,9 +59,9 @@ object AuctionCell extends CellValidator {
                 ctx.txInfo.requireSignedBy(bidder)
                 require(amount > state.highestBid, "Auction: bid too low")
                 require(!(bidder === state.seller), "Auction: seller cannot bid")
-                // Set the continuing output value to the new bid amount + beacon
-                val beaconValue = Value(ctx.ownPolicyId, beaconName, BigInt(1))
-                ctx.setContinuingValue(Value.plus(Value.lovelace(amount), beaconValue))
+                // Set the continuing output value to the new bid amount
+                // (beacon token is auto-included by UtxoCellDef)
+                ctx.setContinuingValue(Value.lovelace(amount))
                 // Refund previous bidder
                 state.highestBidder match
                     case Option.Some(prev) =>
@@ -118,7 +118,8 @@ object AuctionCell extends CellValidator {
               policyId,
               sc.txInfo
             )
-        else if qty === BigInt(-1) then UtxoCellLib.verifyBurnBeacon(beaconName, policyId, sc.txInfo)
+        else if qty === BigInt(-1) then
+            UtxoCellLib.verifyBurnBeacon(beaconName, policyId, sc.txInfo)
         else fail("Auction: invalid beacon mint quantity")
     }
 }

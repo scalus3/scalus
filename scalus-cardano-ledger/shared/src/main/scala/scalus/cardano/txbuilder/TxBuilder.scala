@@ -1701,10 +1701,8 @@ case class TxBuilder(
         // Exclude UTXOs already used in initial context (from user's steps)
         // and only use sponsor's UTxOs for input/collateral selection
         val alreadyUsedInputs = initialCtx.resolvedUtxos.utxos.keySet
-        val availableUtxos = allAvailableUtxos.filter { case (_, output) =>
-            output.address == sponsor
-        }.filterNot { case (input, _) =>
-            alreadyUsedInputs.contains(input)
+        val availableUtxos = allAvailableUtxos.filter { case (input, output) =>
+            output.address == sponsor && !alreadyUsedInputs.contains(input)
         }
 
         // Determine if we need collateral (transaction has scripts)
@@ -1990,8 +1988,8 @@ case class TxBuilder(
       */
     def addSteps(s: TransactionBuilderStep*): TxBuilder = copy(steps = steps ++ s)
 
-    /** Resolve all [[TransactionBuilderStep.Deferred]] steps synchronously using the provided UTxOs.
-      * Each deferred step's resolve function receives the full UTxO set.
+    /** Resolve all [[TransactionBuilderStep.Deferred]] steps synchronously using the provided
+      * UTxOs. Each deferred step's resolve function receives the full UTxO set.
       */
     private def resolveDeferredSync(utxos: Utxos): TxBuilder = {
         if !steps.exists(_.isInstanceOf[TransactionBuilderStep.Deferred]) then this

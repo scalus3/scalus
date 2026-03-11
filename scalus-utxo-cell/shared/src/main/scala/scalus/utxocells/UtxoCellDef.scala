@@ -6,8 +6,8 @@ import scalus.uplc.builtin.Data.toData
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.{AssetName, PolicyId, ScriptHash, Utxo, Utxos, Value}
 import scalus.cardano.node.{UtxoQuery, UtxoSource}
-import scalus.cardano.txbuilder.{TxBuilder, TransactionBuilderStep}
-import scalus.cardano.onchain.plutus.prelude.{Option as POption}
+import scalus.cardano.txbuilder.{TransactionBuilderStep, TxBuilder}
+import scalus.cardano.onchain.plutus.prelude.Option as POption
 
 /** A stateless descriptor for a UtxoCell — a UTxO-based state machine on Cardano.
   *
@@ -51,8 +51,7 @@ class UtxoCellDef[S: ToData: FromData, A: ToData](
     /** Find the cell UTxO by beacon token in the provided UTxO set. */
     def findUtxo(utxos: Utxos): Option[Utxo] = {
         utxos.collectFirst {
-            case (input, output)
-                if output.value.assets.assets.exists { case (pid, tokens) =>
+            case (input, output) if output.value.assets.assets.exists { case (pid, tokens) =>
                     pid == policyId && tokens.exists { case (name, qty) =>
                         name == assetName && qty > 0
                     }
@@ -88,12 +87,14 @@ class UtxoCellDef[S: ToData: FromData, A: ToData](
         val env = builder.env
         val redeemer = action.toData
 
-        builder.addSteps(TransactionBuilderStep.Deferred(
-          query = UtxoQuery(UtxoSource.FromAsset(policyId, assetName)),
-          resolve = { utxos =>
-              resolveTransition(action, redeemer, utxos, env)
-          }
-        ))
+        builder.addSteps(
+          TransactionBuilderStep.Deferred(
+            query = UtxoQuery(UtxoSource.FromAsset(policyId, assetName)),
+            resolve = { utxos =>
+                resolveTransition(action, redeemer, utxos, env)
+            }
+          )
+        )
     }
 
     /** Apply an action to the cell (eager). Finds cell UTxO in the provided set, runs transition,
@@ -127,8 +128,20 @@ class UtxoCellDef[S: ToData: FromData, A: ToData](
             case POption.None    => None
 
         import UtxoCellBuilder.*
-        val outputValue = ctx.continuingValue.getOrElse(Value.zero)
-        val temp = TxBuilder(env).spendCellCtx(cellDef, cellUtxo, redeemer, scalaNextState, ctx, outputValue)
+        // Auto-include beacon token when setContinuingValue was called.
+        // When not called (None), outputValue=zero causes spendCellCtx to preserve
+        // the existing UTxO value (which already contains the beacon).
+        val outputValue = ctx.continuingValue match
+            case Some(v) => v + Value.asset(policyId, assetName, 1)
+            case None    => Value.zero
+        val temp = TxBuilder(env).spendCellCtx(
+          cellDef,
+          cellUtxo,
+          redeemer,
+          scalaNextState,
+          ctx,
+          outputValue
+        )
         temp.steps
     }
 
