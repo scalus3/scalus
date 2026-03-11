@@ -33,9 +33,31 @@ object CellContextOps {
 
     def mint(self: ScriptContext, tokenName: ByteString, amount: BigInt): Unit = {
         val policyId = ownPolicyId(self)
+        val mintedTokens = self.txInfo.mint.tokens(policyId)
         require(
-          self.txInfo.mint.quantityOf(policyId, tokenName) === amount,
+          mintedTokens.length === BigInt(1),
+          "CellContext: only one token name may be minted under this policy"
+        )
+        require(
+          mintedTokens.keys.head === tokenName,
+          "CellContext: unexpected token name minted"
+        )
+        require(
+          mintedTokens.values.head === amount,
           "CellContext: mint quantity mismatch"
+        )
+    }
+
+    def requireInputToken(
+        self: ScriptContext,
+        policyId: PolicyId,
+        tokenName: ByteString,
+        quantity: BigInt
+    ): Unit = {
+        val ownValue = ownInputValue(self)
+        require(
+          ownValue.quantityOf(policyId, tokenName) >= quantity,
+          "CellContext: required token not present in cell input"
         )
     }
 
@@ -48,6 +70,10 @@ object CellContextOps {
                     case _ => fail("CellContext: input is not a script")
                 val outputs = self.txInfo.findOwnScriptOutputs(scriptHash)
                 require(outputs.length === BigInt(1), "CellContext: expected one continuing output")
+                UtxoCellLib.verifyStakingCredential(
+                  ownInput.resolved.address,
+                  outputs.head.address
+                )
                 require(
                   UtxoCellLib.valueGeq(outputs.head.value, value),
                   "CellContext: continuing output value insufficient"
@@ -78,7 +104,13 @@ object CellTxInfoOps {
             case _ => fail("CellContext: no finite upper bound on validity range")
 }
 
-/** On-chain substitute for [[CellOutputs]]. Receives `List[TxOut]` (as Data) as `self`. */
+/** On-chain substitute for [[CellOutputs]]. Receives `List[TxOut]` (as Data) as `self`.
+  *
+  * WARNING (V005): Each `add` call independently searches all tx outputs via `exists`. If the
+  * transition calls `add` multiple times with the same address and overlapping value, a single
+  * output can satisfy multiple checks (double satisfaction). For transitions producing multiple
+  * outputs to the same address, use `UtxoCellLib.verifyOutputs` for V005-safe sequential matching.
+  */
 @Compile
 object CellOutputsOps {
 

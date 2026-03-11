@@ -12,7 +12,7 @@ import scalus.cardano.onchain.plutus.v3.ScriptContext
   * passes `ScriptContext` directly as `CellContext` via `asInstanceOf` — the plugin's `typeProxy`
   * cast makes this zero-cost.
   *
-  * Off-chain: `OffChainCellContext` (future) implements this trait normally, accumulating builder
+  * Off-chain: [[OffChainCellContext]] implements this trait normally, accumulating builder
   * constraints and outputs.
   *
   * Usage in transition:
@@ -48,6 +48,14 @@ trait CellContext {
       * has >= this value. Off-chain: records the value for the builder to use.
       */
     @Ignore def setContinuingValue(value: Value): Unit
+
+    /** Require that the cell's own input contains at least the given quantity of a token (V024).
+      *
+      * Use this to verify authentication tokens (e.g., an external NFT that proves this is a
+      * legitimate parameterized instance). On-chain: verifies own input value. Off-chain: verifies
+      * the cell UTxO has the token with a clear error message.
+      */
+    @Ignore def requireInputToken(policyId: PolicyId, tokenName: ByteString, quantity: BigInt): Unit
 }
 
 /** Dual-interpretation transaction info for UtxoCell transitions.
@@ -82,6 +90,11 @@ trait CellTxInfo {
 @OnChainSubstitute(CellOutputsOps)
 trait CellOutputs {
 
-    /** Add a required output. On-chain: checks output exists. Off-chain: adds payTo to builder. */
+    /** Add a required output. On-chain: checks output exists. Off-chain: adds payTo to builder.
+      *
+      * WARNING (V005): Each call independently searches all tx outputs. If multiple `add` calls
+      * target the same address with overlapping value, a single output can satisfy multiple checks.
+      * For V005-safe matching, use `UtxoCellLib.verifyOutputs` with a collected list of outputs.
+      */
     @Ignore def add(address: Address, value: Value): Unit
 }

@@ -46,7 +46,30 @@ class OffChainCellContext(
     override def ownInputValue: onchain.Value =
         UtxoCellBuilder.fromLedgerValue(cellUtxo.output.value)
 
+    override def requireInputToken(
+        policyId: onchain.PolicyId,
+        tokenName: ByteString,
+        quantity: BigInt
+    ): Unit = {
+        val inputValue = ownInputValue
+        val actual = inputValue.quantityOf(policyId, tokenName)
+        require(
+          actual >= quantity,
+          s"Cell UTxO missing required token: policy=${policyId.toHex}, " +
+              s"token=${tokenName.toHex}, required=$quantity, found=$actual"
+        )
+    }
+
+    private var _mintedTokenName: Option[ByteString] = None
+
     override def mint(tokenName: ByteString, amount: BigInt): Unit = {
+        _mintedTokenName match
+            case Some(prev) if prev != tokenName =>
+                throw new IllegalStateException(
+                  s"V011: only one token name may be minted per policy. " +
+                      s"Already minting ${prev.toHex}, cannot also mint ${tokenName.toHex}"
+                )
+            case _ => _mintedTokenName = Some(tokenName)
         _steps += TransactionBuilderStep.Mint(
           scriptHash = cellDef.scriptHash,
           assetName = AssetName(tokenName),
