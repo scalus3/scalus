@@ -1,8 +1,6 @@
 package scalus.utxocells
 
-import scalus.Compile
 import scalus.uplc.builtin.ByteString
-import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.PolicyId
 
 /** Describes how to locate the UTxO state on-chain (find continuing output, detect beacon). */
