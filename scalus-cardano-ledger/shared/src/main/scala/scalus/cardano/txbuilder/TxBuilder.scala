@@ -114,6 +114,22 @@ object TxBuilderException {
           s"Insufficient tokens at $sponsorAddress: need $required of ${policyId.toHex}.${assetName.toString}, found only $available"
         )
 
+    /** Deferred step resolution failed.
+      *
+      * Thrown when a [[TransactionBuilderStep.Deferred]] step's `resolve` function throws an
+      * exception. This typically happens when off-chain transition logic fails (e.g., a `require`
+      * check in a UtxoCell transition). The underlying exception is preserved as the cause for
+      * stack traces.
+      */
+    final case class DeferredResolutionException(
+        stepError: StepError.DeferredResolutionFailed
+    ) extends TxBuilderException(
+          s"Deferred step resolution failed: ${stepError.cause.getMessage}",
+          stepError.cause
+        ) {
+        def step: TransactionBuilderStep = stepError.step
+    }
+
     /** Converts a SomeBuildError to the appropriate TxBuilderException. */
     def fromBuildError(error: SomeBuildError): TxBuilderException = error match {
         case SomeBuildError.SomeStepError(e, ctx)             => BuildStepException(e, ctx)
@@ -1632,21 +1648,19 @@ case class TxBuilder(
       *   a Future containing a new TxBuilder with the transaction completed
       */
     def complete(reader: BlockchainReader, sponsor: Address): Future[TxBuilder] = {
-        // Build initial context FIRST (fail-fast before async call)
-        val initialBuildResult = TransactionBuilder.build(env.network, steps)
-
-        initialBuildResult match {
-            case Left(error) =>
-                Future.failed(TxBuilderException.fromBuildError(error))
-
-            case Right(initialCtx) =>
-                // Only fetch UTXOs if initial build succeeds
-                // Use reader's ExecutionContext for the map operation
-                given scala.concurrent.ExecutionContext = reader.executionContext
-                reader.findUtxos(address = sponsor).map { utxosResult =>
-                    val allAvailableUtxos = utxosResult.getOrElse(Map.empty)
-                    completeWithUtxos(allAvailableUtxos, sponsor, initialCtx)
-                }
+        given scala.concurrent.ExecutionContext = reader.executionContext
+        // Resolve deferred steps first, then proceed with normal complete
+        resolveDeferredAsync(reader).flatMap { resolved =>
+            val initialBuildResult = TransactionBuilder.build(env.network, resolved.steps)
+            initialBuildResult match {
+                case Left(error) =>
+                    Future.failed(TxBuilderException.fromBuildError(error))
+                case Right(initialCtx) =>
+                    reader.findUtxos(address = sponsor).map { utxosResult =>
+                        val allAvailableUtxos = utxosResult.getOrElse(Map.empty)
+                        resolved.completeWithUtxos(allAvailableUtxos, sponsor, initialCtx)
+                    }
+            }
         }
     }
 
@@ -1655,21 +1669,24 @@ case class TxBuilder(
       * This synchronous variant is useful when UTXOs are already available in memory, avoiding the
       * need for async provider queries. Otherwise identical to the provider-based variant.
       *
+      * Deferred steps are resolved using the provided UTxO set.
+      *
       * @param availableUtxos
-      *   the UTXOs available at the sponsor address for input/collateral selection
+      *   the UTXOs available for input/collateral selection and deferred step resolution
       * @param sponsor
       *   the address to use for input selection, collateral, and change
       * @return
       *   a new TxBuilder with the transaction completed
       */
     def complete(availableUtxos: Utxos, sponsor: Address): TxBuilder = {
-        val initialBuildResult = TransactionBuilder.build(env.network, steps)
+        val resolved = resolveDeferredSync(availableUtxos)
+        val initialBuildResult = TransactionBuilder.build(env.network, resolved.steps)
 
         initialBuildResult match {
             case Left(error) =>
                 throw TxBuilderException.fromBuildError(error)
             case Right(initialCtx) =>
-                completeWithUtxos(availableUtxos, sponsor, initialCtx)
+                resolved.completeWithUtxos(availableUtxos, sponsor, initialCtx)
         }
     }
 
@@ -1682,8 +1699,11 @@ case class TxBuilder(
         initialCtx: TransactionBuilder.Context
     ): TxBuilder = {
         // Exclude UTXOs already used in initial context (from user's steps)
+        // and only use sponsor's UTxOs for input/collateral selection
         val alreadyUsedInputs = initialCtx.resolvedUtxos.utxos.keySet
-        val availableUtxos = allAvailableUtxos.filterNot { case (input, _) =>
+        val availableUtxos = allAvailableUtxos.filter { case (_, output) =>
+            output.address == sponsor
+        }.filterNot { case (input, _) =>
             alreadyUsedInputs.contains(input)
         }
 
@@ -1969,6 +1989,61 @@ case class TxBuilder(
       *   the steps to append
       */
     def addSteps(s: TransactionBuilderStep*): TxBuilder = copy(steps = steps ++ s)
+
+    /** Resolve all [[TransactionBuilderStep.Deferred]] steps synchronously using the provided UTxOs.
+      * Each deferred step's resolve function receives the full UTxO set.
+      */
+    private def resolveDeferredSync(utxos: Utxos): TxBuilder = {
+        if !steps.exists(_.isInstanceOf[TransactionBuilderStep.Deferred]) then this
+        else {
+            val resolvedSteps = steps.flatMap {
+                case d: TransactionBuilderStep.Deferred =>
+                    try d.resolve(utxos)
+                    catch {
+                        case e: Exception =>
+                            throw TxBuilderException.DeferredResolutionException(
+                              StepError.DeferredResolutionFailed(e, d)
+                            )
+                    }
+                case s => Seq(s)
+            }
+            copy(steps = resolvedSteps)
+        }
+    }
+
+    /** Resolve all [[TransactionBuilderStep.Deferred]] steps asynchronously using a
+      * [[BlockchainReader]]. Each deferred step's query is fetched in parallel, then its resolve
+      * function is called with the fetched UTxOs.
+      */
+    private def resolveDeferredAsync(
+        reader: BlockchainReader
+    )(using ec: scala.concurrent.ExecutionContext): Future[TxBuilder] = {
+        val deferredWithIndex = steps.zipWithIndex.collect {
+            case (d: TransactionBuilderStep.Deferred, i) => (d, i)
+        }
+        if deferredWithIndex.isEmpty then Future.successful(this)
+        else {
+            val fetchFutures = deferredWithIndex.map { case (d, i) =>
+                reader.findUtxos(d.query).map(r => (i, d, r.getOrElse(Map.empty)))
+            }
+            Future.sequence(fetchFutures).map { results =>
+                val resolvedByIndex =
+                    results.map { case (i, d, utxos) =>
+                        i -> (try d.resolve(utxos)
+                        catch {
+                            case e: Exception =>
+                                throw TxBuilderException.DeferredResolutionException(
+                                  StepError.DeferredResolutionFailed(e, d)
+                                )
+                        })
+                    }.toMap
+                val resolvedSteps = steps.zipWithIndex.flatMap { case (step, i) =>
+                    resolvedByIndex.getOrElse(i, Seq(step))
+                }
+                copy(steps = resolvedSteps)
+            }
+        }
+    }
 }
 
 /** Factory methods for creating TxBuilder instances. */

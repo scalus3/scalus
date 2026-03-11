@@ -2,6 +2,7 @@ package scalus.cardano.txbuilder
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
+import scalus.cardano.node.UtxoQuery
 import scalus.uplc.builtin.Data
 
 sealed trait TransactionBuilderStep
@@ -130,4 +131,20 @@ object TransactionBuilderStep {
 
     /** Requires a public key hash to sign the transaction. */
     case class RequireSignature(signer: AddrKeyHash) extends TransactionBuilderStep
+
+    /** A deferred step that is resolved at `complete` time when UTxOs are available.
+      *
+      * The `query` specifies which UTxOs to fetch (used by `complete(reader, sponsor)`). The
+      * `resolve` function receives the fetched UTxOs and returns concrete steps to insert in place of
+      * the deferred step.
+      *
+      * For `complete(utxos, sponsor)`, the full provided UTxO set is passed to `resolve` (the query
+      * is not evaluated locally).
+      *
+      * Deferred steps are not supported by `build` — they must be resolved before building.
+      */
+    case class Deferred(
+        query: UtxoQuery,
+        resolve: Utxos => Seq[TransactionBuilderStep]
+    ) extends TransactionBuilderStep
 }

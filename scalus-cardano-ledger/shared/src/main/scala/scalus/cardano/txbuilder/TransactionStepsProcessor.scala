@@ -151,6 +151,11 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
 
         case requireSignature: TransactionBuilderStep.RequireSignature =>
             useRequireSignature(requireSignature)
+
+        case _: TransactionBuilderStep.Deferred =>
+            Left(
+              UnexpectedDeferredStep(step)
+            )
     }
 
     // -------------------------------------------------------------------------

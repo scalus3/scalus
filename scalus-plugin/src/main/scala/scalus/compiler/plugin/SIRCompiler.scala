@@ -262,6 +262,8 @@ final class SIRCompiler(
     private val IgnoreAnnot = requiredClassRef("scalus.compiler.Ignore").symbol.asClass
 
     private val uplcIntrinsicAnnot = Symbols.requiredClass("scalus.uplc.builtin.uplcIntrinsic")
+    private val onChainSubstituteAnnot =
+        Symbols.requiredClass("scalus.compiler.OnChainSubstitute")
 
     private def builtinFun(s: Symbol): Option[SIR.Builtin] = {
         DefaultFunSIRBuiltins
@@ -2879,10 +2881,11 @@ final class SIRCompiler(
                 // can't be field (because fields are not type-applyable)
                 if isConstructorVal(tree.symbol, tree.tpe) then
                     compileNewConstructor(env, sel.tpe, tree.tpe, targs, tree)
-                // TODO: now we have-no virtual calls with template parameters,
-                //   but if we want to add it, we well need extend case here
-                // else if isVirtualCall
-                else compileIdentOrQualifiedSelect(env, sel, tree, targs)
+                else
+                    tryCompileSubstitutedCall(env, sel, obj, ident) match
+                        case Some(substituted) => substituted
+                        case None =>
+                            compileIdentOrQualifiedSelect(env, sel, tree, targs)
             // case class User(name: String, age: Int)
             // val user = User("John", 42) => \u - u "John" 42
             // user.name => \u name age -> name
@@ -2946,15 +2949,20 @@ final class SIRCompiler(
                         AnnotationsDecl.fromSrcPos(tree.srcPos)
                       )
                     )
-                else if isVirtualCall(tree, obj, ident) then
-                    compileVirtualCall(env, tree, obj, ident)
-                else {
-                    try compileIdentOrQualifiedSelect(env, tree, tree, Nil)
-                    catch
-                        case NonFatal(ex) =>
-                            println(s"Exception during compiling select: ${sel.show}")
-                            throw ex
-                }
+                else
+                    tryCompileSubstitutedCall(env, tree, obj, ident) match
+                        case Some(substituted) => substituted
+                        case None =>
+                            if isVirtualCall(tree, obj, ident) then
+                                compileVirtualCall(env, tree, obj, ident)
+                            else
+                                try compileIdentOrQualifiedSelect(env, tree, tree, Nil)
+                                catch
+                                    case NonFatal(ex) =>
+                                        println(
+                                          s"Exception during compiling select: ${sel.show}"
+                                        )
+                                        throw ex
             // Ignore type application
             //   actually now all current applications are typeapplications
             case TypeApply(f, targs) =>
@@ -3137,6 +3145,122 @@ final class SIRCompiler(
                 if env.trace then e.printStackTrace()
                 if true then throw e
                 SIRType.TypeNothing
+    }
+
+    /** Check if a method's owner type has @OnChainSubstitute. If so, compile the call as
+      * `SubstObject.method(typeProxy[SelfAs](qualifier), ...)` and return Some. Otherwise None.
+      */
+    private def tryCompileSubstitutedCall(
+        env: Env,
+        selectTree: Tree,
+        qualifier: Tree,
+        methodName: Name
+    ): Option[AnnotatedSIR] = {
+        val methodSym = selectTree match
+            case sel: Select  => sel.symbol
+            case TypeApply(sel: Select, _) => sel.symbol
+            case _            => return None
+
+        if !methodSym.exists then return None
+
+        val ownerSym = methodSym.owner
+        ownerSym.getAnnotation(onChainSubstituteAnnot) match {
+            case None => None
+            case Some(annot) =>
+                val (substituteSym, selfAsSym) = parseOnChainSubstitute(annot)
+                // Use moduleClass to get the name with '$' suffix, matching how
+                // module names are stored in SIR (e.g., "pkg.SubstOps$")
+                val moduleClassSym =
+                    if substituteSym.moduleClass.exists then substituteSym.moduleClass
+                    else substituteSym
+                val substModuleName = moduleClassSym.fullName.toString
+                val substMethodName = s"$substModuleName.${methodSym.name.show}"
+
+                if env.debug then
+                    println(
+                      s"@OnChainSubstitute: redirecting ${ownerSym.fullName}.${methodSym.name} -> $substMethodName"
+                    )
+
+                // Determine self type: selfAs type if specified, otherwise qualifier type
+                val selfAsType =
+                    if selfAsSym != defn.NothingClass then
+                        sirTypeInEnv(selfAsSym.typeRef, selectTree.srcPos, env)
+                    else sirTypeInEnv(qualifier.tpe.widen, selectTree.srcPos, env)
+
+                // Method type (the original method signature)
+                val methodType = sirTypeInEnv(methodSym.info, selectTree.srcPos, env)
+                // Substitute method type: Fun(selfAs, methodType)
+                val substType = SIRType.Fun(selfAsType, methodType)
+
+                val methodRef = SIR.ExternalVar(
+                  substModuleName,
+                  substMethodName,
+                  substType,
+                  AnnotationsDecl.fromSrcPos(selectTree.srcPos)
+                )
+
+                // Compile qualifier and optionally cast to selfAs type
+                val qualifierSir = compileExpr(env, qualifier)
+                val selfSir =
+                    if selfAsSym != defn.NothingClass then
+                        SIR.Cast(
+                          qualifierSir,
+                          selfAsType,
+                          AnnotationsDecl.fromSrcPos(selectTree.srcPos) +
+                              ("typeProxy" -> SIR.Const(
+                                scalus.uplc.Constant.Bool(true),
+                                SIRType.Boolean,
+                                AnnotationsDecl.fromSrcPos(selectTree.srcPos)
+                              ))
+                        )
+                    else qualifierSir
+
+                // Apply self to get partially-applied method
+                val applied = SIR.Apply(
+                  methodRef,
+                  selfSir,
+                  methodType,
+                  AnnotationsDecl.fromSrcPos(selectTree.srcPos)
+                )
+
+                Some(applied)
+        }
+    }
+
+    private def parseOnChainSubstitute(
+        annot: Annotations.Annotation
+    ): (Symbol, Symbol) = {
+        val substituteSym = annot.argument(0) match {
+            case Some(arg) =>
+                val sym = arg.symbol
+                if sym.exists then sym
+                else
+                    // might be a type reference
+                    arg.tpe.termSymbol match
+                        case s if s.exists => s
+                        case _             => arg.tpe.typeSymbol.sourceModule
+            case None =>
+                report.error("@OnChainSubstitute requires a substitute object argument")
+                Symbols.NoSymbol
+        }
+        val selfAsSym = annot.argument(1) match {
+            case Some(arg) =>
+                // classOf[T] compiles to Literal(Constant(TypeRepr))
+                arg match
+                    case tpd.Literal(const) if const.tag == Constants.ClazzTag =>
+                        const.typeValue.typeSymbol match
+                            case s if s.exists => s
+                            case _             => defn.NothingClass
+                    case _ =>
+                        arg.tpe.widenTermRefExpr match
+                            case tp: ConstantType =>
+                                tp.value.typeValue.typeSymbol match
+                                    case s if s.exists => s
+                                    case _             => defn.NothingClass
+                            case _ => defn.NothingClass
+            case None => defn.NothingClass
+        }
+        (substituteSym, selfAsSym)
     }
 
     private def isVirtualCall(@unused tree: Tree, qualifier: Tree, name: Name): Boolean = {

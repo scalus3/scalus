@@ -155,6 +155,8 @@ lazy val root: Project = project
       scalusTestkit.jvm,
       scalusExamples.js,
       scalusExamples.jvm,
+      scalusUtxoCell.js,
+      scalusUtxoCell.jvm,
       scalusDesignPatterns,
       bench,
       `scalus-bloxbean-cardano-client-lib`,
@@ -176,6 +178,7 @@ lazy val jvm: Project = project
       scalusCardanoLedger.jvm,
       scalusTestkit.jvm,
       scalusExamples.jvm,
+      scalusUtxoCell.jvm,
       scalusDesignPatterns,
       bench,
       `scalus-bloxbean-cardano-client-lib`,
@@ -193,6 +196,7 @@ lazy val js: Project = project
       scalusCardanoLedger.js,
       scalusTestkit.js,
       scalusExamples.js,
+      scalusUtxoCell.js,
     )
     .settings(
       publish / skip := true
@@ -545,6 +549,29 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       scalaJSLinkerConfig ~= {
           _.withModuleKind(ModuleKind.CommonJSModule)
       }
+    )
+    .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
+
+lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
+    .in(file("scalus-utxo-cell"))
+    .dependsOn(
+      scalus % "compile->compile;compile->test",
+      scalusCardanoLedger % "compile->compile;test->test"
+    )
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-utxo-cell",
+      scalacOptions ++= commonScalacOptions,
+      PluginDependency,
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
+      publish / skip := true
+    )
+    .jvmSettings(Test / fork := true)
+    .jsSettings(
+      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
+      scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
+      scalaJSUseMainModuleInitializer := false
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
 

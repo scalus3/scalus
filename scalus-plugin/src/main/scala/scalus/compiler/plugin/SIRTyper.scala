@@ -208,7 +208,8 @@ class SIRTyper(using Context) {
             tryMakeFunctionalInterface(tp, sym, env) orElse
             tryMakeCaseClassOrCaseParent(tp, sym, types, env) orElse
             tryMakeSynomimVaragsType(tp, sym, types, env) orElse
-            tryMakeNonCaseModule(tp, sym, types, env)).getOrElse {
+            tryMakeNonCaseModule(tp, sym, types, env) orElse
+            tryMakeOnChainSubstituteType(sym)).getOrElse {
 //            val name = sym.fullName.show
 //            val typeArgs = types.map(_.show)
             unsupportedType(
@@ -770,6 +771,15 @@ class SIRTyper(using Context) {
         } else {
             None
         }
+    }
+
+    /** Types annotated with @OnChainSubstitute are represented as Data on-chain.
+      * The actual self type cast is handled by the substitution mechanism in SIRCompiler.
+      */
+    private def tryMakeOnChainSubstituteType(typeSymbol: Symbol): Option[SIRType] = {
+        val onChainSubstAnnot = Symbols.requiredClass("scalus.compiler.OnChainSubstitute")
+        if typeSymbol.hasAnnotation(onChainSubstAnnot) then Some(SIRType.Data.tp)
+        else None
     }
 
     private def makeUnaryFun(args: List[SIRType], res: SIRType, env: SIRTypeEnv): SIRType = {

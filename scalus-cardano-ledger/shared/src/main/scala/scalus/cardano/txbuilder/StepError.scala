@@ -234,4 +234,25 @@ object StepError {
         override def explain: String =
             s"The validity end slot ($slot) is already set. You cannot set the validity end slot more than once."
     }
+
+    case class UnexpectedDeferredStep(step: TransactionBuilderStep) extends StepError {
+        override def explain: String =
+            "Deferred steps must be resolved before building. Use complete(reader, sponsor) or complete(utxos, sponsor) instead of build."
+    }
+
+    /** A deferred step's `resolve` function threw an exception.
+      *
+      * This typically happens when the off-chain transition logic fails (e.g., a `require` check
+      * in a UtxoCell transition function). The underlying exception is preserved for stack traces.
+      *
+      * @param cause
+      *   the exception thrown by the resolve function
+      * @param step
+      *   the deferred step that failed
+      */
+    case class DeferredResolutionFailed(cause: Throwable, step: TransactionBuilderStep)
+        extends StepError {
+        override def explain: String =
+            s"Deferred step resolution failed: ${cause.getMessage}"
+    }
 }
