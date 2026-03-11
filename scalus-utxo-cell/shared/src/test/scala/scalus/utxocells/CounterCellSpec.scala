@@ -142,7 +142,8 @@ object CounterCellV2 extends CellValidator {
         if qty === BigInt(1) then
             val initialState = CounterState(BigInt(0))
             UtxoCellLib.verifyMintResult(initialState, beaconName, policyId, sc.txInfo)
-        else if qty === BigInt(-1) then UtxoCellLib.verifyBurnBeacon(beaconName, policyId, sc.txInfo)
+        else if qty === BigInt(-1) then
+            UtxoCellLib.verifyBurnBeacon(beaconName, policyId, sc.txInfo)
         else fail("CounterCell: invalid beacon mint quantity")
     }
 }

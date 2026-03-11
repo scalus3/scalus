@@ -35,7 +35,8 @@ trait CellContext {
     /** The policy ID of this cell. On-chain: from scriptInfo. Off-chain: from cell definition. */
     @Ignore def ownPolicyId: PolicyId
 
-    /** The value locked in the current input. On-chain: from txInfo.inputs. Off-chain: from UTxO. */
+    /** The value locked in the current input. On-chain: from txInfo.inputs. Off-chain: from UTxO.
+      */
     @Ignore def ownInputValue: Value
 
     /** Mint tokens under the cell's own policy. On-chain: verifies mint quantity. Off-chain: adds
@@ -74,8 +75,8 @@ trait CellTxInfo {
 /** Dual-interpretation transaction outputs for UtxoCell transitions.
   *
   * On-chain: `@OnChainSubstitute` redirects to [[CellOutputsOps]]. Verifies outputs exist in
-  * `tx.outputs` with matching address and `>= value`.
-  * Off-chain: adds `payTo` steps to the transaction builder.
+  * `tx.outputs` with matching address and `>= value`. Off-chain: adds `payTo` steps to the
+  * transaction builder.
   */
 @Compile
 @OnChainSubstitute(CellOutputsOps)

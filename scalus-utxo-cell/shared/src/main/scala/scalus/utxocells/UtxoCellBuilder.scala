@@ -60,7 +60,10 @@ object UtxoCellBuilder {
         var result = OnchainValue.lovelace(BigInt(v.coin.value))
         for (policyId, tokens) <- v.assets.assets do
             for (assetName, amount) <- tokens do
-                result = OnchainValue.plus(result, OnchainValue(policyId, assetName.bytes, BigInt(amount)))
+                result = OnchainValue.plus(
+                  result,
+                  OnchainValue(policyId, assetName.bytes, BigInt(amount))
+                )
         result
     }
 

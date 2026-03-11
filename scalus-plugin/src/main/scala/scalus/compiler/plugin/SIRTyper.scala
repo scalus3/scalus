@@ -773,8 +773,8 @@ class SIRTyper(using Context) {
         }
     }
 
-    /** Types annotated with @OnChainSubstitute are represented as Data on-chain.
-      * The actual self type cast is handled by the substitution mechanism in SIRCompiler.
+    /** Types annotated with @OnChainSubstitute are represented as Data on-chain. The actual self
+      * type cast is handled by the substitution mechanism in SIRCompiler.
       */
     private def tryMakeOnChainSubstituteType(typeSymbol: Symbol): Option[SIRType] = {
         val onChainSubstAnnot = Symbols.requiredClass("scalus.compiler.OnChainSubstitute")

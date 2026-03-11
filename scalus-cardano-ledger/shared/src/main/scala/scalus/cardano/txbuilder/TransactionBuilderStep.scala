@@ -135,8 +135,8 @@ object TransactionBuilderStep {
     /** A deferred step that is resolved at `complete` time when UTxOs are available.
       *
       * The `query` specifies which UTxOs to fetch (used by `complete(reader, sponsor)`). The
-      * `resolve` function receives the fetched UTxOs and returns concrete steps to insert in place of
-      * the deferred step.
+      * `resolve` function receives the fetched UTxOs and returns concrete steps to insert in place
+      * of the deferred step.
       *
       * For `complete(utxos, sponsor)`, the full provided UTxO set is passed to `resolve` (the query
       * is not evaluated locally).

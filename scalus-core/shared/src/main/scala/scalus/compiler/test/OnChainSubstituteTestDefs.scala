@@ -7,6 +7,7 @@ import scalus.uplc.builtin.Data
 /** Substitute @Compile object for ContextTxInfo: on-chain, ContextTxInfo is just Data (TxInfo). */
 @Compile
 object ContextTxInfoOps {
+
     /** On-chain, ContextTxInfo is Data. For this test, fee simply unwraps I(n). */
     def fee(self: Data): BigInt = self.toI
 }

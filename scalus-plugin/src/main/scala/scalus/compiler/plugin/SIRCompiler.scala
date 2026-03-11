@@ -3157,9 +3157,9 @@ final class SIRCompiler(
         methodName: Name
     ): Option[AnnotatedSIR] = {
         val methodSym = selectTree match
-            case sel: Select  => sel.symbol
+            case sel: Select               => sel.symbol
             case TypeApply(sel: Select, _) => sel.symbol
-            case _            => return None
+            case _                         => return None
 
         if !methodSym.exists then return None
 

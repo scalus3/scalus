@@ -147,10 +147,13 @@ class CounterCellEmulatorTest extends AnyFunSuite {
         val cellUtxo = Utxo(cellEntry.get)
 
         // 3. Spend: increment using OffChainCellContext
-        val ctx = new OffChainCellContext(cellDefV2, cellUtxo, CounterAction.Increment.toData, testEnv)
+        val ctx =
+            new OffChainCellContext(cellDefV2, cellUtxo, CounterAction.Increment.toData, testEnv)
         val currentState = CounterState(BigInt(0))
         val nextState = CounterCellV2.transition(currentState, CounterAction.Increment, ctx)
-        assert(nextState == scalus.cardano.onchain.plutus.prelude.Option.Some(CounterState(BigInt(1))))
+        assert(
+          nextState == scalus.cardano.onchain.plutus.prelude.Option.Some(CounterState(BigInt(1)))
+        )
         assert(ctx.steps.isEmpty, "Counter transition should not accumulate steps")
 
         val fundingUtxo = Utxo(emulator.utxos.find(_._2.address != scriptAddr).get)
@@ -175,11 +178,16 @@ class CounterCellEmulatorTest extends AnyFunSuite {
         assert(cellEntry2.isDefined, "Should find updated V2 cell")
         val cellUtxo2 = Utxo(cellEntry2.get)
         val updatedDatum = cellEntry2.get._2.datumOption.flatMap(_.dataOption)
-        assert(updatedDatum.contains(CounterState(BigInt(1)).toData), "Datum should be CounterState(1)")
+        assert(
+          updatedDatum.contains(CounterState(BigInt(1)).toData),
+          "Datum should be CounterState(1)"
+        )
 
         // 5. Reset (terminal): spend + burn beacon
-        val ctx2 = new OffChainCellContext(cellDefV2, cellUtxo2, CounterAction.Reset.toData, testEnv)
-        val nextState2 = CounterCellV2.transition(CounterState(BigInt(1)), CounterAction.Reset, ctx2)
+        val ctx2 =
+            new OffChainCellContext(cellDefV2, cellUtxo2, CounterAction.Reset.toData, testEnv)
+        val nextState2 =
+            CounterCellV2.transition(CounterState(BigInt(1)), CounterAction.Reset, ctx2)
         assert(nextState2 == scalus.cardano.onchain.plutus.prelude.Option.None)
 
         val fundingUtxo2 = Utxo(emulator.utxos.find(_._2.address != scriptAddr).get)
