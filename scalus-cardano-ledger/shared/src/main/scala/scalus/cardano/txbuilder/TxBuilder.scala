@@ -6,7 +6,7 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{Data, ToData}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
-import scalus.cardano.node.BlockchainReader
+import scalus.cardano.node.{BlockchainReader, UtxoQueryError}
 import scalus.cardano.txbuilder.SomeBuildError
 
 import java.time.Instant
@@ -129,6 +129,12 @@ object TxBuilderException {
         ) {
         def step: TransactionBuilderStep = stepError.step
     }
+
+    /** UTxO query failed during transaction completion. */
+    final case class UtxoQueryException(
+        error: UtxoQueryError,
+        message: String
+    ) extends TxBuilderException(s"UTxO query failed: $message ($error)")
 
     /** Converts a SomeBuildError to the appropriate TxBuilderException. */
     def fromBuildError(error: SomeBuildError): TxBuilderException = error match {
@@ -1656,9 +1662,14 @@ case class TxBuilder(
                 case Left(error) =>
                     Future.failed(TxBuilderException.fromBuildError(error))
                 case Right(initialCtx) =>
-                    reader.findUtxos(address = sponsor).map { utxosResult =>
-                        val allAvailableUtxos = utxosResult.getOrElse(Map.empty)
-                        resolved.completeWithUtxos(allAvailableUtxos, sponsor, initialCtx)
+                    reader.findUtxos(address = sponsor).map {
+                        case Right(allAvailableUtxos) =>
+                            resolved.completeWithUtxos(allAvailableUtxos, sponsor, initialCtx)
+                        case Left(queryError) =>
+                            throw TxBuilderException.UtxoQueryException(
+                              queryError,
+                              s"Failed to query UTxOs for sponsor $sponsor"
+                            )
                     }
             }
         }
@@ -2022,7 +2033,14 @@ case class TxBuilder(
         if deferredWithIndex.isEmpty then Future.successful(this)
         else {
             val fetchFutures = deferredWithIndex.map { case (d, i) =>
-                reader.findUtxos(d.query).map(r => (i, d, r.getOrElse(Map.empty)))
+                reader.findUtxos(d.query).map {
+                    case Right(utxos) => (i, d, utxos)
+                    case Left(queryError) =>
+                        throw TxBuilderException.UtxoQueryException(
+                          queryError,
+                          s"Failed to query UTxOs for deferred step"
+                        )
+                }
             }
             Future.sequence(fetchFutures).map { results =>
                 val resolvedByIndex =
