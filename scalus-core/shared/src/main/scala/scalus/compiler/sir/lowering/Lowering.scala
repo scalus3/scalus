@@ -311,7 +311,8 @@ object Lowering {
                 lvIfThenElse(loweredCond, loweredT, loweredF, anns.pos)
             case SIR.Cast(expr, tp, anns) =>
                 val loweredExpr = lowerSIR(expr, Some(tp))
-                try lvCast(loweredExpr, tp, anns.pos)
+                val isTypeProxy = anns.data.contains("typeProxy")
+                try lvCast(loweredExpr, tp, anns.pos, isTypeProxy)
                 catch
                     case NonFatal(ex) =>
                         println(

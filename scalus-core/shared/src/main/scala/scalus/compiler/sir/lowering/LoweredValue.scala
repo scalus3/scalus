@@ -2312,7 +2312,12 @@ object LoweredValue {
             )
         }
 
-        def lvCast(expr: LoweredValue, targetType: SIRType, inPos: SIRPosition)(using
+        def lvCast(
+            expr: LoweredValue,
+            targetType: SIRType,
+            inPos: SIRPosition,
+            isTypeProxy: Boolean = false
+        )(using
             lctx: LoweringContext
         ): LoweredValue = {
             if lctx.debug then {
@@ -2326,7 +2331,7 @@ object LoweredValue {
                 changeRepresentation: Boolean = true,
                 printWarning: Boolean = true
             ): LoweredValue = {
-                if printWarning then {
+                if printWarning && !isTypeProxy then {
                     lctx.warn(
                       s"casting unrelated types ${value.sirType.show} and ${targetType.show}",
                       inPos

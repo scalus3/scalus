@@ -13,7 +13,6 @@ import scalus.utils.await
 
 import scala.collection.immutable.SortedMap
 import scala.concurrent.duration.*
-import scala.concurrent.ExecutionContext.Implicits.global
 import scalus.cardano.address.StakePayload
 import scalus.uplc.PlutusV3
 
