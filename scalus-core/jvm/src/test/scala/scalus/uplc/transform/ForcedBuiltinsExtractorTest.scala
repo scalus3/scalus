@@ -17,66 +17,24 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
       optimizeUplc = false
     )
 
-    test("extract (force (builtin headList))") {
+    test("single-use builtin is NOT extracted") {
         val sir = compile(headList(scalus.uplc.builtin.BuiltinList.empty[Boolean]))
         val uplc = sir.toUplc()
         val logger = Log()
         val optimized =
             ForcedBuiltinsExtractor.apply(uplc, logger = logger.log)
-        assert(logger.getLogs(0) == "Replacing Forced builtin with Var: __builtin_HeadList")
-        assert(
-          optimized == (λ(__builtin_HeadList =>
-              __builtin_HeadList $ List.empty[Boolean].asTerm
-          ) $ (!Builtin(
-            DefaultFun.HeadList
-          )))
-        )
+        // Single-use builtins should not be extracted
+        assert(logger.getLogs.isEmpty)
+        assert(optimized == uplc)
     }
 
-    test("extract (force (force (builtin fstPair)))") {
+    test("single-use double-force builtin is NOT extracted") {
         val sir = compile(fstPair(scalus.uplc.builtin.BuiltinPair(true, false)))
         val uplc = sir.toUplc()
+        val logger = Log()
         val optimized = ForcedBuiltinsExtractor(uplc)
-
-        val expected = λ("__builtin_FstPair")(
-          vr"__builtin_FstPair" $ (true, false).asTerm
-        ) $ (!(!Builtin(DefaultFun.FstPair)))
-
-        assert(
-          optimized == (λ("__builtin_FstPair")(
-            vr"__builtin_FstPair" $ (true, false).asTerm
-          ) $ (!(!Builtin(DefaultFun.FstPair))))
-        )
-    }
-
-    test("extract multiple single-force builtins (headList + tailList)") {
-        val sir = compile {
-            val lst = scalus.uplc.builtin.BuiltinList.empty[Boolean]
-            (headList(lst), tailList(lst))
-        }
-        val uplc = sir.toUplc()
-        val logger = Log()
-        val optimized = ForcedBuiltinsExtractor.apply(uplc, logger = logger.log)
-
-        // Verify both builtins were extracted
-        val logs = logger.getLogs
-        assert(logs(0).contains("__builtin_HeadList"))
-        assert(logs(1).contains("__builtin_TailList"))
-    }
-
-    test("extract multiple double-force builtins (fstPair + sndPair)") {
-        val sir = compile {
-            val pair = scalus.uplc.builtin.BuiltinPair(true, false)
-            (fstPair(pair), sndPair(pair))
-        }
-        val uplc = sir.toUplc()
-        val logger = Log()
-        val optimized = ForcedBuiltinsExtractor.apply(uplc, logger = logger.log)
-
-        // Verify both builtins were extracted
-        val logs = logger.getLogs
-        assert(logs(0).contains("__builtin_FstPair"))
-        assert(logs(1).contains("__builtin_SndPair"))
+        // Single-use builtins should not be extracted
+        assert(optimized == uplc)
     }
 
     test("extract same builtin used multiple times") {
@@ -95,13 +53,21 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
         assert(logs.size == 2) // But only 2 log entries total (both for the same builtin)
     }
 
-    test("extract builtins in deterministic sorted order") {
+    test("extract builtins in deterministic sorted order when used multiple times") {
         val sir = compile {
             val lst = scalus.uplc.builtin.BuiltinList.empty[Boolean]
             val pair = scalus.uplc.builtin.BuiltinPair(true, false)
-            // Use builtins in non-alphabetical order: tailList, sndPair, headList, fstPair
-            // Expected sorted order: FstPair, HeadList, SndPair, TailList
-            (tailList(lst), sndPair(pair), headList(lst), fstPair(pair))
+            // Use each builtin twice to trigger extraction
+            (
+              tailList(lst),
+              sndPair(pair),
+              headList(lst),
+              fstPair(pair),
+              tailList(lst),
+              sndPair(pair),
+              headList(lst),
+              fstPair(pair)
+            )
         }
         val uplc = sir.toUplc()
         val logger = Log()
@@ -140,8 +106,10 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
     test("exceptBuiltins excludes specific builtins from extraction") {
         val sir = compile {
-            val lst = scalus.uplc.builtin.BuiltinList.empty[Boolean]
-            (headList(lst), tailList(lst))
+            val lst1 = scalus.uplc.builtin.BuiltinList.empty[Boolean]
+            val lst2 = scalus.uplc.builtin.BuiltinList.empty[Boolean]
+            // Use each builtin twice to trigger extraction
+            (headList(lst1), tailList(lst1), headList(lst2), tailList(lst2))
         }
         val uplc = sir.toUplc()
         val logger = Log()
@@ -156,7 +124,7 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
         val logs = logger.getLogs
         assert(logs.exists(_.contains("__builtin_TailList")))
         assert(!logs.exists(_.contains("__builtin_HeadList")))
-        assert(logs.size == 1)
+        assert(logs.size == 2) // TailList extracted at two call sites
     }
 
 }

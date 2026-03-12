@@ -65,7 +65,9 @@ package object scalus {
                       generateErrorTraces = generateErrorTraces,
                       debug = debug,
                       targetLanguage = options.targetLanguage,
-                      targetProtocolVersion = options.targetProtocolVersion
+                      targetProtocolVersion = options.targetProtocolVersion,
+                      intrinsicModules =
+                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules
                     ).lower()
             val retval =
                 if optimizeUplc then
@@ -101,7 +103,9 @@ package object scalus {
               generateErrorTraces = options.generateErrorTraces,
               debug = options.debug,
               targetLanguage = options.targetLanguage,
-              targetProtocolVersion = options.targetProtocolVersion
+              targetProtocolVersion = options.targetProtocolVersion,
+              intrinsicModules =
+                  scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules
             ).toLoweredValue()
             retval
         }
@@ -127,7 +131,9 @@ package object scalus {
                       generateErrorTraces = options.generateErrorTraces,
                       debug = options.debug,
                       targetLanguage = options.targetLanguage,
-                      targetProtocolVersion = options.targetProtocolVersion
+                      targetProtocolVersion = options.targetProtocolVersion,
+                      intrinsicModules =
+                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules
                     ).lower()
             val retval =
                 if options.optimizeUplc then

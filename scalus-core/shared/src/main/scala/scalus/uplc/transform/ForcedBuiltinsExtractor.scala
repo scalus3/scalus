@@ -24,6 +24,39 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
     def logs: Seq[String] = logger.getLogs.toSeq
 
     private def extract(term: Term): Term = {
+        // Pass 1: count occurrences of each forced builtin.
+        // Builtins inside lambda bodies count as 2, since lambdas may be called
+        // multiple times (e.g. recursive functions), making extraction worthwhile.
+        val counts = mutable.Map.empty[DefaultFun, Int]
+
+        def countForcedBuiltin(bn: DefaultFun, insideLambda: Boolean): Unit =
+            val increment = if insideLambda then 2 else 1
+            counts.updateWith(bn) {
+                case Some(c) => Some(c + increment)
+                case None    => Some(increment)
+            }
+
+        def count(term: Term, insideLambda: Boolean): Unit = term match
+            case Apply(f, arg, _)   => count(f, insideLambda); count(arg, insideLambda)
+            case LamAbs(_, body, _) => count(body, insideLambda = true)
+            case Force(Force(Builtin(bn, _), _), _)
+                if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2
+                    && !exceptBuiltins.contains(bn) =>
+                countForcedBuiltin(bn, insideLambda)
+            case Force(Builtin(bn, _), _)
+                if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 1
+                    && !exceptBuiltins.contains(bn) =>
+                countForcedBuiltin(bn, insideLambda)
+            case Force(t, _)        => count(t, insideLambda)
+            case Delay(t, _)        => count(t, insideLambda)
+            case Constr(_, args, _) => args.foreach(count(_, insideLambda))
+            case Case(scrutinee, cases, _) =>
+                count(scrutinee, insideLambda); cases.foreach(count(_, insideLambda))
+            case _: Var | _: Const | _: Builtin | _: Error => ()
+
+        count(term, insideLambda = false)
+
+        // Pass 2: extract only builtins used 2+ times
         var counter = 0
 
         def freshName(base: String, env: Map[String, Term]): String =
@@ -40,14 +73,16 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
             case LamAbs(name, body, ann) => LamAbs(name, go(body, env - name), ann)
             case Force(Force(Builtin(bn, _), _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 2
-                    && !exceptBuiltins.contains(bn) =>
+                    && !exceptBuiltins.contains(bn)
+                    && counts.getOrElse(bn, 0) >= 2 =>
                 val (_, name) =
                     extracted.getOrElseUpdate(bn, (term, freshName(s"__builtin_$bn", env)))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
             case Force(Builtin(bn, _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars == 1
-                    && !exceptBuiltins.contains(bn) =>
+                    && !exceptBuiltins.contains(bn)
+                    && counts.getOrElse(bn, 0) >= 2 =>
                 val (_, name) =
                     extracted.getOrElseUpdate(bn, (term, freshName(s"__builtin_$bn", env)))
                 logger.log(s"Replacing Forced builtin with Var: $name")

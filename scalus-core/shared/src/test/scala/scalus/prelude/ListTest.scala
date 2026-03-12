@@ -354,21 +354,21 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list.quicksort,
           List.empty[BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 8164, steps = 1_439027)
+          ExUnits(memory = 8464, steps = 1_487027)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.quicksort,
           List.single(1),
           List.single(BigInt(1)),
-          ExUnits(memory = 25514, steps = 5_630093)
+          ExUnits(memory = 25314, steps = 5_539532)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.quicksort,
           Cons(3, Cons(1, Cons(2, Nil))),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          ExUnits(memory = 134031, steps = 32_260472)
+          ExUnits(memory = 132831, steps = 31_892789)
         )
     }
 
@@ -391,21 +391,21 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[List[BigInt]]) => list.flatten,
           List.empty[List[BigInt]],
           List.empty[BigInt],
-          ExUnits(memory = 5796, steps = 1_080960)
+          ExUnits(memory = 6096, steps = 1_128960)
         )
 
         assertEvalWithBudget(
           (list: List[List[BigInt]]) => list.flatten,
           List.single(Cons(3, Cons(1, Cons(2, Nil)))),
           Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))),
-          ExUnits(memory = 14322, steps = 3_077577)
+          ExUnits(memory = 14122, steps = 2_987016)
         )
 
         assertEvalWithBudget(
           (list: List[List[BigInt]]) => list.flatten,
           Cons[List[BigInt]](Cons(1, Cons(2, Nil)), List.single(List.single(3))),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          ExUnits(memory = 29536, steps = 6_971526)
+          ExUnits(memory = 28836, steps = 6_742404)
         )
     }
 
@@ -979,35 +979,35 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list.appendedAll(List.empty[BigInt]),
           List.empty[BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 6266, steps = 1_287125)
+          ExUnits(memory = 6066, steps = 1_196564)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.appendedAll(List.single(BigInt(1))),
           List.empty[BigInt],
           List.single(BigInt(1)),
-          ExUnits(memory = 7298, steps = 1_580119)
+          ExUnits(memory = 7098, steps = 1_489558)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.appendedAll(List.empty[BigInt]),
           List.single(1),
           List.single(BigInt(1)),
-          ExUnits(memory = 6266, steps = 1_287125)
+          ExUnits(memory = 6066, steps = 1_196564)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.appendedAll(List.single(BigInt(2))),
           List.single(1),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
-          ExUnits(memory = 10126, steps = 2_382288)
+          ExUnits(memory = 9926, steps = 2_291727)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.appendedAll(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          ExUnits(memory = 12954, steps = 3_184457)
+          ExUnits(memory = 12754, steps = 3_093896)
         )
     }
 
@@ -1023,35 +1023,35 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list :++ List.empty[BigInt],
           List.empty[BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 6266, steps = 1_287125)
+          ExUnits(memory = 6066, steps = 1_196564)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => List.empty[BigInt] :++ list,
           List.single(1),
           List.single(BigInt(1)),
-          ExUnits(memory = 6998, steps = 1_532119)
+          ExUnits(memory = 6798, steps = 1_441558)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list :++ List.empty[BigInt],
           List.single(1),
           List.single(BigInt(1)),
-          ExUnits(memory = 6266, steps = 1_287125)
+          ExUnits(memory = 6066, steps = 1_196564)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list :++ List.single(BigInt(2)),
           List.single(1),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
-          ExUnits(memory = 10126, steps = 2_382288)
+          ExUnits(memory = 9926, steps = 2_291727)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list :++ List.single(BigInt(3)),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          ExUnits(memory = 12954, steps = 3_184457)
+          ExUnits(memory = 12754, steps = 3_093896)
         )
     }
 
@@ -1067,35 +1067,35 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list.concat(List.empty[BigInt]),
           List.empty[BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 6266, steps = 1_287125)
+          ExUnits(memory = 6066, steps = 1_196564)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.concat(List.single(BigInt(1))),
           List.empty[BigInt],
           List.single(BigInt(1)),
-          ExUnits(memory = 7298, steps = 1_580119)
+          ExUnits(memory = 7098, steps = 1_489558)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.concat(List.empty[BigInt]),
           List.single(1),
           List.single(BigInt(1)),
-          ExUnits(memory = 6266, steps = 1_287125)
+          ExUnits(memory = 6066, steps = 1_196564)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.concat(List.single(BigInt(2))),
           List.single(1),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
-          ExUnits(memory = 10126, steps = 2_382288)
+          ExUnits(memory = 9926, steps = 2_291727)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.concat(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          ExUnits(memory = 12954, steps = 3_184457)
+          ExUnits(memory = 12754, steps = 3_093896)
         )
     }
 
@@ -1111,35 +1111,35 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list ++ List.empty[BigInt],
           List.empty[BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 6266, steps = 1_287125)
+          ExUnits(memory = 6066, steps = 1_196564)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => List.empty[BigInt] ++ list,
           List.single(1),
           List.single(BigInt(1)),
-          ExUnits(memory = 6998, steps = 1_532119)
+          ExUnits(memory = 6798, steps = 1_441558)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list ++ List.empty[BigInt],
           List.single(1),
           List.single(BigInt(1)),
-          ExUnits(memory = 6266, steps = 1_287125)
+          ExUnits(memory = 6066, steps = 1_196564)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list ++ List.single(BigInt(2)),
           List.single(1),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
-          ExUnits(memory = 10126, steps = 2_382288)
+          ExUnits(memory = 9926, steps = 2_291727)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list ++ List.single(BigInt(3)),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          ExUnits(memory = 12954, steps = 3_184457)
+          ExUnits(memory = 12754, steps = 3_093896)
         )
     }
 
@@ -1185,35 +1185,35 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list.flatMap(x => List.single(x + 1)),
           List.empty[BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 6396, steps = 1_176960)
+          ExUnits(memory = 6696, steps = 1_224960)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.flatMap(x => List.single(x + 1)),
           List.single(1),
           List.single(BigInt(2)),
-          ExUnits(memory = 16288, steps = 3_565257)
+          ExUnits(memory = 16088, steps = 3_474696)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.flatMap(x => List.single(x + 1)),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(2), Cons(BigInt(3), Nil)),
-          ExUnits(memory = 30040, steps = 7_048717)
+          ExUnits(memory = 29340, steps = 6_819595)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.flatMap(_ => Nil),
           Cons(1, Cons(2, Nil)),
           List.empty[BigInt],
-          ExUnits(memory = 24048, steps = 5_255816)
+          ExUnits(memory = 23348, steps = 5_026694)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.flatMap(x => Cons(x + 10, Cons(x + 100, Nil))),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(11), Cons(BigInt(101), Cons(BigInt(12), Cons(BigInt(102), Nil)))),
-          ExUnits(memory = 35000, steps = 8_548624)
+          ExUnits(memory = 34300, steps = 8_319502)
         )
     }
 
@@ -1599,21 +1599,21 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list.lastOption,
           List.empty[BigInt],
           None,
-          ExUnits(memory = 4764, steps = 895027)
+          ExUnits(memory = 5064, steps = 943027)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.lastOption,
           List.single(1),
           Some(BigInt(1)),
-          ExUnits(memory = 7525, steps = 1_779396)
+          ExUnits(memory = 7325, steps = 1_688835)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.lastOption,
           Cons(1, Cons(2, Nil)),
           Some(BigInt(2)),
-          ExUnits(memory = 11354, steps = 2_876759)
+          ExUnits(memory = 10654, steps = 2_647637)
         )
     }
 
@@ -1683,7 +1683,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         assertEvalWithBudget(
           List.single(BigInt(1)).head,
           BigInt(1),
-          ExUnits(memory = 4430, steps = 1_188263)
+          ExUnits(memory = 200, steps = 16100)
         )
 
         assertEvalWithBudget(
@@ -1766,7 +1766,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         assertEvalWithBudget(
           List.single(BigInt(1)).tail,
           List.empty[BigInt],
-          ExUnits(memory = 1832, steps = 405094)
+          ExUnits(memory = 200, steps = 16100)
         )
         assertEvalWithBudget(
           (list: List[BigInt]) => list.tail,
@@ -2183,42 +2183,42 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list.diff(List.empty[BigInt]),
           List.empty[BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 6865, steps = 1_307076)
+          ExUnits(memory = 6665, steps = 1_216515)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.diff(List.empty[BigInt]),
           List.single(1),
           List.single(BigInt(1)),
-          ExUnits(memory = 7597, steps = 1_552070)
+          ExUnits(memory = 7397, steps = 1_461509)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.diff(List.single(BigInt(1))),
           List.empty[BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 6865, steps = 1_307076)
+          ExUnits(memory = 6665, steps = 1_216515)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.diff(List.single(BigInt(1))),
           List.single(1),
           List.empty[BigInt],
-          ExUnits(memory = 16956, steps = 3_849603)
+          ExUnits(memory = 16256, steps = 3_620481)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.diff(List.single(BigInt(2))),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Nil),
-          ExUnits(memory = 23214, steps = 5_565786)
+          ExUnits(memory = 22514, steps = 5_336664)
         )
 
         assertEvalWithBudget(
           (list: List[BigInt]) => list.diff(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
-          ExUnits(memory = 25810, steps = 6_254292)
+          ExUnits(memory = 25110, steps = 6_025170)
         )
     }
 
@@ -2241,7 +2241,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         assertEvalWithBudget(
           Cons(BigInt(1), Cons(BigInt(2), Nil)).init,
           Cons(BigInt(1), Nil),
-          ExUnits(memory = 27624, steps = 7_460339)
+          ExUnits(memory = 27424, steps = 7_369778)
         )
     }
 

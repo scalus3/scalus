@@ -222,11 +222,18 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                                 case Some(message) =>
                                     assert(message.contains(exception.getMessage))
                                 case None =>
-                                    assert(
-                                      failure.exception.getMessage.contains(
-                                        exception.getClass.getName
-                                      )
-                                    )
+                                    val failMsg = failure.exception.getMessage
+                                    val exMsg = exception.getMessage
+                                    if exMsg != null && exMsg.nonEmpty then
+                                        assert(
+                                          failMsg.contains(exMsg),
+                                          s"Expected UPLC error to contain '$exMsg', but got: $failMsg"
+                                        )
+                                    else
+                                        assert(
+                                          failMsg.contains(exception.getClass.getName),
+                                          s"Expected UPLC error to contain '${exception.getClass.getName}', but got: $failMsg"
+                                        )
                         case _ =>
                             fail(s"Expected failure, but got success: $result")
 

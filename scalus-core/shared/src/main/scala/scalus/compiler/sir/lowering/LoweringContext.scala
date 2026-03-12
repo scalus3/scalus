@@ -4,6 +4,7 @@ import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.compiler.sir.*
 
+import java.util.IdentityHashMap
 import scala.collection.mutable.Map as MutableMap
 
 class LoweringContext(
@@ -21,7 +22,31 @@ class LoweringContext(
     var debugLevel: Int = 0,
     var nestingLevel: Int = 0,
     var enclosingLambdaParams: List[IdentifiableLoweredValue] = List.empty,
+    val intrinsicModules: Map[String, Module] = Map.empty,
 ) {
+
+    private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]
+
+    /** Cache of pre-lowered SIR nodes, keyed by reference identity.
+      *
+      * Used during intrinsic resolution: the resolver adds an entry before lowering the substituted
+      * provider body, and removes it after. This way `lowerSIR` finds the cached value for the
+      * substituted argument without recomputing it.
+      */
+    val precomputedValues: IdentityHashMap[SIR, LoweredValue] = new IdentityHashMap()
+
+    /** Find a binding in a provider module by module name and method name. */
+    def findProviderBinding(providerModuleName: String, methodName: String): Option[Binding] = {
+        val fullBindingName = s"$providerModuleName.$methodName"
+        bindingCache.getOrElseUpdate(
+          (providerModuleName, methodName),
+          intrinsicModules
+              .get(providerModuleName)
+              .flatMap(
+                _.defs.find(_.name == fullBindingName)
+              )
+        )
+    }
 
     def uniqueVarName(prefix: String = "_v"): String = {
         varIdSeq += 1

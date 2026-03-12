@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.*
-import scalus.compiler.sir.{SIR, SIRType}
+import scalus.compiler.sir.{Module, SIR, SIRType}
 import scalus.uplc.*
 
 import scala.collection.mutable.Map as MutableMap
@@ -14,7 +14,8 @@ class SirToUplcV3Lowering(
     representation: LoweredValueRepresentation = TypeVarRepresentation(true),
     debug: Boolean = false,
     targetLanguage: Language = Language.PlutusV3,
-    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
+    intrinsicModules: Map[String, Module] = Map.empty
 ) {
 
     private var _lastLoweredValue: Option[LoweredValue] = None
@@ -87,7 +88,8 @@ class SirToUplcV3Lowering(
           targetLanguage = targetLanguage,
           targetProtocolVersion = effectivePV,
           generateErrorTraces = generateErrorTraces,
-          debug = debug
+          debug = debug,
+          intrinsicModules = intrinsicModules
         )
         ScalusRuntime.initContext(retval)
         retval

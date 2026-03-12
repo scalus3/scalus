@@ -33,6 +33,9 @@ object Lowering {
         sir: SIR,
         optTargetType: Option[SIRType] = None
     )(using lctx: LoweringContext): LoweredValue = {
+        // Check precomputed cache (used by intrinsic resolution to avoid re-lowering args)
+        val cached = lctx.precomputedValues.get(sir)
+        if cached != null then return cached
         lctx.nestingLevel += 1
         val retval = sir match
             case SIR.Decl(data, term) =>
@@ -430,7 +433,42 @@ object Lowering {
         if isFromDataApp(app) then lowerFromData(app)
         else if isToDataApp(app) then lowerToData(app)
         else if isPairListConversion(app) then lowerPairListConversion(app)
+        else if isTypeProxyApp(app) then lowerTypeProxy(app)
+        else if isTypeProxyRetDataApp(app) then lowerTypeProxyRetData(app)
         else lowerNormalApp(app, optTargetType)
+    }
+
+    private val TypeProxyName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxy"
+    private val TypeProxyRetDataName =
+        "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxyRetData"
+
+    private def isTypeProxyApp(app: SIR.Apply): Boolean = app.f match
+        case SIR.ExternalVar(_, name, _, _) => name == TypeProxyName
+        case _                              => false
+
+    private def isTypeProxyRetDataApp(app: SIR.Apply): Boolean = app.f match
+        case SIR.ExternalVar(_, name, _, _) => name == TypeProxyRetDataName
+        case _                              => false
+
+    private def lowerTypeProxy(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
+        val loweredArg = lowerSIR(app.arg)
+        TypeRepresentationProxyLoweredValue(
+          loweredArg,
+          app.tp,
+          loweredArg.representation,
+          app.anns.pos
+        )
+    }
+
+    private def lowerTypeProxyRetData(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
+        val loweredArg = lowerSIR(app.arg)
+        val repr = lctx.typeGenerator(app.tp).defaultDataRepresentation(app.tp)
+        TypeRepresentationProxyLoweredValue(
+          loweredArg,
+          app.tp,
+          repr,
+          app.anns.pos
+        )
     }
 
     private def lowerNormalApp(app: SIR.Apply, @unused optTargetType: Option[SIRType])(using
@@ -449,6 +487,19 @@ object Lowering {
         val fun = lowerSIR(app.f)
         val arg = lowerSIR(app.arg)
         // lctx.debug = prevDebug
+
+        // Try intrinsic resolution using the already-lowered arg's representation
+        if lctx.intrinsicModules.nonEmpty then
+            IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(using
+              lctx
+            ) match
+                case Some(result) =>
+                    if lctx.debug then
+                        lctx.log(
+                          s"Intrinsic resolved: ${app.f.pretty.render(60)} -> ${result.pretty.render(100)}"
+                        )
+                    return result
+                case None => // fall through to normal apply
         val result =
             try
                 lvApply(

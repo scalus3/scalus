@@ -73,12 +73,19 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
                                 case None =>
                                     // if the error occurred due to an erroneously called builtin, e.g. / by zero,
                                     // there won't be a respective log, but the CEK exception message is going to include
-                                    // the root error.
-                                    assert(
-                                      failure.exception.getMessage.contains(
-                                        exception.getClass.getName
-                                      )
-                                    )
+                                    // the root error. Check message text first, fall back to class name.
+                                    val failMsg = failure.exception.getMessage
+                                    val exMsg = exception.getMessage
+                                    if exMsg != null && exMsg.nonEmpty then
+                                        assert(
+                                          failMsg.contains(exMsg),
+                                          s"Expected UPLC error to contain '$exMsg', but got: $failMsg"
+                                        )
+                                    else
+                                        assert(
+                                          failMsg.contains(exception.getClass.getName),
+                                          s"Expected UPLC error to contain '${exception.getClass.getName}', but got: $failMsg"
+                                        )
                                     if budget.exists: budget =>
                                             result.budget.steps > budget.steps ||
                                                 result.budget.memory > budget.memory
@@ -127,14 +134,18 @@ class StdlibTestKit extends AnyFunSuite with ScalaCheckPropertyChecks with Arbit
                                 case Some(message) =>
                                     assert(message.contains(exception.getMessage))
                                 case None =>
-                                    // if the error occurred due to an erroneously called builtin, e.g. / by zero,
-                                    // there won't be a respective log, but the CEK exception message is going to include
-                                    // the root error.
-                                    assert(
-                                      failure.exception.getMessage.contains(
-                                        exception.getClass.getName
-                                      )
-                                    )
+                                    val failMsg = failure.exception.getMessage
+                                    val exMsg = exception.getMessage
+                                    if exMsg != null && exMsg.nonEmpty then
+                                        assert(
+                                          failMsg.contains(exMsg),
+                                          s"Expected UPLC error to contain '$exMsg', but got: $failMsg"
+                                        )
+                                    else
+                                        assert(
+                                          failMsg.contains(exception.getClass.getName),
+                                          s"Expected UPLC error to contain '${exception.getClass.getName}', but got: $failMsg"
+                                        )
                             }
                         case _ =>
                             fail(s"Expected failure, but got success: $result")

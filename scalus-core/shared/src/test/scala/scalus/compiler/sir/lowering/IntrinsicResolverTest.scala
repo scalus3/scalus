@@ -1,0 +1,393 @@
+package scalus.compiler.sir.lowering
+
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.cardano.ledger.MajorProtocolVersion
+import scalus.compiler.sir.*
+import scalus.uplc.*
+import scalus.uplc.DefaultFun.*
+import scalus.uplc.Term.*
+
+/** Tests for the IntrinsicResolver — verifies that intrinsic substitution produces optimized UPLC
+  * (e.g., `nullList` instead of match-based `chooseList`).
+  */
+class IntrinsicResolverTest extends AnyFunSuite {
+
+    private val ae = AnnotationsDecl.empty
+
+    // --- Helper types ---
+    private val typeA = SIRType.TypeVar("A", Some(1), isBuiltin = false)
+    private val listTypeA = SIRType.List(typeA)
+    private val builtinListData = SIRType.BuiltinList(SIRType.Data.tp)
+
+    // --- Build provider module SIR ---
+
+    /** Manually construct the BuiltinListOperations module SIR.
+      *
+      * isEmpty[A](self: List[A]): Boolean = nullList(typeProxy[BuiltinList[Data]](self))
+      *
+      * In SIR this is: LamAbs(self, Apply(nullList, Cast(Var(self), BuiltinList[Data],
+      * {typeProxy=true})))
+      */
+    private def buildIsEmptyBinding: Binding = {
+        val selfVar = SIR.Var("self", listTypeA, ae)
+        val typeProxyCast = SIR.Cast(
+          selfVar,
+          builtinListData,
+          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
+        )
+        val body = SIR.Apply(SIRBuiltins.nullList, typeProxyCast, SIRType.Boolean, ae)
+        val lambda = SIR.LamAbs(selfVar, body, List.empty, ae)
+        Binding(
+          "scalus.compiler.intrinsics.BuiltinListOperations$.isEmpty",
+          SIRType.Fun(listTypeA, SIRType.Boolean),
+          lambda
+        )
+    }
+
+    /** head[A](self: List[A]): A = typeProxy[A](headList(typeProxy[BuiltinList[Data]](self))) */
+    private def buildHeadBinding: Binding = {
+        val selfVar = SIR.Var("self", listTypeA, ae)
+        val innerCast = SIR.Cast(
+          selfVar,
+          builtinListData,
+          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
+        )
+        val headCall = SIR.Apply(SIRBuiltins.headList, innerCast, SIRType.Data.tp, ae)
+        val outerCast = SIR.Cast(
+          headCall,
+          typeA,
+          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
+        )
+        val lambda = SIR.LamAbs(selfVar, outerCast, List.empty, ae)
+        Binding(
+          "scalus.compiler.intrinsics.BuiltinListOperations$.head",
+          SIRType.Fun(listTypeA, typeA),
+          lambda
+        )
+    }
+
+    /** tail[A](self: List[A]): List[A] =
+      * typeProxy[List[A]](tailList(typeProxy[BuiltinList[Data]](self)))
+      */
+    private def buildTailBinding: Binding = {
+        val selfVar = SIR.Var("self", listTypeA, ae)
+        val innerCast = SIR.Cast(
+          selfVar,
+          builtinListData,
+          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
+        )
+        val tailCall = SIR.Apply(SIRBuiltins.tailList, innerCast, builtinListData, ae)
+        val outerCast = SIR.Cast(
+          tailCall,
+          listTypeA,
+          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
+        )
+        val lambda = SIR.LamAbs(selfVar, outerCast, List.empty, ae)
+        Binding(
+          "scalus.compiler.intrinsics.BuiltinListOperations$.tail",
+          SIRType.Fun(listTypeA, listTypeA),
+          lambda
+        )
+    }
+
+    /** drop[A](self: List[A], n: BigInt): List[A] = typeProxy[List[A]](dropList(n,
+      * typeProxy[BuiltinList[Data]](self)))
+      */
+    private def buildDropBinding: Binding = {
+        val selfVar = SIR.Var("self", listTypeA, ae)
+        val nVar = SIR.Var("n", SIRType.Integer, ae)
+        val innerCast = SIR.Cast(
+          selfVar,
+          builtinListData,
+          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
+        )
+        val dropCall = SIR.Apply(
+          SIR.Apply(SIRBuiltins.dropList, nVar, SIRType.Fun(builtinListData, builtinListData), ae),
+          innerCast,
+          builtinListData,
+          ae
+        )
+        val outerCast = SIR.Cast(
+          dropCall,
+          listTypeA,
+          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
+        )
+        val innerLambda = SIR.LamAbs(nVar, outerCast, List.empty, ae)
+        val lambda = SIR.LamAbs(selfVar, innerLambda, List.empty, ae)
+        Binding(
+          "scalus.compiler.intrinsics.BuiltinListOperationsV11$.drop",
+          SIRType.Fun(listTypeA, SIRType.Fun(SIRType.Integer, listTypeA)),
+          lambda
+        )
+    }
+
+    private val builtinListOpsModule = Module(
+      version = SIRVersion,
+      name = "scalus.compiler.intrinsics.BuiltinListOperations$",
+      linked = false,
+      requireBackend = None,
+      defs = List(buildIsEmptyBinding, buildHeadBinding, buildTailBinding)
+    )
+
+    private val builtinListOpsV11Module = Module(
+      version = SIRVersion,
+      name = "scalus.compiler.intrinsics.BuiltinListOperationsV11$",
+      linked = false,
+      requireBackend = None,
+      defs = List(buildDropBinding)
+    )
+
+    private val intrinsicModules: Map[String, Module] = Map(
+      builtinListOpsModule.name -> builtinListOpsModule,
+      builtinListOpsV11Module.name -> builtinListOpsV11Module
+    )
+
+    // --- Helper to lower with intrinsic modules ---
+
+    private def lower(
+        sir: SIR,
+        modules: Map[String, Module] = intrinsicModules,
+        targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
+        debug: Boolean = false
+    ): Term =
+        SirToUplcV3Lowering(
+          sir,
+          generateErrorTraces = false,
+          debug = debug,
+          intrinsicModules = modules,
+          targetProtocolVersion = targetProtocolVersion
+        ).lower()
+
+    private def lowerWithoutModules(sir: SIR): Term =
+        SirToUplcV3Lowering(
+          sir,
+          generateErrorTraces = false
+        ).lower()
+
+    extension (term: Term)
+        infix def alphaEq(other: Term): Boolean =
+            DeBruijn.deBruijnTerm(term) α_== DeBruijn.deBruijnTerm(other)
+
+    // --- Build usage SIR (simulating linked output) ---
+
+    /** Build: let isEmpty = <match-based-impl> in isEmpty(listVar)
+      *
+      * After linking, list.isEmpty compiles to: Let([Binding("List$.isEmpty", <match impl>)],
+      * Apply(Var("List$.isEmpty"), listVar))
+      */
+    private def buildIsEmptyUsage(listSir: AnnotatedSIR): SIR = {
+        val isEmptyName = "scalus.cardano.onchain.plutus.prelude.List$.isEmpty"
+        val isEmptyType = SIRType.Fun(listTypeA, SIRType.Boolean)
+        // The match-based fallback (simplified — real one would pattern match)
+        val matchImpl = SIR.LamAbs(
+          SIR.Var("_self", listTypeA, ae),
+          SIR.Const(Constant.Bool(true), SIRType.Boolean, ae), // placeholder
+          List.empty,
+          ae
+        )
+        SIR.Let(
+          List(Binding(isEmptyName, isEmptyType, matchImpl)),
+          SIR.Apply(
+            SIR.Var(isEmptyName, isEmptyType, ae),
+            listSir,
+            SIRType.Boolean,
+            ae
+          ),
+          SIR.LetFlags.None,
+          ae
+        )
+    }
+
+    // --- Tests ---
+
+    test("isEmpty intrinsic: SumDataList representation produces nullList") {
+        // Build a list constant (will have SumDataList representation after lowering)
+        val listConst = SIR.Const(
+          Constant.List(DefaultUni.Data, List.empty),
+          SIRType.List(SIRType.Data.tp),
+          ae
+        )
+        val sir = buildIsEmptyUsage(listConst)
+        val uplc = lower(sir)
+
+        // The UPLC should contain NullList applied to the list constant.
+        // Without intrinsics, it would use the match-based implementation.
+        assert(
+          containsBuiltin(uplc, NullList),
+          s"Expected nullList in UPLC but got: ${uplc.pretty.render(100)}"
+        )
+    }
+
+    test("isEmpty fallback: without intrinsic modules, uses original implementation") {
+        val listConst = SIR.Const(
+          Constant.List(DefaultUni.Data, List.empty),
+          SIRType.List(SIRType.Data.tp),
+          ae
+        )
+        val sir = buildIsEmptyUsage(listConst)
+        val uplc = lowerWithoutModules(sir)
+
+        // Without modules, intrinsics don't fire. The result uses the placeholder implementation.
+        // It should NOT contain nullList builtin from intrinsic resolution.
+        // (The match-based impl is a placeholder returning true, so no NullList here)
+        assert(
+          !containsBuiltin(uplc, NullList),
+          s"Expected no nullList (no modules) but got: ${uplc.pretty.render(100)}"
+        )
+    }
+
+    test("head intrinsic: SumDataList representation produces headList") {
+        val headName = "scalus.cardano.onchain.plutus.prelude.List$.head"
+        val headType = SIRType.Fun(listTypeA, typeA)
+        val matchImpl = SIR.LamAbs(
+          SIR.Var("_self", listTypeA, ae),
+          SIR.Error("head of empty list", ae),
+          List.empty,
+          ae
+        )
+        val listConst = SIR.Const(
+          Constant.List(DefaultUni.Data, List.empty),
+          SIRType.List(SIRType.Data.tp),
+          ae
+        )
+        val sir = SIR.Let(
+          List(Binding(headName, headType, matchImpl)),
+          SIR.Apply(SIR.Var(headName, headType, ae), listConst, typeA, ae),
+          SIR.LetFlags.None,
+          ae
+        )
+        val uplc = lower(sir)
+        assert(
+          containsBuiltin(uplc, HeadList),
+          s"Expected headList in UPLC but got: ${uplc.pretty.render(100)}"
+        )
+    }
+
+    test("tail intrinsic: SumDataList representation produces tailList") {
+        val tailName = "scalus.cardano.onchain.plutus.prelude.List$.tail"
+        val tailType = SIRType.Fun(listTypeA, listTypeA)
+        val matchImpl = SIR.LamAbs(
+          SIR.Var("_self", listTypeA, ae),
+          SIR.Error("tail of empty list", ae),
+          List.empty,
+          ae
+        )
+        val listConst = SIR.Const(
+          Constant.List(DefaultUni.Data, List.empty),
+          SIRType.List(SIRType.Data.tp),
+          ae
+        )
+        val sir = SIR.Let(
+          List(Binding(tailName, tailType, matchImpl)),
+          SIR.Apply(SIR.Var(tailName, tailType, ae), listConst, listTypeA, ae),
+          SIR.LetFlags.None,
+          ae
+        )
+        val uplc = lower(sir)
+        assert(
+          containsBuiltin(uplc, TailList),
+          s"Expected tailList in UPLC but got: ${uplc.pretty.render(100)}"
+        )
+    }
+
+    test("drop intrinsic: not available at changPV (version 9)") {
+        val dropName = "scalus.cardano.onchain.plutus.prelude.List$.drop"
+        val dropType = SIRType.Fun(listTypeA, SIRType.Fun(SIRType.Integer, listTypeA))
+        // Fallback returns the list unchanged (valid SumDataList representation)
+        val matchImpl = SIR.LamAbs(
+          SIR.Var("_self", listTypeA, ae),
+          SIR.LamAbs(
+            SIR.Var("_n", SIRType.Integer, ae),
+            SIR.Var("_self", listTypeA, ae),
+            List.empty,
+            ae
+          ),
+          List.empty,
+          ae
+        )
+        val listConst = SIR.Const(
+          Constant.List(DefaultUni.Data, List.empty),
+          SIRType.List(SIRType.Data.tp),
+          ae
+        )
+        val nConst = SIR.Const(Constant.Integer(2), SIRType.Integer, ae)
+        val sir = SIR.Let(
+          List(Binding(dropName, dropType, matchImpl)),
+          SIR.Apply(
+            SIR.Apply(
+              SIR.Var(dropName, dropType, ae),
+              listConst,
+              SIRType.Fun(SIRType.Integer, listTypeA),
+              ae
+            ),
+            nConst,
+            listTypeA,
+            ae
+          ),
+          SIR.LetFlags.None,
+          ae
+        )
+        // At changPV (9), drop intrinsic (minVersion=11) should NOT be available
+        val uplc = lower(sir, targetProtocolVersion = MajorProtocolVersion.changPV)
+        assert(
+          !containsBuiltin(uplc, DropList),
+          s"Expected no dropList at changPV but got: ${uplc.pretty.render(100)}"
+        )
+    }
+
+    test("drop intrinsic: available at vanRossemPV (version 11)") {
+        val dropName = "scalus.cardano.onchain.plutus.prelude.List$.drop"
+        val dropType = SIRType.Fun(listTypeA, SIRType.Fun(SIRType.Integer, listTypeA))
+        val matchImpl = SIR.LamAbs(
+          SIR.Var("_self", listTypeA, ae),
+          SIR.LamAbs(
+            SIR.Var("_n", SIRType.Integer, ae),
+            SIR.Error("drop fallback", ae),
+            List.empty,
+            ae
+          ),
+          List.empty,
+          ae
+        )
+        val listConst = SIR.Const(
+          Constant.List(DefaultUni.Data, List.empty),
+          SIRType.List(SIRType.Data.tp),
+          ae
+        )
+        val nConst = SIR.Const(Constant.Integer(2), SIRType.Integer, ae)
+        val sir = SIR.Let(
+          List(Binding(dropName, dropType, matchImpl)),
+          SIR.Apply(
+            SIR.Apply(
+              SIR.Var(dropName, dropType, ae),
+              listConst,
+              SIRType.Fun(SIRType.Integer, listTypeA),
+              ae
+            ),
+            nConst,
+            listTypeA,
+            ae
+          ),
+          SIR.LetFlags.None,
+          ae
+        )
+        // At vanRossemPV (11), drop intrinsic should be available
+        val uplc = lower(sir, targetProtocolVersion = MajorProtocolVersion.vanRossemPV)
+        assert(
+          containsBuiltin(uplc, DropList),
+          s"Expected dropList at vanRossemPV but got: ${uplc.pretty.render(100)}"
+        )
+    }
+
+    // --- Helpers ---
+
+    /** Check if a UPLC term tree contains a reference to the given builtin. */
+    private def containsBuiltin(term: Term, fun: DefaultFun): Boolean = term match
+        case Term.Builtin(f, _) if f == fun => true
+        case Term.Apply(f, arg, _)          => containsBuiltin(f, fun) || containsBuiltin(arg, fun)
+        case Term.LamAbs(_, body, _)        => containsBuiltin(body, fun)
+        case Term.Force(inner, _)           => containsBuiltin(inner, fun)
+        case Term.Delay(inner, _)           => containsBuiltin(inner, fun)
+        case _                              => false
+}

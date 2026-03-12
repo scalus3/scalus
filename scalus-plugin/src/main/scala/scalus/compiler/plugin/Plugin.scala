@@ -304,6 +304,10 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
             val compileDebugWithOptionsSymbol =
                 oldCompilerModule.requiredMethod("compileDebugWithOptions")
 
+            val compiledModulesSymbol =
+                requiredModule(Plugin.newCompilerModuleName)
+                    .requiredMethod("compiledModules")
+
             def matchesSymbol(sym: Symbol, oldSym: Symbol, newSymOpt: Option[Symbol]): Boolean =
                 sym == oldSym || newSymOpt.contains(sym)
 
@@ -404,12 +408,80 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
                     println(s"tree: ${tree.show}")
                     tree
              */
+            else if tree.fun.symbol == compiledModulesSymbol
+            then transformCompiledModules(tree)
             else tree
         catch
             case scala.util.control.NonFatal(ex) =>
                 ex.printStackTrace()
                 throw ex
     end transformApply
+
+    /** Transforms a `compiledModules("name1", "name2", ...)` call into a
+      * `SIRLinker.readModules(List(SIRModuleWithDeps(...), ...))` expression.
+      */
+    private def transformCompiledModules(tree: tpd.Apply)(using Context): tpd.Tree = {
+        import dotty.tools.dotc.core.Constants.Constant as DottyConstant
+
+        // Extract string literal elements from varargs
+        val elems: List[tpd.Tree] = tree.args match
+            case List(tpd.Typed(tpd.SeqLiteral(elems, _), _)) => elems
+            case List(tpd.SeqLiteral(elems, _))               => elems
+            case args                                         => args
+
+        // Validate all elements are string literals
+        val moduleNames = elems.map {
+            case tpd.Literal(DottyConstant(name: String)) => name
+            case other =>
+                report.error(
+                  s"compiledModules argument must be a string literal, got: ${other.show}",
+                  other.srcPos
+                )
+                return tree
+        }
+
+        if moduleNames.isEmpty then
+            report.error("compiledModules requires at least one module name string", tree.srcPos)
+            return tree
+
+        // Resolve symbols
+        val sirModuleWithDepsModule = requiredModule("scalus.compiler.sir.SIRModuleWithDeps")
+        val sirModuleWithDepsType =
+            requiredClassRef("scalus.compiler.sir.SIRModuleWithDeps")
+        val sirLinkerModule = requiredModule("scalus.compiler.sir.linking.SIRLinker")
+
+        // Build SIRModuleWithDeps entries for each module name
+        val entries = moduleNames.map { name =>
+            val moduleSym = Symbols.requiredModule(name)
+            val moduleRef = tpd.ref(moduleSym).withSpan(tree.span)
+
+            val sirModuleVal = moduleSym.requiredMethod(Plugin.SIR_MODULE_VAL_NAME)
+            val sirDepsVal = moduleSym.requiredMethod(Plugin.SIR_DEPS_VAL_NAME)
+
+            val sirTree = moduleRef.select(sirModuleVal).withSpan(tree.span)
+            val depsTree = tpd.ref(moduleSym).select(sirDepsVal).withSpan(tree.span)
+
+            tpd.ref(sirModuleWithDepsModule)
+                .select(sirModuleWithDepsModule.requiredMethod("apply"))
+                .appliedToArgs(List(sirTree, depsTree))
+                .withSpan(tree.span)
+        }
+
+        // Build: SIRModuleWithDeps.list(entries...)
+        val listExpr = tpd
+            .ref(sirModuleWithDepsModule)
+            .select(sirModuleWithDepsModule.requiredMethod("list"))
+            .appliedTo(
+              tpd.SeqLiteral(entries, tpd.TypeTree(sirModuleWithDepsType))
+            )
+            .withSpan(tree.span)
+
+        // Build: SIRLinker.readModules(list)
+        val readModulesMethod = sirLinkerModule.requiredMethod("readModules")
+        tpd.ref(readModulesMethod)
+            .appliedTo(listExpr)
+            .withSpan(tree.span)
+    }
 
     override def transformTypeDef(tree: tpd.TypeDef)(using Context): tpd.Tree =
         // If the template has a compile annotation, we need to add a variable for SIR

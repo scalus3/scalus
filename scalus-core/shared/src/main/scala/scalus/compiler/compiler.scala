@@ -2,7 +2,7 @@ package scalus.compiler
 
 import scalus.uplc.builtin.Data
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
-import scalus.compiler.sir.{SIR, SIRDefaultOptions, SIRType, TargetLoweringBackend}
+import scalus.compiler.sir.{Module, SIR, SIRDefaultOptions, SIRType, TargetLoweringBackend}
 import scalus.utils.Macros
 
 case class Options(
@@ -133,6 +133,20 @@ def compileDebugWithOptions(options: Options, e: Any): SIR =
   *   }}}
   */
 def compileType[T]: SIRType = throwCompilerPluginMissingException()
+
+/** Collects SIR modules from the given `@Compile` objects at compile time.
+  *
+  * The Scalus compiler plugin intercepts this call and replaces it with a `Map[String, Module]`
+  * containing the SIR modules of the referenced objects. Each argument must be a fully qualified
+  * name of a `@Compile` object (e.g., `"scalus.compiler.intrinsics.BuiltinListOperations"`).
+  *
+  * @param moduleNames
+  *   Fully qualified names of `@Compile` objects.
+  * @return
+  *   A map from module name (with `$` suffix) to [[scalus.compiler.sir.Module]].
+  */
+def compiledModules(moduleNames: String*): Map[String, Module] =
+    throwCompilerPluginMissingException()
 
 /** Generates a `scalus.compiler.compile(code)` call at compile time.
   *

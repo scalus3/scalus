@@ -602,6 +602,100 @@ object SIR:
 
     }
 
+    /** Substitute all free occurrences of variable `varName` with `replacement` in `sir`. Properly
+      * tracks shadowing through lambda, let, and match bindings.
+      */
+    def substituteFreeVar(sir: SIR, varName: String, replacement: SIR): SIR = {
+
+        def processSir(sir: SIR, localNames: Set[String]): SIR = {
+            sir match {
+                case SIR.Decl(data, term) =>
+                    SIR.Decl(data, processSir(term, localNames))
+                case annSir: AnnotatedSIR =>
+                    processAnnotated(annSir, localNames)
+            }
+        }
+
+        def processAnnotated(sir: AnnotatedSIR, localNames: Set[String]): AnnotatedSIR = {
+            sir match {
+                case Var(name, tp, anns) =>
+                    if localNames.contains(name) then sir
+                    else if name == varName then replacement.asInstanceOf[AnnotatedSIR]
+                    else sir
+                case ExternalVar(_, _, _, _) => sir
+                case Let(bindings, body, flags, anns) =>
+                    val initBindings: IndexedSeq[Binding] = IndexedSeq.empty
+                    val (newBindings, newLocalNames) =
+                        bindings.foldLeft((initBindings, localNames)) {
+                            case ((accBindings, ln), b) =>
+                                if flags.isRec then
+                                    val nLn = ln + b.name
+                                    val nValue = processSir(b.value, nLn)
+                                    (accBindings :+ Binding(b.name, b.tp, nValue), nLn)
+                                else
+                                    val nValue = processSir(b.value, ln)
+                                    val nLn = ln + b.name
+                                    (accBindings :+ Binding(b.name, b.tp, nValue), nLn)
+                        }
+                    val newBody = processSir(body, newLocalNames)
+                    Let(newBindings.toList, newBody, flags, anns)
+                case LamAbs(param, term, typeParams, anns) =>
+                    val nLn = localNames + param.name
+                    val nTerm = processSir(term, nLn)
+                    LamAbs(param, nTerm, typeParams, anns)
+                case Apply(f, arg, tp, anns) =>
+                    val nF = processSir(f, localNames).asInstanceOf[AnnotatedSIR]
+                    val nArg = processSir(arg, localNames).asInstanceOf[AnnotatedSIR]
+                    Apply(nF, nArg, tp, anns)
+                case Select(scrutinee, field, tp, anns) =>
+                    val nScrutinee = processSir(scrutinee, localNames).asInstanceOf[AnnotatedSIR]
+                    Select(nScrutinee, field, tp, anns)
+                case Const(_, _, _) => sir
+                case And(a, b, anns) =>
+                    val nA = processSir(a, localNames).asInstanceOf[AnnotatedSIR]
+                    val nB = processSir(b, localNames).asInstanceOf[AnnotatedSIR]
+                    And(nA, nB, anns)
+                case Or(a, b, anns) =>
+                    val nA = processSir(a, localNames).asInstanceOf[AnnotatedSIR]
+                    val nB = processSir(b, localNames).asInstanceOf[AnnotatedSIR]
+                    Or(nA, nB, anns)
+                case Not(a, anns) =>
+                    val nA = processSir(a, localNames).asInstanceOf[AnnotatedSIR]
+                    Not(nA, anns)
+                case IfThenElse(cond, t, f, tp, anns) =>
+                    val nCond = processSir(cond, localNames).asInstanceOf[AnnotatedSIR]
+                    val nT = processSir(t, localNames).asInstanceOf[AnnotatedSIR]
+                    val nF = processSir(f, localNames).asInstanceOf[AnnotatedSIR]
+                    IfThenElse(nCond, nT, nF, tp, anns)
+                case Builtin(_, _, _) => sir
+                case Error(msg, anns, cause) =>
+                    val nMsg = processSir(msg, localNames).asInstanceOf[AnnotatedSIR]
+                    Error(nMsg, anns, cause)
+                case Constr(name, data, args, tp, anns) =>
+                    val nArgs = args.map(a => processSir(a, localNames))
+                    Constr(name, data, nArgs, tp, anns)
+                case Match(scrutinee, cases, tp, anns) =>
+                    val nScrutinee = processSir(scrutinee, localNames).asInstanceOf[AnnotatedSIR]
+                    val nCases = cases.map { c =>
+                        val nLn = c.pattern match {
+                            case Pattern.Wildcard               => localNames
+                            case Pattern.Constr(_, bindings, _) => localNames ++ bindings
+                            case Pattern.Const(_)               => localNames
+                        }
+                        val nBody = processSir(c.body, nLn)
+                        Case(c.pattern, nBody, c.anns)
+                    }
+                    Match(nScrutinee, nCases, tp, anns)
+                case Cast(term, tp, anns) =>
+                    val nTerm = processAnnotated(term, localNames)
+                    Cast(nTerm, tp, anns)
+            }
+        }
+
+        processSir(sir, Set.empty)
+
+    }
+
     def accumulate[A](
         sir: SIR,
         a0: A,
