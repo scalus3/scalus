@@ -264,6 +264,8 @@ final class SIRCompiler(
     private val uplcIntrinsicAnnot = Symbols.requiredClass("scalus.uplc.builtin.uplcIntrinsic")
     private val onChainSubstituteAnnot =
         Symbols.requiredClass("scalus.compiler.OnChainSubstitute")
+    private val sirModuleAnnotationTrait =
+        Symbols.requiredClass("scalus.compiler.SIRModuleAnnotation")
 
     private def builtinFun(s: Symbol): Option[SIR.Builtin] = {
         DefaultFunSIRBuiltins
@@ -441,13 +443,15 @@ final class SIRCompiler(
                 )
         } else {
             val moduleName = td.symbol.fullName.toString
+            val moduleAnns = collectModuleAnnotations(td.symbol, td.srcPos)
             val module =
                 Module(
                   SIRVersion,
                   moduleName,
                   false,
                   None,
-                  bindings
+                  bindings,
+                  moduleAnns
                 )
 
             val moduleTree = convertFlatToTree(
@@ -476,6 +480,134 @@ final class SIRCompiler(
                   s"compiled Scalus module ${td.name} [${td.symbol.fullName.toString}] definitions: ${bindings.map(_.name)} in ${time}ms"
                 )
         }
+    }
+
+    /** Collects annotations extending SIRModuleAnnotation from the given symbol and encodes their
+      * arguments generically into AnnotationsDecl.data.
+      */
+    private def collectModuleAnnotations(sym: Symbol, srcPos: SrcPos): AnnotationsDecl = {
+        val annots = sym.annotations.filter { annot =>
+            annot.symbol.isClass && annot.symbol.derivesFrom(sirModuleAnnotationTrait)
+        }
+        if annots.isEmpty then AnnotationsDecl.emptyModule
+        else
+            val data = annots.flatMap { annot =>
+                val annotName = annot.symbol.fullName.toString
+                val args = annot.arguments
+                if args.isEmpty then
+                    List(
+                      annotName -> SIR.Const(
+                        scalus.uplc.Constant.Bool(true),
+                        SIRType.Boolean,
+                        AnnotationsDecl.emptyModule
+                      )
+                    )
+                else
+                    args match
+                        // Single Map argument: flatten keys as "annotName:key" -> encode(value)
+                        case List(mapArg) if isMapLiteral(mapArg) =>
+                            parseMapLiteral(mapArg).map { case (k, v) =>
+                                s"$annotName:$k" -> encodeLiteralArg(v, srcPos)
+                            }
+                        // Multiple args or single non-Map arg
+                        case _ =>
+                            args.zipWithIndex.map { case (arg, idx) =>
+                                val key =
+                                    if args.size == 1 then annotName
+                                    else s"$annotName:$idx"
+                                key -> encodeLiteralArg(arg, srcPos)
+                            }
+            }.toMap
+            AnnotationsDecl(SIRPosition.fromSrcPos(srcPos), data = data)
+    }
+
+    private def isMapLiteral(tree: Tree): Boolean = tree match
+        case tpd.Apply(fun, _) =>
+            val sym = fun.symbol
+            sym.exists && sym.name.show == "apply" && {
+                val ownerName = sym.owner.fullName.toString
+                ownerName == "scala.collection.immutable.Map$"
+                || ownerName == "scala.Predef.Map$"
+                || ownerName == "scala.collection.Map$"
+            }
+        case _ => false
+
+    private def parseMapLiteral(tree: Tree): List[(String, Tree)] = {
+        def extractPairs(elems: List[Tree]): List[(String, Tree)] =
+            elems.flatMap {
+                case tpd.Apply(_, List(key, value)) =>
+                    extractStringLiteral(key).map(k => (k, value))
+                case _ => None
+            }
+
+        tree match
+            case tpd.Apply(_, List(tpd.Typed(tpd.SeqLiteral(elems, _), _))) =>
+                extractPairs(elems)
+            case tpd.Apply(_, elems) =>
+                extractPairs(elems)
+            case _ => Nil
+    }
+
+    private def extractStringLiteral(tree: Tree): Option[String] = tree match
+        case tpd.Literal(const) if const.tag == Constants.StringTag =>
+            Some(const.stringValue)
+        case _ => None
+
+    private def encodeLiteralArg(tree: Tree, srcPos: SrcPos): SIR = {
+        val emptyAnns = AnnotationsDecl.emptyModule
+        tree match
+            case tpd.Literal(const) =>
+                const.tag match
+                    case Constants.StringTag =>
+                        SIR.Const(
+                          scalus.uplc.Constant.String(const.stringValue),
+                          SIRType.String,
+                          emptyAnns
+                        )
+                    case Constants.IntTag | Constants.LongTag =>
+                        SIR.Const(
+                          scalus.uplc.Constant.Integer(BigInt(const.longValue)),
+                          SIRType.Integer,
+                          emptyAnns
+                        )
+                    case Constants.BooleanTag =>
+                        SIR.Const(
+                          scalus.uplc.Constant.Bool(const.booleanValue),
+                          SIRType.Boolean,
+                          emptyAnns
+                        )
+                    case _ =>
+                        SIR.Const(
+                          scalus.uplc.Constant.String(const.value.toString),
+                          SIRType.String,
+                          emptyAnns
+                        )
+            case _ =>
+                val sym = tree.symbol
+                if sym.exists then
+                    SIR.Const(
+                      scalus.uplc.Constant.String(sym.fullName.toString),
+                      SIRType.String,
+                      emptyAnns
+                    )
+                else
+                    val termSym = tree.tpe.termSymbol
+                    if termSym.exists then
+                        SIR.Const(
+                          scalus.uplc.Constant.String(termSym.fullName.toString),
+                          SIRType.String,
+                          emptyAnns
+                        )
+                    else
+                        report.error(
+                          s"SIRModuleAnnotation argument must be a literal or object reference, got: ${tree.show}",
+                          srcPos
+                        )
+                        SIR.Const(
+                          scalus.uplc.Constant.String("<error>"),
+                          SIRType.String,
+                          emptyAnns
+                        )
     }
 
     private def writeModule(module: Module, className: String): Unit = {

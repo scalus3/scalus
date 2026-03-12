@@ -37,3 +37,14 @@ final class Ignore extends Annotation
   */
 final class OnChainSubstitute(substitute: AnyRef, selfAs: Class[?] = classOf[Nothing])
     extends StaticAnnotation
+
+/** Marker trait for annotations that should be propagated to SIR Module metadata.
+  *
+  * The compiler plugin finds all annotations on `@Compile` objects whose class extends this trait
+  * and serializes their arguments generically into `Module.anns.data`. Adding a new annotation
+  * subclass requires zero plugin changes.
+  *
+  * Keys in `anns.data` are `"annotationClassName"` for simple args or `"annotationClassName:key"`
+  * for Map entries.
+  */
+trait SIRModuleAnnotation extends StaticAnnotation
