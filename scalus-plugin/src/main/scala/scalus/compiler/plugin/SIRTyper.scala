@@ -108,7 +108,7 @@ class SIRTyper(using Context) {
                                 tryMakeFunctionalInterface(tp, tp.typeSymbol, env) getOrElse
                                     makeSIRNonFunClassType(
                                       tpc,
-                                      tp.args.map(sirTypeInEnv(_, env)),
+                                      tp.args.map(sirTypeInEnvWithErr(_, env)),
                                       env
                                     )
                             }
