@@ -59,6 +59,10 @@ class SIRTyper(using Context) {
                 val sym = tpc.typeSymbol
                 if tpc =:= defn.NothingType then SIRType.TypeNothing
                 else if tpc.isTypeAlias then sirTypeInEnvWithErr(tpc.dealias, env)
+                else if sym.isOpaqueAlias then
+                    val alias = sym.opaqueAlias
+                    if alias.exists then sirTypeInEnvWithErr(alias, env)
+                    else unsupportedType(tpc, s"opaque type with no alias: ${tpc.show}", env)
                 else if tpc =:= defn.AnyType then SIRType.FreeUnificator
                 else if sym.isClass then makeSIRNonFunClassType(tpc, Nil, env)
                 else if sym.isTypeParam then
@@ -97,6 +101,10 @@ class SIRTyper(using Context) {
                     unsupportedType(tp, "MatchCaseClass", env)
                 else if tp.typeSymbol.exists && tp.typeSymbol.isAliasType then
                     sirTypeInEnvWithErr(tp.dealias, env)
+                else if tp.typeSymbol.exists && tp.typeSymbol.isOpaqueAlias then
+                    val alias = tp.typeSymbol.opaqueAlias
+                    if alias.exists then sirTypeInEnvWithErr(alias.appliedTo(tp.args), env)
+                    else unsupportedType(tp, s"opaque type with no alias: ${tp.show}", env)
                 else if defn.isFunctionType(tp) then {
                     makeSIRFunType(tp, env)
                 } else {
