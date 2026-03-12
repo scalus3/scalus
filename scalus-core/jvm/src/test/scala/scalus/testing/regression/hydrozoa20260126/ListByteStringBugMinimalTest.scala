@@ -1,4 +1,4 @@
-package scalus.regressions.hydrozoa20260126
+package scalus.testing.regression.hydrozoa20260126
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
