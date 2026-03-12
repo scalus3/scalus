@@ -12,8 +12,8 @@ import scalus.uplc.eval.PlutusVM
 /** Regression: recursive enum with derived FromData/ToData fails to compile.
   *
   * The bug: `enum ForkTree derives FromData, ToData` with a recursive
-  * `Fork(children: List[ForkTree])` case triggers a compilation error
-  * in the Scalus compiler plugin.
+  * `Fork(children: List[ForkTree])` case triggers a compilation error in the Scalus compiler
+  * plugin.
   */
 
 enum ForkTree derives FromData, ToData {
