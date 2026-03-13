@@ -9,13 +9,13 @@ import scala.collection.mutable
 
 /** Extract forced builtins to top level
   *
-  * For example, replace `(force (force (builtin fstPair)))` with (lam builtin_FstPair
-  * (builtin_FstPair (pair true false)) (! (! __builtin_FstPair))). This is more memory/cpu
-  * efficient than nested Force at least in Plutus V3 Plomin HF, protocol version 10.
+  * For example, replace `(force (force (builtin fstPair)))` with (lam FstPair (FstPair (pair true
+  * false)) (! (! __FstPair))). This is more memory/cpu efficient than nested Force at least in
+  * Plutus V3 Plomin HF, protocol version 10.
   *
   * With current machine costs, Force costs 100 memory and 16000 cpu, same for Builtin. Hence (lam
-  * builtin_FstPair (builtin_FstPair (pair true false)) (! (! __builtin_FstPair))) costs 200 memory
-  * and 32000 cpu, while `(force (force (builtin fstPair)))` costs 300 memory and 48000 cpu.
+  * FstPair (FstPair (pair true false)) (! (! __FstPair))) costs 200 memory and 32000 cpu, while
+  * `(force (force (builtin fstPair)))` costs 300 memory and 48000 cpu.
   */
 class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[DefaultFun] = Set())
     extends Optimizer {
@@ -76,7 +76,7 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
                     && !exceptBuiltins.contains(bn)
                     && counts.getOrElse(bn, 0) >= 2 =>
                 val (_, name) =
-                    extracted.getOrElseUpdate(bn, (term, freshName(s"__builtin_$bn", env)))
+                    extracted.getOrElseUpdate(bn, (term, freshName(s"__$bn", env)))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
             case Force(Builtin(bn, _), _)
@@ -84,7 +84,7 @@ class ForcedBuiltinsExtractor(logger: Logger = new Log(), exceptBuiltins: Set[De
                     && !exceptBuiltins.contains(bn)
                     && counts.getOrElse(bn, 0) >= 2 =>
                 val (_, name) =
-                    extracted.getOrElseUpdate(bn, (term, freshName(s"__builtin_$bn", env)))
+                    extracted.getOrElseUpdate(bn, (term, freshName(s"__$bn", env)))
                 logger.log(s"Replacing Forced builtin with Var: $name")
                 vr(name)
             case Force(t, ann)          => Force(go(t, env), ann)

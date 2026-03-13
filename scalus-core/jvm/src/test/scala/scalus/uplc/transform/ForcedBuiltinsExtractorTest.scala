@@ -49,7 +49,7 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
         // Verify both uses were replaced with the same variable
         val logs = logger.getLogs
-        assert(logs.count(_.contains("__builtin_HeadList")) == 2) // Two replacements
+        assert(logs.count(_.contains("__HeadList")) == 2) // Two replacements
         assert(logs.size == 2) // But only 2 log entries total (both for the same builtin)
     }
 
@@ -96,10 +96,10 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
                   _
                 ) =>
                 // Verify the order of extracted builtins is sorted
-                assert(name1 == "__builtin_FstPair")
-                assert(name2 == "__builtin_HeadList")
-                assert(name3 == "__builtin_SndPair")
-                assert(name4 == "__builtin_TailList")
+                assert(name1 == "__FstPair")
+                assert(name2 == "__HeadList")
+                assert(name3 == "__SndPair")
+                assert(name4 == "__TailList")
             case _ => fail("Optimized term does not match expected structure")
         }
     }
@@ -122,8 +122,8 @@ class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 
         // Verify only TailList was extracted, HeadList was excluded
         val logs = logger.getLogs
-        assert(logs.exists(_.contains("__builtin_TailList")))
-        assert(!logs.exists(_.contains("__builtin_HeadList")))
+        assert(logs.exists(_.contains("__TailList")))
+        assert(!logs.exists(_.contains("__HeadList")))
         assert(logs.size == 2) // TailList extracted at two call sites
     }
 
