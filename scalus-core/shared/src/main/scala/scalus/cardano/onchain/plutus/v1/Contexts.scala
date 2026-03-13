@@ -1,6 +1,7 @@
 package scalus.cardano.onchain.plutus.v1
 
 import scalus.{Compile, Ignore}
+import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.cardano.ledger.{TransactionHash, TransactionInput}
 import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Builtins.*
@@ -410,6 +411,7 @@ object DCert {
 
 }
 
+@UplcRepr(UplcRepresentation.ProductCaseOneElement)
 case class TxId(hash: Hash):
     override def toString = s"txid#${hash.toHex}"
 
@@ -453,6 +455,7 @@ object TxOutRef {
     }
 }
 
+@UplcRepr(UplcRepresentation.ProductCaseOneElement)
 case class PubKeyHash(hash: Hash) {
     override def toString = s"pkh#${hash.toHex}"
 }

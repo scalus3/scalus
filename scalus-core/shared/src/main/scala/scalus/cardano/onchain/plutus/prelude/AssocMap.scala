@@ -1,11 +1,13 @@
 package scalus.cardano.onchain.plutus.prelude
 
 import scalus.Compile
+import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.fromData
 import scalus.uplc.builtin.{Data, FromData, ToData}
 import scala.annotation.tailrec
 
+@UplcRepr(UplcRepresentation.Map)
 case class AssocMap[A, B](toList: List[(A, B)])
 
 @Compile

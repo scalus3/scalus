@@ -48,3 +48,43 @@ final class OnChainSubstitute(substitute: AnyRef, selfAs: Class[?] = classOf[Not
   * for Map entries.
   */
 trait SIRModuleAnnotation extends StaticAnnotation
+
+/** Type-safe specification of UPLC type representations.
+  *
+  * This enum defines how a type should be represented in UPLC (Untyped Plutus Lambda Calculus).
+  * Used with the [[UplcRepr]] annotation to customize type representation at compile time.
+  */
+sealed trait UplcRepresentation
+
+object UplcRepresentation {
+    // Simple representations (no parameters)
+    case object ProductCase extends UplcRepresentation
+    case object SumCase extends UplcRepresentation
+    case object Map extends UplcRepresentation
+    case object SumDataList extends UplcRepresentation
+    case object SumPairDataList extends UplcRepresentation
+    case object Data extends UplcRepresentation
+    case object BuiltinArray extends UplcRepresentation
+
+    // One-element wrapper - inner type derived from first constructor parameter
+    case object ProductCaseOneElement extends UplcRepresentation
+}
+
+/** Specifies the UPLC representation for a case class or enum.
+  *
+  * When applied to a type, this annotation directs the Scalus compiler to use the specified
+  * representation instead of the default structural inference.
+  *
+  * @param repr
+  *   The representation from [[UplcRepresentation]]
+  *
+  * @example
+  *   {{{
+  *   @UplcRepr(UplcRepresentation.ProductCaseOneElement)
+  *   case class PubKeyHash(hash: ByteString)
+  *
+  *   @UplcRepr(UplcRepresentation.Map)
+  *   case class AssocMap[K, V](inner: List[(K, V)])
+  *   }}}
+  */
+final class UplcRepr(repr: UplcRepresentation) extends StaticAnnotation

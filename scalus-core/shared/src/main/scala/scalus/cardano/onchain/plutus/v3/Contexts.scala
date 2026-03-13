@@ -1,6 +1,7 @@
 package scalus.cardano.onchain.plutus.v3
 
 import scalus.Compile
+import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.uplc.builtin
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
@@ -41,6 +42,7 @@ export scalus.cardano.onchain.plutus.v2.TxOut
 export scalus.cardano.onchain.plutus.v1.Value
 import scalus.uplc.builtin.Builtins
 
+@UplcRepr(UplcRepresentation.ProductCaseOneElement)
 case class TxId(hash: ByteString)
 
 @Compile

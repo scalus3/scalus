@@ -66,6 +66,40 @@ trait SirTypeUplcGenerator {
 
 object SirTypeUplcGenerator {
 
+    /** Extracts the uplcRepr annotation value from AnnotationsDecl. */
+    private def getUplcReprAnnotation(anns: AnnotationsDecl): Option[String] =
+        anns.data.get("uplcRepr").collect {
+            case SIR.Const(scalus.uplc.Constant.String(spec), _, _) => spec
+        }
+
+    /** Resolves the encoded UplcRepresentation string to the appropriate generator. */
+    private def resolveUplcRepresentation(
+        encoded: String,
+        constrDecl: ConstrDecl,
+        typeArgs: List[SIRType],
+        debug: Boolean
+    ): SirTypeUplcGenerator =
+        encoded match {
+            case "ProductCase"           => ProductCaseSirTypeGenerator
+            case "SumCase"               => SumCaseSirTypeGenerator
+            case "SumDataList"           => SumDataListSirTypeGenerator
+            case "SumPairDataList"       => SumPairDataListSirTypeGenerator
+            case "Map"                   => MapSirTypeGenerator
+            case "Data"                  => SIRTypeUplcDataGenerator
+            case "BuiltinArray"          => BuiltinArraySirTypeGenerator
+            case "ProductCaseOneElement" =>
+                // Derive inner type from first constructor parameter
+                val paramType = SIRType.substitute(
+                  constrDecl.params.head.tp,
+                  constrDecl.typeParams.zip(typeArgs).toMap,
+                  Map.empty
+                )
+                val innerGenerator = SirTypeUplcGenerator(paramType, debug)
+                ProductCaseOneElementSirTypeGenerator(innerGenerator)
+            case other =>
+                throw IllegalArgumentException(s"Unknown UplcRepresentation: $other")
+        }
+
     def apply(tp: SIRType, debug: Boolean = false): SirTypeUplcGenerator = {
         val retval = tp match
             case SIRType.Boolean =>
@@ -79,22 +113,39 @@ object SirTypeUplcGenerator {
             case SIRType.Unit =>
                 UnitSirTypeGenerator
             case SIRType.SumCaseClass(decl, typeArgs) =>
-                val trace = new IdentityHashMap[SIRType, SIRType]()
-                if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
-                else if decl.name == SumListCommonSirTypeGenerator.PairListDataDeclName then
-                    if !containsFun(tp, trace) then SumPairDataListSirTypeGenerator
-                    else SumCaseUplcOnlySirTypeGenerator
-                else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
-                    if !containsFun(tp, trace) then {
-                        if isPair(typeArgs.head) // isPairOrTuple2(typeArgs.head)
-                        then SumPairDataListSirTypeGenerator
-                        else SumDataListSirTypeGenerator
-                    } else SumCaseUplcOnlySirTypeGenerator
-                else if decl.name == SIRType.BuiltinList.name then
-                    if isPairOrTuple2(typeArgs.head) then SumPairDataListSirTypeGenerator
-                    else SumDataListSirTypeGenerator
-                else if !containsFun(tp, trace) then SumCaseSirTypeGenerator
-                else SumCaseUplcOnlySirTypeGenerator
+                // Check for @UplcRepr annotation on the sum type
+                getUplcReprAnnotation(decl.annotations)
+                    .map { encoded =>
+                        // For sum types, we need to pick a constructor to resolve the representation
+                        // Use the first constructor if available
+                        decl.constructors.headOption match {
+                            case Some(constr) =>
+                                resolveUplcRepresentation(encoded, constr, typeArgs, debug)
+                            case None =>
+                                throw IllegalArgumentException(
+                                  s"Sum type ${decl.name} has no constructors but has @UplcRepr annotation"
+                                )
+                        }
+                    }
+                    .getOrElse {
+                        // Existing structural logic
+                        val trace = new IdentityHashMap[SIRType, SIRType]()
+                        if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
+                        else if decl.name == SumListCommonSirTypeGenerator.PairListDataDeclName then
+                            if !containsFun(tp, trace) then SumPairDataListSirTypeGenerator
+                            else SumCaseUplcOnlySirTypeGenerator
+                        else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
+                            if !containsFun(tp, trace) then {
+                                if isPair(typeArgs.head) // isPairOrTuple2(typeArgs.head)
+                                then SumPairDataListSirTypeGenerator
+                                else SumDataListSirTypeGenerator
+                            } else SumCaseUplcOnlySirTypeGenerator
+                        else if decl.name == SIRType.BuiltinList.name then
+                            if isPairOrTuple2(typeArgs.head) then SumPairDataListSirTypeGenerator
+                            else SumDataListSirTypeGenerator
+                        else if !containsFun(tp, trace) then SumCaseSirTypeGenerator
+                        else SumCaseUplcOnlySirTypeGenerator
+                    }
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>
                 // Data constructors are handled by SIRTypeUplcDataGenerator
                 if constrDecl.name == SIRType.Data.Constr.name
@@ -106,39 +157,32 @@ object SirTypeUplcGenerator {
                 // BuiltinArray has its own generator for proper Data conversion
                 else if constrDecl.name == SIRType.BuiltinArray.name
                 then BuiltinArraySirTypeGenerator
-                else if constrDecl.name == "scalus.cardano.onchain.plutus.v1.PubKeyHash"
-                    || constrDecl.name == "scalus.cardano.onchain.plutus.v3.TxId"
-                then ProductCaseOneElementSirTypeGenerator(SIRTypeUplcByteStringGenerator)
-                else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.AssocMap" || constrDecl.name == "scalus.cardano.onchain.plutus.prelude.SortedMap"
-                then MapSirTypeGenerator
-                else if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.Varargs" || constrDecl.name == "scalus.cardano.onchain.plutus.v1.Value"
-                then {
-                    val paramType =
-                        SIRType.substitute(
-                          constrDecl.params.head.tp,
-                          constrDecl.typeParams.zip(typeArgs).toMap,
-                          Map.empty
-                        )
-                    val paramTypeGen = SirTypeUplcGenerator(paramType, debug)
-                    ProductCaseOneElementSirTypeGenerator(paramTypeGen)
-                } else
-                    val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
-                    if constrDecl.name == SIRType.List.NilConstr.name || constrDecl.name == SIRType.List.Cons.name
-                        || constrDecl.name == SIRType.BuiltinList.Nil.name || constrDecl.name == SIRType.BuiltinList.Cons.name
-                        || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
-                    then {
-                        if hasFun then SumCaseUplcOnlySirTypeGenerator
-                        // PairList constructors always use SumPairDataList
-                        else if constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
-                            || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
-                        then SumPairDataListSirTypeGenerator
-                        else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPairOrTuple2(
-                              typeArgs.head
-                            )
-                        then SumPairDataListSirTypeGenerator
-                        else SumDataListSirTypeGenerator
-                    } else if hasFun then ProductCaseUplcOnlySirTypeGenerator
-                    else ProductCaseSirTypeGenerator
+                else
+                    // Check for @UplcRepr annotation on the case class
+                    getUplcReprAnnotation(constrDecl.annotations) match {
+                        case Some(encoded) =>
+                            resolveUplcRepresentation(encoded, constrDecl, typeArgs, debug)
+                        case None =>
+                            // Existing structural logic
+                            val hasFun =
+                                containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
+                            if constrDecl.name == SIRType.List.NilConstr.name || constrDecl.name == SIRType.List.Cons.name
+                                || constrDecl.name == SIRType.BuiltinList.Nil.name || constrDecl.name == SIRType.BuiltinList.Cons.name
+                                || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
+                            then {
+                                if hasFun then SumCaseUplcOnlySirTypeGenerator
+                                // PairList constructors always use SumPairDataList
+                                else if constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
+                                    || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
+                                then SumPairDataListSirTypeGenerator
+                                else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPairOrTuple2(
+                                      typeArgs.head
+                                    )
+                                then SumPairDataListSirTypeGenerator
+                                else SumDataListSirTypeGenerator
+                            } else if hasFun then ProductCaseUplcOnlySirTypeGenerator
+                            else ProductCaseSirTypeGenerator
+                    }
             case SIRType.TypeLambda(_, body) =>
                 SirTypeUplcGenerator(body, debug)
             case SIRType.TypeProxy(ref) =>
