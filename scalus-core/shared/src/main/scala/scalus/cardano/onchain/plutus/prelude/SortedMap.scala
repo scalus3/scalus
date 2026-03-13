@@ -1,6 +1,7 @@
 package scalus.cardano.onchain.plutus.prelude
 
 import scalus.{Compile, Ignore}
+import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.fromData
 import scalus.uplc.builtin.{Data, FromData, ToData}
@@ -12,6 +13,7 @@ import scala.annotation.tailrec
   * @tparam B
   *   the type of values
   */
+@UplcRepr(UplcRepresentation.Map)
 case class SortedMap[A, B] private (toList: List[(A, B)])
 
 @Compile

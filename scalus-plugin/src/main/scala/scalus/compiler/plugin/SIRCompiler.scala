@@ -269,6 +269,9 @@ final class SIRCompiler(
         Symbols.requiredClass("scalus.compiler.OnChainSubstitute")
     private val sirModuleAnnotationTrait =
         Symbols.requiredClass("scalus.compiler.SIRModuleAnnotation")
+    private val uplcReprAnnotation = Symbols.requiredClass("scalus.compiler.UplcRepr")
+    private val uplcRepresentationClass =
+        Symbols.requiredClass("scalus.compiler.UplcRepresentation")
 
     private def builtinFun(s: Symbol): Option[SIR.Builtin] = {
         DefaultFunSIRBuiltins
@@ -621,6 +624,40 @@ final class SIRCompiler(
                         )
     }
 
+    /** Extracts the UplcRepr annotation from a symbol and encodes it as a map entry. */
+    private def extractUplcReprAnnotation(sym: Symbol): Map[String, SIR] = {
+        sym.getAnnotation(uplcReprAnnotation) match {
+            case Some(annot) =>
+                annot.argument(0) match {
+                    case Some(tree) =>
+                        encodeUplcRepresentation(tree) match {
+                            case Some(encoded) => Map("uplcRepr" -> encoded)
+                            case None          => Map.empty
+                        }
+                    case None => Map.empty
+                }
+            case None => Map.empty
+        }
+    }
+
+    /** Encodes the UplcRepresentation enum value to SIR. The tree should be a reference to a
+      * UplcRepresentation case object.
+      */
+    private def encodeUplcRepresentation(tree: Tree): Option[SIR] = {
+        val termSym = tree.tpe.termSymbol
+        if termSym.exists && termSym.owner.derivesFrom(uplcRepresentationClass) then
+            // Extract just the case object name (e.g., "Map", "ProductCaseOneElement")
+            val reprName = termSym.name.show
+            Some(
+              SIR.Const(
+                scalus.uplc.Constant.String(reprName),
+                SIRType.String,
+                AnnotationsDecl.emptyModule
+              )
+            )
+        else None
+    }
+
     private def writeModule(module: Module, className: String): Unit = {
         val suffix = ".sir"
         val outputDirectory = ctx.settings.outputDir.value
@@ -750,9 +787,11 @@ final class SIRCompiler(
             case memberDef: MemberDef =>
                 memberDef.rawComment.map(_.raw)
             case _ => None
+        val reprData = extractUplcReprAnnotation(dataInfo.dataTypeSymbol)
         val anns = AnnotationsDecl(
           SIRPosition.fromSourcePosition(sourcePos),
-          optComment
+          optComment,
+          data = reprData
         )
         scalus.compiler.sir.DataDecl(dataFullName.name, constrDecls, dataTypeParams, anns)
     }
@@ -796,7 +835,8 @@ final class SIRCompiler(
             case memberDef: MemberDef =>
                 memberDef.rawComment.map(_.raw)
             case _ => None
-        val anns = AnnotationsDecl(pos, comment)
+        val reprData = extractUplcReprAnnotation(constrSymbol)
+        val anns = AnnotationsDecl(pos, comment, data = reprData)
         try
             scalus.compiler.sir.ConstrDecl(
               constrSymbol.fullName.show,

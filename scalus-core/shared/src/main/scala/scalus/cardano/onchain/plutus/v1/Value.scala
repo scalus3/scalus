@@ -1,5 +1,6 @@
 package scalus.cardano.onchain.plutus.v1
 
+import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.cardano.ledger
 import scalus.cardano.ledger.{AssetName, Coin, Hash, MultiAsset}
 import scalus.cardano.onchain.plutus.prelude
@@ -11,6 +12,7 @@ import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 
 import scala.annotation.tailrec
 
+@UplcRepr(UplcRepresentation.ProductCaseOneElement)
 case class Value private (toSortedMap: SortedMap[PolicyId, SortedMap[TokenName, BigInt]]) {
     override def toString: String = {
         import Value.{adaPolicyId, adaTokenName}
