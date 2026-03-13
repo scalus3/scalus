@@ -2360,10 +2360,11 @@ object LoweredValue {
 
             // typeProxy means zero-cost view change — just change type and representation metadata,
             // no UPLC conversion code generated
-            if isTypeProxy then
+            if isTypeProxy then {
                 val targetGen = lctx.typeGenerator(targetType)
-                val targetRepr = targetGen.defaultRepresentation(targetType)
-                return new TypeRepresentationProxyLoweredValue(expr, targetType, targetRepr, inPos)
+                val targetRepr = targetGen.defaultTypeVarReperesentation(targetType)
+                new TypeRepresentationProxyLoweredValue(expr, targetType, targetRepr, inPos)
+            } else {
 
             val unifyResult = SIRUnify.topLevelUnifyType(
               expr.sirType,
@@ -2409,6 +2410,8 @@ object LoweredValue {
                                 expr.sirType != SIRType.TypeNothing
                         castedValue(printWarning = printWarning)
             }
+
+            } // else !isTypeProxy
 
         }
 
