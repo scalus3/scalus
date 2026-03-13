@@ -40,4 +40,16 @@ object BuiltinListOperationsV11 {
 
     def drop[A](self: List[A], n: BigInt): List[A] =
         typeProxy[List[A]](dropList(n, typeProxy[BuiltinList[Data]](self)))
+
+}
+
+/** implementations for List builtins substitutions vanRossemPV (protocol version 11+).
+  */
+@Compile
+object BuiltinListLongOperationsV11 {
+
+    def atSumDataList(self: BuiltinList[Data], n: BigInt): Data = {
+        dropList(n - 1, self).head
+    }
+
 }

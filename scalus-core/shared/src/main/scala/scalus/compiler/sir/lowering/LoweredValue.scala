@@ -2366,50 +2366,54 @@ object LoweredValue {
                 new TypeRepresentationProxyLoweredValue(expr, targetType, targetRepr, inPos)
             } else {
 
-            val unifyResult = SIRUnify.topLevelUnifyType(
-              expr.sirType,
-              targetType,
-              SIRUnify.Env.empty.withoutUpcasting
-            )
+                val unifyResult = SIRUnify.topLevelUnifyType(
+                  expr.sirType,
+                  targetType,
+                  SIRUnify.Env.empty.withoutUpcasting
+                )
 
-            unifyResult match {
-                case SIRUnify.UnificationSuccess(_, tp) =>
-                    // if we can unify types, we can return the expression as is
-                    castedValue(changeRepresentation = false, printWarning = false)
-                case SIRUnify.UnificationFailure(_, _, _) =>
-                    if SIRType.isSum(targetType) then
-                        val parentsSeq =
-                            SIRUnify.subtypeSeq(expr.sirType, targetType, SIRUnify.Env.empty)
-                        if parentsSeq.isEmpty then castedValue(printWarning = true)
-                        else {
-                            val upcasted = parentsSeq.tail.foldLeft(expr) { (s, e) =>
-                                val result = s.upcastOne(e, inPos)
-                                result
+                unifyResult match {
+                    case SIRUnify.UnificationSuccess(_, tp) =>
+                        // if we can unify types, we can return the expression as is
+                        castedValue(changeRepresentation = false, printWarning = false)
+                    case SIRUnify.UnificationFailure(_, _, _) =>
+                        if SIRType.isSum(targetType) then
+                            val parentsSeq =
+                                SIRUnify.subtypeSeq(expr.sirType, targetType, SIRUnify.Env.empty)
+                            if parentsSeq.isEmpty then castedValue(printWarning = true)
+                            else {
+                                val upcasted = parentsSeq.tail.foldLeft(expr) { (s, e) =>
+                                    val result = s.upcastOne(e, inPos)
+                                    result
+                                }
+                                castedValue(
+                                  upcasted,
+                                  changeRepresentation = false,
+                                  printWarning = false
+                                )
                             }
-                            castedValue(
-                              upcasted,
-                              changeRepresentation = false,
-                              printWarning = false
-                            )
-                        }
-                    else
-                        // Check if this is a type test: casting from sum type to one of its variants
-                        // e.g., EqBudgetStatus -> EqBudgetStatus.Done
-                        val isTypeTest = targetType match
-                            case cc: SIRType.CaseClass =>
-                                cc.parent match
-                                    case Some(parent) =>
-                                        SIRUnify
-                                            .subtypeSeq(expr.sirType, parent, SIRUnify.Env.empty)
-                                            .nonEmpty
-                                    case None => false
-                            case _ => false
-                        val printWarning =
-                            !isTypeTest &&
-                                targetType != SIRType.FreeUnificator &&
-                                expr.sirType != SIRType.TypeNothing
-                        castedValue(printWarning = printWarning)
-            }
+                        else
+                            // Check if this is a type test: casting from sum type to one of its variants
+                            // e.g., EqBudgetStatus -> EqBudgetStatus.Done
+                            val isTypeTest = targetType match
+                                case cc: SIRType.CaseClass =>
+                                    cc.parent match
+                                        case Some(parent) =>
+                                            SIRUnify
+                                                .subtypeSeq(
+                                                  expr.sirType,
+                                                  parent,
+                                                  SIRUnify.Env.empty
+                                                )
+                                                .nonEmpty
+                                        case None => false
+                                case _ => false
+                            val printWarning =
+                                !isTypeTest &&
+                                    targetType != SIRType.FreeUnificator &&
+                                    expr.sirType != SIRType.TypeNothing
+                            castedValue(printWarning = printWarning)
+                }
 
             } // else !isTypeProxy
 
