@@ -199,9 +199,11 @@
 
             # Common JVM options for CI environment (Java 11 - more conservative settings)
             ciCommonJvmOpts = [
-              # Memory settings - use percentage of physical RAM for portability
-              "-XX:InitialRAMPercentage=25.0" # Initial heap: 25% of physical RAM
-              "-XX:MaxRAMPercentage=75.0" # Max heap: 75% of physical RAM
+              # Memory settings - fixed heap to avoid OOM on 16GB GitHub Actions runners.
+              # MaxRAMPercentage=75% gives ~12GB heap, leaving too little for Node.js
+              # (Scala.js tests), Nix, and OS — causing the OOM killer to SIGTERM the runner.
+              "-Xms2g" # Initial heap: 2GB
+              "-Xmx7g" # Max heap: 7GB (leaves ~9GB for Node.js, Nix, OS on 16GB runner)
               "-Xss64m" # Stack size for deep recursive calls in compiler
 
               # Garbage Collection - G1GC for Java 11 stability
@@ -238,7 +240,8 @@
             JAVA_OPTS = builtins.concatStringsSep " " ciCommonJvmOpts;
             SBT_OPTS = builtins.concatStringsSep " " ciSbtJvmOpts;
             # Fixes issues with Node.js 20+ and OpenSSL 3 during webpack build
-            NODE_OPTIONS = "--openssl-legacy-provider";
+            # Limit Node.js heap to avoid OOM when running Scala.js tests alongside JVM
+            NODE_OPTIONS = "--openssl-legacy-provider --max-old-space-size=2048";
             # Fix locale warnings in CI
             LC_ALL = "C";
             LOCALE_ARCHIVE = pkgs.lib.optionalString pkgs.stdenv.isLinux "${pkgs.glibcLocales}/lib/locale/locale-archive";
