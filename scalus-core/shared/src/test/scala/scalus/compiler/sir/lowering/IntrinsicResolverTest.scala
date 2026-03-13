@@ -67,7 +67,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
         val body = SIR.Apply(SIRBuiltins.nullList, proxy, SIRType.Boolean, ae)
         val lambda = SIR.LamAbs(selfVar, body, List.empty, ae)
         Binding(
-          "scalus.compiler.intrinsics.BuiltinListOperations$.isEmpty",
+          "scalus.compiler.intrinsics.BuiltinListSumDataListOperations$.isEmpty",
           SIRType.Fun(listTypeA, SIRType.Boolean),
           lambda
         )
@@ -83,7 +83,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
         val outerProxy = mkTypeProxyRetData(headCall, typeA)
         val lambda = SIR.LamAbs(selfVar, outerProxy, List.empty, ae)
         Binding(
-          "scalus.compiler.intrinsics.BuiltinListOperations$.head",
+          "scalus.compiler.intrinsics.BuiltinListSumDataListOperations$.head",
           SIRType.Fun(listTypeA, typeA),
           lambda
         )
@@ -99,7 +99,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
         val outerProxy = mkTypeProxyRepr(tailCall, listTypeA, "SumDataList")
         val lambda = SIR.LamAbs(selfVar, outerProxy, List.empty, ae)
         Binding(
-          "scalus.compiler.intrinsics.BuiltinListOperations$.tail",
+          "scalus.compiler.intrinsics.BuiltinListSumDataListOperations$.tail",
           SIRType.Fun(listTypeA, listTypeA),
           lambda
         )
@@ -122,7 +122,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
         val innerLambda = SIR.LamAbs(nVar, outerProxy, List.empty, ae)
         val lambda = SIR.LamAbs(selfVar, innerLambda, List.empty, ae)
         Binding(
-          "scalus.compiler.intrinsics.BuiltinListOperationsV11$.drop",
+          "scalus.compiler.intrinsics.BuiltinListSumDataListOperationsV11$.drop",
           SIRType.Fun(listTypeA, SIRType.Fun(SIRType.Integer, listTypeA)),
           lambda
         )
@@ -130,7 +130,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
 
     private val builtinListOpsModule = Module(
       version = SIRVersion,
-      name = "scalus.compiler.intrinsics.BuiltinListOperations$",
+      name = "scalus.compiler.intrinsics.BuiltinListSumDataListOperations$",
       linked = false,
       requireBackend = None,
       defs = List(buildIsEmptyBinding, buildHeadBinding, buildTailBinding)
@@ -138,7 +138,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
 
     private val builtinListOpsV11Module = Module(
       version = SIRVersion,
-      name = "scalus.compiler.intrinsics.BuiltinListOperationsV11$",
+      name = "scalus.compiler.intrinsics.BuiltinListSumDataListOperationsV11$",
       linked = false,
       requireBackend = None,
       defs = List(buildDropBinding)

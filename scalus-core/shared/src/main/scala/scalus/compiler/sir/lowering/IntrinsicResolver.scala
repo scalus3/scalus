@@ -18,8 +18,16 @@ object IntrinsicResolver {
 
     // Module name constants (must match plugin's td.symbol.fullName for @Compile objects)
     private val ListModule = "scalus.cardano.onchain.plutus.prelude.List$"
-    private val BuiltinListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
-    private val BuiltinListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
+    private val PairListModule = "scalus.cardano.onchain.plutus.prelude.PairList$"
+
+    private val SumDataListOps = "scalus.compiler.intrinsics.BuiltinListSumDataListOperations$"
+    private val SumDataListOpsV11 =
+        "scalus.compiler.intrinsics.BuiltinListSumDataListOperationsV11$"
+
+    private val SumDataPairListOps =
+        "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperations$"
+    private val SumDataPairListOpsV11 =
+        "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperationsV11$"
 
     /** Default intrinsic modules, loaded at compile time by the plugin. The plugin intercepts
       * `compiledModules(...)` and replaces it with `SIRLinker.readModules(...)` that accesses the
@@ -27,8 +35,10 @@ object IntrinsicResolver {
       */
     lazy val defaultIntrinsicModules: Map[String, Module] =
         scalus.compiler.compiledModules(
-          "scalus.compiler.intrinsics.BuiltinListOperations",
-          "scalus.compiler.intrinsics.BuiltinListOperationsV11"
+          "scalus.compiler.intrinsics.BuiltinListSumDataListOperations",
+          "scalus.compiler.intrinsics.BuiltinListSumDataListOperationsV11",
+          "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperations",
+          "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperationsV11"
         )
 
     /** Support modules — their bindings are added to scope for normal function calls from intrinsic
@@ -36,21 +46,33 @@ object IntrinsicResolver {
       */
     lazy val defaultSupportModules: Map[String, Module] =
         scalus.compiler.compiledModules(
-          "scalus.compiler.intrinsics.BuiltinListLongOperationsV11"
+          "scalus.compiler.intrinsics.BuiltinListSumDataListSupportV11"
         )
 
     // Representation name constants (must match LoweredValueRepresentation case object names)
     private val SumDataListRepr = "SumDataList"
+    private val SumDataPairListRepr = "SumDataPairList"
 
     /** Registry entry: (representation, minProtocolVersion, providerModule) */
     private type RegistryEntry = (String, Int, String)
 
-    /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule) */
+    private val SumDataPairListEntries: List[RegistryEntry] = List(
+      (SumDataPairListRepr, 0, SumDataPairListOps),
+      (SumDataPairListRepr, 11, SumDataPairListOpsV11)
+    )
+
+    /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule)
+      *
+      * Note: PairListModule is NOT registered because PairList has different parameter types
+      * (PairList[A,B] vs List[A]) and its head returns (A,B) (ProdDataConstr) while headList
+      * returns BuiltinPair (PairData) — a representation mismatch. PairList intrinsics need
+      * separate providers with PairList[A,B] parameter types (future work).
+      */
     private val registry: Map[String, List[RegistryEntry]] = Map(
-      ListModule -> List(
-        (SumDataListRepr, 0, BuiltinListOps),
-        (SumDataListRepr, 11, BuiltinListOpsV11)
-      )
+      ListModule -> (List[RegistryEntry](
+        (SumDataListRepr, 0, SumDataListOps),
+        (SumDataListRepr, 11, SumDataListOpsV11)
+      ) ++ SumDataPairListEntries)
     )
 
     /** Try to resolve an intrinsic for the given application.

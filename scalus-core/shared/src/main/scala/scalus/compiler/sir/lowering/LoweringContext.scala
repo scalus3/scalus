@@ -6,6 +6,7 @@ import scalus.compiler.sir.*
 
 import java.util.IdentityHashMap
 import scala.collection.mutable.Map as MutableMap
+import scala.collection.mutable.Set as MutableSet
 
 class LoweringContext(
     var zCombinatorNeeded: Boolean = false,
@@ -27,6 +28,11 @@ class LoweringContext(
 ) {
 
     private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]
+
+    /** When set, ExternalVar resolution records resolved names here. Used by initSupportBindings to
+      * detect recursive bindings.
+      */
+    var monitoredExternalVars: Option[MutableSet[String]] = None
 
     /** Cache of pre-lowered SIR nodes, keyed by reference identity.
       *
@@ -54,19 +60,58 @@ class LoweringContext(
       * Called during context initialization (like ScalusRuntime.initContext). Bindings are added to
       * the initial scope so they survive all scope save/restore in lowerLet. They are only included
       * in UPLC output if actually referenced (via termWithNeededVars).
+      *
+      * Uses two passes because support bindings may be recursive (e.g., `lengthSumDataList` calls
+      * itself via ExternalVar). Pass 1 adds placeholders so recursive references resolve during
+      * lowering. Pass 2 lowers each binding, using monitoredExternalVars to detect self-references
+      * and wrap with LetRec only when needed.
       */
     def initSupportBindings(): Unit = {
-        for (_, module) <- supportModules do
-            for binding <- module.defs do
-                val lowered = Lowering.lowerSIR(binding.value)(using this)
-                val varVal = VariableLoweredValue(
+        // Pass 1: add placeholders so recursive ExternalVar references resolve
+        val placeholders = for {
+            (_, module) <- supportModules.toSeq
+            binding <- module.defs
+        } yield {
+            val repr = SirTypeUplcGenerator(binding.value.tp)
+                .defaultRepresentation(binding.tp)(using this)
+            val placeholder = VariableLoweredValue(
+              id = uniqueVarName(binding.name),
+              name = binding.name,
+              sir = SIR.Var(binding.name, binding.tp, AnnotationsDecl(SIRPosition.empty)),
+              representation = repr
+            )
+            scope = scope.add(placeholder)
+            (binding, placeholder)
+        }
+
+        // Pass 2: lower each binding, detect recursion, wrap accordingly
+        for (binding, placeholder) <- placeholders do
+            val monitor = MutableSet.empty[String]
+            monitoredExternalVars = Some(monitor)
+            val lowered = Lowering.lowerSIR(binding.value)(using this)
+            monitoredExternalVars = None
+            val isRecursive = monitor.contains(binding.name)
+
+            val varVal = if isRecursive then
+                zCombinatorNeeded = true
+                val letRec =
+                    LetRecLoweredValue(placeholder, lowered, placeholder, SIRPosition.empty)
+                VariableLoweredValue(
+                  id = uniqueVarName(binding.name),
+                  name = binding.name,
+                  sir = SIR.Var(binding.name, binding.tp, AnnotationsDecl(SIRPosition.empty)),
+                  representation = lowered.representation,
+                  optRhs = Some(letRec)
+                )
+            else
+                VariableLoweredValue(
                   id = uniqueVarName(binding.name),
                   name = binding.name,
                   sir = SIR.Var(binding.name, binding.tp, AnnotationsDecl(SIRPosition.empty)),
                   representation = lowered.representation,
                   optRhs = Some(lowered)
                 )
-                scope = scope.add(varVal)
+            scope = scope.add(varVal)
     }
 
     def uniqueVarName(prefix: String = "_v"): String = {

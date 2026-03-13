@@ -129,6 +129,7 @@ object Lowering {
                               s"Found external variable $name in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}"
                             )
                         }
+                        lctx.monitoredExternalVars.foreach(_.add(name))
                         value
                     case None =>
                         // Check if this is a UniversalDataConversion function used outside Apply
