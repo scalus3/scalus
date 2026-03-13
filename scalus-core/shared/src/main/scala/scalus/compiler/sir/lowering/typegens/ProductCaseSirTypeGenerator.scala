@@ -713,6 +713,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
               representation = sndRepr,
               optRhs = None // lambda parameter, not derived from builtin
             )
+            // Add pair element vars to scope so the body can reference them
+            lctx.scope = lctx.scope.addAll(scala.collection.immutable.List(frsVar, sndVar))
             val lwBody = lctx.lower(myCase.body, optTargetType)
             lvCasePair(matchVal, frsVar, sndVar, lwBody, matchData.anns.pos)
         } else {
