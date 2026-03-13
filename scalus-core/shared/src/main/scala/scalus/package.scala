@@ -67,7 +67,9 @@ package object scalus {
                       targetLanguage = options.targetLanguage,
                       targetProtocolVersion = options.targetProtocolVersion,
                       intrinsicModules =
-                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules
+                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
+                      supportModules =
+                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
                     ).lower()
             val retval =
                 if optimizeUplc then
@@ -105,7 +107,8 @@ package object scalus {
               targetLanguage = options.targetLanguage,
               targetProtocolVersion = options.targetProtocolVersion,
               intrinsicModules =
-                  scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules
+                  scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
+              supportModules = scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
             ).toLoweredValue()
             retval
         }
@@ -133,7 +136,9 @@ package object scalus {
                       targetLanguage = options.targetLanguage,
                       targetProtocolVersion = options.targetProtocolVersion,
                       intrinsicModules =
-                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules
+                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
+                      supportModules =
+                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
                     ).lower()
             val retval =
                 if options.optimizeUplc then

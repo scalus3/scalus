@@ -104,7 +104,9 @@ sealed abstract class CompiledPlutus[A](
                   targetLanguage = language,
                   targetProtocolVersion = options.targetProtocolVersion,
                   intrinsicModules =
-                      scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules
+                      scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
+                  supportModules =
+                      scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
                 ).lower()
         if options.optimizeUplc then optimizer(uplc) else uplc
     }

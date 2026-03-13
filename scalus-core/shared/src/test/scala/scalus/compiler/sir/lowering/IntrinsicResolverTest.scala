@@ -20,23 +20,51 @@ class IntrinsicResolverTest extends AnyFunSuite {
     private val listTypeA = SIRType.List(typeA)
     private val builtinListData = SIRType.BuiltinList(SIRType.Data.tp)
 
+    // --- typeProxyRepr / typeProxyRetData SIR helpers ---
+
+    private val typeProxyReprModule = "scalus.compiler.intrinsics.IntrinsicHelpers$"
+    private val typeProxyReprName = s"$typeProxyReprModule.typeProxyRepr"
+    private val typeProxyRetDataName = s"$typeProxyReprModule.typeProxyRetData"
+
+    private def mkTypeProxyRepr(
+        arg: AnnotatedSIR,
+        targetType: SIRType,
+        reprName: String
+    ): AnnotatedSIR =
+        SIR.Apply(
+          SIR.ExternalVar(
+            typeProxyReprModule,
+            typeProxyReprName,
+            SIRType.Fun(SIRType.FreeUnificator, targetType),
+            ae
+          ),
+          arg,
+          targetType,
+          ae + ("repr" -> SIR.Const(Constant.String(reprName), SIRType.String, ae))
+        )
+
+    private def mkTypeProxyRetData(arg: AnnotatedSIR, targetType: SIRType): AnnotatedSIR =
+        SIR.Apply(
+          SIR.ExternalVar(
+            typeProxyReprModule,
+            typeProxyRetDataName,
+            SIRType.Fun(SIRType.FreeUnificator, targetType),
+            ae
+          ),
+          arg,
+          targetType,
+          ae
+        )
+
     // --- Build provider module SIR ---
 
-    /** Manually construct the BuiltinListOperations module SIR.
-      *
-      * isEmpty[A](self: List[A]): Boolean = nullList(typeProxy[BuiltinList[Data]](self))
-      *
-      * In SIR this is: LamAbs(self, Apply(nullList, Cast(Var(self), BuiltinList[Data],
-      * {typeProxy=true})))
+    /** isEmpty[A](self: List[A]): Boolean = nullList(typeProxyRepr[BuiltinList[Data],
+      * SumDataList.type](self))
       */
     private def buildIsEmptyBinding: Binding = {
         val selfVar = SIR.Var("self", listTypeA, ae)
-        val typeProxyCast = SIR.Cast(
-          selfVar,
-          builtinListData,
-          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
-        )
-        val body = SIR.Apply(SIRBuiltins.nullList, typeProxyCast, SIRType.Boolean, ae)
+        val proxy = mkTypeProxyRepr(selfVar, builtinListData, "SumDataList")
+        val body = SIR.Apply(SIRBuiltins.nullList, proxy, SIRType.Boolean, ae)
         val lambda = SIR.LamAbs(selfVar, body, List.empty, ae)
         Binding(
           "scalus.compiler.intrinsics.BuiltinListOperations$.isEmpty",
@@ -45,21 +73,15 @@ class IntrinsicResolverTest extends AnyFunSuite {
         )
     }
 
-    /** head[A](self: List[A]): A = typeProxy[A](headList(typeProxy[BuiltinList[Data]](self))) */
+    /** head[A](self: List[A]): A = typeProxyRetData[A](headList(typeProxyRepr[BuiltinList[Data],
+      * SumDataList.type](self)))
+      */
     private def buildHeadBinding: Binding = {
         val selfVar = SIR.Var("self", listTypeA, ae)
-        val innerCast = SIR.Cast(
-          selfVar,
-          builtinListData,
-          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
-        )
-        val headCall = SIR.Apply(SIRBuiltins.headList, innerCast, SIRType.Data.tp, ae)
-        val outerCast = SIR.Cast(
-          headCall,
-          typeA,
-          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
-        )
-        val lambda = SIR.LamAbs(selfVar, outerCast, List.empty, ae)
+        val innerProxy = mkTypeProxyRepr(selfVar, builtinListData, "SumDataList")
+        val headCall = SIR.Apply(SIRBuiltins.headList, innerProxy, SIRType.Data.tp, ae)
+        val outerProxy = mkTypeProxyRetData(headCall, typeA)
+        val lambda = SIR.LamAbs(selfVar, outerProxy, List.empty, ae)
         Binding(
           "scalus.compiler.intrinsics.BuiltinListOperations$.head",
           SIRType.Fun(listTypeA, typeA),
@@ -67,23 +89,15 @@ class IntrinsicResolverTest extends AnyFunSuite {
         )
     }
 
-    /** tail[A](self: List[A]): List[A] =
-      * typeProxy[List[A]](tailList(typeProxy[BuiltinList[Data]](self)))
+    /** tail[A](self: List[A]): List[A] = typeProxyRepr[List[A], SumDataList.type](
+      * tailList(typeProxyRepr[BuiltinList[Data], SumDataList.type](self)))
       */
     private def buildTailBinding: Binding = {
         val selfVar = SIR.Var("self", listTypeA, ae)
-        val innerCast = SIR.Cast(
-          selfVar,
-          builtinListData,
-          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
-        )
-        val tailCall = SIR.Apply(SIRBuiltins.tailList, innerCast, builtinListData, ae)
-        val outerCast = SIR.Cast(
-          tailCall,
-          listTypeA,
-          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
-        )
-        val lambda = SIR.LamAbs(selfVar, outerCast, List.empty, ae)
+        val innerProxy = mkTypeProxyRepr(selfVar, builtinListData, "SumDataList")
+        val tailCall = SIR.Apply(SIRBuiltins.tailList, innerProxy, builtinListData, ae)
+        val outerProxy = mkTypeProxyRepr(tailCall, listTypeA, "SumDataList")
+        val lambda = SIR.LamAbs(selfVar, outerProxy, List.empty, ae)
         Binding(
           "scalus.compiler.intrinsics.BuiltinListOperations$.tail",
           SIRType.Fun(listTypeA, listTypeA),
@@ -91,29 +105,21 @@ class IntrinsicResolverTest extends AnyFunSuite {
         )
     }
 
-    /** drop[A](self: List[A], n: BigInt): List[A] = typeProxy[List[A]](dropList(n,
-      * typeProxy[BuiltinList[Data]](self)))
+    /** drop[A](self: List[A], n: BigInt): List[A] = typeProxyRepr[List[A], SumDataList.type](
+      * dropList(n, typeProxyRepr[BuiltinList[Data], SumDataList.type](self)))
       */
     private def buildDropBinding: Binding = {
         val selfVar = SIR.Var("self", listTypeA, ae)
         val nVar = SIR.Var("n", SIRType.Integer, ae)
-        val innerCast = SIR.Cast(
-          selfVar,
-          builtinListData,
-          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
-        )
+        val innerProxy = mkTypeProxyRepr(selfVar, builtinListData, "SumDataList")
         val dropCall = SIR.Apply(
           SIR.Apply(SIRBuiltins.dropList, nVar, SIRType.Fun(builtinListData, builtinListData), ae),
-          innerCast,
+          innerProxy,
           builtinListData,
           ae
         )
-        val outerCast = SIR.Cast(
-          dropCall,
-          listTypeA,
-          ae + ("typeProxy" -> SIR.Const(Constant.Bool(true), SIRType.Boolean, ae))
-        )
-        val innerLambda = SIR.LamAbs(nVar, outerCast, List.empty, ae)
+        val outerProxy = mkTypeProxyRepr(dropCall, listTypeA, "SumDataList")
+        val innerLambda = SIR.LamAbs(nVar, outerProxy, List.empty, ae)
         val lambda = SIR.LamAbs(selfVar, innerLambda, List.empty, ae)
         Binding(
           "scalus.compiler.intrinsics.BuiltinListOperationsV11$.drop",
@@ -148,6 +154,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
     private def lower(
         sir: SIR,
         modules: Map[String, Module] = intrinsicModules,
+        supportModules: Map[String, Module] = Map.empty,
         targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
         debug: Boolean = false
     ): Term =
@@ -156,6 +163,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
           generateErrorTraces = false,
           debug = debug,
           intrinsicModules = modules,
+          supportModules = supportModules,
           targetProtocolVersion = targetProtocolVersion
         ).lower()
 

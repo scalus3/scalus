@@ -23,6 +23,7 @@ class LoweringContext(
     var nestingLevel: Int = 0,
     var enclosingLambdaParams: List[IdentifiableLoweredValue] = List.empty,
     val intrinsicModules: Map[String, Module] = Map.empty,
+    val supportModules: Map[String, Module] = Map.empty,
 ) {
 
     private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]
@@ -46,6 +47,26 @@ class LoweringContext(
                 _.defs.find(_.name == fullBindingName)
               )
         )
+    }
+
+    /** Add all support module bindings to the base scope.
+      *
+      * Called during context initialization (like ScalusRuntime.initContext). Bindings are added to
+      * the initial scope so they survive all scope save/restore in lowerLet. They are only included
+      * in UPLC output if actually referenced (via termWithNeededVars).
+      */
+    def initSupportBindings(): Unit = {
+        for (_, module) <- supportModules do
+            for binding <- module.defs do
+                val lowered = Lowering.lowerSIR(binding.value)(using this)
+                val varVal = VariableLoweredValue(
+                  id = uniqueVarName(binding.name),
+                  name = binding.name,
+                  sir = SIR.Var(binding.name, binding.tp, AnnotationsDecl(SIRPosition.empty)),
+                  representation = lowered.representation,
+                  optRhs = Some(lowered)
+                )
+                scope = scope.add(varVal)
     }
 
     def uniqueVarName(prefix: String = "_v"): String = {

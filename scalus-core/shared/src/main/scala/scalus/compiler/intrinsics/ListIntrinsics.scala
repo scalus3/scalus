@@ -3,6 +3,7 @@ package scalus.compiler.intrinsics
 import scalus.Compile
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
+import scalus.compiler.sir.lowering.SumCaseClassRepresentation
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.{BuiltinList, Data}
 
@@ -12,7 +13,7 @@ import scalus.uplc.builtin.{BuiltinList, Data}
   * substitutes these implementations when the list argument has SumDataList representation.
   *
   * Methods must match the signature of the original extension methods in List companion. Provider
-  * methods should only use builtins and typeProxy to prevent complex resolution chains.
+  * methods should only use builtins and typeProxyRepr to prevent complex resolution chains.
   *
   * Available at all protocol versions (changPV+).
   */
@@ -20,13 +21,23 @@ import scalus.uplc.builtin.{BuiltinList, Data}
 object BuiltinListOperations {
 
     def isEmpty[A](self: List[A]): Boolean =
-        nullList(typeProxy[BuiltinList[Data]](self))
+        nullList(
+          typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self)
+        )
 
     def head[A](self: List[A]): A =
-        typeProxyRetData[A](headList(typeProxy[BuiltinList[Data]](self)))
+        typeProxyRetData[A](
+          headList(
+            typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self)
+          )
+        )
 
     def tail[A](self: List[A]): List[A] =
-        typeProxy[List[A]](tailList(typeProxy[BuiltinList[Data]](self)))
+        typeProxyRepr[List[A], SumCaseClassRepresentation.SumDataList.type](
+          tailList(
+            typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self)
+          )
+        )
 }
 
 /** Intrinsic implementations for List builtins requiring vanRossemPV (protocol version 11+).
@@ -39,7 +50,20 @@ object BuiltinListOperations {
 object BuiltinListOperationsV11 {
 
     def drop[A](self: List[A], n: BigInt): List[A] =
-        typeProxy[List[A]](dropList(n, typeProxy[BuiltinList[Data]](self)))
+        typeProxyRepr[List[A], SumCaseClassRepresentation.SumDataList.type](
+          dropList(
+            n,
+            typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self)
+          )
+        )
+
+    def at[A](self: List[A], index: BigInt): A =
+        typeProxyRetData[A](
+          BuiltinListLongOperationsV11.atSumDataList(
+            typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self),
+            index
+          )
+        )
 
 }
 
@@ -49,7 +73,7 @@ object BuiltinListOperationsV11 {
 object BuiltinListLongOperationsV11 {
 
     def atSumDataList(self: BuiltinList[Data], n: BigInt): Data = {
-        dropList(n - 1, self).head
+        dropList(n, self).head
     }
 
 }

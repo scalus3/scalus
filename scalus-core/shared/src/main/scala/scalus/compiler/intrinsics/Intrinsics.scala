@@ -1,6 +1,7 @@
 package scalus.compiler.intrinsics
 
 import scalus.Compile
+import scalus.compiler.sir.lowering.LoweredValueRepresentation
 
 /** Intrinsic helper functions for type and representation casts.
   *
@@ -13,13 +14,17 @@ import scalus.Compile
 @Compile
 object IntrinsicHelpers {
 
-    /** Zero-cost type cast. Keeps the expression's current representation unchanged.
+    /** Zero-cost type cast with explicit representation.
       *
-      * Use for arguments where the UPLC representation is already correct — e.g., viewing a
-      * `List[A]` as `BuiltinList[Data]` when the list already has SumDataList representation.
+      * The `R` singleton type parameter specifies the target `LoweredValueRepresentation`. The
+      * plugin intercepts calls and encodes the representation name in a SIR annotation; the
+      * lowering reads it and sets the representation directly.
+      *
+      * Example: `typeProxyRepr[BuiltinList[Data], SumDataList.type](self)` — view `self` as
+      * `BuiltinList[Data]` with `SumDataList` representation.
       */
-    def typeProxy[T](x: Any): T =
-        throw new RuntimeException("typeProxy: handled by lowering")
+    def typeProxyRepr[V, R <: LoweredValueRepresentation](x: Any): V =
+        throw new RuntimeException("typeProxyRepr: handled by lowering")
 
     /** Type cast that marks the return value as having Data (packed) representation.
       *

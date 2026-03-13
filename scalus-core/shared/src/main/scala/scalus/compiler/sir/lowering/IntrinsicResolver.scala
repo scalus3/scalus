@@ -31,6 +31,14 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.BuiltinListOperationsV11"
         )
 
+    /** Support modules — their bindings are added to scope for normal function calls from intrinsic
+      * provider bodies. Unlike intrinsic modules, these are NOT used for provider substitution.
+      */
+    lazy val defaultSupportModules: Map[String, Module] =
+        scalus.compiler.compiledModules(
+          "scalus.compiler.intrinsics.BuiltinListLongOperationsV11"
+        )
+
     // Representation name constants (must match LoweredValueRepresentation case object names)
     private val SumDataListRepr = "SumDataList"
 
@@ -71,36 +79,32 @@ object IntrinsicResolver {
         appType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): Option[LoweredValue] = {
-        // Extract module name and method name from the function
-        val (moduleName, methodName) = extractModuleAndMethod(f).getOrElse(return None)
+        extractModuleAndMethod(f) match
+            case None => None
+            case Some((moduleName, methodName)) =>
+                registry.get(moduleName) match
+                    case None => None
+                    case Some(entries) =>
+                        val reprName = representationName(loweredArg.representation)
+                        val pvVersion = lctx.targetProtocolVersion.version
 
-        // Look up registry entries for this target module
-        val entries = registry.getOrElse(moduleName, return None)
+                        // Find best matching provider: highest minPV that satisfies constraints
+                        var bestBinding: Option[Binding] = None
+                        var bestPV = -1
+                        for (repr, minPV, providerModuleName) <- entries do
+                            if repr == reprName && pvVersion >= minPV && minPV > bestPV then
+                                lctx.findProviderBinding(providerModuleName, methodName).foreach {
+                                    b =>
+                                        bestBinding = Some(b)
+                                        bestPV = minPV
+                                }
 
-        // Map the argument's representation to a string name
-        val reprName = representationName(loweredArg.representation)
-
-        // Get protocol version as integer for comparison
-        val pvVersion = lctx.targetProtocolVersion.version
-
-        // Filter entries matching representation and protocol version, sorted by version desc
-        val matchingEntries = entries
-            .filter { case (repr, minPV, _) => repr == reprName && pvVersion >= minPV }
-            .sortBy { case (_, minPV, _) => -minPV } // highest version first
-
-        // Try each matching provider (highest version first)
-        for (_, _, providerModuleName) <- matchingEntries do
-            lctx.findProviderBinding(providerModuleName, methodName) match
-                case Some(binding) =>
-                    val substituted = substituteSelf(binding.value, argSir)
-                    // Cache the already-lowered arg, lower the substituted SIR, remove cache entry
-                    lctx.precomputedValues.put(argSir, loweredArg)
-                    try
-                        val result = Lowering.lowerSIR(substituted, Some(appType))
-                        return Some(result)
-                    finally lctx.precomputedValues.remove(argSir)
-                case None => // method not in this provider, try next
-        None
+                        bestBinding.map { binding =>
+                            val substituted = substituteSelf(binding.value, argSir)
+                            lctx.precomputedValues.put(argSir, loweredArg)
+                            try Lowering.lowerSIR(substituted, Some(appType))
+                            finally lctx.precomputedValues.remove(argSir)
+                        }
     }
 
     /** Extract module name and method name from a function SIR node. */

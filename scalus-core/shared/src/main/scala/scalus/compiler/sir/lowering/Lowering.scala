@@ -433,29 +433,37 @@ object Lowering {
         if isFromDataApp(app) then lowerFromData(app)
         else if isToDataApp(app) then lowerToData(app)
         else if isPairListConversion(app) then lowerPairListConversion(app)
-        else if isTypeProxyApp(app) then lowerTypeProxy(app)
+        else if isTypeProxyReprApp(app) then lowerTypeProxyRepr(app)
         else if isTypeProxyRetDataApp(app) then lowerTypeProxyRetData(app)
         else lowerNormalApp(app, optTargetType)
     }
 
-    private val TypeProxyName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxy"
+    private val TypeProxyReprName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxyRepr"
     private val TypeProxyRetDataName =
         "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxyRetData"
 
-    private def isTypeProxyApp(app: SIR.Apply): Boolean = app.f match
-        case SIR.ExternalVar(_, name, _, _) => name == TypeProxyName
+    private def isTypeProxyReprApp(app: SIR.Apply): Boolean = app.f match
+        case SIR.ExternalVar(_, name, _, _) => name == TypeProxyReprName
         case _                              => false
 
     private def isTypeProxyRetDataApp(app: SIR.Apply): Boolean = app.f match
         case SIR.ExternalVar(_, name, _, _) => name == TypeProxyRetDataName
         case _                              => false
 
-    private def lowerTypeProxy(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
+    private def lowerTypeProxyRepr(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
         val loweredArg = lowerSIR(app.arg)
+        val repr = app.anns.data.get("repr") match
+            case Some(SIR.Const(scalus.uplc.Constant.String(reprName), _, _)) =>
+                resolveReprByName(reprName, app.anns.pos)
+            case _ =>
+                throw LoweringException(
+                  "typeProxyRepr: missing 'repr' annotation with representation name",
+                  app.anns.pos
+                )
         TypeRepresentationProxyLoweredValue(
           loweredArg,
           app.tp,
-          loweredArg.representation,
+          repr,
           app.anns.pos
         )
     }
@@ -470,6 +478,21 @@ object Lowering {
           app.anns.pos
         )
     }
+
+    private def resolveReprByName(
+        name: String,
+        pos: SIRPosition
+    ): LoweredValueRepresentation = name match
+        case "SumDataList"       => SumCaseClassRepresentation.SumDataList
+        case "SumDataPairList"   => SumCaseClassRepresentation.SumDataPairList
+        case "PackedSumDataList" => SumCaseClassRepresentation.PackedSumDataList
+        case "DataConstr"        => SumCaseClassRepresentation.DataConstr
+        case "DataData"          => SumCaseClassRepresentation.DataData
+        case "ProdDataList"      => ProductCaseClassRepresentation.ProdDataList
+        case "ProdDataConstr"    => ProductCaseClassRepresentation.ProdDataConstr
+        case "PackedData"        => PrimitiveRepresentation.PackedData
+        case _ =>
+            throw LoweringException(s"typeProxyRepr: unknown representation '$name'", pos)
 
     private def lowerNormalApp(app: SIR.Apply, @unused optTargetType: Option[SIRType])(using
         lctx: LoweringContext

@@ -136,6 +136,9 @@ final class SIRCompiler(
     private val BuiltinValueModuleSymbol = requiredModule("scalus.uplc.builtin.BuiltinValue")
     private val FromDataSymbol = requiredClass("scalus.uplc.builtin.FromData")
     private val ToDataSymbol = requiredClass("scalus.uplc.builtin.ToData")
+    private val typeProxyReprModule =
+        requiredModule("scalus.compiler.intrinsics.IntrinsicHelpers")
+    private val typeProxyReprMethod = typeProxyReprModule.requiredMethod("typeProxyRepr")
     private val moduleToExprSymbol = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
     private val sirBodyAnnotation = requiredClass("scalus.compiler.sir.SIRBodyAnnotation")
     private val sirModuleWithDepsType = requiredClassRef("scalus.compiler.sir.SIRModuleWithDeps")
@@ -3115,6 +3118,10 @@ final class SIRCompiler(
                 compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
             case Apply(Select(obj, nme.copy), args) if isCaseClassInstance(obj) =>
                 compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
+            // typeProxyRepr[V, R](x) — intercept to extract R type parameter
+            case Apply(TypeApply(f, targs), List(arg))
+                if f.symbol == typeProxyReprMethod && targs.size == 2 =>
+                compileTypeProxyRepr(env, targs, arg, tree)
             // Generic Apply
             case a @ Apply(pf @ TypeApply(f, targs), args) =>
                 compileApply(env, f, targs, args, tree.tpe, a)
@@ -3365,6 +3372,43 @@ final class SIRCompiler(
 
                 Some(applied)
         }
+    }
+
+    /** Compile `typeProxyRepr[V, R](x)` — extract the `R` singleton type name and encode it as a
+      * SIR annotation so the lowering can set the representation directly.
+      */
+    private def compileTypeProxyRepr(
+        env: Env,
+        targs: List[Tree],
+        arg: Tree,
+        tree: Tree
+    ): AnnotatedSIR = {
+        val targetType = sirTypeInEnv(targs(0).tpe.widen, tree.srcPos, env)
+        // Extract the singleton type R's symbol name (e.g., "SumDataList" from SumDataList.type)
+        val reprSym = targs(1).tpe.termSymbol
+        val reprName =
+            if reprSym.exists then reprSym.name.show
+            else targs(1).tpe.typeSymbol.name.show
+        val compiledArg = compileExpr(env, arg)
+        val typeProxyReprModuleName = "scalus.compiler.intrinsics.IntrinsicHelpers$"
+        val typeProxyReprFullName = s"$typeProxyReprModuleName.typeProxyRepr"
+        val anns = AnnotationsDecl.fromSrcPos(tree.srcPos) +
+            ("repr" -> SIR.Const(
+              scalus.uplc.Constant.String(reprName),
+              SIRType.String,
+              AnnotationsDecl.fromSrcPos(tree.srcPos)
+            ))
+        SIR.Apply(
+          SIR.ExternalVar(
+            typeProxyReprModuleName,
+            typeProxyReprFullName,
+            SIRType.Fun(SIRType.FreeUnificator, targetType),
+            AnnotationsDecl.fromSrcPos(tree.srcPos)
+          ),
+          compiledArg,
+          targetType,
+          anns
+        )
     }
 
     private def parseOnChainSubstitute(

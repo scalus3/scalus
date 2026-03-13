@@ -5,8 +5,10 @@ import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
 import scalus.cardano.onchain.plutus.prelude.{asScalus, identity, Eq, List, Option, Ord, Order, SortedMap}
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
+import scalus.compiler.Options
 import scalus.testing.kit.EvalTestKit
+import scalus.uplc.PlutusV3
 
 class ListTest extends AnyFunSuite with EvalTestKit {
 
@@ -2335,4 +2337,31 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             list <- Arbitrary.arbitrary[List[BigInt]]
             index <- bigIntGen
         } yield (list, index)
+
+    test("at with vanRossemPV uses dropList intrinsic") {
+        given opts: Options = compilerOptions.copy(
+          targetProtocolVersion = MajorProtocolVersion.vanRossemPV
+        )
+        assertEvalEq(
+          Cons(BigInt(10), Cons(BigInt(20), Cons(BigInt(30), Nil))).at(1),
+          BigInt(20)
+        )
+        // Compare budget: vanRossemPV at(1) should be cheaper than changPV at(1)
+        val v11Compiled = PlutusV3.compile(Cons(BigInt(1), Cons(BigInt(2), Nil)).at(1))
+        val v11Budget = v11Compiled.program.term.evaluateDebug
+            .asInstanceOf[scalus.uplc.eval.Result.Success]
+            .budget
+        val v9Compiled = {
+            given Options = compilerOptions
+            PlutusV3.compile(Cons(BigInt(1), Cons(BigInt(2), Nil)).at(1))
+        }
+        val v9Budget = v9Compiled.program.term.evaluateDebug
+            .asInstanceOf[scalus.uplc.eval.Result.Success]
+            .budget
+        info(s"at(1) budget: changPV=$v9Budget, vanRossemPV=$v11Budget")
+        assert(
+          v11Budget.steps <= v9Budget.steps,
+          s"vanRossemPV should not be more expensive: $v11Budget vs $v9Budget"
+        )
+    }
 }
