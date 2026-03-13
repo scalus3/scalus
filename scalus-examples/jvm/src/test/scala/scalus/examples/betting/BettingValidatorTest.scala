@@ -85,7 +85,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             result.logs.foreach(println)
             println(result)
         assert(result.isSuccess, "Script execution should succeed for initial minting")
-        assert(result.budget == ExUnits(memory = 143737, steps = 44_271155))
+        assert(result.budget == ExUnits(memory = 134755, steps = 41_471747))
 
     test("Verify that player2 can join an existing bet"):
         val player1 = TestUtil.mockPubKeyHash(1)

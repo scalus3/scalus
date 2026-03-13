@@ -29,6 +29,11 @@ object IntrinsicResolver {
     private val SumDataPairListOpsV11 =
         "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperationsV11$"
 
+    private val PairListSumDataPairListOps =
+        "scalus.compiler.intrinsics.BuiltinPairListSumDataPairListOperations$"
+    private val PairListSumDataPairListOpsV11 =
+        "scalus.compiler.intrinsics.BuiltinPairListSumDataPairListOperationsV11$"
+
     /** Default intrinsic modules, loaded at compile time by the plugin. The plugin intercepts
       * `compiledModules(...)` and replaces it with `SIRLinker.readModules(...)` that accesses the
       * objects' `sirModule` vals.
@@ -38,7 +43,9 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.BuiltinListSumDataListOperations",
           "scalus.compiler.intrinsics.BuiltinListSumDataListOperationsV11",
           "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperations",
-          "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperationsV11"
+          "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperationsV11",
+          "scalus.compiler.intrinsics.BuiltinPairListSumDataPairListOperations",
+          "scalus.compiler.intrinsics.BuiltinPairListSumDataPairListOperationsV11"
         )
 
     /** Support modules — their bindings are added to scope for normal function calls from intrinsic
@@ -61,18 +68,18 @@ object IntrinsicResolver {
       (SumDataPairListRepr, 11, SumDataPairListOpsV11)
     )
 
-    /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule)
-      *
-      * Note: PairListModule is NOT registered because PairList has different parameter types
-      * (PairList[A,B] vs List[A]) and its head returns (A,B) (ProdDataConstr) while headList
-      * returns BuiltinPair (PairData) — a representation mismatch. PairList intrinsics need
-      * separate providers with PairList[A,B] parameter types (future work).
-      */
+    private val PairListSumDataPairListEntries: List[RegistryEntry] = List(
+      (SumDataPairListRepr, 0, PairListSumDataPairListOps),
+      (SumDataPairListRepr, 11, PairListSumDataPairListOpsV11)
+    )
+
+    /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule) */
     private val registry: Map[String, List[RegistryEntry]] = Map(
       ListModule -> (List[RegistryEntry](
         (SumDataListRepr, 0, SumDataListOps),
         (SumDataListRepr, 11, SumDataListOpsV11)
-      ) ++ SumDataPairListEntries)
+      ) ++ SumDataPairListEntries),
+      PairListModule -> PairListSumDataPairListEntries
     )
 
     /** Try to resolve an intrinsic for the given application.

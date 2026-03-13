@@ -1,10 +1,11 @@
 package scalus.compiler.intrinsics
 
 import scalus.Compile
-import scalus.cardano.onchain.plutus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.{List, PairList}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.compiler.sir.lowering.SumCaseClassRepresentation
 import scalus.uplc.builtin.Builtins.*
+import scalus.compiler.sir.lowering.ProductCaseClassRepresentation
 import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Data}
 
 // ---------------------------------------------------------------------------
@@ -93,7 +94,7 @@ object BuiltinListSumDataPairListOperations {
         )
 
     def head[A](self: List[A]): A =
-        typeProxyRetData[A](
+        typeProxyRepr[A, ProductCaseClassRepresentation.PairData.type](
           headList(
             typeProxyRepr[BuiltinList[
               BuiltinPair[Data, Data]
@@ -133,7 +134,7 @@ object BuiltinListSumDataPairListOperationsV11 {
         )
 
     def at[A](self: List[A], index: BigInt): A =
-        typeProxyRetData[A](
+        typeProxyRepr[A, ProductCaseClassRepresentation.PairData.type](
           headList(
             dropList(
               index,
@@ -142,6 +143,68 @@ object BuiltinListSumDataPairListOperationsV11 {
               ], SumCaseClassRepresentation.SumDataPairList.type](
                 self
               )
+            )
+          )
+        )
+
+}
+
+// ---------------------------------------------------------------------------
+//  PairList intrinsics — PairList[A,B] with SumDataPairList representation
+// ---------------------------------------------------------------------------
+
+/** Intrinsic implementations for PairList with SumDataPairList representation.
+  *
+  * Available at all protocol versions (changPV+).
+  */
+@Compile
+object BuiltinPairListSumDataPairListOperations {
+
+    def isEmpty[A, B](self: PairList[A, B]): Boolean =
+        nullList(
+          typeProxyRepr[BuiltinList[
+            BuiltinPair[Data, Data]
+          ], SumCaseClassRepresentation.SumDataPairList.type](
+            self
+          )
+        )
+
+    def head[A, B](self: PairList[A, B]): (A, B) =
+        typeProxyRepr[(A, B), ProductCaseClassRepresentation.PairData.type](
+          headList(
+            typeProxyRepr[BuiltinList[
+              BuiltinPair[Data, Data]
+            ], SumCaseClassRepresentation.SumDataPairList.type](
+              self
+            )
+          )
+        )
+
+    def tail[A, B](self: PairList[A, B]): PairList[A, B] =
+        typeProxyRepr[PairList[A, B], SumCaseClassRepresentation.SumDataPairList.type](
+          tailList(
+            typeProxyRepr[BuiltinList[
+              BuiltinPair[Data, Data]
+            ], SumCaseClassRepresentation.SumDataPairList.type](
+              self
+            )
+          )
+        )
+
+}
+
+/** PairList SumDataPairList intrinsics requiring vanRossemPV (protocol version 11+). */
+@Compile
+object BuiltinPairListSumDataPairListOperationsV11 {
+
+    def drop[A, B](self: PairList[A, B], n: BigInt): PairList[A, B] =
+        typeProxyRepr[PairList[A, B], SumCaseClassRepresentation.SumDataPairList.type](
+          dropList(
+            n,
+            typeProxyRepr[BuiltinList[
+              BuiltinPair[Data, Data]
+            ], SumCaseClassRepresentation.SumDataPairList.type](
+              self
             )
           )
         )

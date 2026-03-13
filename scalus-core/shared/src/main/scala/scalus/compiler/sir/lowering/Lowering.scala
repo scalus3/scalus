@@ -491,6 +491,7 @@ object Lowering {
         case "DataData"          => SumCaseClassRepresentation.DataData
         case "ProdDataList"      => ProductCaseClassRepresentation.ProdDataList
         case "ProdDataConstr"    => ProductCaseClassRepresentation.ProdDataConstr
+        case "PairData"          => ProductCaseClassRepresentation.PairData
         case "PackedData"        => PrimitiveRepresentation.PackedData
         case _ =>
             throw LoweringException(s"typeProxyRepr: unknown representation '$name'", pos)

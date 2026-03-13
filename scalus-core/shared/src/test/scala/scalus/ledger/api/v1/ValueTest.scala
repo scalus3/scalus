@@ -878,7 +878,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.lovelace(1000).lovelaceAmount,
           BigInt(1000),
-          ExUnits(memory = 18785, steps = 5_821257)
+          ExUnits(memory = 200, steps = 16_100)
         )
         // returns correct lovelace for value with lovelace + native asset
         assertEvalWithBudget(
@@ -894,7 +894,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
               .lovelaceAmount,
           BigInt(2000),
-          ExUnits(memory = 201554, steps = 57_773540)
+          ExUnits(memory = 200, steps = 16_100)
         )
 
         // fails on Value.zero (empty list)

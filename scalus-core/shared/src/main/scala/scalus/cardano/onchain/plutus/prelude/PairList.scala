@@ -1,6 +1,9 @@
 package scalus.cardano.onchain.plutus.prelude
 
 import scalus.compiler.{Compile, Ignore}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.Data.{fromData, FromData, ToData}
+import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Data}
 
 /** A list of key-value pairs that stays in the UPLC `BuiltinPair` representation, avoiding costly
   * per-element conversions between `PairData` and `ConstrData` that occur when using `List[(A, B)]`
@@ -49,8 +52,19 @@ object PairList {
           *   }}}
           */
         def head: (A, B) = self match
-            case PairNil           => throw new NoSuchElementException("head of empty PairList")
+            case PairNil           => throw new NoSuchElementException("head of empty list")
             case PairCons(head, _) => head
+
+        /** Returns all elements except the first.
+          *
+          * @return
+          *   The tail of the `PairList`.
+          * @throws NoSuchElementException
+          *   If the `PairList` is empty.
+          */
+        def tail: PairList[A, B] = self match
+            case PairNil           => throw new NoSuchElementException("tail of empty list")
+            case PairCons(_, tail) => tail
 
         /** Converts this `PairList` to a `List[(A, B)]`.
           *
@@ -133,6 +147,36 @@ object PairList {
             self.foldRight(scala.Nil: scala.collection.immutable.List[(A, B)]) { case (pair, acc) =>
                 pair :: acc
             }
+
+    given pairListToData[A: ToData, B: ToData]: ToData[PairList[A, B]] =
+        (a: PairList[A, B]) => {
+            def loop(a: PairList[A, B]): BuiltinList[BuiltinPair[Data, Data]] =
+                a match
+                    case PairNil => mkNilPairData()
+                    case PairCons((k, v), tail) =>
+                        mkCons(mkPairData(summon[ToData[A]](k), summon[ToData[B]](v)), loop(tail))
+            mapData(loop(a))
+        }
+
+    given pairListFromData[A: FromData, B: FromData]: FromData[PairList[A, B]] =
+        (d: Data) =>
+            def loop(ls: BuiltinList[BuiltinPair[Data, Data]]): PairList[A, B] =
+                if ls.isEmpty then PairNil
+                else PairCons((fromData[A](ls.head.fst), fromData[B](ls.head.snd)), loop(ls.tail))
+            loop(unMapData(d))
+
+    given pairListEq[A: Eq, B: Eq]: Eq[PairList[A, B]] =
+        (lhs: PairList[A, B], rhs: PairList[A, B]) =>
+            lhs match
+                case PairNil =>
+                    rhs match
+                        case PairNil        => true
+                        case PairCons(_, _) => false
+                case PairCons(headLhs, tailLhs) =>
+                    rhs match
+                        case PairNil => false
+                        case PairCons(headRhs, tailRhs) =>
+                            headLhs === headRhs && tailLhs === tailRhs
 
     /** Converts a `List[(A, B)]` to a `PairList[A, B]`.
       *
