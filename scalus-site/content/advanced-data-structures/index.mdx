@@ -1,0 +1,84 @@
+---
+asIndexPage: true
+title: Authenticated Collections — Advanced Data Structures for Cardano
+sidebarTitle: Advanced Data Structures
+description: Authenticated data structures for Cardano smart contracts — Merkle Trees, Incremental Merkle Trees, Merkle Patricia Forestry, Fused MPF, and Bilinear Accumulators. Store data off-chain, verify on-chain with cryptographic proofs.
+---
+
+import { Callout } from 'nextra/components'
+
+# Advanced Data Structures
+
+Starting from 0.16.0, Scalus includes a library of **authenticated collections**: data structures where you store data off-chain and keep only a small hash commitment on-chain. Cryptographic proofs verify that operations (membership, insert, delete) are valid — without the on-chain validator ever seeing the full dataset.
+
+This matters on Cardano because of eUTxO constraints: limited transaction size, expensive on-chain storage, and tight script execution budgets. Authenticated collections let you work with arbitrarily large datasets while keeping transactions small and cheap.
+
+## When to Use Each Collection
+
+| Collection | Verification Cost | Proof Size | Grows with N? | Use Case |
+|---|---|---|---|---|
+| **[Merkle Tree](/docs/advanced-data-structures/merkle-tree)** | log₂(N)+1 blake2b calls | 33 × ceil(log₂(N)) bytes | Yes (logarithmic) | Static set known at deploy time. Airdrop allowlists, governance voter registries. |
+| **[Incremental Merkle Tree](/docs/advanced-data-structures/merkle-tree#incremental-merkle-tree)** | Verify: log₂(N)+1 blake2b. Append: 2×log₂(N)+2 blake2b | 32–33 × ceil(log₂(N)) bytes | Yes (logarithmic) | Append-only sets. Oracle price feeds, event logs, audit trails. |
+| **[Frontier Merkle Tree](/docs/advanced-data-structures/merkle-tree#frontier-merkle-tree)** | Same as Incremental MT | Same as Incremental MT | Yes (logarithmic) | Same as Incremental MT but with O(depth) off-chain memory instead of O(N). |
+| **[Merkle Patricia Forestry](/docs/advanced-data-structures/merkle-patricia-forestry)** | ~5–15 blake2b calls per step | ~200–800 bytes (Data-encoded) | **No** (max 2²⁵⁶ entries) | General key-value with insert/delete/update + non-membership proofs. Aiken-compatible. DEX order books, token registries. |
+| **[Fused MPF](/docs/advanced-data-structures/merkle-patricia-forestry#fused-merkle-patricia-forestry)** | ~8–12% less CPU than MPF | ~100–500 bytes (flat ByteString) | **No** (max 2²⁵⁶ entries) | Same as MPF but cheaper on-chain. Not Aiken-compatible. |
+| **[Bilinear Accumulators](/docs/advanced-data-structures/bilinear-accumulators)** | 2 pairings + MSM (~35× more CPU) | ~48–96 bytes | **No** (constant, 1 group element) | Large sets where constant proof size matters. Many proofs per tx, tight size limits. |
+
+## Decision Flowchart
+
+1. **Static set?** → **[Merkle Tree](/docs/advanced-data-structures/merkle-tree)** (cheapest possible)
+2. **Append-only?** → **[Incremental Merkle Tree](/docs/advanced-data-structures/merkle-tree#incremental-merkle-tree)** / **[Frontier Merkle Tree](/docs/advanced-data-structures/merkle-tree#frontier-merkle-tree)**
+3. **Need insert + delete?** → **[Fused MPF](/docs/advanced-data-structures/merkle-patricia-forestry#fused-merkle-patricia-forestry)** (cheapest) or **[MPF](/docs/advanced-data-structures/merkle-patricia-forestry)** (Aiken-compatible)
+4. **Proof size critical?** → **[Bilinear Accumulator](/docs/advanced-data-structures/bilinear-accumulators)** (smallest constant proof, ~35× CPU)
+5. **Need non-membership proofs?** → MPF, Fused MPF, or Bilinear Accumulator
+
+```
+               What collection do you need?
+                            │
+                     ┌──────▼──────┐
+                     │ Static set? │── Yes ──→  Merkle Tree (MT) @ cheapest
+                     └──────┬──────┘
+                            │ No
+                     ┌──────▼───────┐
+                     │ Append-only? │── Yes ──→  Incremental MT / Frontier MT
+                     └──────┬───────┘
+                            │ No
+                            │
+               ┌────────────▼────────────┐
+               │ Proof size critical?    │── Yes ──→  Bilinear Accumulator
+               │ (many proofs per tx,    │   (smallest constant proof size, ~35x CPU)
+               │  tight tx size limits)  │
+               └────────────┬────────────┘
+                            │ No
+               ┌────────────▼────────────┐
+               │ Need Aiken              │── Yes ──→  Merkle Patricia Forestry (MPF)
+               │ compatibility?          │
+               └────────────┬────────────┘
+                            │ No
+                            ▼
+                  Fused MPF (10% cheaper than MPF)
+```
+
+## Supported Operations
+
+| Operation | Merkle Tree | Incremental MT / Frontier MT | Merkle Patricia Forestry | Fused MPF | Bilinear Accumulator |
+|---|---|---|---|---|---|
+| Verify membership | yes | yes | yes | yes | yes |
+| Verify non-membership | — | — | yes | yes | yes |
+| Insert (with proof) | — | append only | yes | yes | — |
+| Delete (with proof) | — | — | yes | yes | — |
+| Update (with proof) | — | — | yes | yes | — |
+
+<Callout>
+Frontier Merkle Tree uses the same on-chain verifier as Incremental Merkle Tree — it is an off-chain memory optimization.
+</Callout>
+
+## Benchmarks
+
+For detailed performance benchmarks — including radix comparisons, fusing optimizations, and full Cardano transaction fee breakdowns — see [Benchmarking Authenticated Collections on Cardano](https://lantr.io/blog/scalus-authenticated-collections-benchmarks/).
+
+## Related
+
+- [Design Patterns](/docs/design-patterns) — Optimization and validation patterns for Cardano contracts
+- [Smart Contract Optimization](/docs/smart-contracts/optimisations) — Compiler-level optimizations
+- [Testing](/docs/testing/unit-testing) — Test your authenticated collection implementations

@@ -7,6 +7,7 @@ export default {
   'transactions': 'Transactions',
   testing: 'Testing',
   'design-patterns': 'Design Patterns',
+  'advanced-data-structures': 'Advanced Data Structures',
   security: 'Security',
   'dapp-development': 'DApp Development',
   ledger: 'Ledger Framework',
