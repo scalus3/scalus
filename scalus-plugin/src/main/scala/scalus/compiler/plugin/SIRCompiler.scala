@@ -320,11 +320,19 @@ final class SIRCompiler(
                                 annot.argumentConstant(0).map(_.intValue).getOrElse(1)
                             case None => 0
                         List((cd, debugLevel))
+                    else if cd.symbol.is(Flags.Module) && cd.symbol.name.toString
+                            .endsWith("$package$")
+                    then
+                        // Recurse into synthetic $package modules to find nested @Compile objects
+                        cd.rhs match
+                            case tpl: Template => tpl.body.flatMap(collectTypeDefs)
+                            case _             => Nil
                     else List.empty
                 case vd: ValDef =>
                     // println(s"valdef $vd")
                     Nil // module instance
                 case Import(_, _) => Nil
+                case _            => Nil
         }
 
         val allTypeDefs = collectTypeDefs(tree)
@@ -3971,7 +3979,7 @@ final class SIRCompiler(
         // var requireV3Lowering = false
         val moduleWithDepsRefs = dependencies.map { case (name, externalVar) =>
             name -> {
-                val cName = name.replace("$", "")
+                val cName = name.split('.').map(_.stripSuffix("$")).mkString(".")
                 val moduleSym = Symbols.requiredModule(cName)
                 val moduleRef = tpd.ref(moduleSym).withSpan(srcPos.span)
                 // println(s"moduleRef: ${moduleRef.show}")

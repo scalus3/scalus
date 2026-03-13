@@ -138,4 +138,34 @@ class OpaqueTypeTest extends AnyFunSuite {
                 )
         }
     }
+
+    test("top-level opaque type with @Compile companion: factory method") {
+        import scalus.compiler.sir.toplevelope.*
+
+        val sir = compile { (x: BigInt) =>
+            TopMyInt(x)
+        }
+
+        sir.tp match {
+            case SIRType.Fun(SIRType.Integer, SIRType.Integer) => succeed
+            case _ => fail(s"expected Fun(Integer, Integer) but got ${sir.tp.show}")
+        }
+    }
+
+    test("top-level opaque type with @Compile companion: extension method") {
+        import scalus.compiler.sir.toplevelope.*
+
+        val sir = compile { (x: TopMyInt, y: TopMyInt) =>
+            x.add(y)
+        }
+
+        sir.tp match {
+            case SIRType.Fun(SIRType.Integer, SIRType.Fun(SIRType.Integer, SIRType.Integer)) =>
+                succeed
+            case _ =>
+                fail(
+                  s"expected Fun(Integer, Fun(Integer, Integer)) but got ${sir.tp.show}"
+                )
+        }
+    }
 }
