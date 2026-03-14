@@ -4,6 +4,8 @@ import scala.quoted.*
 
 private object FromDataMacros {
 
+    import scalus.uplc.builtin.internal.UplcReprMacroUtils.getUplcRepr
+
     def fromDataImpl[A: Type](using Quotes): Expr[FromData[A]] = {
         import quotes.reflect.*
         val ta = TypeRepr.of[A].dealias.widen
@@ -17,13 +19,28 @@ private object FromDataMacros {
                         )
                     else if ta.typeSymbol.flags.is(Flags.Case) || ta.typeSymbol.flags.is(Flags.Enum)
                     then {
-                        deriveFromDataCaseClassApply[A]
+                        getUplcRepr[A] match
+                            case Some("ProductCaseOneElement") =>
+                                deriveFromDataProductCaseOneElement[A]
+                            case Some("ProductCase") | None =>
+                                deriveFromDataCaseClassApply[A]
+                            case Some(other) =>
+                                report.errorAndAbort(
+                                  s"@UplcRepr($other) is not supported by FromData.derived for ${ta.typeSymbol.fullName}. Please provide your own FromData instance."
+                                )
                     } else {
                         report.errorAndAbort(
                           s"Cannot derive FromData for ${ta.typeSymbol.fullName} which is not a case class or enum"
                         )
                     }
-                else deriveFromDataSumCaseClassApply[A]
+                else
+                    getUplcRepr[A] match
+                        case Some("SumCase") | None =>
+                            deriveFromDataSumCaseClassApply[A]
+                        case Some(other) =>
+                            report.errorAndAbort(
+                              s"@UplcRepr($other) is not supported by FromData.derived for enum ${ta.typeSymbol.fullName}. Please provide your own FromData instance."
+                            )
             // println(s"fromDataImpl for ${Type.show[A]}:\n${retval.show}")
             retval
         else
@@ -88,6 +105,35 @@ private object FromDataMacros {
             ${ genConstructorCall('{ args }) }
         }
 
+    }
+
+    private def deriveFromDataProductCaseOneElement[A: Type](using Quotes): Expr[FromData[A]] = {
+        import quotes.reflect.*
+        val classSym = TypeTree.of[A].symbol
+        val constr = classSym.primaryConstructor
+        val params = constr.paramSymss.flatten
+        if params.size != 1 then
+            report.errorAndAbort(
+              s"@UplcRepr(ProductCaseOneElement) requires exactly one constructor parameter, but ${classSym.fullName} has ${params.size}"
+            )
+        val param = params.head
+        val tpe = param.termRef.widen.dealias
+        tpe.asType match
+            case '[t] =>
+                Expr.summon[FromData[t]] match
+                    case None =>
+                        report.errorAndAbort(
+                          s"Could not find given FromData[${tpe.show}] for @UplcRepr(ProductCaseOneElement) derivation of ${TypeRepr.of[A].show}"
+                        )
+                    case Some(fromDataInner) =>
+                        '{ (d: Data) =>
+                            ${
+                                New(TypeTree.of[A])
+                                    .select(constr)
+                                    .appliedToArgs(scala.List('{ $fromDataInner(d) }.asTerm))
+                                    .asExprOf[A]
+                            }
+                        }
     }
 
     private def deriveFromDataSumCaseClassApply[A: Type](using Quotes): Expr[FromData[A]] = {

@@ -4,6 +4,8 @@ import scala.quoted.*
 
 private object ToDataMacros {
 
+    import scalus.uplc.builtin.internal.UplcReprMacroUtils.getUplcRepr
+
     def toDataImpl[A: Type](using Quotes): Expr[ToData[A]] = {
         '{ (a: A) =>
             ${ generateToDataApply[A]('a) }
@@ -24,17 +26,58 @@ private object ToDataMacros {
                     )
                 else if tpe.typeSymbol.flags.is(Flags.Case) || tpe.typeSymbol.flags.is(Flags.Enum)
                 then
-                    val constrIndex = findADTConstrIndex[A]
-                    deriveToDataCaseClassApply[A](a, constrIndex)
+                    getUplcRepr[A] match
+                        case Some("ProductCaseOneElement") =>
+                            deriveToDataProductCaseOneElement[A](a)
+                        case Some("ProductCase") | None =>
+                            val constrIndex = findADTConstrIndex[A]
+                            deriveToDataCaseClassApply[A](a, constrIndex)
+                        case Some(other) =>
+                            report.errorAndAbort(
+                              s"@UplcRepr($other) is not supported by ToData.derived for ${tpe.typeSymbol.fullName}. Please provide your own ToData instance."
+                            )
                 else
                     report.errorAndAbort(
                       s"Cannot derive ToData for ${tpe.typeSymbol.fullName} which is not a case class or enum"
                     )
-            else deriveToDataSumCaseClassApply[A](a)
+            else
+                getUplcRepr[A] match
+                    case Some("SumCase") | None =>
+                        deriveToDataSumCaseClassApply[A](a)
+                    case Some(other) =>
+                        report.errorAndAbort(
+                          s"@UplcRepr($other) is not supported by ToData.derived for enum ${tpe.typeSymbol.fullName}. Please provide your own ToData instance."
+                        )
         else
             report.errorAndAbort(
               s"Cannot derive ToData for ${tpe.typeSymbol.fullName}"
             )
+    }
+
+    private def deriveToDataProductCaseOneElement[A: Type](a: Expr[A])(using
+        Quotes
+    ): Expr[Data] = {
+        import quotes.reflect.*
+        val classSym = TypeTree.of[A].symbol
+        val constr = classSym.primaryConstructor
+        val params = constr.paramSymss.flatten
+        if params.size != 1 then
+            report.errorAndAbort(
+              s"@UplcRepr(ProductCaseOneElement) requires exactly one constructor parameter, but ${classSym.fullName} has ${params.size}"
+            )
+        val param = params.head
+        val tpe = param.termRef.widen.dealias
+        tpe.asType match
+            case '[t] =>
+                Expr.summon[ToData[t]] match
+                    case None =>
+                        report.errorAndAbort(
+                          s"Could not find given ToData[${tpe.show}] for @UplcRepr(ProductCaseOneElement) derivation of ${TypeRepr.of[A].show}"
+                        )
+                    case Some(toDataInner) =>
+                        val fieldAccess =
+                            Select(a.asTerm, classSym.fieldMember(param.name)).asExprOf[t]
+                        '{ $toDataInner($fieldAccess) }
     }
 
     private def deriveToDataCaseClassApply[A: Type](

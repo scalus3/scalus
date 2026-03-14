@@ -15,6 +15,9 @@ import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.test.ArbitraryInstances
 
+import scalus.compiler.{UplcRepr, UplcRepresentation}
+import scalus.uplc.builtin.{FromData, ToData}
+
 import scala.annotation.nowarn
 import scala.language.implicitConversions
 
@@ -45,6 +48,13 @@ object ToDataAdt:
                   2,
                   mkCons(a.toData, mkCons(b.toData, mkNilData()))
                 )
+
+@UplcRepr(UplcRepresentation.ProductCaseOneElement)
+case class WrappedByteString(hash: ByteString)
+
+object WrappedByteString:
+    given FromData[WrappedByteString] = FromData.derived
+    given ToData[WrappedByteString] = ToData.derived
 
 case class BigRecord(
     a: Boolean,
@@ -179,6 +189,31 @@ class FromDataDerivationTest
                     fail(error)
 
             assert((term $ d).evaluate == d.asTerm)
+        }
+    }
+
+    test("derived FromData/ToData roundtrip for @UplcRepr(ProductCaseOneElement)") {
+        val bs = ByteString.fromHex("deadbeef")
+        val w = WrappedByteString(bs)
+
+        // ToData should produce B(bytestring), not Constr(0, [B(bytestring)])
+        val d = w.toData
+        assert(d == Data.B(bs), s"Expected Data.B but got $d")
+
+        // FromData should reconstruct the wrapper from B(bytestring)
+        val w2 = fromData[WrappedByteString](d)
+        assert(w2 == w)
+    }
+
+    test("@UplcRepr(ProductCaseOneElement) roundtrip with property-based testing") {
+        given Arbitrary[WrappedByteString] = Arbitrary(
+          Arbitrary.arbitrary[ByteString].map(WrappedByteString(_))
+        )
+        forAll { (w: WrappedByteString) =>
+            val d = w.toData
+            // verify data format is B(...), not Constr(0, ...)
+            assert(d.isInstanceOf[Data.B])
+            assert(fromData[WrappedByteString](d) == w)
         }
     }
 
