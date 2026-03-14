@@ -602,6 +602,17 @@ object SIRType {
     object Varargs {
         val name = "scalus.cardano.onchain.plutus.prelude.Varargs"
 
+        private val uplcReprAnnotation = AnnotationsDecl(
+          SIRPosition.empty,
+          data = Map(
+            "uplcRepr" -> SIR.Const(
+              scalus.uplc.Constant.String("ProductCaseOneElement"),
+              SIRType.String,
+              AnnotationsDecl.emptyModule
+            )
+          )
+        )
+
         val constrDecl = {
             val hash = name.hashCode
             val a = TypeVar("A", Some(hash), true)
@@ -610,12 +621,12 @@ object SIRType {
               scala.List(TypeBinding("list", SIRType.List(a))),
               scala.List(a),
               scala.Nil,
-              AnnotationsDecl.empty
+              uplcReprAnnotation
             )
         }
 
         val dataDecl = {
-            DataDecl(name, scala.List(constrDecl), scala.Nil, AnnotationsDecl.empty)
+            DataDecl(name, scala.List(constrDecl), scala.Nil, uplcReprAnnotation)
         }
 
         def apply(a: SIRType): SIRType =
