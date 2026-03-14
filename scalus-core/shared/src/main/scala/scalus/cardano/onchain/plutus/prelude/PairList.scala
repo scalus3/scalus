@@ -1,6 +1,9 @@
 package scalus.cardano.onchain.plutus.prelude
 
 import scalus.compiler.{Compile, Ignore}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.Data.{fromData, FromData, ToData}
+import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Data}
 
 /** A list of key-value pairs that stays in the UPLC `BuiltinPair` representation, avoiding costly
   * per-element conversions between `PairData` and `ConstrData` that occur when using `List[(A, B)]`
@@ -145,16 +148,9 @@ object PairList {
                 pair :: acc
             }
 
-    given pairListToData[A: scalus.uplc.builtin.Data.ToData, B: scalus.uplc.builtin.Data.ToData]
-        : scalus.uplc.builtin.Data.ToData[PairList[A, B]] =
-        import scalus.uplc.builtin.Builtins.*
-        import scalus.uplc.builtin.Data.ToData
+    given pairListToData[A: ToData, B: ToData]: ToData[PairList[A, B]] =
         (a: PairList[A, B]) => {
-            def loop(
-                a: PairList[A, B]
-            ): scalus.uplc.builtin.BuiltinList[
-              scalus.uplc.builtin.BuiltinPair[scalus.uplc.builtin.Data, scalus.uplc.builtin.Data]
-            ] =
+            def loop(a: PairList[A, B]): BuiltinList[BuiltinPair[Data, Data]] =
                 a match
                     case PairNil => mkNilPairData()
                     case PairCons((k, v), tail) =>
@@ -162,21 +158,9 @@ object PairList {
             mapData(loop(a))
         }
 
-    given pairListFromData[
-        A: scalus.uplc.builtin.Data.FromData,
-        B: scalus.uplc.builtin.Data.FromData
-    ]: scalus.uplc.builtin.Data.FromData[PairList[A, B]] =
-        import scalus.uplc.builtin.Builtins.*
-        import scalus.uplc.builtin.Data.fromData
-        (d: scalus.uplc.builtin.Data) =>
-            def loop(
-                ls: scalus.uplc.builtin.BuiltinList[
-                  scalus.uplc.builtin.BuiltinPair[
-                    scalus.uplc.builtin.Data,
-                    scalus.uplc.builtin.Data
-                  ]
-                ]
-            ): PairList[A, B] =
+    given pairListFromData[A: FromData, B: FromData]: FromData[PairList[A, B]] =
+        (d: Data) =>
+            def loop(ls: BuiltinList[BuiltinPair[Data, Data]]): PairList[A, B] =
                 if ls.isEmpty then PairNil
                 else PairCons((fromData[A](ls.head.fst), fromData[B](ls.head.snd)), loop(ls.tail))
             loop(unMapData(d))
