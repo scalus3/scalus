@@ -411,7 +411,6 @@ object DCert {
 
 }
 
-@UplcRepr(UplcRepresentation.ProductCaseOneElement)
 case class TxId(hash: Hash):
     override def toString = s"txid#${hash.toHex}"
 

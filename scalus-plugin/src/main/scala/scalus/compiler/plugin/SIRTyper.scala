@@ -28,6 +28,33 @@ class SIRTyper(using Context) {
 
     private val cachedDataDecl: MutableSymbolMap[DataDecl] = new MutableSymbolMap()
 
+    private val uplcReprAnnotation = Symbols.requiredClass("scalus.compiler.UplcRepr")
+    private val uplcRepresentationClass =
+        Symbols.requiredClass("scalus.compiler.UplcRepresentation")
+
+    /** Extracts the UplcRepr annotation from a symbol and encodes it as a map entry. */
+    private def extractUplcReprAnnotation(sym: Symbol): Map[String, SIR] = {
+        sym.getAnnotation(uplcReprAnnotation) match {
+            case Some(annot) =>
+                annot.argument(0) match {
+                    case Some(tree) =>
+                        val termSym = tree.tpe.termSymbol
+                        if termSym.exists && tree.tpe.derivesFrom(uplcRepresentationClass) then
+                            val reprName = termSym.name.show
+                            Map(
+                              "uplcRepr" -> SIR.Const(
+                                scalus.uplc.Constant.String(reprName),
+                                SIRType.String,
+                                AnnotationsDecl.emptyModule
+                              )
+                            )
+                        else Map.empty
+                    case None => Map.empty
+                }
+            case None => Map.empty
+        }
+    }
+
     def sirTypeInEnv(tp: Type, env0: SIRTypeEnv): SIRType = {
         val env = env0
         val retval =
@@ -593,12 +620,15 @@ class SIRTyper(using Context) {
 
         }
         try
+            val baseAnns = AnnotationsDecl.fromSym(typeSymbol)
+            val reprData = extractUplcReprAnnotation(typeSymbol)
+            val anns = if reprData.isEmpty then baseAnns else baseAnns.copy(data = reprData)
             ConstrDecl(
               name,
               params,
               tparams,
               parentTypeArgs,
-              AnnotationsDecl.fromSym(typeSymbol)
+              anns
             )
         catch
             case NonFatal(e) =>
@@ -723,23 +753,31 @@ class SIRTyper(using Context) {
                         val dataDecl = makeSumClassDataDecl(s, nEnv)
                         SIRType.typeApply(dataDecl.tp, sirTypeParams)
                 val params = List(TypeBinding("value", paramType))
+                val sBaseAnns = AnnotationsDecl.fromSym(s)
+                val sReprData = extractUplcReprAnnotation(s)
+                val sAnns = if sReprData.isEmpty then sBaseAnns else sBaseAnns.copy(data = sReprData)
                 ConstrDecl(
                   syntethicName,
                   params,
                   sirTypeParams,
                   parentTypeArgs,
-                  AnnotationsDecl.fromSym(s)
+                  sAnns
                 )
         }
         val typeParams =
             typeSymbol.typeParams.map(tp =>
                 SIRType.TypeVar(tp.name.show, Some(tp.hashCode()), false)
             )
+        val dataDeclBaseAnns = AnnotationsDecl.fromSym(typeSymbol)
+        val dataDeclReprData = extractUplcReprAnnotation(typeSymbol)
+        val dataDeclAnns =
+            if dataDeclReprData.isEmpty then dataDeclBaseAnns
+            else dataDeclBaseAnns.copy(data = dataDeclReprData)
         DataDecl(
           typeSymbol.fullName.show,
           constrDecls,
           typeParams,
-          AnnotationsDecl.fromSym(typeSymbol)
+          dataDeclAnns
         )
     }
 

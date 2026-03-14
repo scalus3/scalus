@@ -645,7 +645,7 @@ final class SIRCompiler(
       */
     private def encodeUplcRepresentation(tree: Tree): Option[SIR] = {
         val termSym = tree.tpe.termSymbol
-        if termSym.exists && termSym.owner.derivesFrom(uplcRepresentationClass) then
+        if termSym.exists && tree.tpe.derivesFrom(uplcRepresentationClass) then
             // Extract just the case object name (e.g., "Map", "ProductCaseOneElement")
             val reprName = termSym.name.show
             Some(

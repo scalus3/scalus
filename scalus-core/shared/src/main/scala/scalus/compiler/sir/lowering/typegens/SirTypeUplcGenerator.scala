@@ -158,31 +158,16 @@ object SirTypeUplcGenerator {
                 else if constrDecl.name == SIRType.BuiltinArray.name
                 then BuiltinArraySirTypeGenerator
                 else
-                    // Check for @UplcRepr annotation on the case class
-                    getUplcReprAnnotation(constrDecl.annotations) match {
-                        case Some(encoded) =>
-                            resolveUplcRepresentation(encoded, constrDecl, typeArgs, debug)
-                        case None =>
-                            // Existing structural logic
-                            val hasFun =
-                                containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
-                            if constrDecl.name == SIRType.List.NilConstr.name || constrDecl.name == SIRType.List.Cons.name
-                                || constrDecl.name == SIRType.BuiltinList.Nil.name || constrDecl.name == SIRType.BuiltinList.Cons.name
-                                || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
-                            then {
-                                if hasFun then SumCaseUplcOnlySirTypeGenerator
-                                // PairList constructors always use SumPairDataList
-                                else if constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
-                                    || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
-                                then SumPairDataListSirTypeGenerator
-                                else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPairOrTuple2(
-                                      typeArgs.head
-                                    )
-                                then SumPairDataListSirTypeGenerator
-                                else SumDataListSirTypeGenerator
-                            } else if hasFun then ProductCaseUplcOnlySirTypeGenerator
-                            else ProductCaseSirTypeGenerator
-                    }
+                    // 1. Non-trivial structural constraints (can't be expressed by annotations)
+                    resolveWithConstraints(constrDecl, typeArgs)
+                        // 2. @UplcRepr annotation
+                        .orElse(getUplcReprAnnotation(constrDecl.annotations)
+                            .map(encoded => resolveUplcRepresentation(encoded, constrDecl, typeArgs, debug)))
+                        // 3. Basic structural inference with diagnostic check
+                        .getOrElse {
+                            warnIfExpectedAnnotation(constrDecl)
+                            resolveBasicStructural(constrDecl)
+                        }
             case SIRType.TypeLambda(_, body) =>
                 SirTypeUplcGenerator(body, debug)
             case SIRType.TypeProxy(ref) =>
@@ -209,6 +194,54 @@ object SirTypeUplcGenerator {
         if debug then println(s"SirTypeUplcGenerator: ${tp} ->${retval.getClass.getSimpleName}")
         retval
     }
+
+    /** Types that should have @UplcRepr annotation. If we reach here, the annotation wasn't propagated. */
+    private val expectedAnnotatedTypes = Set(
+      "scalus.cardano.onchain.plutus.v1.PubKeyHash",
+      "scalus.cardano.onchain.plutus.v3.TxId",
+      "scalus.cardano.onchain.plutus.prelude.AssocMap",
+      "scalus.cardano.onchain.plutus.prelude.SortedMap",
+      "scalus.cardano.onchain.plutus.prelude.Varargs",
+      "scalus.cardano.onchain.plutus.v1.Value"
+    )
+
+    private def warnIfExpectedAnnotation(constrDecl: ConstrDecl): Unit =
+        if expectedAnnotatedTypes.contains(constrDecl.name) then
+            System.err.println(
+              s"WARNING: ${constrDecl.name} expected @UplcRepr annotation but none found. " +
+                "Falling back to structural inference, which may produce incorrect representation."
+            )
+
+    /** Non-trivial structural constraints that can't be expressed by annotations
+      * (List/BuiltinList/PairList handling with containsFun/isPairOrTuple2 checks).
+      */
+    private def resolveWithConstraints(
+        constrDecl: ConstrDecl,
+        typeArgs: List[SIRType]
+    ): Option[SirTypeUplcGenerator] =
+        if constrDecl.name == SIRType.List.NilConstr.name || constrDecl.name == SIRType.List.Cons.name
+            || constrDecl.name == SIRType.BuiltinList.Nil.name || constrDecl.name == SIRType.BuiltinList.Cons.name
+            || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
+        then
+            val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
+            if hasFun then Some(SumCaseUplcOnlySirTypeGenerator)
+            else if constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
+                || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
+            then Some(SumPairDataListSirTypeGenerator)
+            else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPairOrTuple2(
+                  typeArgs.head
+                )
+            then Some(SumPairDataListSirTypeGenerator)
+            else Some(SumDataListSirTypeGenerator)
+        else None
+
+    /** Basic structural inference: ProductCase or ProductCaseUplcOnly based on containsFun. */
+    private def resolveBasicStructural(
+        constrDecl: ConstrDecl
+    ): SirTypeUplcGenerator =
+        val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
+        if hasFun then ProductCaseUplcOnlySirTypeGenerator
+        else ProductCaseSirTypeGenerator
 
     def isPairOrTuple2(tp: SIRType): Boolean =
         ProductCaseClassRepresentation.PairData.isPairOrTuple2(tp)
