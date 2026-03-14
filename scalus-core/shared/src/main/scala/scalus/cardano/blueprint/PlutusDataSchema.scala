@@ -4,6 +4,8 @@ import com.github.plokhotnyuk.jsoniter_scala.core.{writeToString, JsonValueCodec
 import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
 import PlutusDataSchema.given_JsonValueCodec_PlutusDataSchema
 
+import scalus.uplc.builtin.internal.UplcReprMacroUtils.getUplcRepr
+
 import scala.annotation.tailrec
 import scala.quoted.*
 
@@ -69,10 +71,27 @@ object PlutusDataSchema {
         if isUnit(tpe) then '{ PlutusDataSchema(dataType = Some(DataType.UnitBuiltin)) }
         else if isPrimitive(tpe) then deriveForPrimitive(tpe)
         else if isTuple(tpe) then deriveForTuple(tpe)
-        else if symbol.flags.is(Flags.Case) && !symbol.flags.is(Flags.Enum) then
-            deriveForCaseClass(symbol)
+        else deriveForSymbol(symbol, tpe)
+
+    private def deriveForSymbol(using
+        Quotes
+    )(symbol: quotes.reflect.Symbol, tpe: quotes.reflect.TypeRepr): Expr[PlutusDataSchema] =
+        import quotes.reflect.*
+        if symbol.flags.is(Flags.Case) && !symbol.flags.is(Flags.Enum) then
+            getUplcRepr(symbol) match
+                case Some("ProductCaseOneElement") => deriveForProductCaseOneElement(symbol)
+                case Some("ProductCase") | None    => deriveForCaseClass(symbol)
+                case Some(other) =>
+                    report.errorAndAbort(
+                      s"@UplcRepr($other) is not supported by PlutusDataSchema.derived for ${symbol.fullName}. Please provide your own PlutusDataSchema."
+                    )
         else if !symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum) then
-            deriveForEnumRoot(symbol)
+            getUplcRepr(symbol) match
+                case Some("SumCase") | None => deriveForEnumRoot(symbol)
+                case Some(other) =>
+                    report.errorAndAbort(
+                      s"@UplcRepr($other) is not supported by PlutusDataSchema.derived for enum ${symbol.fullName}. Please provide your own PlutusDataSchema."
+                    )
         else if symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum) then
             generateForEnumLeafWithIndex(symbol, 0)
         else report.errorAndAbort(s"Unsupported type for schema generation: ${tpe.show}")
@@ -98,6 +117,19 @@ object PlutusDataSchema {
             case _ =>
                 report.errorAndAbort(s"Unsupported primitive type: ${tpe.show}")
         }
+
+    private def deriveForProductCaseOneElement(using
+        Quotes
+    )(symbol: quotes.reflect.Symbol): Expr[PlutusDataSchema] =
+        import quotes.reflect.*
+        val params = getPrimaryConstructorParams(symbol)
+        if params.size != 1 then
+            report.errorAndAbort(
+              s"@UplcRepr(ProductCaseOneElement) requires exactly one constructor parameter for ${symbol.name}"
+            )
+        val (_, innerType) = params.head
+        val innerDataType = resolveFieldDataType(innerType)
+        '{ PlutusDataSchema(dataType = $innerDataType, title = Some(${ Expr(symbol.name) })) }
 
     private def deriveForCaseClass(using
         Quotes
@@ -179,14 +211,8 @@ object PlutusDataSchema {
             deriveForPrimitive(tpe)
         } else if isTuple(tpe) then {
             deriveForTuple(tpe)
-        } else if symbol.flags.is(Flags.Case) && !symbol.flags.is(Flags.Enum) then {
-            deriveForCaseClass(symbol)
-        } else if !symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum) then {
-            deriveForEnumRoot(symbol)
-        } else if symbol.flags.is(Flags.Case) && symbol.flags.is(Flags.Enum) then {
-            generateForEnumLeafWithIndex(symbol, 0)
         } else {
-            report.errorAndAbort(s"Unsupported type for schema generation: ${tpe.show}")
+            deriveForSymbol(symbol, tpe)
         }
 
     private def generateFieldSchema(using
@@ -257,17 +283,17 @@ object PlutusDataSchema {
         } else {
             val symbol = tpe.typeSymbol
             if symbol.flags.is(Flags.Case) && !symbol.flags.is(Flags.Enum) then {
-                val params = getPrimaryConstructorParams(symbol)
-                if params.length == 1 then {
-                    val (_, fieldType) = params.head
-                    if isPrimitive(fieldType) then {
-                        resolveFieldDataType(fieldType)
-                    } else {
+                getUplcRepr(symbol) match
+                    case Some("ProductCaseOneElement") =>
+                        val params = getPrimaryConstructorParams(symbol)
+                        if params.length == 1 then
+                            resolveFieldDataType(params.head._2)
+                        else
+                            report.errorAndAbort(
+                              s"@UplcRepr(ProductCaseOneElement) requires exactly one constructor parameter for ${symbol.name}"
+                            )
+                    case _ =>
                         '{ Some(DataType.Constructor) }
-                    }
-                } else {
-                    '{ Some(DataType.Constructor) }
-                }
             } else {
                 '{ Some(DataType.Constructor) }
             }

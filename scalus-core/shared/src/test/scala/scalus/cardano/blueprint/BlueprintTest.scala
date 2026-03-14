@@ -307,6 +307,21 @@ class BlueprintTest extends AnyFunSuite {
         assert(redeemerSchema.title.contains("Action"))
     }
 
+    test("should produce correct schema for @UplcRepr(ProductCaseOneElement) types") {
+        // TxId has @UplcRepr(ProductCaseOneElement) and wraps ByteString
+        val txIdSchema = PlutusDataSchema.derived[scalus.cardano.onchain.plutus.v3.TxId]
+        assert(txIdSchema.dataType.contains(DataType.Bytes))
+        assert(txIdSchema.title.contains("TxId"))
+        assert(txIdSchema.fields.isEmpty)
+    }
+
+    test("should produce correct schema for @UplcRepr(ProductCaseOneElement) used as field") {
+        // PubKeyHash wraps ByteString (via Hash alias), used as field should resolve to Bytes
+        val schema = PlutusDataSchema.derived[scalus.cardano.onchain.plutus.v1.PubKeyHash]
+        assert(schema.dataType.contains(DataType.Bytes))
+        assert(schema.title.contains("PubKeyHash"))
+    }
+
     test("Blueprint.plutusV3 methods should produce valid JSON") {
         val compiled = PlutusV3.compile((ctx: Data) => ())
         val bp = Blueprint.plutusV3[ContractDatum, Action](
