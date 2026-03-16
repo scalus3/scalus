@@ -18,8 +18,8 @@ This matters on Cardano because of eUTxO constraints: limited transaction size, 
 | Collection | Verification Cost | Proof Size | Grows with N? | Use Case |
 |---|---|---|---|---|
 | **[Merkle Tree](/docs/advanced-data-structures/merkle-tree)** | log₂(N)+1 blake2b calls | 33 × ceil(log₂(N)) bytes | Yes (logarithmic) | Static set known at deploy time. Airdrop allowlists, governance voter registries. |
-| **[Incremental Merkle Tree](/docs/advanced-data-structures/merkle-tree#incremental-merkle-tree)** | Verify: log₂(N)+1 blake2b. Append: 2×log₂(N)+2 blake2b | 32–33 × ceil(log₂(N)) bytes | Yes (logarithmic) | Append-only sets. Oracle price feeds, event logs, audit trails. |
-| **[Frontier Merkle Tree](/docs/advanced-data-structures/merkle-tree#frontier-merkle-tree)** | Same as Incremental MT | Same as Incremental MT | Yes (logarithmic) | Same as Incremental MT but with O(depth) off-chain memory instead of O(N). |
+| **[Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree)** | Verify: log₂(N)+1 blake2b. Append: 2×log₂(N)+2 blake2b | 32–33 × ceil(log₂(N)) bytes | Yes (logarithmic) | Append-only sets. Oracle price feeds, event logs, audit trails. |
+| **[Frontier Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree#frontier-merkle-tree)** | Same as Incremental MT | Same as Incremental MT | Yes (logarithmic) | Same as Incremental MT but with O(depth) off-chain memory instead of O(N). |
 | **[Merkle Patricia Forestry](/docs/advanced-data-structures/merkle-patricia-forestry)** | ~5–15 blake2b calls per step | ~200–800 bytes (Data-encoded) | **No** (max 2²⁵⁶ entries) | General key-value with insert/delete/update + non-membership proofs. Aiken-compatible. DEX order books, token registries. |
 | **[Fused MPF](/docs/advanced-data-structures/merkle-patricia-forestry#fused-merkle-patricia-forestry)** | ~8–12% less CPU than MPF | ~100–500 bytes (flat ByteString) | **No** (max 2²⁵⁶ entries) | Same as MPF but cheaper on-chain. Not Aiken-compatible. |
 | **[Bilinear Accumulators](/docs/advanced-data-structures/bilinear-accumulators)** | 2 pairings + MSM (~35× more CPU) | ~48–96 bytes | **No** (constant, 1 group element) | Large sets where constant proof size matters. Many proofs per tx, tight size limits. |
@@ -27,7 +27,7 @@ This matters on Cardano because of eUTxO constraints: limited transaction size, 
 ## Decision Flowchart
 
 1. **Static set?** → **[Merkle Tree](/docs/advanced-data-structures/merkle-tree)** (cheapest possible)
-2. **Append-only?** → **[Incremental Merkle Tree](/docs/advanced-data-structures/merkle-tree#incremental-merkle-tree)** / **[Frontier Merkle Tree](/docs/advanced-data-structures/merkle-tree#frontier-merkle-tree)**
+2. **Append-only?** → **[Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree)** / **[Frontier Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree#frontier-merkle-tree)**
 3. **Need insert + delete?** → **[Fused MPF](/docs/advanced-data-structures/merkle-patricia-forestry#fused-merkle-patricia-forestry)** (cheapest) or **[MPF](/docs/advanced-data-structures/merkle-patricia-forestry)** (Aiken-compatible)
 4. **Proof size critical?** → **[Bilinear Accumulator](/docs/advanced-data-structures/bilinear-accumulators)** (smallest constant proof, ~35× CPU)
 5. **Need non-membership proofs?** → MPF, Fused MPF, or Bilinear Accumulator
