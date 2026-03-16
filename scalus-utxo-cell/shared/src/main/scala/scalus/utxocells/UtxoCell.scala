@@ -1,7 +1,7 @@
 package scalus.utxocells
 
 import scalus.Compile
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.ToData
 import scalus.cardano.onchain.plutus.v1.{Address, PolicyId, Value}
@@ -210,5 +210,27 @@ object UtxoCellLib {
           mintedTokens.values.head === BigInt(-1),
           "UtxoCell: beacon token must be burned exactly once"
         )
+    }
+
+    /** Verify a flow spend transition.
+      *
+      * If nextDatum is Some, verifies the continuing output (datum match + staking credential). If
+      * nextDatum is None (terminal), verifies the beacon token is burned.
+      */
+    def verifyFlowSpend(
+        nextDatum: Option[Data],
+        beaconName: ByteString,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        verifyContinuingOutput[Data](nextDatum, tx, ownRef)
+        nextDatum match
+            case Option.None =>
+                val ownInput = tx.findOwnInputOrFail(ownRef)
+                val policyId = ownInput.resolved.address.credential match
+                    case Credential.ScriptCredential(hash) => hash
+                    case _ => fail("UtxoFlow: input is not a script")
+                verifyBurnBeacon(beaconName, policyId, tx)
+            case _ => ()
     }
 }

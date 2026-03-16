@@ -2,6 +2,7 @@ package scalus.utxocells
 
 import cps.*
 import scalus.uplc.builtin.{Data, FromData}
+import scalus.cardano.onchain.plutus.prelude.Option as POption
 
 /** Free monad for multi-transaction flows.
   *
@@ -38,12 +39,17 @@ object UtxoFlow {
     /** Define a multi-transaction flow. The macro:
       *   1. Calls dotty-cps-async to CPS-transform the body
       *   1. Walks the resulting monadic tree to find suspend boundaries
-      *   1. Generates off-chain dispatch code with datum field tracking
+      *   1. Generates Scalus-compilable dispatch code with datum field tracking
       *
-      * Returns a [[UtxoFlowDispatch]] with the dispatch function and chunk count. Wrap in a
-      * [[UtxoFlowDef]] together with a compiled script and token name for full flow operations.
+      * Returns a dispatch function `(Data, Data, CellContext) => POption[Data]` that is
+      * Scalus-compilable. When placed inside a `@Compile` object, the plugin compiles it to SIR →
+      * UPLC. Off-chain, the same function runs on JVM with POption → scala.Option conversion at the
+      * boundary.
+      *
+      * Wrap in a [[UtxoFlowDef]] together with a compiled script and token name for full flow
+      * operations.
       */
     transparent inline def define(
         inline body: CpsMonadContext[UtxoFlow] ?=> CellContext => Unit
-    ): UtxoFlowDispatch = ${ UtxoFlowMacros.defineImpl('body) }
+    ): (Data, Data, CellContext) => POption[Data] = ${ UtxoFlowMacros.defineImpl('body) }
 }

@@ -2,10 +2,15 @@ package scalus.utxocells
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.Compile
+import scalus.compiler.Options
+import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.ByteString.utf8
 import scalus.uplc.builtin.Data.toData
+import scalus.cardano.onchain.OnchainError
 import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.cardano.onchain.plutus.prelude.List as PList
+import scalus.cardano.onchain.plutus.prelude.Option as POption
 import cps.*
 
 // -- Test types --
@@ -28,16 +33,15 @@ class UtxoFlowSpec extends AnyFunSuite {
     // Single await tests (refactored from spike)
     // ================================================================
 
-    test("single await — chunkCount=1, dispatch returns None") {
+    test("single await — dispatch returns POption.None") {
         val flowDispatch = UtxoFlow.define { ctx =>
             val bid = await(UtxoFlow.suspend[Bid])
             ctx.txInfo.requireSignedBy(bid.bidder)
         }
 
-        assert(flowDispatch.chunkCount == 1, s"Expected 1 chunk, got ${flowDispatch.chunkCount}")
-        assert(flowDispatch.dispatch != null)
+        assert(flowDispatch != null)
 
-        // Single-await flow is terminal, so dispatch should return None
+        // Single-await flow is terminal, so dispatch should return POption.None
         val datum = Data.Constr(0, PList.Nil)
         val bidder = PubKeyHash(
           ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
@@ -46,12 +50,12 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // ctx is null so requireSignedBy will NPE, but that proves decode + body ran
         val ex = intercept[NullPointerException] {
-            flowDispatch.dispatch(datum, redeemer, null)
+            flowDispatch(datum, redeemer, null)
         }
         info(s"Single await dispatch correctly reached ctx.txInfo (NPE: ${ex.getMessage})")
     }
 
-    test("dispatch throws on unknown chunk tag") {
+    test("dispatch throws OnchainError on unknown chunk tag") {
         val flowDispatch = UtxoFlow.define { ctx =>
             val bid = await(UtxoFlow.suspend[Bid])
             ctx.txInfo.requireSignedBy(bid.bidder)
@@ -65,8 +69,8 @@ class UtxoFlowSpec extends AnyFunSuite {
           BigInt(0)
         ).toData
 
-        val ex = intercept[Exception] {
-            flowDispatch.dispatch(datum, redeemer, null)
+        val ex = intercept[OnchainError] {
+            flowDispatch(datum, redeemer, null)
         }
         assert(ex.getMessage.contains("unknown chunk tag"))
     }
@@ -75,18 +79,18 @@ class UtxoFlowSpec extends AnyFunSuite {
     // Two await tests
     // ================================================================
 
-    test("two awaits — chunkCount=2, chunk 0 returns Some, chunk 1 returns None") {
+    test("two awaits — chunk 0 returns POption.Some, chunk 1 returns POption.None") {
         val flowDispatch = UtxoFlow.define { ctx =>
             val bid = await(UtxoFlow.suspend[Bid])
             ctx.txInfo.requireSignedBy(bid.bidder)
             val confirm = await(UtxoFlow.suspend[Confirm])
         }
 
-        assert(flowDispatch.chunkCount == 2, s"Expected 2 chunks, got ${flowDispatch.chunkCount}")
-        info(s"Flow has ${flowDispatch.chunkCount} chunks")
+        // Verify dispatch function works (no chunkCount metadata)
+        assert(flowDispatch != null)
     }
 
-    test("two awaits — chunk 0 dispatch returns Some(Constr(1, fields))") {
+    test("two awaits — chunk 0 dispatch returns POption.Some(Constr(1, fields))") {
         val flowDispatch = UtxoFlow.define { ctx =>
             val bid = await(UtxoFlow.suspend[Bid])
             ctx.txInfo.requireSignedBy(bid.bidder)
@@ -105,12 +109,12 @@ class UtxoFlowSpec extends AnyFunSuite {
         // But chunk 0 is non-terminal, so the macro body should run first,
         // hitting the NPE before reaching the continuation return
         val ex = intercept[NullPointerException] {
-            flowDispatch.dispatch(datum, redeemer, null)
+            flowDispatch(datum, redeemer, null)
         }
         info(s"Chunk 0 correctly executed body before continuation (NPE: ${ex.getMessage})")
     }
 
-    test("two awaits — chunk 1 dispatch returns None (terminal)") {
+    test("two awaits — chunk 1 dispatch returns POption.None (terminal)") {
         val flowDispatch = UtxoFlow.define { ctx =>
             val bid = await(UtxoFlow.suspend[Bid])
             val confirm = await(UtxoFlow.suspend[Confirm])
@@ -122,9 +126,9 @@ class UtxoFlowSpec extends AnyFunSuite {
         val confirm = Confirm(true)
         val redeemer = confirm.toData
 
-        val result = flowDispatch.dispatch(datum, redeemer, null)
-        assert(result.isEmpty, s"Expected None for terminal chunk, got $result")
-        info("Chunk 1 (terminal) correctly returned None")
+        val result = flowDispatch(datum, redeemer, null)
+        assert(result == POption.None, s"Expected POption.None for terminal chunk, got $result")
+        info("Chunk 1 (terminal) correctly returned POption.None")
     }
 
     // ================================================================
@@ -140,10 +144,8 @@ class UtxoFlowSpec extends AnyFunSuite {
             ctx.txInfo.requireSignedBy(bid.bidder)
         }
 
-        assert(flowDispatch.chunkCount == 2)
-
         // Chunk 0: no datum fields needed (no free vars from before chunk 0)
-        // Dispatch chunk 0: should return Some(Constr(1, [bid.toData]))
+        // Dispatch chunk 0: should return POption.Some(Constr(1, [bid.toData]))
         val datum0 = Data.Constr(0, PList.Nil)
         val bidder = PubKeyHash(
           ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
@@ -151,31 +153,31 @@ class UtxoFlowSpec extends AnyFunSuite {
         val bid = Bid(bidder, BigInt(500_000))
         val redeemer0 = bid.toData
 
-        val result0 = flowDispatch.dispatch(datum0, redeemer0, null)
-        assert(result0.isDefined, "Chunk 0 should return Some (non-terminal)")
-        info(s"Chunk 0 returned: $result0")
+        val result0 = flowDispatch(datum0, redeemer0, null)
+        result0 match
+            case POption.Some(nextDatum) =>
+                info(s"Chunk 0 returned: POption.Some($nextDatum)")
+                nextDatum match
+                    case Data.Constr(tag, fields) =>
+                        assert(tag == 1, s"Expected tag=1, got $tag")
+                        assert(!fields.isEmpty, "Expected bid to be captured in datum fields")
+                        info(s"Next datum: tag=$tag, fields=$fields")
+                    case other =>
+                        fail(s"Expected Constr, got $other")
 
-        // The result should be Constr(1, [bid.toData]) since bid is captured
-        val nextDatum = result0.get
-        nextDatum match
-            case Data.Constr(tag, fields) =>
-                assert(tag == 1, s"Expected tag=1, got $tag")
-                assert(!fields.isEmpty, "Expected bid to be captured in datum fields")
-                info(s"Next datum: tag=$tag, fields=$fields")
-            case other =>
-                fail(s"Expected Constr, got $other")
+                // Chunk 1: datum has bid captured, redeemer is Confirm
+                // Body calls ctx.txInfo.requireSignedBy(bid.bidder) — will NPE on null ctx
+                val confirm = Confirm(true)
+                val redeemer1 = confirm.toData
 
-        // Chunk 1: datum has bid captured, redeemer is Confirm
-        // Body calls ctx.txInfo.requireSignedBy(bid.bidder) — will NPE on null ctx
-        val confirm = Confirm(true)
-        val redeemer1 = confirm.toData
-
-        val ex = intercept[NullPointerException] {
-            flowDispatch.dispatch(nextDatum, redeemer1, null)
-        }
-        info(
-          s"Chunk 1 correctly decoded captured bid and reached ctx.txInfo (NPE: ${ex.getMessage})"
-        )
+                val ex = intercept[NullPointerException] {
+                    flowDispatch(nextDatum, redeemer1, null)
+                }
+                info(
+                  s"Chunk 1 correctly decoded captured bid and reached ctx.txInfo (NPE: ${ex.getMessage})"
+                )
+            case POption.None =>
+                fail("Chunk 0 should return POption.Some (non-terminal)")
     }
 
     test("dead variable not captured — only live vars in datum") {
@@ -187,8 +189,6 @@ class UtxoFlowSpec extends AnyFunSuite {
             // bid is NOT referenced here — only confirm is used
         }
 
-        assert(flowDispatch.chunkCount == 2)
-
         // Chunk 0: body uses bid.bidder with ctx, will NPE
         val datum0 = Data.Constr(0, PList.Nil)
         val bidder = PubKeyHash(
@@ -197,7 +197,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         val bid = Bid(bidder, BigInt(500_000))
 
         val ex = intercept[NullPointerException] {
-            flowDispatch.dispatch(datum0, bid.toData, null)
+            flowDispatch(datum0, bid.toData, null)
         }
         info(s"Chunk 0 ran body with ctx access (NPE as expected)")
     }
@@ -213,8 +213,6 @@ class UtxoFlowSpec extends AnyFunSuite {
             val confirm = await(UtxoFlow.suspend[Confirm])
         }
 
-        assert(flowDispatch.chunkCount == 2)
-
         // Step 1: dispatch chunk 0
         val datum0 = Data.Constr(0, PList.Nil)
         val bid = Bid(
@@ -223,14 +221,228 @@ class UtxoFlowSpec extends AnyFunSuite {
           ),
           BigInt(1_000_000)
         )
-        val result0 = flowDispatch.dispatch(datum0, bid.toData, null)
-        assert(result0.isDefined, "Chunk 0 should return Some")
-        info(s"After chunk 0: ${result0.get}")
+        val result0 = flowDispatch(datum0, bid.toData, null)
+        result0 match
+            case POption.Some(nextDatum) =>
+                info(s"After chunk 0: $nextDatum")
 
-        // Step 2: dispatch chunk 1 with the datum from step 1
-        val confirm = Confirm(true)
-        val result1 = flowDispatch.dispatch(result0.get, confirm.toData, null)
-        assert(result1.isEmpty, "Chunk 1 (terminal) should return None")
-        info("Full lifecycle completed: chunk 0 → Some → chunk 1 → None")
+                // Step 2: dispatch chunk 1 with the datum from step 1
+                val confirm = Confirm(true)
+                val result1 = flowDispatch(nextDatum, confirm.toData, null)
+                assert(
+                  result1 == POption.None,
+                  s"Chunk 1 (terminal) should return POption.None, got $result1"
+                )
+                info("Full lifecycle completed: chunk 0 → POption.Some → chunk 1 → POption.None")
+            case POption.None =>
+                fail("Chunk 0 should return POption.Some")
+    }
+
+    // ================================================================
+    // Branching tests — if/match with await in branches
+    // ================================================================
+
+    test("branching — await in then-branch, else is terminal") {
+        val flowDispatch = UtxoFlow.define { ctx =>
+            val confirm = await(UtxoFlow.suspend[Confirm])
+            if confirm.confirmed then
+                val bid = await(UtxoFlow.suspend[Bid])
+            // else: implicit unit → terminal
+        }
+
+        val datum0 = Data.Constr(0, PList.Nil)
+
+        // confirmed=true → should continue to next chunk (POption.Some)
+        val confirmed = Confirm(true)
+        val resultTrue = flowDispatch(datum0, confirmed.toData, null)
+        resultTrue match {
+            case POption.Some(nextDatum) =>
+                info(s"confirmed=true → POption.Some($nextDatum)")
+                nextDatum match {
+                    case Data.Constr(tag, _) =>
+                        assert(tag == 1, s"Expected tag=1, got $tag")
+                    case other => fail(s"Expected Constr, got $other")
+                }
+            case POption.None =>
+                fail("confirmed=true should continue to next chunk")
+        }
+
+        // confirmed=false → should terminate (POption.None)
+        val notConfirmed = Confirm(false)
+        val resultFalse = flowDispatch(datum0, notConfirmed.toData, null)
+        assert(resultFalse == POption.None, s"confirmed=false should terminate, got $resultFalse")
+        info("confirmed=false → POption.None (terminal)")
+    }
+
+    test("branching — BigInt condition with await in then-branch") {
+        val flowDispatch = UtxoFlow.define { ctx =>
+            val bid = await(UtxoFlow.suspend[Bid])
+            if bid.amount > BigInt(100) then
+                val confirm = await(UtxoFlow.suspend[Confirm])
+        }
+
+        val bidder = PubKeyHash(
+          ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
+        )
+        val datum0 = Data.Constr(0, PList.Nil)
+
+        // High bid → continue
+        val highBid = Bid(bidder, BigInt(1_000_000))
+        val resultHigh = flowDispatch(datum0, highBid.toData, null)
+        resultHigh match {
+            case POption.Some(nextDatum) =>
+                info(s"High bid → POption.Some($nextDatum)")
+            case POption.None =>
+                fail("High bid should continue to next chunk")
+        }
+
+        // Low bid → terminal
+        val lowBid = Bid(bidder, BigInt(50))
+        val resultLow = flowDispatch(datum0, lowBid.toData, null)
+        assert(resultLow == POption.None, s"Low bid should terminate, got $resultLow")
+        info("Low bid → POption.None (terminal)")
+    }
+
+    test("branching — await in both branches") {
+        val flowDispatch = UtxoFlow.define { ctx =>
+            val confirm = await(UtxoFlow.suspend[Confirm])
+            if confirm.confirmed then
+                val bid = await(UtxoFlow.suspend[Bid])
+            else
+                val retry = await(UtxoFlow.suspend[Confirm])
+        }
+
+        val datum0 = Data.Constr(0, PList.Nil)
+
+        // confirmed=true → POption.Some(Constr for bid chunk)
+        val confirmed = Confirm(true)
+        val resultTrue = flowDispatch(datum0, confirmed.toData, null)
+        resultTrue match {
+            case POption.Some(nextDatum) =>
+                nextDatum match {
+                    case Data.Constr(tag, _) =>
+                        info(s"confirmed=true → chunk $tag")
+                    case other => fail(s"Expected Constr, got $other")
+                }
+            case POption.None =>
+                fail("confirmed=true should continue")
+        }
+
+        // confirmed=false → POption.Some(Constr for retry chunk)
+        val notConfirmed = Confirm(false)
+        val resultFalse = flowDispatch(datum0, notConfirmed.toData, null)
+        resultFalse match {
+            case POption.Some(nextDatum) =>
+                nextDatum match {
+                    case Data.Constr(tag, _) =>
+                        info(s"confirmed=false → chunk $tag")
+                    case other => fail(s"Expected Constr, got $other")
+                }
+            case POption.None =>
+                fail("confirmed=false should also continue (to retry)")
+        }
+    }
+
+    test("branching — free variable captured in branch continuation") {
+        val flowDispatch = UtxoFlow.define { ctx =>
+            val bid = await(UtxoFlow.suspend[Bid])
+            val confirm = await(UtxoFlow.suspend[Confirm])
+            if confirm.confirmed then
+                val bid2 = await(UtxoFlow.suspend[Bid])
+                ctx.txInfo.requireSignedBy(bid.bidder) // bid captured in chunk 2 datum
+        }
+
+        val bidder = PubKeyHash(
+          ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
+        )
+        val datum0 = Data.Constr(0, PList.Nil)
+        val bid = Bid(bidder, BigInt(500_000))
+        val result0 = flowDispatch(datum0, bid.toData, null)
+
+        result0 match {
+            case POption.Some(datum1) =>
+                info(s"Chunk 0 returned: POption.Some($datum1)")
+                val confirm = Confirm(true)
+                val result1 = flowDispatch(datum1, confirm.toData, null)
+                result1 match {
+                    case POption.Some(datum2) =>
+                        info(s"Chunk 1 (confirmed=true) returned: POption.Some($datum2)")
+                        datum2 match {
+                            case Data.Constr(tag, fields) =>
+                                assert(tag == 2, s"Expected tag=2, got $tag")
+                                assert(
+                                  !fields.isEmpty,
+                                  "Expected bid to be captured in datum fields"
+                                )
+                                info(s"Next datum: tag=$tag, fields=$fields")
+
+                                // Dispatch chunk 2 — body uses bid.bidder via ctx, will NPE
+                                val bid2 = Bid(bidder, BigInt(100))
+                                val ex = intercept[NullPointerException] {
+                                    flowDispatch(datum2, bid2.toData, null)
+                                }
+                                info(
+                                  s"Chunk 2 decoded captured bid, reached ctx.txInfo (NPE: ${ex.getMessage})"
+                                )
+                            case other => fail(s"Expected Constr, got $other")
+                        }
+                    case POption.None =>
+                        fail("confirmed=true should continue to chunk 2")
+                }
+            case POption.None =>
+                fail("Chunk 0 should return POption.Some")
+        }
+    }
+}
+
+// -- On-chain flow validators --
+
+@Compile
+object TestFlowValidator extends FlowCellValidator {
+    inline def beaconName: ByteString = utf8"test-flow"
+    inline def flowDispatch = UtxoFlow.define { ctx =>
+        val bid = await(UtxoFlow.suspend[Bid])
+        ctx.txInfo.requireSignedBy(bid.bidder)
+        val confirm = await(UtxoFlow.suspend[Confirm])
+    }
+}
+
+@Compile
+object BranchingFlowValidator extends FlowCellValidator {
+    inline def beaconName: ByteString = utf8"branching-flow"
+    inline def flowDispatch = UtxoFlow.define { ctx =>
+        val confirm = await(UtxoFlow.suspend[Confirm])
+        if confirm.confirmed then
+            val bid = await(UtxoFlow.suspend[Bid])
+            ctx.txInfo.requireSignedBy(bid.bidder)
+    }
+}
+
+object TestFlowCompilation {
+    given Options = Options.debug
+    lazy val compiled = PlutusV3.compile(TestFlowValidator.validate)
+}
+
+object BranchingFlowCompilation {
+    given Options = Options.debug
+    lazy val compiled = PlutusV3.compile(BranchingFlowValidator.validate)
+}
+
+class UtxoFlowOnChainSpec extends AnyFunSuite {
+
+    private given scalus.uplc.eval.PlutusVM = scalus.uplc.eval.PlutusVM.makePlutusV3VM()
+
+    test("FlowCellValidator compiles to UPLC") {
+        val compiled = TestFlowCompilation.compiled
+        assert(compiled.program.term != null)
+        info(s"UPLC program version: ${compiled.program.version}")
+        info(s"Script size: ${compiled.script.script.size} bytes")
+    }
+
+    test("BranchingFlowValidator compiles to UPLC") {
+        val compiled = BranchingFlowCompilation.compiled
+        assert(compiled.program.term != null)
+        info(s"UPLC program version: ${compiled.program.version}")
+        info(s"Branching script size: ${compiled.script.script.size} bytes")
     }
 }

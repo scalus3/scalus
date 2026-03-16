@@ -4,12 +4,14 @@ import scala.quoted.*
 import cps.*
 import cps.macros.Async
 import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Builtins, Data, FromData, ToData}
+import scalus.cardano.onchain.OnchainError
+import scalus.cardano.onchain.plutus.prelude.Option as POption
 
 object UtxoFlowMacros {
 
     def defineImpl(
         body: Expr[CpsMonadContext[UtxoFlow] ?=> CellContext => Unit]
-    )(using Quotes): Expr[UtxoFlowDispatch] = {
+    )(using Quotes): Expr[(Data, Data, CellContext) => POption[Data]] = {
         import quotes.reflect.*
 
         // ================================================================
@@ -100,6 +102,18 @@ object UtxoFlowMacros {
             case Apply(Select(_, "pure"), _)               => true
             case _                                         => false
 
+        def isPure(term: Term): Boolean = term match
+            case Inlined(_, _, inner)                      => isPure(inner)
+            case Apply(TypeApply(Select(_, "pure"), _), _) => true
+            case Apply(Select(_, "pure"), _)               => true
+            case _                                         => false
+
+        def extractPureBody(term: Term): Term = term match
+            case Inlined(_, _, inner)                              => extractPureBody(inner)
+            case Apply(TypeApply(Select(_, "pure"), _), List(arg)) => arg
+            case Apply(Select(_, "pure"), List(arg))               => arg
+            case _                                                 => '{ () }.asTerm
+
         /** Multi-symbol substitution via TreeMap. */
         def substituteSymbols(
             tree: Term,
@@ -127,6 +141,15 @@ object UtxoFlowMacros {
                         case _              => Block(stats, '{ () }.asTerm)
             case Block(stats, expr) =>
                 Block(stats, stripMonadicTail(expr))
+            case Apply(TypeApply(Select(_, "pure"), _), List(arg)) => arg
+            case Apply(Select(_, "pure"), List(arg))               => arg
+            case If(cond, thenp, elsep) =>
+                If(cond, stripMonadicTail(thenp), stripMonadicTail(elsep))
+            case Match(scrutinee, cases) =>
+                Match(
+                  scrutinee,
+                  cases.map(c => CaseDef(c.pattern, c.guard, stripMonadicTail(c.rhs)))
+                )
             case _ if isMonadicOp(term) => '{ () }.asTerm
             case other                  => other
 
@@ -185,10 +208,15 @@ object UtxoFlowMacros {
             acc.foldTree(Set.empty, tree)(Symbol.spliceOwner)
         }
 
-        /** Check if a symbol is a local parameter/val (not top-level, not a package member). */
+        /** Check if a symbol is a local parameter/val (not top-level, not a package member). Also
+          * excludes members of package objects (whose owner's owner is a package).
+          */
         def isLocalSymbol(sym: Symbol): Boolean = {
             val owner = sym.owner
-            owner.exists && !owner.isNoSymbol && !owner.flags.is(Flags.Package)
+            if !owner.exists || owner.isNoSymbol || owner.flags.is(Flags.Package) then false
+            else
+                val grandOwner = owner.owner
+                !grandOwner.exists || grandOwner.isNoSymbol || !grandOwner.flags.is(Flags.Package)
         }
 
         /** Collect free variables in a term — Ident references not in `bound` and not defined
@@ -270,43 +298,104 @@ object UtxoFlowMacros {
 
         case class ChunkField(name: String, symbol: Symbol, tpe: TypeRepr)
 
+        sealed trait Continuation
+        case object TerminalCont extends Continuation
+        case class NextCont(chunkIndex: Int) extends Continuation
+        case class IfCont(cond: Term, thenCont: Continuation, elseCont: Continuation)
+            extends Continuation
+        case class MatchCont(scrutinee: Term, cases: List[(CaseDef, Continuation)])
+            extends Continuation
+
         case class ChunkInfo(
             index: Int,
             datumFields: List[ChunkField],
             redeemerParam: ValDef,
             redeemerType: TypeRepr,
             effectBody: Term,
-            isTerminal: Boolean
+            rawBody: Term,
+            continuation: Continuation
         )
 
-        case class ChunkBody(param: ValDef, body: Term, suspendType: TypeRepr)
+        case class RawChunk(
+            index: Int,
+            param: ValDef,
+            body: Term,
+            suspendType: TypeRepr,
+            continuation: Continuation
+        )
 
-        def extractChunkBodies(term: Term): List[ChunkBody] = term match
-            case Inlined(_, _, b) => extractChunkBodies(b)
-            case Block(_, expr)   => extractChunkBodies(expr)
+        class Counter(private var n: Int = 0) {
+            def next(): Int = { val r = n; n += 1; r }
+        }
 
-            case Apply(
-                  Apply(TypeApply(Select(_, "flatMap"), _), List(fa)),
-                  List(Lambda(List(p), b))
-                ) if isSuspend(fa) =>
-                ChunkBody(p, b, extractSuspendTypeRepr(fa)) :: extractChunkBodies(b)
-            case Apply(Apply(Select(_, "flatMap"), List(fa)), List(Lambda(List(p), b)))
-                if isSuspend(fa) =>
-                ChunkBody(p, b, extractSuspendTypeRepr(fa)) :: extractChunkBodies(b)
+        def collectChunks(term: Term, counter: Counter): (List[RawChunk], Continuation) =
+            term match
+                case Inlined(_, _, b) => collectChunks(b, counter)
+                case Block(_, expr)   => collectChunks(expr, counter)
 
-            case Apply(Apply(TypeApply(Select(_, "map"), _), List(fa)), List(Lambda(List(p), b)))
-                if isSuspend(fa) =>
-                List(ChunkBody(p, b, extractSuspendTypeRepr(fa)))
-            case Apply(Apply(Select(_, "map"), List(fa)), List(Lambda(List(p), b)))
-                if isSuspend(fa) =>
-                List(ChunkBody(p, b, extractSuspendTypeRepr(fa)))
+                // flatMap with TypeApply
+                case Apply(
+                      Apply(TypeApply(Select(_, "flatMap"), _), List(fa)),
+                      List(Lambda(List(p), b))
+                    ) if isSuspend(fa) =>
+                    val idx = counter.next()
+                    val (inner, cont) = collectChunks(b, counter)
+                    (RawChunk(idx, p, b, extractSuspendTypeRepr(fa), cont) :: inner, NextCont(idx))
+                // flatMap without TypeApply
+                case Apply(Apply(Select(_, "flatMap"), List(fa)), List(Lambda(List(p), b)))
+                    if isSuspend(fa) =>
+                    val idx = counter.next()
+                    val (inner, cont) = collectChunks(b, counter)
+                    (RawChunk(idx, p, b, extractSuspendTypeRepr(fa), cont) :: inner, NextCont(idx))
 
-            case _ => Nil
+                // map with TypeApply
+                case Apply(
+                      Apply(TypeApply(Select(_, "map"), _), List(fa)),
+                      List(Lambda(List(p), b))
+                    ) if isSuspend(fa) =>
+                    val idx = counter.next()
+                    (
+                      List(RawChunk(idx, p, b, extractSuspendTypeRepr(fa), TerminalCont)),
+                      NextCont(idx)
+                    )
+                // map without TypeApply
+                case Apply(Apply(Select(_, "map"), List(fa)), List(Lambda(List(p), b)))
+                    if isSuspend(fa) =>
+                    val idx = counter.next()
+                    (
+                      List(RawChunk(idx, p, b, extractSuspendTypeRepr(fa), TerminalCont)),
+                      NextCont(idx)
+                    )
 
-        val chunkBodies = extractChunkBodies(monadicTerm)
+                // If: recurse into branches
+                case If(cond, thenp, elsep) =>
+                    val (tc, tcont) = collectChunks(thenp, counter)
+                    val (ec, econt) = collectChunks(elsep, counter)
+                    (tc ++ ec, IfCont(cond, tcont, econt))
 
-        if chunkBodies.isEmpty then
+                // Match: recurse into cases
+                case Match(scrutinee, cases) =>
+                    val results = cases.map { c =>
+                        val (ch, co) = collectChunks(c.rhs, counter)
+                        (c, ch, co)
+                    }
+                    (
+                      results.flatMap(_._2),
+                      MatchCont(scrutinee, results.map(r => (r._1, r._3)))
+                    )
+
+                // Terminal: pure or non-monadic
+                case _ => (Nil, TerminalCont)
+
+        val chunkCounter = new Counter()
+        val (rawChunks, rootCont) = collectChunks(monadicTerm, chunkCounter)
+
+        if rawChunks.isEmpty then
             report.errorAndAbort("No chunk bodies found — the flow has no await calls")
+
+        // Build param→index map for rewriteMonadicBody
+        val chunkByParam: Map[Symbol, Int] =
+            rawChunks.map(c => c.param.symbol -> c.index).toMap
 
         // Symbols that should never be captured
         val excludedSymbols = Set(cpsCtxParam.symbol, cellCtxParam.symbol)
@@ -314,12 +403,20 @@ object UtxoFlowMacros {
         val chunkInfos: List[ChunkInfo] = {
             var boundSoFar = excludedSymbols
 
-            chunkBodies.zipWithIndex.map { case (chunk, idx) =>
-                val isTerminal = idx == chunkBodies.size - 1
+            rawChunks.map { chunk =>
                 val effectBody = stripMonadicTail(chunk.body)
 
                 val chunkBound = boundSoFar + chunk.param.symbol
-                val fv = freeVars(effectBody, chunkBound)
+                // Use rawBody for free vars: stripMonadicTail removes monadic
+                // branches that may reference variables needed for continuations.
+                // Lambda params inside the raw body are excluded automatically
+                // by collectDefinedSymbols (they are ValDefs in the tree).
+                // Filter out Given/Implicit symbols (compiler-generated evidence
+                // like derived$FromData) which are monadic infrastructure, not
+                // user variables that need datum capture.
+                val fv = freeVars(chunk.body, chunkBound).filter { sym =>
+                    !sym.flags.is(Flags.Given) && !sym.flags.is(Flags.Implicit)
+                }
 
                 val datumFields = fv.toList
                     .sortBy(_.name)
@@ -328,12 +425,13 @@ object UtxoFlowMacros {
                     }
 
                 val info = ChunkInfo(
-                  index = idx,
+                  index = chunk.index,
                   datumFields = datumFields,
                   redeemerParam = chunk.param,
                   redeemerType = chunk.suspendType,
                   effectBody = effectBody,
-                  isTerminal = isTerminal
+                  rawBody = chunk.body,
+                  continuation = chunk.continuation
                 )
 
                 boundSoFar = chunkBound
@@ -342,13 +440,19 @@ object UtxoFlowMacros {
         }
 
         // Report chunk info
+        def contLabel(c: Continuation): String = c match
+            case TerminalCont  => "terminal"
+            case NextCont(idx) => s"next=$idx"
+            case _: IfCont     => "if-branch"
+            case _: MatchCont  => "match-branch"
+
         report.info(s"UtxoFlow chunks: ${chunkInfos.size}")
         chunkInfos.foreach { chunk =>
             val fields = chunk.datumFields.map(f => s"${f.name}: ${f.tpe.show}").mkString(", ")
             report.info(
               s"  Chunk ${chunk.index}: await=${chunk.redeemerType.show}, " +
                   s"binding=${chunk.redeemerParam.name}, " +
-                  s"datumFields=[$fields], terminal=${chunk.isTerminal}"
+                  s"datumFields=[$fields], cont=${contLabel(chunk.continuation)}"
             )
         }
 
@@ -377,6 +481,137 @@ object UtxoFlowMacros {
                         case None =>
                             report.errorAndAbort(s"Cannot summon ToData[${tp.show}]")
         }
+
+        /** Build POption.Some(Data.Constr(nextTag, List(field1.toData, ...))) for a chunk
+          * transition.
+          */
+        def buildReturnSome(
+            nextChunkIdx: Int,
+            symMapping: Map[Symbol, Symbol],
+            owner: Symbol
+        ): Term = {
+            val nextChunk = chunkInfos(nextChunkIdx)
+            val nextTagValue = nextChunkIdx
+
+            val nextFieldExprs = nextChunk.datumFields.map { field =>
+                val sym = symMapping.getOrElse(field.symbol, field.symbol)
+                buildToDataCall(Ref(sym), field.tpe)
+            }
+
+            // Build PList[Data]
+            val nilTerm: Term = {
+                val nilSym = TypeRepr
+                    .of[scalus.cardano.onchain.plutus.prelude.List.type]
+                    .termSymbol
+                    .methodMember("empty")
+                    .head
+                TypeApply(
+                  Select(
+                    Ref(
+                      TypeRepr.of[scalus.cardano.onchain.plutus.prelude.List.type].termSymbol
+                    ),
+                    nilSym
+                  ),
+                  List(TypeTree.of[Data])
+                )
+            }
+
+            val fieldsList = nextFieldExprs.foldRight(nilTerm) { (elem, acc) =>
+                val consTpe = TypeRepr.of[scalus.cardano.onchain.plutus.prelude.List.Cons[Data]]
+                val consSym = consTpe.typeSymbol.companionModule
+                Select.overloaded(
+                  Ref(consSym),
+                  "apply",
+                  List(TypeRepr.of[Data]),
+                  List(elem, acc)
+                )
+            }
+
+            // Data.Constr(BigInt(nextTag), fieldsList)
+            val bigIntTerm = Select.overloaded(
+              Ref(TypeRepr.of[BigInt.type].termSymbol),
+              "apply",
+              Nil,
+              List(Literal(IntConstant(nextTagValue)))
+            )
+
+            val dataConstr = Select.overloaded(
+              Ref(TypeRepr.of[Data.Constr.type].termSymbol),
+              "apply",
+              Nil,
+              List(bigIntTerm, fieldsList)
+            )
+
+            // POption.Some[Data](dataConstr) : POption[Data]
+            Typed(
+              Select.overloaded(
+                Ref(TypeRepr.of[POption.Some.type].termSymbol),
+                "apply",
+                List(TypeRepr.of[Data]),
+                List(dataConstr)
+              ),
+              TypeTree.of[POption[Data]]
+            )
+        }
+
+        /** Rewrite monadic operations in a term to return-value construction. Replaces
+          * flatMap/map(suspend, ...) with POption.Some(Data.Constr(...)) and pure(x) with x;
+          * POption.None. Recurses into If/Match branches.
+          */
+        def rewriteMonadicBody(
+            term: Term,
+            symMapping: Map[Symbol, Symbol],
+            owner: Symbol
+        ): Term = term match
+            case Inlined(_, _, b) =>
+                rewriteMonadicBody(b, symMapping, owner)
+            case Block(stats, expr) =>
+                Block(stats, rewriteMonadicBody(expr, symMapping, owner))
+            // flatMap(suspend, Lambda(p, _)) → POption.Some(...)
+            case Apply(
+                  Apply(TypeApply(Select(_, "flatMap"), _), List(fa)),
+                  List(Lambda(List(p), _))
+                ) if isSuspend(fa) =>
+                buildReturnSome(chunkByParam(p.symbol), symMapping, owner)
+            case Apply(Apply(Select(_, "flatMap"), List(fa)), List(Lambda(List(p), _)))
+                if isSuspend(fa) =>
+                buildReturnSome(chunkByParam(p.symbol), symMapping, owner)
+            // map(suspend, Lambda(p, _)) → POption.Some(...)
+            case Apply(
+                  Apply(TypeApply(Select(_, "map"), _), List(fa)),
+                  List(Lambda(List(p), _))
+                ) if isSuspend(fa) =>
+                buildReturnSome(chunkByParam(p.symbol), symMapping, owner)
+            case Apply(Apply(Select(_, "map"), List(fa)), List(Lambda(List(p), _)))
+                if isSuspend(fa) =>
+                buildReturnSome(chunkByParam(p.symbol), symMapping, owner)
+            // pure(value) → value; POption.None
+            case _ if isPure(term) =>
+                val body = extractPureBody(term)
+                val noneExpr = '{ POption.None: POption[Data] }.asTerm
+                body match
+                    case Literal(UnitConstant()) => noneExpr
+                    case _                       => Block(List(body), noneExpr)
+            // If: recurse into branches
+            case If(cond, thenp, elsep) =>
+                If(
+                  cond,
+                  rewriteMonadicBody(thenp, symMapping, owner),
+                  rewriteMonadicBody(elsep, symMapping, owner)
+                )
+            // Match: recurse into case bodies
+            case Match(scrutinee, cases) =>
+                Match(
+                  scrutinee,
+                  cases.map(c =>
+                      CaseDef(
+                        c.pattern,
+                        c.guard,
+                        rewriteMonadicBody(c.rhs, symMapping, owner)
+                      )
+                  )
+                )
+            case other => other
 
         /** Build the body for a chunk, given refs to datum fields list, redeemer, and ctx. */
         def buildChunkBody(
@@ -449,97 +684,44 @@ object UtxoFlowMacros {
             stmts += ValDef(redeemerBindingSym, Some(fromDataCall.changeOwner(redeemerBindingSym)))
             symMapping = symMapping + (chunk.redeemerParam.symbol -> redeemerBindingSym)
 
-            // 3. Apply substitutions to effect body (redeemer + datum fields + ctx)
+            // 3. Apply substitutions to raw body (redeemer + datum fields + ctx)
             val allSubs = symMapping + (cellCtxParam.symbol -> ctxRef.symbol)
-            val substituted = substituteSymbols(chunk.effectBody, allSubs, owner)
+            val substituted = substituteSymbols(chunk.rawBody, allSubs, owner)
 
-            // 4. Freshen all local ValDefs to avoid ScopeException
-            val (freshBody, freshMapping) = freshenLocals(substituted, owner)
+            // 4. Rewrite monadic operations (before freshen, so lambda param symbols are original)
+            val rewritten = chunk.continuation match
+                case TerminalCont => substituted
+                case _            => rewriteMonadicBody(substituted, symMapping, owner)
+
+            // 5. Freshen all local ValDefs to avoid ScopeException
+            val (freshBody, freshMapping) = freshenLocals(rewritten, owner)
             symMapping = symMapping ++ freshMapping
 
-            // 5. Flatten the effect body and add to stmts.
+            // 6. Flatten the body and add to stmts.
             //    flattenBlock strips Inlined wrappers from dotty-cps-async so that
             //    ValDefs appear as direct Block stats (required by Splicer scope check).
             val (bodyStmts, bodyFinalExpr) = flattenBlock(freshBody)
             stmts ++= bodyStmts
-            val isUnitLiteral = bodyFinalExpr match
-                case Literal(UnitConstant()) => true
-                case _                       => false
-            if !isUnitLiteral then stmts += bodyFinalExpr
 
-            // 6. Build return value using Term-level reflect API (not quasi-quotes)
-            if chunk.isTerminal then
-                val noneExpr = '{ scala.None: Option[Data] }.asTerm
-                Block(stmts.toList, noneExpr)
-            else
-                // Non-terminal: return Some(Data.Constr(nextTag, List(field1.toData, ...)))
-                val nextChunk = chunkInfos(chunk.index + 1)
-                val nextTagValue = chunk.index + 1
-
-                val nextFieldExprs = nextChunk.datumFields.map { field =>
-                    val sym = symMapping.getOrElse(field.symbol, field.symbol)
-                    buildToDataCall(Ref(sym), field.tpe)
-                }
-
-                // Build PList[Data]
-                val nilTerm: Term = {
-                    val nilSym = TypeRepr
-                        .of[scalus.cardano.onchain.plutus.prelude.List.type]
-                        .termSymbol
-                        .methodMember("empty")
-                        .head
-                    TypeApply(
-                      Select(
-                        Ref(
-                          TypeRepr.of[scalus.cardano.onchain.plutus.prelude.List.type].termSymbol
-                        ),
-                        nilSym
-                      ),
-                      List(TypeTree.of[Data])
-                    )
-                }
-
-                val fieldsList = nextFieldExprs.foldRight(nilTerm) { (elem, acc) =>
-                    val consTpe = TypeRepr.of[scalus.cardano.onchain.plutus.prelude.List.Cons[Data]]
-                    val consSym = consTpe.typeSymbol.companionModule
-                    Select.overloaded(
-                      Ref(consSym),
-                      "apply",
-                      List(TypeRepr.of[Data]),
-                      List(elem, acc)
-                    )
-                }
-
-                // Data.Constr(BigInt(nextTag), fieldsList)
-                val bigIntTerm = Select.overloaded(
-                  Ref(TypeRepr.of[BigInt.type].termSymbol),
-                  "apply",
-                  Nil,
-                  List(Literal(IntConstant(nextTagValue)))
-                )
-
-                val dataConstr = Select.overloaded(
-                  Ref(TypeRepr.of[Data.Constr.type].termSymbol),
-                  "apply",
-                  Nil,
-                  List(bigIntTerm, fieldsList)
-                )
-
-                // Some[Data](dataConstr) : Option[Data]
-                val someResult = Typed(
-                  Select.overloaded(
-                    Ref(TypeRepr.of[Some.type].termSymbol),
-                    "apply",
-                    List(TypeRepr.of[Data]),
-                    List(dataConstr)
-                  ),
-                  TypeTree.of[Option[Data]]
-                )
-
-                Block(stmts.toList, someResult)
+            // 7. Build return value based on continuation type
+            chunk.continuation match
+                case TerminalCont =>
+                    // Terminal chunk: body is pure user code. Run it, return POption.None.
+                    val isUnit = bodyFinalExpr match
+                        case Literal(UnitConstant()) => true
+                        case _                       => false
+                    if !isUnit then stmts += bodyFinalExpr
+                    Block(stmts.toList, '{ POption.None: POption[Data] }.asTerm)
+                case _ =>
+                    // Non-terminal: bodyFinalExpr is already rewritten
+                    // (POption.Some/None or if/match with rewritten branches)
+                    Block(stmts.toList, bodyFinalExpr)
         }
 
-        /** Build if-else chain dispatching on tag. */
+        /** Build if-else chain dispatching on tag.
+          *
+          * TODO: switch to `match` when the Scalus plugin supports integer pattern matching (PV11).
+          */
         def buildDispatchChain(
             chunks: List[ChunkInfo],
             idx: Int,
@@ -550,7 +732,7 @@ object UtxoFlowMacros {
             owner: Symbol
         ): Term = {
             if idx >= chunks.size then
-                '{ throw new Exception("UtxoFlow: unknown chunk tag") }.asTerm
+                '{ throw new OnchainError("UtxoFlow: unknown chunk tag") }.asTerm
             else
                 val chunk = chunks(idx)
                 val chunkBody = buildChunkBody(chunk, fieldsRef, redeemerRef, ctxRef, owner)
@@ -564,7 +746,6 @@ object UtxoFlowMacros {
                       ctxRef,
                       owner
                     )
-
                 val condition = '{
                     ${ tagRef.asExprOf[BigInt] } == BigInt(${ Expr(idx) })
                 }.asTerm
@@ -574,7 +755,7 @@ object UtxoFlowMacros {
         // Build the dispatch lambda: (datum, redeemer, ctx) => { ... }
         val dispatchFnType = MethodType(List("datum", "redeemer", "ctx"))(
           _ => List(TypeRepr.of[Data], TypeRepr.of[Data], TypeRepr.of[CellContext]),
-          _ => TypeRepr.of[Option[Data]]
+          _ => TypeRepr.of[POption[Data]]
         )
 
         val dispatchLambda = Lambda(
@@ -632,8 +813,6 @@ object UtxoFlowMacros {
           }
         )
 
-        val dispatchExpr = dispatchLambda.asExprOf[(Data, Data, CellContext) => Option[Data]]
-        val chunkCount = Expr(chunkInfos.size)
-        '{ new UtxoFlowDispatch($dispatchExpr, $chunkCount) }
+        dispatchLambda.asExprOf[(Data, Data, CellContext) => POption[Data]]
     }
 }

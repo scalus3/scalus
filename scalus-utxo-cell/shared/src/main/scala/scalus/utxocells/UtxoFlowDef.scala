@@ -6,22 +6,7 @@ import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.{AssetName, PolicyId, ScriptHash, Utxo, Utxos, Value}
 import scalus.cardano.node.{UtxoQuery, UtxoSource}
 import scalus.cardano.txbuilder.{TransactionBuilderStep, TxBuilder}
-
-/** Result of `UtxoFlow.define` macro — holds the off-chain dispatch function and chunk metadata.
-  *
-  * This is the raw macro output. Wrap it in a [[UtxoFlowDef]] together with a compiled script and
-  * token name to get a full flow descriptor with init/advance operations.
-  *
-  * @param dispatch
-  *   Off-chain dispatch: `(datum: Data, redeemer: Data, ctx: CellContext) => Option[Data]`. Returns
-  *   `Some(nextDatum)` to continue or `None` for terminal.
-  * @param chunkCount
-  *   Number of chunks (suspend boundaries).
-  */
-class UtxoFlowDispatch(
-    val dispatch: (Data, Data, CellContext) => Option[Data],
-    val chunkCount: Int
-)
+import scalus.cardano.onchain.plutus.prelude.Option as POption
 
 /** A stateless descriptor for a UtxoFlow — a multi-transaction UTxO flow on Cardano.
   *
@@ -51,7 +36,7 @@ class UtxoFlowDispatch(
 class UtxoFlowDef(
     val compiled: CompiledPlutus[?],
     val tokenName: ByteString,
-    val flowDispatch: UtxoFlowDispatch
+    val flowDispatch: (Data, Data, CellContext) => POption[Data]
 ) {
 
     val scriptHash: ScriptHash = compiled.script.scriptHash
@@ -59,12 +44,6 @@ class UtxoFlowDef(
     val assetName: AssetName = AssetName(tokenName)
 
     def scriptAddress(network: Network): Address = compiled.address(network)
-
-    /** The dispatch function: `(datum, redeemer, ctx) => Option[Data]`. */
-    def dispatch: (Data, Data, CellContext) => Option[Data] = flowDispatch.dispatch
-
-    /** Number of chunks (suspend boundaries). */
-    def chunkCount: Int = flowDispatch.chunkCount
 
     /** Find the flow UTxO by beacon token in the provided UTxO set. */
     def findUtxo(utxos: Utxos): Option[Utxo] = {
@@ -125,7 +104,7 @@ class UtxoFlowDef(
         val datum = currentDatum(flowUtxo)
         val cellDef = toCellDef(env.network)
         val ctx = new OffChainCellContext(cellDef, flowUtxo, redeemer, env)
-        val nextDatum = dispatch(datum, redeemer, ctx)
+        val nextDatum = flowDispatch(datum, redeemer, ctx).asScala
 
         import UtxoCellBuilder.*
         val outputValue = ctx.continuingValue match
