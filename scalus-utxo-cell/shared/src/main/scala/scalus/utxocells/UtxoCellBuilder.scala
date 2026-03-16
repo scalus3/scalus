@@ -197,5 +197,40 @@ object UtxoCellBuilder {
                     withSpend.mint(cellDef.compiled, Map(cellDef.assetName -> -1L), redeemer)
             withState.addSteps(ctx.steps*)
         }
+
+        /** Initialize a UtxoFlow: mint beacon + send initial datum to script address.
+          *
+          * Usage:
+          * {{{
+          * TxBuilder(env)
+          *     .initUtxoFlow(auctionFlow, initialDatum, Value.ada(10))
+          *     .complete(emulator.utxos, Alice.address)
+          * }}}
+          */
+        def initUtxoFlow(
+            flow: UtxoFlowDef,
+            initialDatum: Data,
+            outputValue: Value
+        ): TxBuilder = flow.init(initialDatum, outputValue)(builder)
+
+        /** Advance a UtxoFlow (deferred).
+          *
+          * Records a deferred step that resolves at `complete` time: finds flow UTxO by beacon,
+          * runs dispatch, builds spend + continuing output (or burn) + context-accumulated steps.
+          */
+        def advanceUtxoFlow(
+            flow: UtxoFlowDef,
+            redeemer: Data
+        ): TxBuilder = flow.advance(redeemer)(builder)
+
+        /** Advance a UtxoFlow (eager).
+          *
+          * Finds flow UTxO in the provided set, runs dispatch, and adds concrete steps immediately.
+          */
+        def advanceUtxoFlow(
+            flow: UtxoFlowDef,
+            redeemer: Data,
+            utxos: Utxos
+        ): TxBuilder = flow.advance(redeemer, utxos)(builder)
     }
 }

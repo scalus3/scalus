@@ -565,6 +565,7 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.0",
       publish / skip := true
     )
     .jvmSettings(Test / fork := true)
