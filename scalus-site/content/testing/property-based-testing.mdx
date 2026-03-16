@@ -1,0 +1,212 @@
+---
+title: Property-Based Testing for Cardano Smart Contracts
+sidebarTitle: Property-Based Testing
+description: Use ScalaCheck property-based testing with Scalus to verify smart contract invariants across random inputs. Generate random Cardano types, test validator properties, and catch edge cases automatically.
+---
+
+import { Callout } from 'nextra/components'
+
+# Property-Based Testing
+
+Example-based tests check specific scenarios you think of. Property-based tests check invariants across hundreds of randomly generated inputs — catching edge cases you didn't anticipate.
+
+For smart contracts, this is critical: a validator that passes 10 hand-picked test cases can still fail on the 11th combination of amount, timing, and signatories. ScalaCheck generates those combinations for you.
+
+## Setup
+
+Scalus integrates with [ScalaCheck](https://www.scalacheck.org/) and provides `Arbitrary` instances for all Cardano types:
+
+```scala {2,8-10}
+import org.scalatest.funsuite.AnyFunSuite
+import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scalus.testing.kit.ScalusTest
+
+class MyValidatorTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
+
+  test("value is always non-negative") {
+    forAll { (txIn: TxInInfo) =>
+      assert(txIn.resolved.value.lovelace >= 0)
+    }
+  }
+}
+```
+
+`forAll` generates random `TxInInfo` values and checks the property for each. If it fails, ScalaCheck shrinks the failing input to the minimal reproduction case.
+
+Available `Arbitrary` instances:
+- **Plutus types:** `TxInfo`, `TxOut`, `TxInInfo`, `ScriptContext`, `Value`, `Address`
+- **Primitives:** `PubKeyHash`, `TxId`, `TxOutRef`, `POSIXTime`, `ValidatorHash`
+- **Custom types** with `derives FromData, ToData`
+
+## Custom Generators
+
+Use `Gen` to constrain random values to your domain:
+
+```scala {3-4,7,14}
+import org.scalacheck.Gen
+
+val validBidGen: Gen[Long] = Gen.choose(2_000_000L, 100_000_000L)
+val invalidBidGen: Gen[Long] = Gen.choose(0L, 1_999_999L)
+
+test("bids above minimum are accepted") {
+  forAll(validBidGen) { bidAmount =>
+    val result = submitBid(bidAmount)
+    assert(result.isRight)
+  }
+}
+
+test("bids below minimum are rejected") {
+  forAll(invalidBidGen) { bidAmount =>
+    val result = submitBid(bidAmount)
+    assert(result.isLeft)
+  }
+}
+```
+
+### Combining Generators
+
+Compose generators for complex test inputs:
+
+```scala {1-5,8}
+val auctionScenarioGen: Gen[(Long, Long, Boolean)] = for
+  currentBid <- Gen.choose(2_000_000L, 50_000_000L)
+  newBid     <- Gen.choose(0L, 100_000_000L)
+  afterDeadline <- Gen.oneOf(true, false)
+yield (currentBid, newBid, afterDeadline)
+
+test("bid validation is consistent") {
+  forAll(auctionScenarioGen) { (currentBid, newBid, afterDeadline) =>
+    val result = validateBid(currentBid, newBid, afterDeadline)
+
+    if afterDeadline then
+      assert(result.isFailure, "Should reject all bids after deadline")
+    else if newBid <= currentBid then
+      assert(result.isFailure, "Should reject bids at or below current")
+    else
+      assert(result.isSuccess, "Should accept valid bids before deadline")
+  }
+}
+```
+
+## Testing Validator Properties
+
+The key insight: express what your validator **should guarantee** as a property, then let ScalaCheck find counterexamples.
+
+### Crowdfunding: Donation Validates Correctly
+
+```scala {2-4,6,28-35}
+test("donate fails after deadline") {
+  val deadlineGen = Gen.choose(1000L, 100_000L)
+  val slotGen = Gen.choose(0L, 200_000L)
+  val amountGen = Gen.choose(1_000_000L, 50_000_000L)
+
+  forAll(deadlineGen, slotGen, amountGen) { (deadline, currentSlot, amount) =>
+    val datum = CampaignDatum(
+      totalSum = BigInt(0),
+      goal = BigInt(10_000_000),
+      recipient = random[PubKeyHash],
+      deadline = BigInt(deadline),
+      withdrawn = BigInt(0),
+      donationPolicyId = donationPolicyId
+    )
+
+    val context = ScriptContext(
+      txInfo = TxInfo(
+        inputs = List(campaignInput(datum)),
+        outputs = List.Nil,
+        mint = Value.zero,
+        signatories = List.Nil,
+        validRange = Interval.after(currentSlot),
+        id = random[TxId]
+      ),
+      redeemer = Action.Donate(BigInt(amount), BigInt(0), BigInt(0), BigInt(1)).toData,
+      scriptInfo = ScriptInfo.SpendingScript(txOutRef, Option.None)
+    )
+
+    val result = crowdfundingContract.program $ context.toData
+    val evalResult = result.evaluateDebug
+
+    if currentSlot > deadline then
+      assert(evalResult.isFailure, "Should reject donations after deadline")
+    else
+      // May fail for other reasons (missing outputs, etc.) but not for deadline
+      evalResult match
+        case Result.Failure(_, _, _, logs) =>
+          assert(!logs.exists(_.contains("before deadline")),
+            "Should not fail with deadline error when before deadline")
+        case _ => ()  // success is fine
+  }
+}
+```
+
+### Auction: Bid Amount Invariant
+
+```scala {2-3,5,18-22}
+test("bid must exceed current highest") {
+  val bidGen = Gen.choose(0L, 200_000_000L)
+  val currentBidGen = Gen.choose(2_000_000L, 100_000_000L)
+
+  forAll(bidGen, currentBidGen) { (newBid, currentBid) =>
+    val datum = AuctionDatum(
+      seller = random[PubKeyHash],
+      highestBidder = random[PubKeyHash],
+      highestBid = BigInt(currentBid),
+      auctionEndTime = BigInt(999_999),
+      itemId = utf8"test-item"
+    )
+
+    val context = buildBidContext(datum, newBid, slot = 500)
+    val result = auctionContract.program $ context.toData
+    val evalResult = result.evaluateDebug
+
+    if newBid > currentBid then
+      // Valid bid — may still fail for other reasons (outputs, etc.)
+      ()
+    else
+      assert(evalResult.isFailure, s"Should reject bid $newBid <= current $currentBid")
+  }
+}
+```
+
+## Labeled Properties
+
+Use labeled props for clear failure messages when testing multiple properties at once:
+
+```scala {4-8}
+import org.scalacheck.Prop
+
+test("campaign datum invariants") {
+  forAll { (datum: CampaignDatum) =>
+    Prop(datum.totalSum >= 0)            :| "totalSum non-negative" &&
+    Prop(datum.goal > 0)                 :| "goal positive" &&
+    Prop(datum.withdrawn >= 0)           :| "withdrawn non-negative" &&
+    Prop(datum.withdrawn <= datum.totalSum) :| "withdrawn <= totalSum"
+  }
+}
+```
+
+When a property fails, ScalaCheck reports which label broke — instead of a generic assertion error.
+
+## Beyond Single-Step Testing
+
+`forAll` tests properties against a fixed state. But smart contracts evolve through sequences of actions — donate, wait, withdraw, reclaim — where bugs emerge from specific orderings.
+
+Scalus provides two tools for multi-step property testing:
+
+- **`ContractScalaCheckCommands`** — generates random sequences of actions, checks invariants after each step, and shrinks to minimal failing sequences. Scales to hundreds of participants.
+- **`Scenario.explore`** — exhaustive exploration of all action combinations at bounded depth. Full coverage for small state spaces.
+
+Both use the same `ContractStepVariations` interface and can be combined with [attack patterns](/docs/testing/testkit#standard-variations) for security testing.
+
+See [Boundary Testing](/docs/testing/testkit) for the full guide on multi-step testing, transaction variations, and attack simulation.
+
+## Examples
+
+- [CrowdfundingValidatorTest](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingValidatorTest.scala) — Property-based script context testing with random data and error log verification
+
+## Related
+
+- [Unit Testing](/docs/testing/unit-testing) — ScalusTest trait, assertScriptFail, budget testing
+- [Boundary Testing](/docs/testing/testkit) — Multi-step testing, attack patterns, and state-space exploration
+- [TDD & ATDD Workflow](/docs/testing/tdd-atdd-workflow) — Test-first development for smart contracts
+- [Emulator](/docs/testing/emulator) — In-memory Cardano node for fast iteration

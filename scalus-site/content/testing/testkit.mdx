@@ -930,9 +930,15 @@ val scenario = ScenarioExplorer.explore(maxDepth = 3) { reader =>
 
 This works via `CpsMonadConversion[Future, Scenario]` which wraps the `Future` in a `Scenario.WaitFuture` node, preserving state correctly.
 
+## Examples
+
+- [CrowdfundingScalaCheckCommandTest](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScalaCheckCommandTest.scala) — Multi-step property testing with 200 participants and invariant checking
+- [CrowdfundingScenarioTest](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/crowdfunding/CrowdfundingScenarioTest.scala) — Exhaustive scenario exploration with non-deterministic branching
+
 ## See Also
 
-- [Unit Testing](/docs/testing/unit-testing) — Property-based testing with ScalaCheck
+- [Unit Testing](/docs/testing/unit-testing) — ScalusTest trait, assertScriptFail, budget testing
+- [Property-Based Testing](/docs/testing/property-based-testing) — ScalaCheck forAll with random Cardano types
 - [Emulator](/docs/testing/emulator) — In-memory testing with instant feedback
 - [Common Vulnerabilities](/docs/security/common-vulnerabilities) — Vulnerability patterns the testkit helps detect
 - [Security](/docs/security) — Security principles for smart contracts

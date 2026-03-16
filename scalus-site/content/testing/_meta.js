@@ -1,6 +1,8 @@
 export default {
   //index: '',
+  'tdd-atdd-workflow': 'TDD & ATDD Workflow',
   'unit-testing': 'Unit Testing',
+  'property-based-testing': 'Property-Based Testing',
   debugging: 'Debugging',
   emulator: 'Emulator',
   'js-emulator': 'JS/TS Emulator',
