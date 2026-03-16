@@ -9,6 +9,8 @@
         * [Merkelized Validator](#merkelized-validator)
     * [Validation Patterns](#validation-patterns)
         * [Parameter Validation](#parameter-validation)
+    * [Creational Patterns](#creational-patterns)
+        * [Factory](#factory)
     * [Indexing Patterns](#indexing-patterns)
         * [UTxO Indexers](#utxo-indexers)
     * [Advanced Data structures](#advanced-data-structures)
@@ -342,6 +344,98 @@ object NFTMintingPolicy {
 ```
 
 See `scalus.examples.ParameterValidationExample` for the complete implementation.
+
+## Creational Patterns
+
+### Factory
+
+This pattern implements the [Factory](https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/factory)
+pattern from the Rosetta Smart Contracts project. In account-model blockchains (Ethereum),
+a Factory contract deploys Product contracts dynamically. In Cardano's UTxO model, there is
+no "deploy contract at runtime," so the pattern must be reinterpreted.
+
+#### UTxO Interpretations
+
+| Approach | Idea | Pros | Cons |
+|----------|------|------|------|
+| **A: Minting Policy as Factory** | Minting = creation, burning = destruction. Products are NFT-identified UTxOs at a spending validator. | Natural UTxO mapping, clean separation, products discoverable via policy ID | Requires two script endpoints (mint + spend) |
+| **B: Single Validator** | One spending validator manages all products, each with a unique NFT | Simpler, tighter coupling | "Factory" concept is less distinct |
+| **C: Parameterized Script Factory** | Off-chain function instantiates parameterized validators per product | Each product at its own address, closest to Ethereum's "deploy" | No on-chain factory logic, hard to enumerate products |
+
+This module implements **Approach A**, which is the most practical and instructive.
+
+#### How It Works
+
+```
+  ┌─────────────────────┐
+  │  Factory (Minting)  │  Create(tag, seedUtxo) → mint NFT, produce product UTxO
+  │                     │  Destroy               → burn NFT
+  └────────┬────────────┘
+           │ NFT
+  ┌────────▼────────────┐
+  │  Product UTxO       │  datum: ProductDatum(tag, creator)
+  │  at spending script │  value: ... + 1 NFT (policy=factory, name=hash)
+  └─────────────────────┘
+           │
+  ┌────────▼────────────┐
+  │  Spending Validator │  Only creator can spend; NFT must be burned
+  └─────────────────────┘
+```
+
+The token name is `blake2b_256(serialiseData(seedUtxo))`, where `seedUtxo` is a
+one-shot UTxO reference consumed during creation. Since each UTxO can only be spent
+once, this guarantees globally unique token names and prevents duplicate products.
+
+#### API
+
+**On-chain functions** (`Factory`):
+
+| Function | Description |
+|----------|-------------|
+| `computeTokenName` | Derive unique token name from seed UTxO (one-shot) |
+| `validateCreate` | Minting policy logic: verify seed consumed, mint, datum, output, signature |
+| `validateDestroy` | Minting policy logic: verify burn and creator signature |
+| `validateSpend` | Spending validator logic: verify NFT burn and creator signature |
+
+**Off-chain discovery:**
+
+Products are found by querying UTxOs at the spending script address that carry tokens
+from the factory's policy ID. Each product's datum contains the `tag` and `creator`.
+
+#### Example
+
+```scala
+import scalus.patterns.{Factory, FactoryAction, ProductDatum}
+
+@Compile
+object FactoryExample extends Validator {
+
+    // Minting endpoint — factory creates/destroys products
+    inline override def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit = {
+        val action = redeemer.to[FactoryAction]
+        action match
+            case FactoryAction.Create(tag, seedUtxo) =>
+                val creator = tx.signatories.head
+                Factory.validateCreate(creator, tag, seedUtxo, policyId, policyId, tx)
+            case FactoryAction.Destroy =>
+                val creator = tx.signatories.head
+                Factory.validateDestroy(creator, policyId, tx)
+    }
+
+    // Spending endpoint — consuming a product requires burning its NFT
+    inline override def spend(
+        datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef
+    ): Unit = {
+        val productDatum = datum.getOrFail("Datum required").to[ProductDatum]
+        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val factoryPolicyId = ownInput.resolved.address.credential
+            .scriptOption.getOrFail("Own address must be Script")
+        Factory.validateSpend(productDatum, factoryPolicyId, ownInput.resolved.value, tx)
+    }
+}
+```
+
+See `scalus.examples.FactoryExample` for the complete implementation.
 
 ## Indexing Patterns
 
