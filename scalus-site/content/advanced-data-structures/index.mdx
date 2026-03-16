@@ -77,6 +77,17 @@ Frontier Merkle Tree uses the same on-chain verifier as Incremental Merkle Tree 
 
 For detailed performance benchmarks — including radix comparisons, fusing optimizations, and full Cardano transaction fee breakdowns — see [Benchmarking Authenticated Collections on Cardano](https://lantr.io/blog/scalus-authenticated-collections-benchmarks/).
 
+## Examples
+
+Each data structure page includes on-chain and off-chain code snippets from real validators in the [scalus-examples](https://github.com/scalus3/scalus/tree/master/scalus-examples) module:
+
+- [**MembershipTokenValidator**](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/MembershipToken.scala) — Merkle Tree for allowlist-gated token minting
+- [**SetBenchImtValidator**](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchImtValidator.scala) — Incremental Merkle Tree for oracle-managed sets
+- [**SetBenchMpf16oValidator**](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16oValidator.scala) — Standard MPF (Aiken-compatible)
+- [**SetBenchMpf16bValidator**](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16bValidator.scala) — Fused MPF (8–12% cheaper)
+- [**SetBenchAccValidator**](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchAccValidator.scala) — Bilinear Accumulator with Ethereum KZG ceremony
+- [**AnonymousDataValidator**](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/anonymousdata/AnonymousDataValidator.scala) — Merkle Tree + AssocMap for privacy-preserving storage
+
 ## Related
 
 - [Design Patterns](/docs/design-patterns) — Optimization and validation patterns for Cardano contracts

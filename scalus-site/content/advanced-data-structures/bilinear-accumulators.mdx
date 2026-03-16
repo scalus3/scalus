@@ -62,6 +62,55 @@ Both use 2 pairings for verification. The G2 variant would be cheaper on-chain (
 - **Elliptic curve pairings** — Vitalik Buterin's [Exploring Elliptic Curve Pairings](https://medium.com/@VitalikButerin/exploring-elliptic-curve-pairings-c73c1f6b6b0) gives an accessible introduction.
 - **Bilinear accumulators** — The original construction is from [Nguyen (2005)](https://link.springer.com/chapter/10.1007/978-3-540-30580-4_19). For a more accessible treatment, see [Boneh, Bünz, Fisch: Batching Techniques for Accumulators](https://eprint.iacr.org/2018/1188), Section 3.
 
+## Example: Accumulator-Based Set Validator
+
+The [SetBenchAccValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchAccValidator.scala) demonstrates membership verification using the G1 accumulator with the Ethereum KZG ceremony as the trusted setup.
+
+**On-chain** — verify membership and update the accumulator:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.accumulator.G1Accumulator
+import scalus.cardano.onchain.plutus.prelude.bls12_381.G2
+
+// Decompress the accumulator and proof from datum/redeemer
+val acc = bls12_381_G1_uncompress(state.root)
+val proof = bls12_381_G1_uncompress(action.compressedProof)
+
+// Load CRS (G2 powers from the trusted setup)
+val g2_0 = G2.uncompress(SetBenchCRS.g2_0)
+val g2_1 = G2.uncompress(SetBenchCRS.g2_1)
+val crs = List(g2_0, g2_1)
+
+// Verify the element is in the set
+require(
+  G1Accumulator.verifyMembership(crs, acc, List(action.element), proof),
+  "Membership proof failed"
+)
+
+// After deletion, the membership proof IS the new accumulator
+val newRoot = bls12_381_G1_compress(proof)
+```
+
+**Off-chain** — build the accumulator and generate proofs:
+
+```scala
+import scalus.crypto.accumulator.EthereumKzgCeremony
+import scalus.crypto.accumulator.BilinearAccumulatorProver.*
+
+// Load the Ethereum KZG ceremony as trusted setup
+val ceremony = EthereumKzgCeremony.loadCeremony()
+val setup = Setup.fromPoints(ceremony.g1Monomial.toVector, ceremony.g2Monomial.toVector)
+
+// Create accumulator from a set of elements (as BigInt field elements)
+val elements: Vector[BigInt] = keys.map(k => byteStringToInteger(true, blake2b_256(k)))
+val acc = setup.accumulate(elements)
+
+// Generate a membership proof for a single element
+val proof = setup.proveMembership(elements, targetElement)
+```
+
+See also: [CollectionMembershipBudgetTest](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala) — budget analysis comparing accumulator vs MPF variants at different collection sizes.
+
 ## Related
 
 - [Merkle Patricia Forestry](/docs/advanced-data-structures/merkle-patricia-forestry) — hash-based alternative with ~35× less CPU but larger proofs

@@ -104,6 +104,58 @@ The on-chain verifier is **identical** to the Incremental Merkle Tree — the va
 
 The off-chain build time is higher (12s vs 2s for 1M elements) because the frontier tree recomputes intermediate hashes rather than looking them up in a stored structure, but for an oracle that appends one data point per block this is negligible.
 
+## Example: Oracle-Managed Set Validator
+
+The [SetBenchImtValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchImtValidator.scala) demonstrates an oracle-managed append-only set. The oracle appends new elements, and users prove membership to deposit or withdraw.
+
+**On-chain** — append a new element (oracle action):
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.tree.IncrementalMerkleTree
+
+val state = datum.getOrFail("No datum").to[ImtDatum]
+
+// Oracle appends a new key to the tree
+val newRoot = IncrementalMerkleTree.append(
+  state.root,   // current root hash
+  state.size,   // number of elements already in the tree
+  state.depth,  // fixed tree depth (e.g. 15 for up to 32K elements)
+  key,           // new element to append
+  siblings       // proof: sibling hashes along the path
+)
+```
+
+**On-chain** — verify membership (user action):
+
+```scala
+// User proves their key is in the tree to deposit or withdraw
+IncrementalMerkleTree.verifyMembership(
+  state.root,    // current root hash
+  key,            // element to verify
+  state.depth,   // tree depth
+  siblings        // membership proof
+)
+```
+
+**Off-chain** — build the tree and generate proofs:
+
+```scala
+import scalus.crypto.tree.IncrementalMerkleTree
+
+// Build a tree of depth 15 (capacity: 2^15 = 32,768 elements)
+var tree = IncrementalMerkleTree.empty(depth = 15)
+
+// Append elements one by one
+for (key, _) <- elements do
+  tree = tree.append(blake2b_256(key))
+
+// Generate proofs
+val membershipProof = tree.proveMembership(elementHash)
+val appendProof = tree.proveAppend(newElementHash)
+```
+
+See also: [SetBenchEmulatorTest](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/scala/scalus/examples/setbench/SetBenchEmulatorTest.scala) for full emulator-based benchmarks measuring real transaction fees and execution units.
+
 ## Related
 
 - [Merkle Tree](/docs/advanced-data-structures/merkle-tree) — static variant for immutable sets

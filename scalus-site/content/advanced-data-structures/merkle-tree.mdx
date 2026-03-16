@@ -50,6 +50,37 @@ To verify membership, the on-chain validator receives the element and its proof 
 
 Ralph Merkle described the idea in 1979 in "A Certified Digital Signature". The motivation was signing many messages at once: instead of signing each message individually, hash them into a root and sign only the root.
 
+## Example: Membership Token Validator
+
+The [MembershipTokenValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/MembershipToken.scala) uses a Merkle Tree to gate token minting — only members in a pre-built allowlist can mint. The Merkle root is baked into the script at deployment time via `ParameterizedValidator[ByteString]`.
+
+**On-chain** — verify the signer is in the allowlist:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.tree.MerkleTree
+
+// merkleRoot is the script parameter (baked in at deploy time)
+// signer.hash is the pubkeyhash of the transaction signer
+// proof is the sibling hashes along the path to the root
+MerkleTree.verifyMembership(merkleRoot, signer.hash, proof)
+```
+
+**Off-chain** — build the tree and generate a proof:
+
+```scala
+import scalus.crypto.tree.MerkleTree
+
+// Build the tree from a list of member pubkeyhashes
+val members: Seq[ByteString] = Seq(alice.hash, bob.hash, charlie.hash)
+val tree = MerkleTree.fromHashes(members)
+val root = tree.rootHash  // bake this into the script parameter
+
+// Generate a membership proof for alice
+val proof = tree.proveMembership(alice.hash)
+```
+
+The [AnonymousDataValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/anonymousdata/AnonymousDataValidator.scala) demonstrates another pattern: Merkle Tree for participant authorization combined with `AssocMap` for encrypted key-value storage.
+
 ## Related
 
 - [Incremental Merkle Tree](/docs/advanced-data-structures/incremental-merkle-tree) — append-only variant for dynamic sets

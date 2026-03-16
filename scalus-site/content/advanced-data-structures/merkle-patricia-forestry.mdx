@@ -127,6 +127,78 @@ The fused variant hashes a branch as `blake2b(skip_count ++ halfLeft ++ halfRigh
 
 Use the standard variant when you need to share Merkle roots with Aiken contracts. Use the fused variant for maximum on-chain efficiency in Scalus-only deployments.
 
+## Example: Key-Value Set Validator (Standard MPF)
+
+The [SetBenchMpf16oValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16oValidator.scala) demonstrates insert and delete operations with the Aiken-compatible MPF variant.
+
+**On-chain** — insert or delete a key-value pair:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry
+import scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.*
+
+val state = datum.getOrFail("No datum").to[SetBenchDatum]
+val trie = MerklePatriciaForestry(state.root)
+
+// Insert returns a new trie with updated root
+val newTrie = trie.insert(key, value, proofData.to[Proof])
+
+// Delete returns a new trie with the key removed
+val newTrie = trie.delete(key, value, proofData.to[Proof])
+
+// Verify the continuing output has the new root
+require(outDatum.root === newTrie.root, "Wrong root")
+```
+
+**Off-chain** — build the trie and generate proofs:
+
+```scala
+import scalus.crypto.trie.MerklePatriciaForestry
+
+// Build the trie from key-value pairs
+var trie = MerklePatriciaForestry.empty
+for (key, value) <- elements do
+  trie = trie.insert(blake2b_256(key), blake2b_256(value))
+
+// Generate proofs
+val membershipProof = trie.proveMembership(keyHash)
+val nonMembershipProof = trie.proveNonMembership(keyHash)
+```
+
+## Example: Key-Value Set Validator (Fused MPF)
+
+The [SetBenchMpf16bValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16bValidator.scala) uses the Fused MPF variant for ~8–12% lower on-chain cost. The API is the same — only the proof encoding differs.
+
+**On-chain** — the fused variant uses `ByteString` proofs instead of `Proof`:
+
+```scala
+import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry
+import scalus.cardano.onchain.plutus.crypto.trie.FusedMerklePatriciaForestry.*
+
+val trie = FusedMerklePatriciaForestry(state.root)
+
+// Same API as standard MPF, but proofs are flat ByteStrings
+val newTrie = trie.insert(key, value, unBData(proofData))
+val newTrie = trie.delete(key, value, unBData(proofData))
+```
+
+**Off-chain** — the fused variant generates binary proofs:
+
+```scala
+import scalus.crypto.trie.FusedMerklePatriciaForestry
+
+var trie = FusedMerklePatriciaForestry.empty
+for (key, value) <- elements do
+  trie = trie.insert(blake2b_256(key), blake2b_256(value))
+
+val proof = trie.proveMembership(keyHash)  // returns ByteString, not List[ProofStep]
+```
+
+See also:
+- [SetBenchMpf16bLightValidator](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/main/scala/scalus/examples/setbench/SetBenchMpf16bLightValidator.scala) — minimal validator for fair Scalus-vs-Aiken cost comparison
+- [CollectionMembershipBudgetTest](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/scala/scalus/examples/setbench/CollectionMembershipBudgetTest.scala) — budget analysis comparing MPF variants at different collection sizes
+- [AikenMpfCompatibilityTest](https://github.com/scalus3/scalus/tree/master/scalus-examples/jvm/src/test/scala/scalus/examples/setbench/AikenMpfCompatibilityTest.scala) — verifies Scalus MPF proofs are compatible with Aiken's implementation
+
 ## Related
 
 - [Merkle Trees](/docs/advanced-data-structures/merkle-tree) — simpler static and append-only variants
