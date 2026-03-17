@@ -286,8 +286,7 @@ object PlutusDataSchema {
                 getUplcRepr(symbol) match
                     case Some("ProductCaseOneElement") =>
                         val params = getPrimaryConstructorParams(symbol)
-                        if params.length == 1 then
-                            resolveFieldDataType(params.head._2)
+                        if params.length == 1 then resolveFieldDataType(params.head._2)
                         else
                             report.errorAndAbort(
                               s"@UplcRepr(ProductCaseOneElement) requires exactly one constructor parameter for ${symbol.name}"

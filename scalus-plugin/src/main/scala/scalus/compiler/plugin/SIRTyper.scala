@@ -755,7 +755,8 @@ class SIRTyper(using Context) {
                 val params = List(TypeBinding("value", paramType))
                 val sBaseAnns = AnnotationsDecl.fromSym(s)
                 val sReprData = extractUplcReprAnnotation(s)
-                val sAnns = if sReprData.isEmpty then sBaseAnns else sBaseAnns.copy(data = sReprData)
+                val sAnns =
+                    if sReprData.isEmpty then sBaseAnns else sBaseAnns.copy(data = sReprData)
                 ConstrDecl(
                   syntethicName,
                   params,

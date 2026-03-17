@@ -4,8 +4,8 @@ import scala.quoted.*
 
 /** Shared macro utility for extracting `@UplcRepr` annotation values at compile time.
   *
-  * Returns the `UplcRepresentation` case object name (e.g. "ProductCaseOneElement", "SumCase")
-  * by pattern-matching the annotation's AST node.
+  * Returns the `UplcRepresentation` case object name (e.g. "ProductCaseOneElement", "SumCase") by
+  * pattern-matching the annotation's AST node.
   */
 private[scalus] object UplcReprMacroUtils {
 

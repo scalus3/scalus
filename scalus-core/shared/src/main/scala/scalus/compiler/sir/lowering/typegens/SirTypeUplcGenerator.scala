@@ -161,8 +161,12 @@ object SirTypeUplcGenerator {
                     // 1. Non-trivial structural constraints (can't be expressed by annotations)
                     resolveWithConstraints(constrDecl, typeArgs)
                         // 2. @UplcRepr annotation
-                        .orElse(getUplcReprAnnotation(constrDecl.annotations)
-                            .map(encoded => resolveUplcRepresentation(encoded, constrDecl, typeArgs, debug)))
+                        .orElse(
+                          getUplcReprAnnotation(constrDecl.annotations)
+                              .map(encoded =>
+                                  resolveUplcRepresentation(encoded, constrDecl, typeArgs, debug)
+                              )
+                        )
                         // 3. Basic structural inference with diagnostic check
                         .getOrElse {
                             warnIfExpectedAnnotation(constrDecl)
@@ -195,7 +199,9 @@ object SirTypeUplcGenerator {
         retval
     }
 
-    /** Types that should have @UplcRepr annotation. If we reach here, the annotation wasn't propagated. */
+    /** Types that should have @UplcRepr annotation. If we reach here, the annotation wasn't
+      * propagated.
+      */
     private val expectedAnnotatedTypes = Set(
       "scalus.cardano.onchain.plutus.v1.PubKeyHash",
       "scalus.cardano.onchain.plutus.v3.TxId",
@@ -209,7 +215,7 @@ object SirTypeUplcGenerator {
         if expectedAnnotatedTypes.contains(constrDecl.name) then
             System.err.println(
               s"WARNING: ${constrDecl.name} expected @UplcRepr annotation but none found. " +
-                "Falling back to structural inference, which may produce incorrect representation."
+                  "Falling back to structural inference, which may produce incorrect representation."
             )
 
     /** Non-trivial structural constraints that can't be expressed by annotations
