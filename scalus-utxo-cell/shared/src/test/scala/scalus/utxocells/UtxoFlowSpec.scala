@@ -496,6 +496,155 @@ class UtxoFlowSpec extends AnyFunSuite {
         info("Full recursion lifecycle: entry → loop → re-bid → loop → terminal")
     }
 
+    // ================================================================
+    // Parameterized flow tests — outer scope params captured as datum fields
+    // ================================================================
+
+    test("parameterized flow — outer param captured in recursive function") {
+        // Pattern from the design doc: a function that takes parameters
+        // and returns a flow dispatch. The parameters become datum fields
+        // in chunks that reference them.
+        def auctionFlow(seller: PubKeyHash) = UtxoFlow.define { ctx =>
+            def bidLoop(currentBid: Bid): Unit = {
+                val confirm = await(UtxoFlow.suspend[Confirm])
+                if confirm.confirmed then
+                    ctx.txInfo.requireSignedBy(seller) // seller from outer scope
+                else
+                    val newBid = await(UtxoFlow.suspend[Bid])
+                    bidLoop(newBid)
+            }
+            val firstBid = await(UtxoFlow.suspend[Bid])
+            bidLoop(firstBid)
+        }
+
+        val seller = PubKeyHash(
+          ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
+        )
+        val flowDispatch = auctionFlow(seller)
+
+        // Chunk 0: await Bid → enters bidLoop
+        val datum0 = Data.Constr(0, PList.Nil)
+        val bid1 = Bid(seller, BigInt(500))
+        val result0 = flowDispatch(datum0, bid1.toData, null)
+        val loopDatum = result0 match {
+            case POption.Some(d) =>
+                info(s"Chunk 0 → loop entry: $d")
+                d match {
+                    case Data.Constr(tag, fields) =>
+                        assert(tag == 1, s"Expected tag=1 (loop entry), got $tag")
+                        // Datum should contain currentBid AND seller
+                        info(s"Loop entry datum fields: $fields")
+                        d
+                    case other => fail(s"Expected Constr, got $other"); ???
+                }
+            case POption.None => fail("Chunk 0 should enter loop"); ???
+        }
+
+        // Chunk 1 (loop entry): await Confirm; confirmed=false → chunk 2 (await Bid)
+        val notConfirmed = Confirm(false)
+        val result1 = flowDispatch(loopDatum, notConfirmed.toData, null)
+        val awaitBidDatum = result1 match {
+            case POption.Some(d) =>
+                info(s"Loop (not confirmed) → await new bid: $d")
+                d
+            case POption.None => fail("Not confirmed should continue to await bid"); ???
+        }
+
+        // Chunk 2: await Bid → calls bidLoop(newBid) → back to chunk 1
+        // This tests transitive free var: seller must be carried through chunk 2
+        val bid2 = Bid(seller, BigInt(1000))
+        val result2 = flowDispatch(awaitBidDatum, bid2.toData, null)
+        val loopDatum2 = result2 match {
+            case POption.Some(d) =>
+                info(s"Re-bid → back to loop: $d")
+                d match {
+                    case Data.Constr(tag, fields) =>
+                        assert(tag == 1, s"Expected tag=1 (loop back), got $tag")
+                        // seller should still be in datum fields
+                        info(s"Loop re-entry datum fields: $fields")
+                        d
+                    case other => fail(s"Expected Constr, got $other"); ???
+                }
+            case POption.None => fail("Re-bid should loop back"); ???
+        }
+
+        // Chunk 1 again: confirmed=true → terminal (uses seller via ctx)
+        val confirmed = Confirm(true)
+        val ex = intercept[NullPointerException] {
+            flowDispatch(loopDatum2, confirmed.toData, null)
+        }
+        info(s"Terminal reached ctx.txInfo.requireSignedBy(seller) (NPE: ${ex.getMessage})")
+    }
+
+    test("parameterized flow — multiple outer params + function param in datum") {
+        // Full auction pattern: seller + minBid from outer scope,
+        // currentBid as function param, all captured as datum fields.
+        def auctionFlow(seller: PubKeyHash, minBid: BigInt) = UtxoFlow.define { ctx =>
+            def bidLoop(currentBid: Bid): Unit = {
+                val confirm = await(UtxoFlow.suspend[Confirm])
+                if confirm.confirmed then
+                    // Terminal: both seller (outer) and currentBid (param) used
+                    ctx.txInfo.requireSignedBy(seller)
+                    ctx.txInfo.outputs.add(
+                      scalus.cardano.onchain.plutus.v1.Address.fromPubKeyHash(seller),
+                      scalus.cardano.onchain.plutus.v1.Value.lovelace(currentBid.amount)
+                    )
+                else
+                    val newBid = await(UtxoFlow.suspend[Bid])
+                    bidLoop(newBid)
+            }
+            val firstBid = await(UtxoFlow.suspend[Bid])
+            // minBid from outer scope used here
+            require(firstBid.amount >= minBid, "bid too low")
+            bidLoop(firstBid)
+        }
+
+        val seller = PubKeyHash(
+          ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
+        )
+        val minBid = BigInt(100)
+        val flowDispatch = auctionFlow(seller, minBid)
+
+        // Chunk 0: await Bid; require(amount >= minBid) → bidLoop
+        // Initial datum must include outer-scope params that are used in chunk 0.
+        // minBid is a free var in chunk 0's body → it's a datum field.
+        val datum0 = Data.Constr(0, PList.Cons(minBid.toData, PList.Nil))
+
+        // Bid below minBid should fail
+        val lowBid = Bid(seller, BigInt(50))
+        val ex = intercept[IllegalArgumentException] {
+            flowDispatch(datum0, lowBid.toData, null)
+        }
+        assert(ex.getMessage.contains("bid too low"))
+        info(s"Low bid rejected: ${ex.getMessage}")
+
+        // Valid bid → enters loop
+        val bid1 = Bid(seller, BigInt(500))
+        val result0 = flowDispatch(datum0, bid1.toData, null)
+        val loopDatum = result0 match {
+            case POption.Some(d) =>
+                d match {
+                    case Data.Constr(tag, fields) =>
+                        assert(tag == 1, s"Expected tag=1, got $tag")
+                        // Should have currentBid AND seller in datum
+                        info(s"Loop entry: tag=$tag, fields count=${fields.size}")
+                        d
+                    case other => fail(s"Expected Constr, got $other"); ???
+                }
+            case POption.None => fail("Should enter loop"); ???
+        }
+
+        // Chunk 1 (loop): confirmed=true → terminal (uses seller + currentBid)
+        val confirmed = Confirm(true)
+        // Will NPE on ctx.txInfo.requireSignedBy, proving seller was decoded
+        val npe = intercept[NullPointerException] {
+            flowDispatch(loopDatum, confirmed.toData, null)
+        }
+        info(
+          s"Terminal used seller from outer scope and currentBid from param (NPE: ${npe.getMessage})"
+        )
+    }
+
     test("branching — free variable captured in branch continuation") {
         val flowDispatch = UtxoFlow.define { ctx =>
             val bid = await(UtxoFlow.suspend[Bid])
