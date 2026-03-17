@@ -1,0 +1,214 @@
+---
+asIndexPage: true
+title: Ledger Rules Framework
+sidebarTitle: Framework
+description: Scalus Ledger Rules Framework — a composable State Transition System (STS) for Cardano transaction validation. Architecture, rule composition, customization patterns, and writing custom rules.
+---
+
+import { Callout } from 'nextra/components'
+
+# Ledger Rules Framework
+
+Scalus implements Cardano's ledger validation rules as a composable **State Transition System (STS)** in pure Scala 3, running on **JVM**, **JavaScript**, and **Native** platforms.
+
+These rules power the [Emulator](/docs/testing/emulator) for fast local testing, and can be used standalone for transaction validation.
+
+<Callout type="warning">
+  The Ledger Rules Framework is in active development and may change.
+</Callout>
+
+## Overview
+
+The framework implements two validation phases matching Cardano node behavior:
+
+- **Phase 1** — Structural validation (inputs exist, fees correct, signatures valid, size limits)
+- **Phase 2** — Script execution (Plutus V1/V2/V3 and native scripts)
+
+Rules are organized into **Validators** (read-only checks) and **Mutators** (state transitions). See the [Ledger Rules Reference](/docs/ledger/ledger-rules) for the full catalog of built-in rules.
+
+Source: `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/ledger/rules/`
+
+## Architecture
+
+The framework is built on a **State Transition System (STS)** pattern with two rule types:
+
+```scala
+import scalus.cardano.ledger.rules.*
+
+// Validators — read-only checks that return Right(()) or Left(error)
+trait STS.Validator {
+    def validate(context: Context, state: State, event: Transaction): Either[Error, Unit]
+}
+
+// Mutators — state transitions that return Right(newState) or Left(error)
+trait STS.Mutator {
+    def transit(context: Context, state: State, event: Transaction): Either[Error, State]
+}
+```
+
+### Composition
+
+When processing a transaction, the framework runs **all validators first** (short-circuiting on the first error), then **all mutators** sequentially, threading state through each one:
+
+```scala
+// Run validators, then mutators
+STS.Mutator.transit(validators, mutators, context, state, transaction)
+
+// Internally:
+// 1. validators.foldLeft(Right(())) { (acc, v) => acc.flatMap(_ => v.validate(...)) }
+// 2. mutators.foldLeft(Right(state)) { (acc, m) => acc.flatMap(s => m.transit(..., s, ...)) }
+```
+
+### Default Rule Registries
+
+All built-in rules are collected in two registries:
+
+- **`DefaultValidators.all`** — 26 validators in a `SortedSet` (ordered by name)
+- **`DefaultMutators.all`** — 2 mutators: `PlutusScriptsTransactionMutator`, `StakeCertificatesMutator`
+
+**`CardanoMutator`** is the top-level entry point that runs all default rules:
+
+```scala
+object CardanoMutator extends STS.Mutator {
+    override def transit(context: Context, state: State, event: Event): Result =
+        STS.Mutator.transit(DefaultValidators.all, DefaultMutators.all, context, state, event)
+}
+```
+
+## Rule Customization
+
+Both `Emulator` and `ImmutableEmulator` accept `validators` and `mutators` as constructor parameters, making it straightforward to enable, disable, or extend rules.
+
+```scala
+class Emulator(
+    initialUtxos: Utxos = Map.empty,
+    initialContext: Context = Context.testMainnet(),
+    val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
+    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
+)
+```
+
+### Disable all validators
+
+Skip all Phase-1 checks for fast iteration during development:
+
+```scala
+val emulator = Emulator(
+  initialUtxos = utxos,
+  validators = Set.empty,
+  mutators = Emulator.defaultMutators
+)
+```
+
+### Enable only specific validators
+
+Run a focused subset for targeted testing:
+
+```scala
+import scalus.cardano.ledger.rules.*
+
+// Only check that inputs exist in the UTxO set
+val emulator = Emulator(
+  initialUtxos = utxos,
+  validators = Set(AllInputsMustBeInUtxoValidator),
+  mutators = Emulator.defaultMutators
+)
+```
+
+### Script execution only
+
+Keep only the Plutus script mutator — useful when you want to test script logic without other ledger checks:
+
+```scala
+val emulator = Emulator(
+  initialUtxos = utxos,
+  mutators = Set(PlutusScriptsTransactionMutator)
+)
+```
+
+### Remove a specific rule
+
+Filter out a rule while keeping everything else:
+
+```scala
+val emulator = Emulator(
+  initialUtxos = utxos,
+  validators = DefaultValidators.all.filterNot(_ == FeesOkValidator),
+  mutators = DefaultMutators.all
+)
+```
+
+### Add a custom rule
+
+Extend the defaults with your own validator:
+
+```scala
+val emulator = Emulator(
+  initialUtxos = utxos,
+  validators = DefaultValidators.all ++ Set(MyCustomValidator),
+  mutators = DefaultMutators.all
+)
+```
+
+### ImmutableEmulator
+
+The same mechanism works with `ImmutableEmulator` for functional state-threading patterns:
+
+```scala
+val emulator = ImmutableEmulator(
+  state = State(utxos = utxos),
+  env = UtxoEnv.testMainnet(),
+  validators = Set.empty,
+  mutators = Set(PlutusScriptsTransactionMutator)
+)
+```
+
+## Writing Custom Rules
+
+Implement `STS.Validator` for read-only checks:
+
+```scala
+import scalus.cardano.ledger.rules.*
+
+object MyCustomValidator extends STS.Validator {
+    override type Error = TransactionException
+
+    override def validate(context: Context, state: State, event: Event): Result = {
+        if someCondition(event) then success
+        else failure(new TransactionException("Validation failed: ..."))
+    }
+}
+```
+
+Implement `STS.Mutator` for state transitions:
+
+```scala
+object MyCustomMutator extends STS.Mutator {
+    override type Error = TransactionException
+
+    override def transit(context: Context, state: State, event: Event): Result = {
+        // Check preconditions, then return updated state
+        val newState = state.copy(fees = state.fees + event.body.fee)
+        success(newState)
+    }
+}
+```
+
+You can also create validators from functions without defining an object:
+
+```scala
+val myValidator = STS.Validator[TransactionException](
+  (context, state, event) => {
+      if event.body.inputs.nonEmpty then Right(())
+      else Left(new TransactionException("No inputs"))
+  },
+  validatorName = "MyInlineValidator"
+)
+```
+
+## See Also
+
+- [Ledger Rules Reference](/docs/ledger/ledger-rules) — Complete catalog of built-in validators and mutators
+- [Emulator](/docs/testing/emulator) — In-memory node using these rules for fast testing
+- [Yaci DevKit](/docs/testing/local-devnet) — Docker-based devnet with real Cardano node
+- [Protocol Parameters](/docs/ledger/protocol-parameters) — Network configuration used by validators

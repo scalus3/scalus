@@ -1,3 +1,3 @@
 export default {
-  'ledger-rules': 'Ledger Rules',
+  'ledger-rules': 'Rules Reference',
 }
