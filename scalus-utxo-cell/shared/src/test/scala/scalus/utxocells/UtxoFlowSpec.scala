@@ -25,6 +25,11 @@ case class Confirm(confirmed: Boolean) derives FromData, ToData
 @Compile
 object Confirm
 
+case class FlowParams(seller: PubKeyHash, minBid: BigInt) derives FromData, ToData
+
+@Compile
+object FlowParams
+
 // -- Tests --
 
 class UtxoFlowSpec extends AnyFunSuite {
@@ -749,6 +754,24 @@ object RecursiveFlowCompilation {
     lazy val compiled = PlutusV3.compile(RecursiveFlowValidator.validate)
 }
 
+@Compile
+object ParameterizedFlowValidator extends DataParameterizedFlowCellValidator {
+    inline def beaconName: ByteString = utf8"param-flow"
+    inline def flowDispatch(param: Data) = {
+        val p = param.to[FlowParams]
+        UtxoFlow.define { ctx =>
+            val bid = await(UtxoFlow.suspend[Bid])
+            ctx.txInfo.requireSignedBy(p.seller)
+            val confirm = await(UtxoFlow.suspend[Confirm])
+        }
+    }
+}
+
+object ParameterizedFlowCompilation {
+    given Options = Options.debug
+    lazy val compiled = PlutusV3.compile(ParameterizedFlowValidator.validate)
+}
+
 class UtxoFlowOnChainSpec extends AnyFunSuite {
 
     private given scalus.uplc.eval.PlutusVM = scalus.uplc.eval.PlutusVM.makePlutusV3VM()
@@ -772,5 +795,12 @@ class UtxoFlowOnChainSpec extends AnyFunSuite {
         assert(compiled.program.term != null)
         info(s"UPLC program version: ${compiled.program.version}")
         info(s"Recursive script size: ${compiled.script.script.size} bytes")
+    }
+
+    test("ParameterizedFlowValidator compiles to UPLC") {
+        val compiled = ParameterizedFlowCompilation.compiled
+        assert(compiled.program.term != null)
+        info(s"UPLC program version: ${compiled.program.version}")
+        info(s"Parameterized script size: ${compiled.script.script.size} bytes")
     }
 }
