@@ -38,6 +38,6 @@
   { "from": "/docs/offchain-applications", "to": "/docs/dapp-development" },
   { "from": "/docs/offchain-applications/working-with-contract", "to": "/docs/dapp-development/working-with-contract" },
   { "from": "/docs/ledger/provider", "to": "/docs/dapp-development/blockchain-providers" },
-  { "from": "/docs/ledger/protocol-parameters", "to": "/docs/dapp-development/protocol-parameters" }
+  { "from": "/docs/ledger/protocol-parameters", "to": "/docs/dapp-development/protocol-parameters" },
   { "from": "/docs/testing/testkit", "to": "/docs/testing" }
 ]
