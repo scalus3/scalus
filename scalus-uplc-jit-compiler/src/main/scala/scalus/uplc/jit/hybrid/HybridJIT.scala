@@ -2,8 +2,10 @@ package scalus.uplc.jit.hybrid
 
 import scalus.uplc.eval.*
 import scalus.uplc.jit.nativestack.{JIT, StackTresholdException}
-import scalus.uplc.jit.{mincont, JitRunner, RuntimeHelper}
+import scalus.uplc.jit.{mincont, JitEvaluationFailure, JitRunner, RuntimeHelper}
 import scalus.uplc.{DeBruijn, Term}
+
+import scala.util.control.NonFatal
 
 object HybridJIT extends JitRunner {
 
@@ -44,6 +46,11 @@ object HybridJIT extends JitRunner {
                 case ex: StackTresholdException =>
                     // Fallback to stack-safe Evaluator (Cek or minicont JIT)
                     backupEvaluator(logger, budgetSpender, machineParams)
+                case ex: MachineError => throw ex
+                case NonFatal(ex) =>
+                    // Wrap runtime errors (e.g. ArithmeticException from division by zero)
+                    // as MachineError, matching CEK behavior (Cek.scala:1157-1162)
+                    throw new JitEvaluationFailure(s"JIT runtime error: ${ex.getMessage}")
             }
     }
 
