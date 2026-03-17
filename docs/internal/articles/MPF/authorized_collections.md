@@ -482,8 +482,6 @@ In full transactions (emulator), fusing saves 0.75–1% in total fee:
 
 Despite ~7% savings in CPU and ~6% in memory, the total fee savings are only ~0.75% (N=32K) to ~1% (N=1M). This is because the Cardano fee is dominated by the base fee (54%) — execution units contribute only ~11% of the total.
 
-However, fusing is still worthwhile: the ~7% execution budget savings provide headroom against per-transaction CPU/memory limits (14B steps, 10M mem units). And for light validators (proof-only, no output/lovelace checks), the savings are more noticeable (~3.8%) because execution is a larger share of the fee.
-
 Fee difference breakdown (MPF-16 → FusedMPF-16, withdraw N=32K, Δfee = −2,162):
 
 | Category | Δ lovelace | % of saving |
@@ -494,6 +492,8 @@ Fee difference breakdown (MPF-16 → FusedMPF-16, withdraw N=32K, Δfee = −2,1
 | RefScript (fused validator is larger) | +728 | −33.7% |
 
 Memory reduction is the largest factor (~67%): fusing eliminates intermediate ByteString allocations from separate prefix hashing. Proof shrinking (~41%) comes from flat binary encoding saving ~20B per proof. CPU savings (~26%) come from fewer blake2b calls. The fused validator is slightly larger (3,323B vs 3,275B), partially offsetting the gains via higher reference script fees.
+
+For light validators (proof-only, no output/lovelace checks), the savings are more noticeable (~3.8%) because execution is a larger share of the fee. However, fusing is still worthwhile when you hit the per-transaction CPU/memory limits (14B steps, 10M mem units) or transaction size limits — the ~7–12% execution budget savings and ~4% smaller proofs provide headroom that can make the difference between a transaction that fits and one that doesn't.
 
 #### Fused radix comparison: does radix still matter?
 
