@@ -515,9 +515,6 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
                             )
                             tree
                 case None =>
-                    println(
-                      s"ScalusPhase: SIRBodyAnnotation not found for ${tree.symbol.fullName}"
-                    )
                     tree
         } else tree
 
