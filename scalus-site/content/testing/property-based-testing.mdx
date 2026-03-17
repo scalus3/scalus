@@ -196,9 +196,9 @@ Scalus provides two tools for multi-step property testing:
 - **`ContractScalaCheckCommands`** — generates random sequences of actions, checks invariants after each step, and shrinks to minimal failing sequences. Scales to hundreds of participants.
 - **`Scenario.explore`** — exhaustive exploration of all action combinations at bounded depth. Full coverage for small state spaces.
 
-Both use the same `ContractStepVariations` interface and can be combined with [attack patterns](/docs/testing/testkit#standard-variations) for security testing.
+Both use the same `ContractStepVariations` interface and can be combined with [attack patterns](/docs/testing/boundary-testing#standard-variations) for security testing.
 
-See [Boundary Testing](/docs/testing/testkit) for the full guide on multi-step testing, transaction variations, and attack simulation.
+See [Boundary Testing](/docs/testing/boundary-testing) for the full guide on multi-step testing, transaction variations, and attack simulation.
 
 ## Examples
 
@@ -207,6 +207,6 @@ See [Boundary Testing](/docs/testing/testkit) for the full guide on multi-step t
 ## Related
 
 - [Unit Testing](/docs/testing/unit-testing) — ScalusTest trait, assertScriptFail, budget testing
-- [Boundary Testing](/docs/testing/testkit) — Multi-step testing, attack patterns, and state-space exploration
+- [Boundary Testing](/docs/testing/boundary-testing) — Multi-step testing, attack patterns, and state-space exploration
 - [TDD & ATDD Workflow](/docs/testing/tdd-atdd-workflow) — Test-first development for smart contracts
 - [Emulator](/docs/testing/emulator) — In-memory Cardano node for fast iteration

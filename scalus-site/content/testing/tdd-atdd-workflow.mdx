@@ -152,7 +152,7 @@ Build the validator, datum types, and transaction builders until the acceptance 
 
 ### Add boundary testing
 
-Once the happy path works, use the [Testkit](/docs/testing/testkit) to automatically explore edge cases and attack vectors:
+Once the happy path works, use [Boundary Testing](/docs/testing/boundary-testing) to automatically explore edge cases and attack vectors:
 
 ```scala
 test("auction resists attack variations") {
@@ -167,7 +167,7 @@ test("auction resists attack variations") {
 }
 ```
 
-The Testkit generates steal attempts, corrupted datums, double satisfaction attacks, and boundary value variations — all derived from your contract's structure.
+The boundary testing toolkit generates steal attempts, corrupted datums, double satisfaction attacks, and boundary value variations — all derived from your contract's structure.
 
 </Steps>
 
@@ -194,7 +194,7 @@ The Testkit generates steal attempts, corrupted datums, double satisfaction atta
                   │
 ┌─────────────────▼───────────────────────────────┐
 │  4. Add boundary & attack testing               │
-│     Testkit explores edge cases automatically   │
+│     Boundary testing explores edge cases          │
 │     → catches what you didn't think of          │
 └─────────────────┬───────────────────────────────┘
                   │
@@ -208,6 +208,6 @@ The Testkit generates steal attempts, corrupted datums, double satisfaction atta
 
 - [TDD in the AI Coding Era](https://lantr.io/blog/tdd-atdd-ai-coding-era/) — the full argument for why TDD matters more, not less, when AI writes your code
 - [Unit Testing](/docs/testing/unit-testing) — property-based testing with ScalaCheck
-- [Boundary Testing](/docs/testing/testkit) — automated edge case and attack exploration
+- [Boundary Testing](/docs/testing/boundary-testing) — automated edge case and attack exploration
 - [Emulator](/docs/testing/emulator) — in-memory Cardano node for fast iteration
 - [Debugging](/docs/testing/debugging) — IDE debugging and logging for validators

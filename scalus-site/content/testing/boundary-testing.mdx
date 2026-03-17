@@ -1,7 +1,7 @@
 ---
-title: Testkit - Boundary & Property Testing for Smart Contracts
+title: Boundary Testing for Cardano Smart Contracts
 sidebarTitle: Boundary Testing
-description: Test Cardano smart contracts by exploring transaction variations around boundary values. Use ScalaCheck, Scenario exploration, and standard attack patterns to find flaws.
+description: Explore smart contract boundaries with automated transaction variations, attack patterns, and multi-step state-space exploration. Includes ScalaCheck Commands, Scenario exhaustive testing, and standard vulnerability patterns.
 ---
 
 import { Callout } from 'nextra/components'
@@ -27,87 +27,6 @@ You can run boundary tests in three modes:
 - **ScalaCheck forAll** — random sampling with shrinking, single step
 - **ScalaCheck Commands** — random multi-step sequences, scales to large state spaces
 - **Scenario** — exhaustive exploration at bounded depth, full coverage of small state spaces
-
-## Actors
-
-In practice, contracts are tested by multiple **actors** (participants) doing different things — a donor donating, a recipient withdrawing, an attacker trying to steal funds. The actor model makes this explicit:
-
-1. **Contract under test** — the smart contract validator
-2. **Actors** — participants that interact with the contract, each generates actions based on state
-3. **Test configuration** = state extraction + set of actors + slot delays
-
-<Callout type="info">
-We use "actor" in the sense of "one who acts" — a participant performing actions — not in the sense of the Actor concurrency model (Akka, Erlang). There is no message passing or mailbox here; actors simply generate transaction actions given the current blockchain state.
-</Callout>
-
-Each actor is a `ContractTestActor[S]` that, given the current blockchain state, returns the actions it can take:
-
-```scala
-trait ContractTestActor[S] {
-    def name: String
-    def actions(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[StepAction]]
-}
-```
-
-### Creating Actors
-
-Three factory methods cover common patterns:
-
-```scala
-// Simple actor — builds one transaction (or none if it can't act)
-val bidder = ContractTestActor.simple[AuctionState](
-    "bidder-alice",
-    (reader, state) => buildBidTx(reader, state).map(Some(_))
-)
-
-// Multi-action actor — builds multiple transactions
-val donorGroup = ContractTestActor.multi[CampaignState](
-    "donor-group",
-    (reader, state) => buildDonateTxs(reader, state)
-)
-
-// Actor with attack variations — base tx + standard attack patterns
-val attacker = ContractTestActor.withVariations[AuctionState](
-    "attacker",
-    baseTx = (reader, state) => buildAttackerBaseTx(reader, state).map(Some(_)),
-    txVariations = TxVariations.standard.default(
-        extractUtxo = _.auctionUtxo,
-        extractDatum = s => updatedDatum(s),
-        redeemer = _ => BidRedeemer.toData,
-        script = auctionScript
-    )
-)
-```
-
-### Composing Actors into a Step
-
-Use `ContractStepVariations.fromActors` to combine actors into a single step:
-
-```scala
-val step = ContractStepVariations.fromActors[AuctionState](
-    extract = reader => extractAuctionState(reader),
-    actors = Seq(
-        HonestBidderActor(alice),
-        HonestBidderActor(bob),
-        attackerActor   // attack txs should be rejected by the contract
-    ),
-    delays = _ => Seq(10L, 50L)
-)
-
-// Use with ScalaCheck Commands or Scenario as usual
-val commands = ContractScalaCheckCommands(emulator, step) { (reader, state) =>
-    Future.successful(Prop(state.currentBid >= 0) :| "bid non-negative")
-}
-```
-
-The key pattern: mix honest actors with attacker actors. The contract should reject all attack transactions while accepting honest ones. If an attacker's transaction gets accepted, the invariant check fails and ScalaCheck reports the minimal failing sequence.
-
-### Two Paths
-
-- **Simple (single interaction type):** Implement `ContractStepVariations` directly with `makeBaseTx` + `variations`
-- **Multi-actor:** Define actors, compose with `ContractStepVariations.fromActors`
-
-Both produce a `ContractStepVariations[S]` that works with ScalaCheck Commands and Scenario exploration.
 
 ## Quick Start
 
@@ -141,21 +60,33 @@ The richer your state, the more attack vectors you can explore. For example, you
 
 To explore the state space you need to implement `ContractStepVariations[S]` — the interface that tells the testkit how to interact with your contract:
 
-```scala
+```scala {2-4,7,10,13}
 trait ContractStepVariations[S] {
     def extractState(reader: BlockchainReader)(using ExecutionContext): Future[S]
     def makeBaseTx(reader: BlockchainReader, state: S)(using ExecutionContext): Future[TxTemplate]
     def variations: TxVariations[S]
+
+    // convenience — builds template and enumerates variations
+    def allVariations(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[Transaction]]
+
+    // slot delays to explore at this step (default: empty)
+    def slotDelays(state: S): Seq[Long] = Seq.empty
+
+    // all actions — combines Submit(tx) for each variation + Wait(slots) for each delay
+    def allActions(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[StepAction]]
 }
 ```
 
+The three core methods you implement:
 - **`extractState`** — read the blockchain and build your observable state `S`
 - **`makeBaseTx`** — build a base transaction template that variations will modify (usually a correct happy-path transaction, but can be any starting point)
 - **`variations`** — generate a set of transactions by varying the base template (amounts, timings, recipients, etc.)
 
+The rest is derived: `allVariations` builds the template and enumerates variations, `allActions` combines `Submit(tx)` for each variation with `Wait(slots)` for each delay. Each `Submit` is applied in its own copy of the world; each `Wait` advances the slot clock.
+
 Here's a complete implementation for the auction example:
 
-```scala
+```scala {3,16,29}
 object AuctionStep extends ContractStepVariations[AuctionState] {
 
     def extractState(reader: BlockchainReader)(using ExecutionContext): Future[AuctionState] =
@@ -197,11 +128,39 @@ object AuctionStep extends ContractStepVariations[AuctionState] {
 `makeBaseTx` returns a `TxTemplate` which bundles the builder with sponsor and signer. `variations` here uses `TxVariations.standard.default` — pre-built [attack patterns](/docs/security/common-vulnerabilities) that give broad coverage with minimal setup. See [Defining Variations](#defining-variations) for custom variations.
 </Callout>
 
+For time-dependent contracts, override `slotDelays` to explore behavior at different points in time:
+
+```scala {12}
+object HtlcStep extends ContractStepVariations[HtlcState] {
+    def extractState(reader: BlockchainReader)(using ExecutionContext) = ...
+    def makeBaseTx(reader: BlockchainReader, state: HtlcState)(using ExecutionContext) = ...
+    def variations = TxVariations.standard.default[HtlcState](
+        extractUtxo = _.utxo,
+        extractDatum = s => s.utxo.output.requireInlineDatum,
+        redeemer = _ => HtlcRedeemer.Unlock.toData,
+        script = htlcScript
+    )
+
+    // Time-dependent: explore advancing 10 and 100 slots
+    override def slotDelays(state: HtlcState) = Seq(10L, 100L)
+}
+```
+
+Override individual methods via anonymous refinement:
+
+```scala
+// Extend with custom attack variation
+new HtlcStep {
+    override def variations =
+        super.variations ++ customAttackVariation
+}
+```
+
 ### 3. Define Variations
 
 The `variations` field above used `TxVariations.standard.default` — the quickest way to get broad coverage. You can also write custom variations or compose them:
 
-```scala
+```scala {14,27}
 import scalus.testing.TxVariations
 
 // Pre-built attack patterns
@@ -306,7 +265,7 @@ test("auction command sequence") {
 
 **Invariant checking:** the second parameter group receives `(BlockchainReader, S) => Future[Prop]` — checked after every successful transaction. Use labeled props for clear failure messages:
 
-```scala
+```scala {3-5}
 val commands = ContractScalaCheckCommands(emulator, step) { (reader, state) =>
     Future.successful {
         Prop(state.totalSum >= 0) :| "totalSum non-negative" &&
@@ -332,7 +291,7 @@ assert(result.passed, s"Property test failed: $result")
 
 **Overriding `allVariations` for complex logic:** when the available actions depend on the current blockchain state (e.g., different actions before vs after a deadline), override `allVariations` directly:
 
-```scala
+```scala {11-12,16,20,23,29}
 class CrowdfundingStep(campaignId: ByteString)
     extends ContractStepVariations[CrowdfundingState] {
 
@@ -374,7 +333,7 @@ This pattern is useful when different contract phases (before/after deadline, go
 
 Explores all combinations of boundary values at bounded depth using a logic monad. The step function receives a `BlockchainReader` and performs one interaction using normal Scenario operations. Actions (`submit`, `sleep`) are automatically logged.
 
-```scala
+```scala {6,11-14,22}
 test("auction exhaustive boundaries") {
     val emulator = Emulator(...)
     // Setup auction...
@@ -404,70 +363,86 @@ test("auction exhaustive boundaries") {
 
 If a `Scenario.check` fails, `ScenarioExplorer` returns a `Violation` containing the action path (all `StepAction.Submit` and `StepAction.Wait` entries) that led to the failure.
 
-## ContractStepVariations
+## Multi-Actor Testing
 
-The Quick Start showed a complete `ContractStepVariations` example. Here's the full trait. The type parameter `S` is the observable blockchain state — it can be as simple as a single UTXO's datum, or as rich as all UTXOs at a script address plus balances at related addresses:
+The Quick Start above uses a single `ContractStepVariations` — one interaction type with variations. In practice, contracts are tested by multiple **actors** (participants) doing different things — a donor donating, a recipient withdrawing, an attacker trying to steal funds. The actor model makes this explicit:
+
+1. **Contract under test** — the smart contract validator
+2. **Actors** — participants that interact with the contract, each generates actions based on state
+3. **Test configuration** = state extraction + set of actors + slot delays
+
+<Callout type="info">
+We use "actor" in the sense of "one who acts" — a participant performing actions — not in the sense of the Actor concurrency model (Akka, Erlang). There is no message passing or mailbox here; actors simply generate transaction actions given the current blockchain state.
+</Callout>
+
+Each actor is a `ContractTestActor[S]` that, given the current blockchain state, returns the actions it can take:
 
 ```scala
-trait ContractStepVariations[S] {
-    def extractState(reader: BlockchainReader)(using ExecutionContext): Future[S]
-    def makeBaseTx(reader: BlockchainReader, state: S)(using ExecutionContext): Future[TxTemplate]
-    def variations: TxVariations[S]
-
-    // convenience — builds template and enumerates variations
-    def allVariations(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[Transaction]]
-
-    // slot delays to explore at this step (default: empty)
-    def slotDelays(state: S): Seq[Long] = Seq.empty
-
-    // all actions — combines Submit(tx) for each variation + Wait(slots) for each delay
-    def allActions(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[StepAction]]
+trait ContractTestActor[S] {
+    def name: String
+    def actions(reader: BlockchainReader, state: S)(using ExecutionContext): Future[Seq[StepAction]]
 }
 ```
 
-`allActions` returns `Submit` for each transaction variation plus `Wait` for each slot delay. This means time-dependent testing is configured on the step, not on the consumer.
+### Creating Actors
 
-### StepAction
+Three factory methods cover common patterns:
 
-Each action produced by a step is a `StepAction`:
+```scala {2,8,15}
+// Simple actor — builds one transaction (or none if it can't act)
+val bidder = ContractTestActor.simple[AuctionState](
+    "bidder-alice",
+    (reader, state) => buildBidTx(reader, state).map(Some(_))
+)
 
-```scala
-sealed trait StepAction
-object StepAction {
-    case class Submit(tx: Transaction) extends StepAction
-    case class Wait(slots: Long) extends StepAction
-}
-```
+// Multi-action actor — builds multiple transactions
+val donorGroup = ContractTestActor.multi[CampaignState](
+    "donor-group",
+    (reader, state) => buildDonateTxs(reader, state)
+)
 
-Each `Submit` is applied in its own copy of the world, each `Wait` advances the slot clock.
-
-### Another Example
-
-```scala
-object HtlcStep extends ContractStepVariations[HtlcState] {
-    def extractState(reader: BlockchainReader)(using ExecutionContext) = ...
-    def makeBaseTx(reader: BlockchainReader, state: HtlcState)(using ExecutionContext) = ...
-    def variations = TxVariations.standard.default[HtlcState](
-        extractUtxo = _.utxo,
-        extractDatum = s => s.utxo.output.requireInlineDatum,
-        redeemer = _ => HtlcRedeemer.Unlock.toData,
-        script = htlcScript
+// Actor with attack variations — base tx + standard attack patterns
+val attacker = ContractTestActor.withVariations[AuctionState](
+    "attacker",
+    baseTx = (reader, state) => buildAttackerBaseTx(reader, state).map(Some(_)),
+    txVariations = TxVariations.standard.default(
+        extractUtxo = _.auctionUtxo,
+        extractDatum = s => updatedDatum(s),
+        redeemer = _ => BidRedeemer.toData,
+        script = auctionScript
     )
-
-    // Time-dependent: explore advancing 10 and 100 slots
-    override def slotDelays(state: HtlcState) = Seq(10L, 100L)
-}
+)
 ```
 
-Override individual methods via anonymous refinement:
+### Composing Actors into a Step
+
+Use `ContractStepVariations.fromActors` to combine actors into a single step:
 
 ```scala
-// Extend with custom attack variation
-new HtlcStep {
-    override def variations =
-        super.variations ++ customAttackVariation
+val step = ContractStepVariations.fromActors[AuctionState](
+    extract = reader => extractAuctionState(reader),
+    actors = Seq(
+        HonestBidderActor(alice),
+        HonestBidderActor(bob),
+        attackerActor   // attack txs should be rejected by the contract
+    ),
+    delays = _ => Seq(10L, 50L)
+)
+
+// Use with ScalaCheck Commands or Scenario as usual
+val commands = ContractScalaCheckCommands(emulator, step) { (reader, state) =>
+    Future.successful(Prop(state.currentBid >= 0) :| "bid non-negative")
 }
 ```
+
+The key pattern: mix honest actors with attacker actors. The contract should reject all attack transactions while accepting honest ones. If an attacker's transaction gets accepted, the invariant check fails and ScalaCheck reports the minimal failing sequence.
+
+### Two Paths
+
+- **Simple (single interaction type):** Implement `ContractStepVariations` directly with `makeBaseTx` + `variations` (as shown in [Quick Start](#quick-start))
+- **Multi-actor:** Define actors, compose with `ContractStepVariations.fromActors`
+
+Both produce a `ContractStepVariations[S]` that works with ScalaCheck Commands and Scenario exploration.
 
 ## Defining Variations
 
@@ -511,7 +486,7 @@ trait TxSamplingVariations[S] extends TxVariations[S] {
 
 Example implementation:
 
-```scala
+```scala {5-7}
 val valueFuzz: TxSamplingVariations[AuctionState] = new TxSamplingVariations[AuctionState] {
     override def sampleSize = 30
 
@@ -570,25 +545,11 @@ val variations: TxVariations[MyState] = new TxVariations[MyState] {
 
 Each dimension has ~3 values (below/at/above), so 3 dimensions = 27 combinations.
 
-### Composing Variations
-
-Combine multiple `TxVariations` with `++`:
-
-```scala
-// Combine standard attacks with custom variations
-val allVariations = TxVariations.standard.default(...) ++ customVariation
-
-// Extend via refinement
-new MyStep {
-    override def variations = super.variations ++ additionalAttacks
-}
-```
-
 ## Standard Variations
 
 Use `TxVariations.standard` to access pre-built attack patterns. The `default` method combines common attack vectors with minimal configuration:
 
-```scala
+```scala {6,15,20-21}
 import scalus.testing.TxVariations
 
 case class ContractState(utxo: Utxo)
@@ -728,7 +689,7 @@ val allAttacks = standardAttacks ++ customAttack
 
 As described in [Define Observable State](#1-define-observable-state), the state type `S` should capture everything you need from the blockchain. When a contract can have multiple UTXOs at the same address (which is common — any contract that processes multiple independent interactions), model state as a collection of all open UTXOs. This naturally enables testing double satisfaction attacks where one transaction spends multiple UTXOs while only satisfying one validator:
 
-```scala
+```scala {36,51-52,54-55}
 // State includes all open UTXOs at the contract address
 case class MultiUtxoState(
     openUtxos: Seq[Utxo],
