@@ -1,23 +1,24 @@
 ---
 title: Merkelized Validator Pattern
 sidebarTitle: Merkelized Validator
-description: Share verified computation results across spending validators using stake validator redeemers.
+description: Delegate computation to withdrawal scripts — bypass script size limits and share verified results across spending validators.
 ---
 
 import { Callout } from 'nextra/components'
 
 # Merkelized Validator Pattern
 
-Extend the [Stake Validator Pattern](/docs/design-patterns/withdraw-zero) to allow spending validators to **read verified data** from the stake validator's redeemer.
+Extend the [Stake Validator Pattern](/docs/design-patterns/withdraw-zero) to **delegate computation** to a withdrawal script and let spending validators **read verified results** from its redeemer.
 
 ## The Challenge
 
-When processing multiple UTxOs in a batch operation:
-- Each spending validator runs independently
-- Expensive computations (e.g., calculating a clearing price) would run N times
-- No built-in way to share verified results between spending validator executions
+Cardano validators face two constraints that compound in batch operations:
 
-Even with the Stake Validator pattern, spending validators can only verify that the stake validator ran—they cannot access its computation results.
+**Script size limits.** Validators are bounded by the ~16KB reference script limit per script. Optimization techniques like loop unrolling and function inlining reduce ExUnits but increase script size — often pushing past the limit. There's no way to split a single validator's logic across multiple scripts.
+
+**Redundant computation.** When processing multiple UTxOs, each spending validator runs independently. Expensive computations (e.g., calculating a clearing price, verifying a Merkle proof) execute N times — once per input. Even with the Stake Validator pattern, spending validators can only verify that the stake validator ran; they cannot access its computation results.
+
+The Merkelized Validator pattern solves both: move expensive logic into a separate withdrawal script (bypassing size limits) and let spending validators read its verified output (avoiding redundant computation).
 
 ## How It Works
 
@@ -28,12 +29,18 @@ Even with the Stake Validator pattern, spending validators can only verify that 
 
 This reduces complexity from O(N²) to O(N) for batch operations while giving each spending validator access to shared, verified data.
 
+For script size optimization, the same mechanism applies: the heavy computation logic lives in the withdrawal script (which can use its own ~16KB budget for aggressive optimizations), while the spending validator stays small — it just reads the result.
+
+<Callout>
+**Reference script limits.** The total size of reference scripts in a transaction is capped at 200KiB, and fees increase exponentially with size. Plan your script splitting accordingly.
+</Callout>
+
 ## When to Use This Pattern
 
 **Best for:**
-- Batch auctions where all bids need the same clearing price
-- Settlement operations with shared computation results
-- Any scenario where spending validators need verified global state
+- **Script size optimization** — move heavy logic (loop-unrolled, inlined) into a separate withdrawal script, keeping the spending validator small
+- **Batch operations** — auctions, settlements, or order matching where all inputs need the same computed result (clearing price, exchange rate)
+- **Shared verified state** — any scenario where spending validators need access to a value that's expensive to compute but only needs verification once
 
 **Not ideal for:**
 - Simple validation that doesn't need shared data (use [Stake Validator](/docs/design-patterns/withdraw-zero) instead)
