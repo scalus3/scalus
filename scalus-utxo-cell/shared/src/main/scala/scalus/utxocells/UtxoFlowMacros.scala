@@ -324,13 +324,17 @@ object UtxoFlowMacros {
         // Free variable analysis
         // ================================================================
 
-        /** Collect all symbols DEFINED within a tree (ValDef symbols). */
+        /** Collect all symbols DEFINED within a tree (ValDef, DefDef, and Bind symbols). Bind
+          * symbols are pattern bindings in match expressions — they must be included so that
+          * pattern-bound variables are not mistakenly treated as free variables.
+          */
         def collectDefinedSymbols(tree: Tree): Set[Symbol] = {
             val acc = new TreeAccumulator[Set[Symbol]] {
                 override def foldTree(syms: Set[Symbol], tree: Tree)(owner: Symbol): Set[Symbol] =
                     tree match
                         case vd: ValDef => foldOverTree(syms + vd.symbol, tree)(owner)
                         case dd: DefDef => foldOverTree(syms + dd.symbol, tree)(owner)
+                        case b: Bind    => foldOverTree(syms + b.symbol, tree)(owner)
                         case _          => foldOverTree(syms, tree)(owner)
             }
             acc.foldTree(Set.empty, tree)(Symbol.spliceOwner)
@@ -379,21 +383,25 @@ object UtxoFlowMacros {
           * symbols from the monadic tree are referenced in the generated dispatch lambda.
           */
         def freshenLocals(tree: Term, owner: Symbol): (Term, Map[Symbol, Symbol]) = {
-            // First pass: collect all ValDef symbols
+            // First pass: collect all ValDef and Bind symbols
             val valSymbols = scala.collection.mutable.ListBuffer.empty[Symbol]
+            val bindSymbols = scala.collection.mutable.ListBuffer.empty[Symbol]
             val collector = new TreeAccumulator[Unit] {
                 override def foldTree(acc: Unit, tree: Tree)(o: Symbol): Unit = tree match
                     case vd: ValDef =>
                         valSymbols += vd.symbol
                         foldOverTree(acc, tree)(o)
+                    case b: Bind =>
+                        bindSymbols += b.symbol
+                        foldOverTree(acc, tree)(o)
                     case _ => foldOverTree(acc, tree)(o)
             }
             collector.foldTree((), tree)(owner)
 
-            if valSymbols.isEmpty then return (tree, Map.empty)
+            if valSymbols.isEmpty && bindSymbols.isEmpty then return (tree, Map.empty)
 
-            // Create fresh symbols
-            val mapping: Map[Symbol, Symbol] = valSymbols.map { sym =>
+            // Create fresh symbols for ValDefs
+            val valMapping: Map[Symbol, Symbol] = valSymbols.map { sym =>
                 sym -> Symbol.newVal(
                   owner,
                   sym.name,
@@ -403,11 +411,23 @@ object UtxoFlowMacros {
                 )
             }.toMap
 
+            // Create fresh symbols for Bind (pattern bindings)
+            val bindMapping: Map[Symbol, Symbol] = bindSymbols.map { sym =>
+                sym -> Symbol.newBind(
+                  owner,
+                  sym.name,
+                  Flags.EmptyFlags,
+                  sym.termRef.widenTermRefByName
+                )
+            }.toMap
+
+            val mapping = valMapping ++ bindMapping
+
             // Second pass: rebuild tree with fresh symbols
             val mapper = new TreeMap {
                 override def transformStatement(tree: Statement)(o: Symbol): Statement = tree match
-                    case vd: ValDef if mapping.contains(vd.symbol) =>
-                        val freshSym = mapping(vd.symbol)
+                    case vd: ValDef if valMapping.contains(vd.symbol) =>
+                        val freshSym = valMapping(vd.symbol)
                         val newRhs = vd.rhs.map(rhs => transformTerm(rhs)(freshSym))
                         ValDef(freshSym, newRhs.map(_.changeOwner(freshSym)))
                     case _ => super.transformStatement(tree)(o)
@@ -415,6 +435,11 @@ object UtxoFlowMacros {
                 override def transformTerm(t: Term)(o: Symbol): Term = t match
                     case Ident(_) if mapping.contains(t.symbol) => Ref(mapping(t.symbol))
                     case _                                      => super.transformTerm(t)(o)
+
+                override def transformTree(tree: Tree)(o: Symbol): Tree = tree match
+                    case b: Bind if bindMapping.contains(b.symbol) =>
+                        Bind(bindMapping(b.symbol), super.transformTree(b.pattern)(o))
+                    case _ => super.transformTree(tree)(o)
             }
 
             (mapper.transformTerm(tree)(owner), mapping)
