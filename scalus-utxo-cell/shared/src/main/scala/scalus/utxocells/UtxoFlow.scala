@@ -49,7 +49,7 @@ object UtxoFlow {
       * Wrap in a [[UtxoFlowDef]] together with a compiled script and token name for full flow
       * operations.
       */
-    transparent inline def define(
+    inline def define(
         inline body: CpsMonadContext[UtxoFlow] ?=> CellContext => Unit
     ): (Data, Data, CellContext) => POption[Data] = ${ UtxoFlowMacros.defineImpl('body) }
 }

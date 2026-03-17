@@ -26,6 +26,7 @@ object UtxoFlowMacros {
               s"Expected exactly one CpsMonadContext parameter, got ${cpsCtxParams.size}"
             )
         val cpsCtxParam = cpsCtxParams.head
+        report.info(s"UtxoFlow.define: processing flow")
 
         def extractLambda(t: Term): (ValDef, Term) = t match
             case Lambda(List(cellParam), lambdaBody) =>
@@ -52,7 +53,7 @@ object UtxoFlowMacros {
         val (cellCtxParam, userBody) = extractLambda(afterCtxFn)
 
         // ================================================================
-        // Step 2: Call Async.transformMonad
+        // Step 2: Extract local functions & CPS-transform
         // ================================================================
 
         val monadExpr = Expr
@@ -61,19 +62,65 @@ object UtxoFlowMacros {
               report.errorAndAbort("Cannot summon CpsMonad[UtxoFlow]")
             )
 
-        val userBodyExpr = userBody.changeOwner(Symbol.spliceOwner).asExprOf[Unit]
-        val cpsCtxRef = Ref(cpsCtxParam.symbol).asExprOf[CpsMonadContext[UtxoFlow]]
+        /** Check if a tree contains `await` or `suspend` calls — indicators of flow logic. We check
+          * for both `await` and `suspend` because `await` may have been expanded by the compiler
+          * before our macro runs (it's transparent inline from dotty-cps-async).
+          */
+        def containsFlowOps(tree: Tree): Boolean = {
+            var found = false
+            val walker = new TreeTraverser {
+                override def traverseTree(t: Tree)(owner: Symbol): Unit =
+                    if found then ()
+                    else
+                        t match
+                            case Apply(Select(_, "await"), _) =>
+                                found = true
+                            case Apply(TypeApply(Select(_, "await"), _), _) =>
+                                found = true
+                            case Apply(TypeApply(sel @ Select(_, "suspend"), _), _)
+                                if sel.qualifier.tpe <:< TypeRepr.of[UtxoFlow.type] =>
+                                found = true
+                            case Apply(sel @ Select(_, "suspend"), _)
+                                if sel.qualifier.tpe <:< TypeRepr.of[UtxoFlow.type] =>
+                                found = true
+                            case _ => super.traverseTree(t)(owner)
+            }
+            walker.traverseTree(tree)(Symbol.spliceOwner)
+            found
+        }
 
-        val monadicExpr: Expr[UtxoFlow[Unit]] =
-            Async.transformMonad[UtxoFlow, Unit, CpsMonadContext[UtxoFlow]](
-              userBodyExpr,
-              monadExpr,
-              cpsCtxRef
-            )
+        /** Extract local function defs (with flow ops) from a Block body. Returns (localDefs,
+          * mainBody) where mainBody no longer contains the function definitions.
+          */
+        def extractLocalDefs(term: Term): (List[DefDef], Term) = term match
+            case Block(stats, expr) =>
+                val (defs, others) = stats.partition {
+                    case dd: DefDef => containsFlowOps(dd)
+                    case _          => false
+                }
+                val localDefs = defs.collect { case dd: DefDef => dd }
+                val mainBody =
+                    if others.isEmpty then expr
+                    else Block(others, expr)
+                (localDefs, mainBody)
+            case _ => (Nil, term)
 
-        val monadicTerm = monadicExpr.asTerm
+        val (localDefs, mainBodyWithoutDefs) = extractLocalDefs(userBody)
+        val localFuncSymbols: Set[Symbol] = localDefs.map(_.symbol).toSet
 
-        report.info(s"UtxoFlow monadic tree:\n${monadicTerm.show}")
+        // ---------- case class for local function info ----------
+        case class LocalFuncInfo(
+            defDef: DefDef,
+            params: List[ValDef],
+            body: Term
+        )
+
+        val localFuncInfos: List[LocalFuncInfo] = localDefs.map { dd =>
+            val params = dd.paramss.flatMap(_.params).collect { case v: ValDef => v }
+            val body =
+                dd.rhs.getOrElse(report.errorAndAbort(s"Local function ${dd.name} has no body"))
+            LocalFuncInfo(dd, params, body)
+        }
 
         // ================================================================
         // Local helpers
@@ -293,6 +340,168 @@ object UtxoFlowMacros {
         }
 
         // ================================================================
+        // Step 2a: Manual CPS transform (for bodies with local recursive functions)
+        // ================================================================
+
+        /** Extract the suspend arg from an await call (various forms). Returns None if not an await
+          * call.
+          */
+        def extractAwaitSuspendArg(term: Term): Option[Term] = term match
+            case Inlined(_, _, x) => extractAwaitSuspendArg(x)
+            case Block(_, x)      => extractAwaitSuspendArg(x)
+            // Extension method: suspend.await(ctx)
+            case Apply(Select(arg, "await"), _)               => Some(arg)
+            case Apply(TypeApply(Select(arg, "await"), _), _) => Some(arg)
+            // Top-level function: await(suspend)(ctx) or await[F,T](suspend)(ctx)
+            case Apply(Apply(TypeApply(Select(_, "await"), _), List(arg)), _) => Some(arg)
+            case Apply(Apply(Select(_, "await"), List(arg)), _)               => Some(arg)
+            case Apply(Apply(TypeApply(Ident("await"), _), List(arg)), _)     => Some(arg)
+            case Apply(Apply(Ident("await"), List(arg)), _)                   => Some(arg)
+            case _                                                            => None
+
+        /** Check whether a term is `await(UtxoFlow.suspend[T])`. */
+        def isAwaitSuspendRaw(term: Term): Boolean =
+            extractAwaitSuspendArg(term).exists(isSuspend)
+
+        /** Extract the suspend[T] call from an await(suspend[T]) expression. */
+        def extractSuspendFromAwait(term: Term): Term =
+            extractAwaitSuspendArg(term)
+                .filter(isSuspend)
+                .getOrElse(
+                  report.errorAndAbort(s"Cannot extract suspend from: ${term.show}")
+                )
+
+        /** Check if a ValDef rhs is `await(suspend[T])`. */
+        def isAwaitValDef(stmt: Statement): Boolean = stmt match
+            case vd: ValDef => vd.rhs.exists(isAwaitSuspendRaw)
+            case _          => false
+
+        /** Build monadic flatMap tree: `monad.flatMap[A, Unit](suspendCall)(Lambda(param, body))`.
+          */
+        def buildFlatMapTree(suspendCall: Term, param: ValDef, body: Term): Term = {
+            val suspendType = extractSuspendTypeRepr(suspendCall)
+            suspendType.asType match
+                case '[a] =>
+                    val monadTerm = monadExpr.asTerm
+                    val flatMapSym = TypeRepr
+                        .of[CpsMonad[UtxoFlow]]
+                        .typeSymbol
+                        .methodMember("flatMap")
+                        .head
+                    val typeApplied = TypeApply(
+                      Select(monadTerm, flatMapSym),
+                      List(TypeTree.of[a], TypeTree.of[Unit])
+                    )
+                    val applied1 = Apply(typeApplied, List(suspendCall))
+                    // Build lambda: (param: a) => body
+                    val lambdaType = MethodType(List(param.name))(
+                      _ => List(suspendType),
+                      _ => TypeRepr.of[UtxoFlow[Unit]]
+                    )
+                    val lambda = Lambda(
+                      Symbol.spliceOwner,
+                      lambdaType,
+                      (owner, params) => {
+                          val paramRef = params.head.asInstanceOf[Term]
+                          // Substitute original param symbol with new lambda param
+                          substituteSymbols(
+                            body.changeOwner(owner),
+                            Map(param.symbol -> paramRef.symbol),
+                            owner
+                          )
+                      }
+                    )
+                    Apply(applied1, List(lambda))
+        }
+
+        /** Build monadic pure(()) tree. */
+        def buildPureUnit: Term =
+            '{ $monadExpr.pure(()) }.asTerm
+
+        /** Manually transform a raw (pre-CPS) tree into a monadic tree. This is used for function
+          * bodies and the main body when local functions are present (since Async.transformMonad
+          * cannot handle recursive local defs).
+          */
+        def rawToMonadic(term: Term, localFuncs: Set[Symbol]): Term = {
+            val (stmts, finalExpr) = flattenBlock(term)
+
+            // Find the first await statement
+            val awaitIdx = stmts.indexWhere(isAwaitValDef)
+
+            if awaitIdx >= 0 then
+                val beforeAwait = stmts.take(awaitIdx)
+                val awaitVd = stmts(awaitIdx).asInstanceOf[ValDef]
+                val afterAwait = stmts.drop(awaitIdx + 1)
+                val suspendCall = extractSuspendFromAwait(awaitVd.rhs.get)
+
+                // Build the rest body (statements after await + final expr)
+                val restTerm =
+                    if afterAwait.isEmpty then finalExpr
+                    else
+                        afterAwait.last match
+                            case lastT: Term if afterAwait.size == 1 =>
+                                if finalExpr == Literal(UnitConstant()) then lastT
+                                else Block(List(lastT), finalExpr)
+                            case _ => Block(afterAwait.toList, finalExpr)
+
+                // Recursively transform the rest
+                val restMonadic = rawToMonadic(restTerm, localFuncs)
+
+                // Wrap in before-await statements
+                val flatMapTerm = buildFlatMapTree(suspendCall, awaitVd, restMonadic)
+                if beforeAwait.isEmpty then flatMapTerm
+                else Block(beforeAwait.toList, flatMapTerm)
+            else
+                // No await found — check if finalExpr is a branch or function call
+                val monadicFinal = rawExprToMonadic(finalExpr, localFuncs)
+                if stmts.isEmpty then monadicFinal
+                else Block(stmts.toList, monadicFinal)
+        }
+
+        /** Convert a final expression (non-await) to monadic form. */
+        def rawExprToMonadic(term: Term, localFuncs: Set[Symbol]): Term = term match
+            case Inlined(_, _, inner) => rawExprToMonadic(inner, localFuncs)
+            case Block(stats, expr)   => Block(stats, rawExprToMonadic(expr, localFuncs))
+            case If(cond, thenp, elsep) =>
+                If(
+                  cond,
+                  rawToMonadic(thenp, localFuncs),
+                  rawToMonadic(elsep, localFuncs)
+                )
+            case Match(scrutinee, cases) =>
+                Match(
+                  scrutinee,
+                  cases.map(c => CaseDef(c.pattern, c.guard, rawToMonadic(c.rhs, localFuncs)))
+                )
+            case Apply(id @ Ident(_), _) if localFuncs.contains(id.symbol) =>
+                // Function call — leave as-is (collectChunks will detect it)
+                term
+            case Literal(UnitConstant()) => buildPureUnit
+            case _                       => Block(List(term), buildPureUnit)
+
+        /** Use Async.transformMonad for CPS transformation. */
+        def cpsTransform(bodyExpr: Term): Term = {
+            val cpsCtxRef = Ref(cpsCtxParam.symbol).asExprOf[CpsMonadContext[UtxoFlow]]
+            val bodyAsExpr = bodyExpr.changeOwner(Symbol.spliceOwner).asExprOf[Unit]
+            Async
+                .transformMonad[UtxoFlow, Unit, CpsMonadContext[UtxoFlow]](
+                  bodyAsExpr,
+                  monadExpr,
+                  cpsCtxRef
+                )
+                .asTerm
+        }
+
+        // For bodies without local functions: use Async.transformMonad (existing path).
+        // For bodies with local functions: use rawToMonadic (manual CPS that handles
+        // the expanded await form and preserves function call references).
+        val monadicTerm: Term =
+            if localFuncInfos.isEmpty then cpsTransform(userBody)
+            else rawToMonadic(mainBodyWithoutDefs, localFuncSymbols)
+
+        // report.info(s"UtxoFlow monadic tree:\n${monadicTerm.show}")
+
+        // ================================================================
         // Step 3: Extract chunk info from monadic tree
         // ================================================================
 
@@ -305,6 +514,7 @@ object UtxoFlowMacros {
             extends Continuation
         case class MatchCont(scrutinee: Term, cases: List[(CaseDef, Continuation)])
             extends Continuation
+        case class FunctionCallCont(funcSymbol: Symbol, args: List[Term]) extends Continuation
 
         case class ChunkInfo(
             index: Int,
@@ -384,11 +594,41 @@ object UtxoFlowMacros {
                       MatchCont(scrutinee, results.map(r => (r._1, r._3)))
                     )
 
-                // Terminal: pure or non-monadic
+                // Function call in tail position (direct)
+                case Apply(id @ Ident(_), args) if localFuncSymbols.contains(id.symbol) =>
+                    (Nil, FunctionCallCont(id.symbol, args))
+
+                // pure(expr) — check if expr is a function call
+                case _ if isPure(term) =>
+                    val body = extractPureBody(term)
+                    body match
+                        case Apply(id @ Ident(_), args) if localFuncSymbols.contains(id.symbol) =>
+                            (Nil, FunctionCallCont(id.symbol, args))
+                        case _ => (Nil, TerminalCont)
+
+                // Terminal: non-monadic
                 case _ => (Nil, TerminalCont)
 
         val chunkCounter = new Counter()
-        val (rawChunks, rootCont) = collectChunks(monadicTerm, chunkCounter)
+        val (mainRawChunks, rootCont) = collectChunks(monadicTerm, chunkCounter)
+
+        // Collect chunks from local function bodies
+        val functionEntryMap = scala.collection.mutable.Map.empty[Symbol, Int]
+        val funcParamMap = scala.collection.mutable.Map.empty[Symbol, List[ValDef]]
+
+        // For each function body, use rawToMonadic (manual CPS) which handles
+        // the expanded await form and preserves recursive call references.
+        val functionRawChunks: List[RawChunk] = localFuncInfos.flatMap { funcInfo =>
+            val funcMonadic = rawToMonadic(funcInfo.body, localFuncSymbols)
+            // report.info(s"Function ${funcInfo.defDef.name} monadic tree:\n${funcMonadic.show}")
+            val (chunks, _) = collectChunks(funcMonadic, chunkCounter)
+            if chunks.nonEmpty then
+                functionEntryMap(funcInfo.defDef.symbol) = chunks.head.index
+                funcParamMap(funcInfo.defDef.symbol) = funcInfo.params
+            chunks
+        }
+
+        val rawChunks = mainRawChunks ++ functionRawChunks
 
         if rawChunks.isEmpty then
             report.errorAndAbort("No chunk bodies found — the flow has no await calls")
@@ -399,11 +639,16 @@ object UtxoFlowMacros {
 
         // Symbols that should never be captured
         val excludedSymbols = Set(cpsCtxParam.symbol, cellCtxParam.symbol)
+        val functionEntryIndices: Set[Int] = functionEntryMap.values.toSet
 
         val chunkInfos: List[ChunkInfo] = {
             var boundSoFar = excludedSymbols
 
             rawChunks.map { chunk =>
+                // Reset boundSoFar at function entry points so main-flow
+                // variables don't leak into function chunk scope
+                if functionEntryIndices.contains(chunk.index) then boundSoFar = excludedSymbols
+
                 val effectBody = stripMonadicTail(chunk.body)
 
                 val chunkBound = boundSoFar + chunk.param.symbol
@@ -414,8 +659,14 @@ object UtxoFlowMacros {
                 // Filter out Given/Implicit symbols (compiler-generated evidence
                 // like derived$FromData) which are monadic infrastructure, not
                 // user variables that need datum capture.
-                val fv = freeVars(chunk.body, chunkBound).filter { sym =>
+                // Also filter out local function symbols (they are code, not values).
+                val rawFv = freeVars(chunk.body, chunkBound)
+                // report.info(
+                //   s"  Chunk ${chunk.index} raw freeVars: ${rawFv.map(s => s"${s.name}").mkString(", ")}"
+                // )
+                val fv = rawFv.filter { sym =>
                     !sym.flags.is(Flags.Given) && !sym.flags.is(Flags.Implicit)
+                    && !localFuncSymbols.contains(sym)
                 }
 
                 val datumFields = fv.toList
@@ -441,10 +692,11 @@ object UtxoFlowMacros {
 
         // Report chunk info
         def contLabel(c: Continuation): String = c match
-            case TerminalCont  => "terminal"
-            case NextCont(idx) => s"next=$idx"
-            case _: IfCont     => "if-branch"
-            case _: MatchCont  => "match-branch"
+            case TerminalCont           => "terminal"
+            case NextCont(idx)          => s"next=$idx"
+            case _: IfCont              => "if-branch"
+            case _: MatchCont           => "match-branch"
+            case FunctionCallCont(s, _) => s"call=${s.name}"
 
         report.info(s"UtxoFlow chunks: ${chunkInfos.size}")
         chunkInfos.foreach { chunk =>
@@ -585,13 +837,16 @@ object UtxoFlowMacros {
             case Apply(Apply(Select(_, "map"), List(fa)), List(Lambda(List(p), _)))
                 if isSuspend(fa) =>
                 buildReturnSome(chunkByParam(p.symbol), symMapping, owner)
-            // pure(value) → value; POption.None
+            // pure(value) → value; POption.None (or function call)
             case _ if isPure(term) =>
                 val body = extractPureBody(term)
-                val noneExpr = '{ POption.None: POption[Data] }.asTerm
                 body match
-                    case Literal(UnitConstant()) => noneExpr
-                    case _                       => Block(List(body), noneExpr)
+                    case Apply(id @ Ident(_), args) if localFuncSymbols.contains(id.symbol) =>
+                        buildReturnSomeForCall(id.symbol, args, symMapping, owner)
+                    case Literal(UnitConstant()) =>
+                        '{ POption.None: POption[Data] }.asTerm
+                    case _ =>
+                        Block(List(body), '{ POption.None: POption[Data] }.asTerm)
             // If: recurse into branches
             case If(cond, thenp, elsep) =>
                 If(
@@ -611,7 +866,96 @@ object UtxoFlowMacros {
                       )
                   )
                 )
+            // Function call in tail position → POption.Some(Constr(entryTag, [args...]))
+            case Apply(id @ Ident(_), args) if localFuncSymbols.contains(id.symbol) =>
+                buildReturnSomeForCall(id.symbol, args, symMapping, owner)
             case other => other
+
+        /** Build POption.Some(Data.Constr(entryTag, [...args+freeVars...])) for a function call.
+          * The datum fields for the entry chunk may include function params and free variables from
+          * the enclosing scope.
+          */
+        def buildReturnSomeForCall(
+            funcSym: Symbol,
+            callArgs: List[Term],
+            symMapping: Map[Symbol, Symbol],
+            owner: Symbol
+        ): Term = {
+            val entryIdx = functionEntryMap(funcSym)
+            val entryChunk = chunkInfos(entryIdx)
+            val fParams = funcParamMap(funcSym)
+            val paramToArg: Map[Symbol, Term] =
+                fParams.map(_.symbol).zip(callArgs).toMap
+
+            val nextFieldExprs = entryChunk.datumFields.map { field =>
+                paramToArg.get(field.symbol) match
+                    case Some(arg) =>
+                        // Function param → use call argument
+                        val mappedArg = substituteSymbols(
+                          arg,
+                          symMapping.filter((_, v) => v.exists),
+                          owner
+                        )
+                        buildToDataCall(mappedArg, field.tpe)
+                    case None =>
+                        // Free var from enclosing scope → use symMapping
+                        val sym = symMapping.getOrElse(field.symbol, field.symbol)
+                        buildToDataCall(Ref(sym), field.tpe)
+            }
+
+            // Build PList[Data]
+            val nilTerm: Term = {
+                val nilSym = TypeRepr
+                    .of[scalus.cardano.onchain.plutus.prelude.List.type]
+                    .termSymbol
+                    .methodMember("empty")
+                    .head
+                TypeApply(
+                  Select(
+                    Ref(
+                      TypeRepr.of[scalus.cardano.onchain.plutus.prelude.List.type].termSymbol
+                    ),
+                    nilSym
+                  ),
+                  List(TypeTree.of[Data])
+                )
+            }
+
+            val fieldsList = nextFieldExprs.foldRight(nilTerm) { (elem, acc) =>
+                val consTpe = TypeRepr.of[scalus.cardano.onchain.plutus.prelude.List.Cons[Data]]
+                val consSym = consTpe.typeSymbol.companionModule
+                Select.overloaded(
+                  Ref(consSym),
+                  "apply",
+                  List(TypeRepr.of[Data]),
+                  List(elem, acc)
+                )
+            }
+
+            val bigIntTerm = Select.overloaded(
+              Ref(TypeRepr.of[BigInt.type].termSymbol),
+              "apply",
+              Nil,
+              List(Literal(IntConstant(entryIdx)))
+            )
+
+            val dataConstr = Select.overloaded(
+              Ref(TypeRepr.of[Data.Constr.type].termSymbol),
+              "apply",
+              Nil,
+              List(bigIntTerm, fieldsList)
+            )
+
+            Typed(
+              Select.overloaded(
+                Ref(TypeRepr.of[POption.Some.type].termSymbol),
+                "apply",
+                List(TypeRepr.of[Data]),
+                List(dataConstr)
+              ),
+              TypeTree.of[POption[Data]]
+            )
+        }
 
         /** Build the body for a chunk, given refs to datum fields list, redeemer, and ctx. */
         def buildChunkBody(

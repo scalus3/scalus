@@ -343,6 +343,159 @@ class UtxoFlowSpec extends AnyFunSuite {
         }
     }
 
+    // ================================================================
+    // Recursion / loop tests
+    // ================================================================
+
+    test("recursion — self-loop terminates on confirmed") {
+        val flowDispatch = UtxoFlow.define { ctx =>
+            def loop(c: Confirm): Unit = {
+                val next = await(UtxoFlow.suspend[Confirm])
+                if next.confirmed then ()
+                else loop(next)
+            }
+            val first = await(UtxoFlow.suspend[Confirm])
+            loop(first)
+        }
+
+        // Chunk 0: await Confirm (main flow entry)
+        val datum0 = Data.Constr(0, PList.Nil)
+        val first = Confirm(false)
+        val result0 = flowDispatch(datum0, first.toData, null)
+        result0 match {
+            case POption.Some(nextDatum) =>
+                info(s"Chunk 0 → POption.Some($nextDatum)")
+                nextDatum match {
+                    case Data.Constr(tag, _) =>
+                        // Should point to the function entry chunk (chunk 1)
+                        assert(tag == 1, s"Expected tag=1 (function entry), got $tag")
+                    case other => fail(s"Expected Constr, got $other")
+                }
+
+                // Chunk 1: await Confirm (function entry)
+                // Send confirmed=false → should self-loop back to chunk 1
+                val notConfirmed = Confirm(false)
+                val result1 = flowDispatch(nextDatum, notConfirmed.toData, null)
+                result1 match {
+                    case POption.Some(loopDatum) =>
+                        info(s"Chunk 1 (not confirmed) → POption.Some($loopDatum)")
+                        loopDatum match {
+                            case Data.Constr(loopTag, _) =>
+                                assert(
+                                  loopTag == 1,
+                                  s"Expected tag=1 (self-loop), got $loopTag"
+                                )
+                            case other => fail(s"Expected Constr, got $other")
+                        }
+
+                        // Send confirmed=true → should terminate
+                        val confirmed = Confirm(true)
+                        val result2 = flowDispatch(loopDatum, confirmed.toData, null)
+                        assert(
+                          result2 == POption.None,
+                          s"Expected terminal POption.None, got $result2"
+                        )
+                        info("Chunk 1 (confirmed) → POption.None (terminal)")
+                    case POption.None =>
+                        fail("Not confirmed should loop, not terminate")
+                }
+            case POption.None =>
+                fail("Chunk 0 should return POption.Some")
+        }
+    }
+
+    test("recursion — self-loop with function param used after await") {
+        val flowDispatch = UtxoFlow.define { ctx =>
+            def loop(bid: Bid): Unit = {
+                val confirm = await(UtxoFlow.suspend[Confirm])
+                if confirm.confirmed then
+                    ctx.txInfo.requireSignedBy(bid.bidder) // bid is a datum field
+                else
+                    val newBid = await(UtxoFlow.suspend[Bid])
+                    loop(newBid)
+            }
+            val firstBid = await(UtxoFlow.suspend[Bid])
+            loop(firstBid)
+        }
+
+        val bidder = PubKeyHash(
+          ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
+        )
+        val datum0 = Data.Constr(0, PList.Nil)
+        val bid = Bid(bidder, BigInt(500_000))
+
+        // Chunk 0: await Bid → enters loop
+        val result0 = flowDispatch(datum0, bid.toData, null)
+        result0 match {
+            case POption.Some(loopDatum) =>
+                info(s"Chunk 0 → POption.Some($loopDatum)")
+                loopDatum match {
+                    case Data.Constr(tag, fields) =>
+                        // Function entry chunk; bid should be captured as datum field
+                        assert(!fields.isEmpty, "Expected bid to be captured in datum fields")
+                        info(s"Function entry: tag=$tag, fields=$fields")
+                    case other => fail(s"Expected Constr, got $other")
+                }
+            case POption.None =>
+                fail("Chunk 0 should return POption.Some")
+        }
+    }
+
+    test("recursion — self-loop full lifecycle with re-bid") {
+        val flowDispatch = UtxoFlow.define { ctx =>
+            def loop(bid: Bid): Unit = {
+                val confirm = await(UtxoFlow.suspend[Confirm])
+                if confirm.confirmed then () // terminal
+                else
+                    val newBid = await(UtxoFlow.suspend[Bid])
+                    loop(newBid)
+            }
+            val firstBid = await(UtxoFlow.suspend[Bid])
+            loop(firstBid)
+        }
+
+        val bidder = PubKeyHash(
+          ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
+        )
+
+        // Chunk 0: await Bid (main entry)
+        val datum0 = Data.Constr(0, PList.Nil)
+        val bid1 = Bid(bidder, BigInt(100))
+        val result0 = flowDispatch(datum0, bid1.toData, null)
+        val loopDatum1 = result0 match {
+            case POption.Some(d) =>
+                info(s"Chunk 0 → loop entry: $d")
+                d
+            case POption.None => fail("Chunk 0 should enter loop"); ???
+        }
+
+        // Chunk 1 (loop entry): await Confirm; confirmed=false → await Bid (chunk 2)
+        val notConfirmed = Confirm(false)
+        val result1 = flowDispatch(loopDatum1, notConfirmed.toData, null)
+        val awaitNewBidDatum = result1 match {
+            case POption.Some(d) =>
+                info(s"Loop (not confirmed) → await new bid: $d")
+                d
+            case POption.None => fail("Not confirmed should continue"); ???
+        }
+
+        // Chunk 2: await Bid → loop(newBid) → back to chunk 1
+        val bid2 = Bid(bidder, BigInt(200))
+        val result2 = flowDispatch(awaitNewBidDatum, bid2.toData, null)
+        val loopDatum2 = result2 match {
+            case POption.Some(d) =>
+                info(s"Re-bid → back to loop entry: $d")
+                d
+            case POption.None => fail("Re-bid should loop back"); ???
+        }
+
+        // Chunk 1 again: confirmed=true → terminal
+        val confirmed = Confirm(true)
+        val result3 = flowDispatch(loopDatum2, confirmed.toData, null)
+        assert(result3 == POption.None, s"Expected terminal, got $result3")
+        info("Full recursion lifecycle: entry → loop → re-bid → loop → terminal")
+    }
+
     test("branching — free variable captured in branch continuation") {
         val flowDispatch = UtxoFlow.define { ctx =>
             val bid = await(UtxoFlow.suspend[Bid])
@@ -418,6 +571,20 @@ object BranchingFlowValidator extends FlowCellValidator {
     }
 }
 
+@Compile
+object RecursiveFlowValidator extends FlowCellValidator {
+    inline def beaconName: ByteString = utf8"recursive-flow"
+    inline def flowDispatch = UtxoFlow.define { ctx =>
+        def loop(c: Confirm): Unit = {
+            val next = await(UtxoFlow.suspend[Confirm])
+            if next.confirmed then ()
+            else loop(next)
+        }
+        val first = await(UtxoFlow.suspend[Confirm])
+        loop(first)
+    }
+}
+
 object TestFlowCompilation {
     given Options = Options.debug
     lazy val compiled = PlutusV3.compile(TestFlowValidator.validate)
@@ -426,6 +593,11 @@ object TestFlowCompilation {
 object BranchingFlowCompilation {
     given Options = Options.debug
     lazy val compiled = PlutusV3.compile(BranchingFlowValidator.validate)
+}
+
+object RecursiveFlowCompilation {
+    given Options = Options.debug
+    lazy val compiled = PlutusV3.compile(RecursiveFlowValidator.validate)
 }
 
 class UtxoFlowOnChainSpec extends AnyFunSuite {
@@ -444,5 +616,12 @@ class UtxoFlowOnChainSpec extends AnyFunSuite {
         assert(compiled.program.term != null)
         info(s"UPLC program version: ${compiled.program.version}")
         info(s"Branching script size: ${compiled.script.script.size} bytes")
+    }
+
+    test("RecursiveFlowValidator compiles to UPLC") {
+        val compiled = RecursiveFlowCompilation.compiled
+        assert(compiled.program.term != null)
+        info(s"UPLC program version: ${compiled.program.version}")
+        info(s"Recursive script size: ${compiled.script.script.size} bytes")
     }
 }
