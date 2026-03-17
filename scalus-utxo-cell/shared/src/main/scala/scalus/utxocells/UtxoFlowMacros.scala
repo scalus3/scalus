@@ -123,6 +123,87 @@ object UtxoFlowMacros {
         }
 
         // ================================================================
+        // Compile-time validation
+        // ================================================================
+
+        /** Detect `await`/`suspend` inside lambda expressions (async closures). These cannot be
+          * statically defunctionalized — the number of chunk boundaries would depend on runtime
+          * iteration count.
+          */
+        def checkNoAsyncClosures(tree: Tree): Unit = {
+            val walker = new TreeTraverser {
+                override def traverseTree(t: Tree)(owner: Symbol): Unit = t match
+                    case Lambda(_, body) =>
+                        if containsFlowOps(body) then
+                            report.errorAndAbort(
+                              "UtxoFlow: await/suspend inside a lambda is not supported. " +
+                                  "Use explicit tail recursion with a local def instead.",
+                              t.pos
+                            )
+                        // containsFlowOps is deep, so if body has no flow ops,
+                        // no nested lambda can either — safe to skip children.
+                    case _ => super.traverseTree(t)(owner)
+            }
+            walker.traverseTree(tree)(Symbol.spliceOwner)
+        }
+
+        /** Check that calls to local flow functions appear only in tail position. Non-tail
+          * recursion would require a call stack in the datum — impractical on-chain.
+          */
+        def checkTailCalls(body: Term, funcSymbols: Set[Symbol]): Unit = {
+
+            /** Verify that tree contains no calls to any funcSymbol (non-tail context). */
+            def checkNotTail(tree: Tree): Unit = {
+                val walker = new TreeTraverser {
+                    override def traverseTree(t: Tree)(owner: Symbol): Unit = t match
+                        case Apply(id @ Ident(_), _) if funcSymbols.contains(id.symbol) =>
+                            report.errorAndAbort(
+                              s"UtxoFlow: call to '${id.symbol.name}' is not in tail position. " +
+                                  "Only tail-call patterns are supported — the call must be " +
+                                  "the last action in a branch.",
+                              t.pos
+                            )
+                        case _ => super.traverseTree(t)(owner)
+                }
+                walker.traverseTree(tree)(Symbol.spliceOwner)
+            }
+
+            /** Verify calls to funcSymbols in term are only in tail position. */
+            def checkTailPos(term: Term): Unit = term match
+                case Inlined(_, bindings, inner) =>
+                    bindings.foreach(b => checkNotTail(b))
+                    checkTailPos(inner)
+                case Block(stats, expr) =>
+                    stats.foreach(s => checkNotTail(s))
+                    checkTailPos(expr)
+                case If(cond, thenp, elsep) =>
+                    checkNotTail(cond)
+                    checkTailPos(thenp)
+                    checkTailPos(elsep)
+                case Match(scrutinee, cases) =>
+                    checkNotTail(scrutinee)
+                    cases.foreach(c => checkTailPos(c.rhs))
+                case Typed(expr, _) =>
+                    checkTailPos(expr)
+                case Apply(id @ Ident(_), args) if funcSymbols.contains(id.symbol) =>
+                    // Tail-position call — OK. But check args don't contain calls.
+                    args.foreach(checkNotTail)
+                case _ =>
+                    // Try, Return, and other forms fall through here and are
+                    // correctly rejected by checkNotTail if they contain calls.
+                    checkNotTail(term)
+
+            checkTailPos(body)
+        }
+
+        checkNoAsyncClosures(userBody)
+        if localFuncSymbols.nonEmpty then
+            localFuncInfos.foreach { info =>
+                checkTailCalls(info.body, localFuncSymbols)
+            }
+            checkTailCalls(mainBodyWithoutDefs, localFuncSymbols)
+
+        // ================================================================
         // Local helpers
         // ================================================================
 

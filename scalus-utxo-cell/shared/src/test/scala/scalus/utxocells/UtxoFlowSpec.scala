@@ -700,6 +700,49 @@ class UtxoFlowSpec extends AnyFunSuite {
                 fail("Chunk 0 should return POption.Some")
         }
     }
+
+    // ================================================================
+    // Compile-time error tests
+    // ================================================================
+
+    test("compile error — await inside lambda (async closure)") {
+        assertDoesNotCompile("""
+            UtxoFlow.define { ctx =>
+                val f: Int => Unit = x => {
+                    val c = await(UtxoFlow.suspend[Confirm])
+                }
+                val bid = await(UtxoFlow.suspend[Bid])
+            }
+        """)
+    }
+
+    test("compile error — non-tail recursive call (followed by await)") {
+        assertDoesNotCompile("""
+            UtxoFlow.define { ctx =>
+                def loop(c: Confirm): Unit = {
+                    loop(c)
+                    val next = await(UtxoFlow.suspend[Confirm])
+                    ()
+                }
+                val first = await(UtxoFlow.suspend[Confirm])
+                loop(first)
+            }
+        """)
+    }
+
+    test("compile error — non-tail recursive call (followed by code)") {
+        assertDoesNotCompile("""
+            UtxoFlow.define { ctx =>
+                def loop(c: Confirm): Unit = {
+                    val next = await(UtxoFlow.suspend[Confirm])
+                    loop(next)
+                    ()
+                }
+                val first = await(UtxoFlow.suspend[Confirm])
+                loop(first)
+            }
+        """)
+    }
 }
 
 // -- On-chain flow validators --

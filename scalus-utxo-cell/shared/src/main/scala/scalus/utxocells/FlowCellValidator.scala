@@ -82,9 +82,9 @@ trait FlowCellValidator extends CellValidator {
   * }
   * }}}
   *
-  * `flowDispatch` must be `inline def` taking `Data` and returning the dispatch function.
-  * The parameter is decoded inside the method body before the `UtxoFlow.define` block, making
-  * its fields available as captured variables in the flow.
+  * `flowDispatch` must be `inline def` taking `Data` and returning the dispatch function. The
+  * parameter is decoded inside the method body before the `UtxoFlow.define` block, making its
+  * fields available as captured variables in the flow.
   */
 trait DataParameterizedFlowCellValidator extends DataParameterizedCellValidator {
     inline def beaconName: ByteString
