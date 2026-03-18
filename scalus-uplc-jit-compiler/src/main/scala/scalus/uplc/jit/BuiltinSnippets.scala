@@ -624,4 +624,256 @@ object BuiltinSnippets {
                     caseUnit
                 }
 
+    // Additional integer operations (unapplied forms)
+
+    @inline def divideInteger(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): BigInt => BigInt => BigInt =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  BuiltinApp(DivideInteger),
+                  params.builtinCostModel.divideInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.divideInteger(x, y)
+            }
+
+    @inline def quotientInteger(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): BigInt => BigInt => BigInt =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  BuiltinApp(QuotientInteger),
+                  params.builtinCostModel.quotientInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.quotientInteger(x, y)
+            }
+
+    @inline def remainderInteger(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): BigInt => BigInt => BigInt =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  BuiltinApp(RemainderInteger),
+                  params.builtinCostModel.remainderInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.remainderInteger(x, y)
+            }
+
+    @inline def modInteger(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): BigInt => BigInt => BigInt =
+        (x: BigInt) =>
+            (y: BigInt) => {
+                budget.spendBudget(
+                  BuiltinApp(ModInteger),
+                  params.builtinCostModel.modInteger.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.modInteger(x, y)
+            }
+
+    // Additional ByteString operations (unapplied forms)
+
+    @inline def appendByteString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => ByteString => ByteString =
+        (x: ByteString) =>
+            (y: ByteString) => {
+                budget.spendBudget(
+                  BuiltinApp(AppendByteString),
+                  params.builtinCostModel.appendByteString.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.appendByteString(x, y)
+            }
+
+    @inline def lessThanByteString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => ByteString => Boolean =
+        (x: ByteString) =>
+            (y: ByteString) => {
+                budget.spendBudget(
+                  BuiltinApp(LessThanByteString),
+                  params.builtinCostModel.lessThanByteString.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.lessThanByteString(x, y)
+            }
+
+    @inline def lessThanEqualsByteString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => ByteString => Boolean =
+        (x: ByteString) =>
+            (y: ByteString) => {
+                budget.spendBudget(
+                  BuiltinApp(LessThanEqualsByteString),
+                  params.builtinCostModel.lessThanEqualsByteString.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.lessThanEqualsByteString(x, y)
+            }
+
+    @inline def lengthOfByteString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => BigInt =
+        (bs: ByteString) => {
+            budget.spendBudget(
+              BuiltinApp(LengthOfByteString),
+              params.builtinCostModel.lengthOfByteString.constantCost,
+              Nil
+            )
+            Builtins.lengthOfByteString(bs)
+        }
+
+    // Additional hash functions (unapplied forms)
+
+    @inline def sha3_256(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => ByteString =
+        (bs: ByteString) => {
+            budget.spendBudget(
+              BuiltinApp(Sha3_256),
+              params.builtinCostModel.sha3_256.calculateCostFromMemory(
+                Seq(MemoryUsageJit.memoryUsage(bs))
+              ),
+              Nil
+            )
+            Builtins.sha3_256(bs)
+        }
+
+    @inline def blake2b_256(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => ByteString =
+        (bs: ByteString) => {
+            budget.spendBudget(
+              BuiltinApp(Blake2b_256),
+              params.builtinCostModel.blake2b_256.calculateCostFromMemory(
+                Seq(MemoryUsageJit.memoryUsage(bs))
+              ),
+              Nil
+            )
+            Builtins.blake2b_256(bs)
+        }
+
+    // Additional String operations (unapplied forms)
+
+    @inline def appendString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): String => String => String =
+        (x: String) =>
+            (y: String) => {
+                budget.spendBudget(
+                  BuiltinApp(AppendString),
+                  params.builtinCostModel.appendString.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.appendString(x, y)
+            }
+
+    @inline def equalsString(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): String => String => Boolean =
+        (x: String) =>
+            (y: String) => {
+                budget.spendBudget(
+                  BuiltinApp(EqualsString),
+                  params.builtinCostModel.equalsString.calculateCostFromMemory(
+                    Seq(
+                      MemoryUsageJit.memoryUsage(x),
+                      MemoryUsageJit.memoryUsage(y)
+                    )
+                  ),
+                  Nil
+                )
+                Builtins.equalsString(x, y)
+            }
+
+    @inline def encodeUtf8(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): String => ByteString =
+        (s: String) => {
+            budget.spendBudget(
+              BuiltinApp(EncodeUtf8),
+              params.builtinCostModel.encodeUtf8.calculateCostFromMemory(
+                Seq(MemoryUsageJit.memoryUsage(s))
+              ),
+              Nil
+            )
+            Builtins.encodeUtf8(s)
+        }
+
+    @inline def decodeUtf8(
+        budget: BudgetSpender,
+        params: MachineParams
+    ): ByteString => String =
+        (bs: ByteString) => {
+            budget.spendBudget(
+              BuiltinApp(DecodeUtf8),
+              params.builtinCostModel.decodeUtf8.calculateCostFromMemory(
+                Seq(MemoryUsageJit.memoryUsage(bs))
+              ),
+              Nil
+            )
+            Builtins.decodeUtf8(bs)
+        }
+
 }

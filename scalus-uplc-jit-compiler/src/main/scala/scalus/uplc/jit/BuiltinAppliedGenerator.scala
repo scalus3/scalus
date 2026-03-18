@@ -359,7 +359,7 @@ object BuiltinAppliedGenerator {
               ),
               Nil
             )
-            ${ x }.asInstanceOf[BigInt] / ${ y }.asInstanceOf[BigInt]
+            Builtins.divideInteger(${ x }.asInstanceOf[BigInt], ${ y }.asInstanceOf[BigInt])
         }
     }
 

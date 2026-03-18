@@ -179,18 +179,8 @@ object PlutusVM {
       * @return
       *   A configured Plutus V2 VM instance
       */
-    def makePlutusV2VM(params: MachineParams): PlutusVM = {
-        val semanticVariant = BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
-          CardanoInfo.mainnet.majorProtocolVersion,
-          Language.PlutusV2
-        )
-        new PlutusVM(
-          Language.PlutusV2,
-          params,
-          semanticVariant,
-          platform
-        )
-    }
+    def makePlutusV2VM(params: MachineParams): PlutusVM =
+        makePlutusV2VM(params, CardanoInfo.mainnet.majorProtocolVersion)
 
     /** Creates a Plutus V2 VM with default parameters.
       *
@@ -203,6 +193,47 @@ object PlutusVM {
           Language.PlutusV2
         )
         makePlutusV2VM(params)
+    }
+
+    /** Creates a Plutus V2 VM with custom parameters and a specific protocol version.
+      *
+      * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
+      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      *
+      * @param params
+      *   Custom machine parameters to use for the VM
+      * @param protocolVersion
+      *   The target protocol version
+      * @return
+      *   A configured Plutus V2 VM instance
+      */
+    def makePlutusV2VM(params: MachineParams, protocolVersion: MajorProtocolVersion): PlutusVM = {
+        val semanticVariant = BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
+          protocolVersion,
+          Language.PlutusV2
+        )
+        new PlutusVM(
+          Language.PlutusV2,
+          params,
+          semanticVariant,
+          platform,
+          protocolVersion
+        )
+    }
+
+    /** Creates a Plutus V2 VM with default parameters and a specific protocol version.
+      *
+      * Use `MajorProtocolVersion.vanRossemPV` to enable protocol version 11 features
+      * (case-on-builtins, batch6 builtins like ExpModInteger).
+      *
+      * @param protocolVersion
+      *   The target protocol version
+      * @return
+      *   A Plutus V2 VM instance with default parameters
+      */
+    def makePlutusV2VM(protocolVersion: MajorProtocolVersion): PlutusVM = {
+        val params = MachineParams.defaultParamsFor(Language.PlutusV2, protocolVersion)
+        makePlutusV2VM(params, protocolVersion)
     }
 
     /** Creates a Plutus V3 VM with custom parameters.

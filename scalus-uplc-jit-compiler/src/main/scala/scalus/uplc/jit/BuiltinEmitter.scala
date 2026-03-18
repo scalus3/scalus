@@ -112,6 +112,34 @@ object BuiltinEmitter {
                 '{ BuiltinSnippets.verifySchnorrSecp256k1Signature($budget, $params) }
             case DefaultFun.ChooseUnit =>
                 '{ BuiltinSnippets.chooseUnit($budget, $params) }
+            case DefaultFun.DivideInteger =>
+                '{ BuiltinSnippets.divideInteger($budget, $params) }
+            case DefaultFun.QuotientInteger =>
+                '{ BuiltinSnippets.quotientInteger($budget, $params) }
+            case DefaultFun.RemainderInteger =>
+                '{ BuiltinSnippets.remainderInteger($budget, $params) }
+            case DefaultFun.ModInteger =>
+                '{ BuiltinSnippets.modInteger($budget, $params) }
+            case DefaultFun.AppendByteString =>
+                '{ BuiltinSnippets.appendByteString($budget, $params) }
+            case DefaultFun.LessThanByteString =>
+                '{ BuiltinSnippets.lessThanByteString($budget, $params) }
+            case DefaultFun.LessThanEqualsByteString =>
+                '{ BuiltinSnippets.lessThanEqualsByteString($budget, $params) }
+            case DefaultFun.LengthOfByteString =>
+                '{ BuiltinSnippets.lengthOfByteString($budget, $params) }
+            case DefaultFun.Sha3_256 =>
+                '{ BuiltinSnippets.sha3_256($budget, $params) }
+            case DefaultFun.Blake2b_256 =>
+                '{ BuiltinSnippets.blake2b_256($budget, $params) }
+            case DefaultFun.AppendString =>
+                '{ BuiltinSnippets.appendString($budget, $params) }
+            case DefaultFun.EqualsString =>
+                '{ BuiltinSnippets.equalsString($budget, $params) }
+            case DefaultFun.EncodeUtf8 =>
+                '{ BuiltinSnippets.encodeUtf8($budget, $params) }
+            case DefaultFun.DecodeUtf8 =>
+                '{ BuiltinSnippets.decodeUtf8($budget, $params) }
             case _ =>
                 sys.error(
                   s"Builtin $bn is not yet supported by the JIT compiler. Please add implementation in the Builtin pattern matching section."
