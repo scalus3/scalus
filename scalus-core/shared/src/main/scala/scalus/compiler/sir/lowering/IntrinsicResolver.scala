@@ -148,10 +148,15 @@ object IntrinsicResolver {
             else None
         case _ => None
 
-    /** Map a LoweredValueRepresentation to its string name for registry lookup. */
+    /** Map a LoweredValueRepresentation to its string name for registry lookup.
+      *
+      * SumDataList/SumDataPairList are val aliases for SumBuiltinList instances, so the
+      * SumBuiltinList patterns handle them via case class equality.
+      */
     private def representationName(repr: LoweredValueRepresentation): String = repr match
-        case SumCaseClassRepresentation.SumDataList       => "SumDataList"
-        case SumCaseClassRepresentation.SumDataPairList   => "SumDataPairList"
+        case SumCaseClassRepresentation.SumBuiltinList(ProductCaseClassRepresentation.PairData) =>
+            "SumDataPairList"
+        case SumCaseClassRepresentation.SumBuiltinList(_) => "SumDataList"
         case SumCaseClassRepresentation.PackedSumDataList => "PackedSumDataList"
         case SumCaseClassRepresentation.DataConstr        => "DataConstr"
         case _ => repr.getClass.getSimpleName.stripSuffix("$")

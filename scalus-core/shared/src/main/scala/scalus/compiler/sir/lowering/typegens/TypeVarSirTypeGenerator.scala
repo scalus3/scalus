@@ -113,6 +113,17 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                           SumCaseClassRepresentation.SumDataPairList,
                                           pos
                                         )
+                                case SumCaseClassRepresentation.SumBuiltinList(_) =>
+                                    // Generic SumBuiltinList — go through PackedSumDataList
+                                    val r1 = input.toRepresentation(
+                                      SumCaseClassRepresentation.PackedSumDataList,
+                                      pos
+                                    )
+                                    SumDataListSirTypeGenerator.toRepresentation(
+                                      r1,
+                                      representation,
+                                      pos
+                                    )
                             }
                         case prodRepr: ProductCaseClassRepresentation =>
                             prodRepr match {
