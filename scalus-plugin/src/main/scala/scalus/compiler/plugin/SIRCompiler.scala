@@ -3060,7 +3060,8 @@ final class SIRCompiler(
             // ignore asInstanceOf (both source-level name and encoded $asInstanceOf$ from inline expansion)
             case TypeApply(Select(e, nme.asInstanceOf_), _) =>
                 compileExpr(env, e)
-            case TypeApply(sel @ Select(e, _), _) if sel.symbol == defn.Any_asInstanceOf =>
+            case TypeApply(sel @ Select(e, ident), _)
+                if sel.symbol == defn.Any_asInstanceOf || ident.toString == "$asInstanceOf$" =>
                 compileExpr(env, e)
             case TypeApply(sel @ Select(obj, ident), targs) =>
 
@@ -3236,8 +3237,14 @@ final class SIRCompiler(
                     case vd: ValDef =>
                         vd.rhs match
                             case TypeApply(sel: Select, _) =>
-                                !(sel.qualifier.symbol.is(Flags.Module) &&
-                                    sel.symbol == defn.Any_asInstanceOf)
+                                // Only filter out $package module proxy bindings (from opaque type
+                                // inline expansion). Regular @Compile object proxies are needed.
+                                val isPackageProxy =
+                                    sel.qualifier.symbol.is(Flags.Module) &&
+                                        sel.qualifier.symbol.name.toString.endsWith("$package") &&
+                                        (sel.symbol == defn.Any_asInstanceOf ||
+                                            sel.name.toString == "$asInstanceOf$")
+                                !isPackageProxy
                             case _ => true
                     case _ => true
                 }

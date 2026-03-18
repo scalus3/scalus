@@ -182,15 +182,16 @@ class OpaqueTypeTest extends AnyFunSuite {
         }
     }
 
-    // TODO: enable after fixing $asInstanceOf$ handling in @Compile objects for inline opaque extensions
-    // test("top-level opaque type: inline extension unwrap in separate @Compile object") {
-    //     import scalus.compiler.sir.toplevelope.*
-    //     val sir = compile { (x: TopMyInt) =>
-    //         TopMyIntUnwrap.unwrap(x)
-    //     }
-    //     sir.tp match {
-    //         case SIRType.Fun(SIRType.Integer, SIRType.Integer) => succeed
-    //         case _ => fail(s"expected Fun(Integer, Integer) but got ${sir.tp.show}")
-    //     }
-    // }
+    test("top-level opaque type: inline extension unwrap in separate @Compile object") {
+        import scalus.compiler.sir.toplevelope.*
+
+        val sir = compile { (x: TopMyInt) =>
+            TopMyIntUnwrap.unwrap(x)
+        }
+
+        sir.tp match {
+            case SIRType.Fun(SIRType.Integer, SIRType.Integer) => succeed
+            case _ => fail(s"expected Fun(Integer, Integer) but got ${sir.tp.show}")
+        }
+    }
 }

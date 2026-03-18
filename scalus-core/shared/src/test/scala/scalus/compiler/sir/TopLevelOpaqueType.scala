@@ -19,10 +19,9 @@ object TopMyIntOps {
     def double(x: TopMyInt): TopMyInt = x.add(x)
 }
 
-// TODO: enable after fixing $asInstanceOf$ handling in @Compile objects for inline opaque extensions
 // Mirrors BitcoinHelpers.blockHeaderHash(blockHeader: BlockHeader)
 // where blockHeader.bytes returns the underlying ByteString via inline extension
-// @Compile
-// object TopMyIntUnwrap {
-//     def unwrap(x: TopMyInt): BigInt = x.value
-// }
+@Compile
+object TopMyIntUnwrap {
+    def unwrap(x: TopMyInt): BigInt = x.value
+}
