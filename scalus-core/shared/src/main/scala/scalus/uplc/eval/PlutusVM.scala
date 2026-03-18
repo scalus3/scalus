@@ -179,18 +179,8 @@ object PlutusVM {
       * @return
       *   A configured Plutus V2 VM instance
       */
-    def makePlutusV2VM(params: MachineParams): PlutusVM = {
-        val semanticVariant = BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
-          CardanoInfo.mainnet.majorProtocolVersion,
-          Language.PlutusV2
-        )
-        new PlutusVM(
-          Language.PlutusV2,
-          params,
-          semanticVariant,
-          platform
-        )
-    }
+    def makePlutusV2VM(params: MachineParams): PlutusVM =
+        makePlutusV2VM(params, CardanoInfo.mainnet.majorProtocolVersion)
 
     /** Creates a Plutus V2 VM with default parameters.
       *

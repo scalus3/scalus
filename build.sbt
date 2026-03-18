@@ -401,7 +401,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
 // Scalus UPLC JIT Compiler - experimental JIT compiler for UPLC
 lazy val scalusUplcJitCompiler = project
     .in(file("scalus-uplc-jit-compiler"))
-    .dependsOn(scalus.jvm % "compile->compile")
+    .dependsOn(scalus.jvm % "compile->compile;test->test")
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       name := "scalus-uplc-jit-compiler",

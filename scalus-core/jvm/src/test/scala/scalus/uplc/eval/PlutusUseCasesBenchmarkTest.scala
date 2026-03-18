@@ -25,13 +25,15 @@ class PlutusUseCasesBenchmarkTest extends AnyFunSuite {
     private val vm = PlutusVM.makePlutusV2VM(MajorProtocolVersion.vanRossemPV)
 
     private def allFlatFiles: Seq[Path] = {
-        Files
-            .list(dataDir)
-            .iterator()
-            .asScala
-            .filter(_.toString.endsWith(".flat"))
-            .toSeq
-            .sortBy(_.getFileName.toString)
+        val stream = Files.list(dataDir)
+        try
+            stream
+                .iterator()
+                .asScala
+                .filter(_.toString.endsWith(".flat"))
+                .toSeq
+                .sortBy(_.getFileName.toString)
+        finally stream.close()
     }
 
     private def scriptName(p: Path): String =

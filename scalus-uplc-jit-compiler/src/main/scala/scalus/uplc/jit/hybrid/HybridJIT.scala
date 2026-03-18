@@ -50,7 +50,10 @@ object HybridJIT extends JitRunner {
                 case NonFatal(ex) =>
                     // Wrap runtime errors (e.g. ArithmeticException from division by zero)
                     // as MachineError, matching CEK behavior (Cek.scala:1157-1162)
-                    throw new JitEvaluationFailure(s"JIT runtime error: ${ex.getMessage}")
+                    throw new JitEvaluationFailure(
+                      s"JIT runtime error: ${ex.getClass.getName}: ${ex.getMessage}",
+                      ex
+                    )
             }
     }
 

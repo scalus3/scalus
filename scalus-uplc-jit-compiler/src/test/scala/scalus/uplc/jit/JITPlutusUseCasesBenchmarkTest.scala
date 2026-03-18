@@ -4,6 +4,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.DeBruijnedProgram
 import scalus.uplc.eval.*
 
+import scala.util.Using
+
 /** Regression tests for JIT compilation of Plutus use-case benchmarks from
   * https://saib-inc.github.io/cardano-plutus-vm-benchmark/
   *
@@ -26,8 +28,7 @@ class JITPlutusUseCasesBenchmarkTest extends AnyFunSuite {
     private def loadScript(name: String): DeBruijnedProgram = {
         val stream = getClass.getClassLoader.getResourceAsStream(s"data/plutus_use_cases/$name.flat")
         assert(stream != null, s"Resource data/plutus_use_cases/$name.flat not found")
-        val bytes = stream.readAllBytes()
-        stream.close()
+        val bytes = Using.resource(stream)(_.readAllBytes())
         DeBruijnedProgram.fromFlatEncoded(bytes)
     }
 
