@@ -11,7 +11,7 @@ lowers to Untyped Plutus Core (UPLC), the language of Cardano smart contracts.
 
 ## Commands
 
-Always use `sbtn`, never plain `sbt`.
+Prefer `sbtn` over `sbt`, when `sbtn` is aviable and not hangs. 
 
 | Command          | Purpose                                              |
 |------------------|------------------------------------------------------|
