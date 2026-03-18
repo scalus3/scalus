@@ -40,7 +40,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(memory = 212_975835, steps = 56_643_881699L)
+                ExUnits(memory = 199_053463, steps = 52_545_609375L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -140,7 +140,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(memory = 590_008332, steps = 148_450_772581L)
+                ExUnits(memory = 576_709000, steps = 144_536_721569L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -242,7 +242,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(memory = 1_201_069095, steps = 297_554_524824L)
+                ExUnits(memory = 1_184_849143, steps = 292_778_049376L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -398,17 +398,17 @@ object KnightsTest:
 
     end extension
 
-    case class Queue[A](list: List[A])
+    opaque type Queue[A] = List[A]
 
-    def emptyQueue[A]: Queue[A] = Queue(List.empty[A])
+    def emptyQueue[A]: Queue[A] = List.empty[A]
 
     extension [A](self: Queue[A])
-        def toList: List[A] = self.list
-        def isEmpty: Boolean = toList.isEmpty
-        def appendFront(item: A): Queue[A] = Queue(toList.prepended(item))
-        def appendAllFront(list: List[A]): Queue[A] = Queue(list ++ toList)
-        def removeFront: Queue[A] = Queue(toList.tail)
-        def head: A = toList.head
+        def toList: List[A] = self
+        def isEmpty: Boolean = List.isEmpty(self)
+        def appendFront(item: A): Queue[A] = List.prepended(self)(item)
+        def appendAllFront(list: List[A]): Queue[A] = list ++ self
+        def removeFront: Queue[A] = List.tail(self)
+        def head: A = List.head(self)
 
     end extension
 
