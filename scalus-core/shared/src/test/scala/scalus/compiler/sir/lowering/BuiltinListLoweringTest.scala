@@ -141,4 +141,62 @@ class BuiltinListLoweringTest extends AnyFunSuite {
           s"Expected exception about non-Data element type, got: ${ex.getMessage}"
         )
     }
+
+    // --- SumBuiltinList tests ---
+
+    test("SumBuiltinList structural equality with val aliases") {
+        import SumCaseClassRepresentation.*
+
+        // SumDataList is SumBuiltinList(PackedData)
+        assert(SumDataList == SumBuiltinList(PrimitiveRepresentation.PackedData))
+        assert(SumDataList.isInstanceOf[SumBuiltinList])
+
+        // SumDataPairList is SumBuiltinList(PairData)
+        assert(SumDataPairList == SumBuiltinList(ProductCaseClassRepresentation.PairData))
+        assert(SumDataPairList.isInstanceOf[SumBuiltinList])
+
+        // They are not equal to each other
+        assert(SumDataList != SumDataPairList)
+
+        // New SumBuiltinList instances with same elementRepr are equal
+        val anotherDataList = SumBuiltinList(PrimitiveRepresentation.PackedData)
+        assert(anotherDataList == SumDataList)
+    }
+
+    test("SumBuiltinList isCompatibleWithType checks") {
+        import scalus.compiler.sir.SIRType
+        import SumCaseClassRepresentation.*
+
+        val listIntType = SIRType.List(SIRType.Integer)
+        val pairType = SIRType.CaseClass(
+          SIRType.BuiltinPair.constrDecl,
+          List(SIRType.Data.tp, SIRType.Data.tp),
+          None
+        )
+        val listPairType = SIRType.List(pairType)
+
+        // SumDataList (PackedData) is compatible with any list
+        assert(SumDataList.isCompatibleWithType(listIntType))
+        assert(SumDataList.isCompatibleWithType(listPairType))
+
+        // SumDataPairList (PairData) is compatible only with pair-element lists
+        assert(SumDataPairList.isCompatibleWithType(listPairType))
+        assert(!SumDataPairList.isCompatibleWithType(listIntType))
+
+        // Non-list types are not compatible with either
+        assert(!SumDataList.isCompatibleWithType(SIRType.Integer))
+        assert(!SumDataPairList.isCompatibleWithType(SIRType.Integer))
+    }
+
+    test("SumBuiltinList isPackedData and isDataCentric") {
+        import SumCaseClassRepresentation.*
+
+        // SumDataList: isPackedData=false, isDataCentric=true (PackedData.isDataCentric=true)
+        assert(!SumDataList.isPackedData)
+        assert(SumDataList.isDataCentric)
+
+        // SumDataPairList: isPackedData=false, isDataCentric=true (PairData.isDataCentric=true)
+        assert(!SumDataPairList.isPackedData)
+        assert(SumDataPairList.isDataCentric)
+    }
 }

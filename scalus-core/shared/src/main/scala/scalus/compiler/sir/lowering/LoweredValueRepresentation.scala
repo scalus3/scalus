@@ -82,49 +82,56 @@ object SumCaseClassRepresentation {
       */
     case object PairIntDataList extends SumCaseClassRepresentation(false, true)
 
-    /** Representation for sum case classes that are represented as a list of data elements. unlike
-      * `DataConstr`, this representation does not use a constructor tag, but use unList and
-      * unListData to work with the data.
+    /** Parameterized representation for builtin lists.
+      *
+      * `elementRepr` describes how each element is stored at the UPLC level. Replaces the former
+      * `SumDataList` and `SumDataPairList` case objects, enabling native element storage (e.g.,
+      * `BuiltinList[Integer]`) without per-element Data wrapping.
       */
-    case object SumDataList extends SumCaseClassRepresentation(false, true) {
-        override def isCompatibleWithType(tp: SIRType): Boolean = {
-            SIRType.retrieveDataDecl(tp) match
-                case Left(_) => false
-                case Right(decl) =>
-                    decl.name == SIRType.List.dataDecl.name || decl.name == SIRType.BuiltinList.dataDecl.name
-        }
-    }
-
-    /** List of pairs of data elements. result of unMapData
-      */
-    case object SumDataPairList extends SumCaseClassRepresentation(false, true) {
+    case class SumBuiltinList(elementRepr: LoweredValueRepresentation)
+        extends SumCaseClassRepresentation(false, elementRepr.isDataCentric) {
 
         override def isCompatibleWithType(tp: SIRType): Boolean = {
             SIRType.retrieveDataDecl(tp) match
                 case Left(_) => false
                 case Right(decl) =>
                     val isList =
-                        decl.name == SIRType.List.dataDecl.name || decl.name == SIRType.BuiltinList.dataDecl.name
-                    if isList then
-                        retrieveListElementType(tp) match
-                            case Some(elementType) =>
-                                ProductCaseClassRepresentation.PairData.isPairOrTuple2(elementType)
-                            case None => false
-                    else false
+                        decl.name == SIRType.List.dataDecl.name ||
+                            decl.name == SIRType.BuiltinList.dataDecl.name
+                    if !isList then false
+                    else
+                        elementRepr match
+                            case ProductCaseClassRepresentation.PairData =>
+                                SumBuiltinList.retrieveListElementType(tp) match
+                                    case Some(elementType) =>
+                                        ProductCaseClassRepresentation.PairData
+                                            .isPairOrTuple2(elementType)
+                                    case None => false
+                            case _ => true
         }
+    }
 
+    object SumBuiltinList {
         def retrieveListElementType(tp: SIRType): Option[SIRType] = {
             tp match
                 case SIRType.SumCaseClass(decl, typeArgs) =>
-                    Some(typeArgs.head)
+                    typeArgs.headOption
                 case SIRType.TypeLambda(params, body) =>
                     retrieveListElementType(body)
                 case _ =>
                     None
-
         }
-
     }
+
+    /** Representation for sum case classes that are represented as a list of data elements. unlike
+      * `DataConstr`, this representation does not use a constructor tag, but use unList and
+      * unListData to work with the data.
+      */
+    val SumDataList: SumBuiltinList = SumBuiltinList(PrimitiveRepresentation.PackedData)
+
+    /** List of pairs of data elements. result of unMapData
+      */
+    val SumDataPairList: SumBuiltinList = SumBuiltinList(ProductCaseClassRepresentation.PairData)
 
     /** SumDataPairList packed as AssocMap
       */

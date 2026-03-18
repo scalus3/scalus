@@ -484,8 +484,10 @@ object Lowering {
         name: String,
         pos: SIRPosition
     ): LoweredValueRepresentation = name match
-        case "SumDataList"       => SumCaseClassRepresentation.SumDataList
-        case "SumDataPairList"   => SumCaseClassRepresentation.SumDataPairList
+        case "SumDataList"     => SumCaseClassRepresentation.SumDataList
+        case "SumDataPairList" => SumCaseClassRepresentation.SumDataPairList
+        case "SumBuiltinList" =>
+            SumCaseClassRepresentation.SumDataList // default; refine from type context
         case "PackedSumDataList" => SumCaseClassRepresentation.PackedSumDataList
         case "DataConstr"        => SumCaseClassRepresentation.DataConstr
         case "DataData"          => SumCaseClassRepresentation.DataData
