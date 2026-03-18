@@ -12,21 +12,22 @@ import scala.util.Using
   * JIT compilation is slow (~20s per script), so we test only previously-failing scripts.
   *
   * Fixed issues:
-  *   1. Case on Bool (UPLC 1.1.0 / CIP-0137): Scala 3 erasure error with Boolean/Tuple2
-  *      — Fixed by checking isInstanceOf[Boolean] before pattern match in CaseHelper
-  *   2. Missing unapplied builtins: AppendByteString, Blake2b_256, QuotientInteger, DivideInteger
-  *      — Fixed by adding unapplied forms to BuiltinEmitter/BuiltinSnippets
-  *   3. DivideInteger used truncated division (toward 0) instead of floor division (toward -∞)
-  *      — Fixed in BuiltinSnippets and BuiltinAppliedGenerator
-  *   4. JIT runtime exceptions (e.g. ArithmeticException) not wrapped as MachineError
-  *      — Fixed by catching NonFatal in HybridJIT execution boundary
+  *   1. Case on Bool (UPLC 1.1.0 / CIP-0137): Scala 3 erasure error with Boolean/Tuple2 — Fixed by
+  *      checking isInstanceOf[Boolean] before pattern match in CaseHelper
+  *   2. Missing unapplied builtins: AppendByteString, Blake2b_256, QuotientInteger, DivideInteger —
+  *      Fixed by adding unapplied forms to BuiltinEmitter/BuiltinSnippets
+  *   3. DivideInteger used truncated division (toward 0) instead of floor division (toward -∞) —
+  *      Fixed in BuiltinSnippets and BuiltinAppliedGenerator
+  *   4. JIT runtime exceptions (e.g. ArithmeticException) not wrapped as MachineError — Fixed by
+  *      catching NonFatal in HybridJIT execution boundary
   */
 class JITPlutusUseCasesBenchmarkTest extends AnyFunSuite {
 
     private val params = MachineParams.defaultPlutusV2PostConwayParams
 
     private def loadScript(name: String): DeBruijnedProgram = {
-        val stream = getClass.getClassLoader.getResourceAsStream(s"data/plutus_use_cases/$name.flat")
+        val stream =
+            getClass.getClassLoader.getResourceAsStream(s"data/plutus_use_cases/$name.flat")
         assert(stream != null, s"Resource data/plutus_use_cases/$name.flat not found")
         val bytes = Using.resource(stream)(_.readAllBytes())
         DeBruijnedProgram.fromFlatEncoded(bytes)
