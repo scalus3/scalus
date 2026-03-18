@@ -26,7 +26,6 @@ object UtxoFlowMacros {
               s"Expected exactly one CpsMonadContext parameter, got ${cpsCtxParams.size}"
             )
         val cpsCtxParam = cpsCtxParams.head
-        report.info(s"UtxoFlow.define: processing flow")
 
         def extractLambda(t: Term): (ValDef, Term) = t match
             case Lambda(List(cellParam), lambdaBody) =>
@@ -804,15 +803,16 @@ object UtxoFlowMacros {
             case _: MatchCont           => "match-branch"
             case FunctionCallCont(s, _) => s"call=${s.name}"
 
-        report.info(s"UtxoFlow chunks: ${chunkInfos.size}")
-        chunkInfos.foreach { chunk =>
-            val fields = chunk.datumFields.map(f => s"${f.name}: ${f.tpe.show}").mkString(", ")
-            report.info(
-              s"  Chunk ${chunk.index}: await=${chunk.redeemerType.show}, " +
-                  s"binding=${chunk.redeemerParam.name}, " +
-                  s"datumFields=[$fields], cont=${contLabel(chunk.continuation)}"
-            )
-        }
+        // Debug logging (uncomment for macro debugging):
+        // report.info(s"UtxoFlow chunks: ${chunkInfos.size}")
+        // chunkInfos.foreach { chunk =>
+        //     val fields = chunk.datumFields.map(f => s"${f.name}: ${f.tpe.show}").mkString(", ")
+        //     report.info(
+        //       s"  Chunk ${chunk.index}: await=${chunk.redeemerType.show}, " +
+        //           s"binding=${chunk.redeemerParam.name}, " +
+        //           s"datumFields=[$fields], cont=${contLabel(chunk.continuation)}"
+        //     )
+        // }
 
         // ================================================================
         // Step 4: Generate off-chain dispatch
