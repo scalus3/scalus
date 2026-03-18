@@ -121,7 +121,15 @@ class SIRTyper(using Context) {
                     val applyTpe = tpc.member(nme.apply).info
                     sirTypeInEnvWithErr(applyTpe, env)
                 } else {
-                    sirTypeInEnvWithErr(tpc.parent, env)
+                    // Check if this is a refinement revealing an opaque type alias
+                    // (produced by inline expansion of opaque type extension methods)
+                    // e.g. RefinedType($package.type, TopMyInt, TypeBounds(BigInt, BigInt))
+                    (tpc.parent, tpc.refinedInfo) match
+                        case (tr: TermRef, TypeBounds(lo, hi))
+                            if tr.symbol.is(Flags.Module) && (lo =:= hi) =>
+                            sirTypeInEnvWithErr(lo, env)
+                        case _ =>
+                            sirTypeInEnvWithErr(tpc.parent, env)
                 }
             case tp: AppliedType =>
                 if tp.tycon.isRef(defn.MatchCaseClass) then
@@ -157,10 +165,19 @@ class SIRTyper(using Context) {
             case tp: AnnotatedType =>
                 sirTypeInEnvWithErr(tp.underlying, env)
             case tp: AndType =>
-                findClassInAndType(tp) match
-                    case Some(tpf) => makeSIRClassTypeNoTypeArgs(tpf, env)
-                    case None =>
-                        unsupportedType(tp, s"AndType", env)
+                // For AndType (e.g., from inline expansion of opaque types: x.type & T),
+                // try to resolve a component with a known class or opaque type symbol
+                val tp2sym = tp.tp2.typeSymbol
+                val tp1sym = tp.tp1.typeSymbol
+                if tp2sym.exists && (tp2sym.isClass || tp2sym.isOpaqueAlias) then
+                    sirTypeInEnvWithErr(tp.tp2, env)
+                else if tp1sym.exists && (tp1sym.isClass || tp1sym.isOpaqueAlias) then
+                    sirTypeInEnvWithErr(tp.tp1, env)
+                else
+                    findClassInAndType(tp) match
+                        case Some(tpf) => makeSIRClassTypeNoTypeArgs(tpf, env)
+                        case None =>
+                            unsupportedType(tp, s"AndType", env)
             case orTp: OrType =>
                 sirTypeInEnvWithErr(orTp.join, env)
             case tp: MatchType =>
@@ -299,7 +316,11 @@ class SIRTyper(using Context) {
     }
 
     private def findClassInAndType(andType: AndType): Option[Type] = {
-        ???
+        def search(tp: Type): Option[Type] = tp match
+            case at: AndType => search(at.tp1).orElse(search(at.tp2))
+            case t if t.typeSymbol.exists && t.typeSymbol.isClass => Some(t)
+            case _                                                => None
+        search(andType)
     }
 
     private def tryMakePrimitivePrimitive(

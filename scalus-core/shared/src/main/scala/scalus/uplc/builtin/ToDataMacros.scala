@@ -4,7 +4,39 @@ import scala.quoted.*
 
 private object ToDataMacros {
 
-    import scalus.uplc.builtin.internal.UplcReprMacroUtils.getUplcRepr
+    import scalus.uplc.builtin.internal.UplcReprMacroUtils.{getUplcRepr, resolveOpaqueAlias}
+
+    /** Summon ToData for a field type, falling back to translucentSuperType for opaque types. */
+    private def summonToDataForField(using
+        Quotes
+    )(
+        binding: quotes.reflect.Symbol,
+        tpe: quotes.reflect.TypeRepr,
+        contextTypeName: String
+    ): Expr[Data] = {
+        import quotes.reflect.*
+        val resolvedTpe = tpe.widen.dealias
+        resolvedTpe.asType match
+            case '[t] =>
+                Expr.summon[ToData[t]] match
+                    case Some(toData) =>
+                        val arg = Ident(binding.termRef).asExprOf[t]
+                        '{ $toData($arg) }
+                    case None =>
+                        // Try resolving opaque type via translucentSuperType
+                        val opaqueTpe = resolveOpaqueAlias(resolvedTpe)
+                        opaqueTpe.asType match
+                            case '[u] =>
+                                Expr.summon[ToData[u]] match
+                                    case Some(toData) =>
+                                        // Cast the opaque-typed binding to the underlying type
+                                        val arg = Ident(binding.termRef).asExpr
+                                        '{ $toData($arg.asInstanceOf[u]) }
+                                    case None =>
+                                        report.errorAndAbort(
+                                          s"Could not find given ToData[${resolvedTpe.show}] within $contextTypeName"
+                                        )
+    }
 
     def toDataImpl[A: Type](using Quotes): Expr[ToData[A]] = {
         '{ (a: A) =>
@@ -91,7 +123,7 @@ private object ToDataMacros {
         val unapplyRef = companionModuleRef.methodMember("unapply").head.termRef
         val constr = classSym.primaryConstructor
         val params = constr.paramSymss.flatten
-        val paramsNameType = params.map(p => p.name -> p.typeRef)
+        val paramsNameType = params.map(p => p.name -> p.termRef.widen)
 
         /*
         Generate a pattern match to introduce all the params,
@@ -126,16 +158,7 @@ private object ToDataMacros {
               ${
                   val args = bindings
                       .map { case (binding, tpe) =>
-                          tpe.widen.asType match
-                              case '[t] =>
-                                  Expr.summon[ToData[t]] match
-                                      case None =>
-                                          report.errorAndAbort(
-                                            s"Could not find given ToData[${tpe.widen.show}] within ${TypeRepr.of[A].show} when generate product"
-                                          )
-                                      case Some(toData) =>
-                                          val arg = Ident(binding.termRef).asExprOf[t]
-                                          '{ $toData($arg) }
+                          summonToDataForField(using quotes0)(binding, tpe, TypeRepr.of[A].show)
                       }
                   args.foldRight('{ scalus.uplc.builtin.Builtins.mkNilData() }) { (data, acc) =>
                       '{ scalus.uplc.builtin.Builtins.mkCons($data, $acc) }
@@ -164,22 +187,7 @@ private object ToDataMacros {
               ${
                   val args = bindings
                       .map { case (binding, atpe) =>
-                          atpe.asType match
-                              case '[t] =>
-                                  Expr.summon[ToData[t]] match
-                                      case None =>
-                                          println(
-                                            s"atpe=${atpe.show}, atpe.widen=${atpe.widen.show}, atpe."
-                                          )
-                                          println(
-                                            s"constrIdex = ${constrIdx}, binding = ${binding}, bindings = ${bindings}"
-                                          )
-                                          report.errorAndAbort(
-                                            s"Could not find given ToData[${atpe.widen.show}] within ${originTpe.widen.show} when generating sum"
-                                          )
-                                      case Some(toData) =>
-                                          val arg = Ident(binding.termRef).asExprOf[t]
-                                          '{ $toData($arg) }.asExprOf[Data]
+                          summonToDataForField(using quotes0)(binding, atpe, originTpe.widen.show)
                       }
                   args.foldRight('{ scalus.uplc.builtin.Builtins.mkNilData() }) { (data, acc) =>
                       '{ scalus.uplc.builtin.Builtins.mkCons($data, $acc) }
@@ -199,16 +207,10 @@ private object ToDataMacros {
                     val unapplyRef = companionModuleRef.methodMember("unapply").head.termRef
                     val constr = classSym.primaryConstructor
                     val constrNudeType = TypeIdent(classSym).tpe
-                    // val paramTypes = constrNudeType.memberType(constr) match
-                    //    case PolyType(_, tpe) => tpe
-                    //    case tpe              => tpe
-                    // }
                     val params = constr.paramSymss.flatten
 
-                    // println(s"constr = ${constr}, typeParams=${typeParams}, params = ${params}")
                     val paramsNameType = params.map { p =>
-                        // p.name -> p.info
-                        p.name -> p.typeRef
+                        p.name -> p.termRef.widen
                     }
                     val bindingsSymbols = paramsNameType.map { (name, tpe) =>
                         (Symbol.newBind(Symbol.noSymbol, name, Flags.EmptyFlags, tpe), tpe)

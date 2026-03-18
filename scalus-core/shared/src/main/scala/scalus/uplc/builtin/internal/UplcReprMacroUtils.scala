@@ -27,4 +27,21 @@ private[scalus] object UplcReprMacroUtils {
         import quotes.reflect.*
         getUplcRepr(TypeRepr.of[A].dealias.widen.typeSymbol)
     }
+
+    /** Resolve opaque type alias via TypeRef.translucentSuperType. Returns the underlying type if
+      * the type is an opaque alias, or the original type unchanged. Also handles AppliedType where
+      * the type constructor is an opaque alias (e.g., opaque type Queue[A] = List[A]).
+      */
+    def resolveOpaqueAlias(using Quotes)(tpe: quotes.reflect.TypeRepr): quotes.reflect.TypeRepr = {
+        import quotes.reflect.*
+        tpe match
+            case tr: TypeRef if tr.isOpaqueAlias =>
+                tr.translucentSuperType
+            case AppliedType(tycon, args) =>
+                tycon match
+                    case tr: TypeRef if tr.isOpaqueAlias =>
+                        tr.translucentSuperType.appliedTo(args)
+                    case _ => tpe
+            case _ => tpe
+    }
 }

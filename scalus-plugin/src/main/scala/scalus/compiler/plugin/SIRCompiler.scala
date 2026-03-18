@@ -3057,10 +3057,13 @@ final class SIRCompiler(
                 if isConstructorVal(tree.symbol, tree.tpe) then
                     compileNewConstructor(env, tree.tpe, tree.tpe, Nil, tree)
                 else compileIdentOrQualifiedSelect(env, tree, tree, Nil)
-            // ignore asInstanceOf
+            // ignore asInstanceOf (both source-level name and encoded $asInstanceOf$ from inline expansion)
             case TypeApply(Select(e, nme.asInstanceOf_), _) =>
                 compileExpr(env, e)
+            case TypeApply(sel @ Select(e, _), _) if sel.symbol == defn.Any_asInstanceOf =>
+                compileExpr(env, e)
             case TypeApply(sel @ Select(obj, ident), targs) =>
+
                 // can't be field (because fields are not type-applyable)
                 if isConstructorVal(tree.symbol, tree.tpe) then
                     compileNewConstructor(env, sel.tpe, tree.tpe, targs, tree)
@@ -3226,7 +3229,19 @@ final class SIRCompiler(
                 val newEnv =
                     if call.isEmpty then env
                     else env.pushInlineCall(SIRPosition.fromSrcPos(call.srcPos))
-                val r = compileBlock(newEnv, bindings, expr)
+                // Filter out synthetic scope proxy bindings from inline expansion of opaque types.
+                // These are module.$asInstanceOf$[RefinedType] references that exist only for
+                // type-level scope resolution and have no runtime value.
+                val filteredBindings = bindings.filter {
+                    case vd: ValDef =>
+                        vd.rhs match
+                            case TypeApply(sel: Select, _) =>
+                                !(sel.qualifier.symbol.is(Flags.Module) &&
+                                    sel.symbol == defn.Any_asInstanceOf)
+                            case _ => true
+                    case _ => true
+                }
+                val r = compileBlock(newEnv, filteredBindings, expr)
                 // val t = r.asTerm.show
                 // report.info(s"Inlined: ${bindings}, ${expr.show}\n${t}", Position(SourceFile.current, globalPosition, 0))
                 r

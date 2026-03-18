@@ -4,7 +4,7 @@ import scala.quoted.*
 
 private object FromDataMacros {
 
-    import scalus.uplc.builtin.internal.UplcReprMacroUtils.getUplcRepr
+    import scalus.uplc.builtin.internal.UplcReprMacroUtils.{getUplcRepr, resolveOpaqueAlias}
 
     def fromDataImpl[A: Type](using Quotes): Expr[FromData[A]] = {
         import quotes.reflect.*
@@ -72,11 +72,18 @@ private object FromDataMacros {
             tpe.asType match
                 case '[t] =>
                     Expr.summon[FromData[t]] match
-                        case None =>
-                            report.errorAndAbort(
-                              s"Could not find given FromData[${tpe.show}] in case class constructor generation for ${TypeRepr.of[T].show}]"
-                            )
                         case Some(value) => value
+                        case None        =>
+                            // Try resolving opaque type via owner's memberType
+                            val resolved = resolveOpaqueAlias(tpe)
+                            resolved.asType match
+                                case '[u] =>
+                                    Expr.summon[FromData[u]] match
+                                        case Some(value) => value
+                                        case None =>
+                                            report.errorAndAbort(
+                                              s"Could not find given FromData[${tpe.show}] in case class constructor generation for ${TypeRepr.of[T].show}]"
+                                            )
         }
 
         def genGetter(init: Expr[scalus.uplc.builtin.BuiltinList[Data]], idx: Int)(using
@@ -93,9 +100,16 @@ private object FromDataMacros {
         def genConstructorCall(
             a: Expr[scalus.uplc.builtin.BuiltinList[scalus.uplc.builtin.Data]]
         )(using Quotes): Expr[T] = {
-            val args = fromDataOfArgs.zipWithIndex.map { case (appl, idx) =>
+            val args = fromDataOfArgs.zip(params).zipWithIndex.map { case ((appl, param), idx) =>
                 val arg = genGetter(a, idx)
-                '{ $appl($arg) }.asTerm
+                val decoded = '{ $appl($arg) }
+                val declaredTpe = param.termRef.widen
+                if decoded.asTerm.tpe <:< declaredTpe then decoded.asTerm
+                else
+                    // Cast to declared parameter type for opaque types
+                    // (FromData[ByteString] returns ByteString, but constructor expects OpaqueId)
+                    declaredTpe.asType match
+                        case '[p] => '{ $decoded.asInstanceOf[p] }.asTerm
             }
             // Couldn't find a way to do this using quotes, so just construct the tree manually
             New(TypeTree.of[T]).select(constr).appliedToArgs(args).asExprOf[T]
