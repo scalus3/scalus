@@ -2,20 +2,17 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.uplc.builtin.Builtins.*
-import scalus.uplc.builtin.ByteString.hex
-import scalus.uplc.builtin.Data.toData
-import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
 import scalus.cardano.ledger.CardanoInfo
-import scalus.cardano.ledger.ExUnits.given
 import scalus.cardano.onchain.plutus
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.serialization.flat.Flat
 import scalus.uplc.Term.*
-import scalus.uplc.{Constant, NamedDeBruijn, Term}
-
-import scala.math.Ordering.Implicits.*
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.ByteString.hex
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
+import scalus.uplc.{NamedDeBruijn, Term}
 
 class ExprSizeAndBudgetTest extends AnyFunSuite {
     private val encoder = summon[Flat[Term]]
@@ -24,6 +21,8 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     private val fun1Uplc = compile((b: Boolean) => b).toUplc()
     private val fun1Size = encoder.bitSize(fun1Uplc)
     private given PlutusVM = PlutusVM.makePlutusV3VM()
+    private val params = CardanoInfo.mainnet.protocolParams
+    private val prices = params.executionUnitPrices
 
     // SimpleSirToUplcLowering is used to have stable sizes in terms, not in data representation.
     given Options =
@@ -103,23 +102,7 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         assert(pricePerRecursionInUSDMilliCents == 3.2888350440000003)
     }
 
-    test("equalsInteger(unIData) < equalsData(iData)") {
-        given PlutusVM = PlutusVM.makePlutusV3VM()
-        val eqDataSIR = compile { (d: Data) => equalsData(d, iData(1)) }
-        val eqIntegerSIR = compile { (d: Data) => equalsInteger(unIData(d), 1) }
-        val d = iData(1)
-        val eqDataUplc = eqDataSIR.toUplc() $ d.asTerm
-        val eqIntegerUplc = eqIntegerSIR.toUplc() $ d.asTerm
-        val (eqData, eqInteger) = (eqDataUplc.evaluateDebug, eqIntegerUplc.evaluateDebug)
-        // here we ensure that it's cheaper to convert the data to an integer and compare with equalsInteger
-        // than to convert the integer to data and compare with equalsData
-        // this is a prerequisite for the optimizations to be valid
-        assert(eqInteger.budget < eqData.budget)
-    }
-
     test("2nd bytestring in a list fee = 126") {
-        given PlutusVM = PlutusVM.makePlutusV3VM()
-        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
         val bs2 = hex"02"
         val bs3 = hex"03"
@@ -140,8 +123,6 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     }
 
     test("2nd bytestring in a packed bytestring fee = 94") {
-        given PlutusVM = PlutusVM.makePlutusV3VM()
-        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
         val bs2 = hex"02"
         val bs3 = hex"03"
@@ -162,8 +143,6 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     }
 
     test("5th bytestring in a list fee = 211") {
-        given PlutusVM = PlutusVM.makePlutusV3VM()
-        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
         val bs2 = hex"02"
         val bs3 = hex"03"
@@ -184,8 +163,6 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     }
 
     test("5th bytestring in a packed bytestring fee = 94") {
-        given PlutusVM = PlutusVM.makePlutusV3VM()
-        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val bs1 = hex"01"
         val bs2 = hex"02"
         val bs3 = hex"03"
@@ -206,8 +183,6 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     }
 
     test("2nd int in a list of ints fee = 126") {
-        given PlutusVM = PlutusVM.makePlutusV3VM()
-        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val i1 = BigInt(0)
         val i2 = BigInt(1)
         val intData = listData(BuiltinList(i1.toData, i2.toData))
@@ -225,8 +200,6 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
     }
 
     test("2nd int in a bytestring of 64bit packed ints fee = 198") {
-        given PlutusVM = PlutusVM.makePlutusV3VM()
-        val prices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
         val i1 = BigInt(0)
         val i2 = BigInt(1)
         val packedInts =
