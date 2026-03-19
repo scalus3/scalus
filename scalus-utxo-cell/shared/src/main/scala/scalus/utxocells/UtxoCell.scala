@@ -1,9 +1,10 @@
 package scalus.utxocells
 
+import scala.compiletime.summonInline
 import scalus.Compile
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
-import scalus.uplc.builtin.ToData
+import scalus.uplc.builtin.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{Address, PolicyId, Value}
 import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.v2.OutputDatum
@@ -232,5 +233,63 @@ object UtxoCellLib {
                     case _ => fail("UtxoFlow: input is not a script")
                 verifyBurnBeacon(beaconName, policyId, tx)
             case _ => ()
+    }
+
+    /** Complete validate implementation for transition-based cells.
+      *
+      * Handles ScriptInfo dispatch, state/action decoding, transition, continuing output
+      * verification, and beacon mint/burn. Type parameters `S` and `A` are inferred from the
+      * `transition` function.
+      *
+      * Usage:
+      * {{{
+      * @Compile
+      * object MyCell extends CellValidator {
+      *     val beaconName: ByteString = utf8"my-cell"
+      *     def transition(state: MyState, action: MyAction, ctx: CellContext): Option[MyState] = ...
+      *     def initialState(redeemer: Data): MyState = redeemer.to[MyState]
+      *
+      *     inline override def spendCell(datum, redeemer, sc, ownRef) =
+      *         UtxoCellLib.transitionSpend(beaconName, transition, datum, redeemer, sc, ownRef)
+      *     inline override def mintCell(redeemer, policyId, sc) =
+      *         UtxoCellLib.transitionMint(beaconName, initialState, redeemer, policyId, sc)
+      * }
+      * }}}
+      */
+    inline def transitionSpend[S, A](
+        beaconName: ByteString,
+        transition: (S, A, CellContext) => Option[S],
+        datum: Option[Data],
+        redeemer: Data,
+        sc: ScriptContext,
+        ownRef: TxOutRef
+    ): Unit = {
+        val state = summonInline[FromData[S]].apply(
+          datum.getOrFail("CellValidator: missing datum")
+        )
+        val action = summonInline[FromData[A]].apply(redeemer)
+        val ctx: CellContext = sc.toData.asInstanceOf[CellContext]
+        val nextState = transition(state, action, ctx)
+        val nextStateData = nextState.map(s => summonInline[ToData[S]].apply(s))
+        verifyContinuingOutput[Data](nextStateData, sc.txInfo, ownRef)
+        nextStateData match
+            case Option.None =>
+                verifyBurnBeacon(beaconName, ctx.ownPolicyId, sc.txInfo)
+            case _ => ()
+    }
+
+    inline def transitionMint[S](
+        beaconName: ByteString,
+        initialState: Data => S,
+        redeemer: Data,
+        policyId: PolicyId,
+        sc: ScriptContext
+    ): Unit = {
+        val qty = sc.txInfo.mint.quantityOf(policyId, beaconName)
+        if qty === BigInt(1) then
+            val initStateData = summonInline[ToData[S]].apply(initialState(redeemer))
+            verifyMintResult[Data](initStateData, beaconName, policyId, sc.txInfo)
+        else if qty === BigInt(-1) then verifyBurnBeacon(beaconName, policyId, sc.txInfo)
+        else fail("CellValidator: invalid beacon mint quantity")
     }
 }

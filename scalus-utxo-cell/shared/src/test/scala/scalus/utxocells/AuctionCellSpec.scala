@@ -48,6 +48,8 @@ object AuctionCell extends CellValidator {
 
     val beaconName: ByteString = utf8"auction"
 
+    def initialState(redeemer: Data): AuctionState = redeemer.to[AuctionState]
+
     def transition(
         state: AuctionState,
         action: AuctionAction,
@@ -92,36 +94,13 @@ object AuctionCell extends CellValidator {
         redeemer: Data,
         sc: ScriptContext,
         ownRef: TxOutRef
-    ): Unit = {
-        val state = datum.getOrFail("Auction: missing datum").to[AuctionState]
-        val action = redeemer.to[AuctionAction]
-        val ctx: CellContext = sc.toData.asInstanceOf[CellContext]
-        val nextState = transition(state, action, ctx)
-        UtxoCellLib.verifyContinuingOutput(nextState, sc.txInfo, ownRef)
-        nextState match
-            case Option.None =>
-                UtxoCellLib.verifyBurnBeacon(beaconName, ctx.ownPolicyId, sc.txInfo)
-            case _ => ()
-    }
+    ): Unit = UtxoCellLib.transitionSpend(beaconName, transition, datum, redeemer, sc, ownRef)
 
     inline override def mintCell(
         redeemer: Data,
         policyId: PolicyId,
         sc: ScriptContext
-    ): Unit = {
-        val qty = sc.txInfo.mint.quantityOf(policyId, beaconName)
-        if qty === BigInt(1) then
-            // Mint redeemer is Data.I(0) — just verify initial state
-            UtxoCellLib.verifyMintResult(
-              redeemer.to[AuctionState],
-              beaconName,
-              policyId,
-              sc.txInfo
-            )
-        else if qty === BigInt(-1) then
-            UtxoCellLib.verifyBurnBeacon(beaconName, policyId, sc.txInfo)
-        else fail("Auction: invalid beacon mint quantity")
-    }
+    ): Unit = UtxoCellLib.transitionMint(beaconName, initialState, redeemer, policyId, sc)
 }
 
 object AuctionCellCompilation {
