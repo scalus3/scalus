@@ -1,11 +1,13 @@
 package scalus.uplc.jit
 
+import org.scalatest.Tag
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.testing.Benchmark
 import scalus.uplc.DeBruijnedProgram
 import scalus.uplc.eval.*
 
 import scala.util.Using
+
+private object Benchmark extends Tag("scalus.testing.Benchmark")
 
 /** Regression tests for JIT compilation of Plutus use-case benchmarks from
   * https://saib-inc.github.io/cardano-plutus-vm-benchmark/
@@ -57,9 +59,7 @@ class JITPlutusUseCasesBenchmarkTest extends AnyFunSuite {
           "uniswap-5"
         )
     do {
-        test(
-          s"HybridJIT compiles and runs $name (was: missing unapplied builtin)".taggedAs(Benchmark)
-        ) {
+        test(s"HybridJIT compiles and runs $name (was: missing unapplied builtin)", Benchmark) {
             val result = jitCompileAndRun(name)
             assert(result != null)
         }
@@ -81,9 +81,8 @@ class JITPlutusUseCasesBenchmarkTest extends AnyFunSuite {
         )
     do {
         test(
-          s"HybridJIT compiles and runs $name (was: Case-on-Bool / missing builtin)".taggedAs(
-            Benchmark
-          )
+          s"HybridJIT compiles and runs $name (was: Case-on-Bool / missing builtin)",
+          Benchmark
         ) {
             val result = jitCompileAndRun(name)
             assert(result != null)
