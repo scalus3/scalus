@@ -13,7 +13,7 @@ import scala.language.implicitConversions
 
 class HelloCardanoTest extends AnyFunSuite with ScalusTest {
 
-    private val contract = HelloCardanoContract.withErrorTraces
+    private val contract = HelloCardanoContract.compiled.withErrorTraces
 
     test(s"Hello Cardano script size is ${contract.script.script.size} bytes") {
         assert(contract.script.script.size == 596)
@@ -28,7 +28,7 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
           signatories = List(ownerPubKey)
         )
 
-        // Using HelloCardanoContract.withErrorTraces (Options.release with generateErrorTraces=true)
+        // Using HelloCardanoContract.compiled.withErrorTraces (Options.release with generateErrorTraces=true)
         val scalusBudget = ExUnits(memory = 27630, steps = 9_512668)
 
         val applied = contract.program $ context.toData

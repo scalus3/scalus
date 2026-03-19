@@ -48,8 +48,7 @@ class MembershipTokenTest extends AnyFunSuite with ScalusTest {
         val datum = MembershipDatum(alicePkh)
 
         val tx = TxBuilder(env)
-            .mint(applied, Map(tokenName -> 1L), _ => redeemer)
-            .requireSignature(Party.Alice.addrKeyHash)
+            .mint(applied, Map(tokenName -> 1L), _ => redeemer, Set(Party.Alice.addrKeyHash))
             .payTo(Party.Alice.address, Value.asset(policyId, tokenName, 1L))
             .payTo(scriptAddress, Value.lovelace(2_000_000L), datum)
             .complete(aliceUtxos, Party.Alice.address)
@@ -76,9 +75,9 @@ class MembershipTokenTest extends AnyFunSuite with ScalusTest {
             .mint(
               applied,
               Map(tokenName -> 1L),
-              _ => mintRedeemer
+              _ => mintRedeemer,
+              Set(Party.Alice.addrKeyHash)
             )
-            .requireSignature(Party.Alice.addrKeyHash)
             .payTo(Party.Alice.address, Value.asset(policyId, tokenName, 1L))
             .payTo(scriptAddress, Value.lovelace(2_000_000L), datum)
             .complete(aliceUtxos1, Party.Alice.address)
@@ -105,10 +104,10 @@ class MembershipTokenTest extends AnyFunSuite with ScalusTest {
             .mint(
               applied,
               Map(tokenName -> -1L),
-              _ => burnRedeemer
+              _ => burnRedeemer,
+              Set(Party.Alice.addrKeyHash)
             )
-            .requireSignature(Party.Alice.addrKeyHash)
-            .spend(depositUtxo, burnRedeemer, script)
+            .spend(depositUtxo, burnRedeemer, script, Set(Party.Alice.addrKeyHash))
             .payTo(Party.Alice.address, Value.lovelace(2_000_000L))
             .complete(aliceUtxos2, Party.Alice.address)
             .sign(Party.Alice.signer)
@@ -139,9 +138,9 @@ class MembershipTokenTest extends AnyFunSuite with ScalusTest {
                 .mint(
                   applied,
                   Map(tokenName -> 1L),
-                  _ => redeemer
+                  _ => redeemer,
+                  Set(Party.Faith.addrKeyHash)
                 )
-                .requireSignature(Party.Faith.addrKeyHash)
                 .payTo(Party.Faith.address, Value.asset(policyId, tokenName, 1L))
                 .payTo(scriptAddress, Value.lovelace(2_000_000L), datum)
                 .complete(faithUtxos, Party.Faith.address)

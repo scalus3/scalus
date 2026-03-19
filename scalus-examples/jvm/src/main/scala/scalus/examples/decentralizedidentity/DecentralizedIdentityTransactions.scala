@@ -138,9 +138,9 @@ case class DecentralizedIdentityTransactions(
             .spend(
               identityUtxo,
               buildSpendRedeemer,
-              parameterizedScript
+              parameterizedScript,
+              Set(AddrKeyHash(oldOwnerPkh), newOwnerPkh)
             )
-            .requireSignatures(Set(AddrKeyHash(oldOwnerPkh), newOwnerPkh))
             .payTo(scriptAddr, identityUtxo.output.value, newDatum)
             .complete(availableUtxos = utxos, changeAddress)
             .sign(ownerSigner)
@@ -191,9 +191,9 @@ case class DecentralizedIdentityTransactions(
             .mint(
               parameterizedScript,
               Map(delegAsset -> 1L),
-              buildMintRedeemer
+              buildMintRedeemer,
+              Set(AddrKeyHash(ownerPkh))
             )
-            .requireSignature(AddrKeyHash(ownerPkh))
             .payTo(scriptAddr, Value.asset(policyId, delegAsset, 1), datum)
             .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)
@@ -226,9 +226,9 @@ case class DecentralizedIdentityTransactions(
             .spend(
               delegationUtxo,
               SpendAction.RevokeDelegate,
-              parameterizedScript
+              parameterizedScript,
+              Set(AddrKeyHash(ownerPkh))
             )
-            .requireSignature(AddrKeyHash(ownerPkh))
             .mint(parameterizedScript, Map(delegAsset -> -1L), MintAction.Burn)
             .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)
@@ -276,9 +276,9 @@ case class DecentralizedIdentityTransactions(
             .mint(
               parameterizedScript,
               Map(attrAsset -> 1L),
-              buildMintRedeemer
+              buildMintRedeemer,
+              Set(AddrKeyHash(delegDatum.delegatePkh.hash))
             )
-            .requireSignature(AddrKeyHash(delegDatum.delegatePkh.hash))
             .validFrom(validFrom)
             .validTo(validUntil)
             .payTo(scriptAddr, Value.asset(policyId, attrAsset, 1), datum)
@@ -313,9 +313,9 @@ case class DecentralizedIdentityTransactions(
             .spend(
               attributeUtxo,
               SpendAction.RevokeAttribute,
-              parameterizedScript
+              parameterizedScript,
+              Set(AddrKeyHash(ownerPkh))
             )
-            .requireSignature(AddrKeyHash(ownerPkh))
             .mint(parameterizedScript, Map(attrAsset -> -1L), MintAction.Burn)
             .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)

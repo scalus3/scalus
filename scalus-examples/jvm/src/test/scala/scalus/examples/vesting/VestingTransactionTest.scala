@@ -14,7 +14,7 @@ import scalus.utils.await
 class VestingTransactionTest extends AnyFunSuite, ScalusTest {
 
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val contract = VestingContract.withErrorTraces
+    private val contract = VestingContract.compiled.withErrorTraces
 
     private val txCreator = VestingTransactions(
       env = env,

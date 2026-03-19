@@ -7,6 +7,7 @@ import scalus.cardano.ledger.rules.Context
 import scalus.cardano.ledger.utils.MinTransactionFee
 import scalus.cardano.node.Emulator
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
+import scalus.toUplc
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.PlutusV3
 import scalus.utils.await

@@ -63,7 +63,7 @@ class LotteryScalaCheckCommandTest extends AnyFunSuite {
 }
 
 object LotteryScalaCheckCommandTest {
-    private val compiledContract = LotteryContract.withErrorTraces
+    private val compiledContract = LotteryContract.compiled.withErrorTraces
     private val lotteryScript = compiledContract.script
     private val network = Network.Mainnet
     private val scriptAddress = compiledContract.address(network)

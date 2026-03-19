@@ -16,7 +16,7 @@ import scalus.utils.await
 class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val contract = VaultContract.withErrorTraces
+    private val contract = VaultContract.compiled.withErrorTraces
     private val scriptAddress = contract.address(env.network)
 
     // Generate real key pairs

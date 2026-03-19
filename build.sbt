@@ -161,6 +161,7 @@ lazy val root: Project = project
       bench,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
+      scalusSbtPlugin,
       docs
     )
     .settings(
@@ -518,6 +519,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
     .dependsOn(scalus, scalusTestkit)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
+    .enablePlugins(ScalusBlueprintPlugin)
     .settings(
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
@@ -749,6 +751,18 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       }
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
+
+// sbt plugin for blueprint generation
+lazy val scalusSbtPlugin = project
+    .in(file("scalus-sbt-plugin"))
+    .enablePlugins(SbtPlugin)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-sbt-plugin",
+      sbtPlugin := true,
+      scalaVersion := "2.12.20",
+      scalacOptions ++= Seq("-deprecation", "-feature"),
+    )
 
 // Ethereum KZG ceremony trusted setup for bilinear accumulators
 lazy val scalusEthereumKzgCeremony = project

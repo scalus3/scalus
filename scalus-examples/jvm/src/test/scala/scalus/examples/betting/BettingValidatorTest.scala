@@ -18,7 +18,7 @@ import scalus.testing.kit.{ScalusTest, TestUtil}
 import scala.language.implicitConversions
 
 class BettingValidatorTest extends AnyFunSuite, ScalusTest:
-    private val contract = BettingContract.withErrorTraces
+    private val contract = BettingContract.compiled.withErrorTraces
 
     /*
     case class TestCase(

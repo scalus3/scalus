@@ -14,7 +14,7 @@ import scalus.testing.kit.ScalusTest
 class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
     val fee = 10
 
-    private val contract = SimpleTransferContract.withErrorTraces
+    private val contract = SimpleTransferContract.compiled.withErrorTraces
 
     private val hash: Gen[Hash] = genByteStringOfN(28)
     private val scriptHash = hash.sample.get

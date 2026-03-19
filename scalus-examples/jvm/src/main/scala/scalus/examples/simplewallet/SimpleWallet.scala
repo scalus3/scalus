@@ -1,6 +1,6 @@
 package scalus.examples.simplewallet
 
-import scalus.cardano.address.Address
+import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
 import scalus.uplc.builtin.ByteString
@@ -27,12 +27,12 @@ object SimpleWallet {
         TransactionInput(genesisHash, 0) ->
             TransactionOutput(ownerAddress, Value.ada(10L))
 
-    // deposit: send ADA to the owner's address -- just a regular payment transaction.
+    // deposit: send ADA to the owner's address — just a regular payment transaction.
     val deposit =
         TxBuilder(env)
             .spend(Utxo(walletUtxo))
             .payTo(ownerAddress, Value.ada(5L))
-            .build(changeTo = walletUtxo._2.address) // back to the wallet
+            .build(changeTo = walletUtxo._2.address)
 
     // createTransaction + executeTransaction: on Cardano these collapse into one step.
     // The transaction is fully specified off-chain and submitted directly.
@@ -47,5 +47,53 @@ object SimpleWallet {
     val withdraw =
         TxBuilder(env)
             .spend(Utxo(walletUtxo))
-        // and spend the utxo however necessary
+}
+
+/** Going beyond the spec: a 2-of-3 multisig wallet using a Cardano native script.
+  *
+  * No Plutus contract is needed. A [[Timelock.MOf]] script defines the spending policy; any two of
+  * the three owners must sign to authorize a transaction.
+  */
+object MultiSigWallet {
+    private val env: CardanoInfo = CardanoInfo.mainnet
+
+    private val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("aa" * 32))
+
+    private val owner1: AddrKeyHash = ???
+    private val owner2: AddrKeyHash = ???
+    private val owner3: AddrKeyHash = ???
+
+    // 2-of-3 native script: any two owners must sign.
+    val policy: Script.Native = Script.Native(
+      Timelock.MOf(
+        2,
+        IndexedSeq(
+          Timelock.Signature(owner1),
+          Timelock.Signature(owner2),
+          Timelock.Signature(owner3)
+        )
+      )
+    )
+
+    // The wallet address is derived from the script hash — no Plutus execution, just signature checks.
+    val walletAddress: Address = ShelleyAddress(
+      env.network,
+      ShelleyPaymentPart.Script(policy.scriptHash),
+      ShelleyDelegationPart.Null
+    )
+
+    val walletUtxo: (TransactionInput, TransactionOutput) =
+        TransactionInput(genesisHash, 0) ->
+            TransactionOutput(walletAddress, Value.ada(10L))
+
+    private val recipientAddress: Address = ???
+
+    // Spending requires the native script witness plus signatures from any two owners.
+    val transfer =
+        TxBuilder(env)
+            .spend(Utxo(walletUtxo), NativeScriptWitness.attached(policy))
+            .requireSignature(owner1)
+            .requireSignature(owner2)
+            .payTo(recipientAddress, Value.ada(3L))
+            .build(changeTo = walletAddress)
 }

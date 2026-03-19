@@ -144,9 +144,9 @@ class CrowdfundingEndpoints(
                 .mint(
                   crowdfundingContract,
                   Map(nftAsset -> 1L),
-                  redeemer
+                  redeemer,
+                  Set(recipientAddrKeyHash)
                 )
-                .requireSignature(recipientAddrKeyHash)
                 .payTo(scriptAddress, LedgerValue(initialValue) + mintedValue, datum)
                 .validTo(Instant.ofEpochMilli(deadline - 1000))
                 .complete(provider, recipientAddress)

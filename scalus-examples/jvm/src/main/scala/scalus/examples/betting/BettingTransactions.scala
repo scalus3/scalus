@@ -61,9 +61,9 @@ case class BettingTransactions(
             .mint(
               script.scriptHash,
               scala.collection.Map(token -> amount),
-              Data.unit
+              Data.unit,
+              Set(player1Pkh)
             )
-            .requireSignature(player1Pkh)
             .payTo(
               scriptAddress,
               Value.asset(script.scriptHash, token, amount, bet),

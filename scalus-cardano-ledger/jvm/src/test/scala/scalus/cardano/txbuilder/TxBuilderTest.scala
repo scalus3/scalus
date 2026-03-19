@@ -17,6 +17,7 @@ import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.cardano.ledger.rules.Context as LedgerContext
 import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
+import scalus.toUplc
 import scalus.utils.await
 
 import java.time.Instant

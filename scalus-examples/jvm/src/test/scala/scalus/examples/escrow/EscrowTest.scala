@@ -19,7 +19,7 @@ import scalus.utils.await
 class EscrowTest extends AnyFunSuite, ScalusTest {
 
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val contract = EscrowContract.withErrorTraces
+    private val contract = EscrowContract.compiled.withErrorTraces
 
     private val txCreator = EscrowTransactions(
       env = env,
@@ -79,8 +79,8 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
 
     // --- Contract Size ---
 
-    test(s"Escrow validator size is ${EscrowContract.script.script.size} bytes") {
-        assert(EscrowContract.script.script.size > 0)
+    test(s"Escrow validator size is ${EscrowContract.compiled.script.script.size} bytes") {
+        assert(EscrowContract.compiled.script.script.size > 0)
     }
 
     // --- Initialize Tests ---

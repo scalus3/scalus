@@ -245,11 +245,68 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
                 // val sirLoader = createSirLoader
                 val compiler = new SIRCompiler(options)
                 compiler.compileModule(tree)
+                collectBlueprintModules(tree)
                 ctx
         catch
             case scala.util.control.NonFatal(ex) =>
                 ex.printStackTrace()
                 throw ex
+    }
+
+    /** Finds module objects extending Contract and writes their names to a manifest file.
+      *
+      * The manifest at `META-INF/scalus/blueprint-modules` stores one entry per line in the format
+      * `className\tsourcePath`. On each incremental recompilation the entries for the current
+      * source file are replaced, so stale entries from deleted or changed files are pruned
+      * automatically.
+      */
+    private def collectBlueprintModules(tree: Tree)(using Context): Unit = {
+        val contractSym =
+            try requiredClass("scalus.cardano.blueprint.Contract")
+            catch case _: Exception => return // Contract not on classpath
+
+        def collect(tree: Tree): List[Symbol] = tree match
+            case PackageDef(_, stats) => stats.flatMap(collect)
+            case td: TypeDef if td.symbol.is(Flags.Module) =>
+                if td.symbol.info.baseClasses.contains(contractSym) then List(td.symbol)
+                else Nil
+            case _ => Nil
+
+        val sourcePath = ctx.compilationUnit.source.file.path
+        val modules = collect(tree)
+        val newEntries = modules.map { sym =>
+            val name = sym.fullName.toString
+            val className = if name.endsWith("$") then name else name + "$"
+            s"$className\t$sourcePath"
+        }.toSet
+
+        val outputDir = ctx.settings.outputDir.value
+        val manifestDir = outputDir.subdirectoryNamed("META-INF").subdirectoryNamed("scalus")
+        val manifestFile = manifestDir.fileNamed("blueprint-modules")
+
+        // Read existing entries, drop any from the current source file, add new ones
+        val existing =
+            try
+                val path = java.nio.file.Path.of(
+                  outputDir.file.toPath.toString,
+                  "META-INF",
+                  "scalus",
+                  "blueprint-modules"
+                )
+                if java.nio.file.Files.exists(path) then
+                    new String(java.nio.file.Files.readAllBytes(path), "UTF-8").linesIterator
+                        .filter(_.nonEmpty)
+                        .filterNot(_.endsWith(s"\t$sourcePath"))
+                        .toSet
+                else Set.empty[String]
+            catch case _: Exception => Set.empty[String]
+
+        val allEntries = (existing ++ newEntries).toSeq.sorted
+        val out = manifestFile.bufferedOutput
+        try
+            out.write(allEntries.mkString("\n").getBytes("UTF-8"))
+            out.write('\n')
+        finally out.close()
     }
 
     override def prepareForApply(tree: tpd.Apply)(using Context): Context = {
