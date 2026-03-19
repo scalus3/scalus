@@ -47,7 +47,7 @@ object HybridJIT extends JitRunner {
                     // Fallback to stack-safe Evaluator (Cek or minicont JIT)
                     backupEvaluator(logger, budgetSpender, machineParams)
                 case ex: MachineError => throw ex
-                case NonFatal(ex) =>
+                case NonFatal(ex)     =>
                     // Wrap runtime errors (e.g. ArithmeticException from division by zero)
                     // as MachineError, matching CEK behavior (Cek.scala:1157-1162)
                     throw new JitEvaluationFailure(
