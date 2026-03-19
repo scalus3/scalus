@@ -420,6 +420,8 @@ lazy val scalusUplcJitCompiler = project
       libraryDependencies += "org.scala-lang" %% "scala3-staging" % scalaVersion.value,
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value,
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      // Exclude benchmark-tagged tests from default test runs
+      Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark"),
       inConfig(Test)(PluginDependency),
       publish / skip := true
     )

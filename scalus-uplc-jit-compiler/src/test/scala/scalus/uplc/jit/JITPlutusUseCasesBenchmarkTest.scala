@@ -1,6 +1,7 @@
 package scalus.uplc.jit
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.testing.Benchmark
 import scalus.uplc.DeBruijnedProgram
 import scalus.uplc.eval.*
 
@@ -56,7 +57,7 @@ class JITPlutusUseCasesBenchmarkTest extends AnyFunSuite {
           "uniswap-5"
         )
     do {
-        test(s"HybridJIT compiles and runs $name (was: missing unapplied builtin)") {
+        test(s"HybridJIT compiles and runs $name (was: missing unapplied builtin)".taggedAs(Benchmark)) {
             val result = jitCompileAndRun(name)
             assert(result != null)
         }
@@ -77,7 +78,7 @@ class JITPlutusUseCasesBenchmarkTest extends AnyFunSuite {
           "guardrail-unsorted-small"
         )
     do {
-        test(s"HybridJIT compiles and runs $name (was: Case-on-Bool / missing builtin)") {
+        test(s"HybridJIT compiles and runs $name (was: Case-on-Bool / missing builtin)".taggedAs(Benchmark)) {
             val result = jitCompileAndRun(name)
             assert(result != null)
         }
