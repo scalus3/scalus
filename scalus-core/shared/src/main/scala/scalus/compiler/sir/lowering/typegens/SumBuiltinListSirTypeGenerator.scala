@@ -54,13 +54,21 @@ class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation
                       s"SumPair should have a pair or tuple type representation, we have ${tp.show}",
                       pos
                     )
+            case PrimitiveRepresentation.Constant => PrimitiveRepresentation.Constant
             case _ => lctx.typeGenerator(tp).defaultDataRepresentation(tp)
 
-    override def isDataSupported(tp: SIRType)(using lctx: LoweringContext): Boolean = true
+    override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
+        val elemType = retrieveElementType(tp, SIRPosition.empty)
+        lctx.typeGenerator(elemType).canBeConvertedToData(elemType)
+    }
 
     override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue =
         elementRepr match
             case ProductCaseClassRepresentation.PairData => lvPairDataNil(pos, resType)
-            case _                                       => lvDataNil(pos, SIRType.List.Nil)
+            case PrimitiveRepresentation.Constant =>
+                val elemType = retrieveElementType(resType, pos)
+                if elemType == SIRType.FreeUnificator then lvDataNil(pos, resType, listRepr)
+                else lvTypedNil(pos, elemType, resType, listRepr)
+            case _ => lvDataNil(pos, SIRType.List.Nil, listRepr)
 
 }

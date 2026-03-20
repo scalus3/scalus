@@ -64,7 +64,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     }
 
     // Test to understand BuiltinList literal compilation
-    ignore("BuiltinList literal standalone") {
+    test("BuiltinList literal standalone") {
         val sir = compile {
             BuiltinList[BigInt](1, 2, 3)
         }
@@ -77,7 +77,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     }
 
     // Test headList with BuiltinList literal
-    ignore("headList with BuiltinList literal") {
+    test("headList with BuiltinList literal") {
         val sir = compile {
             val list = BuiltinList[BigInt](10, 20, 30)
             headList(list)
@@ -91,7 +91,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     }
 
     // Test tailList with BuiltinList literal
-    ignore("tailList with BuiltinList literal") {
+    test("tailList with BuiltinList literal") {
         val sir = compile {
             val list = BuiltinList[BigInt](10, 20, 30)
             tailList(list)
@@ -105,17 +105,17 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     }
 
     // Test constRepresentation for BuiltinList[Data] and BuiltinList[BuiltinPair[Data,Data]]
-    test("constRepresentation for BuiltinList[Data] returns SumDataList") {
+    test("constRepresentation for BuiltinList[Data] returns SumBuiltinList(DataData)") {
         import scalus.compiler.sir.SIRType
 
         given LoweringContext = LoweringContext()
 
-        // BuiltinList[Data] should return SumDataList
+        // BuiltinList[Data] should return SumBuiltinList(DataData)
         val builtinListDataType = SIRType.BuiltinList(SIRType.Data.tp)
         val dataListRepr = LoweredValueRepresentation.constRepresentation(builtinListDataType)
         assert(
-          dataListRepr == SumCaseClassRepresentation.SumDataList,
-          s"Expected SumDataList but got $dataListRepr"
+          dataListRepr == SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+          s"Expected SumBuiltinList(DataData) but got $dataListRepr"
         )
 
         // BuiltinList[BuiltinPair[Data, Data]] should return SumDataPairList
@@ -131,41 +131,42 @@ class BuiltinListLoweringTest extends AnyFunSuite {
           s"Expected SumDataPairList but got $pairListRepr"
         )
 
-        // BuiltinList[Integer] should throw exception (non-Data element type not supported)
+        // BuiltinList[Integer] should return SumBuiltinList(Constant) for native primitive lists
         val builtinListIntType = SIRType.BuiltinList(SIRType.Integer)
-        val ex = intercept[LoweringException] {
-            LoweredValueRepresentation.constRepresentation(builtinListIntType)
-        }
+        val intListRepr = LoweredValueRepresentation.constRepresentation(builtinListIntType)
         assert(
-          ex.getMessage.contains("non-Data element type"),
-          s"Expected exception about non-Data element type, got: ${ex.getMessage}"
+          intListRepr == SumCaseClassRepresentation.SumBuiltinList(
+            PrimitiveRepresentation.Constant
+          ),
+          s"Expected SumBuiltinList(Constant) but got $intListRepr"
         )
     }
 
     // --- SumBuiltinList tests ---
 
-    test("SumBuiltinList structural equality with val aliases") {
+    test("SumBuiltinList structural equality") {
         import SumCaseClassRepresentation.*
 
-        // SumDataList is SumBuiltinList(PackedData)
-        assert(SumDataList == SumBuiltinList(PrimitiveRepresentation.PackedData))
-        assert(SumDataList.isInstanceOf[SumBuiltinList])
+        // SumBuiltinList(DataData) structural equality
+        val dataList1 = SumBuiltinList(DataData)
+        val dataList2 = SumBuiltinList(DataData)
+        assert(dataList1 == dataList2)
+        assert(dataList1.isInstanceOf[SumBuiltinList])
 
         // SumDataPairList is SumBuiltinList(PairData)
         assert(SumDataPairList == SumBuiltinList(ProductCaseClassRepresentation.PairData))
         assert(SumDataPairList.isInstanceOf[SumBuiltinList])
 
-        // They are not equal to each other
-        assert(SumDataList != SumDataPairList)
-
-        // New SumBuiltinList instances with same elementRepr are equal
-        val anotherDataList = SumBuiltinList(PrimitiveRepresentation.PackedData)
-        assert(anotherDataList == SumDataList)
+        // Different element reprs are not equal
+        assert(dataList1 != SumDataPairList)
+        assert(SumBuiltinList(PrimitiveRepresentation.Constant) != dataList1)
     }
 
     test("SumBuiltinList isCompatibleWithType checks") {
         import scalus.compiler.sir.SIRType
         import SumCaseClassRepresentation.*
+
+        given LoweringContext = LoweringContext()
 
         val listIntType = SIRType.List(SIRType.Integer)
         val pairType = SIRType.CaseClass(
@@ -175,28 +176,238 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         )
         val listPairType = SIRType.List(pairType)
 
-        // SumDataList (PackedData) is compatible with any list
-        assert(SumDataList.isCompatibleWithType(listIntType))
-        assert(SumDataList.isCompatibleWithType(listPairType))
+        // SumBuiltinList(DataData) is compatible with any list
+        val dataList = SumBuiltinList(DataData)
+        assert(dataList.isCompatibleWithType(listIntType))
+        assert(dataList.isCompatibleWithType(listPairType))
 
-        // SumDataPairList (PairData) is compatible only with pair-element lists
+        // SumBuiltinList(PairData) is compatible only with pair-element lists
         assert(SumDataPairList.isCompatibleWithType(listPairType))
         assert(!SumDataPairList.isCompatibleWithType(listIntType))
 
         // Non-list types are not compatible with either
-        assert(!SumDataList.isCompatibleWithType(SIRType.Integer))
+        assert(!dataList.isCompatibleWithType(SIRType.Integer))
         assert(!SumDataPairList.isCompatibleWithType(SIRType.Integer))
     }
 
     test("SumBuiltinList isPackedData and isDataCentric") {
         import SumCaseClassRepresentation.*
 
-        // SumDataList: isPackedData=false, isDataCentric=true (PackedData.isDataCentric=true)
-        assert(!SumDataList.isPackedData)
-        assert(SumDataList.isDataCentric)
+        // SumBuiltinList(DataData): isPackedData=false, isDataCentric=true
+        val dataList = SumBuiltinList(DataData)
+        assert(!dataList.isPackedData)
+        assert(dataList.isDataCentric)
 
-        // SumDataPairList: isPackedData=false, isDataCentric=true (PairData.isDataCentric=true)
+        // SumBuiltinList(PairData): isPackedData=false, isDataCentric=true
         assert(!SumDataPairList.isPackedData)
         assert(SumDataPairList.isDataCentric)
+
+        // SumBuiltinList(Constant): isPackedData=false, isDataCentric=false
+        val nativeList = SumBuiltinList(PrimitiveRepresentation.Constant)
+        assert(!nativeList.isPackedData)
+        assert(!nativeList.isDataCentric)
+    }
+
+    // --- Phase 2: Native element storage tests ---
+
+    test("BuiltinList[BigInt] preserves native Constant.List(Integer)") {
+        val sir = compile {
+            BuiltinList[BigInt](1, 2, 3)
+        }
+        val uplc = sir.toUplc()
+        val result = uplc.evaluateDebug
+        result match
+            case Result.Success(term, _, _, _) =>
+                // Should be a native integer list, not Data-wrapped
+                term match
+                    case scalus.uplc.Term.Const(scalus.uplc.Constant.List(elemType, elements), _) =>
+                        assert(
+                          elemType == scalus.uplc.DefaultUni.Integer,
+                          s"Expected Integer element type but got $elemType"
+                        )
+                        assert(elements.size == 3, s"Expected 3 elements but got ${elements.size}")
+                    case other =>
+                        fail(s"Expected Constant.List but got $other")
+            case Result.Failure(e, _, _, _) =>
+                fail(s"Evaluation failed: $e")
+    }
+
+    test("headList on native BuiltinList[BigInt] returns Integer") {
+        val sir = compile {
+            val list = BuiltinList[BigInt](10, 20, 30)
+            headList(list)
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(term, _, _, _) =>
+                term match
+                    case scalus.uplc.Term.Const(scalus.uplc.Constant.Integer(v), _) =>
+                        assert(v == 10, s"Expected 10 but got $v")
+                    case other =>
+                        fail(s"Expected Constant.Integer but got $other")
+            case Result.Failure(e, _, _, _) =>
+                fail(s"Evaluation failed: $e")
+    }
+
+    test("tailList on native BuiltinList[BigInt]") {
+        val sir = compile {
+            val list = BuiltinList[BigInt](10, 20, 30)
+            tailList(list)
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(term, _, _, _) =>
+                term match
+                    case scalus.uplc.Term.Const(scalus.uplc.Constant.List(elemType, elements), _) =>
+                        assert(
+                          elemType == scalus.uplc.DefaultUni.Integer,
+                          s"Expected Integer element type but got $elemType"
+                        )
+                        assert(elements.size == 2, s"Expected 2 elements but got ${elements.size}")
+                    case other =>
+                        fail(s"Expected Constant.List but got $other")
+            case Result.Failure(e, _, _, _) =>
+                fail(s"Evaluation failed: $e")
+    }
+
+    test("BuiltinList[ByteString] native literal") {
+        import scalus.uplc.builtin.ByteString
+        val sir = compile {
+            BuiltinList[ByteString](ByteString.fromHex("dead"), ByteString.fromHex("beef"))
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(term, _, _, _) =>
+                term match
+                    case scalus.uplc.Term.Const(scalus.uplc.Constant.List(elemType, elements), _) =>
+                        assert(
+                          elemType == scalus.uplc.DefaultUni.ByteString,
+                          s"Expected ByteString element type but got $elemType"
+                        )
+                        assert(elements.size == 2)
+                    case other =>
+                        fail(s"Expected Constant.List but got $other")
+            case Result.Failure(e, _, _, _) =>
+                fail(s"Evaluation failed: $e")
+    }
+
+    test("BuiltinList[String] native literal") {
+        val sir = compile {
+            BuiltinList[String]("hello", "world")
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(term, _, _, _) =>
+                term match
+                    case scalus.uplc.Term.Const(scalus.uplc.Constant.List(elemType, elements), _) =>
+                        assert(
+                          elemType == scalus.uplc.DefaultUni.String,
+                          s"Expected String element type but got $elemType"
+                        )
+                        assert(elements.size == 2)
+                    case other =>
+                        fail(s"Expected Constant.List but got $other")
+            case Result.Failure(e, _, _, _) =>
+                fail(s"Evaluation failed: $e")
+    }
+
+    test("BuiltinList[Boolean] native literal") {
+        val sir = compile {
+            BuiltinList[Boolean](true, false, true)
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(term, _, _, _) =>
+                term match
+                    case scalus.uplc.Term.Const(scalus.uplc.Constant.List(elemType, elements), _) =>
+                        assert(
+                          elemType == scalus.uplc.DefaultUni.Bool,
+                          s"Expected Bool element type but got $elemType"
+                        )
+                        assert(elements.size == 3)
+                    case other =>
+                        fail(s"Expected Constant.List but got $other")
+            case Result.Failure(e, _, _, _) =>
+                fail(s"Evaluation failed: $e")
+    }
+
+    test("uplcType for SumBuiltinList representations") {
+        import scalus.compiler.sir.SIRType
+
+        given LoweringContext = LoweringContext()
+
+        val listIntType = SIRType.List(SIRType.Integer)
+
+        // SumBuiltinList(Constant) → BuiltinList[Integer]
+        val nativeRepr = SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant)
+        val nativeUplc = nativeRepr.uplcType(listIntType)
+        assert(
+          nativeUplc == SIRType.BuiltinList(SIRType.Integer),
+          s"Expected BuiltinList[Integer] but got ${nativeUplc.show}"
+        )
+
+        // SumBuiltinList(DataData) → BuiltinList[Data]
+        val dataUplc = SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData).uplcType(listIntType)
+        assert(
+          dataUplc == SIRType.BuiltinList(SIRType.Data.tp),
+          s"Expected BuiltinList[Data] but got ${dataUplc.show}"
+        )
+    }
+
+    test("List.get with intrinsic modules") {
+        import scalus.cardano.onchain.plutus.prelude.List
+        import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
+        import scalus.uplc.*
+        import scalus.compiler.Options
+        import scalus.compiler.sir.TargetLoweringBackend
+        given Options = Options(
+          targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
+          generateErrorTraces = true,
+          optimizeUplc = false,
+          debug = false
+        )
+        val compiled = PlutusV3.compile {
+            Cons(BigInt(1), Cons(BigInt(2), Nil)).get(BigInt(0))
+        }
+        val lowering = new SirToUplcV3Lowering(
+          compiled.sir,
+          generateErrorTraces = true,
+          intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
+          supportModules = IntrinsicResolver.defaultSupportModules
+        )
+        val uplc = lowering.lower()
+        val result = uplc.evaluateDebug
+        result match
+            case eval.Result.Success(term, _, _, _) => ()
+            case f =>
+                fail(s"get evaluation failed:\n$f")
+    }
+
+    test("List.isEmpty with intrinsic modules") {
+        import scalus.cardano.onchain.plutus.prelude.List
+        import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
+        import scalus.uplc.*
+        import scalus.compiler.Options
+        import scalus.compiler.sir.TargetLoweringBackend
+        given Options = Options(
+          targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
+          generateErrorTraces = true,
+          optimizeUplc = true,
+          debug = false
+        )
+        val compiled = PlutusV3.compile(!Cons(BigInt(1), Cons(BigInt(2), Nil)).isEmpty)
+        val lowering = new SirToUplcV3Lowering(
+          compiled.sir,
+          generateErrorTraces = true,
+          intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
+          supportModules = IntrinsicResolver.defaultSupportModules
+        )
+        val unoptimized = lowering.lower()
+        val unoptResult = unoptimized.evaluateDebug
+        unoptResult match
+            case eval.Result.Success(term, _, _, _) =>
+                assert(term == Term.Const(Constant.Bool(true)), s"Expected true but got ${term.show}")
+            case f =>
+                fail(s"isEmpty evaluation failed:\n$f")
     }
 }

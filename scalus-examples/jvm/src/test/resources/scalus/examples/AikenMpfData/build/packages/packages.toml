@@ -1,0 +1,14 @@
+[[packages]]
+name = "aiken-lang/merkle-patricia-forestry"
+version = "main"
+source = "github"
+
+[[packages]]
+name = "aiken-lang/stdlib"
+version = "v2"
+source = "github"
+
+[[packages]]
+name = "aiken-lang/fuzz"
+version = "v2"
+source = "github"

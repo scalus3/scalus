@@ -6,45 +6,26 @@ import scalus.compiler.sir.*
 
 object ScalusRuntime {
 
-    val PAIRS_LIST_TO_DATA_LIST_NAME = "$PairsListToDataList"
-    val TUPLES_LIST_TO_DATA_LIST_NAME = "$TuplesListToDataList"
-
-    val DATA_LIST_TO_PAIRS_LIST_NAME = "$dataListToPairsList"
-    val DATA_LIST_TO_TUPLES_LIST_NAME = "$dataListToTuplesList"
-
     val ARRAY_TO_LIST_NAME = "$arrayToList"
+    val MAP_LIST_NAME = "$mapList"
 
     /** Add to context scope lazy val with runtime functions.
       * @param lctx
       * @return
       */
     def initContext(lctx: LoweringContext): Unit = {
-        initPairDataListToDataList(using lctx)
-        initDataListToPairDataList(using lctx)
         initArrayToList(using lctx)
+        initMapList(using lctx)
         lctx.zCombinatorNeeded = false
         // will set to true when some of initialized function will be used
     }
 
-    def pairsListToDataList(using lctx: LoweringContext): LoweredValue = {
-        retrieveRuntimeFunction(PAIRS_LIST_TO_DATA_LIST_NAME)
-    }
-    def tuplesListToDataList(using lctx: LoweringContext): LoweredValue = {
-        // TODO: output performance warning.
-        // throw new RuntimeException(TUPLES_LIST_TO_DATA_LIST_NAME)
-        retrieveRuntimeFunction(TUPLES_LIST_TO_DATA_LIST_NAME)
-    }
-    def dataListToPairsList(using lctx: LoweringContext): LoweredValue = {
-        retrieveRuntimeFunction(DATA_LIST_TO_PAIRS_LIST_NAME)
-    }
-    def dataListToTuplesList(using lctx: LoweringContext): LoweredValue = {
-        // TODO: output performance warning.
-        // throw new RuntimeException("DATA_LIST_TO_TUPLES_LIST_NAME")
-        retrieveRuntimeFunction(DATA_LIST_TO_TUPLES_LIST_NAME)
-    }
-
     def arrayToList(using lctx: LoweringContext): LoweredValue = {
         retrieveRuntimeFunction(ARRAY_TO_LIST_NAME)
+    }
+
+    def mapList(using lctx: LoweringContext): LoweredValue = {
+        retrieveRuntimeFunction(MAP_LIST_NAME)
     }
 
     private def retrieveRuntimeFunction(
@@ -60,367 +41,6 @@ object ScalusRuntime {
                   s"Can't find scalus runtime function ${name} in context, check that context is initialized"
                 )
         }
-    }
-
-    private def initPairDataListToDataList(using lctx: LoweringContext): Unit = {
-        val name = TUPLES_LIST_TO_DATA_LIST_NAME
-        val name1 = "fun_" + name
-        val rhs = genPairDataListToDataList(name1)(using lctx)
-        val retvalForTuples =
-            lvNewLazyNamedVar(name, rhs.sirType, rhs.representation, rhs, AnnotationsDecl.empty.pos)
-        // will ne the same uplc code but different types
-        val lambdaForPairs = SIRType.TypeLambda2(
-          "A",
-          "B",
-          (ta, tb) =>
-              SIRType.List(SIRType.BuiltinPair(ta, tb)) ->: SIRType.List(
-                SIRType.BuiltinPair(ta, tb)
-              ),
-          false
-        )
-        val proxy = TypeRepresentationProxyLoweredValue(
-          retvalForTuples,
-          lambdaForPairs,
-          LambdaRepresentation(
-            lambdaForPairs,
-            InOutRepresentationPair(
-              SumCaseClassRepresentation.SumDataPairList,
-              SumCaseClassRepresentation.SumDataList
-            )
-          ),
-          AnnotationsDecl.empty.pos
-        )
-        val retvalForPairs =
-            lvNewLazyNamedVar(
-              PAIRS_LIST_TO_DATA_LIST_NAME,
-              proxy.sirType,
-              proxy.representation,
-              proxy,
-              AnnotationsDecl.empty.pos
-            )
-    }
-
-    private def initDataListToPairDataList(using lctx: LoweringContext): LoweredValue = {
-        val nameTuples = DATA_LIST_TO_TUPLES_LIST_NAME
-        val name1 = "fun_" + nameTuples
-        val rhs = genDataListToPairDataList(name1)(using lctx)
-        // top-level, not need to set ScopeBrackets
-        val funTuples = lvNewLazyNamedVar(
-          nameTuples,
-          rhs.sirType,
-          rhs.representation,
-          rhs,
-          AnnotationsDecl.empty.pos
-        )
-        val lambdaType = SIRType.TypeLambda2(
-          "A",
-          "B",
-          (ta, tb) => SIRType.List(SIRType.Tuple2(ta, tb)) ->: SIRType.List(SIRType.Tuple2(ta, tb)),
-          false
-        )
-        val tailsProxy = TypeRepresentationProxyLoweredValue(
-          funTuples,
-          lambdaType,
-          LambdaRepresentation(
-            lambdaType,
-            InOutRepresentationPair(
-              SumCaseClassRepresentation.SumDataList,
-              SumCaseClassRepresentation.SumDataPairList
-            )
-          ),
-          AnnotationsDecl.empty.pos
-        )
-        lvNewLazyNamedVar(
-          DATA_LIST_TO_PAIRS_LIST_NAME,
-          tailsProxy.sirType,
-          tailsProxy.representation,
-          tailsProxy,
-          AnnotationsDecl.empty.pos
-        )
-
-    }
-
-    /*
-    private def initDataListToPairDataList_Tuple(
-        name: String
-    )(using lctx: LoweringContext): LoweredValue = {
-        val name1 = "fun_" + name
-        val rhs = genDataListToPairDataList(name1)(using lctx)
-        lvNewLazyNamedVar(name, rhs.sirType, rhs.representation, rhs, AnnotationsDecl.empty.pos)
-    }
-    
-     */
-
-    private def genPairDataListToDataList(
-        name: String
-    )(using lctx: LoweringContext): LoweredValue = {
-        val hc = name.hashCode
-        val tpA = SIRType.TypeVar("A", Some(hc), isBuiltin = false)
-        val tpB = SIRType.TypeVar("B", Some(hc), isBuiltin = false)
-        val tpInTuple = SIRType.Tuple2(tpA, tpB)
-        val tpInTupleList = SIRType.List(tpInTuple)
-        val tpOutTupleList = SIRType.List(SIRType.Tuple2(tpA, tpB))
-        val funType =
-            SIRType.Fun(tpInTupleList, tpOutTupleList)
-        val lambdaType = SIRType.TypeLambda(List(tpA, tpB), funType)
-        val lambdaRepr = LambdaRepresentation(
-          lambdaType,
-          InOutRepresentationPair(
-            SumCaseClassRepresentation.SumDataPairList,
-            SumCaseClassRepresentation.SumDataList
-          )
-        )
-
-        val whenNil = {
-            lvDataNil(AnnotationsDecl.empty.pos, tpOutTupleList)
-        }
-
-        def pairDataToTupleAsData(
-            head: IdentifiableLoweredValue,
-            tail: IdentifiableLoweredValue,
-            recFun: IdentifiableLoweredValue,
-        ): LoweredValue = {
-            def buildTupleBody(
-                first: LoweredValue,
-                second: LoweredValue
-            ): LoweredValue = {
-                // val tupleDecl = SIRType.Tuple2.constrDecl
-                val dataNil = lvDataNil(AnnotationsDecl.empty.pos)
-                val t1 = lvBuiltinApply2(
-                  SIRBuiltins.mkCons,
-                  second,
-                  dataNil,
-                  SIRType.List(SIRType.Data.tp),
-                  SumCaseClassRepresentation.SumDataList,
-                  AnnotationsDecl.empty.pos
-                )
-                val t2 = lvBuiltinApply2(
-                  SIRBuiltins.mkCons,
-                  first,
-                  t1,
-                  SIRType.List(SIRType.Data.tp),
-                  SumCaseClassRepresentation.SumDataList,
-                  AnnotationsDecl.empty.pos
-                )
-                val tupleInTvRepr = lvBuiltinApply2(
-                  SIRBuiltins.constrData,
-                  lvIntConstant(0, AnnotationsDecl.empty.pos),
-                  t2,
-                  SIRType.Tuple2(tpA, tpB),
-                  ProductCaseClassRepresentation.ProdDataConstr,
-                  AnnotationsDecl.empty.pos
-                )
-                val recCons = lvApply(
-                  recFun,
-                  tail,
-                  AnnotationsDecl.empty.pos,
-                  Some(tpOutTupleList),
-                  Some(SumCaseClassRepresentation.SumDataList)
-                )
-                lvBuiltinApply2(
-                  SIRBuiltins.mkCons,
-                  tupleInTvRepr,
-                  recCons,
-                  tpOutTupleList,
-                  SumCaseClassRepresentation.SumDataList,
-                  AnnotationsDecl.empty.pos
-                )
-            }
-
-            if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
-                // For PlutusV4: use Case on Pair
-                val fstVarId = lctx.uniqueVarName("pair_fst")
-                val fstVar = new VariableLoweredValue(
-                  id = fstVarId,
-                  name = fstVarId,
-                  sir = SIR.Var(fstVarId, tpA, AnnotationsDecl.empty),
-                  representation = TypeVarRepresentation(false),
-                  optRhs = None
-                )
-                val sndVarId = lctx.uniqueVarName("pair_snd")
-                val sndVar = new VariableLoweredValue(
-                  id = sndVarId,
-                  name = sndVarId,
-                  sir = SIR.Var(sndVarId, tpB, AnnotationsDecl.empty),
-                  representation = TypeVarRepresentation(false),
-                  optRhs = None
-                )
-                val body = buildTupleBody(fstVar, sndVar)
-                lvCasePair(head, fstVar, sndVar, body, AnnotationsDecl.empty.pos)
-            } else {
-                // For V1-V3: use fstPair/sndPair builtins (original code)
-                val first = lvBuiltinApply(
-                  SIRBuiltins.fstPair,
-                  head,
-                  tpA,
-                  TypeVarRepresentation(false),
-                  AnnotationsDecl.empty.pos
-                )
-                val second = lvBuiltinApply(
-                  SIRBuiltins.sndPair,
-                  head,
-                  tpB,
-                  TypeVarRepresentation(false),
-                  AnnotationsDecl.empty.pos
-                )
-                buildTupleBody(first, second)
-            }
-        }
-
-        val letDef = lvLetRec(
-          name,
-          lambdaType,
-          lambdaRepr,
-          rec =>
-              lvLamAbs(
-                "list",
-                tpInTupleList,
-                SumCaseClassRepresentation.SumDataPairList,
-                list =>
-                    lvMatchList(
-                      list,
-                      whenNil,
-                      (head, tail) => pairDataToTupleAsData(head, tail, rec),
-                      tpInTupleList,
-                      tpInTuple,
-                      SumCaseClassRepresentation.SumDataPairList,
-                      ProductCaseClassRepresentation.PairData,
-                      tpOutTupleList,
-                      SumCaseClassRepresentation.SumDataList
-                    ),
-                AnnotationsDecl.empty.pos
-              ),
-          rec => rec,
-          AnnotationsDecl.empty.pos
-        )
-        letDef
-
-    }
-
-    private def genDataListToPairDataList(
-        name: String
-    )(using lctx: LoweringContext): LoweredValue = {
-        val hc = name.hashCode
-        val tpA = SIRType.TypeVar("A", Some(hc), isBuiltin = false)
-        val tpB = SIRType.TypeVar("B", Some(hc), isBuiltin = false)
-        val tpOutPair = SIRType.Tuple2(tpA, tpB)
-        val tpOutPairList = SIRType.List(tpOutPair)
-        val tpInTupleList = SIRType.List(SIRType.Tuple2(tpA, tpB))
-        val funType =
-            SIRType.Fun(tpInTupleList, tpOutPairList)
-        val lambdaType = SIRType.TypeLambda(List(tpA, tpB), funType)
-        val lambdaRepr = LambdaRepresentation(
-          lambdaType,
-          InOutRepresentationPair(
-            SumCaseClassRepresentation.SumDataList,
-            SumCaseClassRepresentation.SumDataPairList
-          )
-        )
-
-        val whenNil = lvPairDataNil(AnnotationsDecl.empty.pos, tpOutPairList)
-
-        def mapTupleToPair(
-            head: IdentifiableLoweredValue,
-            tail: IdentifiableLoweredValue,
-            funRec: LoweredValue
-        ): LoweredValue = {
-            val pairIntData = lvBuiltinApply(
-              SIRBuiltins.unConstrData,
-              head,
-              SIRType.Tuple2(tpA, tpB),
-              ProductCaseClassRepresentation.PairIntDataList,
-              AnnotationsDecl.empty.pos
-            )
-            val prodList = lvBuiltinApply(
-              SIRBuiltins.sndPair,
-              pairIntData,
-              SIRType.List(SIRType.Data.tp),
-              SumCaseClassRepresentation.SumDataList,
-              AnnotationsDecl.empty.pos
-            )
-            val prodListId = lctx.uniqueVarName("prodList")
-            val prodListVal = new VariableLoweredValue(
-              id = prodListId,
-              name = prodListId,
-              sir = SIR.Var(prodListId, SIRType.List(SIRType.Data.tp), AnnotationsDecl.empty),
-              representation = SumCaseClassRepresentation.SumDataList,
-              optRhs = Some(prodList),
-            )
-            val firstProdList = lvBuiltinApply(
-              SIRBuiltins.headList,
-              prodListVal,
-              SIRType.Data.tp,
-              PrimitiveRepresentation.PackedData,
-              AnnotationsDecl.empty.pos
-            )
-            val tailProdList = lvBuiltinApply(
-              SIRBuiltins.tailList,
-              prodListVal,
-              SIRType.List(SIRType.Data.tp),
-              SumCaseClassRepresentation.SumDataList,
-              AnnotationsDecl.empty.pos
-            )
-            val secondProdList = lvBuiltinApply(
-              SIRBuiltins.headList,
-              tailProdList,
-              SIRType.Data.tp,
-              PrimitiveRepresentation.PackedData,
-              AnnotationsDecl.empty.pos
-            )
-            val pair = lvBuiltinApply2(
-              SIRBuiltins.mkPairData,
-              firstProdList,
-              secondProdList,
-              tpOutPair,
-              ProductCaseClassRepresentation.PairData,
-              AnnotationsDecl.empty.pos
-            )
-            val recCons = lvApply(
-              funRec,
-              tail,
-              AnnotationsDecl.empty.pos,
-              Some(tpOutPairList),
-              Some(SumCaseClassRepresentation.SumDataPairList)
-            )
-            val cons = lvBuiltinApply2(
-              SIRBuiltins.mkCons,
-              pair,
-              recCons,
-              tpOutPairList,
-              SumCaseClassRepresentation.SumDataPairList,
-              AnnotationsDecl.empty.pos
-            )
-            cons
-        }
-
-        val letDef = lvLetRec(
-          name,
-          lambdaType,
-          lambdaRepr,
-          rec =>
-              lvLamAbs(
-                "list",
-                tpInTupleList,
-                SumCaseClassRepresentation.SumDataList,
-                list =>
-                    lvMatchList(
-                      list,
-                      whenNil,
-                      (head, tail) => mapTupleToPair(head, tail, rec),
-                      tpInTupleList,
-                      SIRType.Tuple2(tpA, tpB),
-                      SumCaseClassRepresentation.SumDataList,
-                      ProductCaseClassRepresentation.ProdDataConstr,
-                      tpOutPairList,
-                      SumCaseClassRepresentation.SumDataPairList
-                    ),
-                AnnotationsDecl.empty.pos
-              ),
-          rec => rec,
-          AnnotationsDecl.empty.pos
-        )
-
-        letDef
     }
 
     /** Unified list matching that uses Case on list for PlutusV4 and ChooseList for V1-V3.
@@ -613,16 +233,19 @@ object ScalusRuntime {
         // arrayToList(arr) = arrayToListFromTo(arr, 0, lengthOfArray(arr))
 
         val helperName = name + "_helper"
+        val elemType = SIRType.Data.tp
+        val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+        val listRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
         // Helper type: BuiltinArray[Data] -> Integer -> Integer -> BuiltinList[Data]
         val helperType =
             SIRType.BuiltinArray(
-              SIRType.Data.tp
+              elemType
             ) ->: SIRType.Integer ->: SIRType.Integer ->: SIRType
-                .BuiltinList(SIRType.Data.tp)
+                .BuiltinList(elemType)
 
         val innerFunType =
-            SIRType.Integer ->: SIRType.Integer ->: SIRType.BuiltinList(SIRType.Data.tp)
-        val innerInnerFunType = SIRType.Integer ->: SIRType.BuiltinList(SIRType.Data.tp)
+            SIRType.Integer ->: SIRType.Integer ->: SIRType.BuiltinList(elemType)
+        val innerInnerFunType = SIRType.Integer ->: SIRType.BuiltinList(elemType)
 
         val helperRepr = LambdaRepresentation(
           helperType,
@@ -636,7 +259,7 @@ object ScalusRuntime {
                   innerInnerFunType,
                   InOutRepresentationPair(
                     PrimitiveRepresentation.Constant,
-                    SumCaseClassRepresentation.SumDataList
+                    listRepr
                   )
                 )
               )
@@ -714,7 +337,7 @@ object ScalusRuntime {
                                   n,
                                   AnnotationsDecl.empty.pos,
                                   Some(SIRType.BuiltinList(SIRType.Data.tp)),
-                                  Some(SumCaseClassRepresentation.SumDataList)
+                                  Some(listRepr)
                                 )
                                 // mkCons(elem, recCall)
                                 val consCase = lvBuiltinApply2(
@@ -722,7 +345,7 @@ object ScalusRuntime {
                                   elem,
                                   recCall,
                                   SIRType.BuiltinList(SIRType.Data.tp),
-                                  SumCaseClassRepresentation.SumDataList,
+                                  listRepr,
                                   AnnotationsDecl.empty.pos
                                 )
                                 lvIfThenElse(
@@ -775,13 +398,139 @@ object ScalusRuntime {
                 length,
                 AnnotationsDecl.empty.pos,
                 Some(SIRType.BuiltinList(SIRType.Data.tp)),
-                Some(SumCaseClassRepresentation.SumDataList)
+                Some(listRepr)
               )
           },
           AnnotationsDecl.empty.pos
         )
 
         arrayToListBody
+    }
+
+    /** Initialize mapList runtime function.
+      *
+      * mapList: (A -> B) -> List[B] -> List[A] -> List[B]
+      *
+      * Uses lvApplyDirect to avoid automatic representation conversion — the function operates on
+      * lists with TypeVar element representations that don't match default representations.
+      */
+    private def initMapList(using lctx: LoweringContext): Unit = {
+        val name = MAP_LIST_NAME
+        val rhs = genMapList(name)
+        lvNewLazyNamedVar(name, rhs.sirType, rhs.representation, rhs, AnnotationsDecl.empty.pos)
+    }
+
+    private def genMapList(name: String)(using lctx: LoweringContext): LoweredValue = {
+        val hc = name.hashCode
+        val tpA = SIRType.TypeVar("A", Some(hc), isBuiltin = true)
+        val tpB = SIRType.TypeVar("B", Some(hc), isBuiltin = true)
+        val tpInList = SIRType.BuiltinList(tpA)
+        val tpOutList = SIRType.BuiltinList(tpB)
+        val tpFn = SIRType.Fun(tpA, tpB)
+
+        val funType = tpFn ->: tpOutList ->: tpInList ->: tpOutList
+        val lambdaType = SIRType.TypeLambda(List(tpA, tpB), funType)
+
+        val tvReprA = TypeVarRepresentation(isBuiltin = true)
+        val tvReprB = TypeVarRepresentation(isBuiltin = true)
+        val tvListReprIn = SumCaseClassRepresentation.SumBuiltinList(tvReprA)
+        val tvListReprOut = SumCaseClassRepresentation.SumBuiltinList(tvReprB)
+        val fnRepr = LambdaRepresentation(
+          tpFn,
+          InOutRepresentationPair(tvReprA, tvReprB)
+        )
+
+        val innerType2 = tpInList ->: tpOutList
+        val innerType1 = tpOutList ->: innerType2
+        val innerRepr2 = LambdaRepresentation(
+          innerType2,
+          InOutRepresentationPair(tvListReprIn, tvListReprOut)
+        )
+        val innerRepr1 = LambdaRepresentation(
+          innerType1,
+          InOutRepresentationPair(tvListReprOut, innerRepr2)
+        )
+        val lambdaRepr = LambdaRepresentation(
+          lambdaType,
+          InOutRepresentationPair(fnRepr, innerRepr1)
+        )
+
+        val letDef = lvLetRec(
+          name,
+          lambdaType,
+          lambdaRepr,
+          rec =>
+              lvLamAbs(
+                "f",
+                tpFn,
+                fnRepr,
+                f =>
+                    lvLamAbs(
+                      "nil",
+                      tpOutList,
+                      tvListReprOut,
+                      nil =>
+                          lvLamAbs(
+                            "lst",
+                            tpInList,
+                            tvListReprIn,
+                            lst =>
+                                lvMatchList(
+                                  lst,
+                                  nil,
+                                  (head, tail) => {
+                                      val mapped = lvApplyDirect(
+                                        f,
+                                        head,
+                                        tpB,
+                                        tvReprB,
+                                        AnnotationsDecl.empty.pos
+                                      )
+                                      val recCall = lvApplyDirect(
+                                        lvApplyDirect(
+                                          lvApplyDirect(
+                                            rec,
+                                            f,
+                                            innerType1,
+                                            innerRepr1,
+                                            AnnotationsDecl.empty.pos
+                                          ),
+                                          nil,
+                                          innerType2,
+                                          innerRepr2,
+                                          AnnotationsDecl.empty.pos
+                                        ),
+                                        tail,
+                                        tpOutList,
+                                        tvListReprOut,
+                                        AnnotationsDecl.empty.pos
+                                      )
+                                      lvBuiltinApply2(
+                                        SIRBuiltins.mkCons,
+                                        mapped,
+                                        recCall,
+                                        tpOutList,
+                                        tvListReprOut,
+                                        AnnotationsDecl.empty.pos
+                                      )
+                                  },
+                                  tpInList,
+                                  tpA,
+                                  tvListReprIn,
+                                  tvReprA,
+                                  tpOutList,
+                                  tvListReprOut
+                                ),
+                            AnnotationsDecl.empty.pos
+                          ),
+                      AnnotationsDecl.empty.pos
+                    ),
+                AnnotationsDecl.empty.pos
+              ),
+          rec => rec,
+          AnnotationsDecl.empty.pos
+        )
+        letDef
     }
 
 }

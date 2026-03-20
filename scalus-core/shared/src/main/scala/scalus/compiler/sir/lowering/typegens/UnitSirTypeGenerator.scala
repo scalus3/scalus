@@ -22,7 +22,7 @@ object UnitSirTypeGenerator extends SirTypeUplcGenerator {
     )(using lctx: LoweringContext): LoweredValueRepresentation =
         PrimitiveRepresentation.Constant
 
-    override def isDataSupported(tp: SIRType)(using LoweringContext): Boolean = false
+    override def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = false
 
     override def toRepresentation(
         input: LoweredValue,

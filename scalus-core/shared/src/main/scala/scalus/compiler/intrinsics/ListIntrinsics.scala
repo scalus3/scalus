@@ -3,210 +3,140 @@ package scalus.compiler.intrinsics
 import scalus.Compile
 import scalus.cardano.onchain.plutus.prelude.{List, PairList}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
-import scalus.compiler.sir.lowering.SumCaseClassRepresentation
+import scalus.compiler.sir.SIRType
+import scalus.compiler.sir.lowering.*
 import scalus.uplc.builtin.Builtins.*
-import scalus.compiler.sir.lowering.ProductCaseClassRepresentation
 import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Data}
 
+/** A repr rule: (outputType, inputRepr, loweringContext) => outputRepr */
+type ReprRule =
+    (SIRType, LoweredValueRepresentation, LoweringContext) => LoweredValueRepresentation
+
 // ---------------------------------------------------------------------------
-//  SumDataList intrinsics — List[A] where elements are packed as Data
+//  Repr rules — defined here, near the intrinsics that use them
 // ---------------------------------------------------------------------------
 
-/** Intrinsic implementations for List with SumDataList representation.
-  *
-  * Available at all protocol versions (changPV+).
-  */
+object ListReprRules {
+
+    private def listRepr(inRepr: LoweredValueRepresentation): LoweredValueRepresentation =
+        inRepr // same list repr
+
+    private def elemRepr(
+        inRepr: LoweredValueRepresentation,
+        outTp: SIRType,
+        lctx: LoweringContext
+    ): LoweredValueRepresentation =
+        inRepr match
+            case SumCaseClassRepresentation.SumBuiltinList(er) => er
+            case _ => lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    /** isEmpty: List[A] -> Boolean */
+    val isEmptyRule: ReprRule = (outTp, _, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    /** head: List[A] -> A */
+    val headRule: ReprRule = (outTp, inRepr, lctx) =>
+        elemRepr(inRepr, outTp, lctx)
+
+    /** tail: List[A] -> List[A] */
+    val tailRule: ReprRule = (_, inRepr, _) =>
+        listRepr(inRepr)
+
+    /** drop: List[A] -> (BigInt -> List[A]) */
+    val dropRule: ReprRule = (outTp, inRepr, _) =>
+        outTp match
+            case SIRType.Fun(argTp, retTp) =>
+                LambdaRepresentation(
+                  outTp,
+                  InOutRepresentationPair(PrimitiveRepresentation.Constant, listRepr(inRepr))
+                )
+            case _ => listRepr(inRepr)
+
+    /** at: List[A] -> (BigInt -> A) */
+    val atRule: ReprRule = (outTp, inRepr, lctx) =>
+        outTp match
+            case SIRType.Fun(argTp, retTp) =>
+                LambdaRepresentation(
+                  outTp,
+                  InOutRepresentationPair(
+                    PrimitiveRepresentation.Constant,
+                    elemRepr(inRepr, retTp, lctx)
+                  )
+                )
+            case _ => elemRepr(inRepr, outTp, lctx)
+
+    val listRules: Map[String, ReprRule] = Map(
+      "isEmpty" -> isEmptyRule,
+      "head" -> headRule,
+      "tail" -> tailRule,
+      "drop" -> dropRule,
+      "at" -> atRule
+    )
+
+    val pairListRules: Map[String, ReprRule] = listRules
+}
+
+// ---------------------------------------------------------------------------
+//  List[A] intrinsics — unified for all SumBuiltinList(*) representations
+// ---------------------------------------------------------------------------
+
 @Compile
-object BuiltinListSumDataListOperations {
+object BuiltinListOperations {
 
     def isEmpty[A](self: List[A]): Boolean =
-        nullList(
-          typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self)
-        )
+        nullList(typeProxy[BuiltinList[A]](self))
 
     def head[A](self: List[A]): A =
-        typeProxyRetData[A](
-          headList(
-            typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self)
-          )
-        )
+        headList(typeProxy[BuiltinList[A]](self))
 
     def tail[A](self: List[A]): List[A] =
-        typeProxyRepr[List[A], SumCaseClassRepresentation.SumDataList.type](
-          tailList(
-            typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self)
-          )
+        typeProxy[List[A]](
+          tailList(typeProxy[BuiltinList[A]](self))
         )
 
 }
 
-/** SumDataList intrinsics requiring vanRossemPV (protocol version 11+). */
 @Compile
-object BuiltinListSumDataListOperationsV11 {
+object BuiltinListOperationsV11 {
 
     def drop[A](self: List[A], n: BigInt): List[A] =
-        typeProxyRepr[List[A], SumCaseClassRepresentation.SumDataList.type](
-          dropList(
-            n,
-            typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self)
-          )
+        typeProxy[List[A]](
+          dropList(n, typeProxy[BuiltinList[A]](self))
         )
 
     def at[A](self: List[A], index: BigInt): A =
-        typeProxyRetData[A](
-          BuiltinListSumDataListSupportV11.atSumDataList(
-            typeProxyRepr[BuiltinList[Data], SumCaseClassRepresentation.SumDataList.type](self),
-            index
-          )
-        )
-
-}
-
-/** Support module for SumDataList, requiring vanRossemPV (protocol version 11+). */
-@Compile
-object BuiltinListSumDataListSupportV11 {
-
-    def atSumDataList(self: BuiltinList[Data], n: BigInt): Data = {
-        dropList(n, self).head
-    }
+        headList(dropList(index, typeProxy[BuiltinList[A]](self)))
 
 }
 
 // ---------------------------------------------------------------------------
-//  SumDataPairList intrinsics — List[BuiltinPair[A,B]] where elements are
-//  packed as BuiltinPair[Data,Data]
+//  PairList[A,B] intrinsics — same structure, different arity
 // ---------------------------------------------------------------------------
 
-/** Intrinsic implementations for List with SumDataPairList representation.
-  *
-  * Available at all protocol versions (changPV+).
-  */
 @Compile
-object BuiltinListSumDataPairListOperations {
-
-    def isEmpty[A](self: List[A]): Boolean =
-        nullList(
-          typeProxyRepr[BuiltinList[
-            BuiltinPair[Data, Data]
-          ], SumCaseClassRepresentation.SumDataPairList.type](
-            self
-          )
-        )
-
-    def head[A](self: List[A]): A =
-        typeProxyRepr[A, ProductCaseClassRepresentation.PairData.type](
-          headList(
-            typeProxyRepr[BuiltinList[
-              BuiltinPair[Data, Data]
-            ], SumCaseClassRepresentation.SumDataPairList.type](
-              self
-            )
-          )
-        )
-
-    def tail[A](self: List[A]): List[A] =
-        typeProxyRepr[List[A], SumCaseClassRepresentation.SumDataPairList.type](
-          tailList(
-            typeProxyRepr[BuiltinList[
-              BuiltinPair[Data, Data]
-            ], SumCaseClassRepresentation.SumDataPairList.type](
-              self
-            )
-          )
-        )
-
-}
-
-/** SumDataPairList intrinsics requiring vanRossemPV (protocol version 11+). */
-@Compile
-object BuiltinListSumDataPairListOperationsV11 {
-
-    def drop[A](self: List[A], n: BigInt): List[A] =
-        typeProxyRepr[List[A], SumCaseClassRepresentation.SumDataPairList.type](
-          dropList(
-            n,
-            typeProxyRepr[BuiltinList[
-              BuiltinPair[Data, Data]
-            ], SumCaseClassRepresentation.SumDataPairList.type](
-              self
-            )
-          )
-        )
-
-    def at[A](self: List[A], index: BigInt): A =
-        typeProxyRepr[A, ProductCaseClassRepresentation.PairData.type](
-          headList(
-            dropList(
-              index,
-              typeProxyRepr[BuiltinList[
-                BuiltinPair[Data, Data]
-              ], SumCaseClassRepresentation.SumDataPairList.type](
-                self
-              )
-            )
-          )
-        )
-
-}
-
-// ---------------------------------------------------------------------------
-//  PairList intrinsics — PairList[A,B] with SumDataPairList representation
-// ---------------------------------------------------------------------------
-
-/** Intrinsic implementations for PairList with SumDataPairList representation.
-  *
-  * Available at all protocol versions (changPV+).
-  */
-@Compile
-object BuiltinPairListSumDataPairListOperations {
+object BuiltinPairListOperations {
 
     def isEmpty[A, B](self: PairList[A, B]): Boolean =
-        nullList(
-          typeProxyRepr[BuiltinList[
-            BuiltinPair[Data, Data]
-          ], SumCaseClassRepresentation.SumDataPairList.type](
-            self
-          )
-        )
+        nullList(typeProxy[BuiltinList[BuiltinPair[Data, Data]]](self))
 
     def head[A, B](self: PairList[A, B]): (A, B) =
-        typeProxyRepr[(A, B), ProductCaseClassRepresentation.PairData.type](
-          headList(
-            typeProxyRepr[BuiltinList[
-              BuiltinPair[Data, Data]
-            ], SumCaseClassRepresentation.SumDataPairList.type](
-              self
-            )
-          )
+        typeProxy[(A, B)](
+          headList(typeProxy[BuiltinList[BuiltinPair[Data, Data]]](self))
         )
 
     def tail[A, B](self: PairList[A, B]): PairList[A, B] =
-        typeProxyRepr[PairList[A, B], SumCaseClassRepresentation.SumDataPairList.type](
-          tailList(
-            typeProxyRepr[BuiltinList[
-              BuiltinPair[Data, Data]
-            ], SumCaseClassRepresentation.SumDataPairList.type](
-              self
-            )
-          )
+        typeProxy[PairList[A, B]](
+          tailList(typeProxy[BuiltinList[BuiltinPair[Data, Data]]](self))
         )
 
 }
 
-/** PairList SumDataPairList intrinsics requiring vanRossemPV (protocol version 11+). */
 @Compile
-object BuiltinPairListSumDataPairListOperationsV11 {
+object BuiltinPairListOperationsV11 {
 
     def drop[A, B](self: PairList[A, B], n: BigInt): PairList[A, B] =
-        typeProxyRepr[PairList[A, B], SumCaseClassRepresentation.SumDataPairList.type](
-          dropList(
-            n,
-            typeProxyRepr[BuiltinList[
-              BuiltinPair[Data, Data]
-            ], SumCaseClassRepresentation.SumDataPairList.type](
-              self
-            )
-          )
+        typeProxy[PairList[A, B]](
+          dropList(n, typeProxy[BuiltinList[BuiltinPair[Data, Data]]](self))
         )
 
 }

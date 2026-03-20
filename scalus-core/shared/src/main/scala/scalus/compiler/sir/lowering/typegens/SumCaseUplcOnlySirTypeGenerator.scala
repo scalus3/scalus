@@ -24,7 +24,7 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
           SIRPosition.empty
         )
 
-    override def isDataSupported(tp: SIRType)(using lctx: LoweringContext): Boolean = false
+    override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = false
 
     override def toRepresentation(
         input: LoweredValue,

@@ -32,8 +32,8 @@ case class ProductCaseOneElementSirTypeGenerator(
           argGenerator.defaultTypeVarReperesentation(tp)
         )
 
-    override def isDataSupported(tp: SIRType)(using lctx: LoweringContext): Boolean =
-        argGenerator.isDataSupported(tp)
+    override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean =
+        argGenerator.canBeConvertedToData(tp)
 
     override def toRepresentation(
         input: LoweredValue,
@@ -156,7 +156,7 @@ case class ProductCaseOneElementSirTypeGenerator(
           argValue,
           lvDataNil(pos),
           SIRType.List(SIRType.Data.tp),
-          SumCaseClassRepresentation.SumDataList,
+          SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
           pos
         )
 

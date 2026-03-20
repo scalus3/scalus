@@ -7,7 +7,6 @@ import scalus.compiler.sir.*
 import scalus.uplc.*
 import scalus.uplc.UplcAnnotation
 import scalus.utils.{Pretty, Style}
-import scalus.compiler.sir.lowering.SumCaseClassRepresentation.SumDataList
 
 import scala.collection.mutable.{Map as MutableMap, Set as MutableSet}
 
@@ -1787,6 +1786,24 @@ object LoweredValue {
             )
         }
 
+        /** Low-level apply that skips automatic type/representation conversion.
+          *
+          * Use when the caller explicitly manages argument types and representations, e.g., in
+          * runtime conversion functions where arguments are intentionally in non-default
+          * representations.
+          */
+        def lvApplyDirect(
+            f: LoweredValue,
+            arg: LoweredValue,
+            resType: SIRType,
+            resRepr: LoweredValueRepresentation,
+            inPos: SIRPosition
+        )(using
+            lctx: LoweringContext
+        ): LoweredValue = {
+            ApplyLoweredValue(f, arg, resType, resRepr, inPos)
+        }
+
         def lvApply(
             f: LoweredValue,
             arg: LoweredValue,
@@ -1896,7 +1913,7 @@ object LoweredValue {
 
             val fRepresentationPair = f.representation match {
                 case lr: LambdaRepresentation =>
-                    lr.reprFun(argUpcasted.sirType, inPos)
+                    lr.reprFun(argUpcasted.sirType, inPos, argUpcasted.representation)
                 case TypeVarRepresentation(isBuiltin) =>
                     InOutRepresentationPair(
                       TypeVarRepresentation(isBuiltin),
@@ -2261,7 +2278,7 @@ object LoweredValue {
         def lvDataNil(
             inPos: SIRPosition,
             tp: SIRType = SIRType.List(SIRType.Data.tp),
-            repr: LoweredValueRepresentation = SumDataList
+            repr: LoweredValueRepresentation = SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
         )(using
             lctx: LoweringContext
         ): LoweredValue = {
@@ -2287,6 +2304,29 @@ object LoweredValue {
                 Constant.List(DefaultUni.Pair(DefaultUni.Data, DefaultUni.Data), Nil),
                 tp,
                 AnnotationsDecl(inPos)
+              ),
+              repr
+            )
+        }
+
+        def sirTypeToDefaultUni(tp: SIRType): DefaultUni = tp match
+            case SIRType.Integer    => DefaultUni.Integer
+            case SIRType.ByteString => DefaultUni.ByteString
+            case SIRType.String     => DefaultUni.String
+            case SIRType.Boolean    => DefaultUni.Bool
+            case _                  => DefaultUni.Data
+
+        def lvTypedNil(
+            pos: SIRPosition,
+            elemSirType: SIRType,
+            listType: SIRType,
+            repr: LoweredValueRepresentation
+        )(using LoweringContext): LoweredValue = {
+            ConstantLoweredValue(
+              SIR.Const(
+                Constant.List(sirTypeToDefaultUni(elemSirType), Nil),
+                listType,
+                AnnotationsDecl(pos)
               ),
               repr
             )
@@ -2517,7 +2557,7 @@ object LoweredValue {
                             val resolvedArgIn = resolvedInAlign(argIn)
                             val (targetInRepr, targetOutRepr) = targetRepresentation match {
                                 case targetLambdaRepr: LambdaRepresentation =>
-                                    val pair = targetLambdaRepr.reprFun(resolvedTargetIn, inPos)
+                                    val pair = targetLambdaRepr.reprFun(resolvedTargetIn, inPos, targetLambdaRepr.canonicalRepresentationPair.inRepr)
                                     (
                                       pair.inRepr,
                                       pair.outRepr
@@ -2536,7 +2576,7 @@ object LoweredValue {
                             val (argInRepr, argOutRepr) =
                                 arg.representation match {
                                     case argLambdaRepr: LambdaRepresentation =>
-                                        val pair = argLambdaRepr.reprFun(resolvedArgIn, inPos)
+                                        val pair = argLambdaRepr.reprFun(resolvedArgIn, inPos, argLambdaRepr.canonicalRepresentationPair.inRepr)
                                         (
                                           pair.inRepr,
                                           pair.outRepr

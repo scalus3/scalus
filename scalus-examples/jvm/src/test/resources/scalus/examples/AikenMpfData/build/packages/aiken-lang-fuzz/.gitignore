@@ -1,0 +1,9 @@
+.direnv/
+# Aiken compilation artifacts
+artifacts/
+# Aiken's project working directory
+build/
+# Aiken's default documentation export
+docs/
+# Aiken's auto-generated lock file
+aiken.lock

@@ -20,19 +20,11 @@ object IntrinsicResolver {
     private val ListModule = "scalus.cardano.onchain.plutus.prelude.List$"
     private val PairListModule = "scalus.cardano.onchain.plutus.prelude.PairList$"
 
-    private val SumDataListOps = "scalus.compiler.intrinsics.BuiltinListSumDataListOperations$"
-    private val SumDataListOpsV11 =
-        "scalus.compiler.intrinsics.BuiltinListSumDataListOperationsV11$"
+    private val ListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
+    private val ListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
 
-    private val SumDataPairListOps =
-        "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperations$"
-    private val SumDataPairListOpsV11 =
-        "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperationsV11$"
-
-    private val PairListSumDataPairListOps =
-        "scalus.compiler.intrinsics.BuiltinPairListSumDataPairListOperations$"
-    private val PairListSumDataPairListOpsV11 =
-        "scalus.compiler.intrinsics.BuiltinPairListSumDataPairListOperationsV11$"
+    private val PairListOps = "scalus.compiler.intrinsics.BuiltinPairListOperations$"
+    private val PairListOpsV11 = "scalus.compiler.intrinsics.BuiltinPairListOperationsV11$"
 
     /** Default intrinsic modules, loaded at compile time by the plugin. The plugin intercepts
       * `compiledModules(...)` and replaces it with `SIRLinker.readModules(...)` that accesses the
@@ -40,46 +32,38 @@ object IntrinsicResolver {
       */
     lazy val defaultIntrinsicModules: Map[String, Module] =
         scalus.compiler.compiledModules(
-          "scalus.compiler.intrinsics.BuiltinListSumDataListOperations",
-          "scalus.compiler.intrinsics.BuiltinListSumDataListOperationsV11",
-          "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperations",
-          "scalus.compiler.intrinsics.BuiltinListSumDataPairListOperationsV11",
-          "scalus.compiler.intrinsics.BuiltinPairListSumDataPairListOperations",
-          "scalus.compiler.intrinsics.BuiltinPairListSumDataPairListOperationsV11"
+          "scalus.compiler.intrinsics.BuiltinListOperations",
+          "scalus.compiler.intrinsics.BuiltinListOperationsV11",
+          "scalus.compiler.intrinsics.BuiltinPairListOperations",
+          "scalus.compiler.intrinsics.BuiltinPairListOperationsV11"
         )
 
     /** Support modules — their bindings are added to scope for normal function calls from intrinsic
       * provider bodies. Unlike intrinsic modules, these are NOT used for provider substitution.
       */
     lazy val defaultSupportModules: Map[String, Module] =
-        scalus.compiler.compiledModules(
-          "scalus.compiler.intrinsics.BuiltinListSumDataListSupportV11"
-        )
+        Map.empty
 
-    // Representation name constants (must match LoweredValueRepresentation case object names)
-    private val SumDataListRepr = "SumDataList"
-    private val SumDataPairListRepr = "SumDataPairList"
+    // Representation name constants for registry lookup
+    private val BuiltinListRepr = "BuiltinList"
+    private val PairListRepr = "PairList"
 
-    /** Registry entry: (representation, minProtocolVersion, providerModule) */
-    private type RegistryEntry = (String, Int, String)
+    /** Registry entry: (representation, minProtocolVersion, providerModule, reprRules) */
+    private type RegistryEntry =
+        (String, Int, String, Map[String, scalus.compiler.intrinsics.ReprRule])
 
-    private val SumDataPairListEntries: List[RegistryEntry] = List(
-      (SumDataPairListRepr, 0, SumDataPairListOps),
-      (SumDataPairListRepr, 11, SumDataPairListOpsV11)
-    )
+    import scalus.compiler.intrinsics.ListReprRules
 
-    private val PairListSumDataPairListEntries: List[RegistryEntry] = List(
-      (SumDataPairListRepr, 0, PairListSumDataPairListOps),
-      (SumDataPairListRepr, 11, PairListSumDataPairListOpsV11)
-    )
-
-    /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule) */
+    /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule, reprRules) */
     private val registry: Map[String, List[RegistryEntry]] = Map(
-      ListModule -> (List[RegistryEntry](
-        (SumDataListRepr, 0, SumDataListOps),
-        (SumDataListRepr, 11, SumDataListOpsV11)
-      ) ++ SumDataPairListEntries),
-      PairListModule -> PairListSumDataPairListEntries
+      ListModule -> List(
+        (BuiltinListRepr, 0, ListOps, ListReprRules.listRules),
+        (BuiltinListRepr, 11, ListOpsV11, ListReprRules.listRules)
+      ),
+      PairListModule -> List(
+        (PairListRepr, 0, PairListOps, ListReprRules.pairListRules),
+        (PairListRepr, 11, PairListOpsV11, ListReprRules.pairListRules)
+      )
     )
 
     /** Try to resolve an intrinsic for the given application.
@@ -120,19 +104,36 @@ object IntrinsicResolver {
                         // Find best matching provider: highest minPV that satisfies constraints
                         var bestBinding: Option[Binding] = None
                         var bestPV = -1
-                        for (repr, minPV, providerModuleName) <- entries do
+                        var bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
+                            Map.empty
+                        for (repr, minPV, providerModuleName, reprRules) <- entries do
                             if repr == reprName && pvVersion >= minPV && minPV > bestPV then
                                 lctx.findProviderBinding(providerModuleName, methodName).foreach {
                                     b =>
                                         bestBinding = Some(b)
                                         bestPV = minPV
+                                        bestReprRules = reprRules
                                 }
 
                         bestBinding.map { binding =>
                             val substituted = substituteSelf(binding.value, argSir)
                             lctx.precomputedValues.put(argSir, loweredArg)
-                            try Lowering.lowerSIR(substituted, Some(appType))
-                            finally lctx.precomputedValues.remove(argSir)
+                            val lowered =
+                                try Lowering.lowerSIR(substituted, Some(appType))
+                                finally lctx.precomputedValues.remove(argSir)
+                            // Apply repr rule to set correct output representation
+                            bestReprRules.get(methodName) match
+                                case Some(rule) =>
+                                    val outputRepr =
+                                        rule(appType, loweredArg.representation, lctx)
+                                    if lowered.representation == outputRepr then lowered
+                                    else
+                                        RepresentationProxyLoweredValue(
+                                          lowered,
+                                          outputRepr,
+                                          pos
+                                        )
+                                case None => lowered
                         }
     }
 
@@ -154,9 +155,7 @@ object IntrinsicResolver {
       * SumBuiltinList patterns handle them via case class equality.
       */
     private def representationName(repr: LoweredValueRepresentation): String = repr match
-        case SumCaseClassRepresentation.SumBuiltinList(ProductCaseClassRepresentation.PairData) =>
-            "SumDataPairList"
-        case SumCaseClassRepresentation.SumBuiltinList(_) => "SumDataList"
+        case SumCaseClassRepresentation.SumBuiltinList(_) => BuiltinListRepr
         case SumCaseClassRepresentation.PackedSumDataList => "PackedSumDataList"
         case SumCaseClassRepresentation.DataConstr        => "DataConstr"
         case _ => repr.getClass.getSimpleName.stripSuffix("$")
@@ -172,9 +171,17 @@ object IntrinsicResolver {
             val typeEnv: Map[SIRType.TypeVar, SIRType] =
                 if typeParams.isEmpty then Map.empty
                 else
-                    SIRUnify.topLevelUnifyType(param.tp, arg.tp, SIRUnify.Env.empty) match
+                    SIRUnify.topLevelUnifyType(
+                      param.tp,
+                      arg.tp,
+                      SIRUnify.Env.empty.withUpcasting
+                    ) match
                         case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
-                        case _                                   => Map.empty
+                        case other =>
+                            throw LoweringException(
+                              s"substituteSelf: failed to unify param type ${param.tp.show} with arg type ${arg.tp.show}, result: $other",
+                              SIRPosition.empty
+                            )
             if typeEnv.isEmpty then SIR.substituteFreeVar(body, param.name, arg)
             else substituteVarAndTypes(body, param.name, arg, typeEnv)
         case _ =>

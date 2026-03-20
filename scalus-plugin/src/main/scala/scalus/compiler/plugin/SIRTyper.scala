@@ -636,7 +636,15 @@ class SIRTyper(using Context) {
             val btp = ct.baseType(parentSym)
             btp match
                 case AppliedType(ty, targs) =>
-                    targs.map(t => sirTypeInEnvWithErr(t, nEnv))
+                    targs.map { t =>
+                        // baseType returns types with TypeParamRef from the constructor's PolyType.
+                        // These have typeSymbol == NoSymbol, so env lookup fails and creates
+                        // fresh TypeVars with wrong ids. Resolve directly to tparams by index.
+                        t.stripped match
+                            case tpr: TypeParamRef if tpr.paramNum < tparams.size =>
+                                tparams(tpr.paramNum)
+                            case _ => sirTypeInEnvWithErr(t, nEnv)
+                    }
                 case _ => Nil
 
         }

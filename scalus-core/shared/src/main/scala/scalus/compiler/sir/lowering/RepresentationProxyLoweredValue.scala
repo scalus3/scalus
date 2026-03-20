@@ -81,6 +81,25 @@ final class TypeRepresentationProxyLoweredValue(
     inPos: SIRPosition
 ) extends ProxyLoweredValue(input) {
 
+    // DEBUG: catch type/repr mismatch — DataData is only valid for Data-typed elements
+    representation match
+        case SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData) =>
+            SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(inSirType) match
+                case Some(elemType)
+                    if elemType != SIRType.Data.tp
+                        && !elemType.isInstanceOf[SIRType.TypeVar]
+                        && elemType != SIRType.FreeUnificator
+                        && elemType != SIRType.TypeNothing
+                        && (elemType == SIRType.Integer
+                            || elemType == SIRType.ByteString
+                            || elemType == SIRType.String
+                            || elemType == SIRType.Boolean) =>
+                    throw new RuntimeException(
+                      s"TypeRepresentationProxy: primitive element type ${elemType.show} with DataData repr. Should be PackedData. type=${inSirType.show}, inputRepr=${input.representation}"
+                    )
+                case _ => ()
+        case _ => ()
+
     override def sirType: SIRType = inSirType
 
     override def pos: SIRPosition = inPos

@@ -20,7 +20,7 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValueRepresentation = PrimitiveRepresentation.PackedData
 
-    def isDataSupported(tp: SIRType)(using LoweringContext): Boolean = true
+    def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = true
 
     def toRepresentation(
         input: LoweredValue,
@@ -821,7 +821,7 @@ object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         PrimitiveRepresentation.Constant
 
-    override def isDataSupported(tp: SIRType)(using
+    override def canBeConvertedToData(tp: SIRType)(using
         lctx: LoweringContext
     ): Boolean = false
 

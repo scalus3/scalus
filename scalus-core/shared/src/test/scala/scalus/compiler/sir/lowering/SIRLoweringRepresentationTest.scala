@@ -31,7 +31,7 @@ class SIRLoweringRepresentationTest extends AnyFunSuite {
         given LoweringContext = LoweringContext()
         val generator = SirTypeUplcGenerator(listType)
         // println(s"generator = ${generator} ")
-        assert(generator.defaultRepresentation(listType) == SumCaseClassRepresentation.SumDataList)
+        assert(generator.defaultRepresentation(listType) == SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant))
     }
 
     test("Get default representation for Case Class") {

@@ -1,0 +1,93 @@
+name: Continuous Integration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["main"]
+  pull_request:
+    branches: ["main"]
+
+env:
+  CARGO_TERM_COLOR: always
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: true
+
+jobs:
+  javascript:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🧰 Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20.13.1
+
+      - name: 🧰 Setup Aiken
+        uses: aiken-lang/setup-aiken@v1
+        with:
+          version: v1.1.17
+
+      - name: 🌍 Install dependencies
+        working-directory: off-chain
+        run: yarn
+
+      - name: 🔬 Run tests
+        working-directory: off-chain
+        run: yarn test
+
+      - name: 🔬 Generate documentation
+        working-directory: off-chain
+        run: yarn docs
+
+  aiken:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Checkout repository
+        uses: actions/checkout@v4
+
+      - name: 🧰 Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: 🧰 Setup Aiken
+        uses: aiken-lang/setup-aiken@v1
+        with:
+          version: v1.1.17
+
+      - name: 📝 Run fmt
+        working-directory: on-chain
+        run: aiken fmt --check
+
+      - name: 🔬 Run tests
+        working-directory: on-chain
+        run: aiken check
+
+      - name: 📘 Generate documentation
+        shell: bash
+        working-directory: on-chain
+        run: aiken docs -o docs
+
+      - name: 📦 Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: "on-chain/docs/"
+
+  publish-aiken-docs:
+    if: ${{ github.event_name == 'push' }}
+    needs: aiken
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: 🚀 Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

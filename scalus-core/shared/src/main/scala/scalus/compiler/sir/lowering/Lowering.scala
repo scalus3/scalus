@@ -46,17 +46,17 @@ object Lowering {
                 lowerSIR(term, optTargetType)
             case constr @ SIR.Constr(name, decl, args, tp, anns) =>
                 val resolvedType = lctx.resolveTypeVarIfNeeded(tp)
-                val typeGenerator =
+                val (typeGenerator, effectiveConstr) =
                     if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
                     then
                         optTargetType match
                             case Some(targetType) =>
-                                lctx.typeGenerator(targetType)
+                                (lctx.typeGenerator(targetType), constr.copy(tp = targetType))
                             case None =>
-                                lctx.typeGenerator(resolvedType)
-                    else lctx.typeGenerator(resolvedType)
-                typeGenerator.genConstr(constr)
+                                (lctx.typeGenerator(resolvedType), constr)
+                    else (lctx.typeGenerator(resolvedType), constr)
+                typeGenerator.genConstr(effectiveConstr)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
                     lctx.log(
@@ -246,15 +246,24 @@ object Lowering {
                 // Handle BuiltinList and BuiltinArray constants - transform elements to Data if needed
                 // The constant value is transformed to use Data elements at runtime,
                 // but the semantic type is preserved to maintain correct type checking.
-                // TODO: In the future, we may want to add SumConstBuiltinList representation
-                // to avoid this transformation and keep native UPLC list types
+                // For primitive element types (Integer, ByteString, String, Boolean),
+                // keep native UPLC list types to avoid per-element wrapping/unwrapping.
                 val (transformedConst, repr) = tp match {
+                    case SIRType.BuiltinList(elemType)
+                        if !SIRType.Data.unapply(elemType) && isPrimitiveElementType(elemType) =>
+                        // Preserve native UPLC list — no conversion needed
+                        (
+                          const,
+                          SumCaseClassRepresentation.SumBuiltinList(
+                            PrimitiveRepresentation.Constant
+                          )
+                        )
                     case SIRType.BuiltinList(elemType) if !SIRType.Data.unapply(elemType) =>
                         const match {
                             case Constant.List(_, elements) =>
                                 val dataElements = elements.map(constantToData)
                                 val newConst = Constant.List(DefaultUni.Data, dataElements)
-                                (newConst, SumCaseClassRepresentation.SumDataList)
+                                (newConst, SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData))
                             case _ =>
                                 (const, LoweredValueRepresentation.constRepresentation(tp))
                         }
@@ -434,33 +443,53 @@ object Lowering {
         if isFromDataApp(app) then lowerFromData(app)
         else if isToDataApp(app) then lowerToData(app)
         else if isPairListConversion(app) then lowerPairListConversion(app)
+        else if isTypeProxyApp(app) then lowerTypeProxy(app)
         else if isTypeProxyReprApp(app) then lowerTypeProxyRepr(app)
-        else if isTypeProxyRetDataApp(app) then lowerTypeProxyRetData(app)
         else lowerNormalApp(app, optTargetType)
     }
 
+    private val TypeProxyName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxy"
     private val TypeProxyReprName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxyRepr"
-    private val TypeProxyRetDataName =
-        "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxyRetData"
+
+    private def isTypeProxyApp(app: SIR.Apply): Boolean = app.f match
+        case SIR.ExternalVar(_, name, _, _) => name == TypeProxyName
+        case _                              => false
 
     private def isTypeProxyReprApp(app: SIR.Apply): Boolean = app.f match
         case SIR.ExternalVar(_, name, _, _) => name == TypeProxyReprName
         case _                              => false
 
-    private def isTypeProxyRetDataApp(app: SIR.Apply): Boolean = app.f match
-        case SIR.ExternalVar(_, name, _, _) => name == TypeProxyRetDataName
-        case _                              => false
+    /** Type-only cast — changes SIR type, keeps representation from the lowered argument. */
+    private def lowerTypeProxy(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
+        val loweredArg = lowerSIR(app.arg)
+        TypeRepresentationProxyLoweredValue(
+          loweredArg,
+          app.tp,
+          loweredArg.representation,
+          app.anns.pos
+        )
+    }
 
     private def lowerTypeProxyRepr(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
         val loweredArg = lowerSIR(app.arg)
-        val repr = app.anns.data.get("repr") match
-            case Some(SIR.Const(scalus.uplc.Constant.String(reprName), _, _)) =>
-                resolveReprByName(reprName, app.anns.pos)
+        val baseRepr = app.anns.data.get("repr") match
+            case Some(reprSir) => interpretReprSIR(reprSir, app.tp, app.anns.pos)
             case _ =>
                 throw LoweringException(
-                  "typeProxyRepr: missing 'repr' annotation with representation name",
+                  "typeProxyRepr: missing 'repr' annotation",
                   app.anns.pos
                 )
+        // Refine SumBuiltinList repr based on concrete element type
+        val repr = baseRepr match
+            case SumCaseClassRepresentation.SumBuiltinList(_) =>
+                SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(app.tp) match
+                    case Some(elemType) if elemType != SIRType.FreeUnificator
+                        && !elemType.isInstanceOf[SIRType.TypeVar] =>
+                        SumCaseClassRepresentation.SumBuiltinList(
+                          typegens.SirTypeUplcGenerator.elementReprFor(elemType)
+                        )
+                    case _ => baseRepr // unresolved type var — keep sentinel
+            case other => other
         TypeRepresentationProxyLoweredValue(
           loweredArg,
           app.tp,
@@ -469,34 +498,70 @@ object Lowering {
         )
     }
 
-    private def lowerTypeProxyRetData(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
-        val loweredArg = lowerSIR(app.arg)
-        val repr = lctx.typeGenerator(app.tp).defaultDataRepresentation(app.tp)
-        TypeRepresentationProxyLoweredValue(
-          loweredArg,
-          app.tp,
-          repr,
-          app.anns.pos
-        )
+    /** Interpret a SIR expression produced by the plugin for a `ReprTag` value.
+      *
+      * The plugin compiles `ReprTag` case objects as `SIR.Constr` with 0 args, and
+      * `ReprTag.SumBuiltinList(elem)` as `SIR.Constr` with 1 arg.
+      */
+    private def interpretReprSIR(
+        sir: SIR,
+        targetType: SIRType,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValueRepresentation = {
+        import scalus.compiler.intrinsics.ReprTag
+        sir match
+            // Case object: SIR.Constr("ReprTag$.DataData", _, Nil, _, _)
+            case SIR.Constr(name, _, Nil, _, _) =>
+                resolveReprTagName(name, pos)
+            // Case class: SIR.Constr("ReprTag$.SumBuiltinList", _, List(elemReprSir), _, _)
+            case SIR.Constr(name, _, List(elemReprSir), _, _) =>
+                val shortName = name.split("\\$?\\.").last
+                if shortName == "SumBuiltinList" then
+                    val elemRepr = interpretReprSIR(elemReprSir, targetType, pos)
+                    SumCaseClassRepresentation.SumBuiltinList(elemRepr)
+                else
+                    throw LoweringException(
+                      s"typeProxyRepr: unsupported ReprTag constructor '$name'",
+                      pos
+                    )
+            // ExternalVar reference to a case object
+            case SIR.ExternalVar(_, name, _, _) =>
+                resolveReprTagName(name, pos)
+            // Cast wrapper (from inline def expansion)
+            case SIR.Cast(inner, _, _) =>
+                interpretReprSIR(inner, targetType, pos)
+            // String constant (backward compat)
+            case SIR.Const(scalus.uplc.Constant.String(reprName), _, _) =>
+                resolveReprTagName(reprName, pos)
+            case _ =>
+                throw LoweringException(
+                  s"typeProxyRepr: cannot interpret repr SIR: ${sir.pretty.render(80)}",
+                  pos
+                )
     }
 
-    private def resolveReprByName(
+    private def resolveReprTagName(
         name: String,
         pos: SIRPosition
-    ): LoweredValueRepresentation = name match
-        case "SumDataList"     => SumCaseClassRepresentation.SumDataList
-        case "SumDataPairList" => SumCaseClassRepresentation.SumDataPairList
-        case "SumBuiltinList" =>
-            SumCaseClassRepresentation.SumDataList // default; refine from type context
-        case "PackedSumDataList" => SumCaseClassRepresentation.PackedSumDataList
-        case "DataConstr"        => SumCaseClassRepresentation.DataConstr
-        case "DataData"          => SumCaseClassRepresentation.DataData
-        case "ProdDataList"      => ProductCaseClassRepresentation.ProdDataList
-        case "ProdDataConstr"    => ProductCaseClassRepresentation.ProdDataConstr
-        case "PairData"          => ProductCaseClassRepresentation.PairData
-        case "PackedData"        => PrimitiveRepresentation.PackedData
-        case _ =>
-            throw LoweringException(s"typeProxyRepr: unknown representation '$name'", pos)
+    ): LoweredValueRepresentation = {
+        val shortName = name.split("\\$?\\.").last
+        shortName match
+            case "DataData"          => SumCaseClassRepresentation.DataData
+            case "DataConstr"        => SumCaseClassRepresentation.DataConstr
+            case "PairData"          => ProductCaseClassRepresentation.PairData
+            case "Constant"          => PrimitiveRepresentation.Constant
+            case "PackedData"        => PrimitiveRepresentation.PackedData
+            case "PackedSumDataList" => SumCaseClassRepresentation.PackedSumDataList
+            // Compound list reprs for test backward compat
+            case "SumBuiltinList(DataData)" =>
+                SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
+            case "SumBuiltinList(PairData)" =>
+                SumCaseClassRepresentation.SumBuiltinList(ProductCaseClassRepresentation.PairData)
+            case "SumBuiltinList(Constant)" =>
+                SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant)
+            case _ =>
+                throw LoweringException(s"typeProxyRepr: unknown ReprTag '$name'", pos)
+    }
 
     private def lowerNormalApp(app: SIR.Apply, @unused optTargetType: Option[SIRType])(using
         lctx: LoweringContext
@@ -844,9 +909,12 @@ object Lowering {
         sorted.toList
     }
 
+    private def isPrimitiveElementType(tp: SIRType): Boolean = tp match
+        case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean => true
+        case _                                                                       => false
+
     /** Convert a UPLC Constant to a Constant.Data. Used to transform BuiltinList elements to Data
-      * representation. TODO: In the future, we may want to add SumConstBuiltinList representation
-      * to avoid this transformation and keep native UPLC list types.
+      * representation.
       */
     private def constantToData(c: Constant): Constant = c match {
         case Constant.Integer(v)    => Constant.Data(scalus.uplc.builtin.Data.I(v))
