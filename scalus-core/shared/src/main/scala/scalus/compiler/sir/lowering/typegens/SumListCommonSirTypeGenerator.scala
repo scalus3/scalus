@@ -186,6 +186,14 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
                     .toRepresentation(outputRepresentation, pos)
             // --- Original conversions ---
+            // PairData lists → pack via mapData (Data.Map), not listData (Data.List)
+            case (
+                  SumCaseClassRepresentation.SumBuiltinList(ProductCaseClassRepresentation.PairData),
+                  SumCaseClassRepresentation.PackedSumDataList
+                ) =>
+                input
+                    .toRepresentation(SumCaseClassRepresentation.SumDataAssocMap, pos)
+                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
             case (
                   SumCaseClassRepresentation.SumBuiltinList(_),
                   SumCaseClassRepresentation.PackedSumDataList
@@ -193,7 +201,6 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 val elemType = retrieveElementType(input.sirType, pos)
                 val asDataList =
                     if elemType == SIRType.TypeNothing || elemType == SIRType.FreeUnificator then
-                        // Empty list (List[Nothing]) — no elements to convert, apply listData directly
                         input
                     else
                         val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
