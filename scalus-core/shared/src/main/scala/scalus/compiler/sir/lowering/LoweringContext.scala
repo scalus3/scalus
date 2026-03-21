@@ -28,7 +28,8 @@ class LoweringContext(
     val intrinsicModules: Map[String, Module] = Map.empty,
     val supportModules: Map[String, Module] = Map.empty,
     /** When true, List[BigInt] etc. use native UPLC element storage (SumBuiltinList(Constant)).
-      * When false (default), all lists use Data element storage (SumBuiltinList(DataData/PackedData)).
+      * When false (default), all lists use Data element storage
+      * (SumBuiltinList(DataData/PackedData)).
       */
     val nativeListElements: Boolean = false,
 ) {

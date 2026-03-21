@@ -2294,11 +2294,19 @@ object LoweredValue {
 
         /** Nil for a BuiltinList[Data] used as product case constructor fields. */
         def lvProdDataListNil(inPos: SIRPosition)(using LoweringContext): LoweredValue =
-            lvDataNil(inPos, SIRType.List(SIRType.Data.tp), ProductCaseClassRepresentation.ProdDataList)
+            lvDataNil(
+              inPos,
+              SIRType.List(SIRType.Data.tp),
+              ProductCaseClassRepresentation.ProdDataList
+            )
 
         /** Nil for a BuiltinList[Data] with DataData element repr. */
         def lvDataDataListNil(inPos: SIRPosition)(using LoweringContext): LoweredValue =
-            lvDataNil(inPos, SIRType.List(SIRType.Data.tp), SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData))
+            lvDataNil(
+              inPos,
+              SIRType.List(SIRType.Data.tp),
+              SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
+            )
 
         def lvPairDataNil(
             inPos: SIRPosition,
@@ -2565,7 +2573,11 @@ object LoweredValue {
                             val resolvedArgIn = resolvedInAlign(argIn)
                             val (targetInRepr, targetOutRepr) = targetRepresentation match {
                                 case targetLambdaRepr: LambdaRepresentation =>
-                                    val pair = targetLambdaRepr.reprFun(resolvedTargetIn, inPos, targetLambdaRepr.canonicalRepresentationPair.inRepr)
+                                    val pair = targetLambdaRepr.reprFun(
+                                      resolvedTargetIn,
+                                      inPos,
+                                      targetLambdaRepr.canonicalRepresentationPair.inRepr
+                                    )
                                     (
                                       pair.inRepr,
                                       pair.outRepr
@@ -2584,7 +2596,11 @@ object LoweredValue {
                             val (argInRepr, argOutRepr) =
                                 arg.representation match {
                                     case argLambdaRepr: LambdaRepresentation =>
-                                        val pair = argLambdaRepr.reprFun(resolvedArgIn, inPos, argLambdaRepr.canonicalRepresentationPair.inRepr)
+                                        val pair = argLambdaRepr.reprFun(
+                                          resolvedArgIn,
+                                          inPos,
+                                          argLambdaRepr.canonicalRepresentationPair.inRepr
+                                        )
                                         (
                                           pair.inRepr,
                                           pair.outRepr

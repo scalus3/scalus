@@ -4,8 +4,8 @@ package typegens
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
-/** Parameterized list type generator for BuiltinList[X] where X is not BuiltinPair.
-  * For pair lists, use SumPairBuiltinListSirTypeGenerator instead.
+/** Parameterized list type generator for BuiltinList[X] where X is not BuiltinPair. For pair lists,
+  * use SumPairBuiltinListSirTypeGenerator instead.
   */
 class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation)
     extends SumListCommonSirTypeGenerator {
@@ -28,7 +28,9 @@ class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation
     ): LoweredValueRepresentation =
         defaultDataRepresentation(tp)
 
-    override def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValueRepresentation =
+    override def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
+        LoweringContext
+    ): LoweredValueRepresentation =
         listRepr
 
     override def defaultElementRepresentation(tp: SIRType, pos: SIRPosition)(using

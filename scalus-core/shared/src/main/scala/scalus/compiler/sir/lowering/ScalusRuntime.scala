@@ -423,10 +423,8 @@ object ScalusRuntime {
 
     /** Generate mapList: (A -> B) -> List[B] -> List[A] -> List[B]
       *
-      * Structure: mapList f nil = let rec go lst = case lst of
-      *   [] -> nil
-      *   (h :: t) -> mkCons(f(h), go(t))
-      * in go
+      * Structure: mapList f nil = let rec go lst = case lst of [] -> nil (h :: t) -> mkCons(f(h),
+      * go(t)) in go
       *
       * `f` and `nil` are captured in closure, only `lst` is passed recursively.
       */

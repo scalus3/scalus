@@ -11,8 +11,8 @@ object IntrinsicHelpers {
 
     /** Zero-cost type/representation cast.
       *
-      * The `repr` parameter specifies the target representation as a `ReprTag`. The plugin
-      * compiles it to SIR and stores in an annotation; the lowering interprets it.
+      * The `repr` parameter specifies the target representation as a `ReprTag`. The plugin compiles
+      * it to SIR and stores in an annotation; the lowering interprets it.
       */
     /** Zero-cost type-only cast. Changes the SIR type without affecting representation.
       */
@@ -21,9 +21,11 @@ object IntrinsicHelpers {
 
     /** Zero-cost type/representation cast.
       *
-      * The `repr` parameter specifies the target representation as a `ReprTag`. The plugin
-      * compiles it to SIR and stores in an annotation; the lowering interprets it.
+      * The `repr` parameter specifies the target representation as a `ReprTag`. The plugin compiles
+      * it to SIR and stores in an annotation; the lowering interprets it.
       */
     def typeProxyRepr[V](x: Any, repr: ReprTag): V =
-        throw new RuntimeException("typeProxyRepr: should be eliminated by the Scalus compiler plugin")
+        throw new RuntimeException(
+          "typeProxyRepr: should be eliminated by the Scalus compiler plugin"
+        )
 }

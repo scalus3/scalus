@@ -32,7 +32,12 @@ class IntrinsicResolverTest extends AnyFunSuite {
         reprName: String
     ): AnnotatedSIR =
         SIR.Apply(
-          SIR.ExternalVar(helperModule, typeProxyReprName, SIRType.Fun(SIRType.FreeUnificator, targetType), ae),
+          SIR.ExternalVar(
+            helperModule,
+            typeProxyReprName,
+            SIRType.Fun(SIRType.FreeUnificator, targetType),
+            ae
+          ),
           arg,
           targetType,
           ae + ("repr" -> SIR.Const(Constant.String(reprName), SIRType.String, ae))
@@ -40,7 +45,12 @@ class IntrinsicResolverTest extends AnyFunSuite {
 
     private def mkTypeProxy(arg: AnnotatedSIR, targetType: SIRType): AnnotatedSIR =
         SIR.Apply(
-          SIR.ExternalVar(helperModule, typeProxyName, SIRType.Fun(SIRType.FreeUnificator, targetType), ae),
+          SIR.ExternalVar(
+            helperModule,
+            typeProxyName,
+            SIRType.Fun(SIRType.FreeUnificator, targetType),
+            ae
+          ),
           arg,
           targetType,
           ae
@@ -51,7 +61,8 @@ class IntrinsicResolverTest extends AnyFunSuite {
     private val listReprName = "SumBuiltinList(DataData)"
     private val builtinListA = SIRType.BuiltinList(typeA)
 
-    /** isEmpty[A](self: List[A]): Boolean = nullList(typeProxyRepr[BuiltinList[A]](self, sentinel)) */
+    /** isEmpty[A](self: List[A]): Boolean = nullList(typeProxyRepr[BuiltinList[A]](self, sentinel))
+      */
     private def buildIsEmptyBinding: Binding = {
         val selfVar = SIR.Var("self", listTypeA, ae)
         val proxy = mkTypeProxyRepr(selfVar, builtinListA, listReprName)
@@ -77,7 +88,9 @@ class IntrinsicResolverTest extends AnyFunSuite {
         )
     }
 
-    /** tail[A](self: List[A]): List[A] = typeProxy[List[A]](tailList(typeProxyRepr[BuiltinList[A]](self, sentinel))) */
+    /** tail[A](self: List[A]): List[A] =
+      * typeProxy[List[A]](tailList(typeProxyRepr[BuiltinList[A]](self, sentinel)))
+      */
     private def buildTailBinding: Binding = {
         val selfVar = SIR.Var("self", listTypeA, ae)
         val innerProxy = mkTypeProxyRepr(selfVar, builtinListA, listReprName)
@@ -91,7 +104,9 @@ class IntrinsicResolverTest extends AnyFunSuite {
         )
     }
 
-    /** drop[A](self: List[A], n: BigInt): List[A] = typeProxy[List[A]](dropList(n, typeProxyRepr[BuiltinList[A]](self, sentinel))) */
+    /** drop[A](self: List[A], n: BigInt): List[A] = typeProxy[List[A]](dropList(n,
+      * typeProxyRepr[BuiltinList[A]](self, sentinel)))
+      */
     private def buildDropBinding: Binding = {
         val selfVar = SIR.Var("self", listTypeA, ae)
         val nVar = SIR.Var("n", SIRType.Integer, ae)

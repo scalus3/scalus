@@ -3448,8 +3448,8 @@ final class SIRCompiler(
         }
     }
 
-    /** Compile `typeProxyRepr[V](x, repr)` — compile the `repr` argument to SIR and store it as
-      * an annotation so the lowering can interpret it and set the representation directly.
+    /** Compile `typeProxyRepr[V](x, repr)` — compile the `repr` argument to SIR and store it as an
+      * annotation so the lowering can interpret it and set the representation directly.
       */
     /** Compile `typeProxy[V](x)` — type-only cast, keeps representation unchanged. */
     private def compileTypeProxy(

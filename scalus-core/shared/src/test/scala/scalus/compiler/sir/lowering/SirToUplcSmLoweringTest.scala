@@ -218,7 +218,11 @@ class SirToUplcSmLoweringTest
         val listDataType = SIRType.List(SIRType.Data.tp)
         val gen1 = SirTypeUplcGenerator(listDataType)
         val representation1 = gen1.defaultRepresentation(listDataType)
-        assert(representation1 == SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData))
+        assert(
+          representation1 == SumCaseClassRepresentation.SumBuiltinList(
+            SumCaseClassRepresentation.DataData
+          )
+        )
 
         val genDataList = SirTypeUplcGenerator(SIRType.List(SIRType.Data.tp))
 

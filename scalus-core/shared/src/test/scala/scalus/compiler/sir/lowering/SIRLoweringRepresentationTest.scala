@@ -30,14 +30,22 @@ class SIRLoweringRepresentationTest extends AnyFunSuite {
         val listType = SIRType.List(SIRType.Integer)
         given LoweringContext = LoweringContext(nativeListElements = false)
         val generator = SirTypeUplcGenerator(listType)
-        assert(generator.defaultRepresentation(listType) == SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.PackedData))
+        assert(
+          generator.defaultRepresentation(listType) == SumCaseClassRepresentation.SumBuiltinList(
+            PrimitiveRepresentation.PackedData
+          )
+        )
     }
 
     test("Get default representation for List [nativeListElements=true]") {
         val listType = SIRType.List(SIRType.Integer)
         given LoweringContext = LoweringContext(nativeListElements = true)
         val generator = SirTypeUplcGenerator(listType)
-        assert(generator.defaultRepresentation(listType) == SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant))
+        assert(
+          generator.defaultRepresentation(listType) == SumCaseClassRepresentation.SumBuiltinList(
+            PrimitiveRepresentation.Constant
+          )
+        )
     }
 
     test("Get default representation for Case Class") {

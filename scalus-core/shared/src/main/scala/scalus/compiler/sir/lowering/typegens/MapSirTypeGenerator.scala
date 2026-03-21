@@ -195,10 +195,18 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
         )
     }
 
-    private def pairListReprFor(tp: SIRType, pos: SIRPosition)(using lctx: LoweringContext): SumCaseClassRepresentation.SumPairBuiltinList = {
+    private def pairListReprFor(tp: SIRType, pos: SIRPosition)(using
+        lctx: LoweringContext
+    ): SumCaseClassRepresentation.SumPairBuiltinList = {
         val listType = retrieveListType(tp)
-        val elemType = SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(listType)
-            .getOrElse(throw LoweringException(s"Cannot retrieve element type from list type ${listType.show}", pos))
+        val elemType = SumCaseClassRepresentation.SumBuiltinList
+            .retrieveListElementType(listType)
+            .getOrElse(
+              throw LoweringException(
+                s"Cannot retrieve element type from list type ${listType.show}",
+                pos
+              )
+            )
         SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, pos)
     }
 
@@ -206,8 +214,8 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
         tp match
             case SIRType.CaseClass(decl, typeArgs, optParent) =>
                 decl.name match
-                    case "scalus.cardano.onchain.plutus.prelude.AssocMap"
-                        | "scalus.cardano.onchain.plutus.prelude.SortedMap" =>
+                    case "scalus.cardano.onchain.plutus.prelude.AssocMap" |
+                        "scalus.cardano.onchain.plutus.prelude.SortedMap" =>
                         val (ta, tb) = typeArgs match
                             case List(ta, tb) => (ta, tb)
                             case _ =>

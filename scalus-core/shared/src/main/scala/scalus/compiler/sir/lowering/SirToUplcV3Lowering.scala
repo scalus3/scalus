@@ -104,8 +104,13 @@ class SirToUplcV3Lowering(
 
 object SirToUplcV3Lowering {
 
-    /** Create a SirToUplcV3Lowering from compiler Options, using default intrinsic/support modules. */
-    def fromOptions(sir: SIR, options: scalus.compiler.Options, debug: Boolean = false): SirToUplcV3Lowering =
+    /** Create a SirToUplcV3Lowering from compiler Options, using default intrinsic/support modules.
+      */
+    def fromOptions(
+        sir: SIR,
+        options: scalus.compiler.Options,
+        debug: Boolean = false
+    ): SirToUplcV3Lowering =
         SirToUplcV3Lowering(
           sir = sir,
           generateErrorTraces = options.generateErrorTraces,

@@ -80,10 +80,11 @@ object SirTypeUplcGenerator {
         debug: Boolean
     )(using lctx: LoweringContext): SirTypeUplcGenerator =
         encoded match {
-            case "ProductCase"     => ProductCaseSirTypeGenerator
-            case "SumCase"         => SumCaseSirTypeGenerator
-            case "SumDataList"     => new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData)
-            case "SumPairDataList" => SumPairBuiltinListSirTypeGenerator
+            case "ProductCase" => ProductCaseSirTypeGenerator
+            case "SumCase"     => SumCaseSirTypeGenerator
+            case "SumDataList" =>
+                new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData)
+            case "SumPairDataList"       => SumPairBuiltinListSirTypeGenerator
             case "Map"                   => MapSirTypeGenerator
             case "Data"                  => SIRTypeUplcDataGenerator
             case "BuiltinArray"          => BuiltinArraySirTypeGenerator
@@ -100,7 +101,9 @@ object SirTypeUplcGenerator {
                 throw IllegalArgumentException(s"Unknown UplcRepresentation: $other")
         }
 
-    def apply(tp: SIRType, debug: Boolean = false)(using lctx: LoweringContext): SirTypeUplcGenerator = {
+    def apply(tp: SIRType, debug: Boolean = false)(using
+        lctx: LoweringContext
+    ): SirTypeUplcGenerator = {
         val retval = tp match
             case SIRType.Boolean =>
                 SIRTypeUplcBooleanGenerator
@@ -138,7 +141,10 @@ object SirTypeUplcGenerator {
                             if !containsFun(tp, trace) then {
                                 if isPair(typeArgs.head)
                                 then SumPairBuiltinListSirTypeGenerator
-                                else new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head))
+                                else
+                                    new SumBuiltinListSirTypeGenerator(
+                                      elementReprFor(typeArgs.head)
+                                    )
                             } else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == SIRType.BuiltinList.name then
                             if isPair(typeArgs.head) then SumPairBuiltinListSirTypeGenerator
@@ -243,8 +249,7 @@ object SirTypeUplcGenerator {
             else if constrDecl.name == SIRType.List.NilConstr.name
                 || constrDecl.name == SIRType.BuiltinList.Nil.name
                 || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
-            then
-                Some(new SumBuiltinListSirTypeGenerator(TypeVarRepresentation(false)))
+            then Some(new SumBuiltinListSirTypeGenerator(TypeVarRepresentation(false)))
             else
                 throw LoweringException(
                   s"Cannot determine element representation for list constructor ${constrDecl.name} with typeArgs=${typeArgs.map(_.show)}",
@@ -268,9 +273,9 @@ object SirTypeUplcGenerator {
         case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean => true
         case _                                                                       => false
 
-    /** Compute the element representation for a list element type.
-      * Note: only BuiltinPair gets PairData. Tuple2 gets ProdDataConstr via defaultDataRepresentation
-      * because Tuple2 is constr-encoded (Data.Constr(0, [fst, snd])), not pair-encoded.
+    /** Compute the element representation for a list element type. Note: only BuiltinPair gets
+      * PairData. Tuple2 gets ProdDataConstr via defaultDataRepresentation because Tuple2 is
+      * constr-encoded (Data.Constr(0, [fst, snd])), not pair-encoded.
       */
     def elementReprFor(elemType: SIRType)(using lctx: LoweringContext): LoweredValueRepresentation =
         if isPair(elemType) then ProductCaseClassRepresentation.PairData

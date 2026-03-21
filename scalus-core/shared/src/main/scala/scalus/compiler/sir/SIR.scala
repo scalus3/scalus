@@ -94,9 +94,11 @@ case class ConstrDecl(
         val typeParamIds = typeParams.map(_.optId).toSet
         for pta <- parentTypeArgs do
             pta match
-                case tv: SIRType.TypeVar if tv.optId.isDefined && !typeParamIds.contains(tv.optId) =>
+                case tv: SIRType.TypeVar
+                    if tv.optId.isDefined && !typeParamIds.contains(tv.optId) =>
                     val ex = new RuntimeException(
-                      s"ConstrDecl($name): parentTypeArg ${tv.name}(${tv.optId}) is not in typeParams ${typeParams.map(t => s"${t.name}(${t.optId})")}"
+                      s"ConstrDecl($name): parentTypeArg ${tv.name}(${tv.optId}) is not in typeParams ${typeParams
+                              .map(t => s"${t.name}(${t.optId})")}"
                     )
                     println(s"Error making ConstrDecl for $name: ${ex.getMessage}")
                     ex.printStackTrace(System.out)

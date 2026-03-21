@@ -45,7 +45,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         ProductCaseClassRepresentation.ProdDataConstr
 
-    override def canBeConvertedToData(tp: SIRType)(using loweringContext: LoweringContext): Boolean = {
+    override def canBeConvertedToData(
+        tp: SIRType
+    )(using loweringContext: LoweringContext): Boolean = {
         true
     }
 
@@ -458,13 +460,17 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         lvNewLazyIdVar(
                           droppedId,
                           SIRType.List(SIRType.Data.tp),
-                          SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                          SumCaseClassRepresentation.SumBuiltinList(
+                            SumCaseClassRepresentation.DataData
+                          ),
                           lvBuiltinApply2(
                             SIRBuiltins.dropList,
                             lvIntConstant(fieldIndex, sel.anns.pos),
                             list0,
                             SIRType.List(SIRType.Data.tp),
-                            SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                            SumCaseClassRepresentation.SumBuiltinList(
+                              SumCaseClassRepresentation.DataData
+                            ),
                             sel.anns.pos
                           ),
                           sel.anns.pos
@@ -480,12 +486,16 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                             lvNewLazyIdVar(
                               tailId,
                               SIRType.List(SIRType.Data.tp),
-                              SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                              SumCaseClassRepresentation.SumBuiltinList(
+                                SumCaseClassRepresentation.DataData
+                              ),
                               lvBuiltinApply(
                                 SIRBuiltins.tailList,
                                 acc._1,
                                 SIRType.List(SIRType.Data.tp),
-                                SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                                SumCaseClassRepresentation.SumBuiltinList(
+                                  SumCaseClassRepresentation.DataData
+                                ),
                                 sel.anns.pos
                               ),
                               sel.anns.pos
@@ -589,7 +599,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         val v = lvNewLazyIdVar(
                           lctx.uniqueVarName("_match_data_list"),
                           SIRType.List(SIRType.Data.tp),
-                          SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                          SumCaseClassRepresentation.SumBuiltinList(
+                            SumCaseClassRepresentation.DataData
+                          ),
                           other,
                           matchData.anns.pos
                         )

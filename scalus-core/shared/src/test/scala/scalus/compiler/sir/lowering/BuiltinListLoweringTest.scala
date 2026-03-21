@@ -119,8 +119,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         val expectedIntRepr =
             if native then
                 SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant)
-            else
-                SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.PackedData)
+            else SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.PackedData)
         assert(
           intListRepr == expectedIntRepr,
           s"Expected $expectedIntRepr but got $intListRepr"
@@ -137,8 +136,14 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         assert(dataList1 == dataList2)
         assert(dataList1.isInstanceOf[SumBuiltinList])
 
-        val pairList1 = SumPairBuiltinList(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
-        val pairList2 = SumPairBuiltinList(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
+        val pairList1 = SumPairBuiltinList(
+          PrimitiveRepresentation.PackedData,
+          PrimitiveRepresentation.PackedData
+        )
+        val pairList2 = SumPairBuiltinList(
+          PrimitiveRepresentation.PackedData,
+          PrimitiveRepresentation.PackedData
+        )
         assert(pairList1 == pairList2)
         assert(pairList1.isInstanceOf[SumPairBuiltinList])
 
@@ -164,7 +169,10 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         assert(dataList.isCompatibleWithType(listIntType))
         assert(dataList.isCompatibleWithType(listPairType))
 
-        val pairList = SumPairBuiltinList(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
+        val pairList = SumPairBuiltinList(
+          PrimitiveRepresentation.PackedData,
+          PrimitiveRepresentation.PackedData
+        )
         assert(pairList.isCompatibleWithType(listPairType))
         assert(!pairList.isCompatibleWithType(listIntType))
 
@@ -179,7 +187,10 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         assert(!dataList.isPackedData)
         assert(dataList.isDataCentric)
 
-        val pairList = SumPairBuiltinList(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
+        val pairList = SumPairBuiltinList(
+          PrimitiveRepresentation.PackedData,
+          PrimitiveRepresentation.PackedData
+        )
         assert(!pairList.isPackedData)
         assert(pairList.isDataCentric)
 

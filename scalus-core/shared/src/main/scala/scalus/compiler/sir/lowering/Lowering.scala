@@ -263,7 +263,12 @@ object Lowering {
                             case Constant.List(_, elements) =>
                                 val dataElements = elements.map(constantToData)
                                 val newConst = Constant.List(DefaultUni.Data, dataElements)
-                                (newConst, SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData))
+                                (
+                                  newConst,
+                                  SumCaseClassRepresentation.SumBuiltinList(
+                                    SumCaseClassRepresentation.DataData
+                                  )
+                                )
                             case _ =>
                                 (const, LoweredValueRepresentation.constRepresentation(tp))
                         }
@@ -484,8 +489,9 @@ object Lowering {
         val repr = baseRepr match
             case SumCaseClassRepresentation.SumBuiltinList(_) =>
                 SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(app.tp) match
-                    case Some(elemType) if elemType != SIRType.FreeUnificator
-                        && !elemType.isInstanceOf[SIRType.TypeVar] =>
+                    case Some(elemType)
+                        if elemType != SIRType.FreeUnificator
+                            && !elemType.isInstanceOf[SIRType.TypeVar] =>
                         SumCaseClassRepresentation.SumBuiltinList(
                           typegens.SirTypeUplcGenerator.elementReprFor(elemType)
                         )
@@ -733,8 +739,13 @@ object Lowering {
         if isToMapConversion(app) then
             // toSortedMap / toAssocMap: convert to SumPairBuiltinList then apply mapData
             val argType = app.arg.tp
-            val elemType = SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(argType).getOrElse(SIRType.Data.tp)
-            val pairListRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, app.anns.pos)
+            val elemType = SumCaseClassRepresentation.SumBuiltinList
+                .retrieveListElementType(argType)
+                .getOrElse(SIRType.Data.tp)
+            val pairListRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
+              elemType,
+              app.anns.pos
+            )
             val asPairList = loweredArg.toRepresentation(pairListRepr, app.anns.pos)
             lvBuiltinApply(
               SIRBuiltins.mapData,
@@ -745,13 +756,19 @@ object Lowering {
             )
         else
             // toList / toPairList: repr conversion only
-            val elemType = SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(app.tp).getOrElse(SIRType.Data.tp)
-            val pairListRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, app.anns.pos)
+            val elemType = SumCaseClassRepresentation.SumBuiltinList
+                .retrieveListElementType(app.tp)
+                .getOrElse(SIRType.Data.tp)
+            val pairListRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
+              elemType,
+              app.anns.pos
+            )
             val convertedArg = loweredArg.toRepresentation(pairListRepr, app.anns.pos)
             TypeRepresentationProxyLoweredValue(convertedArg, app.tp, pairListRepr, app.anns.pos)
     }
 
-    private val SortedMapSingletonName = "scalus.cardano.onchain.plutus.prelude.SortedMap$.singleton"
+    private val SortedMapSingletonName =
+        "scalus.cardano.onchain.plutus.prelude.SortedMap$.singleton"
     private val AssocMapSingletonName = "scalus.cardano.onchain.plutus.prelude.AssocMap$.singleton"
 
     /** Detect fully-applied `SortedMap.singleton(key, value)` or `AssocMap.singleton(key, value)`.
@@ -792,9 +809,12 @@ object Lowering {
           pos
         )
         // mkCons(pair, emptyPairList)
-        val emptyPairList = lvPairDataNil(pos, app.tp,
+        val emptyPairList = lvPairDataNil(
+          pos,
+          app.tp,
           SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
-            SIRType.BuiltinPair(SIRType.Data.tp, SIRType.Data.tp), pos
+            SIRType.BuiltinPair(SIRType.Data.tp, SIRType.Data.tp),
+            pos
           )
         )
         val pairListRepr = emptyPairList.representation

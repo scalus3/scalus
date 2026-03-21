@@ -77,7 +77,9 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
                   input,
                   pos,
                   Some(SIRType.BuiltinList(SIRType.Data.tp)),
-                  Some(SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData))
+                  Some(
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
+                  )
                 )
                 lvBuiltinApply(
                   SIRBuiltins.listData,

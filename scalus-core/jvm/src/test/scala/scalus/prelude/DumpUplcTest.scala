@@ -4,11 +4,11 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.*
 import scalus.compiler.sir.TargetLoweringBackend
-import scalus.compiler.sir.lowering.{SirToUplcV3Lowering, IntrinsicResolver}
+import scalus.compiler.sir.lowering.{IntrinsicResolver, SirToUplcV3Lowering}
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.{ToData, toData, FromData}
+import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.{PlutusV3, Term}
 import scalus.uplc.Term.asTerm
@@ -22,8 +22,8 @@ class DumpUplcTest extends AnyFunSuite {
     )
     test("dump singleton toList UPLC") {
         import scalus.cardano.onchain.plutus.prelude.SortedMap
-        val compiled = PlutusV3.compile {
-            (m: SortedMap[BigInt, BigInt]) => m.toList
+        val compiled = PlutusV3.compile { (m: SortedMap[BigInt, BigInt]) =>
+            m.toList
         }
         println("=== SIR ===")
         println(compiled.sir.pretty.render(120))

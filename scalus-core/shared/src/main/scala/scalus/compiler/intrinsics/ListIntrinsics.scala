@@ -35,12 +35,10 @@ object ListReprRules {
         lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
 
     /** head: List[A] -> A */
-    val headRule: ReprRule = (outTp, inRepr, lctx) =>
-        elemRepr(inRepr, outTp, lctx)
+    val headRule: ReprRule = (outTp, inRepr, lctx) => elemRepr(inRepr, outTp, lctx)
 
     /** tail: List[A] -> List[A] */
-    val tailRule: ReprRule = (_, inRepr, _) =>
-        listRepr(inRepr)
+    val tailRule: ReprRule = (_, inRepr, _) => listRepr(inRepr)
 
     /** drop: List[A] -> (BigInt -> List[A]) */
     val dropRule: ReprRule = (outTp, inRepr, _) =>

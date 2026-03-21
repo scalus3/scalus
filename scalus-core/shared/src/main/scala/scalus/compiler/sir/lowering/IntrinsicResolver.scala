@@ -54,7 +54,9 @@ object IntrinsicResolver {
 
     import scalus.compiler.intrinsics.ListReprRules
 
-    /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule, reprRules) */
+    /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule,
+      * reprRules)
+      */
     private val registry: Map[String, List[RegistryEntry]] = Map(
       ListModule -> List(
         (BuiltinListRepr, 0, ListOps, ListReprRules.listRules),
