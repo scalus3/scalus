@@ -242,7 +242,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 138978, steps = 42_283121)
+          ExUnits(memory = 115306, steps = 34_516209)
         )
     }
 
@@ -373,7 +373,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 141178, steps = 42_635121)
+          ExUnits(memory = 117506, steps = 34_868209)
         )
     }
 
