@@ -757,7 +757,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list.zip(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
           List.single((BigInt(1), BigInt(3))),
-          ExUnits(memory = 13140, steps = 3_659254)
+          ExUnits(memory = 11116, steps = 2_822872)
         )
     }
 
