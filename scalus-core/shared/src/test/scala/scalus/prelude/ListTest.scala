@@ -743,7 +743,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (list: List[BigInt]) => list.zip(List.single(BigInt(2))),
           List.single(1),
           List.single((BigInt(1), BigInt(2))),
-          ExUnits(memory = 12408, steps = 3_414260)
+          ExUnits(memory = 10384, steps = 2_577878)
         )
 
         assertEvalWithBudget(

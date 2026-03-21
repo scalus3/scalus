@@ -777,9 +777,11 @@ object Lowering {
         val pos = app.anns.pos
         val loweredKey = lctx.lower(keySir)
         val loweredValue = lctx.lower(valueSir)
-        // Convert key and value to PackedData (Data at UPLC level)
-        val keyAsData = loweredKey.toRepresentation(PrimitiveRepresentation.PackedData, pos)
-        val valueAsData = loweredValue.toRepresentation(PrimitiveRepresentation.PackedData, pos)
+        // Convert key and value to their packed Data representations
+        val keyDataRepr = lctx.typeGenerator(keySir.tp).defaultDataRepresentation(keySir.tp)
+        val valueDataRepr = lctx.typeGenerator(valueSir.tp).defaultDataRepresentation(valueSir.tp)
+        val keyAsData = loweredKey.toRepresentation(keyDataRepr, pos)
+        val valueAsData = loweredValue.toRepresentation(valueDataRepr, pos)
         // mkPairData(key, value)
         val pair = lvBuiltinApply2(
           SIRBuiltins.mkPairData,
