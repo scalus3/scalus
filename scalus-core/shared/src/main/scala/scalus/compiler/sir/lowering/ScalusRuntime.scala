@@ -421,6 +421,15 @@ object ScalusRuntime {
         lvNewLazyNamedVar(name, rhs.sirType, rhs.representation, rhs, AnnotationsDecl.empty.pos)
     }
 
+    /** Generate mapList: (A -> B) -> List[B] -> List[A] -> List[B]
+      *
+      * Structure: mapList f nil = let rec go lst = case lst of
+      *   [] -> nil
+      *   (h :: t) -> mkCons(f(h), go(t))
+      * in go
+      *
+      * `f` and `nil` are captured in closure, only `lst` is passed recursively.
+      */
     private def genMapList(name: String)(using lctx: LoweringContext): LoweredValue = {
         val hc = name.hashCode
         val tpA = SIRType.TypeVar("A", Some(hc), isBuiltin = true)
@@ -441,36 +450,39 @@ object ScalusRuntime {
           InOutRepresentationPair(tvReprA, tvReprB)
         )
 
-        val innerType2 = tpInList ->: tpOutList
-        val innerType1 = tpOutList ->: innerType2
-        val innerRepr2 = LambdaRepresentation(
-          innerType2,
+        // go: List[A] -> List[B]
+        val goType = tpInList ->: tpOutList
+        val goRepr = LambdaRepresentation(
+          goType,
           InOutRepresentationPair(tvListReprIn, tvListReprOut)
         )
+
+        val innerType1 = tpOutList ->: goType
         val innerRepr1 = LambdaRepresentation(
           innerType1,
-          InOutRepresentationPair(tvListReprOut, innerRepr2)
+          InOutRepresentationPair(tvListReprOut, goRepr)
         )
         val lambdaRepr = LambdaRepresentation(
           lambdaType,
           InOutRepresentationPair(fnRepr, innerRepr1)
         )
 
-        val letDef = lvLetRec(
-          name,
-          lambdaType,
-          lambdaRepr,
-          rec =>
+        // mapList f nil = let rec go lst = ... in go
+        val outerDef = lvLamAbs(
+          "f",
+          tpFn,
+          fnRepr,
+          f =>
               lvLamAbs(
-                "f",
-                tpFn,
-                fnRepr,
-                f =>
-                    lvLamAbs(
-                      "nil",
-                      tpOutList,
-                      tvListReprOut,
-                      nil =>
+                "nil",
+                tpOutList,
+                tvListReprOut,
+                nil =>
+                    lvLetRec(
+                      name,
+                      goType,
+                      goRepr,
+                      go =>
                           lvLamAbs(
                             "lst",
                             tpInList,
@@ -488,19 +500,7 @@ object ScalusRuntime {
                                         AnnotationsDecl.empty.pos
                                       )
                                       val recCall = lvApplyDirect(
-                                        lvApplyDirect(
-                                          lvApplyDirect(
-                                            rec,
-                                            f,
-                                            innerType1,
-                                            innerRepr1,
-                                            AnnotationsDecl.empty.pos
-                                          ),
-                                          nil,
-                                          innerType2,
-                                          innerRepr2,
-                                          AnnotationsDecl.empty.pos
-                                        ),
+                                        go,
                                         tail,
                                         tpOutList,
                                         tvListReprOut,
@@ -524,14 +524,14 @@ object ScalusRuntime {
                                 ),
                             AnnotationsDecl.empty.pos
                           ),
+                      go => go,
                       AnnotationsDecl.empty.pos
                     ),
                 AnnotationsDecl.empty.pos
               ),
-          rec => rec,
           AnnotationsDecl.empty.pos
         )
-        letDef
+        outerDef
     }
 
 }

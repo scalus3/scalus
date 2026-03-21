@@ -100,7 +100,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
           s"Expected SumBuiltinList(DataData) but got $dataListRepr"
         )
 
-        // BuiltinList[BuiltinPair[Data, Data]] should always return SumDataPairList
+        // BuiltinList[BuiltinPair[Data, Data]] should always return SumPairBuiltinList
         val pairType = SIRType.CaseClass(
           SIRType.BuiltinPair.constrDecl,
           List(SIRType.Data.tp, SIRType.Data.tp),
@@ -109,8 +109,8 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         val builtinListPairType = SIRType.BuiltinList(pairType)
         val pairListRepr = LoweredValueRepresentation.constRepresentation(builtinListPairType)
         assert(
-          pairListRepr == SumCaseClassRepresentation.SumDataPairList,
-          s"Expected SumDataPairList but got $pairListRepr"
+          pairListRepr.isInstanceOf[SumCaseClassRepresentation.SumPairBuiltinList],
+          s"Expected SumPairBuiltinList but got $pairListRepr"
         )
 
         // BuiltinList[Integer] depends on flag
@@ -137,10 +137,12 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         assert(dataList1 == dataList2)
         assert(dataList1.isInstanceOf[SumBuiltinList])
 
-        assert(SumDataPairList == SumBuiltinList(ProductCaseClassRepresentation.PairData))
-        assert(SumDataPairList.isInstanceOf[SumBuiltinList])
+        val pairList1 = SumPairBuiltinList(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
+        val pairList2 = SumPairBuiltinList(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
+        assert(pairList1 == pairList2)
+        assert(pairList1.isInstanceOf[SumPairBuiltinList])
 
-        assert(dataList1 != SumDataPairList)
+        assert(dataList1 != pairList1)
         assert(SumBuiltinList(PrimitiveRepresentation.Constant) != dataList1)
     }
 
@@ -162,11 +164,12 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         assert(dataList.isCompatibleWithType(listIntType))
         assert(dataList.isCompatibleWithType(listPairType))
 
-        assert(SumDataPairList.isCompatibleWithType(listPairType))
-        assert(!SumDataPairList.isCompatibleWithType(listIntType))
+        val pairList = SumPairBuiltinList(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
+        assert(pairList.isCompatibleWithType(listPairType))
+        assert(!pairList.isCompatibleWithType(listIntType))
 
         assert(!dataList.isCompatibleWithType(SIRType.Integer))
-        assert(!SumDataPairList.isCompatibleWithType(SIRType.Integer))
+        assert(!pairList.isCompatibleWithType(SIRType.Integer))
     }
 
     test("SumBuiltinList isPackedData and isDataCentric") {
@@ -176,8 +179,9 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         assert(!dataList.isPackedData)
         assert(dataList.isDataCentric)
 
-        assert(!SumDataPairList.isPackedData)
-        assert(SumDataPairList.isDataCentric)
+        val pairList = SumPairBuiltinList(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
+        assert(!pairList.isPackedData)
+        assert(pairList.isDataCentric)
 
         val nativeList = SumBuiltinList(PrimitiveRepresentation.Constant)
         assert(!nativeList.isPackedData)

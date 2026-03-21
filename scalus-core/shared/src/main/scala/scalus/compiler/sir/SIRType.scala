@@ -542,7 +542,14 @@ object SIRType {
           */
         val ConversionNames: Set[String] = Set(
           "scalus.cardano.onchain.plutus.prelude.PairList$.toList",
-          "scalus.cardano.onchain.plutus.prelude.PairList$.toPairList"
+          "scalus.cardano.onchain.plutus.prelude.PairList$.toPairList",
+          "scalus.cardano.onchain.plutus.prelude.PairList$.unsafeToSortedMap",
+          "scalus.cardano.onchain.plutus.prelude.PairList$.unsafeToAssocMap"
+        )
+
+        val ToMapNames: Set[String] = Set(
+          "scalus.cardano.onchain.plutus.prelude.PairList$.unsafeToSortedMap",
+          "scalus.cardano.onchain.plutus.prelude.PairList$.unsafeToAssocMap"
         )
     }
 

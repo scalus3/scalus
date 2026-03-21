@@ -163,10 +163,13 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
 
             case SIRType.Data.Map.name =>
                 // Data.Map(values: List[(Data, Data)]) => mapData(values)
-                // The argument is List[(Data, Data)] which lowers to SumDataPairList
                 val argLowered = lctx.lower(constr.args.head)
+                val pairRepr = SumCaseClassRepresentation.SumPairBuiltinList(
+                  SumCaseClassRepresentation.DataData,
+                  SumCaseClassRepresentation.DataData
+                )
                 val argAsSumDataPairList =
-                    argLowered.toRepresentation(SumCaseClassRepresentation.SumDataPairList, pos)
+                    argLowered.toRepresentation(pairRepr, pos)
                 lvBuiltinApply(
                   SIRBuiltins.mapData,
                   argAsSumDataPairList,
@@ -338,7 +341,10 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
           mapCase,
           "_map_entries",
           SIRType.List(SIRType.Tuple2(SIRType.Data.tp, SIRType.Data.tp)),
-          SumCaseClassRepresentation.SumDataPairList,
+          SumCaseClassRepresentation.SumPairBuiltinList(
+            SumCaseClassRepresentation.DataData,
+            SumCaseClassRepresentation.DataData
+          ),
           anns.pos,
           optTargetType
         )

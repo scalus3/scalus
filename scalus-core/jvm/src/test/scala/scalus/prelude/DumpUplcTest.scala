@@ -20,20 +20,24 @@ class DumpUplcTest extends AnyFunSuite {
       generateErrorTraces = true,
       optimizeUplc = false,
     )
-    test("dump count UPLC") {
-        val compiled = PlutusV3.compile { (d: Data) =>
-            val list = d.to[List[BigInt]]
-            list.count(_ > 0)
+    test("dump singleton toList UPLC") {
+        import scalus.cardano.onchain.plutus.prelude.SortedMap
+        val compiled = PlutusV3.compile {
+            (m: SortedMap[BigInt, BigInt]) => m.toList
         }
+        println("=== SIR ===")
+        println(compiled.sir.pretty.render(120))
+        println("=== LOWERED ===")
+        val lowered = scalus.toLoweredValue(compiled.sir)(true, false)
+        println(lowered.show)
         println("=== UPLC ===")
         println(compiled.program.term.pretty.render(120))
-        val arg = toData[List[BigInt]](List.single(BigInt(1)))
-        val applied = Term.Apply(compiled.program.term, arg.asTerm)
-        val r = applied.evaluateDebug
+        val r = compiled.program.term.evaluateDebug
         println("=== EVAL ===")
         r match {
             case s: Result.Success =>
                 println(s"Budget: ${s.budget}")
+                println(s"Result: ${s.term}")
             case f: Result.Failure =>
                 println(s"FAILED: ${f.exception}")
         }

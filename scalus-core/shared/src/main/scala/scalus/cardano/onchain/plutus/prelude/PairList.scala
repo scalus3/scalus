@@ -75,6 +75,16 @@ object PairList {
             case PairNil              => List.Nil
             case PairCons(head, tail) => List.Cons(head, tail.toList)
 
+        /** Converts this `PairList` to a `SortedMap` without validation.
+          * On-chain this is just `mapData` — no per-element conversion.
+          */
+        def unsafeToSortedMap: SortedMap[A, B] = SortedMap.unsafeFromList(self.toList)
+
+        /** Converts this `PairList` to an `AssocMap` without validation.
+          * On-chain this is just `mapData` — no per-element conversion.
+          */
+        def unsafeToAssocMap: AssocMap[A, B] = AssocMap(self.toList)
+
         def isEmpty: Boolean = self match
             case PairNil => true
             case _       => false

@@ -445,6 +445,7 @@ object Lowering {
         else if isPairListConversion(app) then lowerPairListConversion(app)
         else if isTypeProxyApp(app) then lowerTypeProxy(app)
         else if isTypeProxyReprApp(app) then lowerTypeProxyRepr(app)
+        else if isMapSingleton(app) then lowerMapSingleton(app)
         else lowerNormalApp(app, optTargetType)
     }
 
@@ -555,8 +556,11 @@ object Lowering {
             // Compound list reprs for test backward compat
             case "SumBuiltinList(DataData)" =>
                 SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
-            case "SumBuiltinList(PairData)" =>
-                SumCaseClassRepresentation.SumBuiltinList(ProductCaseClassRepresentation.PairData)
+            case "SumPairBuiltinList" =>
+                throw LoweringException(
+                  s"typeProxyRepr: SumPairBuiltinList requires type context, use typeProxyRepr with SumDataAssocMap instead",
+                  pos
+                )
             case "SumBuiltinList(Constant)" =>
                 SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant)
             case _ =>
@@ -712,17 +716,102 @@ object Lowering {
             case _                              => false
     }
 
+    private def isToMapConversionName(name: String): Boolean =
+        SIRType.PairList.ToMapNames.contains(name)
+
+    private def isToMapConversion(app: SIR.Apply): Boolean = {
+        app.f match
+            case SIR.ExternalVar(_, name, _, _) => isToMapConversionName(name)
+            case SIR.Var(name, _, _)            => isToMapConversionName(name)
+            case _                              => false
+    }
+
     private def lowerPairListConversion(
         app: SIR.Apply
     )(using lctx: LoweringContext): LoweredValue = {
         val loweredArg = lctx.lower(app.arg)
-        // Convert to SumDataPairList — the shared internal representation for both
-        // List[(A,B)] and PairList[A,B]. At real call sites (e.g. SortedMap.toList → toPairList)
-        // the value is already in SumDataPairList so this is zero-cost. Inside the function body
-        // (dead code on-chain) the value may be in SumDataList, and this handles the conversion.
-        val pairListRepr = SumCaseClassRepresentation.SumDataPairList
-        val convertedArg = loweredArg.toRepresentation(pairListRepr, app.anns.pos)
-        TypeRepresentationProxyLoweredValue(convertedArg, app.tp, pairListRepr, app.anns.pos)
+        if isToMapConversion(app) then
+            // toSortedMap / toAssocMap: convert to SumPairBuiltinList then apply mapData
+            val argType = app.arg.tp
+            val elemType = SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(argType).getOrElse(SIRType.Data.tp)
+            val pairListRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, app.anns.pos)
+            val asPairList = loweredArg.toRepresentation(pairListRepr, app.anns.pos)
+            lvBuiltinApply(
+              SIRBuiltins.mapData,
+              asPairList,
+              app.tp,
+              ProductCaseClassRepresentation.PackedDataMap,
+              app.anns.pos
+            )
+        else
+            // toList / toPairList: repr conversion only
+            val elemType = SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(app.tp).getOrElse(SIRType.Data.tp)
+            val pairListRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, app.anns.pos)
+            val convertedArg = loweredArg.toRepresentation(pairListRepr, app.anns.pos)
+            TypeRepresentationProxyLoweredValue(convertedArg, app.tp, pairListRepr, app.anns.pos)
+    }
+
+    private val SortedMapSingletonName = "scalus.cardano.onchain.plutus.prelude.SortedMap$.singleton"
+    private val AssocMapSingletonName = "scalus.cardano.onchain.plutus.prelude.AssocMap$.singleton"
+
+    /** Detect fully-applied `SortedMap.singleton(key, value)` or `AssocMap.singleton(key, value)`.
+      * These are curried: `Apply(Apply(singleton, key), value)`.
+      */
+    private def isMapSingleton(app: SIR.Apply): Boolean = app.f match
+        case SIR.Apply(f2, _, _, _) =>
+            f2 match
+                case SIR.ExternalVar(_, name, _, _) =>
+                    name == SortedMapSingletonName || name == AssocMapSingletonName
+                case SIR.Var(name, _, _) =>
+                    name == SortedMapSingletonName || name == AssocMapSingletonName
+                case _ => false
+        case _ => false
+
+    /** Lower `SortedMap.singleton(key, value)` directly to `mapData(mkCons(mkPairData(k, v), []))`.
+      * Avoids Tuple2 creation + conversion overhead.
+      */
+    private def lowerMapSingleton(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
+        val keyApp = app.f.asInstanceOf[SIR.Apply]
+        val keySir = keyApp.arg
+        val valueSir = app.arg
+        val pos = app.anns.pos
+        val loweredKey = lctx.lower(keySir)
+        val loweredValue = lctx.lower(valueSir)
+        // Convert key and value to PackedData (Data at UPLC level)
+        val keyAsData = loweredKey.toRepresentation(PrimitiveRepresentation.PackedData, pos)
+        val valueAsData = loweredValue.toRepresentation(PrimitiveRepresentation.PackedData, pos)
+        // mkPairData(key, value)
+        val pair = lvBuiltinApply2(
+          SIRBuiltins.mkPairData,
+          keyAsData,
+          valueAsData,
+          SIRType.BuiltinPair(SIRType.Data.tp, SIRType.Data.tp),
+          ProductCaseClassRepresentation.PairData,
+          pos
+        )
+        // mkCons(pair, emptyPairList)
+        val emptyPairList = lvPairDataNil(pos, app.tp,
+          SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
+            SIRType.BuiltinPair(SIRType.Data.tp, SIRType.Data.tp), pos
+          )
+        )
+        val pairListRepr = emptyPairList.representation
+        val singletonList = lvBuiltinApply2(
+          SIRBuiltins.mkCons,
+          pair,
+          emptyPairList,
+          app.tp,
+          pairListRepr,
+          pos
+        )
+        // mapData(singletonList)
+        lvBuiltinApply(
+          SIRBuiltins.mapData,
+          singletonList,
+          app.tp,
+          ProductCaseClassRepresentation.PackedDataMap,
+          pos
+        )
     }
 
     private def lowerToData(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {

@@ -83,7 +83,7 @@ object SirTypeUplcGenerator {
             case "ProductCase"     => ProductCaseSirTypeGenerator
             case "SumCase"         => SumCaseSirTypeGenerator
             case "SumDataList"     => new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData)
-            case "SumPairDataList" => new SumBuiltinListSirTypeGenerator(ProductCaseClassRepresentation.PairData)
+            case "SumPairDataList" => SumPairBuiltinListSirTypeGenerator
             case "Map"                   => MapSirTypeGenerator
             case "Data"                  => SIRTypeUplcDataGenerator
             case "BuiltinArray"          => BuiltinArraySirTypeGenerator
@@ -132,16 +132,17 @@ object SirTypeUplcGenerator {
                         val trace = new IdentityHashMap[SIRType, SIRType]()
                         if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
                         else if decl.name == SumListCommonSirTypeGenerator.PairListDataDeclName then
-                            if !containsFun(tp, trace) then new SumBuiltinListSirTypeGenerator(ProductCaseClassRepresentation.PairData)
+                            if !containsFun(tp, trace) then SumPairBuiltinListSirTypeGenerator
                             else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
                             if !containsFun(tp, trace) then {
                                 if isPair(typeArgs.head)
-                                then new SumBuiltinListSirTypeGenerator(ProductCaseClassRepresentation.PairData)
+                                then SumPairBuiltinListSirTypeGenerator
                                 else new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head))
                             } else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == SIRType.BuiltinList.name then
-                            new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head))
+                            if isPair(typeArgs.head) then SumPairBuiltinListSirTypeGenerator
+                            else new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head))
                         else if !containsFun(tp, trace) then SumCaseSirTypeGenerator
                         else SumCaseUplcOnlySirTypeGenerator
                     }
@@ -232,11 +233,11 @@ object SirTypeUplcGenerator {
             if hasFun then Some(SumCaseUplcOnlySirTypeGenerator)
             else if constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
                 || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
-            then Some(new SumBuiltinListSirTypeGenerator(ProductCaseClassRepresentation.PairData))
-            else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPairOrTuple2(
+            then Some(SumPairBuiltinListSirTypeGenerator)
+            else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPair(
                   typeArgs.head
                 )
-            then Some(new SumBuiltinListSirTypeGenerator(ProductCaseClassRepresentation.PairData))
+            then Some(SumPairBuiltinListSirTypeGenerator)
             else if typeArgs.nonEmpty && typeArgs.head != SIRType.TypeNothing then
                 Some(new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head)))
             else if constrDecl.name == SIRType.List.NilConstr.name
@@ -267,9 +268,12 @@ object SirTypeUplcGenerator {
         case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean => true
         case _                                                                       => false
 
-    /** Compute the element representation for a list element type. */
+    /** Compute the element representation for a list element type.
+      * Note: only BuiltinPair gets PairData. Tuple2 gets ProdDataConstr via defaultDataRepresentation
+      * because Tuple2 is constr-encoded (Data.Constr(0, [fst, snd])), not pair-encoded.
+      */
     def elementReprFor(elemType: SIRType)(using lctx: LoweringContext): LoweredValueRepresentation =
-        if isPairOrTuple2(elemType) then ProductCaseClassRepresentation.PairData
+        if isPair(elemType) then ProductCaseClassRepresentation.PairData
         else if lctx.nativeListElements && isPrimitiveElementType(elemType) then
             PrimitiveRepresentation.Constant
         else if elemType == SIRType.TypeNothing then TypeVarRepresentation(false)

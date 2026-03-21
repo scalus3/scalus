@@ -100,14 +100,14 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                         .toRepresentation(r1, representation, pos)
                                 case SumCaseClassRepresentation.SumDataAssocMap =>
                                     RepresentationProxyLoweredValue(input, representation, pos)
-                                case SumCaseClassRepresentation.SumDataPairList =>
+                                case spl @ SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
                                     input
                                         .toRepresentation(
                                           SumCaseClassRepresentation.SumDataAssocMap,
                                           pos
                                         )
                                         .toRepresentation(
-                                          SumCaseClassRepresentation.SumDataPairList,
+                                          spl,
                                           pos
                                         )
                                 case sbl @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>

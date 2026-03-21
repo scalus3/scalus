@@ -2303,7 +2303,7 @@ object LoweredValue {
         def lvPairDataNil(
             inPos: SIRPosition,
             tp: SIRType,
-            repr: LoweredValueRepresentation = SumCaseClassRepresentation.SumDataPairList
+            repr: LoweredValueRepresentation
         )(using
             lctx: LoweringContext
         ): LoweredValue = {
