@@ -249,7 +249,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val consSndNil = lvBuiltinApply2(
                       SIRBuiltins.mkCons,
                       sndVar,
-                      lvDataNil(pos),
+                      lvProdDataListNil(pos),
                       SIRType.List(SIRType.Data.tp),
                       ProductCaseClassRepresentation.ProdDataList,
                       pos
@@ -283,7 +283,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         lvBuiltinApply2(
                           SIRBuiltins.mkCons,
                           snd,
-                          lvDataNil(pos),
+                          lvProdDataListNil(pos),
                           SIRType.List(SIRType.Data.tp),
                           ProductCaseClassRepresentation.ProdDataList,
                           pos
@@ -782,7 +782,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     throw e
         }
         // TODO: check UplcConstrOnData, it can be more efficient
-        val s0 = lvDataNil(constr.anns.pos)
+        val s0 = lvDataDataListNil(constr.anns.pos)
         val dataList = dataRepresentations.foldRight(s0) { (arg, acc) =>
             lvBuiltinApply2(
               SIRBuiltins.mkCons,

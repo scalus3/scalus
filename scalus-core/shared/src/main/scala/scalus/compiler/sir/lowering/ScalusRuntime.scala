@@ -299,7 +299,8 @@ object ScalusRuntime {
                                 )
                                 val nilCase = lvDataNil(
                                   AnnotationsDecl.empty.pos,
-                                  SIRType.BuiltinList(SIRType.Data.tp)
+                                  SIRType.BuiltinList(SIRType.Data.tp),
+                                  listRepr
                                 )
                                 // arr[i]
                                 val elem = lvBuiltinApply2(

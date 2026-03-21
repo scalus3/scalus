@@ -2277,8 +2277,8 @@ object LoweredValue {
 
         def lvDataNil(
             inPos: SIRPosition,
-            tp: SIRType = SIRType.List(SIRType.Data.tp),
-            repr: LoweredValueRepresentation = SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
+            tp: SIRType,
+            repr: LoweredValueRepresentation
         )(using
             lctx: LoweringContext
         ): LoweredValue = {
@@ -2291,6 +2291,14 @@ object LoweredValue {
               repr
             )
         }
+
+        /** Nil for a BuiltinList[Data] used as product case constructor fields. */
+        def lvProdDataListNil(inPos: SIRPosition)(using LoweringContext): LoweredValue =
+            lvDataNil(inPos, SIRType.List(SIRType.Data.tp), ProductCaseClassRepresentation.ProdDataList)
+
+        /** Nil for a BuiltinList[Data] with DataData element repr. */
+        def lvDataDataListNil(inPos: SIRPosition)(using LoweringContext): LoweredValue =
+            lvDataNil(inPos, SIRType.List(SIRType.Data.tp), SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData))
 
         def lvPairDataNil(
             inPos: SIRPosition,

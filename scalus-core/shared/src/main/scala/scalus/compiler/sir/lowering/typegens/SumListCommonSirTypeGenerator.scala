@@ -214,6 +214,16 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 )
             case (SumCaseClassRepresentation.SumBuiltinList(inElemRepr), out @ SumCaseClassRepresentation.SumBuiltinList(outElemRepr)) =>
                 if inElemRepr == outElemRepr then input
+                else if (inElemRepr == PrimitiveRepresentation.PackedData && outElemRepr == SumCaseClassRepresentation.DataData)
+                    || (inElemRepr == SumCaseClassRepresentation.DataData && outElemRepr == PrimitiveRepresentation.PackedData)
+                then
+                    throw LoweringException(
+                      s"PackedData/DataData mismatch in SumBuiltinList: ${inElemRepr} -> ${outElemRepr} " +
+                      s"type=${input.sirType.show} createdEx=${input.createdEx}",
+                      pos
+                    )
+                else if inElemRepr.isCompatibleOn(SIRType.Data.tp, outElemRepr, pos) then
+                    RepresentationProxyLoweredValue(input, out, pos)
                 else
                     new SumBuiltinListSirTypeGenerator(inElemRepr)
                         .toRepresentation(input, out, pos)

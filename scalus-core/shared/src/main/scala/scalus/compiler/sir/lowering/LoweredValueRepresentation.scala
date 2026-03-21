@@ -82,9 +82,10 @@ object SumCaseClassRepresentation {
             pos: SIRPosition
         )(using LoweringContext): Boolean =
             repr match {
-                case DataData                 => true
-                case TypeVarRepresentation(_) => true
-                case _                        => false
+                case DataData                      => true
+                case PrimitiveRepresentation.PackedData => true
+                case TypeVarRepresentation(_)      => true
+                case _                             => false
             }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.Data.tp
@@ -112,6 +113,24 @@ object SumCaseClassRepresentation {
             val elemUplcType = elementRepr.uplcType(elemSemType)
             SIRType.BuiltinList(elemUplcType)
         }
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
+            repr match {
+                case SumBuiltinList(otherElemRepr) =>
+                    if elementRepr == otherElemRepr then true
+                    else
+                        SumBuiltinList.retrieveListElementType(tp) match
+                            case Some(elemType) =>
+                                elementRepr.isCompatibleOn(elemType, otherElemRepr, pos)
+                            case None =>
+                                // FreeUnificator or unknown — compatible if both are data-centric
+                                elementRepr.isDataCentric && otherElemRepr.isDataCentric
+                case _ => this == repr
+            }
 
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             SIRType.retrieveDataDecl(tp) match
@@ -431,10 +450,12 @@ case class LambdaRepresentation(
         SIRType.collectPolyOrFun(funTp) match
             case Some((typeVars, input, output)) =>
                 val builtinTypeVars = typeVars.filter(_.isBuiltin)
-                if builtinTypeVars.isEmpty then {
+                if typeVars.isEmpty then {
                     canonicalRepresentationPair
                 } else
-                    // in builtin typevars we must substitute types and derive representations
+                    // Substitute types and derive representations for all TypeVars.
+                    // Builtin TypeVars take repr from the actual argument (via extractTypeVarReprs).
+                    // Non-builtin TypeVars use defaultTypeVarRepresentation of the resolved type.
                     val tvGenContext = SIRType.createMinimalTypeVarGenerationContext(
                       0L,
                       List(funTp)
@@ -447,15 +468,15 @@ case class LambdaRepresentation(
                                 RenamingTypeVars.makeContext(newTpTypevars, tvGenContext)
                             RenamingTypeVars.inType(tp, renamingContext)
                         else tp
-                    SIRUnify.topLevelUnifyType(renamedTp, input, SIRUnify.Env.empty) match {
+                    SIRUnify.topLevelUnifyType(renamedTp, input, SIRUnify.Env.empty.withUpcasting) match {
                         case SIRUnify.UnificationSuccess(env, unificator) =>
-                            val builtinSubstitutes = builtinTypeVars
+                            val allSubstitutes = typeVars
                                 .map(tv => (tv, env.filledTypes.getOrElse(tv, tv)))
                                 .toMap
                             val substitutedInput =
-                                SIRType.substitute(input, builtinSubstitutes, Map.empty)
+                                SIRType.substitute(input, allSubstitutes, Map.empty)
                             val substitutedOutput =
-                                SIRType.substitute(output, builtinSubstitutes, Map.empty)
+                                SIRType.substitute(output, allSubstitutes, Map.empty)
                             val (inputTypeVars, _) = SIRType.partitionGround(
                               typeVars,
                               substitutedInput
@@ -477,17 +498,68 @@ case class LambdaRepresentation(
                               argRepr,
                               builtinTypeVars.toSet
                             )
-                            val inRepr =
-                                lctx.typeGenerator(newInput).defaultRepresentation(newInput)
-                            // Check if the original output was a builtin TypeVar —
-                            // if so, use its repr from the argument, not defaultRepresentation.
-                            val outRepr = output match
-                                case tv: SIRType.TypeVar if tv.isBuiltin && reprSubstitutes.contains(tv) =>
-                                    reprSubstitutes(tv)
-                                case _ =>
-                                    lctx
-                                        .typeGenerator(newOutput)
-                                        .defaultRepresentation(newOutput)
+                            // Compute the representation for a type position, accounting for
+                            // TypeVar origins across curried applications.
+                            //
+                            // Walks three structures in parallel:
+                            // - declaredParamType: parameter type from the function definition (may have TypeVars)
+                            // - argumentType: the same type after unification substitution (concrete types)
+                            // - declaredRepr: representation from canonical pair, carries TypeVar
+                            //   origin info from previous applications
+                            //
+                            // Decision:
+                            // 1. declaredParamType is TypeVar → use reprSubstitutes (builtin) or defaultTypeVarRepresentation (non-builtin)
+                            // 2. Fun → recurse with declaredRepr's inRepr/outRepr
+                            // 3. TypeLambda → recurse into body
+                            // 4. declaredRepr is TypeVarRepresentation → position was TypeVar in a previous application
+                            // 5. Otherwise → defaultRepresentation
+                            def resolveRepr(
+                                declaredParamType: SIRType,
+                                argumentType: SIRType,
+                                declaredRepr: LoweredValueRepresentation
+                            ): LoweredValueRepresentation =
+                                declaredParamType match
+                                    case tv: SIRType.TypeVar if tv.isBuiltin && reprSubstitutes.contains(tv) =>
+                                        reprSubstitutes(tv)
+                                    case tv: SIRType.TypeVar if !tv.isBuiltin =>
+                                        lctx.typeGenerator(argumentType).defaultTypeVarReperesentation(argumentType)
+                                    case SIRType.Fun(defIn, defOut) =>
+                                        (argumentType, declaredRepr) match
+                                            case (SIRType.Fun(argIn, argOut), lr: LambdaRepresentation) =>
+                                                val inR = resolveRepr(defIn, argIn, lr.canonicalRepresentationPair.inRepr)
+                                                val outR = resolveRepr(defOut, argOut, lr.canonicalRepresentationPair.outRepr)
+                                                LambdaRepresentation(
+                                                  argumentType,
+                                                  InOutRepresentationPair(inR, outR)
+                                                )
+                                            case (SIRType.TypeLambda(_, argBody), _) =>
+                                                resolveRepr(declaredParamType, argBody, declaredRepr)
+                                            case (SIRType.Fun(_, _), other) =>
+                                                throw LoweringException(
+                                                  s"resolveRepr: Fun type but declaredRepr is not LambdaRepresentation: ${other.show}",
+                                                  pos
+                                                )
+                                            case _ =>
+                                                throw LoweringException(
+                                                  s"resolveRepr: declaredParamType is Fun but argumentType is ${argumentType.show}",
+                                                  pos
+                                                )
+                                    case SIRType.TypeLambda(_, defBody) =>
+                                        argumentType match
+                                            case SIRType.TypeLambda(_, argBody) =>
+                                                resolveRepr(defBody, argBody, declaredRepr)
+                                            case _ =>
+                                                resolveRepr(defBody, argumentType, declaredRepr)
+                                    case _ =>
+                                        declaredRepr match
+                                            case TypeVarRepresentation(true) =>
+                                                lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
+                                            case TypeVarRepresentation(false) =>
+                                                lctx.typeGenerator(argumentType).defaultTypeVarReperesentation(argumentType)
+                                            case _ =>
+                                                lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
+                            val inRepr = resolveRepr(input, newInput, canonicalRepresentationPair.inRepr)
+                            val outRepr = resolveRepr(output, newOutput, canonicalRepresentationPair.outRepr)
                             InOutRepresentationPair(inRepr, outRepr)
                         case SIRUnify.UnificationFailure(path, left, right) =>
                             throw LoweringException(
@@ -588,6 +660,17 @@ object PrimitiveRepresentation {
     case object PackedData extends PrimitiveRepresentation(true, true) {
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean =
             super.isCompatibleWithType(tp) && tp != SIRType.Unit && tp != SIRType.BLS12_381_MlResult
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
+            repr match {
+                case PackedData                          => true
+                case SumCaseClassRepresentation.DataData => true
+                case TypeVarRepresentation(_)            => true
+                case _                                   => false
+            }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.Data.tp
     }
@@ -607,6 +690,21 @@ case class TypeVarRepresentation(isBuiltin: Boolean) extends LoweredValueReprese
     override def isPackedData: Boolean = !isBuiltin
 
     override def isDataCentric: Boolean = isPackedData
+
+    override def isCompatibleOn(
+        tp: SIRType,
+        repr: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using LoweringContext): Boolean =
+        if isBuiltin then true
+        else
+            repr match {
+                case TypeVarRepresentation(_)                => true
+                case PrimitiveRepresentation.PackedData      => true
+                case SumCaseClassRepresentation.DataData     => true
+                case SumCaseClassRepresentation.DataConstr   => true
+                case _ => repr.isPackedData
+            }
 
     override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = true
 

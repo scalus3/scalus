@@ -13,7 +13,8 @@ case class Options(
     removeTraces: Boolean = SIRDefaultOptions.removeTraces,
     optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
     debugLevel: Int = SIRDefaultOptions.debugLevel,
-    debug: Boolean = false
+    debug: Boolean = false,
+    nativeListElements: Boolean = false
 )
 
 object Options {
