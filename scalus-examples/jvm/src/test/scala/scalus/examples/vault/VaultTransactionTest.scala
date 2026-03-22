@@ -408,7 +408,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
-        assert(finalizeResult.budget == ExUnits(memory = 325454, steps = 92_829932))
+        assert(finalizeResult.budget == ExUnits(memory = 324554, steps = 92_685932))
 
         provider.setSlot(finalizeSlot)
         assert(provider.submit(finalizeTx).await().isRight)
