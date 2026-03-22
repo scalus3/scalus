@@ -196,7 +196,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokensV3
         val flatSize = Program.plutusV1(appliedValidator).flatEncoded.length
-        assert(flatSize == 1162)
+        assert(flatSize == 1221)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
 
     }
@@ -210,7 +210,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV2(appliedValidator).flatEncoded.length
-        assert(flatSize == 1164)
+        assert(flatSize == 1167)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV2)
     }
 
@@ -243,7 +243,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         //    Not sure, if it exists in current UPLC optimization passes, but in this test
         //    it produces larger code size than non-optimized version.
         //    (TODO: alows to disable/enable specific UPLC optimizations from Compiler.Options)
-        assert(flatSize == 862)
+        assert(flatSize == 860)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
     }
 }

@@ -53,7 +53,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         val joinResult = assertSuccess(provider, joinTx, pricebetUtxo._1)
-        assert(joinResult.budget == ExUnits(memory = 255753, steps = 76_406740))
+        assert(joinResult.budget == ExUnits(memory = 255453, steps = 76_358740))
     }
 
     test("Doesn't allow double join") {
@@ -228,7 +228,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(updateSlot)
         val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
-        assert(updateResult.budget == ExUnits(memory = 110321, steps = 35_827189))
+        assert(updateResult.budget == ExUnits(memory = 109121, steps = 35_635189))
     }
 
     test("Oracle forbids unauthorized price updates") {

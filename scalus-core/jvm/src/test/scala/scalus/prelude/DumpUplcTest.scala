@@ -5,10 +5,11 @@ import scalus.*
 import scalus.compiler.*
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.sir.lowering.{IntrinsicResolver, SirToUplcV3Lowering}
-import scalus.cardano.onchain.plutus.prelude.List
+import scalus.cardano.onchain.plutus.prelude.{List, SortedMap}
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{toData, FromData, ToData}
+import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.uplc.{PlutusV3, Term}
 import scalus.uplc.Term.asTerm
@@ -20,13 +21,10 @@ class DumpUplcTest extends AnyFunSuite {
       generateErrorTraces = true,
       optimizeUplc = false,
     )
-    test("dump singleton toList UPLC") {
-        import scalus.cardano.onchain.plutus.prelude.SortedMap
-        val compiled = PlutusV3.compile { (m: SortedMap[BigInt, BigInt]) =>
-            m.toList
+    test("dump minting singleton UPLC") {
+        val compiled = PlutusV3.compile {
+            SortedMap.singleton(hex"484f534b59", BigInt("1000000000000000"))
         }
-        println("=== SIR ===")
-        println(compiled.sir.pretty.render(120))
         println("=== LOWERED ===")
         val lowered = scalus.toLoweredValue(compiled.sir)(true, false)
         println(lowered.show)
@@ -37,7 +35,6 @@ class DumpUplcTest extends AnyFunSuite {
         r match {
             case s: Result.Success =>
                 println(s"Budget: ${s.budget}")
-                println(s"Result: ${s.term}")
             case f: Result.Failure =>
                 println(s"FAILED: ${f.exception}")
         }
