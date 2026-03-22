@@ -44,8 +44,9 @@ object SortedMap {
       *   SortedMap.singleton("key", "value").toList === List.single(("key", "value"))
       *   }}}
       */
-    def singleton[A, B](key: A, value: B): SortedMap[A, B] =
-        PairList.single(key, value).unsafeToSortedMap
+    def singleton[A, B](key: A, value: B): SortedMap[A, B] = SortedMap(
+      List.single((key, value))
+    )
 
     /** Constructs a `SortedMap` in unsafe way from a list of key-value pairs assuming that it's in
       * strictly ascending order without any validation.

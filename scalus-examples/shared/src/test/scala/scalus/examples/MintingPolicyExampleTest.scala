@@ -243,7 +243,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         //    Not sure, if it exists in current UPLC optimization passes, but in this test
         //    it produces larger code size than non-optimized version.
         //    (TODO: alows to disable/enable specific UPLC optimizations from Compiler.Options)
-        assert(flatSize == 860)
+        assert(flatSize == 862)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
     }
 }
