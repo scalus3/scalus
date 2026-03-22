@@ -15,7 +15,7 @@ object ScalusRuntime {
       */
     def initContext(lctx: LoweringContext): Unit = {
         initArrayToList(using lctx)
-        initMapList(using lctx)
+        // mapList is initialized on demand when first used
         lctx.zCombinatorNeeded = false
         // will set to true when some of initialized function will be used
     }
@@ -25,7 +25,22 @@ object ScalusRuntime {
     }
 
     def mapList(using lctx: LoweringContext): LoweredValue = {
-        retrieveRuntimeFunction(MAP_LIST_NAME)
+        lctx.scope.getByName(MAP_LIST_NAME) match {
+            case Some(lv) =>
+                lctx.zCombinatorNeeded = true
+                lv
+            case None =>
+                initMapList
+                lctx.scope.getByName(MAP_LIST_NAME) match {
+                    case Some(lv) =>
+                        lctx.zCombinatorNeeded = true
+                        lv
+                    case None =>
+                        throw IllegalStateException(
+                          s"Can't find scalus runtime function ${MAP_LIST_NAME} after init"
+                        )
+                }
+        }
     }
 
     private def retrieveRuntimeFunction(
