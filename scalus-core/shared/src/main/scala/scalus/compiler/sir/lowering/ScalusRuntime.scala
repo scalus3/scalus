@@ -36,7 +36,6 @@ object ScalusRuntime {
                 lctx.zCombinatorNeeded = true
                 lv
             case None =>
-                println(s"scope=${lctx.scope}")
                 throw IllegalStateException(
                   s"Can't find scalus runtime function ${name} in context, check that context is initialized"
                 )
