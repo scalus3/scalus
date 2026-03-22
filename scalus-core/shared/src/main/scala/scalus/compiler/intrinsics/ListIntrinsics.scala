@@ -3,7 +3,7 @@ package scalus.compiler.intrinsics
 import scalus.Compile
 import scalus.cardano.onchain.plutus.prelude.{List, PairList}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
-import scalus.compiler.sir.SIRType
+import scalus.compiler.sir.{SIRPosition, SIRType}
 import scalus.compiler.sir.lowering.*
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Data}
@@ -28,6 +28,18 @@ object ListReprRules {
     ): LoweredValueRepresentation =
         inRepr match
             case SumCaseClassRepresentation.SumBuiltinList(er) => er
+            case SumCaseClassRepresentation.SumPairBuiltinList(keyRepr, valueRepr) =>
+                // Verify key/value reprs match default data representations for the element type
+                val (keyType, valueType) =
+                    SumCaseClassRepresentation.SumPairBuiltinList.extractKeyValueTypes(outTp)
+                val expectedKeyRepr =
+                    lctx.typeGenerator(keyType).defaultDataRepresentation(keyType)(using lctx)
+                val expectedValueRepr =
+                    lctx.typeGenerator(valueType).defaultDataRepresentation(valueType)(using lctx)
+                if keyRepr.isCompatibleOn(keyType, expectedKeyRepr, SIRPosition.empty)(using lctx)
+                    && valueRepr.isCompatibleOn(valueType, expectedValueRepr, SIRPosition.empty)(using lctx)
+                then ProductCaseClassRepresentation.PairData
+                else lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
             case _ => lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
 
     /** isEmpty: List[A] -> Boolean */

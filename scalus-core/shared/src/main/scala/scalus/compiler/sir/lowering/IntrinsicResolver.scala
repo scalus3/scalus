@@ -157,9 +157,10 @@ object IntrinsicResolver {
       * SumBuiltinList patterns handle them via case class equality.
       */
     private def representationName(repr: LoweredValueRepresentation): String = repr match
-        case SumCaseClassRepresentation.SumBuiltinList(_) => BuiltinListRepr
-        case SumCaseClassRepresentation.PackedSumDataList => "PackedSumDataList"
-        case SumCaseClassRepresentation.DataConstr        => "DataConstr"
+        case SumCaseClassRepresentation.SumBuiltinList(_)        => BuiltinListRepr
+        case SumCaseClassRepresentation.SumPairBuiltinList(_, _) => PairListRepr
+        case SumCaseClassRepresentation.PackedSumDataList        => "PackedSumDataList"
+        case SumCaseClassRepresentation.DataConstr               => "DataConstr"
         case _ => repr.getClass.getSimpleName.stripSuffix("$")
 
     /** Substitute the `self` parameter and type variables in a provider binding body.
