@@ -36,6 +36,8 @@ object UnitSirTypeGenerator extends SirTypeUplcGenerator {
                 input
             case (PrimitiveRepresentation.Constant, TypeVarRepresentation(isBuiltin)) =>
                 input
+            case (TypeVarRepresentation(_), TypeVarRepresentation(_)) =>
+                input
             case (ErrorRepresentation, _) =>
                 // error can be converted to any representatio
                 input

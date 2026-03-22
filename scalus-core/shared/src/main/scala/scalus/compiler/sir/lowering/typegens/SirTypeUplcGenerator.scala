@@ -281,7 +281,8 @@ object SirTypeUplcGenerator {
         if isPair(elemType) then ProductCaseClassRepresentation.PairData
         else if lctx.nativeListElements && isPrimitiveElementType(elemType) then
             PrimitiveRepresentation.Constant
-        else if elemType == SIRType.TypeNothing then TypeVarRepresentation(false)
+        else if elemType == SIRType.TypeNothing || elemType == SIRType.Unit then
+            TypeVarRepresentation(false)
         else SirTypeUplcGenerator(elemType).defaultDataRepresentation(elemType)
 
     def isPair(tp: SIRType): Boolean =
