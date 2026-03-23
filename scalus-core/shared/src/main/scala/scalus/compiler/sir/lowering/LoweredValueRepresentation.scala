@@ -674,12 +674,33 @@ case class LambdaRepresentation(
                                                   argumentType,
                                                   InOutRepresentationPair(inR, outR)
                                                 )
-                                            case (SIRType.TypeLambda(_, argBody), _) =>
-                                                resolveRepr(
+                                            case (SIRType.TypeLambda(params, argBody), _) =>
+                                                val inner = resolveRepr(
                                                   declaredParamType,
                                                   argBody,
                                                   declaredRepr
                                                 )
+                                                // Preserve TypeLambda for unfilled builtin TypeVars
+                                                // so subsequent reprFun calls can resolve them
+                                                // from concrete arguments. Non-builtin TypeVars
+                                                // don't need preservation — they are resolved
+                                                // via defaultTypeVarRepresentation in the body.
+                                                val remaining = params.filter(p =>
+                                                    p.isBuiltin && !allSubstitutes
+                                                        .get(p)
+                                                        .exists(_ != p)
+                                                )
+                                                inner match
+                                                    case lr: LambdaRepresentation
+                                                        if remaining.nonEmpty =>
+                                                        LambdaRepresentation(
+                                                          SIRType.TypeLambda(
+                                                            remaining,
+                                                            lr.funTp
+                                                          ),
+                                                          lr.canonicalRepresentationPair
+                                                        )
+                                                    case other => other
                                             case (SIRType.Fun(_, _), other) =>
                                                 throw LoweringException(
                                                   s"resolveRepr: Fun type but declaredRepr is not LambdaRepresentation: ${other.show}",
@@ -925,7 +946,7 @@ object LoweredValueRepresentation {
                 else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" || decl.name == SIRType.BuiltinList.name
                 then
                     if typeArgs.nonEmpty then
-                        if typegens.SirTypeUplcGenerator.isPair(typeArgs.head) then
+                        if typegens.SirTypeUplcGenerator.isPairOrTuple2(typeArgs.head) then
                             SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
                               typeArgs.head
                             )

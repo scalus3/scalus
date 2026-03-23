@@ -27,7 +27,7 @@ object ListReprRules {
         lctx: LoweringContext
     ): LoweredValueRepresentation =
         inRepr match
-            case SumCaseClassRepresentation.SumBuiltinList(er) => er
+            case SumCaseClassRepresentation.SumBuiltinList(er)                     => er
             case SumCaseClassRepresentation.SumPairBuiltinList(keyRepr, valueRepr) =>
                 // Verify key/value reprs match default data representations for the element type
                 val (keyType, valueType) =
@@ -37,7 +37,9 @@ object ListReprRules {
                 val expectedValueRepr =
                     lctx.typeGenerator(valueType).defaultDataRepresentation(valueType)(using lctx)
                 if keyRepr.isCompatibleOn(keyType, expectedKeyRepr, SIRPosition.empty)(using lctx)
-                    && valueRepr.isCompatibleOn(valueType, expectedValueRepr, SIRPosition.empty)(using lctx)
+                    && valueRepr.isCompatibleOn(valueType, expectedValueRepr, SIRPosition.empty)(
+                      using lctx
+                    )
                 then ProductCaseClassRepresentation.PairData
                 else lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
             case _ => lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)

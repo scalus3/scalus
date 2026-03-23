@@ -135,7 +135,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 264301, steps = 78_973160))
+        // TODO: review after changing PairData representations
+        // assert(result.budget == ExUnits(memory = 264301, steps = 78_973160))
+        assert(result.budget == ExUnits(memory = 264601, steps = 79_021160))
 
         provider.setSlot(currentSlot)
 
@@ -223,7 +225,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, depositTx, vaultUtxo.input)
         assert(result.isSuccess, s"Deposit should succeed: $result")
-        assert(result.budget == ExUnits(memory = 370430, steps = 107_837964))
+        assert(result.budget == ExUnits(memory = 370230, steps = 107_747403))
 
         assert(provider.submit(depositTx).await().isRight)
 
@@ -363,7 +365,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
-        assert(withdrawResult.budget == ExUnits(memory = 264301, steps = 78_973160))
+        // TODO: review after changing PairData representations
+        // assert(withdrawResult.budget == ExUnits(memory = 264301, steps = 78_973160))
+        assert(withdrawResult.budget == ExUnits(memory = 264601, steps = 79_021160))
 
         provider.setSlot(withdrawSlot)
         assert(provider.submit(withdrawTx).await().isRight)
@@ -408,7 +412,9 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
-        assert(finalizeResult.budget == ExUnits(memory = 324554, steps = 92_685932))
+        // TODO: review after changing PairData representations
+        // assert(finalizeResult.budget == ExUnits(memory = 324554, steps = 92_685932))
+        assert(finalizeResult.budget == ExUnits(memory = 324854, steps = 92_733932))
 
         provider.setSlot(finalizeSlot)
         assert(provider.submit(finalizeTx).await().isRight)
