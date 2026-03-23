@@ -634,13 +634,6 @@ object SIRUnify {
                                               SIRType.substitute(_, subst, Map.empty)
                                             )
                                     }
-                                    def showTvId(t: SIRType): String = t match
-                                        case tv: SIRType.TypeVar => s"${tv.show}(${tv.optId})"
-                                        case other               => other.show
-                                    println(
-                                      s"[UNIFY SumCC←CC] parentTypeArgs ids=${ccRight.constrDecl.parentTypeArgs.map(showTvId)}, typeParams ids=${ccRight.constrDecl.typeParams
-                                              .map(t => s"${t.show}(${t.optId})")}"
-                                    )
                                     unifyList(
                                       ccLeft.typeArgs,
                                       effectiveParentTypeArgs,

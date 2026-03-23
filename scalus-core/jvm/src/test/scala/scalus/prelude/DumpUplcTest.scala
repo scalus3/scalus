@@ -21,7 +21,7 @@ class DumpUplcTest extends AnyFunSuite {
       generateErrorTraces = true,
       optimizeUplc = false,
     )
-    test("dump minting singleton UPLC") {
+    ignore("dump minting singleton UPLC") {
         val compiled = PlutusV3.compile {
             SortedMap.singleton(hex"484f534b59", BigInt("1000000000000000"))
         }

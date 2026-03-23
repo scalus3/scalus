@@ -96,13 +96,10 @@ case class ConstrDecl(
             pta match
                 case tv: SIRType.TypeVar
                     if tv.optId.isDefined && !typeParamIds.contains(tv.optId) =>
-                    val ex = new RuntimeException(
+                    throw new RuntimeException(
                       s"ConstrDecl($name): parentTypeArg ${tv.name}(${tv.optId}) is not in typeParams ${typeParams
                               .map(t => s"${t.name}(${t.optId})")}"
                     )
-                    println(s"Error making ConstrDecl for $name: ${ex.getMessage}")
-                    ex.printStackTrace(System.out)
-                    throw ex
                 case _ => ()
     }
 
