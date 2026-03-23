@@ -107,7 +107,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
         assert(compiled.code)
         val result = compiled.program.term.evaluateDebug
         assert(result.success.term α_== true.asTerm)
-        assert(result.budget == ExUnits(memory = 107787, steps = 1_605_857198L))
+        assert(result.budget == ExUnits(memory = 106187, steps = 1_605_601198L))
     }
 
     test("check membership two elements") {
@@ -381,6 +381,6 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
               )
             )
         val result = compiled.program.term.evaluateDebug
-        assert(result.budget == ExUnits(memory = 88_874942, steps = 22_914_641563L))
+        assert(result.budget == ExUnits(memory = 86_814942, steps = 22_585_041563L))
     }
 }

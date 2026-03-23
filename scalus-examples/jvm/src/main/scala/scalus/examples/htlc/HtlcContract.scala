@@ -1,10 +1,10 @@
 package scalus.examples.htlc
 
-import scalus.cardano.blueprint.Blueprint
+import scalus.cardano.blueprint.{Blueprint, Contract}
 import scalus.compiler.Options
 import scalus.uplc.PlutusV3
 
-object HtlcContract {
+object HtlcContract extends Contract {
     private given Options = Options.release
     lazy val compiled = PlutusV3.compile(HtlcValidator.validate)
     lazy val blueprint = Blueprint.plutusV3[Config, Action](
@@ -16,8 +16,4 @@ object HtlcContract {
       compiled = compiled
     )
 
-    @main
-    def main(): Unit = {
-        println(blueprint.toJson())
-    }
 }

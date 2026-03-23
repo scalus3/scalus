@@ -29,7 +29,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         SumCaseClassRepresentation.DataConstr
 
-    override def isDataSupported(tp: SIRType)(using lctx: LoweringContext): Boolean = true
+    override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = true
 
     override def toRepresentation(
         input: LoweredValue,
@@ -41,10 +41,13 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
             case (DataConstr, PairIntDataList) =>
                 lvBuiltinApply(SIRBuiltins.unConstrData, input, input.sirType, PairIntDataList, pos)
-            case (DataConstr, SumDataList) =>
+            case (DataConstr, SumBuiltinList(_)) =>
                 ???
             case (DataConstr, PackedSumDataList) =>
-                val asDataList = toRepresentation(input, SumDataList, pos)
+                val elemType =
+                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val asDataList = toRepresentation(input, SumBuiltinList(elemRepr), pos)
                 lvBuiltinApply(
                   SIRBuiltins.listData,
                   asDataList,
@@ -56,22 +59,48 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 ???
             case (DataConstr, UplcConstrOnData) =>
                 ???
-            case (SumDataList, DataConstr) =>
+            case (SumBuiltinList(_), DataConstr) =>
                 ???
-            case (SumDataList, SumDataList) =>
-                input
-            case (SumDataList, PackedSumDataList) =>
-                lvBuiltinApply(SIRBuiltins.listData, input, input.sirType, PackedSumDataList, pos)
-            case (SumDataList, UplcConstr) =>
+            case (SumBuiltinList(inElemRepr), out @ SumBuiltinList(outElemRepr)) =>
+                if inElemRepr == outElemRepr then input
+                else
+                    new SumBuiltinListSirTypeGenerator(inElemRepr)
+                        .toRepresentation(input, out, pos)
+            case (SumBuiltinList(_), PackedSumDataList) =>
+                val elemRepr =
+                    lctx.typeGenerator(SIRType.Data.tp).defaultDataRepresentation(SIRType.Data.tp)
+                val asDataList = input.toRepresentation(SumBuiltinList(elemRepr), pos)
+                lvBuiltinApply(
+                  SIRBuiltins.listData,
+                  asDataList,
+                  input.sirType,
+                  PackedSumDataList,
+                  pos
+                )
+            case (SumBuiltinList(_), UplcConstr) =>
                 ???
-            case (SumDataList, UplcConstrOnData) =>
+            case (SumBuiltinList(_), UplcConstrOnData) =>
                 ???
-            case (PackedSumDataList, SumDataList) =>
-                lvBuiltinApply(SIRBuiltins.unListData, input, input.sirType, SumDataList, pos)
+            case (PackedSumDataList, SumBuiltinList(outElemRepr)) =>
+                val elemType =
+                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val asDataList = lvBuiltinApply(
+                  SIRBuiltins.unListData,
+                  input,
+                  input.sirType,
+                  SumBuiltinList(elemRepr),
+                  pos
+                )
+                if outElemRepr == elemRepr then asDataList
+                else asDataList.toRepresentation(SumBuiltinList(outElemRepr), pos)
             case (PackedSumDataList, PackedSumDataList) =>
                 input
             case (PackedSumDataList, DataConstr) =>
-                val asDataList = toRepresentation(input, SumDataList, pos)
+                val elemType =
+                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val asDataList = toRepresentation(input, SumBuiltinList(elemRepr), pos)
                 asDataList.toRepresentation(DataConstr, pos)
             case (PackedSumDataList, UplcConstr) =>
                 ???
@@ -79,10 +108,13 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 ???
             case (UplcConstr, DataConstr) =>
                 ???
-            case (UplcConstr, SumDataList) =>
+            case (UplcConstr, SumBuiltinList(_)) =>
                 ???
             case (UplcConstr, PackedSumDataList) =>
-                val asDataList = toRepresentation(input, SumDataList, pos)
+                val elemType =
+                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val asDataList = toRepresentation(input, SumBuiltinList(elemRepr), pos)
                 asDataList.toRepresentation(PackedSumDataList, pos)
             case (TypeVarRepresentation(inBuiltin), outRepr) =>
                 if inBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
@@ -171,10 +203,25 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   loweredScrutinee,
                   optTargetType
                 )
-            case SumDataList =>
-                SumDataListSirTypeGenerator.genMatch(matchData, loweredScrutinee, optTargetType)
+            case SumBuiltinList(elemRepr) =>
+                new SumBuiltinListSirTypeGenerator(elemRepr)
+                    .genMatch(matchData, loweredScrutinee, optTargetType)
             case PackedSumDataList =>
-                SumDataListSirTypeGenerator.genMatch(matchData, loweredScrutinee, optTargetType)
+                val elemType = SumBuiltinList
+                    .retrieveListElementType(loweredScrutinee.sirType)
+                    .getOrElse(SIRType.Data.tp)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val listRepr = SumBuiltinList(elemRepr)
+                val unpacked = loweredScrutinee.toRepresentation(listRepr, matchData.anns.pos)
+                val unpackedVar = lvNewLazyIdVar(
+                  lctx.uniqueVarName("_unpacked"),
+                  loweredScrutinee.sirType,
+                  listRepr,
+                  unpacked,
+                  matchData.anns.pos
+                )
+                new SumBuiltinListSirTypeGenerator(elemRepr)
+                    .genMatch(matchData, unpackedVar, optTargetType)
             case UplcConstr =>
                 genMatchUplcConstr(
                   matchData,
@@ -360,16 +407,19 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
           matchData.scrutinee.anns.pos
         )
 
+        val dataListElemRepr =
+            lctx.typeGenerator(SIRType.Data.tp).defaultDataRepresentation(SIRType.Data.tp)
+        val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(dataListElemRepr)
         val dataListVarId = lctx.uniqueVarName("_match_datalist")
         val dataListVar = lvNewLazyIdVar(
           dataListVarId,
           SIRType.List(SIRType.Data.tp),
-          SumCaseClassRepresentation.SumDataList,
+          dataListRepr,
           lvBuiltinApply(
             SIRBuiltins.sndPair,
             scrutineeVar,
             SIRType.List(SIRType.Data.tp),
-            SumCaseClassRepresentation.SumDataList,
+            dataListRepr,
             matchData.scrutinee.anns.pos
           ),
           matchData.scrutinee.anns.pos
@@ -493,18 +543,18 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val nextTailId = s"${currentTail.id}_t"
                     // mb we already have this id in the scope
                     val nextTailVar =
-                        lctx.scope.get(nextTailId, SumCaseClassRepresentation.SumDataList) match
+                        lctx.scope.get(nextTailId, dataListVar.representation) match
                             case Some(v) => v
                             case None =>
                                 lvNewLazyIdVar(
                                   nextTailId,
                                   listDataType,
-                                  SumCaseClassRepresentation.SumDataList,
+                                  dataListVar.representation,
                                   lvBuiltinApply(
                                     SIRBuiltins.tailList,
                                     currentTail,
                                     listDataType,
-                                    SumCaseClassRepresentation.SumDataList,
+                                    dataListVar.representation,
                                     sirCase.anns.pos
                                   ),
                                   sirCase.anns.pos

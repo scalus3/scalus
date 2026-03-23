@@ -96,11 +96,13 @@ object CounterCellCompilation {
     lazy val compiled = PlutusV3.compile(CounterCell.validate)
 }
 
-// -- Counter cell V2: uses CellValidator + CellContext --
+// -- Counter cell V2: uses CellValidator + transitionSpend/transitionMint helpers --
 @Compile
 object CounterCellV2 extends CellValidator {
 
     val beaconName: ByteString = utf8"counter"
+
+    def initialState(redeemer: Data): CounterState = CounterState(BigInt(0))
 
     def transition(
         state: CounterState,
@@ -121,31 +123,13 @@ object CounterCellV2 extends CellValidator {
         redeemer: Data,
         sc: ScriptContext,
         ownRef: TxOutRef
-    ): Unit = {
-        val state = datum.getOrFail("CounterCell: missing datum").to[CounterState]
-        val action = redeemer.to[CounterAction]
-        val ctx: CellContext = sc.toData.asInstanceOf[CellContext]
-        val nextState = transition(state, action, ctx)
-        UtxoCellLib.verifyContinuingOutput(nextState, sc.txInfo, ownRef)
-        nextState match
-            case Option.None =>
-                UtxoCellLib.verifyBurnBeacon(beaconName, ctx.ownPolicyId, sc.txInfo)
-            case _ => ()
-    }
+    ): Unit = UtxoCellLib.transitionSpend(beaconName, transition, datum, redeemer, sc, ownRef)
 
     inline override def mintCell(
         redeemer: Data,
         policyId: PolicyId,
         sc: ScriptContext
-    ): Unit = {
-        val qty = sc.txInfo.mint.quantityOf(policyId, beaconName)
-        if qty === BigInt(1) then
-            val initialState = CounterState(BigInt(0))
-            UtxoCellLib.verifyMintResult(initialState, beaconName, policyId, sc.txInfo)
-        else if qty === BigInt(-1) then
-            UtxoCellLib.verifyBurnBeacon(beaconName, policyId, sc.txInfo)
-        else fail("CounterCell: invalid beacon mint quantity")
-    }
+    ): Unit = UtxoCellLib.transitionMint(beaconName, initialState, redeemer, policyId, sc)
 }
 
 object CounterCellV2Compilation {

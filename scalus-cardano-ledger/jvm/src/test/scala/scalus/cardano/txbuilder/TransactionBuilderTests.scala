@@ -172,8 +172,9 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
                 .replace(TaggedSortedSet(input1))
             |> expectedSignersL
                 .modify(
-                  _ + spendPkhUtxoStep.utxo.output.address.keyHashOption.get
-                      .asInstanceOf[AddrKeyHash]
+                  _ + ExpectedSigner(
+                    spendPkhUtxoStep.utxo.output.address.keyHashOption.get.asInstanceOf[AddrKeyHash]
+                  )
                 )
             |> resolvedUtxosL.modify((r: ResolvedUtxos) => ResolvedUtxos(r.utxos + pkhUtxo.toTuple))
 
@@ -334,8 +335,10 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               |> expectedSignersL
                   // Add the expected signer for spending the utxo with the script
                   .modify(
-                    _ + utxoWithScript1ReferenceScript.output.address.keyHashOption.get
-                        .asInstanceOf[AddrKeyHash]
+                    _ + ExpectedSigner(
+                      utxoWithScript1ReferenceScript.output.address.keyHashOption.get
+                          .asInstanceOf[AddrKeyHash]
+                    )
                   )
               |> resolvedUtxosL
                   .replace(
@@ -380,8 +383,10 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           tx.map(_.expectedSigners) ==
               Right(
                 Set(
-                  spendPkhUtxoStep.utxo.output.address.keyHashOption.get
-                      .asInstanceOf[AddrKeyHash]
+                  ExpectedSigner(
+                    spendPkhUtxoStep.utxo.output.address.keyHashOption.get
+                        .asInstanceOf[AddrKeyHash]
+                  )
                 )
               )
         )
@@ -407,7 +412,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         // Witnesses no longer carry signers, so expectedSigners should be empty
         assert(
           build(Mainnet, List(step)).map(_.expectedSigners) ==
-              Right(Set.empty[AddrKeyHash])
+              Right(Set.empty[ExpectedSigner])
         )
     }
 
@@ -432,7 +437,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val built = fromRight(build(Mainnet, List(step)))
 
         // Witnesses no longer carry signers, so expectedSigners should be empty
-        assert(built.expectedSigners == Set.empty[AddrKeyHash])
+        assert(built.expectedSigners == Set.empty[ExpectedSigner])
 
         // requiredSigners in tx body should be empty since witnesses don't carry signers
         val obtained =
@@ -1261,7 +1266,7 @@ def unitDRedeemer(purpose: RedeemerPurpose) = DetachedRedeemer(
 def transactionL: Lens[ContextTuple, Transaction] = Focus[ContextTuple](_._1)
 def ctxRedeemersL: Lens[ContextTuple, Seq[DetachedRedeemer]] = Focus[ContextTuple](_._2)
 def networkL: Lens[ContextTuple, Network] = Focus[ContextTuple](_._3)
-def expectedSignersL: Lens[ContextTuple, Set[AddrKeyHash]] = Focus[ContextTuple](_._4)
+def expectedSignersL: Lens[ContextTuple, Set[ExpectedSigner]] = Focus[ContextTuple](_._4)
 def resolvedUtxosL: Lens[ContextTuple, ResolvedUtxos] = Focus[ContextTuple](_._5)
 
 // ===========================================================================
@@ -1362,6 +1367,6 @@ private type ContextTuple = (
     Transaction,
     Seq[DetachedRedeemer],
     Network,
-    Set[AddrKeyHash],
+    Set[ExpectedSigner],
     ResolvedUtxos
 )

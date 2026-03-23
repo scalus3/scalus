@@ -215,7 +215,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                     for {
                         // Extract the key hash, erroring if not a Shelley PKH address
                         keyHash <- getPaymentVerificationKeyHash(utxo.output.address)
-                    } yield usePubKeyWitness(keyHash)
+                    } yield usePubKeyWitness(ExpectedSigner(keyHash))
                 // Case 2: Native script-locked input
                 // Ensure the hash matches the witness, handle the output components,
                 // defer to witness handling
@@ -948,7 +948,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                         // Add key hash to expected signers
                         _ <- cred match {
                             case Credential.KeyHash(keyHash) =>
-                                Right(usePubKeyWitness(keyHash))
+                                Right(usePubKeyWitness(ExpectedSigner(keyHash)))
                             case _ =>
                                 Left(
                                   WrongCredentialType(
@@ -1101,8 +1101,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // ScriptSource
     // -------------------------------------------------------------------------
 
-    private def usePubKeyWitness(keyHash: AddrKeyHash): Unit =
-        modify0(Focus[Context](_.expectedSigners).modify(_ + keyHash))
+    private def usePubKeyWitness(expectedSigner: ExpectedSigner): Unit =
+        modify0(Focus[Context](_.expectedSigners).modify(_ + expectedSigner))
 
     private def useNativeScript(
         nativeScript: ScriptSource[Script.Native]
@@ -1139,7 +1139,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
               .refocus(_.requiredSigners)
               .modify((s: TaggedSortedSet[AddrKeyHash]) => TaggedSortedSet(s.toSet + hash))
         )
-        modify0(Focus[Context](_.expectedSigners).modify(_ + hash))
+        modify0(Focus[Context](_.expectedSigners).modify(_ + ExpectedSigner(hash)))
         Ok
     }
 

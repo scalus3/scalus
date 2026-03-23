@@ -9,5 +9,6 @@ private given Options = Options.release.copy(generateErrorTraces = true)
 
 def PriceBetContract(config: PricebetConfig) =
     PlutusV3.compile(PricebetValidator.validate).apply(config.toData)
+
 def OracleContract(config: OracleConfig) =
     PlutusV3.compile(OracleValidator.validate).apply(config.toData)

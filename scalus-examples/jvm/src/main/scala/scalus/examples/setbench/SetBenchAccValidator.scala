@@ -3,6 +3,7 @@ package scalus.examples.setbench
 import scalus.*
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.FromData
 import scalus.cardano.onchain.plutus.v1.Value.getLovelace
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*

@@ -575,14 +575,28 @@ object SIRUnify {
                               constrDecl,
                               env.copy(path = "constrDecl" :: env.path)
                             ) match
-                                case UnificationSuccess(env1, constrDecl) =>
-                                    // for now we have no mapping between constructor tupe argument and parent type argument,
-                                    // so for now just not check.
-                                    //  In future, insert check here, when we will have full reflection of scala type hierechy
-                                    UnificationSuccess(
-                                      env1.copy(path = env.path),
-                                      ccRight
-                                    )
+                                case UnificationSuccess(env1, _) =>
+                                    val effectiveParentTypeArgs = {
+                                        val subst = ccLeft.constrDecl.typeParams
+                                            .zip(ccLeft.typeArgs)
+                                            .toMap
+                                        if subst.isEmpty then ccLeft.constrDecl.parentTypeArgs
+                                        else
+                                            ccLeft.constrDecl.parentTypeArgs.map(
+                                              SIRType.substitute(_, subst, Map.empty)
+                                            )
+                                    }
+                                    unifyList(
+                                      effectiveParentTypeArgs,
+                                      ccRight.typeArgs,
+                                      env1.copy(path = "typeArgs" :: env.path)
+                                    ) match
+                                        case UnificationSuccess(env2, typeArgs) =>
+                                            UnificationSuccess(
+                                              env2.copy(path = env.path),
+                                              SIRType.SumCaseClass(ccRight.decl, typeArgs)
+                                            )
+                                        case failure @ UnificationFailure(_, _, _) => failure
                                 case failure @ UnificationFailure(path, left, right) => failure
                         case None =>
                             ccLeft.parent match
@@ -605,13 +619,35 @@ object SIRUnify {
                               ccRight.constrDecl,
                               env.copy(path = "constrDecl" :: env.path)
                             ) match
-                                case UnificationSuccess(env1, constrDecl) =>
-                                    // for now we have no mapping between constructor tupe argument and parent type argument,
-                                    // so for now just not check.
-                                    //  In future, insert check here, when we will have full reflection of scala type hierechy
-                                    val nEnv =
-                                        env1.copy(path = env.path, parentTypes = env.parentTypes)
-                                    UnificationSuccess(nEnv, ccLeft)
+                                case UnificationSuccess(env1, _) =>
+                                    // Compute effective parent type args by substituting the
+                                    // constructor's typeParams with concrete typeArgs.
+                                    // E.g., Cons[Int] has typeParams=[A], typeArgs=[Int], parentTypeArgs=[A] → [Int]
+                                    //        Nil has typeParams=[], typeArgs=[], parentTypeArgs=[Nothing] → [Nothing]
+                                    val effectiveParentTypeArgs = {
+                                        val subst = ccRight.constrDecl.typeParams
+                                            .zip(ccRight.typeArgs)
+                                            .toMap
+                                        if subst.isEmpty then ccRight.constrDecl.parentTypeArgs
+                                        else
+                                            ccRight.constrDecl.parentTypeArgs.map(
+                                              SIRType.substitute(_, subst, Map.empty)
+                                            )
+                                    }
+                                    unifyList(
+                                      ccLeft.typeArgs,
+                                      effectiveParentTypeArgs,
+                                      env1.copy(path = "typeArgs" :: env.path)
+                                    ) match
+                                        case UnificationSuccess(env2, typeArgs) =>
+                                            UnificationSuccess(
+                                              env2.copy(
+                                                path = env.path,
+                                                parentTypes = env.parentTypes
+                                              ),
+                                              SIRType.SumCaseClass(ccLeft.decl, typeArgs)
+                                            )
+                                        case failure @ UnificationFailure(_, _, _) => failure
                                 case failure @ UnificationFailure(path, left, right) => failure
                         case None =>
                             UnificationFailure(env.path, left, right)

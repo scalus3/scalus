@@ -14,9 +14,18 @@ sealed trait LoweredValueRepresentation {
         lctx: LoweringContext
     ): Boolean =
         this == repr
-    def isCompatibleWithType(tp: SIRType): Boolean
+    def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean
     def doc: Doc = Doc.text(this.toString)
     def show = doc.render(80)
+
+    /** The SIR type that values actually have at the UPLC level for this representation.
+      *
+      * @param semanticType
+      *   the high-level SIR type (e.g., `Integer`, `List[BigInt]`)
+      * @return
+      *   the UPLC-level SIR type (e.g., `Integer` for Constant, `Data` for PackedData)
+      */
+    def uplcType(semanticType: SIRType)(using LoweringContext): SIRType = semanticType
 }
 
 sealed trait SumCaseClassRepresentation(
@@ -24,7 +33,7 @@ sealed trait SumCaseClassRepresentation(
     override val isDataCentric: Boolean
 ) extends LoweredValueRepresentation {
 
-    override def isCompatibleWithType(tp: SIRType): Boolean = {
+    override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
         SIRType.isSum(tp)
     }
 
@@ -46,14 +55,15 @@ object SumCaseClassRepresentation {
                 case TypeVarRepresentation(_) => true
                 case other                    => false
             }
-
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
     }
 
     /** Representation for the builtin Data type and its constructors (Constr, Map, List, I, B).
       * Data values are stored as raw UPLC Data.
       */
     case object DataData extends SumCaseClassRepresentation(false, true) {
-        override def isCompatibleWithType(tp: SIRType): Boolean = {
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             tp match
                 case SIRType.SumCaseClass(decl, _) if decl.name == SIRType.Data.name => true
                 case SIRType.CaseClass(constrDecl, _, _)
@@ -72,42 +82,78 @@ object SumCaseClassRepresentation {
             pos: SIRPosition
         )(using LoweringContext): Boolean =
             repr match {
-                case DataData                 => true
-                case TypeVarRepresentation(_) => true
-                case _                        => false
+                case DataData                           => true
+                case PrimitiveRepresentation.PackedData => true
+                case TypeVarRepresentation(_)           => true
+                case _                                  => false
             }
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
     }
 
     /** Representation for sum case classes that are represented as a Pair of Int and DataList.
       */
-    case object PairIntDataList extends SumCaseClassRepresentation(false, true)
+    case object PairIntDataList extends SumCaseClassRepresentation(false, true) {
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.BuiltinPair(SIRType.Integer, SIRType.List(SIRType.Data.tp))
+    }
 
-    /** Parameterized representation for builtin lists.
+    /** Parameterized representation for builtin lists (BuiltinList[Data]).
       *
-      * `elementRepr` describes how each element is stored at the UPLC level. Replaces the former
-      * `SumDataList` and `SumDataPairList` case objects, enabling native element storage (e.g.,
-      * `BuiltinList[Integer]`) without per-element Data wrapping.
+      * `elementRepr` describes how each element is stored at the UPLC level. Serialized via
+      * `listData`/`unListData`.
+      *
+      * For pair lists (BuiltinList[BuiltinPair[Data,Data]]), use `SumPairBuiltinList` instead —
+      * those use `mapData`/`unMapData` and have fundamentally different UPLC type.
       */
     case class SumBuiltinList(elementRepr: LoweredValueRepresentation)
         extends SumCaseClassRepresentation(false, elementRepr.isDataCentric) {
 
-        override def isCompatibleWithType(tp: SIRType): Boolean = {
+        override def uplcType(semanticType: SIRType)(using lctx: LoweringContext): SIRType = {
+            val elemSemType =
+                SumBuiltinList.retrieveListElementType(semanticType).getOrElse(SIRType.Data.tp)
+            val elemUplcType = elementRepr.uplcType(elemSemType)
+            SIRType.BuiltinList(elemUplcType)
+        }
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using lctx: LoweringContext): Boolean =
+            repr match {
+                case SumBuiltinList(otherElemRepr) =>
+                    if elementRepr == otherElemRepr then true
+                    else
+                        SumBuiltinList.retrieveListElementType(tp) match
+                            case Some(elemType) =>
+                                elementRepr.isCompatibleOn(elemType, otherElemRepr, pos)
+                            case None =>
+                                // FreeUnificator or unknown — compatible if both are data-centric
+                                elementRepr.isDataCentric && otherElemRepr.isDataCentric
+                case SumPairBuiltinList(otherKeyRepr, otherValueRepr)
+                    if elementRepr == ProductCaseClassRepresentation.PairData =>
+                    // SumBuiltinList(PairData) is compatible with SumPairBuiltinList
+                    SumBuiltinList.retrieveListElementType(tp) match
+                        case Some(elemType) =>
+                            val (keyType, valueType) =
+                                SumPairBuiltinList.extractKeyValueTypes(elemType)
+                            lctx.typeGenerator(keyType)
+                                .defaultDataRepresentation(keyType)
+                                .isCompatibleOn(keyType, otherKeyRepr, pos) &&
+                            lctx.typeGenerator(valueType)
+                                .defaultDataRepresentation(valueType)
+                                .isCompatibleOn(valueType, otherValueRepr, pos)
+                        case None => true
+                case _ => this == repr
+            }
+
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             SIRType.retrieveDataDecl(tp) match
                 case Left(_) => false
                 case Right(decl) =>
-                    val isList =
-                        decl.name == SIRType.List.dataDecl.name ||
-                            decl.name == SIRType.BuiltinList.dataDecl.name
-                    if !isList then false
-                    else
-                        elementRepr match
-                            case ProductCaseClassRepresentation.PairData =>
-                                SumBuiltinList.retrieveListElementType(tp) match
-                                    case Some(elementType) =>
-                                        ProductCaseClassRepresentation.PairData
-                                            .isPairOrTuple2(elementType)
-                                    case None => false
-                            case _ => true
+                    decl.name == SIRType.List.dataDecl.name ||
+                    decl.name == SIRType.BuiltinList.dataDecl.name
         }
     }
 
@@ -123,30 +169,158 @@ object SumCaseClassRepresentation {
         }
     }
 
-    /** Representation for sum case classes that are represented as a list of data elements. unlike
-      * `DataConstr`, this representation does not use a constructor tag, but use unList and
-      * unListData to work with the data.
+    /** Representation for pair lists (BuiltinList[BuiltinPair[Data,Data]]). Serialized via
+      * `mapData`/`unMapData`. Separate from `SumBuiltinList` because pair lists have a
+      * fundamentally different UPLC type and serialization path.
       */
-    val SumDataList: SumBuiltinList = SumBuiltinList(PrimitiveRepresentation.PackedData)
+    case class SumPairBuiltinList(
+        keyRepr: LoweredValueRepresentation,
+        valueRepr: LoweredValueRepresentation
+    ) extends SumCaseClassRepresentation(false, true) {
 
-    /** List of pairs of data elements. result of unMapData
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.BuiltinList(SIRType.BuiltinPair(SIRType.Data.tp, SIRType.Data.tp))
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using lctx: LoweringContext): Boolean =
+            repr match {
+                case SumPairBuiltinList(otherKeyRepr, otherValueRepr) =>
+                    SumBuiltinList.retrieveListElementType(tp) match
+                        case Some(elemType) =>
+                            val (keyType, valueType) =
+                                SumPairBuiltinList.extractKeyValueTypes(elemType)
+                            keyRepr.isCompatibleOn(keyType, otherKeyRepr, pos) &&
+                            valueRepr.isCompatibleOn(valueType, otherValueRepr, pos)
+                        case None =>
+                            keyRepr.isDataCentric && otherKeyRepr.isDataCentric &&
+                            valueRepr.isDataCentric && otherValueRepr.isDataCentric
+                case SumBuiltinList(ProductCaseClassRepresentation.PairData) =>
+                    SumBuiltinList.retrieveListElementType(tp) match
+                        case Some(elemType) =>
+                            val (keyType, valueType) =
+                                SumPairBuiltinList.extractKeyValueTypes(elemType)
+                            keyRepr.isCompatibleOn(
+                              keyType,
+                              lctx.typeGenerator(keyType).defaultDataRepresentation(keyType),
+                              pos
+                            ) &&
+                            valueRepr.isCompatibleOn(
+                              valueType,
+                              lctx.typeGenerator(valueType).defaultDataRepresentation(valueType),
+                              pos
+                            )
+                        case None => true
+                case _ => this == repr
+            }
+
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
+            SIRType.retrieveDataDecl(tp) match
+                case Left(_) => false
+                case Right(decl) =>
+                    if decl.name == SIRType.PairList.DataDeclName then true
+                    else
+                        val isList =
+                            decl.name == SIRType.List.dataDecl.name ||
+                                decl.name == SIRType.BuiltinList.dataDecl.name
+                        if !isList then false
+                        else
+                            SumBuiltinList.retrieveListElementType(tp) match
+                                case Some(elementType) =>
+                                    ProductCaseClassRepresentation.PairData.isPairOrTuple2(
+                                      elementType
+                                    )
+                                case None => false
+        }
+    }
+
+    object SumPairBuiltinList {
+        def extractKeyValueTypes(elemType: SIRType): (SIRType, SIRType) =
+            elemType match
+                case SIRType.CaseClass(constrDecl, keyType :: valueType :: _, _)
+                    if constrDecl.name == "scalus.uplc.builtin.BuiltinPair" || constrDecl.name == "scala.Tuple2" =>
+                    (keyType, valueType)
+                case SIRType.TypeLambda(_, body) => extractKeyValueTypes(body)
+                case _                           => (SIRType.Data.tp, SIRType.Data.tp)
+
+        /** Compute SumPairBuiltinList from the pair element type (BuiltinPair or Tuple2). */
+        def fromElementType(elemType: SIRType, pos: SIRPosition = SIRPosition.empty)(using
+            lctx: LoweringContext
+        ): SumPairBuiltinList = {
+            elemType match
+                case SIRType.CaseClass(constrDecl, keyType :: valueType :: _, _)
+                    if constrDecl.name == "scalus.uplc.builtin.BuiltinPair" || constrDecl.name == "scala.Tuple2" =>
+                    def reprForType(tp: SIRType): LoweredValueRepresentation = tp match
+                        case SIRType.TypeNothing | SIRType.FreeUnificator =>
+                            TypeVarRepresentation(false)
+                        case _: SIRType.TypeVar => TypeVarRepresentation(false)
+                        case _ => lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                    SumPairBuiltinList(reprForType(keyType), reprForType(valueType))
+                case SIRType.TypeLambda(_, body) =>
+                    fromElementType(body, pos)
+                case _: SIRType.TypeVar | SIRType.FreeUnificator | SIRType.TypeNothing =>
+                    // TypeVar, FreeUnificator, or TypeNothing — key/value types unknown
+                    SumPairBuiltinList(TypeVarRepresentation(false), TypeVarRepresentation(false))
+                case _ =>
+                    throw LoweringException(
+                      s"SumPairBuiltinList.fromElementType: expected pair or tuple type, got ${elemType.show}",
+                      pos
+                    )
+        }
+
+    }
+
+    /** Sentinel for native primitive lists — used by intrinsic type proxies. The actual element
+      * type is determined by refinement in the lowering from the concrete type context.
       */
-    val SumDataPairList: SumBuiltinList = SumBuiltinList(ProductCaseClassRepresentation.PairData)
+    val SumBuiltinListNative: SumBuiltinList = SumBuiltinList(PrimitiveRepresentation.Constant)
 
-    /** SumDataPairList packed as AssocMap
+    /** SumPairBuiltinList packed as AssocMap (via mapData)
       */
     case object SumDataAssocMap extends SumCaseClassRepresentation(true, true) {
-        override def isCompatibleWithType(tp: SIRType): Boolean =
-            SumDataPairList.isCompatibleWithType(tp)
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
+            SIRType.retrieveDataDecl(tp) match
+                case Left(_) => false
+                case Right(decl) =>
+                    if decl.name == SIRType.PairList.DataDeclName then true
+                    else
+                        val isList =
+                            decl.name == SIRType.List.dataDecl.name ||
+                                decl.name == SIRType.BuiltinList.dataDecl.name
+                        if !isList then false
+                        else
+                            SumBuiltinList.retrieveListElementType(tp) match
+                                case Some(elementType) =>
+                                    ProductCaseClassRepresentation.PairData.isPairOrTuple2(
+                                      elementType
+                                    )
+                                case None => false
+        }
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
     }
 
     /** packed in data representation as a list of data elements. i.e. unListData for unpacking into
       * DataList
       */
     case object PackedSumDataList extends SumCaseClassRepresentation(true, true) {
-        override def isCompatibleWithType(tp: SIRType): Boolean = {
-            SumDataList.isCompatibleWithType(tp)
+        override def isCompatibleWithType(tp: SIRType)(using lctx: LoweringContext): Boolean = {
+            SIRType.retrieveDataDecl(tp) match
+                case Left(_) => false
+                case Right(decl) =>
+                    val isList = decl.name == SIRType.List.dataDecl.name ||
+                        decl.name == SIRType.BuiltinList.dataDecl.name
+                    if !isList then false
+                    else
+                        SumBuiltinList.retrieveListElementType(tp) match
+                            case Some(elemType) =>
+                                lctx.typeGenerator(elemType).canBeConvertedToData(elemType)
+                            case None => true
         }
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
     }
 
     /** Representation as tern Constr(i,x1,...,xn) where i is the index of the constructor and x is
@@ -164,7 +338,7 @@ object SumCaseClassRepresentation {
 sealed trait ProductCaseClassRepresentation(val isPackedData: Boolean, val isDataCentric: Boolean)
     extends LoweredValueRepresentation {
 
-    override def isCompatibleWithType(tp: SIRType): Boolean = {
+    override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
         SIRType.isProd(tp)
     }
 
@@ -172,17 +346,25 @@ sealed trait ProductCaseClassRepresentation(val isPackedData: Boolean, val isDat
 
 object ProductCaseClassRepresentation {
 
-    case object PackedDataList extends ProductCaseClassRepresentation(true, true)
+    case object PackedDataList extends ProductCaseClassRepresentation(true, true) {
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
+    }
 
-    case object ProdDataList extends ProductCaseClassRepresentation(false, true)
+    case object ProdDataList extends ProductCaseClassRepresentation(false, true) {
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.List(SIRType.Data.tp)
+    }
 
     case object PackedDataMap extends ProductCaseClassRepresentation(true, true) {
-        override def isCompatibleWithType(tp: SIRType): Boolean = {
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             SIRType.retrieveConstrDecl(tp) match
                 case Left(_) => false
                 case Right(constrDecl) =>
                     constrDecl.name == "scalus.cardano.onchain.plutus.prelude.AssocMap" || constrDecl.name == "scalus.cardano.onchain.plutus.prelude.SortedMap"
         }
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
     }
 
     /** Data.Unconstr will give us a pair from data and index of the constructor.
@@ -201,6 +383,8 @@ object ProductCaseClassRepresentation {
                 case TypeVarRepresentation(_) => true
                 case other                    => false
             }
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
     }
 
     case object PairIntDataList extends ProductCaseClassRepresentation(false, true)
@@ -209,9 +393,12 @@ object ProductCaseClassRepresentation {
       */
     case object PairData extends ProductCaseClassRepresentation(false, true) {
 
-        override def isCompatibleWithType(tp: SIRType): Boolean = {
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             isPairOrTuple2(tp)
         }
+
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.BuiltinPair(SIRType.Data.tp, SIRType.Data.tp)
 
         @tailrec
         def isPairOrTuple2(tp: SIRType): Boolean =
@@ -235,7 +422,7 @@ object ProductCaseClassRepresentation {
       * This is the default representation for BuiltinArray, providing O(1) indexed access.
       */
     case object ArrayData extends ProductCaseClassRepresentation(false, false) {
-        override def isCompatibleWithType(tp: SIRType): Boolean = {
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             tp match
                 case SIRType.BuiltinArray(_) => true
                 case _                       => false
@@ -259,11 +446,13 @@ object ProductCaseClassRepresentation {
       * field). The array is converted to a list and then wrapped in Data.List.
       */
     case object PackedArrayAsList extends ProductCaseClassRepresentation(true, true) {
-        override def isCompatibleWithType(tp: SIRType): Boolean = {
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             tp match
                 case SIRType.BuiltinArray(_) => true
                 case _                       => false
         }
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
     }
 
     case class OneElementWrapper(representation: LoweredValueRepresentation)
@@ -347,15 +536,21 @@ case class LambdaRepresentation(
         repr match {
             case comparator: LambdaRepresentation =>
                 val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
-                val InOutRepresentationPair(inRepr, outRepr) = reprFun(inputType, pos)
+                val InOutRepresentationPair(inRepr, outRepr) =
+                    reprFun(inputType, pos, canonicalRepresentationPair.inRepr)
                 val InOutRepresentationPair(otherInRepr, otherOutRepr) =
-                    comparator.reprFun(inputType, pos)
+                    comparator.reprFun(
+                      inputType,
+                      pos,
+                      comparator.canonicalRepresentationPair.inRepr
+                    )
                 inRepr.isCompatibleOn(inputType, otherInRepr, pos) &&
                 outRepr.isCompatibleOn(outputType, otherOutRepr, pos)
             case TypeVarRepresentation(isBuiltin) =>
                 isBuiltin || {
                     val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
-                    val InOutRepresentationPair(inRepr, outRepr) = reprFun(inputType, pos)
+                    val InOutRepresentationPair(inRepr, outRepr) =
+                        reprFun(inputType, pos, canonicalRepresentationPair.inRepr)
                     isTypeVarCompatibleOn(inputType, inRepr, pos)
                     && isTypeVarCompatibleOn(outputType, outRepr, pos)
                 }
@@ -364,27 +559,28 @@ case class LambdaRepresentation(
 
     }
 
-    def reprFun(tp: SIRType, pos: SIRPosition)(using
+    /** Resolve the input/output representation pair for a function application.
+      *
+      * Given the argument type and repr, unifies the type with the function's input type pattern to
+      * resolve builtin type variables. Then derives output repr by extracting TypeVar→repr mappings
+      * from the argument's type/repr structure.
+      *
+      * E.g., for `headList: ∀A. BuiltinList[A] → A` applied to `BuiltinList[Int]` with
+      * `SumBuiltinList(PackedData)`: type substitution gives `A → Int`, repr extraction gives
+      * `A → PackedData`, so output repr = `PackedData`.
+      */
+    def reprFun(tp: SIRType, pos: SIRPosition, argRepr: LoweredValueRepresentation)(using
         lctx: LoweringContext
     ): InOutRepresentationPair = {
         SIRType.collectPolyOrFun(funTp) match
             case Some((typeVars, input, output)) =>
                 val builtinTypeVars = typeVars.filter(_.isBuiltin)
-                if builtinTypeVars.isEmpty then {
+                if typeVars.isEmpty then {
                     canonicalRepresentationPair
-                    // this expression is equal to canonical representation pair
-                    // in princiole, we cah recheck this in paranoid mode.
-                    // val (inputTypeVars, _) = SIRType.partitionGround(tvs, input)
-                    // val (outputTypeVars, _) = SIRType.partitionGround(tvs, output)
-                    // val nInput =
-                    //    if inputTypeVars.isEmpty then input
-                    //    else SIRType.TypeLambda(inputTypeVars, input)
-                    // val nOutput =
-                    //    if outputTypeVars.isEmpty then output
-                    //    else SIRType.TypeLambda(outputTypeVars, output)
-                    // if we have no type variables in input and output, then
                 } else
-                    // in builtin typevars we must substitute types and receive context over substituted type variables
+                    // Substitute types and derive representations for all TypeVars.
+                    // Builtin TypeVars take repr from the actual argument (via extractTypeVarReprs).
+                    // Non-builtin TypeVars use defaultTypeVarRepresentation of the resolved type.
                     val tvGenContext = SIRType.createMinimalTypeVarGenerationContext(
                       0L,
                       List(funTp)
@@ -397,15 +593,19 @@ case class LambdaRepresentation(
                                 RenamingTypeVars.makeContext(newTpTypevars, tvGenContext)
                             RenamingTypeVars.inType(tp, renamingContext)
                         else tp
-                    SIRUnify.topLevelUnifyType(renamedTp, input, SIRUnify.Env.empty) match {
+                    SIRUnify.topLevelUnifyType(
+                      renamedTp,
+                      input,
+                      SIRUnify.Env.empty.withUpcasting
+                    ) match {
                         case SIRUnify.UnificationSuccess(env, unificator) =>
-                            val builtinSubstitutes = builtinTypeVars
+                            val allSubstitutes = typeVars
                                 .map(tv => (tv, env.filledTypes.getOrElse(tv, tv)))
                                 .toMap
                             val substitutedInput =
-                                SIRType.substitute(input, builtinSubstitutes, Map.empty)
+                                SIRType.substitute(input, allSubstitutes, Map.empty)
                             val substitutedOutput =
-                                SIRType.substitute(output, builtinSubstitutes, Map.empty)
+                                SIRType.substitute(output, allSubstitutes, Map.empty)
                             val (inputTypeVars, _) = SIRType.partitionGround(
                               typeVars,
                               substitutedInput
@@ -420,10 +620,119 @@ case class LambdaRepresentation(
                             val newOutput =
                                 if outputTypeVars.isEmpty then substitutedOutput
                                 else SIRType.TypeLambda(outputTypeVars, substitutedOutput)
-                            InOutRepresentationPair(
-                              lctx.typeGenerator(newInput).defaultRepresentation(newInput),
-                              lctx.typeGenerator(newOutput).defaultRepresentation(newOutput)
+                            // Extract TypeVar→repr mappings from the input type/repr structure.
+                            // This tells us what repr each builtin TypeVar has in the actual argument.
+                            val reprSubstitutes = extractTypeVarReprs(
+                              input,
+                              argRepr,
+                              builtinTypeVars.toSet
                             )
+                            // Compute the representation for a type position, accounting for
+                            // TypeVar origins across curried applications.
+                            //
+                            // Walks three structures in parallel:
+                            // - declaredParamType: parameter type from the function definition (may have TypeVars)
+                            // - argumentType: the same type after unification substitution (concrete types)
+                            // - declaredRepr: representation from canonical pair, carries TypeVar
+                            //   origin info from previous applications
+                            //
+                            // Decision:
+                            // 1. declaredParamType is TypeVar → use reprSubstitutes (builtin) or defaultTypeVarRepresentation (non-builtin)
+                            // 2. Fun → recurse with declaredRepr's inRepr/outRepr
+                            // 3. TypeLambda → recurse into body
+                            // 4. declaredRepr is TypeVarRepresentation → position was TypeVar in a previous application
+                            // 5. Otherwise → defaultRepresentation
+                            def resolveRepr(
+                                declaredParamType: SIRType,
+                                argumentType: SIRType,
+                                declaredRepr: LoweredValueRepresentation
+                            ): LoweredValueRepresentation =
+                                declaredParamType match
+                                    case tv: SIRType.TypeVar
+                                        if tv.isBuiltin && reprSubstitutes.contains(tv) =>
+                                        reprSubstitutes(tv)
+                                    case tv: SIRType.TypeVar if !tv.isBuiltin =>
+                                        lctx.typeGenerator(argumentType)
+                                            .defaultTypeVarReperesentation(argumentType)
+                                    case SIRType.Fun(defIn, defOut) =>
+                                        (argumentType, declaredRepr) match
+                                            case (
+                                                  SIRType.Fun(argIn, argOut),
+                                                  lr: LambdaRepresentation
+                                                ) =>
+                                                val inR = resolveRepr(
+                                                  defIn,
+                                                  argIn,
+                                                  lr.canonicalRepresentationPair.inRepr
+                                                )
+                                                val outR = resolveRepr(
+                                                  defOut,
+                                                  argOut,
+                                                  lr.canonicalRepresentationPair.outRepr
+                                                )
+                                                LambdaRepresentation(
+                                                  argumentType,
+                                                  InOutRepresentationPair(inR, outR)
+                                                )
+                                            case (SIRType.TypeLambda(params, argBody), _) =>
+                                                val inner = resolveRepr(
+                                                  declaredParamType,
+                                                  argBody,
+                                                  declaredRepr
+                                                )
+                                                // Preserve TypeLambda for unfilled builtin TypeVars
+                                                // so subsequent reprFun calls can resolve them
+                                                // from concrete arguments. Non-builtin TypeVars
+                                                // don't need preservation — they are resolved
+                                                // via defaultTypeVarRepresentation in the body.
+                                                val remaining = params.filter(p =>
+                                                    p.isBuiltin && !allSubstitutes
+                                                        .get(p)
+                                                        .exists(_ != p)
+                                                )
+                                                inner match
+                                                    case lr: LambdaRepresentation
+                                                        if remaining.nonEmpty =>
+                                                        LambdaRepresentation(
+                                                          SIRType.TypeLambda(
+                                                            remaining,
+                                                            lr.funTp
+                                                          ),
+                                                          lr.canonicalRepresentationPair
+                                                        )
+                                                    case other => other
+                                            case (SIRType.Fun(_, _), other) =>
+                                                throw LoweringException(
+                                                  s"resolveRepr: Fun type but declaredRepr is not LambdaRepresentation: ${other.show}",
+                                                  pos
+                                                )
+                                            case _ =>
+                                                throw LoweringException(
+                                                  s"resolveRepr: declaredParamType is Fun but argumentType is ${argumentType.show}",
+                                                  pos
+                                                )
+                                    case SIRType.TypeLambda(_, defBody) =>
+                                        argumentType match
+                                            case SIRType.TypeLambda(_, argBody) =>
+                                                resolveRepr(defBody, argBody, declaredRepr)
+                                            case _ =>
+                                                resolveRepr(defBody, argumentType, declaredRepr)
+                                    case _ =>
+                                        declaredRepr match
+                                            case TypeVarRepresentation(true) =>
+                                                lctx.typeGenerator(argumentType)
+                                                    .defaultRepresentation(argumentType)
+                                            case TypeVarRepresentation(false) =>
+                                                lctx.typeGenerator(argumentType)
+                                                    .defaultTypeVarReperesentation(argumentType)
+                                            case _ =>
+                                                lctx.typeGenerator(argumentType)
+                                                    .defaultRepresentation(argumentType)
+                            val inRepr =
+                                resolveRepr(input, newInput, canonicalRepresentationPair.inRepr)
+                            val outRepr =
+                                resolveRepr(output, newOutput, canonicalRepresentationPair.outRepr)
+                            InOutRepresentationPair(inRepr, outRepr)
                         case SIRUnify.UnificationFailure(path, left, right) =>
                             throw LoweringException(
                               s"Can't unify function type $tp with input type $input and output type $output, " +
@@ -433,6 +742,41 @@ case class LambdaRepresentation(
                     }
             case None =>
                 canonicalRepresentationPair
+    }
+
+    /** Extract TypeVar→repr mappings by walking a type pattern and actual repr in parallel.
+      *
+      * When a builtin TypeVar is found at a position in the type, the corresponding repr from the
+      * actual repr structure is recorded.
+      *
+      * E.g., type `BuiltinList[A]` with repr `SumBuiltinList(PackedData)`: `A` is at element
+      * position → `{A → PackedData}`
+      */
+    private def extractTypeVarReprs(
+        typePattern: SIRType,
+        actualRepr: LoweredValueRepresentation,
+        builtinTypeVars: Set[SIRType.TypeVar]
+    )(using LoweringContext): Map[SIRType.TypeVar, LoweredValueRepresentation] = {
+        (typePattern, actualRepr) match
+            case (
+                  SIRType.SumCaseClass(decl, typeArgs),
+                  SumCaseClassRepresentation.SumBuiltinList(elemRepr)
+                ) =>
+                // List type: element TypeVar → element repr
+                typeArgs.headOption match
+                    case Some(tv: SIRType.TypeVar) if builtinTypeVars.contains(tv) =>
+                        Map(tv -> elemRepr)
+                    case _ => Map.empty
+            case (
+                  SIRType.SumCaseClass(decl, typeArgs),
+                  SumCaseClassRepresentation.SumPairBuiltinList(_, _)
+                ) =>
+                // Pair list type: element TypeVar → PairData
+                typeArgs.headOption match
+                    case Some(tv: SIRType.TypeVar) if builtinTypeVars.contains(tv) =>
+                        Map(tv -> ProductCaseClassRepresentation.PairData)
+                    case _ => Map.empty
+            case _ => Map.empty
     }
 
     def isTypeVarCompatibleOn(
@@ -445,13 +789,13 @@ case class LambdaRepresentation(
             case othrLambdaRepr @ LambdaRepresentation(otherFunTp, otherCanonicalPair) =>
                 val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
                 val InOutRepresentationPair(inRepr, outRepr) =
-                    othrLambdaRepr.reprFun(inputType, pos)
+                    othrLambdaRepr.reprFun(inputType, pos, otherCanonicalPair.inRepr)
                 isTypeVarCompatibleOn(inputType, inRepr, pos) &&
                 isTypeVarCompatibleOn(outputType, outRepr, pos)
             case _ => repr.isPackedData
         }
 
-    override def isCompatibleWithType(tp: SIRType): Boolean = {
+    override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
         SIRUnify.topLevelUnifyType(funTp, tp, SIRUnify.Env.empty).isSuccess
     }
 
@@ -484,7 +828,7 @@ case class LambdaRepresentation(
 sealed trait PrimitiveRepresentation(val isPackedData: Boolean, val isDataCentric: Boolean)
     extends LoweredValueRepresentation {
 
-    override def isCompatibleWithType(tp: SIRType): Boolean = {
+    override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
         tp match {
             case SIRType.Integer | SIRType.Data() | SIRType.ByteString | SIRType.String |
                 SIRType.Boolean | SIRType.Unit | SIRType.BLS12_381_G1_Element |
@@ -498,8 +842,21 @@ sealed trait PrimitiveRepresentation(val isPackedData: Boolean, val isDataCentri
 
 object PrimitiveRepresentation {
     case object PackedData extends PrimitiveRepresentation(true, true) {
-        override def isCompatibleWithType(tp: SIRType): Boolean =
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean =
             super.isCompatibleWithType(tp) && tp != SIRType.Unit && tp != SIRType.BLS12_381_MlResult
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
+            repr match {
+                case PackedData                          => true
+                case SumCaseClassRepresentation.DataData => true
+                case TypeVarRepresentation(_)            => true
+                case _                                   => false
+            }
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
     }
 
     case object Constant extends PrimitiveRepresentation(false, false)
@@ -518,7 +875,32 @@ case class TypeVarRepresentation(isBuiltin: Boolean) extends LoweredValueReprese
 
     override def isDataCentric: Boolean = isPackedData
 
-    override def isCompatibleWithType(tp: SIRType): Boolean = true
+    override def isCompatibleOn(
+        tp: SIRType,
+        repr: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using LoweringContext): Boolean =
+        if isBuiltin then true
+        else
+            repr match {
+                case TypeVarRepresentation(_)              => true
+                case PrimitiveRepresentation.PackedData    => true
+                case SumCaseClassRepresentation.DataData   => true
+                case SumCaseClassRepresentation.DataConstr => true
+                case _                                     => repr.isPackedData
+            }
+
+    override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = true
+
+    override def uplcType(semanticType: SIRType)(using lctx: LoweringContext): SIRType =
+        semanticType match
+            case _: SIRType.TypeVar | SIRType.FreeUnificator => semanticType
+            case _ =>
+                val gen = lctx.typeGenerator(semanticType)
+                val resolved =
+                    if isBuiltin then gen.defaultRepresentation(semanticType)
+                    else gen.defaultTypeVarReperesentation(semanticType)
+                resolved.uplcType(semanticType)
 
     override def doc: Doc = {
         Doc.text("TypeVar") + (if isBuiltin then Doc.text("(B)") else Doc.empty)
@@ -531,7 +913,7 @@ case object ErrorRepresentation extends LoweredValueRepresentation {
 
     override def isDataCentric: Boolean = false
 
-    override def isCompatibleWithType(tp: SIRType): Boolean = true
+    override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = true
 
 }
 
@@ -539,20 +921,13 @@ object LoweredValueRepresentation {
 
     def constRepresentation(tp: SIRType)(using lc: LoweringContext): LoweredValueRepresentation = {
         tp match
-            // BuiltinList[Data] -> SumDataList (native UPLC list of Data)
-            case SIRType.BuiltinList(SIRType.Data()) =>
-                SumCaseClassRepresentation.SumDataList
-            // BuiltinList[BuiltinPair[Data, Data]] -> SumDataPairList
-            case SIRType.BuiltinList(elemType)
-                if ProductCaseClassRepresentation.PairData.isPairOrTuple2(elemType) =>
-                SumCaseClassRepresentation.SumDataPairList
-            // BuiltinList with non-Data element type - not supported as constant
             case SIRType.BuiltinList(elemType) =>
-                throw LoweringException(
-                  s"BuiltinList constant with non-Data element type ${elemType.show} is not supported. " +
-                      s"Only BuiltinList[Data] and BuiltinList[BuiltinPair[Data,Data]] can be constants.",
-                  SIRPosition.empty
-                )
+                if typegens.SirTypeUplcGenerator.isPair(elemType) then
+                    SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType)
+                else
+                    SumCaseClassRepresentation.SumBuiltinList(
+                      typegens.SirTypeUplcGenerator.elementReprFor(elemType)
+                    )
             // BuiltinArray[Data] -> use ArrayData representation (native UPLC array)
             case SIRType.BuiltinArray(SIRType.Data()) =>
                 ProductCaseClassRepresentation.ArrayData
@@ -570,10 +945,20 @@ object LoweredValueRepresentation {
                 // TODO: add containsFun check like in SirTypeUplcGenerator.apply
                 else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" || decl.name == SIRType.BuiltinList.name
                 then
-                    if typeArgs.nonEmpty && ProductCaseClassRepresentation.PairData
-                            .isPairOrTuple2(typeArgs.head)
-                    then SumCaseClassRepresentation.SumDataPairList
-                    else SumCaseClassRepresentation.SumDataList
+                    if typeArgs.nonEmpty then
+                        if typegens.SirTypeUplcGenerator.isPairOrTuple2(typeArgs.head) then
+                            SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
+                              typeArgs.head
+                            )
+                        else
+                            SumCaseClassRepresentation.SumBuiltinList(
+                              typegens.SirTypeUplcGenerator.elementReprFor(typeArgs.head)
+                            )
+                    else
+                        throw LoweringException(
+                          s"List type without type parameter in constant representation",
+                          SIRPosition.empty
+                        )
                 else SumCaseClassRepresentation.DataConstr
             case SIRType.CaseClass(constrDecl, targs, parent) =>
                 ProductCaseClassRepresentation.ProdDataConstr

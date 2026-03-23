@@ -80,7 +80,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.EndWithWinner,
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 444451, steps = 129_832362))
+        assert(budget == ExUnits(memory = 448419, steps = 130_900609))
     }
 
     test("budget: end auction without bids") {

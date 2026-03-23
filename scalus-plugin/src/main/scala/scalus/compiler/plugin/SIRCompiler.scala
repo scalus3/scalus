@@ -138,6 +138,7 @@ final class SIRCompiler(
     private val ToDataSymbol = requiredClass("scalus.uplc.builtin.ToData")
     private val typeProxyReprModule =
         requiredModule("scalus.compiler.intrinsics.IntrinsicHelpers")
+    private val typeProxyMethod = typeProxyReprModule.requiredMethod("typeProxy")
     private val typeProxyReprMethod = typeProxyReprModule.requiredMethod("typeProxyRepr")
     private val moduleToExprSymbol = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
     private val sirBodyAnnotation = requiredClass("scalus.compiler.sir.SIRBodyAnnotation")
@@ -824,7 +825,14 @@ final class SIRCompiler(
             .flatMap { bs =>
                 constrType.baseType(bs) match
                     case AppliedType(_, args) =>
-                        Some(args.map(a => sirTypeInEnv(a, srcPos, nEnv)))
+                        Some(args.map { a =>
+                            // baseType returns TypeParamRef from PolyType, not Symbols.
+                            // Resolve directly to pcTypeParams by index to get matching TypeVar ids.
+                            a.stripped match
+                                case tpr: TypeParamRef if tpr.paramNum < pcTypeParams.size =>
+                                    pcTypeParams(tpr.paramNum)
+                                case _ => sirTypeInEnv(a, srcPos, nEnv)
+                        })
                     case _ => None
             }
             .getOrElse(Nil)
@@ -3162,10 +3170,14 @@ final class SIRCompiler(
                 compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
             case Apply(Select(obj, nme.copy), args) if isCaseClassInstance(obj) =>
                 compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
-            // typeProxyRepr[V, R](x) — intercept to extract R type parameter
+            // typeProxy[V](x) — type-only cast, no repr change
             case Apply(TypeApply(f, targs), List(arg))
-                if f.symbol == typeProxyReprMethod && targs.size == 2 =>
-                compileTypeProxyRepr(env, targs, arg, tree)
+                if f.symbol == typeProxyMethod && targs.size == 1 =>
+                compileTypeProxy(env, targs, arg, tree)
+            // typeProxyRepr[V](x, repr) — intercept to compile repr argument
+            case Apply(TypeApply(f, targs), List(arg, reprArg))
+                if f.symbol == typeProxyReprMethod && targs.size == 1 =>
+                compileTypeProxyRepr(env, targs, arg, reprArg, tree)
             // Generic Apply
             case a @ Apply(pf @ TypeApply(f, targs), args) =>
                 compileApply(env, f, targs, args, tree.tpe, a)
@@ -3436,30 +3448,47 @@ final class SIRCompiler(
         }
     }
 
-    /** Compile `typeProxyRepr[V, R](x)` — extract the `R` singleton type name and encode it as a
-      * SIR annotation so the lowering can set the representation directly.
+    /** Compile `typeProxyRepr[V](x, repr)` — compile the `repr` argument to SIR and store it as an
+      * annotation so the lowering can interpret it and set the representation directly.
       */
-    private def compileTypeProxyRepr(
+    /** Compile `typeProxy[V](x)` — type-only cast, keeps representation unchanged. */
+    private def compileTypeProxy(
         env: Env,
         targs: List[Tree],
         arg: Tree,
         tree: Tree
     ): AnnotatedSIR = {
         val targetType = sirTypeInEnv(targs(0).tpe.widen, tree.srcPos, env)
-        // Extract the singleton type R's symbol name (e.g., "SumDataList" from SumDataList.type)
-        val reprSym = targs(1).tpe.termSymbol
-        val reprName =
-            if reprSym.exists then reprSym.name.show
-            else targs(1).tpe.typeSymbol.name.show
         val compiledArg = compileExpr(env, arg)
+        val typeProxyModuleName = "scalus.compiler.intrinsics.IntrinsicHelpers$"
+        val typeProxyFullName = s"$typeProxyModuleName.typeProxy"
+        SIR.Apply(
+          SIR.ExternalVar(
+            typeProxyModuleName,
+            typeProxyFullName,
+            SIRType.Fun(SIRType.FreeUnificator, targetType),
+            AnnotationsDecl.fromSrcPos(tree.srcPos)
+          ),
+          compiledArg,
+          targetType,
+          AnnotationsDecl.fromSrcPos(tree.srcPos)
+        )
+    }
+
+    private def compileTypeProxyRepr(
+        env: Env,
+        targs: List[Tree],
+        arg: Tree,
+        reprArg: Tree,
+        tree: Tree
+    ): AnnotatedSIR = {
+        val targetType = sirTypeInEnv(targs(0).tpe.widen, tree.srcPos, env)
+        val compiledArg = compileExpr(env, arg)
+        val compiledRepr = compileExpr(env, reprArg)
         val typeProxyReprModuleName = "scalus.compiler.intrinsics.IntrinsicHelpers$"
         val typeProxyReprFullName = s"$typeProxyReprModuleName.typeProxyRepr"
         val anns = AnnotationsDecl.fromSrcPos(tree.srcPos) +
-            ("repr" -> SIR.Const(
-              scalus.uplc.Constant.String(reprName),
-              SIRType.String,
-              AnnotationsDecl.fromSrcPos(tree.srcPos)
-            ))
+            ("repr" -> compiledRepr)
         SIR.Apply(
           SIR.ExternalVar(
             typeProxyReprModuleName,

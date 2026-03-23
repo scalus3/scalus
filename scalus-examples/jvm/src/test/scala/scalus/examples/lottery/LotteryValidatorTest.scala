@@ -19,8 +19,8 @@ import scala.util.Try
 class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
     import LotteryValidatorTest.{*, given}
 
-    test(s"Lottery validator size is ${LotteryContract.script.script.size} bytes") {
-        info(s"Validator size: ${LotteryContract.script.script.size} bytes")
+    test(s"Lottery validator size is ${LotteryContract.compiled.script.script.size} bytes") {
+        info(s"Validator size: ${LotteryContract.compiled.script.script.size} bytes")
     }
 
     test("P1 reveals valid preimage from Empty state") {
@@ -46,7 +46,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 197498, steps = 60_547298)
+          ExUnits(memory = 197198, steps = 60_499298)
         )
     }
 
@@ -73,7 +73,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 199064, steps = 61_094062)
+          ExUnits(memory = 198764, steps = 61_046062)
         )
     }
 
@@ -100,7 +100,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 197498, steps = 60_547298)
+          ExUnits(memory = 197198, steps = 60_499298)
         )
     }
 
@@ -709,7 +709,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
 
 object LotteryValidatorTest extends ScalusTest {
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val compiledContract = LotteryContract.withErrorTraces
+    private val compiledContract = LotteryContract.compiled.withErrorTraces
     private val scriptAddress = compiledContract.address(env.network)
 
     private val txCreator = LotteryTransactions(
@@ -808,7 +808,7 @@ object LotteryValidatorTest extends ScalusTest {
         expectedBudget: ExUnits
     ): Unit = {
         val scriptContext = getScriptContext(provider, tx, lotteryInput)
-        val directResult = Try(LotteryContract.code(scriptContext.toData))
+        val directResult = Try(LotteryContract.compiled.code(scriptContext.toData))
         val evalResult = compiledContract(scriptContext.toData).program.evaluateDebug
         assert(evalResult.isSuccess, s"UPLC evaluation failed: ${evalResult.logs.mkString(", ")}")
         assert(evalResult.budget == expectedBudget)
@@ -825,7 +825,7 @@ object LotteryValidatorTest extends ScalusTest {
         expectedError: String
     ): Unit = {
         val scriptContext = getScriptContext(provider, tx, lotteryInput)
-        val directResult = Try(LotteryContract.code(scriptContext.toData))
+        val directResult = Try(LotteryContract.compiled.code(scriptContext.toData))
         val submissionResult = provider.submit(tx).await()
 
         assert(directResult.isFailure, "Direct validator call should have failed but succeeded")

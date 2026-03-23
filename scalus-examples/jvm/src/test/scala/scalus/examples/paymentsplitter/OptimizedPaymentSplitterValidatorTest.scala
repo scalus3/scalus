@@ -26,31 +26,31 @@ class OptimizedPaymentSplitterValidatorTest
 
     private val expectedRewardBudgets: Map[String, ExUnits] = Map(
       "success when payments are correctly split for a single payee" -> ExUnits(
-        memory = 321600,
-        steps = 94_535820
+        memory = 321300,
+        steps = 94_487820
       ),
       "success when payments are correctly split between 2 payees" -> ExUnits(
-        memory = 456001,
-        steps = 132_705730
+        memory = 455401,
+        steps = 132_609730
       ),
       "success when payments are correctly split between 3 payees" -> ExUnits(
-        memory = 601724,
-        steps = 174_103444
+        memory = 600824,
+        steps = 173_959444
       ),
       "success when split equally and remainder compensates fee - o1" -> ExUnits(
-        memory = 601724,
-        steps = 174_103444
+        memory = 600824,
+        steps = 173_959444
       ),
       "success when split equally and remainder compensates fee - o2" -> ExUnits(
-        memory = 601724,
-        steps = 174_103444
+        memory = 600824,
+        steps = 173_959444
       ),
       "success when split equally and remainder compensates fee - o3" -> ExUnits(
-        memory = 601724,
-        steps = 174_103444
+        memory = 600824,
+        steps = 173_959444
       ),
-      "success between 5 payees" -> ExUnits(memory = 927136, steps = 266_582284),
-      "success with multiple contract UTxOs" -> ExUnits(memory = 839922, steps = 242_411092)
+      "success between 5 payees" -> ExUnits(memory = 925636, steps = 266_342284),
+      "success with multiple contract UTxOs" -> ExUnits(memory = 839022, steps = 242_267092)
     )
 
     private val expectedSpendBudget: ExUnits = ExUnits(memory = 66066, steps = 20_264798)
@@ -65,7 +65,7 @@ class OptimizedPaymentSplitterValidatorTest
     test("Optimized: budget comparison with multiple UTxOs") {
         val tc = testCases.find(_.name.contains("multiple contract UTxOs")).get
         val (rewardBudget, spendBudget) = runTestCaseWithBudget(tc)
-        assert(rewardBudget == ExUnits(memory = 839922, steps = 242_411092))
+        assert(rewardBudget == ExUnits(memory = 839022, steps = 242_267092))
         assert(spendBudget == ExUnits(memory = 66066, steps = 20_264798))
     }
 

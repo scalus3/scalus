@@ -11,6 +11,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.Party.{Alice, Bob}
+import scalus.toUplc
 import scalus.utils.await
 
 /** Performance measurement tests for TxBuilder transaction balancing.

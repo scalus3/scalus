@@ -34,7 +34,7 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         SumCaseClassRepresentation.DataData
 
-    override def isDataSupported(tp: SIRType)(using LoweringContext): Boolean =
+    override def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean =
         true
 
     override def toRepresentation(
@@ -152,7 +152,12 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
                 // The argument is List[Data] which lowers to SumDataList (BuiltinList[Data])
                 val argLowered = lctx.lower(constr.args.head)
                 val argAsSumDataList =
-                    argLowered.toRepresentation(SumCaseClassRepresentation.SumDataList, pos)
+                    argLowered.toRepresentation(
+                      SumCaseClassRepresentation.SumBuiltinList(
+                        SumCaseClassRepresentation.DataData
+                      ),
+                      pos
+                    )
                 lvBuiltinApply(
                   SIRBuiltins.listData,
                   argAsSumDataList,
@@ -163,10 +168,13 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
 
             case SIRType.Data.Map.name =>
                 // Data.Map(values: List[(Data, Data)]) => mapData(values)
-                // The argument is List[(Data, Data)] which lowers to SumDataPairList
                 val argLowered = lctx.lower(constr.args.head)
+                val pairRepr = SumCaseClassRepresentation.SumPairBuiltinList(
+                  SumCaseClassRepresentation.DataData,
+                  SumCaseClassRepresentation.DataData
+                )
                 val argAsSumDataPairList =
-                    argLowered.toRepresentation(SumCaseClassRepresentation.SumDataPairList, pos)
+                    argLowered.toRepresentation(pairRepr, pos)
                 lvBuiltinApply(
                   SIRBuiltins.mapData,
                   argAsSumDataPairList,
@@ -182,7 +190,12 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
                     tagLowered.toRepresentation(PrimitiveRepresentation.Constant, pos)
                 val argsLowered = lctx.lower(constr.args(1))
                 val argsAsSumDataList =
-                    argsLowered.toRepresentation(SumCaseClassRepresentation.SumDataList, pos)
+                    argsLowered.toRepresentation(
+                      SumCaseClassRepresentation.SumBuiltinList(
+                        SumCaseClassRepresentation.DataData
+                      ),
+                      pos
+                    )
                 lvBuiltinApply2(
                   SIRBuiltins.constrData,
                   tagAsConstant,
@@ -248,7 +261,9 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
                                   SIRBuiltins.sndPair,
                                   unConstr,
                                   sel.tp,
-                                  SumCaseClassRepresentation.SumDataList,
+                                  SumCaseClassRepresentation.SumBuiltinList(
+                                    SumCaseClassRepresentation.DataData
+                                  ),
                                   pos
                                 )
                             case other =>
@@ -338,7 +353,10 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
           mapCase,
           "_map_entries",
           SIRType.List(SIRType.Tuple2(SIRType.Data.tp, SIRType.Data.tp)),
-          SumCaseClassRepresentation.SumDataPairList,
+          SumCaseClassRepresentation.SumPairBuiltinList(
+            SumCaseClassRepresentation.DataData,
+            SumCaseClassRepresentation.DataData
+          ),
           anns.pos,
           optTargetType
         )
@@ -348,7 +366,7 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
           listCase,
           "_list_elements",
           SIRType.List(SIRType.Data.tp),
-          SumCaseClassRepresentation.SumDataList,
+          SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
           anns.pos,
           optTargetType
         )
@@ -428,7 +446,8 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
           id = argsVarId,
           name = argsName,
           sir = SIR.Var(argsName, SIRType.List(SIRType.Data.tp), AnnotationsDecl(pos)),
-          representation = SumCaseClassRepresentation.SumDataList,
+          representation =
+              SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
           optRhs = None
         )
         lctx.scope = lctx.scope.add(argsVar)

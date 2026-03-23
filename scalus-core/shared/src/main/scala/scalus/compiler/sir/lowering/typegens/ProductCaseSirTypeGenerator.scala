@@ -5,7 +5,6 @@ import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.*
-import scalus.compiler.sir.lowering.SumCaseClassRepresentation.SumDataList
 import scalus.compiler.sir.*
 import scalus.uplc.*
 
@@ -46,7 +45,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         ProductCaseClassRepresentation.ProdDataConstr
 
-    override def isDataSupported(tp: SIRType)(using loweringContext: LoweringContext): Boolean = {
+    override def canBeConvertedToData(
+        tp: SIRType
+    )(using loweringContext: LoweringContext): Boolean = {
         true
     }
 
@@ -250,7 +251,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val consSndNil = lvBuiltinApply2(
                       SIRBuiltins.mkCons,
                       sndVar,
-                      lvDataNil(pos),
+                      lvProdDataListNil(pos),
                       SIRType.List(SIRType.Data.tp),
                       ProductCaseClassRepresentation.ProdDataList,
                       pos
@@ -284,7 +285,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         lvBuiltinApply2(
                           SIRBuiltins.mkCons,
                           snd,
-                          lvDataNil(pos),
+                          lvProdDataListNil(pos),
                           SIRType.List(SIRType.Data.tp),
                           ProductCaseClassRepresentation.ProdDataList,
                           pos
@@ -337,8 +338,13 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValue = {
         val targetTypeGenerator = lctx.typeGenerator(targetType)
         targetTypeGenerator.defaultRepresentation(targetType) match {
-            case SumCaseClassRepresentation.SumDataList =>
-                // we are constr or nill
+            case targetListRepr @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
+                if !elemRepr.isDataCentric then
+                    throw LoweringException(
+                      s"upcastOne to SumBuiltinList with non-data-centric element repr ${elemRepr} is not yet supported",
+                      pos
+                    )
+                // we are constr or nil
                 val constrDecl = SIRType
                     .retrieveConstrDecl(input.sirType)
                     .getOrElse(
@@ -353,7 +359,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     new TypeRepresentationProxyLoweredValue(
                       inputR,
                       targetType,
-                      SumCaseClassRepresentation.SumDataList,
+                      targetListRepr,
                       pos
                     )
                 else
@@ -382,12 +388,12 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValue = {
         val loweredArgs = constr.args.map(arg => lctx.lower(arg))
         val argTypeGens = loweredArgs.map(_.sirType).map(lctx.typeGenerator)
-        val isDataSupported = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
-            typeGen.isDataSupported(arg.sirType)
+        val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
+            typeGen.canBeConvertedToData(arg.sirType)
         }
-        if !isDataSupported then {
+        if !canBeConvertedToData then {
             val notSupportedData = loweredArgs.zip(argTypeGens).filterNot { case (arg, typeGen) =>
-                typeGen.isDataSupported(arg.sirType)
+                typeGen.canBeConvertedToData(arg.sirType)
             }
             val firstNotSupported = notSupportedData.head._1
             throw LoweringException(
@@ -427,7 +433,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   lvNewLazyIdVar(
                     lctx.uniqueVarName("list_sel"),
                     dataListScrutinee.sirType,
-                    SumDataList,
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
                     dataListScrutinee,
                     sel.anns.pos
                   ),
@@ -454,13 +460,17 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         lvNewLazyIdVar(
                           droppedId,
                           SIRType.List(SIRType.Data.tp),
-                          SumDataList,
+                          SumCaseClassRepresentation.SumBuiltinList(
+                            SumCaseClassRepresentation.DataData
+                          ),
                           lvBuiltinApply2(
                             SIRBuiltins.dropList,
                             lvIntConstant(fieldIndex, sel.anns.pos),
                             list0,
                             SIRType.List(SIRType.Data.tp),
-                            SumDataList,
+                            SumCaseClassRepresentation.SumBuiltinList(
+                              SumCaseClassRepresentation.DataData
+                            ),
                             sel.anns.pos
                           ),
                           sel.anns.pos
@@ -476,12 +486,16 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                             lvNewLazyIdVar(
                               tailId,
                               SIRType.List(SIRType.Data.tp),
-                              SumDataList,
+                              SumCaseClassRepresentation.SumBuiltinList(
+                                SumCaseClassRepresentation.DataData
+                              ),
                               lvBuiltinApply(
                                 SIRBuiltins.tailList,
                                 acc._1,
                                 SIRType.List(SIRType.Data.tp),
-                                SumDataList,
+                                SumCaseClassRepresentation.SumBuiltinList(
+                                  SumCaseClassRepresentation.DataData
+                                ),
                                 sel.anns.pos
                               ),
                               sel.anns.pos
@@ -585,7 +599,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         val v = lvNewLazyIdVar(
                           lctx.uniqueVarName("_match_data_list"),
                           SIRType.List(SIRType.Data.tp),
-                          SumCaseClassRepresentation.SumDataList,
+                          SumCaseClassRepresentation.SumBuiltinList(
+                            SumCaseClassRepresentation.DataData
+                          ),
                           other,
                           matchData.anns.pos
                         )
@@ -671,7 +687,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   lvNewLazyIdVar(
                     lctx.uniqueVarName("match_pair_data"),
                     SIRType.List(SIRType.Data.tp),
-                    SumCaseClassRepresentation.SumDataList,
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
                     other,
                     matchData.anns.pos
                   ),
@@ -778,14 +794,14 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     throw e
         }
         // TODO: check UplcConstrOnData, it can be more efficient
-        val s0 = lvDataNil(constr.anns.pos)
+        val s0 = lvDataDataListNil(constr.anns.pos)
         val dataList = dataRepresentations.foldRight(s0) { (arg, acc) =>
             lvBuiltinApply2(
               SIRBuiltins.mkCons,
               arg,
               acc,
               SIRType.List(SIRType.Data.tp),
-              SumDataList,
+              SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
               constr.anns.pos
             )
         }

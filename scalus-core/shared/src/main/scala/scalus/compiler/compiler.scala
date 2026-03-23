@@ -12,8 +12,10 @@ case class Options(
     generateErrorTraces: Boolean = SIRDefaultOptions.generateErrorTraces,
     removeTraces: Boolean = SIRDefaultOptions.removeTraces,
     optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
+    uplcOptimizers: Seq[scalus.uplc.transform.Optimizer] = Seq.empty,
     debugLevel: Int = SIRDefaultOptions.debugLevel,
-    debug: Boolean = false
+    debug: Boolean = false,
+    nativeListElements: Boolean = false
 )
 
 object Options {

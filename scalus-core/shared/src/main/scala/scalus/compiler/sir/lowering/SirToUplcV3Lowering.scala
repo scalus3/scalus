@@ -16,7 +16,8 @@ class SirToUplcV3Lowering(
     targetLanguage: Language = Language.PlutusV3,
     targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     intrinsicModules: Map[String, Module] = Map.empty,
-    supportModules: Map[String, Module] = Map.empty
+    supportModules: Map[String, Module] = Map.empty,
+    nativeListElements: Boolean = false
 ) {
 
     private var _lastLoweredValue: Option[LoweredValue] = None
@@ -91,11 +92,33 @@ class SirToUplcV3Lowering(
           generateErrorTraces = generateErrorTraces,
           debug = debug,
           intrinsicModules = intrinsicModules,
-          supportModules = supportModules
+          supportModules = supportModules,
+          nativeListElements = nativeListElements
         )
         ScalusRuntime.initContext(retval)
         retval.initSupportBindings()
         retval
     }
 
+}
+
+object SirToUplcV3Lowering {
+
+    /** Create a SirToUplcV3Lowering from compiler Options, using default intrinsic/support modules.
+      */
+    def fromOptions(
+        sir: SIR,
+        options: scalus.compiler.Options,
+        debug: Boolean = false
+    ): SirToUplcV3Lowering =
+        SirToUplcV3Lowering(
+          sir = sir,
+          generateErrorTraces = options.generateErrorTraces,
+          debug = debug,
+          targetLanguage = options.targetLanguage,
+          targetProtocolVersion = options.targetProtocolVersion,
+          intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
+          supportModules = IntrinsicResolver.defaultSupportModules,
+          nativeListElements = options.nativeListElements
+        )
 }

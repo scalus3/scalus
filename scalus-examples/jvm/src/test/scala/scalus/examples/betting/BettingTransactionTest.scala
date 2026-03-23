@@ -17,7 +17,7 @@ import scalus.utils.await
 
 class BettingTransactionTest extends AnyFunSuite, ScalusTest {
     private given env: CardanoInfo = TestUtil.testEnvironment
-    private val contract = BettingContract.withErrorTraces
+    private val contract = BettingContract.compiled.withErrorTraces
     private val scriptAddress = contract.address(env.network)
 
     // Generate real key pairs for all participants
@@ -288,7 +288,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, joinTx, betUtxo.input)
         assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 490765, steps = 150_918305))
+        assert(result.budget == ExUnits(memory = 489565, steps = 150_726305))
 
         provider.setSlot(beforeSlot - 1)
         assert(provider.submit(joinTx).await().isRight)
@@ -511,7 +511,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, winTx, joinedBetUtxo.input)
         assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 370853, steps = 115_236654))
+        assert(result.budget == ExUnits(memory = 369653, steps = 115_044654))
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
 
