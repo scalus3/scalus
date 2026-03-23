@@ -515,7 +515,6 @@ object Lowering {
         targetType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValueRepresentation = {
-        import scalus.compiler.intrinsics.ReprTag
         sir match
             // Case object: SIR.Constr("ReprTag$.DataData", _, Nil, _, _)
             case SIR.Constr(name, _, Nil, _, _) =>
