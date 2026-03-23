@@ -1,0 +1,89 @@
+---
+title: Blueprint Generation and Script Verification
+sidebarTitle: Blueprint Verification
+description: Generate CIP-57 blueprints, embed them in JARs, and verify on-chain script hashes against published artifacts.
+---
+
+# Blueprint Generation and Script Verification
+
+When a Cardano smart contract is deployed on-chain, only its script hash is visible. How do
+you verify that a given source code produced that hash?
+
+For Scalus projects, the verifiable artifact is the **JAR**. The `ScalusBlueprintPlugin`
+embeds [CIP-57 blueprint](https://cips.cardano.org/cip/CIP-57) JSON files into the JAR during
+build. Each blueprint contains the `compiledCode` (CBOR hex) and `hash` (script hash), so anyone
+with the JAR -- or anyone who can build it from source -- can independently confirm the on-chain
+script hash.
+
+## Setup
+
+`project/plugins.sbt`:
+```scala copy
+addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "<scalus-version>")
+```
+
+`build.sbt`:
+```scala copy
+lazy val myProject = (project in file("."))
+    .enablePlugins(ScalusBlueprintPlugin)
+    .settings(
+      scalaVersion := "3.3.7",
+      addCompilerPlugin("org.scalus" % "scalus-plugin" % "<scalus-version>" cross CrossVersion.full),
+      libraryDependencies += "org.scalus" %% "scalus" % "<scalus-version>",
+    )
+```
+
+## Define a Contract
+
+The compiler plugin discovers objects extending `Contract` automatically.
+Each one needs a validator and a blueprint:
+
+```scala copy
+// MyValidator.scala
+@Compile
+object MyValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef
+    ): Unit = {
+        val owner = datum.getOrFail("No datum").to[PubKeyHash]
+        require(tx.signatories.contains(owner), "Not signed by owner")
+    }
+}
+
+// MyContract.scala
+object MyContract extends Contract {
+    private given Options = Options.release
+    lazy val compiled = PlutusV3.compile(MyValidator.validate)
+    lazy val blueprint = Blueprint.plutusV3[PubKeyHash, Unit](
+      title = "My Validator",
+      description = "Owner-signed spending validator",
+      version = "1.0.0",
+      license = None,
+      compiled = compiled
+    )
+}
+```
+
+## Generate and Verify
+
+Run the `blueprint` task to generate the blueprint files, then `package` to produce the JAR:
+
+```sh copy
+sbt blueprint package
+```
+
+```
+[info] Wrote META-INF/scalus/blueprints/MyContract.json
+```
+
+`sbt package` is the standard sbt command for producing a JAR from your project. A JAR is just
+a ZIP archive, so standard tools work to inspect it. Extract the embedded blueprint:
+
+```sh copy
+unzip -p my-project.jar META-INF/scalus/blueprints/MyContract.json
+```
+
+The `hash` field is the standard Cardano script hash: `blake2b_224(0x03 || compiledCode)`.
+If you have the JAR -- either published or built from source -- you can verify that this hash
+matches what's deployed on-chain. No Scalus installation or JVM required for verification,
+just the JAR and a blake2b implementation.
