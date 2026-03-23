@@ -106,9 +106,13 @@ sealed abstract class CompiledPlutus[A](
                   intrinsicModules =
                       scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
                   supportModules =
-                      scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
+                      scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules,
+                  nativeListElements = options.nativeListElements
                 ).lower()
-        if options.optimizeUplc then optimizer(uplc) else uplc
+        if options.uplcOptimizers.nonEmpty then
+            options.uplcOptimizers.foldLeft(uplc)((term, opt) => opt(term))
+        else if options.optimizeUplc then optimizer(uplc)
+        else uplc
     }
 }
 

@@ -16,7 +16,7 @@ object TypeNothingSirTypeGenerator extends SirTypeUplcGenerator {
         tp: SIRType
     )(using LoweringContext): LoweredValueRepresentation =
         throw IllegalStateException(
-          "Can't ask defaultDataRepresentation access Nothing type generator"
+          "Can't ask defaultDataRepresentation on Nothing type generator"
         )
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
@@ -24,7 +24,9 @@ object TypeNothingSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         ErrorRepresentation
 
-    override def isDataSupported(tp: SIRType)(using LoweringContext): Boolean = false
+    // Nothing is a bottom type — no values exist, so data conversion is vacuously true.
+    // This allows List[Nothing] (= Nil) to be Data-representable.
+    override def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = true
 
     override def toRepresentation(
         input: LoweredValue,

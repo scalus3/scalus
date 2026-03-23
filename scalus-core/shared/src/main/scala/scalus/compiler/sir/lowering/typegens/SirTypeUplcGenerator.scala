@@ -25,7 +25,7 @@ trait SirTypeUplcGenerator {
         LoweringContext
     ): LoweredValueRepresentation
 
-    def isDataSupported(tp: SIRType)(using
+    def canBeConvertedToData(tp: SIRType)(using
         lctx: LoweringContext
     ): Boolean
 
@@ -78,12 +78,13 @@ object SirTypeUplcGenerator {
         constrDecl: ConstrDecl,
         typeArgs: List[SIRType],
         debug: Boolean
-    ): SirTypeUplcGenerator =
+    )(using lctx: LoweringContext): SirTypeUplcGenerator =
         encoded match {
-            case "ProductCase"           => ProductCaseSirTypeGenerator
-            case "SumCase"               => SumCaseSirTypeGenerator
-            case "SumDataList"           => SumDataListSirTypeGenerator
-            case "SumPairDataList"       => SumPairDataListSirTypeGenerator
+            case "ProductCase" => ProductCaseSirTypeGenerator
+            case "SumCase"     => SumCaseSirTypeGenerator
+            case "SumDataList" =>
+                new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData)
+            case "SumPairDataList"       => SumPairBuiltinListSirTypeGenerator
             case "Map"                   => MapSirTypeGenerator
             case "Data"                  => SIRTypeUplcDataGenerator
             case "BuiltinArray"          => BuiltinArraySirTypeGenerator
@@ -100,7 +101,9 @@ object SirTypeUplcGenerator {
                 throw IllegalArgumentException(s"Unknown UplcRepresentation: $other")
         }
 
-    def apply(tp: SIRType, debug: Boolean = false): SirTypeUplcGenerator = {
+    def apply(tp: SIRType, debug: Boolean = false)(using
+        lctx: LoweringContext
+    ): SirTypeUplcGenerator = {
         val retval = tp match
             case SIRType.Boolean =>
                 SIRTypeUplcBooleanGenerator
@@ -132,17 +135,20 @@ object SirTypeUplcGenerator {
                         val trace = new IdentityHashMap[SIRType, SIRType]()
                         if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
                         else if decl.name == SumListCommonSirTypeGenerator.PairListDataDeclName then
-                            if !containsFun(tp, trace) then SumPairDataListSirTypeGenerator
+                            if !containsFun(tp, trace) then SumPairBuiltinListSirTypeGenerator
                             else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
                             if !containsFun(tp, trace) then {
-                                if isPair(typeArgs.head) // isPairOrTuple2(typeArgs.head)
-                                then SumPairDataListSirTypeGenerator
-                                else SumDataListSirTypeGenerator
+                                if isPair(typeArgs.head)
+                                then SumPairBuiltinListSirTypeGenerator
+                                else
+                                    new SumBuiltinListSirTypeGenerator(
+                                      elementReprFor(typeArgs.head)
+                                    )
                             } else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == SIRType.BuiltinList.name then
-                            if isPairOrTuple2(typeArgs.head) then SumPairDataListSirTypeGenerator
-                            else SumDataListSirTypeGenerator
+                            if isPair(typeArgs.head) then SumPairBuiltinListSirTypeGenerator
+                            else new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head))
                         else if !containsFun(tp, trace) then SumCaseSirTypeGenerator
                         else SumCaseUplcOnlySirTypeGenerator
                     }
@@ -224,7 +230,7 @@ object SirTypeUplcGenerator {
     private def resolveWithConstraints(
         constrDecl: ConstrDecl,
         typeArgs: List[SIRType]
-    ): Option[SirTypeUplcGenerator] =
+    )(using lctx: LoweringContext): Option[SirTypeUplcGenerator] = {
         if constrDecl.name == SIRType.List.NilConstr.name || constrDecl.name == SIRType.List.Cons.name
             || constrDecl.name == SIRType.BuiltinList.Nil.name || constrDecl.name == SIRType.BuiltinList.Cons.name
             || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
@@ -233,13 +239,24 @@ object SirTypeUplcGenerator {
             if hasFun then Some(SumCaseUplcOnlySirTypeGenerator)
             else if constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
                 || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
-            then Some(SumPairDataListSirTypeGenerator)
-            else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPairOrTuple2(
+            then Some(SumPairBuiltinListSirTypeGenerator)
+            else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPair(
                   typeArgs.head
                 )
-            then Some(SumPairDataListSirTypeGenerator)
-            else Some(SumDataListSirTypeGenerator)
+            then Some(SumPairBuiltinListSirTypeGenerator)
+            else if typeArgs.nonEmpty && typeArgs.head != SIRType.TypeNothing then
+                Some(new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head)))
+            else if constrDecl.name == SIRType.List.NilConstr.name
+                || constrDecl.name == SIRType.BuiltinList.Nil.name
+                || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
+            then Some(new SumBuiltinListSirTypeGenerator(TypeVarRepresentation(false)))
+            else
+                throw LoweringException(
+                  s"Cannot determine element representation for list constructor ${constrDecl.name} with typeArgs=${typeArgs.map(_.show)}",
+                  SIRPosition.empty
+                )
         else None
+    }
 
     /** Basic structural inference: ProductCase or ProductCaseUplcOnly based on containsFun. */
     private def resolveBasicStructural(
@@ -251,6 +268,22 @@ object SirTypeUplcGenerator {
 
     def isPairOrTuple2(tp: SIRType): Boolean =
         ProductCaseClassRepresentation.PairData.isPairOrTuple2(tp)
+
+    def isPrimitiveElementType(tp: SIRType): Boolean = tp match
+        case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean => true
+        case _                                                                       => false
+
+    /** Compute the element representation for a list element type. Note: only BuiltinPair gets
+      * PairData. Tuple2 gets ProdDataConstr via defaultDataRepresentation because Tuple2 is
+      * constr-encoded (Data.Constr(0, [fst, snd])), not pair-encoded.
+      */
+    def elementReprFor(elemType: SIRType)(using lctx: LoweringContext): LoweredValueRepresentation =
+        if isPair(elemType) then ProductCaseClassRepresentation.PairData
+        else if lctx.nativeListElements && isPrimitiveElementType(elemType) then
+            PrimitiveRepresentation.Constant
+        else if elemType == SIRType.TypeNothing || elemType == SIRType.Unit then
+            TypeVarRepresentation(false)
+        else SirTypeUplcGenerator(elemType).defaultDataRepresentation(elemType)
 
     def isPair(tp: SIRType): Boolean =
         SIRType.retrieveConstrDecl(tp) match {

@@ -29,7 +29,7 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         ProductCaseClassRepresentation.PackedArrayAsList
 
-    override def isDataSupported(tp: SIRType)(using lctx: LoweringContext): Boolean = true
+    override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = true
 
     override def toRepresentation(
         input: LoweredValue,
@@ -77,7 +77,9 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
                   input,
                   pos,
                   Some(SIRType.BuiltinList(SIRType.Data.tp)),
-                  Some(SumCaseClassRepresentation.SumDataList)
+                  Some(
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
+                  )
                 )
                 lvBuiltinApply(
                   SIRBuiltins.listData,
@@ -97,7 +99,7 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
                   SIRBuiltins.unListData,
                   input,
                   SIRType.BuiltinList(SIRType.Data.tp),
-                  SumCaseClassRepresentation.SumDataList,
+                  SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
                   pos
                 )
                 lvBuiltinApply(

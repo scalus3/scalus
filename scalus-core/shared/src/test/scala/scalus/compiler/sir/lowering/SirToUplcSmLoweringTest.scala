@@ -47,7 +47,7 @@ class SirToUplcSmLoweringTest
         infix def alphaEq(other: Term): Boolean =
             DeBruijn.deBruijnTerm(term) α_== DeBruijn.deBruijnTerm(other)
 
-    private val ae = AnnotationsDecl.empty
+    private inline def ae = AnnotationsDecl.empty
 
     given PlutusVM = PlutusVM.makePlutusV3VM()
 
@@ -214,11 +214,15 @@ class SirToUplcSmLoweringTest
           )
         )
 
-        // println(s"oriignSir1.tp = ${originSir1.tp.show}")
-        val gen1 = SirTypeUplcGenerator(originSir1.tp)
         given LoweringContext = LoweringContext()
-        val representation1 = gen1.defaultRepresentation(originSir1.tp)
-        assert(representation1 == SumCaseClassRepresentation.SumDataList)
+        val listDataType = SIRType.List(SIRType.Data.tp)
+        val gen1 = SirTypeUplcGenerator(listDataType)
+        val representation1 = gen1.defaultRepresentation(listDataType)
+        assert(
+          representation1 == SumCaseClassRepresentation.SumBuiltinList(
+            SumCaseClassRepresentation.DataData
+          )
+        )
 
         val genDataList = SirTypeUplcGenerator(SIRType.List(SIRType.Data.tp))
 
@@ -633,7 +637,10 @@ class SirToUplcSmLoweringTest
           ae
         )
 
-        val genArg1 = SirTypeUplcGenerator(arg1Sir.tp)
+        val genArg1 = {
+            given LoweringContext = LoweringContext()
+            SirTypeUplcGenerator(arg1Sir.tp)
+        }
         // println("genArg1 = " + genArg1)
 
         val arg1 = lower(arg1Sir, upcastTo = optionType(SIRType.Integer))

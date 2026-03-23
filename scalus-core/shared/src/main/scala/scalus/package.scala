@@ -60,17 +60,7 @@ package object scalus {
                       targetProtocolVersion = options.targetProtocolVersion
                     ).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
-                    SirToUplcV3Lowering(
-                      sir,
-                      generateErrorTraces = generateErrorTraces,
-                      debug = debug,
-                      targetLanguage = options.targetLanguage,
-                      targetProtocolVersion = options.targetProtocolVersion,
-                      intrinsicModules =
-                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
-                      supportModules =
-                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
-                    ).lower()
+                    SirToUplcV3Lowering.fromOptions(sir, options, debug).lower()
             val retval =
                 if optimizeUplc then
                     val optimizer = V3Optimizer()
@@ -100,16 +90,7 @@ package object scalus {
             generateErrorTraces: Boolean = options.generateErrorTraces,
             debug: Boolean = options.debug
         ): LoweredValue = {
-            val retval = SirToUplcV3Lowering(
-              sir,
-              generateErrorTraces = options.generateErrorTraces,
-              debug = options.debug,
-              targetLanguage = options.targetLanguage,
-              targetProtocolVersion = options.targetProtocolVersion,
-              intrinsicModules =
-                  scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
-              supportModules = scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
-            ).toLoweredValue()
+            val retval = SirToUplcV3Lowering.fromOptions(sir, options).toLoweredValue()
             retval
         }
 
@@ -129,17 +110,7 @@ package object scalus {
                       targetProtocolVersion = options.targetProtocolVersion
                     ).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
-                    SirToUplcV3Lowering(
-                      sir,
-                      generateErrorTraces = options.generateErrorTraces,
-                      debug = options.debug,
-                      targetLanguage = options.targetLanguage,
-                      targetProtocolVersion = options.targetProtocolVersion,
-                      intrinsicModules =
-                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
-                      supportModules =
-                          scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
-                    ).lower()
+                    SirToUplcV3Lowering.fromOptions(sir, options).lower()
             val retval =
                 if options.optimizeUplc then
                     val optimizer = V3Optimizer()

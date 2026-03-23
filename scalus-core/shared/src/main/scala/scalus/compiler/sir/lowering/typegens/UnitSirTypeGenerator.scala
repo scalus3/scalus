@@ -22,7 +22,7 @@ object UnitSirTypeGenerator extends SirTypeUplcGenerator {
     )(using lctx: LoweringContext): LoweredValueRepresentation =
         PrimitiveRepresentation.Constant
 
-    override def isDataSupported(tp: SIRType)(using LoweringContext): Boolean = false
+    override def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = false
 
     override def toRepresentation(
         input: LoweredValue,
@@ -35,6 +35,8 @@ object UnitSirTypeGenerator extends SirTypeUplcGenerator {
             case (TypeVarRepresentation(isBuiltin), PrimitiveRepresentation.Constant) =>
                 input
             case (PrimitiveRepresentation.Constant, TypeVarRepresentation(isBuiltin)) =>
+                input
+            case (TypeVarRepresentation(_), TypeVarRepresentation(_)) =>
                 input
             case (ErrorRepresentation, _) =>
                 // error can be converted to any representatio

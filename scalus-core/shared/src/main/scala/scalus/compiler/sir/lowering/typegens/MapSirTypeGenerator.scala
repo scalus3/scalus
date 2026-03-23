@@ -28,7 +28,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
         ProductCaseClassRepresentation.PackedDataMap
     }
 
-    override def isDataSupported(tp: SIRType)(using
+    override def canBeConvertedToData(tp: SIRType)(using
         lctx: LoweringContext
     ): Boolean = {
         true
@@ -86,7 +86,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
             // TODO: add 'target type' to lower
             val loweredArg = lctx.lower(constr.args.head)
             val loweredArgR = loweredArg.toRepresentation(
-              SumCaseClassRepresentation.SumDataPairList,
+              pairListReprFor(constr.tp, constr.anns.pos),
               constr.anns.pos
             )
             lvBuiltinApply(
@@ -111,7 +111,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
               SIRBuiltins.unMapData,
               loweredScrutinee,
               sel.tp,
-              SumCaseClassRepresentation.SumDataPairList,
+              pairListReprFor(loweredScrutinee.sirType, sel.anns.pos),
               sel.anns.pos
             )
         else
@@ -174,14 +174,14 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
           SIRBuiltins.unMapData,
           loweredScrutineeR,
           listType,
-          SumCaseClassRepresentation.SumDataPairList,
+          pairListReprFor(loweredScrutineeR.sirType, matchData.anns.pos),
           matchData.anns.pos
         )
         val prevScope = lctx.scope
         val matchedVar = lvNewLazyNamedVar(
           argName,
           retrieveListType(loweredScrutinee.sirType),
-          SumCaseClassRepresentation.SumDataPairList,
+          pairListReprFor(loweredScrutinee.sirType, matchData.anns.pos),
           rhs,
           caseData.anns.pos
         )
@@ -195,16 +195,32 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
         )
     }
 
+    private def pairListReprFor(tp: SIRType, pos: SIRPosition)(using
+        lctx: LoweringContext
+    ): SumCaseClassRepresentation.SumPairBuiltinList = {
+        val listType = retrieveListType(tp)
+        val elemType = SumCaseClassRepresentation.SumBuiltinList
+            .retrieveListElementType(listType)
+            .getOrElse(
+              throw LoweringException(
+                s"Cannot retrieve element type from list type ${listType.show}",
+                pos
+              )
+            )
+        SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, pos)
+    }
+
     private def retrieveListType(tp: SIRType): SIRType = {
         tp match
             case SIRType.CaseClass(decl, typeArgs, optParent) =>
                 decl.name match
-                    case "scalus.cardano.onchain.plutus.prelude.AssocMap" =>
+                    case "scalus.cardano.onchain.plutus.prelude.AssocMap" |
+                        "scalus.cardano.onchain.plutus.prelude.SortedMap" =>
                         val (ta, tb) = typeArgs match
                             case List(ta, tb) => (ta, tb)
                             case _ =>
                                 throw LoweringException(
-                                  s"Expected that AssocMap have two arguments, we have ${tp.show}",
+                                  s"Expected that Map have two arguments, we have ${tp.show}",
                                   SIRPosition.empty
                                 )
                         val pairType = SIRType.BuiltinPair(ta, tb)

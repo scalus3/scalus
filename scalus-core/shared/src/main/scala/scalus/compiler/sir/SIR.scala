@@ -89,6 +89,20 @@ case class ConstrDecl(
         throw new RuntimeException("Invalid name in constructor: " + name)
     }
 
+    // parentTypeArgs TypeVars must reference typeParams, otherwise substitution breaks.
+    if typeParams.nonEmpty then {
+        val typeParamIds = typeParams.map(_.optId).toSet
+        for pta <- parentTypeArgs do
+            pta match
+                case tv: SIRType.TypeVar
+                    if tv.optId.isDefined && !typeParamIds.contains(tv.optId) =>
+                    throw new RuntimeException(
+                      s"ConstrDecl($name): parentTypeArg ${tv.name}(${tv.optId}) is not in typeParams ${typeParams
+                              .map(t => s"${t.name}(${t.optId})")}"
+                    )
+                case _ => ()
+    }
+
 }
 
 //  Data~ Lost(Const)

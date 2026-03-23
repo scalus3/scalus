@@ -36,12 +36,12 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         defaultDataRepresentation(tp)
 
-    override def isDataSupported(tp: SIRType)(using lctx: LoweringContext): Boolean = {
+    override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         tp match {
             case tv: SIRType.TypeVar =>
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(resolvedType) =>
-                        lctx.typeGenerator(resolvedType).isDataSupported(resolvedType)
+                        lctx.typeGenerator(resolvedType).canBeConvertedToData(resolvedType)
                     case None =>
                         // for now we assume that type variable can be converted to data
                         // TODO: change when we will implement all representations.
@@ -91,26 +91,23 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                     )
                                 case SumCaseClassRepresentation.PackedSumDataList =>
                                     new RepresentationProxyLoweredValue(input, representation, pos)
-                                case SumCaseClassRepresentation.SumDataList =>
+                                case sbl @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
                                     val r1 = input.toRepresentation(
                                       SumCaseClassRepresentation.PackedSumDataList,
                                       pos
                                     )
-                                    SumDataListSirTypeGenerator.toRepresentation(
-                                      r1,
-                                      representation,
-                                      pos
-                                    )
+                                    new SumBuiltinListSirTypeGenerator(elemRepr)
+                                        .toRepresentation(r1, representation, pos)
                                 case SumCaseClassRepresentation.SumDataAssocMap =>
                                     RepresentationProxyLoweredValue(input, representation, pos)
-                                case SumCaseClassRepresentation.SumDataPairList =>
+                                case spl @ SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
                                     input
                                         .toRepresentation(
                                           SumCaseClassRepresentation.SumDataAssocMap,
                                           pos
                                         )
                                         .toRepresentation(
-                                          SumCaseClassRepresentation.SumDataPairList,
+                                          spl,
                                           pos
                                         )
                             }

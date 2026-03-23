@@ -1,37 +1,31 @@
 package scalus.compiler.intrinsics
 
 import scalus.Compile
-import scalus.compiler.sir.lowering.LoweredValueRepresentation
 
 /** Intrinsic helper functions for type and representation casts.
   *
-  * Marker methods that are never evaluated at runtime. The plugin compiles calls as `ExternalVar`
-  * references; the lowering intercepts them by name and handles representation changes.
-  *
-  * @see
-  *   [[scalus.uplc.builtin.internal.UniversalDataConversion]] for a similar pattern.
+  * Marker methods intercepted by the compiler plugin. Never evaluated at runtime.
   */
 @Compile
 object IntrinsicHelpers {
 
-    /** Zero-cost type cast with explicit representation.
+    /** Zero-cost type/representation cast.
       *
-      * The `R` singleton type parameter specifies the target `LoweredValueRepresentation`. The
-      * plugin intercepts calls and encodes the representation name in a SIR annotation; the
-      * lowering reads it and sets the representation directly.
-      *
-      * Example: `typeProxyRepr[BuiltinList[Data], SumDataList.type](self)` — view `self` as
-      * `BuiltinList[Data]` with `SumDataList` representation.
+      * The `repr` parameter specifies the target representation as a `ReprTag`. The plugin compiles
+      * it to SIR and stores in an annotation; the lowering interprets it.
       */
-    def typeProxyRepr[V, R <: LoweredValueRepresentation](x: Any): V =
-        throw new RuntimeException("typeProxyRepr: handled by lowering")
+    /** Zero-cost type-only cast. Changes the SIR type without affecting representation.
+      */
+    def typeProxy[V](x: Any): V =
+        throw new RuntimeException("typeProxy: should be eliminated by the Scalus compiler plugin")
 
-    /** Type cast that marks the return value as having Data (packed) representation.
+    /** Zero-cost type/representation cast.
       *
-      * Use for builtin return values that produce Data — e.g., `headList` returns a Data element
-      * from a `BuiltinList[Data]`. The lowering sets representation to `PackedData`, causing
-      * appropriate unpacking conversions (e.g., `unIData`, `unBData`) to be generated.
+      * The `repr` parameter specifies the target representation as a `ReprTag`. The plugin compiles
+      * it to SIR and stores in an annotation; the lowering interprets it.
       */
-    def typeProxyRetData[T](x: Any): T =
-        throw new RuntimeException("typeProxyRetData: handled by lowering")
+    def typeProxyRepr[V](x: Any, repr: ReprTag): V =
+        throw new RuntimeException(
+          "typeProxyRepr: should be eliminated by the Scalus compiler plugin"
+        )
 }

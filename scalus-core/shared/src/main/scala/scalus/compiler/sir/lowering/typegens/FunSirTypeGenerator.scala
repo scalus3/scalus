@@ -49,7 +49,7 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
         defaultRepresentation(tp)
     }
 
-    override def isDataSupported(tp: SIRType)(using LoweringContext): Boolean = false
+    override def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = false
 
     override def toRepresentation(
         input: LoweredValue,

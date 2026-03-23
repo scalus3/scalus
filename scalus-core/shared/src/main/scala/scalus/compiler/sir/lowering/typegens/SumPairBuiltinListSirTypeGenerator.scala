@@ -4,30 +4,33 @@ package typegens
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
-/** List(BuiltinPair(List,List))
+/** Generator for BuiltinList[BuiltinPair[Data,Data]] — pair lists. Uses SumPairBuiltinList
+  * representation, serialized via mapData/unMapData.
   */
-object SumPairDataListSirTypeGenerator extends SumListCommonSirTypeGenerator {
+object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation = {
-        SumCaseClassRepresentation.SumDataPairList
+        val elemType = retrieveElementType(tp, SIRPosition.empty)
+        SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType)
     }
 
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
-    ): LoweredValueRepresentation = {
+    ): LoweredValueRepresentation =
         SumCaseClassRepresentation.SumDataAssocMap
-    }
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         LoweringContext
-    ): LoweredValueRepresentation = {
+    ): LoweredValueRepresentation =
         SumCaseClassRepresentation.SumDataAssocMap
-    }
 
-    override def defaultListRepresentation(using LoweringContext): LoweredValueRepresentation = {
-        SumCaseClassRepresentation.SumDataPairList
+    override def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
+        lctx: LoweringContext
+    ): LoweredValueRepresentation = {
+        val elemType = retrieveElementType(tp, pos)
+        SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType)
     }
 
     override def defaultElementRepresentation(tp: SIRType, pos: SIRPosition)(using
@@ -37,7 +40,7 @@ object SumPairDataListSirTypeGenerator extends SumListCommonSirTypeGenerator {
             .retrieveConstrDecl(tp)
             .getOrElse(
               throw LoweringException(
-                s"SumPair shoul have a pari or tuple type representation, we have  ${tp.show}",
+                s"SumPair should have a pair or tuple type representation, we have ${tp.show}",
                 pos
               )
             )
@@ -45,13 +48,12 @@ object SumPairDataListSirTypeGenerator extends SumListCommonSirTypeGenerator {
         then ProductCaseClassRepresentation.PairData
         else
             throw LoweringException(
-              s"SumPair shoul have a pair or tuple type representation, we have  ${tp.show}",
+              s"SumPair should have a pair or tuple type representation, we have ${tp.show}",
               pos
             )
     }
 
-    override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue = {
-        lvPairDataNil(pos, resType)
-    }
+    override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue =
+        lvPairDataNil(pos, resType, defaultListRepresentation(resType, pos))
 
 }

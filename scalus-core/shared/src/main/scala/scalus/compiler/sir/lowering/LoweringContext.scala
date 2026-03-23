@@ -16,8 +16,10 @@ class LoweringContext(
     val targetLanguage: Language = Language.PlutusV3,
     val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     val generateErrorTraces: Boolean = false,
-    val uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) =>
-        SirTypeUplcGenerator(tp, lctx.debugLevel > 30),
+    val uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
+        given LoweringContext = lctx
+        SirTypeUplcGenerator(tp, lctx.debugLevel > 30)
+    },
     var typeUnifyEnv: SIRUnify.Env = SIRUnify.Env.empty,
     var debug: Boolean = false,
     var debugLevel: Int = 0,
@@ -25,6 +27,11 @@ class LoweringContext(
     var enclosingLambdaParams: List[IdentifiableLoweredValue] = List.empty,
     val intrinsicModules: Map[String, Module] = Map.empty,
     val supportModules: Map[String, Module] = Map.empty,
+    /** When true, List[BigInt] etc. use native UPLC element storage (SumBuiltinList(Constant)).
+      * When false (default), all lists use Data element storage
+      * (SumBuiltinList(DataData/PackedData)).
+      */
+    val nativeListElements: Boolean = false,
 ) {
 
     private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]
@@ -72,7 +79,7 @@ class LoweringContext(
             (_, module) <- supportModules.toSeq
             binding <- module.defs
         } yield {
-            val repr = SirTypeUplcGenerator(binding.value.tp)
+            val repr = SirTypeUplcGenerator(binding.value.tp)(using this)
                 .defaultRepresentation(binding.tp)(using this)
             val placeholder = VariableLoweredValue(
               id = uniqueVarName(binding.name),
