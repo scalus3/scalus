@@ -451,11 +451,15 @@ object ProductCaseClassRepresentation {
 
     case object UplcConstr extends ProductCaseClassRepresentation(false, false)
 
-    /** Representation for BuiltinArray[Data] as a native UPLC array.
+    /** BuiltinArray with parameterized element representation.
       *
-      * This is the default representation for BuiltinArray, providing O(1) indexed access.
+      * `ArrayData` is the common case where elements are `PackedData` (i.e., `BuiltinArray[Data]`).
+      * In the future, native element representations like `ProdBuiltinArray(Constant)` for
+      * `BuiltinArray[Integer]` are possible.
       */
-    case object ArrayData extends ProductCaseClassRepresentation(false, false) {
+    case class ProdBuiltinArray(elementRepr: LoweredValueRepresentation)
+        extends ProductCaseClassRepresentation(false, elementRepr.isDataCentric) {
+
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             tp match
                 case SIRType.BuiltinArray(_) => true
@@ -466,15 +470,35 @@ object ProductCaseClassRepresentation {
             tp: SIRType,
             repr: LoweredValueRepresentation,
             pos: SIRPosition
-        )(using LoweringContext): Boolean =
+        )(using lctx: LoweringContext): Boolean =
             repr match {
-                case ArrayData                => true
-                case TypeVarRepresentation(_) => true
-                case _                        => false
+                case ProdBuiltinArray(otherElemRepr) =>
+                    ProdBuiltinArray.extractElementType(tp) match
+                        case Some(elemType) =>
+                            elementRepr.isCompatibleOn(elemType, otherElemRepr, pos)
+                        case None => elementRepr.isDataCentric && otherElemRepr.isDataCentric
+                case TypeVarRepresentation(isBuiltin) =>
+                    if isBuiltin then true
+                    else
+                        val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp)
+                        resolved.isCompatibleOn(tp, this, pos)
+                case _ => false
             }
     }
 
-    /** Representation for BuiltinArray[Data] packed as Data.List.
+    object ProdBuiltinArray {
+        @tailrec
+        def extractElementType(tp: SIRType): Option[SIRType] =
+            tp match
+                case SIRType.BuiltinArray(elemType) => Some(elemType)
+                case SIRType.TypeLambda(_, body)    => extractElementType(body)
+                case SIRType.TypeProxy(ref)         => extractElementType(ref)
+                case _                              => None
+    }
+
+    val ArrayData: ProdBuiltinArray = ProdBuiltinArray(PrimitiveRepresentation.PackedData)
+
+    /** Representation for BuiltinArray packed as Data.List.
       *
       * This is used when the array needs to be Data-compatible (e.g., stored in a case class
       * field). The array is converted to a list and then wrapped in Data.List.
