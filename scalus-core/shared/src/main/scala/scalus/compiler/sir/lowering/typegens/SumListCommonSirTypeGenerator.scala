@@ -47,8 +47,12 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         val outElemUplcType = resolvedOut.uplcType(elemType)
         val inListType = SIRType.BuiltinList(inElemUplcType)
         val outListType = SIRType.BuiltinList(outElemUplcType)
-        val isPairIn = resolvedIn == ProductCaseClassRepresentation.PairData
-        val isPairOut = resolvedOut == ProductCaseClassRepresentation.PairData
+        val isPairIn = resolvedIn match
+            case _: ProductCaseClassRepresentation.ProdBuiltinPair => true
+            case _                                                 => false
+        val isPairOut = resolvedOut match
+            case _: ProductCaseClassRepresentation.ProdBuiltinPair => true
+            case _                                                 => false
         val inListRepr: LoweredValueRepresentation =
             if isPairIn then
                 SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, pos)

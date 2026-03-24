@@ -130,11 +130,11 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                     )
                                 case PackedDataMap =>
                                     new RepresentationProxyLoweredValue(input, representation, pos)
-                                case PairData =>
+                                case pbp: ProductCaseClassRepresentation.ProdBuiltinPair =>
                                     input
                                         .toRepresentation(ProdDataConstr, pos)
                                         .toRepresentation(
-                                          PairData,
+                                          pbp,
                                           pos
                                         )
                                 case ProductCaseClassRepresentation.OneElementWrapper(repr) =>

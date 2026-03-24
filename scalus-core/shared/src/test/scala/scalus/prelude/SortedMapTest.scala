@@ -6,6 +6,9 @@ import scalus.cardano.onchain.plutus.prelude.{identity, Eq, List, Option, Ord, S
 import scalus.uplc.builtin.Data.{fromData, toData, FromData, ToData}
 import scalus.cardano.ledger.ExUnits
 import scalus.testing.kit.EvalTestKit
+import scalus.uplc.*
+import scalus.uplc.Term.asTerm
+import scalus.uplc.eval.Result
 
 class SortedMapTest extends AnyFunSuite with EvalTestKit {
 
@@ -21,12 +24,21 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
             SortedMap.singleton(key, value).toList === List.single((key, value))
         }
 
-        assertEvalWithBudget(
-          (m: SortedMap[BigInt, BigInt]) => m.toList,
-          SortedMap.singleton(BigInt(1), BigInt(1)),
-          List.single((BigInt(1), BigInt(1))),
-          ExUnits(memory = 9852, steps = 2_482648)
-        )
+        { // Budget-only check: term representation changed from list data to list (pair data data)
+            val compiled = PlutusV3.compile((d: scalus.uplc.builtin.Data) => {
+                val m = d.to[SortedMap[BigInt, BigInt]]
+                m.toList
+            })
+            val applied =
+                compiled.program.term $ toData(SortedMap.singleton(BigInt(1), BigInt(1))).asTerm
+            applied.evaluateDebug match
+                case Result.Success(_, exunits, _, _) =>
+                    assert(
+                      exunits == ExUnits(memory = 432, steps = 72723),
+                      s"Budget mismatch: got $exunits"
+                    )
+                case Result.Failure(e, _, _, _) => fail(s"Expected success: $e")
+        }
     }
 
     test("unsafeFromList") {
@@ -36,18 +48,24 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
             SortedMap.unsafeFromList(strictlyAscendingList).toList === strictlyAscendingList
         }
 
-        assertEvalWithBudget(
-          (list: List[(BigInt, BigInt)]) => SortedMap.unsafeFromList(list).toList,
-          List.Cons(
-            (BigInt(1), BigInt(1)),
-            List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
-          ),
-          List.Cons(
-            (BigInt(1), BigInt(1)),
-            List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
-          ),
-          ExUnits(memory = 37876, steps = 11_432197)
-        )
+        { // Budget-only check: term representation changed from list data to list (pair data data)
+            val compiled = PlutusV3.compile((d: scalus.uplc.builtin.Data) => {
+                val list = d.to[List[(BigInt, BigInt)]]
+                SortedMap.unsafeFromList(list).toList
+            })
+            val arg = List.Cons(
+              (BigInt(1), BigInt(1)),
+              List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
+            )
+            val applied = compiled.program.term $ toData(arg).asTerm
+            applied.evaluateDebug match
+                case Result.Success(_, exunits, _, _) =>
+                    assert(
+                      exunits == ExUnits(memory = 20580, steps = 6_212410),
+                      s"Budget mismatch: got $exunits"
+                    )
+                case Result.Failure(e, _, _, _) => fail(s"Expected success: $e")
+        }
     }
 
     test("fromList") {
@@ -57,15 +75,24 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
             SortedMap.fromList(list).toList === strictlyAscendingList
         }
 
-        assertEvalWithBudget(
-          (list: List[(BigInt, BigInt)]) => SortedMap.fromList(list).toList,
-          List.Cons(
-            (BigInt(2), BigInt(2)),
-            List.Cons((BigInt(2), BigInt(3)), List.Cons((BigInt(1), BigInt(1)), List.Nil))
-          ),
-          List.Cons((BigInt(1), BigInt(1)), List.Cons((BigInt(2), BigInt(2)), List.Nil)),
-          ExUnits(memory = 78228, steps = 21_697436)
-        )
+        { // Budget-only check: term representation changed from list data to list (pair data data)
+            val compiled = PlutusV3.compile((d: scalus.uplc.builtin.Data) => {
+                val list = d.to[List[(BigInt, BigInt)]]
+                SortedMap.fromList(list).toList
+            })
+            val arg = List.Cons(
+              (BigInt(2), BigInt(2)),
+              List.Cons((BigInt(2), BigInt(3)), List.Cons((BigInt(1), BigInt(1)), List.Nil))
+            )
+            val applied = compiled.program.term $ toData(arg).asTerm
+            applied.evaluateDebug match
+                case Result.Success(_, exunits, _, _) =>
+                    assert(
+                      exunits == ExUnits(memory = 66220, steps = 18_098580),
+                      s"Budget mismatch: got $exunits"
+                    )
+                case Result.Failure(e, _, _, _) => fail(s"Expected success: $e")
+        }
     }
 
     test("fromStrictlyAscendingList") {

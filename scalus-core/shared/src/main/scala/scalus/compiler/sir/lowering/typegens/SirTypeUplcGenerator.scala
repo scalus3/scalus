@@ -267,7 +267,7 @@ object SirTypeUplcGenerator {
         else ProductCaseSirTypeGenerator
 
     def isPairOrTuple2(tp: SIRType): Boolean =
-        ProductCaseClassRepresentation.PairData.isPairOrTuple2(tp)
+        ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(tp)
 
     def isPrimitiveElementType(tp: SIRType): Boolean = tp match
         case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean => true

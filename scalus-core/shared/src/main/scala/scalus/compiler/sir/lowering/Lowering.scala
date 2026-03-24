@@ -518,12 +518,24 @@ object Lowering {
             // Case object: SIR.Constr("ReprTag$.DataData", _, Nil, _, _)
             case SIR.Constr(name, _, Nil, _, _) =>
                 resolveReprTagName(name, pos)
-            // Case class: SIR.Constr("ReprTag$.SumBuiltinList", _, List(elemReprSir), _, _)
+            // Case class with 1 arg: SIR.Constr("ReprTag$.SumBuiltinList", _, List(elemReprSir), _, _)
             case SIR.Constr(name, _, List(elemReprSir), _, _) =>
                 val shortName = name.split("\\$?\\.").last
                 if shortName == "SumBuiltinList" then
                     val elemRepr = interpretReprSIR(elemReprSir, targetType, pos)
                     SumCaseClassRepresentation.SumBuiltinList(elemRepr)
+                else
+                    throw LoweringException(
+                      s"typeProxyRepr: unsupported ReprTag constructor '$name'",
+                      pos
+                    )
+            // Case class with 2 args: SIR.Constr("ReprTag$.ProdBuiltinPair", _, List(fst, snd), _, _)
+            case SIR.Constr(name, _, List(fstReprSir, sndReprSir), _, _) =>
+                val shortName = name.split("\\$?\\.").last
+                if shortName == "ProdBuiltinPair" then
+                    val fstRepr = interpretReprSIR(fstReprSir, targetType, pos)
+                    val sndRepr = interpretReprSIR(sndReprSir, targetType, pos)
+                    ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
                 else
                     throw LoweringException(
                       s"typeProxyRepr: unsupported ReprTag constructor '$name'",

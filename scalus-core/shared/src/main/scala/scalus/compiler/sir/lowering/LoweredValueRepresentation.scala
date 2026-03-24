@@ -131,20 +131,16 @@ object SumCaseClassRepresentation {
                             case None =>
                                 // FreeUnificator or unknown — compatible if both are data-centric
                                 elementRepr.isDataCentric && otherElemRepr.isDataCentric
-                case SumPairBuiltinList(otherKeyRepr, otherValueRepr)
-                    if elementRepr == ProductCaseClassRepresentation.PairData =>
-                    // SumBuiltinList(PairData) is compatible with SumPairBuiltinList
+                case SumPairBuiltinList(otherKeyRepr, otherValueRepr) =>
                     SumBuiltinList.retrieveListElementType(tp) match
                         case Some(elemType) =>
-                            val (keyType, valueType) =
-                                SumPairBuiltinList.extractKeyValueTypes(elemType)
-                            lctx.typeGenerator(keyType)
-                                .defaultDataRepresentation(keyType)
-                                .isCompatibleOn(keyType, otherKeyRepr, pos) &&
-                            lctx.typeGenerator(valueType)
-                                .defaultDataRepresentation(valueType)
-                                .isCompatibleOn(valueType, otherValueRepr, pos)
-                        case None => true
+                            val otherElemRepr =
+                                ProductCaseClassRepresentation.ProdBuiltinPair(
+                                  otherKeyRepr,
+                                  otherValueRepr
+                                )
+                            elementRepr.isCompatibleOn(elemType, otherElemRepr, pos)
+                        case None => elementRepr.isDataCentric
                 case _ => this == repr
             }
 
@@ -197,22 +193,13 @@ object SumCaseClassRepresentation {
                         case None =>
                             keyRepr.isDataCentric && otherKeyRepr.isDataCentric &&
                             valueRepr.isDataCentric && otherValueRepr.isDataCentric
-                case SumBuiltinList(ProductCaseClassRepresentation.PairData) =>
+                case SumBuiltinList(otherElemRepr) =>
                     SumBuiltinList.retrieveListElementType(tp) match
                         case Some(elemType) =>
-                            val (keyType, valueType) =
-                                SumPairBuiltinList.extractKeyValueTypes(elemType)
-                            keyRepr.isCompatibleOn(
-                              keyType,
-                              lctx.typeGenerator(keyType).defaultDataRepresentation(keyType),
-                              pos
-                            ) &&
-                            valueRepr.isCompatibleOn(
-                              valueType,
-                              lctx.typeGenerator(valueType).defaultDataRepresentation(valueType),
-                              pos
-                            )
-                        case None => true
+                            val thisElemRepr =
+                                ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valueRepr)
+                            otherElemRepr.isCompatibleOn(elemType, thisElemRepr, pos)
+                        case None => keyRepr.isDataCentric && valueRepr.isDataCentric
                 case _ => this == repr
             }
 
@@ -229,7 +216,7 @@ object SumCaseClassRepresentation {
                         else
                             SumBuiltinList.retrieveListElementType(tp) match
                                 case Some(elementType) =>
-                                    ProductCaseClassRepresentation.PairData.isPairOrTuple2(
+                                    ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(
                                       elementType
                                     )
                                 case None => false
@@ -293,7 +280,7 @@ object SumCaseClassRepresentation {
                         else
                             SumBuiltinList.retrieveListElementType(tp) match
                                 case Some(elementType) =>
-                                    ProductCaseClassRepresentation.PairData.isPairOrTuple2(
+                                    ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(
                                       elementType
                                     )
                                 case None => false
@@ -389,17 +376,52 @@ object ProductCaseClassRepresentation {
 
     case object PairIntDataList extends ProductCaseClassRepresentation(false, true)
 
-    /** Pair[Data, Data] ( unMapData will give us a pair of data elements. )
+    /** BuiltinPair with parameterized component representations.
+      *
+      * `PairData` is the common case where both components are `PackedData` (i.e.,
+      * `BuiltinPair[Data, Data]`). In the future, native component representations like
+      * `ProdBuiltinPair(Constant, Constant)` for `BuiltinPair[Integer, ByteString]` are possible.
       */
-    case object PairData extends ProductCaseClassRepresentation(false, true) {
+    case class ProdBuiltinPair(
+        fstRepr: LoweredValueRepresentation,
+        sndRepr: LoweredValueRepresentation
+    ) extends ProductCaseClassRepresentation(
+          false,
+          fstRepr.isDataCentric && sndRepr.isDataCentric
+        ) {
 
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
-            isPairOrTuple2(tp)
+            ProdBuiltinPair.isPairOrTuple2(tp)
         }
 
-        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
-            SIRType.BuiltinPair(SIRType.Data.tp, SIRType.Data.tp)
+        override def uplcType(semanticType: SIRType)(using lctx: LoweringContext): SIRType = {
+            val (fstSemType, sndSemType) = ProdBuiltinPair.extractPairComponentTypes(semanticType)
+            SIRType.BuiltinPair(fstRepr.uplcType(fstSemType), sndRepr.uplcType(sndSemType))
+        }
 
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using lctx: LoweringContext): Boolean =
+            repr match {
+                case ProdBuiltinPair(otherFst, otherSnd) =>
+                    val (fstType, sndType) = ProdBuiltinPair.extractPairComponentTypes(tp)
+                    fstRepr.isCompatibleOn(fstType, otherFst, pos) && sndRepr.isCompatibleOn(
+                      sndType,
+                      otherSnd,
+                      pos
+                    )
+                case TypeVarRepresentation(isBuiltin) =>
+                    if isBuiltin then true
+                    else
+                        val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp)
+                        resolved.isCompatibleOn(tp, this, pos)
+                case _ => false
+            }
+    }
+
+    object ProdBuiltinPair {
         @tailrec
         def isPairOrTuple2(tp: SIRType): Boolean =
             tp match
@@ -413,7 +435,19 @@ object ProductCaseClassRepresentation {
                     isPairOrTuple2(ref)
                 case _ => false
 
+        @tailrec
+        def extractPairComponentTypes(tp: SIRType): (SIRType, SIRType) =
+            tp match
+                case SIRType.CaseClass(decl, fstType :: sndType :: _, _)
+                    if decl.name == "scalus.uplc.builtin.BuiltinPair" || decl.name == "scala.Tuple2" =>
+                    (fstType, sndType)
+                case SIRType.TypeLambda(_, body) => extractPairComponentTypes(body)
+                case SIRType.TypeProxy(ref)      => extractPairComponentTypes(ref)
+                case _                           => (SIRType.Data.tp, SIRType.Data.tp)
     }
+
+    val PairData: ProdBuiltinPair =
+        ProdBuiltinPair(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
 
     case object UplcConstr extends ProductCaseClassRepresentation(false, false)
 
