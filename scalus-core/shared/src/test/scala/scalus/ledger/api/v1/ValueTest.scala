@@ -17,7 +17,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         yield List.from(elements)
     }
 
-    test("toSortedMap") {
+    test("toSortedMap properties") {
         checkEval { (value: Value) =>
             value.toSortedMap.forall { case (policyId, tokens) =>
                 tokens.forall { case (tokenName, amount) =>
@@ -30,7 +30,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.zero.toSortedMap,
           SortedMap.empty
         )
+    }
 
+    test("toSortedMap lovelace") {
         assertEvalWithBudget(
           (v: Value) => v.toSortedMap,
           Value.lovelace(1000),
@@ -40,7 +42,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ),
           ExUnits(memory = 500, steps = 64100)
         )
+    }
 
+    test("toSortedMap token") {
         assertEvalWithBudget(
           (v: Value) => v.toSortedMap,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
@@ -59,7 +63,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("apply") {
+    test("apply properties") {
         checkEval { (policyId: PolicyId, tokenName: TokenName, value: BigInt) =>
             Value(policyId, tokenName, value).toSortedMap ===
                 (
@@ -72,16 +76,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
         }
 
-        assertEvalWithBudget(
-          (v: Value) => v.toSortedMap,
-          Value(utf8"PolicyId", utf8"TokenName", 1),
-          SortedMap.singleton(
-            utf8"PolicyId",
-            SortedMap.singleton(utf8"TokenName", BigInt(1))
-          ),
-          ExUnits(memory = 500, steps = 64100)
-        )
-
         assertEvalEq(
           Value(
             utf8"PolicyId",
@@ -92,7 +86,19 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("lovelace") {
+    test("apply token") {
+        assertEvalWithBudget(
+          (v: Value) => v.toSortedMap,
+          Value(utf8"PolicyId", utf8"TokenName", 1),
+          SortedMap.singleton(
+            utf8"PolicyId",
+            SortedMap.singleton(utf8"TokenName", BigInt(1))
+          ),
+          ExUnits(memory = 500, steps = 64100)
+        )
+    }
+
+    test("lovelace properties") {
         checkEval { (value: BigInt) =>
             Value.lovelace(value).toSortedMap ===
                 (
@@ -105,6 +111,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                 )
         }
 
+        assertEvalEq(
+          Value.lovelace(0),
+          Value.zero
+        )
+    }
+
+    test("lovelace toSortedMap") {
         assertEvalWithBudget(
           (v: Value) => v.toSortedMap,
           Value.lovelace(1000),
@@ -114,14 +127,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ),
           ExUnits(memory = 500, steps = 64100)
         )
-
-        assertEvalEq(
-          Value.lovelace(0),
-          Value.zero
-        )
     }
 
-    test("unsafeFromList") {
+    test("unsafeFromList properties") {
         checkEval { (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
             val validList =
                 list.distinct(using Eq.keyPairEq)
@@ -142,7 +150,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
 
         }
+    }
 
+    test("unsafeFromList two policies") {
         assertEvalWithBudget(
           (v: Value) => v.toSortedMap,
           Value.unsafeFromList(
@@ -165,11 +175,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ),
           ExUnits(memory = 500, steps = 64100)
         )
-
     }
 
-    test("fromList") {
-
+    test("fromList properties") {
         checkEval { (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
             Value.fromList(list).toSortedMap === SortedMap.fromList(
               list.filterMap { case (cs, tnList) =>
@@ -180,7 +188,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               }
             )
         }
+    }
 
+    test("fromList with duplicates and zeros") {
         assertEvalWithBudget(
           (v: Value) => v.toSortedMap,
           Value.fromList(
@@ -214,7 +224,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("fromStrictlyAscendingListWithNonZeroAmounts") {
+    test("fromStrictlyAscendingListWithNonZeroAmounts properties") {
         checkEval { (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
             val validList =
                 list.distinct(using Eq.keyPairEq)
@@ -235,7 +245,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                   validList.map { case (cs, tnList) => (cs, SortedMap.unsafeFromList(tnList)) }
                 )
         }
+    }
 
+    test("fromStrictlyAscendingListWithNonZeroAmounts two policies") {
         assertEvalWithBudget(
           Value
               .fromStrictlyAscendingListWithNonZeroAmounts(
@@ -399,7 +411,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         // }
     }
 
-    test("unary_") {
+    test("unary_ properties") {
         checkEval { (value: Value) =>
             val negatedValue = -value
             negatedValue.toSortedMap === value.toSortedMap.mapValues(_.mapValues(-_))
@@ -409,14 +421,18 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           -Value.zero,
           Value.zero
         )
+    }
 
+    test("unary_ token") {
         assertEvalWithBudget(
           (v: Value) => -v,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", -1000),
           ExUnits(memory = 40188, steps = 11_767393)
         )
+    }
 
+    test("unary_ lovelace") {
         assertEvalWithBudget(
           (v: Value) => -v,
           Value.lovelace(1000),
@@ -425,7 +441,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("+") {
+    test("+ properties") {
         checkEval { (value: Value) =>
             (value + Value.zero) === value && (Value.zero + value) === value
         }
@@ -453,49 +469,63 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.zero + Value.zero,
           Value.zero
         )
+    }
 
+    test("+ token + token") {
         assertEvalWithBudget(
           (v: Value) => v + Value(utf8"PolicyId", utf8"TokenName", 2000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 3000),
-          ExUnits(memory = 109631, steps = 31_901640)
+          ExUnits(memory = 109331, steps = 31_853640)
         )
+    }
 
+    test("+ token + zero") {
         assertEvalWithBudget(
           (v: Value) => v + Value.zero,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 78390, steps = 20_783872)
+          ExUnits(memory = 77790, steps = 20_687872)
         )
+    }
 
+    test("+ zero + token") {
         assertEvalWithBudget(
           (v: Value) => Value.zero + v,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 76926, steps = 20_293884)
+          ExUnits(memory = 76326, steps = 20_197884)
         )
+    }
 
+    test("+ lovelace + lovelace") {
         assertEvalWithBudget(
           (v: Value) => v + Value.lovelace(2000),
           Value.lovelace(1000),
           Value.lovelace(3000),
-          ExUnits(memory = 109631, steps = 31_901528)
+          ExUnits(memory = 109331, steps = 31_853528)
         )
+    }
 
+    test("+ lovelace + zero") {
         assertEvalWithBudget(
           (v: Value) => v + Value.zero,
           Value.lovelace(1000),
           Value.lovelace(1000),
-          ExUnits(memory = 78390, steps = 20_783872)
+          ExUnits(memory = 77790, steps = 20_687872)
         )
+    }
 
+    test("+ zero + lovelace") {
         assertEvalWithBudget(
           (v: Value) => Value.zero + v,
           Value.lovelace(1000),
           Value.lovelace(1000),
-          ExUnits(memory = 76926, steps = 20_293884)
+          ExUnits(memory = 76326, steps = 20_197884)
         )
+    }
 
+    test("+ token + lovelace") {
         assertEvalWithBudget(
           (v: Value) => v + Value.lovelace(1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
@@ -508,23 +538,29 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
           ),
-          ExUnits(memory = 145312, steps = 40_639182)
+          ExUnits(memory = 144412, steps = 40_495182)
         )
+    }
 
+    test("+ token cancel") {
         assertEvalWithBudget(
           (v: Value) => v + Value(utf8"PolicyId", utf8"TokenName", -1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
-          ExUnits(memory = 84435, steps = 24_283494)
+          ExUnits(memory = 84135, steps = 24_235494)
         )
+    }
 
+    test("+ lovelace cancel") {
         assertEvalWithBudget(
           (v: Value) => v + Value.lovelace(-1000),
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 84435, steps = 24_283382)
+          ExUnits(memory = 84135, steps = 24_235382)
         )
+    }
 
+    test("+ multi-asset cancel") {
         assertEvalWithBudget(
           (v: Value) =>
               v + Value.fromList(
@@ -546,9 +582,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.zero,
-          ExUnits(memory = 294616, steps = 84_021613)
+          ExUnits(memory = 294316, steps = 83_973613)
         )
+    }
 
+    test("+ multi-asset partial cancel token") {
         assertEvalWithBudget(
           (v: Value) =>
               v + Value.fromList(
@@ -569,9 +607,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.lovelace(1000),
-          ExUnits(memory = 223888, steps = 63_301459)
+          ExUnits(memory = 223288, steps = 63_205459)
         )
+    }
 
+    test("+ multi-asset partial cancel lovelace") {
         assertEvalWithBudget(
           (v: Value) =>
               v + Value.fromList(
@@ -589,11 +629,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 218172, steps = 60_923641)
+          ExUnits(memory = 217572, steps = 60_827641)
         )
     }
 
-    test("-") {
+    test("- properties") {
         checkEval { (value: Value) =>
             (value - Value.zero) === value && (Value.zero - value) === -value
         }
@@ -621,49 +661,63 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.zero - Value.zero,
           Value.zero
         )
+    }
 
+    test("- token - token") {
         assertEvalWithBudget(
           (v: Value) => v - Value(utf8"PolicyId", utf8"TokenName", 2000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", -1000),
-          ExUnits(memory = 109631, steps = 31_901640)
+          ExUnits(memory = 109331, steps = 31_853640)
         )
+    }
 
+    test("- token - zero") {
         assertEvalWithBudget(
           (v: Value) => v - Value.zero,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 78390, steps = 20_783872)
+          ExUnits(memory = 77790, steps = 20_687872)
         )
+    }
 
+    test("- zero - token") {
         assertEvalWithBudget(
           (v: Value) => Value.zero - v,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", -1000),
-          ExUnits(memory = 76926, steps = 20_293884)
+          ExUnits(memory = 76326, steps = 20_197884)
         )
+    }
 
+    test("- lovelace - lovelace") {
         assertEvalWithBudget(
           (v: Value) => v - Value.lovelace(2000),
           Value.lovelace(1000),
           Value.lovelace(-1000),
-          ExUnits(memory = 109631, steps = 31_901528)
+          ExUnits(memory = 109331, steps = 31_853528)
         )
+    }
 
+    test("- lovelace - zero") {
         assertEvalWithBudget(
           (v: Value) => v - Value.zero,
           Value.lovelace(1000),
           Value.lovelace(1000),
-          ExUnits(memory = 78390, steps = 20_783872)
+          ExUnits(memory = 77790, steps = 20_687872)
         )
+    }
 
+    test("- zero - lovelace") {
         assertEvalWithBudget(
           (v: Value) => Value.zero - v,
           Value.lovelace(1000),
           Value.lovelace(-1000),
-          ExUnits(memory = 76926, steps = 20_293884)
+          ExUnits(memory = 76326, steps = 20_197884)
         )
+    }
 
+    test("- token - lovelace") {
         assertEvalWithBudget(
           (v: Value) => v - Value.lovelace(1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
@@ -676,23 +730,29 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(-1000))))
             )
           ),
-          ExUnits(memory = 145312, steps = 40_639182)
+          ExUnits(memory = 144412, steps = 40_495182)
         )
+    }
 
+    test("- token cancel") {
         assertEvalWithBudget(
           (v: Value) => v - Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
-          ExUnits(memory = 84435, steps = 24_283494)
+          ExUnits(memory = 84135, steps = 24_235494)
         )
+    }
 
+    test("- lovelace cancel") {
         assertEvalWithBudget(
           (v: Value) => v - Value.lovelace(1000),
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 84435, steps = 24_283382)
+          ExUnits(memory = 84135, steps = 24_235382)
         )
+    }
 
+    test("- multi-asset cancel") {
         assertEvalWithBudget(
           (v: Value) =>
               v - Value.fromList(
@@ -714,9 +774,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.zero,
-          ExUnits(memory = 294616, steps = 84_021613)
+          ExUnits(memory = 294316, steps = 83_973613)
         )
+    }
 
+    test("- multi-asset partial cancel token") {
         assertEvalWithBudget(
           (v: Value) =>
               v - Value.fromList(
@@ -737,9 +799,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.lovelace(1000),
-          ExUnits(memory = 223888, steps = 63_301459)
+          ExUnits(memory = 223288, steps = 63_205459)
         )
+    }
 
+    test("- multi-asset partial cancel lovelace") {
         assertEvalWithBudget(
           (v: Value) =>
               v - Value.fromList(
@@ -757,11 +821,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 218172, steps = 60_923641)
+          ExUnits(memory = 217572, steps = 60_827641)
         )
     }
 
-    test("*") {
+    test("* properties") {
         checkEval { (value: Value) => (value * 0) === Value.zero }
 
         checkEval { (value: Value, factor: BigInt) =>
@@ -781,28 +845,36 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.zero * 1,
           Value.zero
         )
+    }
 
+    test("* token by 2") {
         assertEvalWithBudget(
           (v: Value) => v * 2,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 2000),
           ExUnits(memory = 41189, steps = 11_962422)
         )
+    }
 
+    test("* token by 0") {
         assertEvalWithBudget(
           (v: Value) => v * 0,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
           ExUnits(memory = 5301, steps = 908149)
         )
+    }
 
+    test("* lovelace by 2") {
         assertEvalWithBudget(
           (v: Value) => v * 2,
           Value.lovelace(1000),
           Value.lovelace(2000),
           ExUnits(memory = 41189, steps = 11_962422)
         )
+    }
 
+    test("* lovelace by 0") {
         assertEvalWithBudget(
           (v: Value) => v * 0,
           Value.lovelace(1000),
@@ -835,7 +907,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("getLovelace") {
+    test("getLovelace properties") {
         checkEval { (value: Value) =>
             value.getLovelace ===
                 value.toSortedMap
@@ -843,28 +915,36 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                     .flatMap(_.get(Value.adaTokenName))
                     .getOrElse(BigInt(0))
         }
+    }
 
+    test("getLovelace zero") {
         assertEvalWithBudget(
           (v: Value) => v.getLovelace,
           Value.zero,
           BigInt(0),
           ExUnits(memory = 8530, steps = 1_780582)
         )
+    }
 
+    test("getLovelace lovelace") {
         assertEvalWithBudget(
           (v: Value) => v.getLovelace,
           Value.lovelace(1000),
           BigInt(1000),
           ExUnits(memory = 59024, steps = 15_957829)
         )
+    }
 
+    test("getLovelace token returns zero") {
         assertEvalWithBudget(
           (v: Value) => v.getLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           BigInt(0),
           ExUnits(memory = 14226, steps = 3_325898)
         )
+    }
 
+    test("getLovelace zero-amount token returns zero") {
         assertEvalWithBudget(
           (v: Value) => v.getLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 0),
@@ -873,14 +953,15 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("lovelaceAmount") {
-        // returns correct lovelace for lovelace-only value
+    test("lovelaceAmount lovelace-only") {
         assertEvalWithBudget(
           Value.lovelace(1000).lovelaceAmount,
           BigInt(1000),
           ExUnits(memory = 200, steps = 16_100)
         )
-        // returns correct lovelace for value with lovelace + native asset
+    }
+
+    test("lovelaceAmount lovelace + native asset") {
         assertEvalWithBudget(
           Value
               .fromList(
@@ -896,8 +977,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           BigInt(2000),
           ExUnits(memory = 200, steps = 16_100)
         )
+    }
 
-        // fails on Value.zero (empty list)
+    test("lovelaceAmount fails on zero") {
         assertEvalFails[NoSuchElementException] {
             Value.zero.lovelaceAmount
         }
@@ -963,7 +1045,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("quantityOf") {
+    test("quantityOf properties") {
         checkEval { (value: Value, policyId: PolicyId, tokenName: TokenName) =>
             value.quantityOf(policyId, tokenName) ===
                 value.toSortedMap
@@ -971,42 +1053,54 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
                     .flatMap(_.get(tokenName))
                     .getOrElse(BigInt(0))
         }
+    }
 
+    test("quantityOf ada in zero") {
         assertEvalWithBudget(
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value.zero,
           BigInt(0),
           ExUnits(memory = 8530, steps = 1_780582)
         )
+    }
 
+    test("quantityOf token in zero") {
         assertEvalWithBudget(
           (v: Value) => v.quantityOf(utf8"CS", utf8"TN"),
           Value.zero,
           BigInt(0),
           ExUnits(memory = 8530, steps = 1_780582)
         )
+    }
 
+    test("quantityOf ada in lovelace") {
         assertEvalWithBudget(
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value.lovelace(1000),
           BigInt(1000),
           ExUnits(memory = 59024, steps = 15_957829)
         )
+    }
 
+    test("quantityOf missing token in lovelace") {
         assertEvalWithBudget(
           (v: Value) => v.quantityOf(utf8"CS", utf8"TN"),
           Value.lovelace(1000),
           BigInt(0),
           ExUnits(memory = 18626, steps = 4_604417)
         )
+    }
 
+    test("quantityOf ada in token value") {
         assertEvalWithBudget(
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           BigInt(0),
           ExUnits(memory = 14226, steps = 3_325898)
         )
+    }
 
+    test("quantityOf matching token") {
         assertEvalWithBudget(
           (v: Value) => v.quantityOf(utf8"PolicyId", utf8"TokenName"),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
@@ -1015,32 +1109,40 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("withoutLovelace") {
+    test("withoutLovelace properties") {
         checkEval { (value: Value) =>
             value.withoutLovelace.getLovelace === BigInt(0)
         }
+    }
 
+    test("withoutLovelace zero") {
         assertEvalWithBudget(
           (v: Value) => v.withoutLovelace,
           Value.zero,
           Value.zero,
           ExUnits(memory = 5096, steps = 1_009963)
         )
+    }
 
+    test("withoutLovelace lovelace") {
         assertEvalWithBudget(
           (v: Value) => v.withoutLovelace,
           Value.lovelace(1000),
           Value.zero,
           ExUnits(memory = 11828, steps = 3_152662)
         )
+    }
 
+    test("withoutLovelace token") {
         assertEvalWithBudget(
           (v: Value) => v.withoutLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           ExUnits(memory = 9360, steps = 2_311137)
         )
+    }
 
+    test("withoutLovelace multi-asset") {
         assertEvalWithBudget(
           (v: Value) => v.withoutLovelace,
           Value.fromList(
@@ -1057,28 +1159,34 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
-    test("flatten") {
+    test("flatten properties") {
         checkEval { (value: Value) =>
             value.flatten ===
                 value.toSortedMap.toList.flatMap { case (cs, tokens) =>
                     tokens.toList.map { case (tn, amount) => (cs, tn, amount) }
                 }
         }
+    }
 
+    test("flatten zero") {
         assertEvalWithBudget(
           (v: Value) => v.flatten,
           Value.zero,
           List.empty,
           ExUnits(memory = 7096, steps = 1_287650)
         )
+    }
 
+    test("flatten lovelace") {
         assertEvalWithBudget(
           (v: Value) => v.flatten,
           Value.lovelace(1000),
           List((Value.adaPolicyId, Value.adaTokenName, BigInt(1000))),
           ExUnits(memory = 37148, steps = 10_363303)
         )
+    }
 
+    test("flatten token") {
         assertEvalWithBudget(
           (v: Value) => v.flatten,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
@@ -1091,7 +1199,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ),
           ExUnits(memory = 37148, steps = 10_363303)
         )
+    }
 
+    test("flatten multi-asset") {
         assertEvalWithBudget(
           (v: Value) => v.flatten,
           Value.fromList(
@@ -1209,34 +1319,39 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assert(policyIds.size == 2)
     }
 
-    test("Eq vs toData equality budget comparison") {
-        // Using realistic 28-byte PolicyIds (ScriptHash) and utf8 TokenNames
-
-        // zero: Eq 2.9x more mem, 1.7x more steps
+    test("Eq vs toData: zero equal via Eq") {
         assertEvalEq(
           Value.zero === Value.zero,
           true
         )
+    }
+
+    test("Eq vs toData: zero equal via toData") {
         assertEvalEq(
           Value.zero.toData == Value.zero.toData,
           true
         )
+    }
 
-        // lovelace: Eq 2.2x more mem, 2.0x more steps
+    test("Eq vs toData: lovelace equal via Eq") {
         assertEvalWithBudget(
           (v: Value) => v === Value.lovelace(1000),
           Value.lovelace(1000),
           true,
           ExUnits(memory = 64159, steps = 17_641325)
         )
+    }
+
+    test("Eq vs toData: lovelace equal via toData") {
         assertEvalWithBudget(
           (v: Value) => v.toData == Value.lovelace(1000).toData,
           Value.lovelace(1000),
           true,
           ExUnits(memory = 901, steps = 1_653665)
         )
+    }
 
-        // single native asset (28-byte policyId): Eq 2.2x more mem, 2.0x more steps
+    test("Eq vs toData: single token equal via Eq") {
         assertEvalWithBudget(
           (v: Value) =>
               v === Value(
@@ -1252,6 +1367,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           true,
           ExUnits(memory = 64159, steps = 17_641439)
         )
+    }
+
+    test("Eq vs toData: single token equal via toData") {
         assertEvalWithBudget(
           (v: Value) =>
               v.toData == Value(
@@ -1267,8 +1385,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           true,
           ExUnits(memory = 901, steps = 1_735502)
         )
+    }
 
-        // lovelace + native asset (2 policies): Eq 1.25x more mem, 1.24x more steps
+    test("Eq vs toData: two policies equal via Eq") {
         assertEvalWithBudget(
           (v: Value) =>
               v === Value.fromList(
@@ -1292,6 +1411,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           true,
           ExUnits(memory = 260760, steps = 72_130355)
         )
+    }
+
+    test("Eq vs toData: two policies equal via toData") {
         assertEvalWithBudget(
           (v: Value) =>
               v.toData == Value
@@ -1317,8 +1439,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           true,
           ExUnits(memory = 149735, steps = 42_258716)
         )
+    }
 
-        // 3 policies, multiple tokens: Eq 1.22x more mem, 1.21x more steps
+    test("Eq vs toData: three policies equal via Eq") {
         assertEvalWithBudget(
           Value.fromList(
             List(
@@ -1355,6 +1478,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           true,
           ExUnits(memory = 200, steps = 16100)
         )
+    }
+
+    test("Eq vs toData: three policies equal via toData") {
         assertEvalWithBudget(
           (v: Value) =>
               v.toData == Value
@@ -1394,8 +1520,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           true,
           ExUnits(memory = 256573, steps = 73_144854)
         )
+    }
 
-        // not equal: different amounts: Eq 2.0x more mem, 1.9x more steps
+    test("Eq vs toData: single token not equal via Eq") {
         assertEvalWithBudget(
           (v: Value) =>
               v !== Value(
@@ -1411,6 +1538,9 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           true,
           ExUnits(memory = 57404, steps = 15_818860)
         )
+    }
+
+    test("Eq vs toData: single token not equal via toData") {
         assertEvalWithBudget(
           (v: Value) =>
               v.toData != Value(

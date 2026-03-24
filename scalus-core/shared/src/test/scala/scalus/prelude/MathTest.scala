@@ -19,22 +19,27 @@ class MathTest extends AnyFunSuite with EvalTestKit:
       debug = false
     )
 
-    test("abs"):
+    test("abs-properties"):
         checkEval: (x: BigInt) =>
             x.absolute >= 0 &&
                 (x >= 0 && x.absolute == x ||
                     x.absolute == -x)
 
+    test("abs - 0 - budget"):
         assertEvalWithBudget(
           BigInt(0).absolute,
           BigInt(0),
           ExUnits(memory = 1802, steps = 391986)
         )
+
+    test("abs - positive - budget"):
         assertEvalWithBudget(
           BigInt(5).absolute,
           BigInt(5),
           ExUnits(memory = 1802, steps = 391986)
         )
+
+    test("abs - negative - budget"):
         assertEvalWithBudget(
           BigInt(-7).absolute,
           BigInt(7),

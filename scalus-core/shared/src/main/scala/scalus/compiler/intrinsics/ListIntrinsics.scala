@@ -12,6 +12,12 @@ import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Data}
 type ReprRule =
     (SIRType, LoweredValueRepresentation, LoweringContext) => LoweredValueRepresentation
 
+/** Argument conversion rule for factory intrinsics: (argType, resultType, lctx) => target repr.
+  * Returns Some(repr) to convert the argument before substitution, None to leave as-is.
+  */
+type ArgReprConvertRule =
+    (SIRType, SIRType, LoweringContext) => Option[LoweredValueRepresentation]
+
 // ---------------------------------------------------------------------------
 //  Repr rules — defined here, near the intrinsics that use them
 // ---------------------------------------------------------------------------

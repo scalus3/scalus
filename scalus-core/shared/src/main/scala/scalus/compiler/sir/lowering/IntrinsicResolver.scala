@@ -19,12 +19,17 @@ object IntrinsicResolver {
     // Module name constants (must match plugin's td.symbol.fullName for @Compile objects)
     private val ListModule = "scalus.cardano.onchain.plutus.prelude.List$"
     private val PairListModule = "scalus.cardano.onchain.plutus.prelude.PairList$"
+    private val SortedMapModule = "scalus.cardano.onchain.plutus.prelude.SortedMap$"
+    private val AssocMapModule = "scalus.cardano.onchain.plutus.prelude.AssocMap$"
 
     private val ListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
     private val ListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
 
     private val PairListOps = "scalus.compiler.intrinsics.BuiltinPairListOperations$"
     private val PairListOpsV11 = "scalus.compiler.intrinsics.BuiltinPairListOperationsV11$"
+
+    private val SortedMapIntrinsicsModule = "scalus.compiler.intrinsics.SortedMapIntrinsics$"
+    private val AssocMapIntrinsicsModule = "scalus.compiler.intrinsics.AssocMapIntrinsics$"
 
     /** Default intrinsic modules, loaded at compile time by the plugin. The plugin intercepts
       * `compiledModules(...)` and replaces it with `SIRLinker.readModules(...)` that accesses the
@@ -35,7 +40,9 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.BuiltinListOperations",
           "scalus.compiler.intrinsics.BuiltinListOperationsV11",
           "scalus.compiler.intrinsics.BuiltinPairListOperations",
-          "scalus.compiler.intrinsics.BuiltinPairListOperationsV11"
+          "scalus.compiler.intrinsics.BuiltinPairListOperationsV11",
+          "scalus.compiler.intrinsics.SortedMapIntrinsics",
+          "scalus.compiler.intrinsics.AssocMapIntrinsics"
         )
 
     /** Support modules — their bindings are added to scope for normal function calls from intrinsic
@@ -47,24 +54,53 @@ object IntrinsicResolver {
     // Representation name constants for registry lookup
     private val BuiltinListRepr = "BuiltinList"
     private val PairListRepr = "PairList"
+    private val WildcardRepr = "_"
 
-    /** Registry entry: (representation, minProtocolVersion, providerModule, reprRules) */
-    private type RegistryEntry =
-        (String, Int, String, Map[String, scalus.compiler.intrinsics.ReprRule])
+    /** Registry entry: (representation, minProtocolVersion, providerModule, reprRules,
+      * argConvertRules)
+      */
+    private type RegistryEntry = (
+        String,
+        Int,
+        String,
+        Map[String, scalus.compiler.intrinsics.ReprRule],
+        Map[String, scalus.compiler.intrinsics.ArgReprConvertRule]
+    )
 
-    import scalus.compiler.intrinsics.ListReprRules
+    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules}
+
+    private val NoArgConvert: Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] = Map.empty
 
     /** Registry: targetModule -> List of (representation, minProtocolVersion, providerModule,
-      * reprRules)
+      * reprRules, argConvertRules). Use `WildcardRepr` for factory methods whose arguments don't
+      * match the module type.
       */
     private val registry: Map[String, List[RegistryEntry]] = Map(
       ListModule -> List(
-        (BuiltinListRepr, 0, ListOps, ListReprRules.listRules),
-        (BuiltinListRepr, 11, ListOpsV11, ListReprRules.listRules)
+        (BuiltinListRepr, 0, ListOps, ListReprRules.listRules, NoArgConvert),
+        (BuiltinListRepr, 11, ListOpsV11, ListReprRules.listRules, NoArgConvert)
       ),
       PairListModule -> List(
-        (PairListRepr, 0, PairListOps, ListReprRules.pairListRules),
-        (PairListRepr, 11, PairListOpsV11, ListReprRules.pairListRules)
+        (PairListRepr, 0, PairListOps, ListReprRules.pairListRules, NoArgConvert),
+        (PairListRepr, 11, PairListOpsV11, ListReprRules.pairListRules, NoArgConvert)
+      ),
+      SortedMapModule -> List(
+        (
+          WildcardRepr,
+          0,
+          SortedMapIntrinsicsModule,
+          MapReprRules.factoryRules,
+          MapReprRules.factoryArgConvertRules
+        )
+      ),
+      AssocMapModule -> List(
+        (
+          WildcardRepr,
+          0,
+          AssocMapIntrinsicsModule,
+          MapReprRules.factoryRules,
+          MapReprRules.factoryArgConvertRules
+        )
       )
     )
 
@@ -108,18 +144,35 @@ object IntrinsicResolver {
                         var bestPV = -1
                         var bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
                             Map.empty
-                        for (repr, minPV, providerModuleName, reprRules) <- entries do
-                            if repr == reprName && pvVersion >= minPV && minPV > bestPV then
+                        var bestArgConvertRules
+                            : Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] =
+                            Map.empty
+                        for (repr, minPV, providerModuleName, reprRules, argConvertRules) <-
+                                entries
+                        do
+                            if (repr == reprName || (repr == WildcardRepr && reprRules.contains(
+                                  methodName
+                                ))) && pvVersion >= minPV && minPV > bestPV
+                            then
                                 lctx.findProviderBinding(providerModuleName, methodName).foreach {
                                     b =>
                                         bestBinding = Some(b)
                                         bestPV = minPV
                                         bestReprRules = reprRules
+                                        bestArgConvertRules = argConvertRules
                                 }
 
                         bestBinding.map { binding =>
                             val substituted = substituteSelf(binding.value, argSir)
-                            lctx.precomputedValues.put(argSir, loweredArg)
+                            // Apply arg conversion if rule exists for this method
+                            val effectiveArg = bestArgConvertRules.get(methodName) match
+                                case Some(convertRule) =>
+                                    convertRule(argSir.tp, appType, lctx) match
+                                        case Some(targetRepr) =>
+                                            loweredArg.toRepresentation(targetRepr, pos)
+                                        case None => loweredArg
+                                case None => loweredArg
+                            lctx.precomputedValues.put(argSir, effectiveArg)
                             val lowered =
                                 try Lowering.lowerSIR(substituted, Some(appType))
                                 finally lctx.precomputedValues.remove(argSir)
@@ -127,7 +180,7 @@ object IntrinsicResolver {
                             bestReprRules.get(methodName) match
                                 case Some(rule) =>
                                     val outputRepr =
-                                        rule(appType, loweredArg.representation, lctx)
+                                        rule(appType, effectiveArg.representation, lctx)
                                     if lowered.representation == outputRepr then lowered
                                     else
                                         RepresentationProxyLoweredValue(
