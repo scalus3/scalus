@@ -4,4 +4,5 @@ export default {
   'blockchain-providers': 'Blockchain Providers',
   'protocol-parameters': 'Protocol Parameters',
   'blueprint-plugin': 'Blueprint Verification',
+  'deploy': 'Deploying Contracts',
 }

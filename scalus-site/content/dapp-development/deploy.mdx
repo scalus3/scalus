@@ -1,0 +1,92 @@
+---
+title: Deploying Contracts
+sidebarTitle: Deploying Contracts
+description: Deploy Cardano smart contracts as reference script UTXOs using the sbt deploy task.
+---
+
+# Deploying Contracts
+
+The `ScalusBlueprintPlugin` provides a `deploy` sbt task that creates a reference script UTxO
+from a `Contract` object. It extracts the compiled script, attaches it to a new UTxO, builds and signs the transaction,
+and submits it via Blockfrost.
+
+## Setup
+
+`project/plugins.sbt`:
+```scala copy
+addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "<scalus-version>")
+```
+
+`build.sbt`:
+```scala copy
+lazy val myProject = (project in file("."))
+    .enablePlugins(ScalusBlueprintPlugin)
+    .settings(
+      scalaVersion := "3.3.7",
+      addCompilerPlugin("org.scalus" % "scalus-plugin" % "<scalus-version>" cross CrossVersion.full),
+      libraryDependencies ++= Seq(
+        "org.scalus" %% "scalus" % "<scalus-version>",
+        "org.scalus" %% "scalus-cardano-ledger" % "<scalus-version>",
+      ),
+    )
+```
+
+Define a `Contract` object with a compiled validator and blueprint:
+
+```scala copy
+@Compile
+object MyValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef
+    ): Unit = {
+        val owner = datum.getOrFail("No datum").to[PubKeyHash]
+        require(tx.signatories.contains(owner), "Not signed by owner")
+    }
+}
+
+object MyContract extends Contract {
+    private given Options = Options.release
+    lazy val compiled = PlutusV3.compile(MyValidator.validate)
+    lazy val blueprint = Blueprint.plutusV3[PubKeyHash, Unit](
+      title = "My Validator",
+      description = "Owner-signed spending validator",
+      version = "1.0.0",
+      license = None,
+      compiled = compiled
+    )
+}
+```
+
+## Usage
+
+```sh copy
+sbt "deploy MyContract --network preprod --blockfrost-key <key> --mnemonic '<24 words>' --address <bech32-address>"
+```
+
+The first argument is the simple name of your `Contract` object. Named flags:
+
+| Flag | Env Variable | Default | Description |
+|------|-------------|---------|-------------|
+| `--network` | `CARDANO_NETWORK` | `preview` | `preview`, `preprod`, or `mainnet` |
+| `--blockfrost-key` | `BLOCKFROST_API_KEY` | — | Blockfrost API key |
+| `--mnemonic` | `CARDANO_MNEMONIC` | — | BIP-39 mnemonic phrase |
+| `--address` | — | — | Bech32 address for the reference script UTXO |
+
+CLI flags take precedence over environment variables. Using env vars avoids secrets in shell
+history:
+
+```sh copy
+export BLOCKFROST_API_KEY=preprodXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+export CARDANO_MNEMONIC="word1 word2 ... word24"
+export CARDANO_NETWORK=preprod
+
+sbt "deploy MyContract --address addr_test1q..."
+```
+
+Example output:
+
+```
+[info] Deploying contract 'MyContract' to preprod...
+[info] Tx e484fdac... submitted successfully
+[info] Deployed successfully! Transaction hash: e484fdac...
+```
