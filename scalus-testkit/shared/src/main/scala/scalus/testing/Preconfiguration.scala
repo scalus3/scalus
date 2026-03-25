@@ -3,7 +3,7 @@ package scalus.testing
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
 import scalus.testing.kit.Party
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
 import upickle.default.*
 
 /** A single UTxO entry in the preconfiguration.
@@ -14,11 +14,20 @@ import upickle.default.*
   *   optional transaction hash hex; if absent, a genesis hash is used
   * @param idx
   *   optional output index; if absent, auto-assigned sequentially
+  * @param datum
+  *   optional inline datum as a JSON Data value (Plutus JSON schema)
+  * @param datum_cbor
+  *   optional inline datum as a CBOR hex string; mutually exclusive with `datum`
+  * @param datum_hash
+  *   optional datum hash hex; mutually exclusive with `datum` and `datum_cbor`
   */
 case class UtxoEntry(
     ada: Long,
     tx_id: Option[String] = None,
-    idx: Option[Int] = None
+    idx: Option[Int] = None,
+    datum: Option[Data] = None,
+    datum_cbor: Option[String] = None,
+    datum_hash: Option[String] = None
 ) derives ReadWriter
 
 /** Declarative emulator preconfiguration.
@@ -31,7 +40,10 @@ case class UtxoEntry(
   * {
   *   "utxo": {
   *     "alice": [{ "ada": 100000000000 }],
-  *     "bob":   [{ "ada": 5000000 }],
+  *     "bob":   [
+  *       { "ada": 5000000, "datum": { "int": 42 } },
+  *       { "ada": 2000000, "datum_hash": "abcd..." }
+  *     ],
   *     "addr_test1qz...": [{ "ada": 50000000, "tx_id": "abcd...", "idx": 0 }]
   *   }
   * }
@@ -67,10 +79,28 @@ object Preconfiguration {
                     autoIdx += 1
                     i
                 }
-                val value = Value.lovelace(entry.ada)
-                Input(txHash, idx) -> Output(address, value)
+                val value = Value.ada(entry.ada)
+                val datumOption = resolveDatum(entry)
+                val output = datumOption match
+                    case Some(d) => TransactionOutput.Babbage(address, value, Some(d), None)
+                    case None    => Output(address, value)
+                Input(txHash, idx) -> output
             }
         }.toMap
+    }
+
+    private def resolveDatum(entry: UtxoEntry): Option[DatumOption] = {
+        val count =
+            entry.datum.size + entry.datum_cbor.size + entry.datum_hash.size
+        require(count <= 1, "At most one of datum, datum_cbor, datum_hash may be specified")
+        entry.datum
+            .map(DatumOption.Inline(_))
+            .orElse(entry.datum_cbor.map { hex =>
+                DatumOption.Inline(Data.fromCbor(ByteString.fromHex(hex)))
+            })
+            .orElse(entry.datum_hash.map { hex =>
+                DatumOption.Hash(DataHash.fromHex(hex))
+            })
     }
 
     private def resolveAddress(key: String, network: Network): Address =

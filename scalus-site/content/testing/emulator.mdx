@@ -240,12 +240,22 @@ You can initialize the emulator with UTxOs declared in a JSON file using `Precon
 ```json
 {
   "utxo": {
-    "alice": [{ "ada": 100000000000 }],
-    "bob":   [{ "ada": 50000000000 }],
-    "addr_test1qz...": [{ "ada": 10000000, "tx_id": "abcd...", "idx": 0 }]
+    "alice": [
+      { "ada": 10000 },
+      { "ada": 5, "datum": { "int": 42 } }
+    ],
+    "bob": [{ "ada": 5000, "datum_hash": "abcd..." }],
+    "addr_test1qz...": [{ "ada": 100, "tx_id": "abcd...", "idx": 0 }]
   }
 }
 ```
+
+Each UTxO entry supports:
+- `ada` (required) — amount in ADA
+- `datum` — inline datum as a Plutus JSON Data value
+- `datum_cbor` — inline datum as a CBOR hex string
+- `datum_hash` — datum hash hex (produces a datum-hash reference, not inline)
+- `tx_id`, `idx` — explicit transaction input; if absent, a genesis hash and auto-index are used
 
 ```scala
 import scalus.testing.{ImmutableEmulator, Preconfiguration}
@@ -258,8 +268,6 @@ val config = Preconfiguration.fromJson(json)
 val utxos = Preconfiguration.resolveUtxos(config)
 val emulator = Emulator(initialUtxos = utxos)
 ```
-
-Entries without `tx_id` and `idx` get a synthetic genesis hash and auto-assigned indices.
 
 ## See Also
 

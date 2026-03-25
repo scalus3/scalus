@@ -4,14 +4,14 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.address.Network
 import scalus.cardano.ledger.*
 import scalus.testing.kit.Party
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
 
 class PreconfigurationTest extends AnyFunSuite {
 
     private val network = Network.Testnet
 
     test("parse and resolve single party with ada") {
-        val json = """{ "utxo": { "alice": [{ "ada": 100000000 }] } }"""
+        val json = """{ "utxo": { "alice": [{ "ada": 100 }] } }"""
         val config = Preconfiguration.fromJson(json)
 
         assert(config.utxo.size == 1)
@@ -116,5 +116,79 @@ class PreconfigurationTest extends AnyFunSuite {
         assertThrows[Exception] {
             Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
         }
+    }
+
+    test("inline datum via JSON Data") {
+        val json = """{ "utxo": { "alice": [{ "ada": 5, "datum": { "int": 42 } }] } }"""
+        val utxos = Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
+        val output = utxos.values.head
+        assert(output.datumOption.contains(DatumOption.Inline(Data.I(42))))
+    }
+
+    test("inline datum via CBOR hex") {
+        // CBOR encoding of Data.I(42) is 0x182a
+        val cborHex = "182a"
+        val json = s"""{ "utxo": { "alice": [{ "ada": 5, "datum_cbor": "$cborHex" }] } }"""
+        val utxos = Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
+        val output = utxos.values.head
+        assert(output.datumOption.contains(DatumOption.Inline(Data.I(42))))
+    }
+
+    test("datum hash") {
+        val hash = "ab" * 32
+        val json = s"""{ "utxo": { "alice": [{ "ada": 5, "datum_hash": "$hash" }] } }"""
+        val utxos = Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
+        val output = utxos.values.head
+        assert(output.datumOption.contains(DatumOption.Hash(DataHash.fromHex(hash))))
+    }
+
+    test("output without datum uses Shelley format") {
+        val json = """{ "utxo": { "alice": [{ "ada": 5 }] } }"""
+        val utxos = Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
+        val output = utxos.values.head
+        assert(output.datumOption.isEmpty)
+        assert(output.isInstanceOf[TransactionOutput.Shelley])
+    }
+
+    test("output with datum uses Babbage format") {
+        val json = """{ "utxo": { "alice": [{ "ada": 5, "datum": { "int": 1 } }] } }"""
+        val utxos = Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
+        val output = utxos.values.head
+        assert(output.isInstanceOf[TransactionOutput.Babbage])
+    }
+
+    test("multiple datum fields are rejected") {
+        val json =
+            """{ "utxo": { "alice": [{ "ada": 5, "datum": { "int": 1 }, "datum_hash": "ab" }] } }"""
+        assertThrows[IllegalArgumentException] {
+            Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
+        }
+    }
+
+    test("complex inline datum") {
+        val json = """{
+          "utxo": {
+            "alice": [{
+              "ada": 10,
+              "datum": {
+                "constructor": 0,
+                "fields": [
+                  { "int": 100 },
+                  { "bytes": "deadbeef" }
+                ]
+              }
+            }]
+          }
+        }"""
+        val utxos = Preconfiguration.resolveUtxos(Preconfiguration.fromJson(json), network)
+        val output = utxos.values.head
+        val expected = Data.Constr(
+          0,
+          scalus.cardano.onchain.plutus.prelude.List(
+            Data.I(100),
+            Data.B(ByteString.fromHex("deadbeef"))
+          )
+        )
+        assert(output.datumOption.contains(DatumOption.Inline(expected)))
     }
 }
