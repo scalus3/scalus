@@ -1,0 +1,243 @@
+---
+title: UPLC Term DSL
+sidebarTitle: UPLC Term DSL
+description: Build hand-crafted UPLC validators using Scalus Term DSL -- maximum control over the generated code, similar to Plutarch in Haskell.
+---
+
+import { Callout } from 'nextra/components'
+
+# UPLC Term DSL
+
+For maximum control over your on-chain code, Scalus lets you build UPLC terms directly using a Scala-based DSL. This is analogous to [Plutarch](https://github.com/Plutonomicon/plutarch-plutus) in the Haskell ecosystem -- you construct the UPLC AST by hand, with full control over every lambda, application, and builtin call.
+
+## When to Use the Term DSL
+
+- You've exhausted high-level and compiled-assembler optimizations and need to squeeze out more
+- You want to apply specific UPLC patterns that the compiler doesn't generate
+- You're building reusable UPLC combinators
+- You want to combine hand-crafted UPLC fragments with compiler-generated code
+
+## DSL Cheat Sheet
+
+```scala
+import scalus.uplc.Term, scalus.uplc.Term.{asTerm, λ, lam, vr}
+import scalus.uplc.TermDSL.given
+import scalus.uplc.DefaultFun.*
+```
+
+| Scala DSL | UPLC | Description |
+|-----------|------|-------------|
+| `f $ x` | `Apply(f, x)` | Function application |
+| `!t` | `Force(t)` | Force a delayed term |
+| `~t` | `Delay(t)` | Delay evaluation |
+| `λ("x")(body)` | `LamAbs("x", body)` | Lambda with named parameter |
+| `λ { x => body }` | `LamAbs("x", body)` | Lambda macro (extracts param name) |
+| `lam("x", "y")(body)` | `LamAbs("x", LamAbs("y", body))` | Multi-parameter lambda |
+| `vr"x"` | `Var(NamedDeBruijn("x"))` | Variable reference |
+| `42.asTerm` | `Const(Integer(42))` | Lift Scala value to Term |
+| `true.asTerm` | `Const(Bool(True))` | Lift boolean |
+| `AddInteger` | `Builtin(AddInteger)` | Builtin (implicit conversion) |
+| `Term.Case(arg, branches)` | `Case(arg, [...])` | V4 Case dispatch |
+| `Term.Const(Constant.Unit)` | `Const(Unit)` | Unit constant |
+| `Term.Error()` | `Error` | Abort execution |
+
+<Callout>
+All 100+ Plutus builtins from `scalus.uplc.DefaultFun` are available via implicit conversion -- just import `TermDSL.given` and write the builtin name directly.
+</Callout>
+
+## Example: Factorial
+
+A simple example to show the DSL mechanics -- computing factorial using a fixpoint combinator:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.uplc.Term, scalus.uplc.Term.{asTerm, λ, vr}
+import scalus.uplc.TermDSL.given
+import scalus.uplc.DefaultFun.*
+
+// Y-combinator (strict fixpoint)
+def pfix(f: Term => Term): Term =
+    λ { r => r $ r } $ λ { r => f(r $ r) }
+
+val factorial = pfix { recur =>
+    λ { n =>
+        // Force(Force(IfThenElse) $ condition $ ~thenBranch $ ~elseBranch)
+        !(!IfThenElse
+            $ (LessThanEqualsInteger $ n $ 0.asTerm)
+            $ ~(1.asTerm)
+            $ ~(MultiplyInteger $ n $ (recur $ (SubtractInteger $ n $ 1.asTerm))))
+    }
+}
+
+// Wrap as a Plutus program and evaluate
+import scalus.uplc.eval.PlutusVM
+given PlutusVM = PlutusVM.makePlutusV3VM()
+val result = (factorial $ 10.asTerm).plutusV3.deBruijnedProgram.evaluateDebug
+// Result: 3628800
+```
+
+Note how `IfThenElse` is a polymorphic builtin that needs two `Force` applications (`!!`), and both branches must be `Delay`ed (`~`) to prevent eager evaluation.
+
+## Example: PreimageValidator in Term DSL
+
+Here's the same PreimageValidator from the [Optimizing Scala Code](/docs/smart-contracts/optimisations/scala-optimizations) chapter, built entirely with the Term DSL. This targets PlutusV4 and uses `Case` on List and `Case` on Bool for maximum efficiency:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.uplc.Term, scalus.uplc.Term.{asTerm, λ}
+import scalus.uplc.TermDSL.given
+import scalus.uplc.DefaultFun.*
+import scalus.uplc.Constant as C
+
+// Strict fixpoint combinator
+def pfix(f: Term => Term): Term =
+    λ { r => r $ r } $ λ { r => f(r $ r) }
+
+val preimageValidator: Term = λ { datum =>
+    λ { redeemer =>
+        λ { ctxData =>
+            // let pair = snd(unConstrData(datum))
+            (λ { pair =>
+                // let pkh = head(tail(pair))
+                (λ { pkh =>
+                    // Extract signatories:
+                    //   snd(unConstrData(head(snd(unConstrData(ctxData)))))
+                    //   -> txInfoFields, then dropList(8, ...) for signatories
+                    val txInfoFields =
+                        !(!SndPair) $ (UnConstrData $ (!HeadList
+                            $ (!(!SndPair) $ (UnConstrData $ ctxData))))
+                    val sigs =
+                        UnListData $ (!HeadList
+                            $ (!DropList $ BigInt(8).asTerm $ txInfoFields))
+
+                    // Recursive signatory check using Case on List (Cons-only)
+                    val checkSigs = pfix { recur =>
+                        λ { s =>
+                            Term.Case(
+                              s,
+                              scala.List(
+                                // Cons(h, t) branch
+                                λ { h =>
+                                    λ { t =>
+                                        // Case on Bool: equalsData(h, pkh)
+                                        Term.Case(
+                                          EqualsData $ h $ pkh,
+                                          scala.List(
+                                            recur $ t,           // False(0): keep looking
+                                            Term.Const(C.Unit)   // True(1): found
+                                          )
+                                        )
+                                    }
+                                }
+                              )
+                            )
+                        }
+                    }
+
+                    // Check signatories, then verify hash
+                    (λ { _ =>
+                        Term.Case(
+                          EqualsByteString
+                              $ (Sha2_256 $ (UnBData $ redeemer))
+                              $ (UnBData $ (!HeadList $ pair)),
+                          scala.List(
+                            Term.Error(),          // False(0): wrong preimage
+                            Term.Const(C.Unit)     // True(1): success
+                          )
+                        )
+                    }) $ (checkSigs $ sigs)
+                }) $ (!HeadList $ (!TailList $ pair))  // pkh = head(tail(pair))
+            }) $ (!(!SndPair) $ (UnConstrData $ datum)) // pair = snd(unConstrData(datum))
+        }
+    }
+}
+```
+
+Key patterns:
+- **Let-binding via lambda**: `(λ { x => body }) $ value` simulates `let x = value in body`
+- **`Term.Case` on Bool**: branches are `scala.List(falseBranch, trueBranch)` (False = constructor 0, True = constructor 1)
+- **`Term.Case` on List**: Cons-only branch means the VM errors on empty list
+- **`!(!SndPair)`**: `SndPair` is polymorphic, needs two `Force` applications
+- **No `Delay`** needed with `Case` on Bool (unlike `IfThenElse` which evaluates eagerly)
+
+## Wrapping as a Plutus Script
+
+Once you have a `Term`, wrap it as a versioned Plutus program:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.uplc.Term
+
+val validator: Term = ??? // your hand-crafted term
+
+// Wrap as PlutusV3 (version 1.1.0)
+val program = validator.plutusV3
+
+// Flat-encode for deployment
+val flatBytes = program.flatEncoded
+val cborHex = program.doubleCborHex
+```
+
+## Applying UPLC Optimizer Passes
+
+Hand-crafted UPLC can benefit from the same optimizer passes that the compiler uses. For example, `CaseConstrApply` rewrites multi-argument `Apply` chains as `Case`/`Constr` nodes:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.uplc.Term
+import scalus.uplc.transform.*
+
+val handCrafted: Term = ??? // your DSL-built term
+
+// Apply individual passes
+val optimized = handCrafted
+    |> EtaReduce.apply
+    |> Inliner.apply
+    |> CaseConstrApply.apply
+
+// Or apply the full pipeline
+val fullyOptimized = scalus.uplc.transform.UplcOptimizer.optimize(handCrafted)
+```
+
+## Writing Your Own Optimizer
+
+The `scalus.uplc.transform` package contains all built-in optimizer passes. You can write your own by implementing the `Optimizer` trait:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.uplc.Term
+import scalus.uplc.transform.Optimizer
+
+object MyOptimizer extends Optimizer {
+    def apply(term: Term): Term = {
+        // Transform the term tree
+        term
+    }
+}
+```
+
+Custom optimizers can be applied to both compiler-generated and hand-crafted UPLC. You can also register them in the `Options.uplcOptimizers` list to run them as part of the standard pipeline.
+
+See `scalus.uplc.transform.Inliner`, `EtaReduce`, and `CaseConstrApply` for examples of real optimizer implementations.
+
+## Mixing DSL with Compiled Code
+
+You can combine hand-crafted UPLC fragments with compiler-generated code:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.compile
+import scalus.uplc.Term, scalus.uplc.Term.{asTerm, λ}
+import scalus.uplc.TermDSL.given
+import scalus.uplc.DefaultFun.*
+
+// Compile part of the logic with the plugin
+val compiledFragment = compile {
+    (x: BigInt, y: BigInt) => x + y
+}.toUplcOptimized()
+
+// Use it in a hand-crafted validator
+val validator = λ { datum =>
+    λ { redeemer =>
+        λ { ctx =>
+            compiledFragment $ datum $ redeemer
+        }
+    }
+}
+```
+
+This lets you hand-optimize hot paths while keeping the rest of your validator in high-level Scala.

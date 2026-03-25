@@ -1,0 +1,186 @@
+---
+title: Scala Metaprogramming
+sidebarTitle: Scala Metaprogramming
+---
+
+import { Callout } from 'nextra/components'
+
+# Scala Metaprogramming
+
+Scala 3 `inline` keyword is a powerful tool for on-chain code optimization. The Scala compiler evaluates `inline` expressions at compile time, before the Scalus compiler plugin sees the code. This lets you control exactly what gets compiled to UPLC.
+
+## Inlining
+
+The `inline` keyword tells the Scala compiler to substitute the expression at its usage site. This eliminates a `let` binding in UPLC, saving CPU on the lambda application. But inlining is a trade-off -- it can help or hurt depending on how many times the expression is used.
+
+## When inlining helps: single use site
+
+In a recursive hash chain, the combiner function has one call site per recursion step. Inlining eliminates the lambda overhead without duplicating code:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.compile
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
+
+@Compile
+object Checksum {
+    // inline: body substituted at the single call site in checksum
+    inline def combine(acc: ByteString, elem: ByteString): ByteString =
+        blake2b_256(appendByteString(acc, elem))
+
+    def checksum(list: BuiltinList[Data], acc: ByteString): ByteString =
+        if list.isEmpty then acc
+        else checksum(list.tail, combine(acc, list.head.toByteString))
+}
+```
+
+Here `combine` appears once in the recursive body -- `inline` saves CPU with no size penalty. The optimizer may also inline single-use functions automatically, but marking them `inline` guarantees it.
+
+## When inlining hurts
+
+If the same function is called from many places, `inline` duplicates the body at every call site. The script gets bigger:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.compile
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.{ByteString, Data}
+
+@Compile
+object FieldValidator {
+    // inline: body duplicated 3 times → bigger script
+    inline def checkNonEmpty(bs: ByteString): Unit =
+        lengthOfByteString(bs) > BigInt(0) || (throw new RuntimeException("empty"))
+
+    def validate(datum: Data, redeemer: Data, ctx: Data): Unit = {
+        val fields = datum.toConstr.snd
+        checkNonEmpty(fields.head.toByteString)           // body copied here
+        checkNonEmpty(fields.tail.head.toByteString)      // body copied here
+        checkNonEmpty(fields.tail.tail.head.toByteString) // body copied here
+    }
+}
+```
+
+Compare with a regular `def` (single lambda, called 3 times):
+
+| | `inline def` | `def` |
+|---|---|---|
+| Flat size | 126 B | 103 B |
+| CPU steps | 2,815,862 | 3,007,862 |
+| Memory | 10,888 | 12,088 |
+| Execution fee | 832 lovelace | 915 lovelace |
+| Script size fee (44 lovelace/byte) | 5,544 lovelace | 4,532 lovelace |
+| **Total transaction fee** | **6,376 lovelace** | **5,447 lovelace** |
+
+`inline` wins on execution (-7% CPU) but the 23 extra bytes of script size cost 1,012 lovelace more. The total transaction fee is **17% higher** with `inline` -- the size component dominates.
+
+<Callout type="warning">
+Execution fee is only part of the transaction fee. Cardano charges 44 lovelace per byte of transaction size (`txFeePerByte`), and the flat-encoded script is part of the transaction. Inlining that saves a few thousand CPU steps but adds bytes to the script can easily cost more overall. Always measure the full transaction fee, not just execution.
+</Callout>
+
+## Loop Unrolling
+
+When the number of iterations is known at compile time, you can use `inline` to unroll a loop. The Scala compiler expands the recursive `inline` calls, producing straight-line code with no lambda overhead per iteration:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.compile
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.{BuiltinList, Data}
+
+@Compile
+object Unrolled {
+    // The Scala compiler unrolls this at compile time:
+    // checkN(3, sigs, expected) becomes:
+    //   sigs.head == expected.head; checkN(2, sigs.tail, expected.tail)
+    //   sigs.head == expected.head; checkN(1, sigs.tail, expected.tail)
+    //   sigs.head == expected.head; checkN(0, sigs.tail, expected.tail)
+    //   ()
+    inline def checkN(inline n: Int, sigs: BuiltinList[Data], expected: BuiltinList[Data]): Unit =
+        inline if n <= 0 then ()
+        else {
+            sigs.head == expected.head || (throw new RuntimeException("missing sig"))
+            checkN(n - 1, sigs.tail, expected.tail)
+        }
+
+    def validator(datum: Data, redeemer: Data, ctx: Data): Unit = {
+        val sigs = ctx.toConstr.snd.head.toList
+        val expected = datum.toList
+        checkN(3, sigs, expected)  // unrolled to 3 direct checks at compile time
+    }
+}
+```
+
+The Scala compiler resolves `inline if n <= 0` at compile time, recursively expanding `checkN` until `n` reaches 0. The Scalus compiler plugin only sees the final straight-line code — no recursion, no lambda calls per iteration.
+
+| | Unrolled | Recursive |
+|---|---|---|
+| Flat size | 137 B | 116 B |
+| CPU steps | 6,212,620 | 8,062,548 |
+| Fee | 1,144 lovelace | 1,735 lovelace |
+
+Unrolling saves **23% CPU** and **34% fee** for 3 iterations, at the cost of 21 extra bytes of script size.
+
+## Inlining Constants
+
+When you mark a parameter as `inline`, its value is directly embedded in the compiled code. This is particularly useful for configuration like public key hashes:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.*, uplc.builtin.{Data, Builtins, ByteString}, Builtins.*, ByteString.*
+
+inline def validator(inline pubKeyHash: ByteString)(datum: Data, redeemer: Data, ctxData: Data) =
+    verifyEd25519Signature(pubKeyHash, datum.toByteString, redeemer.toByteString)
+val script = compile:
+    validator(hex"deadbeef")
+```
+
+This generates SIR with the constant `#deadbeef` directly embedded -- no runtime parameter passing:
+
+```ocaml
+{λ datum redeemer ctxData ->
+  verifyEd25519Signature(#deadbeef, unBData(datum), unBData(redeemer))
+}
+```
+
+## Compile-Time Evaluation
+
+When a closed function (no free variables) is applied to constants inside `compile`, the entire computation is evaluated at compile time by the optimizer's partial evaluator:
+
+```scala mdoc:compile-only copy showLineNumbers {5-9,12}
+import scalus.*, scalus.compiler.*
+import scala.annotation.tailrec
+
+@Compile
+object Fibonacci {
+    def fib(n: BigInt): BigInt =
+        @tailrec def f(n: BigInt, x: BigInt, y: BigInt): BigInt =
+            if n > 1 then f(n - 1, y, x + y) else y
+        f(n, 0, 1)
+}
+
+// fib(100) is fully evaluated at compile time!
+val sir = compile(Fibonacci.fib(100))
+val uplc = sir.toUplcOptimized()
+// uplc is now just: (Const Integer 354224848179261915075)
+```
+
+The recursive loop runs during compilation. The final script contains only the constant. This works for any closed function applied to constant arguments -- precomputed lookup tables, derived configuration, hash preimages, mathematical constants. Constant folding is also implemented in the [UPLC Optimizer Pipeline](/docs/smart-contracts/optimisations/uplc), which can fold closed subexpressions at the UPLC level.
+
+## Conditional Code Generation
+
+Using `inline if` with a compile-time parameter, you can generate different code at compile time. This is useful for creating separate debug and production versions of your validators:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.*, uplc.builtin.Data, uplc.builtin.Builtins
+
+inline def dbg[A](msg: String)(a: A)(using debug: Boolean): A =
+    inline if debug then Builtins.trace(msg)(a) else a
+
+inline def validator(using debug: Boolean)(datum: Data, redeemer: Data, ctxData: Data) =
+    dbg("datum")(datum)
+
+val releaseScript = compile(validator(using false))
+// {λ datum redeemer ctxData -> datum }
+val debugScript = compile(validator(using true))
+// {λ datum redeemer ctxData -> trace("datum", datum) }
+```
+
+The `releaseScript` contains no `trace` calls at all -- the conditional code is evaluated during Scala compilation, so there's zero runtime overhead for disabled features.

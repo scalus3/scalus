@@ -1,0 +1,152 @@
+---
+title: Direct Builtins Usage
+sidebarTitle: Direct Builtins Usage
+---
+
+import { Callout } from 'nextra/components'
+
+# Direct Builtins Usage
+
+Instead of using high-level prelude types like `ScriptContext` and `List[A]`, you can use builtins and primitive data types (`Data`, `BuiltinList`, `ByteString`) directly inside `compile {}`. This gives you manual control over Data access and makes the resulting Scala code effectively a "compiled assembler" -- it maps almost 1:1 to UPLC builtins.
+
+Let's see the difference on a real validator. Here's a high-level PreimageValidator that checks a hash preimage and verifies a signatory:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.compile
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Builtins.*
+import scalus.cardano.onchain.plutus.v2.*
+import scalus.cardano.onchain.plutus.prelude.*
+
+@Compile
+object PreimageValidator {
+    def preimageValidator(datum: Data, redeemer: Data, ctxData: Data): Unit = {
+        val (hash, pkh) = datum.to[(ByteString, ByteString)]
+        val preimage = redeemer.toByteString
+        val ctx = ctxData.to[ScriptContext]
+        ctx.txInfo.signatories.find(_.hash == pkh).orFail("Not signed")
+        require(sha2_256(preimage) == hash, "Wrong preimage")
+    }
+}
+```
+
+Where does the cost come from?
+- **V3 Lowering backend**: types stay as `Data` internally, so `.to[ScriptContext]` is cheap. The cost is in navigating nested `Data` constructors to reach the `signatories` field -- chained `tailList` calls through 8 unused fields.
+- **Template-based backends**: `.to[ScriptContext]` Scott-encodes or reconstructs the entire structure including all unused fields -- significantly more expensive.
+
+Now the same logic using direct builtins:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.compile
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
+import scalus.cardano.onchain.plutus.v2.ScriptContext
+import scalus.cardano.onchain.plutus.prelude.require
+
+@Compile
+object OptimizedPreimageValidator {
+    def preimageValidator(datum: Data, redeemer: Data, ctxData: Data): Unit = {
+        // Manual Data deconstruction instead of .to[T]
+        val pair = datum.toConstr.snd
+        inline def hash = pair.head.toByteString
+        val pkh = pair.tail.head   // kept as Data for equalsData
+        inline def preimage = redeemer.toByteString
+
+        // Walk signatories with BuiltinList[Data]
+        def checkSignatories(sigs: BuiltinList[Data]): Unit =
+            if sigs.head == pkh then ()
+            else checkSignatories(sigs.tail)
+
+        // Direct field access -- skip unused TxInfo fields
+        inline def sigs = ctxData.field[ScriptContext](_.txInfo.signatories).toList
+        checkSignatories(sigs)
+        require(sha2_256(preimage) == hash)
+    }
+}
+```
+
+## Direct Script Context Access
+
+In this example we can see the use of `datum.toConstr.snd` -- deconstructing `Data` manually instead of `.to[T]`. Since we know the Data representation (a `Constr` with fields as a list), we can use builtins directly: `unConstrData` returns a pair of (constructor tag, fields list), and `.snd` gives us the fields.
+
+Scalus provides two macros for type-safe field access without hardcoding offsets:
+
+**`fieldAsData` macro** (and its shorthand `.field`) -- generates a chain of `headList`/`tailList` calls to extract exactly the field you need. Works with any protocol version:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.compiler.fieldAsData
+import scalus.uplc.builtin.Data
+
+// Both forms are equivalent:
+val signatories = fieldAsData[ScriptContext](_.txInfo.signatories)(ctxData)
+val signatories2 = ctxData.field[ScriptContext](_.txInfo.signatories)
+```
+
+**`offsetOf` macro** (PV11+) -- returns the 0-based field index as `BigInt` at compile time. Use it with the `dropList` builtin to skip N fields in one call instead of chaining `tailList`:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.compiler.offsetOf
+import scalus.uplc.builtin.Builtins.*
+
+val txInfoFields = ctxData.toConstr.snd.head.toConstr.snd
+// offsetOf[TxInfo](_.signatories) expands to BigInt(8) at compile time
+val sigs = dropList(offsetOf[TxInfo](_.signatories), txInfoFields).head.toList
+```
+
+Using direct builtins you also have control over Plutus version details -- like using `dropList` (PV11) instead of chained `tailList`, or `Case` on `BuiltinList` instead of `chooseList`. Here's what the same validator looks like with PV11 features:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.{compile, offsetOf}
+import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.{BuiltinList, Data}
+import scalus.cardano.onchain.plutus.v2.TxInfo
+import scalus.cardano.onchain.plutus.prelude.require
+
+@Compile
+object OptimizedPreimageValidatorV4 {
+    def preimageValidator(datum: Data, redeemer: Data, ctxData: Data): Unit = {
+        val pair = datum.toConstr.snd
+        inline def hash = pair.head.toByteString
+        val pkh = pair.tail.head
+        inline def preimage = redeemer.toByteString
+
+        // Pattern match on BuiltinList -- compiles to Case on List (PV11)
+        def checkSignatories(sigs: BuiltinList[Data]): Unit =
+            (sigs: @unchecked) match
+                case BuiltinList.Cons(h, t) =>
+                    if h == pkh then () else checkSignatories(t)
+
+        // dropList + offsetOf: skip directly to signatories field
+        val txInfoFields = ctxData.toConstr.snd.head.toConstr.snd
+        inline def sigs = dropList(offsetOf[TxInfo](_.signatories), txInfoFields).head.toList
+        checkSignatories(sigs)
+        require(sha2_256(preimage) == hash)
+    }
+}
+```
+
+<Callout>
+`@unchecked` on the `BuiltinList` match omits the `Nil` branch. If the list is empty, the VM throws `CaseListBranchError`. Use this when you know the list is non-empty or when failure on empty is acceptable.
+</Callout>
+
+## Budget Comparison
+
+Here's the same PreimageValidator across styles and protocol versions (1 signatory):
+
+| Variant | Flat Size | CPU | Memory | Exec Fee | Tx Fee (44 lovelace/byte) |
+|---------|-----------|-----|--------|----------|---------------------------|
+| High-level, PV9 | 496 B | 6,594,493 | 21,962 | 1,743 | 23,567 lovelace |
+| High-level, PV11 | 448 B | 4,821,782 | 17,410 | 1,353 | 21,065 lovelace |
+| Direct builtins, PV9 | 426 B | 5,529,726 | 13,908 | 1,202 | 19,946 lovelace |
+| Direct builtins, PV11 | 374 B | 4,161,695 | 9,990 | 877 | 17,333 lovelace |
+
+Key observations:
+- **PV11 with zero code changes** (high-level PV9 vs PV11): 27% CPU savings -- just switch `targetProtocolVersion`
+- **Direct builtins** (PV11 builtins vs PV11 high-level): further 14% CPU, 43% memory savings from manual Data access
+- **Transaction fee** difference is smaller than execution fee difference because the size component (44 lovelace/byte) dominates. Still, direct builtins on PV11 save **26%** on total transaction fee compared to high-level PV9.
+
+The `PreimageBudgetComparisonTest` includes additional variants -- signatory index lookup (O(1) instead of linear search) and direct UPLC construction. Run it yourself:
+
+```bash
+sbtn "scalusExamplesJVM/testOnly scalus.examples.PreimageBudgetComparisonTest"
+```
