@@ -17,9 +17,9 @@ import scalus.utils.await
 
 import java.time.{Duration, Instant}
 
-given Options = Options.default
-
 class TxBuilderDemo extends AnyFunSuite {
+
+    given Options = Options.default
 
     given env: CardanoInfo = CardanoInfo.mainnet
     // Common test values

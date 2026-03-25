@@ -202,6 +202,9 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
     }
 
     test("Minting Policy Validator V2") {
+        given scalus.compiler.Options = scalus.compiler.Options(
+          generateErrorTraces = true
+        )
         val validator =
             MintingPolicyV2.compiledMintingPolicyScriptV2.toUplc(
               generateErrorTraces = true,
@@ -210,7 +213,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV2(appliedValidator).flatEncoded.length
-        assert(flatSize == 1167)
+        assert(flatSize == 1223)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV2)
     }
 
