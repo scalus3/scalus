@@ -4,20 +4,33 @@ package typegens
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
-/** Type generator for BuiltinArray[Data].
+/** Type generator for BuiltinArray.
   *
-  * BuiltinArray is a native UPLC type that holds Data elements. When used as a field in a case
-  * class, it needs to be converted to/from Data representation (Data.List).
+  * BuiltinArray is a native UPLC type that holds elements. When used as a field in a case class, it
+  * needs to be converted to/from Data representation (Data.List).
   *
-  * Default representation: ProductCaseClassRepresentation.ArrayData (native UPLC array) Data
-  * representation: ProductCaseClassRepresentation.PackedArrayAsList (Data.List)
+  * Default representation: ProdBuiltinArray(elementRepr) (native UPLC array) Data representation:
+  * PackedArrayAsList (Data.List)
   */
 object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
+
+    private def extractElemType(tp: SIRType): SIRType =
+        ProductCaseClassRepresentation.ProdBuiltinArray
+            .extractElementType(tp)
+            .getOrElse(SIRType.Data.tp)
+
+    private def arrayRepr(tp: SIRType)(using
+        lctx: LoweringContext
+    ): ProductCaseClassRepresentation.ProdBuiltinArray = {
+        val elemType = extractElemType(tp)
+        val elemRepr = lctx.typeGenerator(elemType).defaultRepresentation(elemType)
+        ProductCaseClassRepresentation.ProdBuiltinArray(elemRepr)
+    }
 
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        ProductCaseClassRepresentation.ArrayData
+        arrayRepr(tp)
 
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
@@ -25,11 +38,18 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
         ProductCaseClassRepresentation.PackedArrayAsList
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
-        LoweringContext
-    ): LoweredValueRepresentation =
-        ProductCaseClassRepresentation.PackedArrayAsList
+        lctx: LoweringContext
+    ): LoweredValueRepresentation = {
+        val elemType = extractElemType(tp)
+        if lctx.typeGenerator(elemType).canBeConvertedToData(elemType) then
+            ProductCaseClassRepresentation.PackedArrayAsList
+        else arrayRepr(tp)
+    }
 
-    override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = true
+    override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
+        val elemType = extractElemType(tp)
+        lctx.typeGenerator(elemType).canBeConvertedToData(elemType)
+    }
 
     override def toRepresentation(
         input: LoweredValue,
@@ -37,38 +57,21 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
         (input.representation, outputRepresentation) match
-            // ArrayData -> ArrayData (identity)
+            // ProdBuiltinArray -> ProdBuiltinArray
             case (
-                  ProductCaseClassRepresentation.ArrayData,
-                  ProductCaseClassRepresentation.ArrayData
+                  ProductCaseClassRepresentation.ProdBuiltinArray(inElemRepr),
+                  outArr @ ProductCaseClassRepresentation.ProdBuiltinArray(outElemRepr)
                 ) =>
-                input
+                val elemType = extractElemType(input.sirType)
+                if inElemRepr.isCompatibleOn(elemType, outElemRepr, pos) then input
+                else
+                    input
+                        .toRepresentation(ProductCaseClassRepresentation.PackedArrayAsList, pos)
+                        .toRepresentation(outArr, pos)
 
-            // Constant <-> ArrayData (interoperability - both represent native UPLC arrays)
-            case (PrimitiveRepresentation.Constant, ProductCaseClassRepresentation.ArrayData) =>
-                TypeRepresentationProxyLoweredValue(
-                  input,
-                  input.sirType,
-                  ProductCaseClassRepresentation.ArrayData,
-                  pos
-                )
-
-            case (ProductCaseClassRepresentation.ArrayData, PrimitiveRepresentation.Constant) =>
-                TypeRepresentationProxyLoweredValue(
-                  input,
-                  input.sirType,
-                  PrimitiveRepresentation.Constant,
-                  pos
-                )
-
-            case (PrimitiveRepresentation.Constant, PrimitiveRepresentation.Constant) =>
-                input
-
-            // ArrayData/Constant -> PackedArrayAsList (array to Data.List)
-            // BuiltinArray[Data] -> Data (as Data.List)
-            // Convert by iterating: arr[0], arr[1], ..., arr[n-1] -> mkCons(arr[0], mkCons(arr[1], ...))
+            // ProdBuiltinArray -> PackedArrayAsList (array to Data.List)
             case (
-                  ProductCaseClassRepresentation.ArrayData | PrimitiveRepresentation.Constant,
+                  _: ProductCaseClassRepresentation.ProdBuiltinArray,
                   ProductCaseClassRepresentation.PackedArrayAsList
                 ) =>
                 // Use runtime helper to convert array to list
@@ -89,10 +92,10 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
 
-            // PackedArrayAsList -> ArrayData/Constant (Data.List to array via unListData + listToArray)
+            // PackedArrayAsList -> ProdBuiltinArray (Data.List to array via unListData + listToArray)
             case (
                   ProductCaseClassRepresentation.PackedArrayAsList,
-                  ProductCaseClassRepresentation.ArrayData | PrimitiveRepresentation.Constant
+                  _: ProductCaseClassRepresentation.ProdBuiltinArray
                 ) =>
                 // Unwrap Data.List to list, then convert to array
                 val asList = lvBuiltinApply(
@@ -120,31 +123,20 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
             // TypeVar handling
             case (_, tv @ TypeVarRepresentation(isBuiltin)) =>
                 if isBuiltin then
-                    val r0 = input.toRepresentation(ProductCaseClassRepresentation.ArrayData, pos)
+                    val r0 = input.toRepresentation(arrayRepr(input.sirType), pos)
                     RepresentationProxyLoweredValue(r0, tv, pos)
                 else
-                    val r1 =
-                        input.toRepresentation(
-                          ProductCaseClassRepresentation.PackedArrayAsList,
-                          pos
-                        )
+                    val typeVarRepr = defaultTypeVarReperesentation(input.sirType)
+                    val r1 = input.toRepresentation(typeVarRepr, pos)
                     new RepresentationProxyLoweredValue(r1, tv, pos)
 
             case (TypeVarRepresentation(isBuiltin), _) =>
                 if isBuiltin then
-                    val r0 =
-                        RepresentationProxyLoweredValue(
-                          input,
-                          ProductCaseClassRepresentation.ArrayData,
-                          pos
-                        )
+                    val r0 = RepresentationProxyLoweredValue(input, arrayRepr(input.sirType), pos)
                     r0.toRepresentation(outputRepresentation, pos)
                 else
-                    val r0 = RepresentationProxyLoweredValue(
-                      input,
-                      ProductCaseClassRepresentation.PackedArrayAsList,
-                      pos
-                    )
+                    val typeVarRepr = defaultTypeVarReperesentation(input.sirType)
+                    val r0 = RepresentationProxyLoweredValue(input, typeVarRepr, pos)
                     r0.toRepresentation(outputRepresentation, pos)
 
             case _ =>

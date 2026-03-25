@@ -261,10 +261,11 @@ object ScalusRuntime {
             SIRType.Integer ->: SIRType.Integer ->: SIRType.BuiltinList(elemType)
         val innerInnerFunType = SIRType.Integer ->: SIRType.BuiltinList(elemType)
 
+        val arrayRepr = ProductCaseClassRepresentation.ProdBuiltinArray(elemRepr)
         val helperRepr = LambdaRepresentation(
           helperType,
           InOutRepresentationPair(
-            PrimitiveRepresentation.Constant,
+            arrayRepr,
             LambdaRepresentation(
               innerFunType,
               InOutRepresentationPair(
@@ -290,7 +291,7 @@ object ScalusRuntime {
               lvLamAbs(
                 "arr",
                 SIRType.BuiltinArray(SIRType.Data.tp),
-                PrimitiveRepresentation.Constant,
+                arrayRepr,
                 arr =>
                     lvLamAbs(
                       "i",
@@ -385,7 +386,7 @@ object ScalusRuntime {
         val arrayToListBody = lvLamAbs(
           "arr",
           SIRType.BuiltinArray(SIRType.Data.tp),
-          PrimitiveRepresentation.Constant,
+          arrayRepr,
           arr => {
               // length = lengthOfArray arr
               val length = lvBuiltinApply(

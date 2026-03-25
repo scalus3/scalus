@@ -493,8 +493,6 @@ object ProductCaseClassRepresentation {
                 case _                              => None
     }
 
-    val ArrayData: ProdBuiltinArray = ProdBuiltinArray(PrimitiveRepresentation.PackedData)
-
     /** Representation for BuiltinArray packed as Data.List.
       *
       * This is used when the array needs to be Data-compatible (e.g., stored in a case class
@@ -833,6 +831,15 @@ case class LambdaRepresentation(
                           tv -> ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valueRepr)
                         )
                     case _ => Map.empty
+            case (
+                  SIRType.BuiltinArray(elemType),
+                  ProductCaseClassRepresentation.ProdBuiltinArray(elemRepr)
+                ) =>
+                // Array type: element TypeVar → element repr
+                elemType match
+                    case tv: SIRType.TypeVar if builtinTypeVars.contains(tv) =>
+                        Map(tv -> elemRepr)
+                    case _ => Map.empty
             case _ => Map.empty
     }
 
@@ -985,16 +992,8 @@ object LoweredValueRepresentation {
                     SumCaseClassRepresentation.SumBuiltinList(
                       typegens.SirTypeUplcGenerator.elementReprFor(elemType)
                     )
-            // BuiltinArray[Data] -> use ArrayData representation (native UPLC array)
-            case SIRType.BuiltinArray(SIRType.Data()) =>
-                ProductCaseClassRepresentation.ArrayData
-            // BuiltinArray with non-Data element type - not supported as constant
             case SIRType.BuiltinArray(elemType) =>
-                throw LoweringException(
-                  s"BuiltinArray constant with non-Data element type ${elemType.show} is not supported. " +
-                      s"Only BuiltinArray[Data] can be a constant.",
-                  SIRPosition.empty
-                )
+                ProductCaseClassRepresentation.ProdBuiltinArray(constRepresentation(elemType))
             case SIRType.SumCaseClass(decl, typeArgs) =>
                 // Data type uses DataData representation, not DataConstr
                 if decl.name == SIRType.Data.name then SumCaseClassRepresentation.DataData
