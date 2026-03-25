@@ -45,7 +45,12 @@ object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator 
               )
             )
         if constrDecl.name == "scalus.uplc.builtin.BuiltinPair" || constrDecl.name == "scala.Tuple2"
-        then ProductCaseClassRepresentation.PairData
+        then
+            val (fstType, sndType) =
+                ProductCaseClassRepresentation.ProdBuiltinPair.extractPairComponentTypes(tp)
+            val fstRepr = lctx.typeGenerator(fstType).defaultDataRepresentation(fstType)
+            val sndRepr = lctx.typeGenerator(sndType).defaultDataRepresentation(sndType)
+            ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
         else
             throw LoweringException(
               s"SumPair should have a pair or tuple type representation, we have ${tp.show}",

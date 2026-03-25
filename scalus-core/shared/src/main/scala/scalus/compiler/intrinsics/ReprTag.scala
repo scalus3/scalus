@@ -11,7 +11,7 @@ import scalus.compiler.sir.lowering.*
   * the actual `LoweredValueRepresentation`.
   */
 enum ReprTag {
-    case DataData, PairData, Constant, PackedData, DataConstr, PackedSumDataList
+    case DataData, Constant, PackedData, DataConstr, PackedSumDataList
     case SumBuiltinList(elemRepr: ReprTag)
     case ProdBuiltinPair(fstRepr: ReprTag, sndRepr: ReprTag)
 }
@@ -28,7 +28,6 @@ object ReprTagConvert {
         case ReprTag.SumBuiltinList(elemTag) =>
             SumCaseClassRepresentation.SumBuiltinList(toLoweredValueRepresentation(elemTag))
         case ReprTag.DataData          => SumCaseClassRepresentation.DataData
-        case ReprTag.PairData          => ProductCaseClassRepresentation.PairData
         case ReprTag.Constant          => PrimitiveRepresentation.Constant
         case ReprTag.PackedData        => PrimitiveRepresentation.PackedData
         case ReprTag.DataConstr        => SumCaseClassRepresentation.DataConstr

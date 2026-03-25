@@ -565,7 +565,6 @@ object Lowering {
         shortName match
             case "DataData"          => SumCaseClassRepresentation.DataData
             case "DataConstr"        => SumCaseClassRepresentation.DataConstr
-            case "PairData"          => ProductCaseClassRepresentation.PairData
             case "Constant"          => PrimitiveRepresentation.Constant
             case "PackedData"        => PrimitiveRepresentation.PackedData
             case "PackedSumDataList" => SumCaseClassRepresentation.PackedSumDataList

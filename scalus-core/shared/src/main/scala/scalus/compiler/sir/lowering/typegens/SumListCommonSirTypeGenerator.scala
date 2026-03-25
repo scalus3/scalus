@@ -323,35 +323,25 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(SumCaseClassRepresentation.SumDataAssocMap, pos)
                     .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
             case (
-                  SumCaseClassRepresentation.SumPairBuiltinList(_, _),
+                  SumCaseClassRepresentation.SumPairBuiltinList(inKeyRepr, inValueRepr),
                   out @ SumCaseClassRepresentation.SumBuiltinList(outElemRepr)
                 ) =>
                 // PairList → regular list: element-wise conversion via convertBuiltinList
                 val elemType = retrieveElementType(input.sirType, pos)
-                convertBuiltinList(
-                  input,
-                  elemType,
-                  ProductCaseClassRepresentation.PairData,
-                  outElemRepr,
-                  out,
-                  pos
-                )
+                val inElemRepr =
+                    ProductCaseClassRepresentation.ProdBuiltinPair(inKeyRepr, inValueRepr)
+                convertBuiltinList(input, elemType, inElemRepr, outElemRepr, out, pos)
             case (
                   SumCaseClassRepresentation.SumBuiltinList(inElemRepr),
-                  out @ SumCaseClassRepresentation.SumPairBuiltinList(_, _)
+                  out @ SumCaseClassRepresentation.SumPairBuiltinList(outKeyRepr, outValueRepr)
                 ) =>
                 // Regular list → PairList: element-wise conversion via convertBuiltinList
                 if isNilType(input.sirType) then lvPairDataNil(pos, input.sirType, out)
                 else
                     val elemType = retrieveElementType(input.sirType, pos)
-                    convertBuiltinList(
-                      input,
-                      elemType,
-                      inElemRepr,
-                      ProductCaseClassRepresentation.PairData,
-                      out,
-                      pos
-                    )
+                    val outElemRepr =
+                        ProductCaseClassRepresentation.ProdBuiltinPair(outKeyRepr, outValueRepr)
+                    convertBuiltinList(input, elemType, inElemRepr, outElemRepr, out, pos)
             // === SumDataAssocMap conversions ===
             case (
                   SumCaseClassRepresentation.SumDataAssocMap,

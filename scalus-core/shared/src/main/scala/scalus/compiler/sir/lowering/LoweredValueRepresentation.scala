@@ -446,9 +446,6 @@ object ProductCaseClassRepresentation {
                 case _                           => (SIRType.Data.tp, SIRType.Data.tp)
     }
 
-    val PairData: ProdBuiltinPair =
-        ProdBuiltinPair(PrimitiveRepresentation.PackedData, PrimitiveRepresentation.PackedData)
-
     case object UplcConstr extends ProductCaseClassRepresentation(false, false)
 
     /** BuiltinArray with parameterized element representation.
@@ -827,12 +824,14 @@ case class LambdaRepresentation(
                     case _ => Map.empty
             case (
                   SIRType.SumCaseClass(decl, typeArgs),
-                  SumCaseClassRepresentation.SumPairBuiltinList(_, _)
+                  SumCaseClassRepresentation.SumPairBuiltinList(keyRepr, valueRepr)
                 ) =>
-                // Pair list type: element TypeVar → PairData
+                // Pair list type: element TypeVar → ProdBuiltinPair with actual key/value reprs
                 typeArgs.headOption match
                     case Some(tv: SIRType.TypeVar) if builtinTypeVars.contains(tv) =>
-                        Map(tv -> ProductCaseClassRepresentation.PairData)
+                        Map(
+                          tv -> ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valueRepr)
+                        )
                     case _ => Map.empty
             case _ => Map.empty
     }

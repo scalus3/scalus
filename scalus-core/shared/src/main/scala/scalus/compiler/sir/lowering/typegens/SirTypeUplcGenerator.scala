@@ -274,11 +274,16 @@ object SirTypeUplcGenerator {
         case _                                                                       => false
 
     /** Compute the element representation for a list element type. Note: only BuiltinPair gets
-      * PairData. Tuple2 gets ProdDataConstr via defaultDataRepresentation because Tuple2 is
+      * ProdBuiltinPair. Tuple2 gets ProdDataConstr via defaultDataRepresentation because Tuple2 is
       * constr-encoded (Data.Constr(0, [fst, snd])), not pair-encoded.
       */
     def elementReprFor(elemType: SIRType)(using lctx: LoweringContext): LoweredValueRepresentation =
-        if isPair(elemType) then ProductCaseClassRepresentation.PairData
+        if isPair(elemType) then
+            val (fstType, sndType) =
+                ProductCaseClassRepresentation.ProdBuiltinPair.extractPairComponentTypes(elemType)
+            val fstRepr = SirTypeUplcGenerator(fstType).defaultDataRepresentation(fstType)
+            val sndRepr = SirTypeUplcGenerator(sndType).defaultDataRepresentation(sndType)
+            ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
         else if lctx.nativeListElements && isPrimitiveElementType(elemType) then
             PrimitiveRepresentation.Constant
         else if elemType == SIRType.TypeNothing || elemType == SIRType.Unit then

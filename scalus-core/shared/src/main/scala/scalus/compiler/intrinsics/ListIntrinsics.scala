@@ -46,7 +46,7 @@ object ListReprRules {
                     && valueRepr.isCompatibleOn(valueType, expectedValueRepr, SIRPosition.empty)(
                       using lctx
                     )
-                then ProductCaseClassRepresentation.PairData
+                then ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valueRepr)
                 else lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
             case _ => lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
 

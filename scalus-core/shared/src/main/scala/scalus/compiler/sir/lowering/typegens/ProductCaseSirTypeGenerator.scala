@@ -22,7 +22,14 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 if constrDecl.name == SIRType.BuiltinPair.name
                 then {
                     // don't change: builtin functions rely on this
-                    ProductCaseClassRepresentation.PairData
+                    val (fstType, sndType) =
+                        ProductCaseClassRepresentation.ProdBuiltinPair
+                            .extractPairComponentTypes(tp)
+                    val fstRepr =
+                        loweringContext.typeGenerator(fstType).defaultDataRepresentation(fstType)
+                    val sndRepr =
+                        loweringContext.typeGenerator(sndType).defaultDataRepresentation(sndType)
+                    ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
                 } else if constrDecl.name == SIRType.Tuple2.name
                 then { // here we can change and see tests.
                     // ProductCaseClassRepresentation.PairData
@@ -82,7 +89,10 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 ???
             case (ProdDataList, outRep @ ProductCaseClassRepresentation.OneElementWrapper(_)) =>
                 lvBuiltinApply(SIRBuiltins.headList, input, input.sirType, outRep, pos)
-            case (ProdDataList, PairData) =>
+            case (
+                  ProdDataList,
+                  outPair @ ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
+                ) =>
                 val (inputIdv, addToScoped) = input match
                     case idv: IdentifiableLoweredValue => (idv, false)
                     case other =>
@@ -99,7 +109,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   SIRBuiltins.headList,
                   inputIdv,
                   input.sirType,
-                  ProductCaseClassRepresentation.PairData,
+                  fstRepr,
                   pos
                 )
                 val headTail = lvBuiltinApply(
@@ -113,7 +123,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   SIRBuiltins.headList,
                   headTail,
                   SIRType.Data.tp,
-                  ProductCaseClassRepresentation.ProdDataList,
+                  sndRepr,
                   pos
                 )
                 val body = lvBuiltinApply2(
@@ -121,7 +131,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   head,
                   headTailHead,
                   input.sirType,
-                  ProductCaseClassRepresentation.PairData,
+                  outPair,
                   pos
                 )
                 if addToScoped then ScopeBracketsLoweredValue(Set(inputIdv), body)
@@ -147,13 +157,10 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(outputRep, pos)
-            case (PackedDataList, PairData) =>
+            case (PackedDataList, outPair: ProductCaseClassRepresentation.ProdBuiltinPair) =>
                 input
                     .toRepresentation(ProdDataList, pos)
-                    .toRepresentation(
-                      PairData,
-                      pos
-                    )
+                    .toRepresentation(outPair, pos)
             case (ProdDataConstr, ProdDataList) =>
                 val pairIntDataList = lvBuiltinApply(
                   SIRBuiltins.unConstrData,
@@ -187,10 +194,10 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(UplcConstr, pos)
-            case (ProdDataConstr, PairData) =>
+            case (ProdDataConstr, outPair: ProductCaseClassRepresentation.ProdBuiltinPair) =>
                 input
                     .toRepresentation(ProdDataList, pos)
-                    .toRepresentation(PairData, pos)
+                    .toRepresentation(outPair, pos)
             case (UplcConstr, ProdDataList) => ???
             case (UplcConstr, PackedDataList) =>
                 input
@@ -218,8 +225,45 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                       s"Can't use one-element=generator for type ${input.sirType.show}",
                       pos
                     )
-            case (PairData, PairData) => input
-            case (PairData, ProdDataList) =>
+            case (
+                  ProductCaseClassRepresentation.ProdBuiltinPair(inFst, inSnd),
+                  outPair @ ProductCaseClassRepresentation.ProdBuiltinPair(outFst, outSnd)
+                ) =>
+                if inFst == outFst && inSnd == outSnd then input
+                else
+                    // Convert component-wise: extract fst/snd in input reprs, convert to output reprs, rebuild
+                    val (fstType, sndType) =
+                        ProductCaseClassRepresentation.ProdBuiltinPair
+                            .extractPairComponentTypes(input.sirType)
+                    val inputIdv = input match
+                        case idv: IdentifiableLoweredValue => idv
+                        case other =>
+                            lvNewLazyIdVar(
+                              lctx.uniqueVarName("pair_conv_input"),
+                              input.sirType,
+                              input.representation,
+                              other,
+                              pos
+                            )
+                    val fst = lvBuiltinApply(SIRBuiltins.fstPair, inputIdv, fstType, inFst, pos)
+                    val snd = lvBuiltinApply(SIRBuiltins.sndPair, inputIdv, sndType, inSnd, pos)
+                    val convertedFst = fst.toRepresentation(outFst, pos)
+                    val convertedSnd = snd.toRepresentation(outSnd, pos)
+                    val body = lvBuiltinApply2(
+                      SIRBuiltins.mkPairData,
+                      convertedFst,
+                      convertedSnd,
+                      input.sirType,
+                      outPair,
+                      pos
+                    )
+                    if inputIdv ne input then ScopeBracketsLoweredValue(Set(inputIdv), body)
+                    else body
+            case (ProductCaseClassRepresentation.ProdBuiltinPair(inFst, inSnd), ProdDataList) =>
+                val (fstType, sndType) =
+                    ProductCaseClassRepresentation.ProdBuiltinPair.extractPairComponentTypes(
+                      input.sirType
+                    )
                 val inputIdv = input match
                     case idv: IdentifiableLoweredValue => idv
                     case other =>
@@ -236,21 +280,25 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val frsVar = new VariableLoweredValue(
                       id = frsVarId,
                       name = frsVarId,
-                      sir = SIR.Var(frsVarId, SIRType.Data.tp, AnnotationsDecl.empty),
-                      representation = PrimitiveRepresentation.PackedData,
+                      sir = SIR.Var(frsVarId, fstType, AnnotationsDecl.empty),
+                      representation = inFst,
                       optRhs = None
                     )
                     val sndVarId = lctx.uniqueVarName("pair_snd")
                     val sndVar = new VariableLoweredValue(
                       id = sndVarId,
                       name = sndVarId,
-                      sir = SIR.Var(sndVarId, SIRType.Data.tp, AnnotationsDecl.empty),
-                      representation = PrimitiveRepresentation.PackedData,
+                      sir = SIR.Var(sndVarId, sndType, AnnotationsDecl.empty),
+                      representation = inSnd,
                       optRhs = None
                     )
+                    val frsDataRepr = lctx.typeGenerator(fstType).defaultDataRepresentation(fstType)
+                    val sndDataRepr = lctx.typeGenerator(sndType).defaultDataRepresentation(sndType)
+                    val frsData = frsVar.toRepresentation(frsDataRepr, pos)
+                    val sndData = sndVar.toRepresentation(sndDataRepr, pos)
                     val consSndNil = lvBuiltinApply2(
                       SIRBuiltins.mkCons,
-                      sndVar,
+                      sndData,
                       lvProdDataListNil(pos),
                       SIRType.List(SIRType.Data.tp),
                       ProductCaseClassRepresentation.ProdDataList,
@@ -258,7 +306,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     )
                     val body = lvBuiltinApply2(
                       SIRBuiltins.mkCons,
-                      frsVar,
+                      frsData,
                       consSndNil,
                       input.sirType,
                       ProductCaseClassRepresentation.ProdDataList,
@@ -270,21 +318,25 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val frs = lvBuiltinApply(
                       SIRBuiltins.fstPair,
                       inputIdv,
-                      SIRType.Data.tp,
-                      PrimitiveRepresentation.PackedData,
+                      fstType,
+                      inFst,
                       pos
                     )
                     val snd = lvBuiltinApply(
                       SIRBuiltins.sndPair,
                       inputIdv,
-                      SIRType.Data.tp,
-                      PrimitiveRepresentation.PackedData,
+                      sndType,
+                      inSnd,
                       pos
                     )
+                    val frsDataRepr = lctx.typeGenerator(fstType).defaultDataRepresentation(fstType)
+                    val sndDataRepr = lctx.typeGenerator(sndType).defaultDataRepresentation(sndType)
+                    val frsData = frs.toRepresentation(frsDataRepr, pos)
+                    val sndData = snd.toRepresentation(sndDataRepr, pos)
                     val consSndNil =
                         lvBuiltinApply2(
                           SIRBuiltins.mkCons,
-                          snd,
+                          sndData,
                           lvProdDataListNil(pos),
                           SIRType.List(SIRType.Data.tp),
                           ProductCaseClassRepresentation.ProdDataList,
@@ -292,7 +344,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         )
                     val retval = lvBuiltinApply2(
                       SIRBuiltins.mkCons,
-                      frs,
+                      frsData,
                       consSndNil,
                       input.sirType,
                       ProductCaseClassRepresentation.ProdDataList,
@@ -300,13 +352,19 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     )
                     retval
                 }
-            case (PairData, TypeVarRepresentation(isBuiltin)) =>
+            case (
+                  _: ProductCaseClassRepresentation.ProdBuiltinPair,
+                  TypeVarRepresentation(isBuiltin)
+                ) =>
                 if isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
                 else
+                    val typeVarRepr = lctx
+                        .typeGenerator(input.sirType)
+                        .defaultTypeVarReperesentation(input.sirType)
                     input
-                        .toRepresentation(ProductCaseClassRepresentation.ProdDataConstr, pos)
+                        .toRepresentation(typeVarRepr, pos)
                         .toRepresentation(representation, pos)
-            case (PairData, _) =>
+            case (_: ProductCaseClassRepresentation.ProdBuiltinPair, _) =>
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(representation, pos)
@@ -522,7 +580,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         loweredScrutinee.representation match
             case ProdDataList | PackedDataList | ProdDataConstr | PairIntDataList =>
                 genMatchDataList(matchData, loweredScrutinee, optTargetType)
-            case PairData =>
+            case _: ProductCaseClassRepresentation.ProdBuiltinPair =>
                 genMatchPairData(matchData, loweredScrutinee, optTargetType)
             case _ =>
                 genMatchDataList(matchData, loweredScrutinee, optTargetType)
