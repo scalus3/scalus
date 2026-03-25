@@ -9,7 +9,7 @@ import { Callout } from 'nextra/components'
 
 Instead of using high-level prelude types like `ScriptContext` and `List[A]`, you can use builtins and primitive data types (`Data`, `BuiltinList`, `ByteString`) directly inside `compile {}`. This gives you manual control over Data access and makes the resulting Scala code effectively a "compiled assembler" -- it maps almost 1:1 to UPLC builtins.
 
-Let's see the difference on a real validator. Here's a high-level PreimageValidator that checks a hash preimage and verifies a signatory:
+Let's see the difference on a real validator. Here's a high-level `PreimageValidator` that checks a hash preimage and verifies a signatory:
 
 ```scala mdoc:compile-only copy showLineNumbers
 import scalus.*, scalus.compiler.compile
