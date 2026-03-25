@@ -689,102 +689,22 @@ case class LambdaRepresentation(
                             // - declaredRepr: representation from canonical pair, carries TypeVar
                             //   origin info from previous applications
                             //
-                            // Decision:
-                            // 1. declaredParamType is TypeVar → use reprSubstitutes (builtin) or defaultTypeVarRepresentation (non-builtin)
-                            // 2. Fun → recurse with declaredRepr's inRepr/outRepr
-                            // 3. TypeLambda → recurse into body
-                            // 4. declaredRepr is TypeVarRepresentation → position was TypeVar in a previous application
-                            // 5. Otherwise → defaultRepresentation
-                            def resolveRepr(
-                                declaredParamType: SIRType,
-                                argumentType: SIRType,
-                                declaredRepr: LoweredValueRepresentation
-                            ): LoweredValueRepresentation =
-                                declaredParamType match
-                                    case tv: SIRType.TypeVar
-                                        if tv.isBuiltin && reprSubstitutes.contains(tv) =>
-                                        reprSubstitutes(tv)
-                                    case tv: SIRType.TypeVar if !tv.isBuiltin =>
-                                        lctx.typeGenerator(argumentType)
-                                            .defaultTypeVarReperesentation(argumentType)
-                                    case SIRType.Fun(defIn, defOut) =>
-                                        (argumentType, declaredRepr) match
-                                            case (
-                                                  SIRType.Fun(argIn, argOut),
-                                                  lr: LambdaRepresentation
-                                                ) =>
-                                                val inR = resolveRepr(
-                                                  defIn,
-                                                  argIn,
-                                                  lr.canonicalRepresentationPair.inRepr
-                                                )
-                                                val outR = resolveRepr(
-                                                  defOut,
-                                                  argOut,
-                                                  lr.canonicalRepresentationPair.outRepr
-                                                )
-                                                LambdaRepresentation(
-                                                  argumentType,
-                                                  InOutRepresentationPair(inR, outR)
-                                                )
-                                            case (SIRType.TypeLambda(params, argBody), _) =>
-                                                val inner = resolveRepr(
-                                                  declaredParamType,
-                                                  argBody,
-                                                  declaredRepr
-                                                )
-                                                // Preserve TypeLambda for unfilled builtin TypeVars
-                                                // so subsequent reprFun calls can resolve them
-                                                // from concrete arguments. Non-builtin TypeVars
-                                                // don't need preservation — they are resolved
-                                                // via defaultTypeVarRepresentation in the body.
-                                                val remaining = params.filter(p =>
-                                                    p.isBuiltin && !allSubstitutes
-                                                        .get(p)
-                                                        .exists(_ != p)
-                                                )
-                                                inner match
-                                                    case lr: LambdaRepresentation
-                                                        if remaining.nonEmpty =>
-                                                        LambdaRepresentation(
-                                                          SIRType.TypeLambda(
-                                                            remaining,
-                                                            lr.funTp
-                                                          ),
-                                                          lr.canonicalRepresentationPair
-                                                        )
-                                                    case other => other
-                                            case (SIRType.Fun(_, _), other) =>
-                                                throw LoweringException(
-                                                  s"resolveRepr: Fun type but declaredRepr is not LambdaRepresentation: ${other.show}",
-                                                  pos
-                                                )
-                                            case _ =>
-                                                throw LoweringException(
-                                                  s"resolveRepr: declaredParamType is Fun but argumentType is ${argumentType.show}",
-                                                  pos
-                                                )
-                                    case SIRType.TypeLambda(_, defBody) =>
-                                        argumentType match
-                                            case SIRType.TypeLambda(_, argBody) =>
-                                                resolveRepr(defBody, argBody, declaredRepr)
-                                            case _ =>
-                                                resolveRepr(defBody, argumentType, declaredRepr)
-                                    case _ =>
-                                        declaredRepr match
-                                            case TypeVarRepresentation(true) =>
-                                                lctx.typeGenerator(argumentType)
-                                                    .defaultRepresentation(argumentType)
-                                            case TypeVarRepresentation(false) =>
-                                                lctx.typeGenerator(argumentType)
-                                                    .defaultTypeVarReperesentation(argumentType)
-                                            case _ =>
-                                                lctx.typeGenerator(argumentType)
-                                                    .defaultRepresentation(argumentType)
-                            val inRepr =
-                                resolveRepr(input, newInput, canonicalRepresentationPair.inRepr)
-                            val outRepr =
-                                resolveRepr(output, newOutput, canonicalRepresentationPair.outRepr)
+                            val inRepr = resolveCanonicalReprInFun(
+                              input,
+                              newInput,
+                              canonicalRepresentationPair.inRepr,
+                              reprSubstitutes,
+                              allSubstitutes,
+                              pos
+                            )
+                            val outRepr = resolveCanonicalReprInFun(
+                              output,
+                              newOutput,
+                              canonicalRepresentationPair.outRepr,
+                              reprSubstitutes,
+                              allSubstitutes,
+                              pos
+                            )
                             InOutRepresentationPair(inRepr, outRepr)
                         case SIRUnify.UnificationFailure(path, left, right) =>
                             throw LoweringException(
@@ -795,6 +715,141 @@ case class LambdaRepresentation(
                     }
             case None =>
                 canonicalRepresentationPair
+    }
+
+    /** Resolve TypeVars in a canonical representation based on concrete argument types.
+      *
+      * Walks the declared type, argument type, and canonical repr in parallel:
+      *   1. TypeVar(builtin) → use reprSubstitutes (from extractTypeVarReprs)
+      *   2. TypeVar(non-builtin) → defaultTypeVarRepresentation of argument type
+      *   3. Fun → recurse into in/out with LambdaRepresentation's in/out reprs
+      *   4. TypeLambda → recurse into body
+      *   5. Compound reprs (SumBuiltinList, ProdBuiltinPair, etc.) → recursively resolve inner
+      *      reprs
+      *   6. Otherwise → defaultRepresentation of argument type
+      */
+    private def resolveCanonicalReprInFun(
+        declaredParamType: SIRType,
+        argumentType: SIRType,
+        declaredRepr: LoweredValueRepresentation,
+        reprSubstitutes: Map[SIRType.TypeVar, LoweredValueRepresentation],
+        allSubstitutes: Map[SIRType.TypeVar, SIRType],
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValueRepresentation = {
+        def resolve(
+            declaredParamType: SIRType,
+            argumentType: SIRType,
+            declaredRepr: LoweredValueRepresentation
+        ): LoweredValueRepresentation =
+            declaredParamType match
+                case tv: SIRType.TypeVar if tv.isBuiltin && reprSubstitutes.contains(tv) =>
+                    reprSubstitutes(tv)
+                case tv: SIRType.TypeVar if !tv.isBuiltin =>
+                    lctx.typeGenerator(argumentType).defaultTypeVarReperesentation(argumentType)
+                case SIRType.Fun(defIn, defOut) =>
+                    (argumentType, declaredRepr) match
+                        case (SIRType.Fun(argIn, argOut), lr: LambdaRepresentation) =>
+                            val inR =
+                                resolve(defIn, argIn, lr.canonicalRepresentationPair.inRepr)
+                            val outR =
+                                resolve(defOut, argOut, lr.canonicalRepresentationPair.outRepr)
+                            LambdaRepresentation(argumentType, InOutRepresentationPair(inR, outR))
+                        case (SIRType.TypeLambda(params, argBody), _) =>
+                            val inner = resolve(declaredParamType, argBody, declaredRepr)
+                            val remaining = params.filter(p =>
+                                p.isBuiltin && !allSubstitutes.get(p).exists(_ != p)
+                            )
+                            inner match
+                                case lr: LambdaRepresentation if remaining.nonEmpty =>
+                                    LambdaRepresentation(
+                                      SIRType.TypeLambda(remaining, lr.funTp),
+                                      lr.canonicalRepresentationPair
+                                    )
+                                case other => other
+                        case (SIRType.Fun(_, _), other) =>
+                            throw LoweringException(
+                              s"resolveCanonicalReprInFun: Fun type but declaredRepr is not LambdaRepresentation: ${other.show}",
+                              pos
+                            )
+                        case _ =>
+                            throw LoweringException(
+                              s"resolveCanonicalReprInFun: declaredParamType is Fun but argumentType is ${argumentType.show}",
+                              pos
+                            )
+                case SIRType.TypeLambda(_, defBody) =>
+                    argumentType match
+                        case SIRType.TypeLambda(_, argBody) =>
+                            resolve(defBody, argBody, declaredRepr)
+                        case _ => resolve(defBody, argumentType, declaredRepr)
+                case _ =>
+                    declaredRepr match
+                        case TypeVarRepresentation(true) =>
+                            lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
+                        case TypeVarRepresentation(false) =>
+                            lctx.typeGenerator(argumentType)
+                                .defaultTypeVarReperesentation(argumentType)
+                        case SumCaseClassRepresentation.SumBuiltinList(innerRepr)
+                            if lctx.nativeListElements
+                                && SumCaseClassRepresentation.SumBuiltinList
+                                    .retrieveListElementType(argumentType)
+                                    .isDefined =>
+                            val declaredElemType =
+                                SumCaseClassRepresentation.SumBuiltinList
+                                    .retrieveListElementType(declaredParamType)
+                                    .getOrElse(SIRType.FreeUnificator)
+                            val argElemType =
+                                SumCaseClassRepresentation.SumBuiltinList
+                                    .retrieveListElementType(argumentType)
+                                    .get
+                            SumCaseClassRepresentation.SumBuiltinList(
+                              resolve(declaredElemType, argElemType, innerRepr)
+                            )
+                        case SumCaseClassRepresentation.SumPairBuiltinList(keyRepr, valRepr)
+                            if lctx.nativeListElements
+                                && SumCaseClassRepresentation.SumBuiltinList
+                                    .retrieveListElementType(argumentType)
+                                    .exists(
+                                      ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2
+                                    ) =>
+                            val declaredElemType =
+                                SumCaseClassRepresentation.SumBuiltinList
+                                    .retrieveListElementType(declaredParamType)
+                                    .getOrElse(SIRType.FreeUnificator)
+                            val argElemType =
+                                SumCaseClassRepresentation.SumBuiltinList
+                                    .retrieveListElementType(argumentType)
+                                    .get
+                            val resolvedElem = resolve(
+                              declaredElemType,
+                              argElemType,
+                              ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valRepr)
+                            )
+                            resolvedElem match
+                                case ProductCaseClassRepresentation.ProdBuiltinPair(rk, rv) =>
+                                    SumCaseClassRepresentation.SumPairBuiltinList(rk, rv)
+                                case _ =>
+                                    SumCaseClassRepresentation.SumPairBuiltinList
+                                        .fromElementType(argElemType, pos)
+                        case ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
+                            if lctx.nativeListElements
+                                && ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(
+                                  argumentType
+                                ) =>
+                            val (declFst, declSnd) =
+                                ProductCaseClassRepresentation.ProdBuiltinPair
+                                    .extractPairComponentTypes(declaredParamType)
+                            val (argFst, argSnd) =
+                                ProductCaseClassRepresentation.ProdBuiltinPair
+                                    .extractPairComponentTypes(argumentType)
+                            ProductCaseClassRepresentation.ProdBuiltinPair(
+                              resolve(declFst, argFst, fstRepr),
+                              resolve(declSnd, argSnd, sndRepr)
+                            )
+                        case _ =>
+                            lctx.typeGenerator(argumentType)
+                                .defaultRepresentation(argumentType)
+
+        resolve(declaredParamType, argumentType, declaredRepr)
     }
 
     /** Extract TypeVar→repr mappings by walking a type pattern and actual repr in parallel.
@@ -1002,7 +1057,10 @@ object LoweredValueRepresentation {
                 else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" || decl.name == SIRType.BuiltinList.name
                 then
                     if typeArgs.nonEmpty then
-                        if typegens.SirTypeUplcGenerator.isPairOrTuple2(typeArgs.head) then
+                        if ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(
+                              typeArgs.head
+                            )
+                        then
                             SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
                               typeArgs.head
                             )

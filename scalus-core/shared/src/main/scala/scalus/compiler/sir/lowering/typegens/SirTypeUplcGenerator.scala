@@ -281,14 +281,22 @@ object SirTypeUplcGenerator {
         if isPair(elemType) then
             val (fstType, sndType) =
                 ProductCaseClassRepresentation.ProdBuiltinPair.extractPairComponentTypes(elemType)
-            val fstRepr = SirTypeUplcGenerator(fstType).defaultDataRepresentation(fstType)
-            val sndRepr = SirTypeUplcGenerator(sndType).defaultDataRepresentation(sndType)
-            ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
-        else if lctx.nativeListElements && isPrimitiveElementType(elemType) then
-            PrimitiveRepresentation.Constant
+            ProductCaseClassRepresentation.ProdBuiltinPair(
+              elementReprFor(fstType),
+              elementReprFor(sndType)
+            )
         else if elemType == SIRType.TypeNothing || elemType == SIRType.Unit then
             TypeVarRepresentation(false)
-        else SirTypeUplcGenerator(elemType).defaultDataRepresentation(elemType)
+        else
+            elemType match
+                case SIRType.TypeVar(_, _, isBuiltin)      => TypeVarRepresentation(isBuiltin)
+                case SIRType.TypeLambda(_, body)           => elementReprFor(body)
+                case SIRType.TypeProxy(ref) if ref != null => elementReprFor(ref)
+                case _ =>
+                    val gen = SirTypeUplcGenerator(elemType)
+                    if lctx.nativeListElements || !gen.canBeConvertedToData(elemType) then
+                        gen.defaultRepresentation(elemType)
+                    else gen.defaultDataRepresentation(elemType)
 
     def isPair(tp: SIRType): Boolean =
         SIRType.retrieveConstrDecl(tp) match {

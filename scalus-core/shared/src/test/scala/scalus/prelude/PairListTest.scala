@@ -9,35 +9,47 @@ import scalus.testing.kit.EvalTestKit
 class PairListTest extends AnyFunSuite with EvalTestKit {
 
     test("head") {
-        assertEvalWithBudget(
+        assertEvalWithBudgets(
           (pl: PairList[BigInt, BigInt]) => pl.head,
           PairList.single(BigInt(1), BigInt(2)),
           (BigInt(1), BigInt(2)),
-          ExUnits(memory = 5856, steps = 1632628)
+          Seq(
+            compilerOptions -> ExUnits(memory = 5856, steps = 1632628),
+            nativeOpts -> ExUnits(memory = 5856, steps = 1_632_628)
+          )
         )
     }
 
     test("tail") {
-        assertEvalWithBudget(
+        assertEvalWithBudgets(
           (pl: PairList[BigInt, BigInt]) => pl.tail,
           PairCons((BigInt(1), BigInt(2)), PairCons((BigInt(3), BigInt(4)), PairNil)),
           PairCons((BigInt(3), BigInt(4)), PairNil),
-          ExUnits(memory = 3196, steps = 719380)
+          Seq(
+            compilerOptions -> ExUnits(memory = 3196, steps = 719380),
+            nativeOpts -> ExUnits(memory = 3196, steps = 719_380)
+          )
         )
     }
 
     test("isEmpty") {
-        assertEvalWithBudget(
+        assertEvalWithBudgets(
           (pl: PairList[BigInt, BigInt]) => pl.isEmpty,
           PairList.empty[BigInt, BigInt],
           true,
-          ExUnits(memory = 1964, steps = 445717)
+          Seq(
+            compilerOptions -> ExUnits(memory = 1964, steps = 445717),
+            nativeOpts -> ExUnits(memory = 1964, steps = 445_717)
+          )
         )
-        assertEvalWithBudget(
+        assertEvalWithBudgets(
           (pl: PairList[BigInt, BigInt]) => pl.isEmpty,
           PairList.single(BigInt(1), BigInt(2)),
           false,
-          ExUnits(memory = 1964, steps = 445717)
+          Seq(
+            compilerOptions -> ExUnits(memory = 1964, steps = 445717),
+            nativeOpts -> ExUnits(memory = 1964, steps = 445_717)
+          )
         )
     }
 }
