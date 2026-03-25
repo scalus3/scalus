@@ -6,7 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.testing.kit.Party
 import scalus.uplc.builtin.ByteString
 
-class PreconfigurationSpec extends AnyFunSuite {
+class PreconfigurationTest extends AnyFunSuite {
 
     private val network = Network.Testnet
 
@@ -16,14 +16,14 @@ class PreconfigurationSpec extends AnyFunSuite {
 
         assert(config.utxo.size == 1)
         assert(config.utxo.contains("alice"))
-        assert(config.utxo("alice").head.ada == 100000000L)
+        assert(config.utxo("alice").head.ada == 100L)
 
         val utxos = Preconfiguration.resolveUtxos(config, network)
         assert(utxos.size == 1)
 
         val (input, output) = utxos.head
         assert(output.address == Party.Alice.address(network))
-        assert(output.value == Value.lovelace(100000000L))
+        assert(output.value == Value.ada(100L))
     }
 
     test("parse and resolve multiple parties") {
