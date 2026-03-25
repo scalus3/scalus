@@ -1,6 +1,6 @@
 package scalus.testing
 
-import scalus.cardano.address.Address
+import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
 import scalus.cardano.node.*
@@ -164,4 +164,30 @@ object ImmutableEmulator {
           mutators = Set(PlutusScriptsTransactionMutator)
         )
     }
+
+    /** Create an ImmutableEmulator from a [[Preconfiguration]].
+      *
+      * Resolves party names and addresses, then initializes the emulator with the resulting UTxOs.
+      */
+    def fromPreconfiguration(
+        config: Preconfiguration,
+        network: Network = Network.Testnet
+    ): ImmutableEmulator = {
+        val utxos = Preconfiguration.resolveUtxos(config, network)
+        ImmutableEmulator(
+          state = State(utxos = utxos),
+          env = UtxoEnv.testMainnet(),
+          mutators = Set(PlutusScriptsTransactionMutator)
+        )
+    }
+
+    /** Create an ImmutableEmulator from a JSON string.
+      *
+      * @see
+      *   [[Preconfiguration]] for the JSON format
+      */
+    def fromJson(
+        json: String,
+        network: Network = Network.Testnet
+    ): ImmutableEmulator = fromPreconfiguration(Preconfiguration.fromJson(json), network)
 }
