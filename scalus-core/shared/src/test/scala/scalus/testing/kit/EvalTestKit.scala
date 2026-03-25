@@ -45,6 +45,9 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
     protected given Options = compilerOptions
 
+    /** Compiler options with nativeListElements enabled. */
+    protected lazy val nativeOpts: Options = compilerOptions.copy(nativeListElements = true)
+
     /** Default PlutusVM - can be overridden by subclasses */
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
 
@@ -179,6 +182,90 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                 fail(s"""Expected success, but got failure: $exception;
                        |budget: $budget;
                        |costs: ${costs.toMap}""".stripMargin)
+
+    /** Assert that code evaluates to expected value under multiple compiler option configurations.
+      *
+      * Compiles the code once, then re-lowers with each `Options` and asserts the corresponding
+      * budget. Useful for testing the same code under different lowering configurations (e.g.,
+      * `nativeListElements` enabled/disabled).
+      *
+      * @param budgets
+      *   list of (Options, ExUnits) pairs to test
+      */
+    protected final inline def assertEvalWithBudgets[T: Eq](
+        inline code: T,
+        inline expected: T,
+        budgets: Seq[(Options, ExUnits)]
+    )(using vm: PlutusVM, options: Options): Unit =
+        val compiled = PlutusV3.compile(code)
+        val compiledExpected = PlutusV3.compile(expected)
+
+        assert(
+          compiled.code === compiledExpected.code,
+          s"Expected ${compiledExpected.code}, but got ${compiled.code}"
+        )
+
+        for (opts, budget) <- budgets do
+            val c = compiled.withOptions(opts)
+            val ce = compiledExpected.withOptions(opts)
+            c.program.term.evaluateDebug match
+                case Result.Success(term, exunits, costs, logs) =>
+                    assert(
+                      exunits == budget,
+                      s"Budget mismatch for $opts: got $exunits, but expected $budget"
+                    )
+                    val expectedTerm = ce.program.term.evaluate
+                    assert(
+                      term α_== expectedTerm,
+                      s"Expected term $expectedTerm, but got ${term.show} (opts=$opts)"
+                    )
+                case Result.Failure(exception, budget, costs, logs) =>
+                    fail(s"""Expected success for $opts, but got failure: $exception;
+                           |budget: $budget;
+                           |costs: ${costs.toMap}""".stripMargin)
+
+    /** Assert that a function evaluates to expected value under multiple compiler option
+      * configurations. The argument is passed as Data at runtime, preventing compile-time constant
+      * folding.
+      */
+    protected final inline def assertEvalWithBudgets[A1, T: Eq](
+        inline code: A1 => T,
+        arg1: A1,
+        inline expected: T,
+        budgets: Seq[(Options, ExUnits)]
+    )(using
+        vm: PlutusVM,
+        options: Options,
+        inline a1FromData: FromData[A1],
+        inline a1ToData: ToData[A1]
+    ): Unit =
+        val compiled = PlutusV3.compile { (d: Data) => code(d.to[A1]) }
+        val compiledExpected = PlutusV3.compile(expected)
+
+        assert(
+          code(arg1) === compiledExpected.code,
+          s"Expected ${compiledExpected.code}, but got ${code(arg1)}"
+        )
+
+        for (opts, budget) <- budgets do
+            val c = compiled.withOptions(opts)
+            val ce = compiledExpected.withOptions(opts)
+            val applied = c.program.term $ toData[A1](arg1).asTerm
+            applied.evaluateDebug match
+                case Result.Success(term, exunits, costs, logs) =>
+                    assert(
+                      exunits == budget,
+                      s"Budget mismatch for $opts: got $exunits, but expected $budget"
+                    )
+                    val expectedTerm = ce.program.term.evaluate
+                    assert(
+                      term α_== expectedTerm,
+                      s"Expected term $expectedTerm, but got ${term.show} (opts=$opts)"
+                    )
+                case Result.Failure(exception, budget, costs, logs) =>
+                    fail(s"""Expected success for $opts, but got failure: $exception;
+                           |budget: $budget;
+                           |costs: ${costs.toMap}""".stripMargin)
 
     /** Assert that code evaluates to different value than expected. */
     protected final inline def assertEvalNotEq[T: Eq](

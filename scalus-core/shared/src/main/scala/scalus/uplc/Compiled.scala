@@ -417,6 +417,14 @@ final case class PlutusV3[A] private[uplc] (
       */
     def withErrorTraces: PlutusV3[A] =
         copy(options = options.copy(generateErrorTraces = true, removeTraces = false))
+
+    /** Returns a copy of this compiled script with different compiler options.
+      *
+      * The SIR is shared; only the lowering (lazy `program`) is recomputed with the new options.
+      * Useful for testing the same code under different lowering configurations.
+      */
+    def withOptions(newOptions: Options): PlutusV3[A] =
+        copy(options = newOptions)
 }
 
 /** Factory methods for creating compiled Plutus V3 scripts. */
