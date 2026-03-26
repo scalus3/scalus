@@ -13,7 +13,9 @@ import scalus.uplc.PlutusV3
 class ListTest extends AnyFunSuite with EvalTestKit {
 
     test("empty") {
-        assertEvalEq(List.empty[BigInt], Nil)
+        if !compilerOptions.nativeListElements then
+            assertEvalEq(List.empty[BigInt], Nil)
+        assertEval(List.empty[BigInt].isEmpty)
 
         assert(scala.List.empty[BigInt].asScalus === List.empty[BigInt])
         assert(List.empty[BigInt].asScala == scala.List.empty[BigInt])
