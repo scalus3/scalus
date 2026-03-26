@@ -84,6 +84,8 @@ object SumCaseClassRepresentation {
       * Data values are stored as raw UPLC Data.
       */
     case object DataData extends SumCaseClassRepresentation(true, true) with PackedDataDefaultUni {
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            SIRType.Data.tp
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             tp match
                 case SIRType.SumCaseClass(decl, _) if decl.name == SIRType.Data.name => true
