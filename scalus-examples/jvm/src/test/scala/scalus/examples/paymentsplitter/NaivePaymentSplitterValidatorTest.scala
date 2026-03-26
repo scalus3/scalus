@@ -1,5 +1,6 @@
 package scalus.examples.paymentsplitter
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data
@@ -50,8 +51,13 @@ class NaivePaymentSplitterValidatorTest
         memory = 912059,
         steps = 267_362556
       ),
-      "success between 5 payees" -> ExUnits(memory = 1_653155, steps = 486_961914),
-      "success with multiple contract UTxOs" -> ExUnits(memory = 1_161281, steps = 339_599410)
+      "success between 5 payees" -> (if Options.default.nativeListElements then
+                                         ExUnits(memory = 1638003, steps = 477515765L)
+                                     else ExUnits(memory = 1_653155, steps = 486_961914)),
+      "success with multiple contract UTxOs" -> (if Options.default.nativeListElements then
+                                                     ExUnits(memory = 1180517, steps = 343222425L)
+                                                 else
+                                                     ExUnits(memory = 1_161281, steps = 339_599410))
     )
 
     // Run all shared test cases

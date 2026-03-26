@@ -1,5 +1,6 @@
 package scalus.benchmarks
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.{multiplyInteger, remainderInteger}
@@ -40,7 +41,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(memory = 185_927967, steps = 49_131_853260L)
+                if Options.default.nativeListElements then
+                    ExUnits(memory = 204281467, steps = 52963867280L)
+                else ExUnits(memory = 185_927967, steps = 49_131_853260L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -140,7 +143,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(memory = 506_240100, steps = 125_813_708262L)
+                if Options.default.nativeListElements then
+                    ExUnits(memory = 598376876, steps = 146019618948L)
+                else ExUnits(memory = 506_240100, steps = 125_813_708262L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -242,7 +247,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                ExUnits(memory = 1_037_856223, steps = 253_647_841283L)
+                if Options.default.nativeListElements then
+                    ExUnits(memory = 1238044719, steps = 297766687086L)
+                else ExUnits(memory = 1_037_856223, steps = 253_647_841283L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>

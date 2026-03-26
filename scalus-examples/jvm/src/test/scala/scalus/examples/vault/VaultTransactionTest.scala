@@ -427,7 +427,11 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
         // TODO: review after changing PairData representations
         // assert(finalizeResult.budget == ExUnits(memory = 324554, steps = 92_685932))
-        assert(finalizeResult.budget == ExUnits(memory = 324854, steps = 92_733932))
+        assert(
+          finalizeResult.budget == (if Options.default.nativeListElements then
+                                        ExUnits(memory = 375706, steps = 105989806L)
+                                    else ExUnits(memory = 324854, steps = 92_733932))
+        )
 
         provider.setSlot(finalizeSlot)
         assert(provider.submit(finalizeTx).await().isRight)
