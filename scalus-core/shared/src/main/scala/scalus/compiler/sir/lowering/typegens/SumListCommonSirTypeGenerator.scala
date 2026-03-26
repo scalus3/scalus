@@ -243,8 +243,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     val elemType = retrieveElementType(input.sirType, pos)
                     if inElemRepr.isCompatibleOn(elemType, outElemRepr, pos) then
                         RepresentationProxyLoweredValue(input, out, pos)
-                    else
-                        convertBuiltinList(input, elemType, inElemRepr, outElemRepr, out, pos)
+                    else convertBuiltinList(input, elemType, inElemRepr, outElemRepr, out, pos)
             // === SumBuiltinList → SumDataAssocMap (go through SumPairBuiltinList) ===
             case (
                   SumCaseClassRepresentation.SumBuiltinList(_),

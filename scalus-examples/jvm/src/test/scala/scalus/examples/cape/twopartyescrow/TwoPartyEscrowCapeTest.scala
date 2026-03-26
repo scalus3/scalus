@@ -1,5 +1,6 @@
 package scalus.examples.cape.twopartyescrow
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits}
@@ -58,25 +59,45 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     // Expected execution budgets for success tests
     // TODO: review after changing PairData representations
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "deposit_successful" -> ExUnits(memory = 57962, steps = 24704298),
+      "deposit_successful" -> (if Options.default.nativeListElements then
+                                   ExUnits(memory = 105395, steps = 36779463L)
+                               else ExUnits(memory = 57962, steps = 24704298)),
       // "accept_successful" -> ExUnits(memory = 73023, steps = 27249620),
-      "accept_successful" -> ExUnits(memory = 73843, steps = 27921848),
+      "accept_successful" -> (if Options.default.nativeListElements then
+                                  ExUnits(memory = 132671, steps = 42275948L)
+                              else ExUnits(memory = 73843, steps = 27921848)),
       // "accept_with_multiple_inputs" -> ExUnits(memory = 78845, steps = 30325979),
-      "accept_with_multiple_inputs" -> ExUnits(memory = 79665, steps = 30998207),
+      "accept_with_multiple_inputs" -> (if Options.default.nativeListElements then
+                                            ExUnits(memory = 140725, steps = 45885745L)
+                                        else ExUnits(memory = 79665, steps = 30998207)),
       // "accept_with_datum_attached" -> ExUnits(memory = 73023, steps = 27249620),
-      "accept_with_datum_attached" -> ExUnits(memory = 73843, steps = 27921848),
+      "accept_with_datum_attached" -> (if Options.default.nativeListElements then
+                                           ExUnits(memory = 132671, steps = 42275948L)
+                                       else ExUnits(memory = 73843, steps = 27921848)),
       // "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 97969, steps = 37424519),
-      "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 99909, steps = 38816975),
+      "accept_with_multiple_outputs_to_seller" -> (if Options.default.nativeListElements then
+                                                       ExUnits(memory = 199549, steps = 63439122L)
+                                                   else ExUnits(memory = 99909, steps = 38816975)),
       // "refund_successful" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_successful" -> ExUnits(memory = 88610, steps = 33401267),
+      "refund_successful" -> (if Options.default.nativeListElements then
+                                  ExUnits(memory = 147438, steps = 47755367L)
+                              else ExUnits(memory = 88610, steps = 33401267)),
       // "refund_after_exact_deadline" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_after_exact_deadline" -> ExUnits(memory = 88610, steps = 33401267),
+      "refund_after_exact_deadline" -> (if Options.default.nativeListElements then
+                                            ExUnits(memory = 147438, steps = 47755367L)
+                                        else ExUnits(memory = 88610, steps = 33401267)),
       // "refund_with_multiple_inputs" -> ExUnits(memory = 93612, steps = 35805398),
-      "refund_with_multiple_inputs" -> ExUnits(memory = 94432, steps = 36477626),
+      "refund_with_multiple_inputs" -> (if Options.default.nativeListElements then
+                                            ExUnits(memory = 155492, steps = 51365164L)
+                                        else ExUnits(memory = 94432, steps = 36477626)),
       // "refund_with_datum_attached" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_with_datum_attached" -> ExUnits(memory = 88610, steps = 33401267),
+      "refund_with_datum_attached" -> (if Options.default.nativeListElements then
+                                           ExUnits(memory = 147438, steps = 47755367L)
+                                       else ExUnits(memory = 88610, steps = 33401267)),
       // "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 112736, steps = 42903938)
-      "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 114676, steps = 44296394)
+      "refund_with_multiple_outputs_to_buyer" -> (if Options.default.nativeListElements then
+                                                      ExUnits(memory = 214316, steps = 68918541L)
+                                                  else ExUnits(memory = 114676, steps = 44296394))
     )
 
     // TODO: review after changing PairData representations

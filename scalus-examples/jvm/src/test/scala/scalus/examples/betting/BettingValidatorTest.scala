@@ -1,5 +1,6 @@
 package scalus.examples.betting
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.ByteString
@@ -85,7 +86,11 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             result.logs.foreach(println)
             println(result)
         assert(result.isSuccess, "Script execution should succeed for initial minting")
-        assert(result.budget == ExUnits(memory = 144173, steps = 44_184855))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 147541, steps = 44732278L)
+                            else ExUnits(memory = 144173, steps = 44_184855))
+        )
 
     test("Verify that player2 can join an existing bet"):
         val player1 = TestUtil.mockPubKeyHash(1)
@@ -158,7 +163,11 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             result.logs.foreach(println)
             println(result)
         assert(result.isSuccess, "Script execution should succeed for player2 joining spending")
-        assert(result.budget == ExUnits(memory = 431924, steps = 134_101098))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 514504, steps = 155221920L)
+                            else ExUnits(memory = 431924, steps = 134_101098))
+        )
 
     test("Verify that the oracle can announce winner and trigger payout"):
         val player1 = TestUtil.mockPubKeyHash(1)
@@ -222,4 +231,8 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             result.logs.foreach(println)
             println(result)
         assert(result.isSuccess, "Script execution should succeed for announce winner spending")
-        assert(result.budget == ExUnits(memory = 321131, steps = 101_037960))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 389027, steps = 118672302L)
+                            else ExUnits(memory = 321131, steps = 101_037960))
+        )

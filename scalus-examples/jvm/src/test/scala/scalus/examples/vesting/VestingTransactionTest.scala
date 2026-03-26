@@ -1,5 +1,6 @@
 package scalus.examples.vesting
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.AllResolvedScripts
@@ -134,7 +135,11 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
         assert(result.isSuccess, s"Validator failed: $result")
-        assert(result.budget == ExUnits(memory = 454936, steps = 131_388367))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 503620, steps = 144436670L)
+                            else ExUnits(memory = 454936, steps = 131_388367))
+        )
 
         val submitResult = provider.submit(withdrawTx).await()
         assert(submitResult.isRight, s"Full withdrawal failed: $submitResult")
@@ -165,7 +170,11 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
         assert(result.isSuccess, s"Validator failed: $result")
-        assert(result.budget == ExUnits(memory = 558830, steps = 163_247969))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 615070, steps = 178193175L)
+                            else ExUnits(memory = 558830, steps = 163_247969))
+        )
 
         val submitResult = provider.submit(withdrawTx).await()
         assert(submitResult.isRight, s"Partial withdrawal failed: $submitResult")
