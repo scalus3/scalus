@@ -366,14 +366,23 @@ class DataPatternMatchingTest extends AnyFunSuite:
           AnnotationsDecl.empty
         )
         val result = sirWithArg.toUplc().evaluate
-        // Map values are stored as Data.Constr(0, [key, value]) pairs
-        val expectedConst = Constant.List(
-          DefaultUni.Data,
-          inputPairs.map { case (k, v) =>
-              Constant.Data(Data.Constr(BigInt(0), PList.from(List(k, v))))
-          }
-        )
-        assert(result == Term.Const(expectedConst))
+        // Map values are stored as pairs - representation depends on nativeListElements
+        if summon[Options].nativeListElements then
+            val expectedConst = Constant.List(
+              DefaultUni.Apply(DefaultUni.ProtoList, DefaultUni.Data),
+              inputPairs.map { case (k, v) =>
+                  Constant.List(DefaultUni.Data, List(Constant.Data(k), Constant.Data(v)))
+              }
+            )
+            assert(result == Term.Const(expectedConst))
+        else
+            val expectedConst = Constant.List(
+              DefaultUni.Data,
+              inputPairs.map { case (k, v) =>
+                  Constant.Data(Data.Constr(BigInt(0), PList.from(List(k, v))))
+              }
+            )
+            assert(result == Term.Const(expectedConst))
     }
 
     test("Select constr field from Data.Constr") {

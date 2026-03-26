@@ -1088,9 +1088,11 @@ object PrimitiveRepresentation {
                 case SIRType.ByteString => DefaultUni.ByteString
                 case SIRType.String     => DefaultUni.String
                 case SIRType.Boolean    => DefaultUni.Bool
-                case SIRType.Unit       => DefaultUni.Unit
-                // BLS, BuiltinValue, etc. are never stored in builtin lists;
-                // defaultUni is only called for list element types, so Data is safe here.
+                case SIRType.Unit                  => DefaultUni.Unit
+                case SIRType.BLS12_381_G1_Element  => DefaultUni.BLS12_381_G1_Element
+                case SIRType.BLS12_381_G2_Element  => DefaultUni.BLS12_381_G2_Element
+                case SIRType.BLS12_381_MlResult    => DefaultUni.BLS12_381_MlResult
+                case SIRType.BuiltinValue          => DefaultUni.Data // Value is always Data
                 case _ => DefaultUni.Data
     }
 }

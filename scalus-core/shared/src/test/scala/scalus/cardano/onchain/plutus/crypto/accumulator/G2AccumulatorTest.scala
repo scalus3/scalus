@@ -106,8 +106,12 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
 
         assert(compiled.code)
         val result = compiled.program.term.evaluateDebug
+        assert(result.isSuccess, s"Expected success but got: ${result}")
         assert(result.success.term α_== true.asTerm)
-        assert(result.budget == ExUnits(memory = 106187, steps = 1_605_601198L))
+        val expectedBudget =
+            if compilerOptions.nativeListElements then ExUnits(memory = 421004, steps = 2_042_021371L)
+            else ExUnits(memory = 106187, steps = 1_605_601198L)
+        assert(result.budget == expectedBudget)
     }
 
     test("check membership two elements") {
