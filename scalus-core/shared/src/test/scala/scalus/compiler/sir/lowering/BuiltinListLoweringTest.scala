@@ -614,22 +614,14 @@ class BuiltinListLoweringTest extends AnyFunSuite {
                 fail(s"lastOption failed: $ex")
     }
 
-    // TODO: List[List[BigInt]].flatten fails with nativeListElements=true
-    // because convertBuiltinList generates wrong nil type for nested lists.
-    // The inner list nil should be list(list data) but gets list(data).
-    test("List[List[BigInt]].flatten [nativeListElements=false]") {
+    withBothFlags("List[List[BigInt]].flatten") { native =>
         import scalus.cardano.onchain.plutus.prelude.List
         import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
         import scalus.uplc.*
         import scalus.uplc.Term.asTerm
         import scalus.uplc.builtin.Data
         import scalus.uplc.builtin.Data.{toData, FromData}
-        given Options = Options(
-          targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-          generateErrorTraces = true,
-          optimizeUplc = true,
-          nativeListElements = false
-        )
+        given Options = optionsWithFlag(native)
         val compiled = PlutusV3.compile { (d: Data) =>
             d.to[List[List[BigInt]]].flatten
         }
@@ -640,8 +632,8 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         val result = applied.evaluateDebug
         result match
             case Result.Success(term, _, _, _) =>
-                info(s"flatten result: ${term.show}")
+                info(s"[native=$native] flatten result: ${term.show}")
             case Result.Failure(ex, _, _, _) =>
-                fail(s"flatten failed: $ex")
+                fail(s"[native=$native] flatten failed: $ex")
     }
 }

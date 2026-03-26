@@ -3,6 +3,7 @@ package typegens
 
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
+import scalus.uplc.Constant
 
 /** Parameterized list type generator for BuiltinList[X] where X is not BuiltinPair. For pair lists,
   * use SumPairBuiltinListSirTypeGenerator instead.
@@ -46,11 +47,18 @@ class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation
     }
 
     override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue =
-        elementRepr match
-            case PrimitiveRepresentation.Constant =>
-                val elemType = retrieveElementType(resType, pos)
-                if elemType == SIRType.FreeUnificator then lvDataNil(pos, resType, listRepr)
-                else lvTypedNil(pos, elemType, resType, listRepr)
-            case _ => lvDataNil(pos, SIRType.List.Nil, listRepr)
+        val elemType = retrieveElementType(resType, pos)
+        if elemType == SIRType.FreeUnificator || elemType == SIRType.TypeNothing then
+            // Use SIRType.List.Nil so isNilType recognizes it for fixNilInConstr
+            lvDataNil(pos, SIRType.List.Nil, listRepr)
+        else
+            ConstantLoweredValue(
+              SIR.Const(
+                Constant.List(elementRepr.defaultUni(elemType), Nil),
+                resType,
+                AnnotationsDecl(pos)
+              ),
+              listRepr
+            )
 
 }

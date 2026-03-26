@@ -471,18 +471,24 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           )
         )
 
-        assertEvalWithBudget(
+        assertEvalWithBudgets(
           (list: List[List[BigInt]]) => list.flatten,
           List.single(Cons(3, Cons(1, Cons(2, Nil)))),
           Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))),
-          ExUnits(memory = 14122, steps = 2_987016)
+          Seq(
+            compilerOptions -> ExUnits(memory = 14122, steps = 2_987016),
+            nativeOpts -> ExUnits(memory = 36418, steps = 8_782_860)
+          )
         )
 
-        assertEvalWithBudget(
+        assertEvalWithBudgets(
           (list: List[List[BigInt]]) => list.flatten,
           Cons[List[BigInt]](Cons(1, Cons(2, Nil)), List.single(List.single(3))),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
-          ExUnits(memory = 28836, steps = 6_742404)
+          Seq(
+            compilerOptions -> ExUnits(memory = 28836, steps = 6_742404),
+            nativeOpts -> ExUnits(memory = 57552, steps = 14_314_371)
+          )
         )
     }
 
