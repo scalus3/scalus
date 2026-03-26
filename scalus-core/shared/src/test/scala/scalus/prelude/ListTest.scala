@@ -907,8 +907,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons((BigInt(1), BigInt(3)), Cons((BigInt(2), BigInt(4)), Nil)),
           Seq(
             compilerOptions.copy(nativeListElements = false) -> ExUnits(memory = 16004, steps = 4_260729),
-            compilerOptions.copy(nativeListElements = true) -> (if compilerOptions.nativeListElements then ExUnits(memory = 23492, steps = 6272357)
-          else ExUnits(memory = 24356, steps = 6_444_659))
+            compilerOptions.copy(nativeListElements = true) -> ExUnits(memory = 23492, steps = 6_272357)
           )
         )
 
