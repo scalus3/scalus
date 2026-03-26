@@ -381,6 +381,9 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
               )
             )
         val result = compiled.program.term.evaluateDebug
-        assert(result.budget == ExUnits(memory = 86_814942, steps = 22_585_041563L))
+        val expectedBudget =
+            if compilerOptions.nativeListElements then ExUnits(memory = 201_319854, steps = 54_128_698616L)
+            else ExUnits(memory = 86_814942, steps = 22_585_041563L)
+        assert(result.budget == expectedBudget)
     }
 }
