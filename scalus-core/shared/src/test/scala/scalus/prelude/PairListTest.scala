@@ -14,8 +14,8 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairList.single(BigInt(1), BigInt(2)),
           (BigInt(1), BigInt(2)),
           Seq(
-            compilerOptions -> ExUnits(memory = 5856, steps = 1632628),
-            nativeOpts -> ExUnits(memory = 5856, steps = 1_632_628)
+            compilerOptions.copy(nativeListElements = false) -> ExUnits(memory = 5856, steps = 1632628),
+            compilerOptions.copy(nativeListElements = true) -> ExUnits(memory = 5856, steps = 1_632_628)
           )
         )
     }
@@ -26,8 +26,8 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairCons((BigInt(1), BigInt(2)), PairCons((BigInt(3), BigInt(4)), PairNil)),
           PairCons((BigInt(3), BigInt(4)), PairNil),
           Seq(
-            compilerOptions -> ExUnits(memory = 3196, steps = 719380),
-            nativeOpts -> ExUnits(memory = 3196, steps = 719_380)
+            compilerOptions.copy(nativeListElements = false) -> ExUnits(memory = 3196, steps = 719380),
+            compilerOptions.copy(nativeListElements = true) -> ExUnits(memory = 3196, steps = 719_380)
           )
         )
     }
@@ -38,8 +38,8 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairList.empty[BigInt, BigInt],
           true,
           Seq(
-            compilerOptions -> ExUnits(memory = 1964, steps = 445717),
-            nativeOpts -> ExUnits(memory = 1964, steps = 445_717)
+            compilerOptions.copy(nativeListElements = false) -> ExUnits(memory = 1964, steps = 445717),
+            compilerOptions.copy(nativeListElements = true) -> ExUnits(memory = 1964, steps = 445_717)
           )
         )
         assertEvalWithBudgets(
@@ -47,8 +47,8 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairList.single(BigInt(1), BigInt(2)),
           false,
           Seq(
-            compilerOptions -> ExUnits(memory = 1964, steps = 445717),
-            nativeOpts -> ExUnits(memory = 1964, steps = 445_717)
+            compilerOptions.copy(nativeListElements = false) -> ExUnits(memory = 1964, steps = 445717),
+            compilerOptions.copy(nativeListElements = true) -> ExUnits(memory = 1964, steps = 445_717)
           )
         )
     }

@@ -36,10 +36,7 @@ class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation
 
     override def defaultElementRepresentation(tp: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
-    ): LoweredValueRepresentation =
-        elementRepr match
-            case PrimitiveRepresentation.Constant => PrimitiveRepresentation.Constant
-            case _ => lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+    ): LoweredValueRepresentation = elementRepr
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         val elemType = retrieveElementType(tp, SIRPosition.empty)

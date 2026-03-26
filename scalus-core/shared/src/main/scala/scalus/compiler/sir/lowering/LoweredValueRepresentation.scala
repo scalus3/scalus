@@ -42,7 +42,7 @@ sealed trait LoweredValueRepresentation {
 }
 
 /** Mixin for representations that always store values as Data at the UPLC level. */
-trait DataCentricDefaultUni extends LoweredValueRepresentation {
+trait PackedDataDefaultUni extends LoweredValueRepresentation {
     override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
         DefaultUni.Data
 }
@@ -65,7 +65,7 @@ object SumCaseClassRepresentation {
       */
     case object DataConstr
         extends SumCaseClassRepresentation(true, true)
-        with DataCentricDefaultUni {
+        with PackedDataDefaultUni {
         override def isCompatibleOn(
             tp: SIRType,
             repr: LoweredValueRepresentation,
@@ -84,8 +84,8 @@ object SumCaseClassRepresentation {
       * Data values are stored as raw UPLC Data.
       */
     case object DataData
-        extends SumCaseClassRepresentation(false, true)
-        with DataCentricDefaultUni {
+        extends SumCaseClassRepresentation(true, true)
+        with PackedDataDefaultUni {
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             tp match
                 case SIRType.SumCaseClass(decl, _) if decl.name == SIRType.Data.name => true
@@ -117,10 +117,14 @@ object SumCaseClassRepresentation {
     /** Representation for sum case classes that are represented as a Pair of Int and DataList.
       */
     case object PairIntDataList
-        extends SumCaseClassRepresentation(false, true)
-        with DataCentricDefaultUni {
+        extends SumCaseClassRepresentation(false, true) {
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.BuiltinPair(SIRType.Integer, SIRType.List(SIRType.Data.tp))
+        override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
+            DefaultUni.Apply(
+              DefaultUni.Apply(DefaultUni.ProtoPair, DefaultUni.Integer),
+              DefaultUni.Apply(DefaultUni.ProtoList, DefaultUni.Data)
+            )
     }
 
     /** Parameterized representation for builtin lists (BuiltinList[Data]).
@@ -319,7 +323,7 @@ object SumCaseClassRepresentation {
       */
     case object SumDataAssocMap
         extends SumCaseClassRepresentation(true, true)
-        with DataCentricDefaultUni {
+        with PackedDataDefaultUni {
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             SIRType.retrieveDataDecl(tp) match
                 case Left(_) => false
@@ -347,7 +351,7 @@ object SumCaseClassRepresentation {
       */
     case object PackedSumDataList
         extends SumCaseClassRepresentation(true, true)
-        with DataCentricDefaultUni {
+        with PackedDataDefaultUni {
         override def isCompatibleWithType(tp: SIRType)(using lctx: LoweringContext): Boolean = {
             SIRType.retrieveDataDecl(tp) match
                 case Left(_) => false
@@ -376,9 +380,12 @@ object SumCaseClassRepresentation {
     /** Representation as Constr(i,x1,...,xn) where i is the index of the constructor and x is a
       * field represented as data.
       */
+    // TODO: remove UplcConstrOnData, use UplcConstr with element representations instead
     case object UplcConstrOnData
-        extends SumCaseClassRepresentation(false, true)
-        with DataCentricDefaultUni
+        extends SumCaseClassRepresentation(false, true) {
+        override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
+            DefaultUni.Data // placeholder, not actually packed data
+    }
 
 }
 
@@ -395,21 +402,22 @@ object ProductCaseClassRepresentation {
 
     case object PackedDataList
         extends ProductCaseClassRepresentation(true, true)
-        with DataCentricDefaultUni {
+        with PackedDataDefaultUni {
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.Data.tp
     }
 
     case object ProdDataList
-        extends ProductCaseClassRepresentation(false, true)
-        with DataCentricDefaultUni {
+        extends ProductCaseClassRepresentation(false, true) {
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.List(SIRType.Data.tp)
+        override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
+            DefaultUni.Apply(DefaultUni.ProtoList, DefaultUni.Data)
     }
 
     case object PackedDataMap
         extends ProductCaseClassRepresentation(true, true)
-        with DataCentricDefaultUni {
+        with PackedDataDefaultUni {
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             SIRType.retrieveConstrDecl(tp) match
                 case Left(_) => false
@@ -424,7 +432,7 @@ object ProductCaseClassRepresentation {
       */
     case object ProdDataConstr
         extends ProductCaseClassRepresentation(true, true)
-        with DataCentricDefaultUni {
+        with PackedDataDefaultUni {
 
         override def isCompatibleOn(
             tp: SIRType,
@@ -443,8 +451,13 @@ object ProductCaseClassRepresentation {
     }
 
     case object PairIntDataList
-        extends ProductCaseClassRepresentation(false, true)
-        with DataCentricDefaultUni
+        extends ProductCaseClassRepresentation(false, true) {
+        override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
+            DefaultUni.Apply(
+              DefaultUni.Apply(DefaultUni.ProtoPair, DefaultUni.Integer),
+              DefaultUni.Apply(DefaultUni.ProtoList, DefaultUni.Data)
+            )
+    }
 
     /** BuiltinPair with parameterized component representations.
       *
@@ -584,7 +597,7 @@ object ProductCaseClassRepresentation {
       */
     case object PackedArrayAsList
         extends ProductCaseClassRepresentation(true, true)
-        with DataCentricDefaultUni {
+        with PackedDataDefaultUni {
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
             tp match
                 case SIRType.BuiltinArray(_) => true
@@ -600,6 +613,10 @@ object ProductCaseClassRepresentation {
           representation.isDataCentric
         ) {
 
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            val argType = OneElementWrapper.retrieveArgType(semanticType, SIRPosition.empty)
+            representation.uplcType(argType)
+
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
             representation.defaultUni(semanticType)
 
@@ -614,7 +631,7 @@ object ProductCaseClassRepresentation {
                 case OneElementWrapper(innerRepr) =>
                     val argType = OneElementWrapper.retrieveArgType(tp, pos)
                     representation.isCompatibleOn(argType, innerRepr, pos)
-                case other => representation.isCompatibleOn(tp, other, pos)
+                case _ => false
             }
     }
 
@@ -1052,7 +1069,7 @@ sealed trait PrimitiveRepresentation(val isPackedData: Boolean, val isDataCentri
 }
 
 object PrimitiveRepresentation {
-    case object PackedData extends PrimitiveRepresentation(true, true) with DataCentricDefaultUni {
+    case object PackedData extends PrimitiveRepresentation(true, true) with PackedDataDefaultUni {
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean =
             super.isCompatibleWithType(tp) && tp != SIRType.Unit && tp != SIRType.BLS12_381_MlResult
         override def isCompatibleOn(
