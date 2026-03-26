@@ -612,10 +612,12 @@ object ProductCaseClassRepresentation {
             representation.uplcType(argType)
 
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            try
-                val argType = OneElementWrapper.retrieveArgType(semanticType, SIRPosition.empty)
-                representation.defaultUni(argType)
-            catch case _: LoweringException => representation.defaultUni(semanticType)
+            SIRType.collectProd(semanticType) match
+                case Some(_, _, _) =>
+                    val argType =
+                        OneElementWrapper.retrieveArgType(semanticType, SIRPosition.empty)
+                    representation.defaultUni(argType)
+                case None => representation.defaultUni(semanticType)
 
         override def isCompatibleOn(
             tp: SIRType,
