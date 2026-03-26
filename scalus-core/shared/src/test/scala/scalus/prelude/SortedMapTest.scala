@@ -842,7 +842,8 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .keys,
           List.Cons(BigInt(1), List.Cons(BigInt(2), List.Cons(BigInt(3), List.Nil))),
-          ExUnits(memory = 79753, steps = 23_816840)
+          (if compilerOptions.nativeListElements then ExUnits(memory = 86225, steps = 24512773)
+          else ExUnits(memory = 79753, steps = 23_816840))
         )
     }
 
@@ -882,7 +883,8 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .values,
           List.Cons("1", List.Cons("2", List.Cons("3", List.Nil))),
-          ExUnits(memory = 80449, steps = 24_157829)
+          (if compilerOptions.nativeListElements then ExUnits(memory = 87539, steps = 25223830)
+          else ExUnits(memory = 80449, steps = 24_157829))
         )
     }
 
