@@ -249,7 +249,12 @@ object SirTypeUplcGenerator {
             else if constrDecl.name == SIRType.List.NilConstr.name
                 || constrDecl.name == SIRType.BuiltinList.Nil.name
                 || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
-            then Some(new SumBuiltinListSirTypeGenerator(TypeVarRepresentation(false)))
+            then
+                Some(
+                  new SumBuiltinListSirTypeGenerator(
+                    TypeVarRepresentation(SIRType.TypeVarKind.DefaultDataRepresentation)
+                  )
+                )
             else
                 throw LoweringException(
                   s"Cannot determine element representation for list constructor ${constrDecl.name} with typeArgs=${typeArgs.map(_.show)}",
@@ -286,10 +291,10 @@ object SirTypeUplcGenerator {
               elementReprFor(sndType)
             )
         else if elemType == SIRType.TypeNothing || elemType == SIRType.Unit then
-            TypeVarRepresentation(false)
+            TypeVarRepresentation(SIRType.TypeVarKind.DefaultDataRepresentation)
         else
             elemType match
-                case SIRType.TypeVar(_, _, isBuiltin)      => TypeVarRepresentation(isBuiltin)
+                case tv: SIRType.TypeVar                   => TypeVarRepresentation(tv.kind)
                 case SIRType.TypeLambda(_, body)           => elementReprFor(body)
                 case SIRType.TypeProxy(ref) if ref != null => elementReprFor(ref)
                 case _ =>

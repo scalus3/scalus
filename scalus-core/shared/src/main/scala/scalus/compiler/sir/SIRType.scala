@@ -285,16 +285,50 @@ object SIRType {
 
     }
 
+    /** Kind of a type variable, controlling its representation during lowering.
+      */
+    enum TypeVarKind {
+
+        /** Type variable from a builtin UPLC function (e.g., headList, chooseList). Can use any
+          * representation transparently.
+          */
+        case Transparent
+
+        /** Scala type variable that uses native (default) representation.
+          */
+        case DefaultRepresentation
+
+        /** Scala type variable that must use Data representation. Used for type parameters of List,
+          * AssocMap, SortedMap, Value.
+          */
+        case DefaultDataRepresentation
+    }
+
+    object TypeVarKind {
+
+        /** Transparent > DefaultDataRepresentation > DefaultRepresentation */
+        def max(a: TypeVarKind, b: TypeVarKind): TypeVarKind = (a, b) match
+            case (Transparent, _) | (_, Transparent) => Transparent
+            case (DefaultDataRepresentation, _) | (_, DefaultDataRepresentation) =>
+                DefaultDataRepresentation
+            case _ => DefaultRepresentation
+
+        /** Convert from legacy isBuiltin flag */
+        def fromIsBuiltin(isBuiltin: Boolean): TypeVarKind =
+            if isBuiltin then Transparent else DefaultDataRepresentation
+    }
+
     /** Type variable have two forms: when id is not set, that means that for each instantiation of
       * type-lambda, a new set of type-variables with fresh id-s are created. when id is set, that
       * means that computations are situated in the process of instantiation of some type-lambda,
       * @param name
       * @param id
-      * @param isBuiltin - if true, then this type variable is a type variable of a builtin uplc function, if false, then
-      *                  this is Scala type variable, which can be represented in uplc in a special form.
-      *                   Note, that builtin type variables can come only from Builtin Functions.
+      * @param kind - controls representation during lowering.
+      *             Transparent: builtin UPLC type variable, can use any representation.
+      *             DefaultRepresentation: Scala type variable with native representation.
+      *             DefaultDataRepresentation: Scala type variable that must use Data representation.
       */
-    case class TypeVar(name: String, optId: Option[Long] = None, isBuiltin: Boolean)
+    case class TypeVar(name: String, optId: Option[Long] = None, kind: TypeVarKind)
         extends SIRType {
 
         override def show: String = name
@@ -302,6 +336,9 @@ object SIRType {
         override def showDebug: String = s"${name}#${optId.getOrElse(0L)}"
 
         def :=>>(body: SIRType): TypeLambda = TypeLambda(scala.List(this), body)
+
+        /** Backward-compatible check: true if this type variable is from a builtin UPLC function */
+        inline def isBuiltin: Boolean = kind == TypeVarKind.Transparent
 
     }
 
@@ -325,10 +362,13 @@ object SIRType {
     }
 
     object TypeLambda {
-        def apply(param: String, body: TypeVar => SIRType, isBuiltin: Boolean): TypeLambda = {
-            val tv = TypeVar(param, None, isBuiltin)
+        def apply(param: String, body: TypeVar => SIRType, kind: TypeVarKind): TypeLambda = {
+            val tv = TypeVar(param, None, kind)
             TypeLambda(scala.List(tv), body(tv))
         }
+
+        def apply(param: String, body: TypeVar => SIRType, isBuiltin: Boolean): TypeLambda =
+            apply(param, body, TypeVarKind.fromIsBuiltin(isBuiltin))
     }
 
     object TypeLambda2 {
@@ -336,12 +376,20 @@ object SIRType {
             param1: String,
             param2: String,
             body: (TypeVar, TypeVar) => SIRType,
-            isBuiltin: Boolean
+            kind: TypeVarKind
         ): TypeLambda = {
-            val tv1 = TypeVar(param1, None, isBuiltin)
-            val tv2 = TypeVar(param2, None, isBuiltin)
+            val tv1 = TypeVar(param1, None, kind)
+            val tv2 = TypeVar(param2, None, kind)
             TypeLambda(scala.List(tv1, tv2), body(tv1, tv2))
         }
+
+        def apply(
+            param1: String,
+            param2: String,
+            body: (TypeVar, TypeVar) => SIRType,
+            isBuiltin: Boolean
+        ): TypeLambda =
+            apply(param1, param2, body, TypeVarKind.fromIsBuiltin(isBuiltin))
     }
 
     case object FreeUnificator extends SIRType {
@@ -457,14 +505,17 @@ object SIRType {
 
         lazy val dataDecl: DataDecl = {
             val proxy = new TypeProxy(null)
-            val aInCons = TypeVar("A", Some(1), false)
+            val aInCons = TypeVar("A", Some(1), TypeVarKind.DefaultDataRepresentation)
             val retval = DataDecl(
               "scalus.cardano.onchain.plutus.prelude.List",
               scala.List(NilConstr, Cons.buildConstr(aInCons, proxy)),
-              scala.List(TypeVar("A", Some(2), false)),
+              scala.List(TypeVar("A", Some(2), TypeVarKind.DefaultDataRepresentation)),
               AnnotationsDecl.empty
             )
-            proxy.ref = SumCaseClass(retval, scala.List(TypeVar("A", Some(1), false)))
+            proxy.ref = SumCaseClass(
+              retval,
+              scala.List(TypeVar("A", Some(1), TypeVarKind.DefaultDataRepresentation))
+            )
             if !checkAllProxiesFilled(retval.tp) then
                 throw new IllegalStateException(s"List dataDecl has unfilled proxies: ${retval.tp}")
             retval
@@ -558,8 +609,8 @@ object SIRType {
         val name = "scalus.uplc.builtin.BuiltinPair"
 
         val constrDecl = {
-            val A = TypeVar("A", None, true)
-            val B = TypeVar("B", None, true)
+            val A = TypeVar("A", None, TypeVarKind.Transparent)
+            val B = TypeVar("B", None, TypeVarKind.Transparent)
             ConstrDecl(
               name,
               scala.List(TypeBinding("fst", A), TypeBinding("snd", B)),
@@ -585,8 +636,8 @@ object SIRType {
 
         val constrDecl = {
             val tuple2Hash = name.hashCode
-            val A = TypeVar("A", Some(tuple2Hash), true)
-            val B = TypeVar("B", Some(tuple2Hash + 1), true)
+            val A = TypeVar("A", Some(tuple2Hash), TypeVarKind.Transparent)
+            val B = TypeVar("B", Some(tuple2Hash + 1), TypeVarKind.Transparent)
             ConstrDecl(
               name,
               scala.List(TypeBinding("_1", A), TypeBinding("_2", B)),
@@ -622,7 +673,7 @@ object SIRType {
 
         val constrDecl = {
             val hash = name.hashCode
-            val a = TypeVar("A", Some(hash), true)
+            val a = TypeVar("A", Some(hash), TypeVarKind.Transparent)
             ConstrDecl(
               name,
               scala.List(TypeBinding("list", SIRType.List(a))),
@@ -652,7 +703,7 @@ object SIRType {
         val name = "scalus.uplc.builtin.BuiltinArray"
 
         val constrDecl = {
-            val A = TypeVar("A", None, true)
+            val A = TypeVar("A", None, TypeVarKind.Transparent)
             ConstrDecl(
               name,
               scala.List(TypeBinding("A", A)),
@@ -707,8 +758,9 @@ object SIRType {
 
         lazy val dataDecl: DataDecl = {
             val consProxy = new TypeProxy(null)
-            val a = TypeVar("A", Some(2), false)
-            val consA: SIRType.TypeVar = TypeVar("A", Some(1), false)
+            val a = TypeVar("A", Some(2), TypeVarKind.DefaultDataRepresentation)
+            val consA: SIRType.TypeVar =
+                TypeVar("A", Some(1), TypeVarKind.DefaultDataRepresentation)
             val retval = DataDecl(
               name,
               scala.List(
@@ -1112,14 +1164,17 @@ object SIRType {
             case DefaultUni.BLS12_381_MlResult   => BLS12_381_MlResult
             case DefaultUni.BuiltinValue         => BuiltinValue
             case DefaultUni.ProtoList =>
-                val a = TypeVar("A", Some(DefaultUni.ProtoList.hashCode()), true)
+                val a = TypeVar("A", Some(DefaultUni.ProtoList.hashCode()), TypeVarKind.Transparent)
                 TypeLambda(scala.List(a), SumCaseClass(BuiltinList.dataDecl, scala.List(a)))
             case DefaultUni.ProtoPair =>
-                val a = TypeVar("A", Some(DefaultUni.ProtoPair.hashCode()), true)
-                val b = TypeVar("B", Some(DefaultUni.ProtoPair.hashCode() + 1), true)
+                val a =
+                    TypeVar("A", Some(DefaultUni.ProtoPair.hashCode()), TypeVarKind.Transparent)
+                val b =
+                    TypeVar("B", Some(DefaultUni.ProtoPair.hashCode() + 1), TypeVarKind.Transparent)
                 TypeLambda(scala.List(a, b), BuiltinPair(a, b))
             case DefaultUni.ProtoArray =>
-                val a = TypeVar("A", Some(DefaultUni.ProtoArray.hashCode()), true)
+                val a =
+                    TypeVar("A", Some(DefaultUni.ProtoArray.hashCode()), TypeVarKind.Transparent)
                 TypeLambda(scala.List(a), BuiltinArray(a))
             case DefaultUni.Apply(f, arg) =>
                 f match
@@ -1130,7 +1185,11 @@ object SIRType {
                     case DefaultUni.Apply(DefaultUni.ProtoPair, a) =>
                         BuiltinPair(fromDefaultUni(a), fromDefaultUni(arg))
                     case DefaultUni.ProtoPair =>
-                        val a = TypeVar("A", Some(DefaultUni.ProtoPair.hashCode()), true)
+                        val a = TypeVar(
+                          "A",
+                          Some(DefaultUni.ProtoPair.hashCode()),
+                          TypeVarKind.Transparent
+                        )
                         TypeLambda(scala.List(a), BuiltinPair(a, fromDefaultUni(arg)))
                     case _ =>
                         SIRType.Fun(fromDefaultUni(f), fromDefaultUni(arg))
@@ -1142,10 +1201,13 @@ object SIRType {
             case UplcTypeScheme.Arrow(argType, resType) =>
                 Fun(fromUplcTypeScheme(argType), fromUplcTypeScheme(resType))
             case UplcTypeScheme.All(typeVar, body) =>
-                TypeLambda(scala.List(TypeVar(typeVar, None, true)), fromUplcTypeScheme(body))
+                TypeLambda(
+                  scala.List(TypeVar(typeVar, None, TypeVarKind.Transparent)),
+                  fromUplcTypeScheme(body)
+                )
             case UplcTypeScheme.App(f, arg) =>
                 calculateApplyType(fromUplcTypeScheme(f), fromUplcTypeScheme(arg), Map.empty)
-            case UplcTypeScheme.TVar(name) => TypeVar(name, None, true)
+            case UplcTypeScheme.TVar(name) => TypeVar(name, None, TypeVarKind.Transparent)
     }
 
     def parentsEqSeq(input: SIRType, parent: SIRType): List[SIRType] = {
@@ -1349,7 +1411,7 @@ object SIRType {
                   "Cannot create fresh copy of type variable when maxCounter is -1"
                 )
             maxCounter += 1
-            val freshTypeVar = TypeVar(tv.name, Some(maxCounter), tv.isBuiltin)
+            val freshTypeVar = TypeVar(tv.name, Some(maxCounter), tv.kind)
             typeVars += freshTypeVar
             freshTypeVar
         }
@@ -1429,9 +1491,9 @@ object SIRType {
             if initTypes.isEmpty then acc
             else
                 initTypes.head match {
-                    case TypeVar(name, Some(id), isBuiltin) =>
+                    case TypeVar(name, Some(id), kind) =>
                         if id > acc.maxCounter then acc.maxCounter = id
-                        acc.typeVars += TypeVar(name, Some(id), isBuiltin)
+                        acc.typeVars += TypeVar(name, Some(id), kind)
                         acc
                     case TypeLambda(params, body) =>
                         params.foreach { tv =>

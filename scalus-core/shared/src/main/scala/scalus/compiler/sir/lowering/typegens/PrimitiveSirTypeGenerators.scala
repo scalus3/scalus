@@ -38,21 +38,21 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
                 uplcToDataValue(input, pos)
             case (PrimitiveRepresentation.PackedData, PrimitiveRepresentation.Constant) =>
                 dataToUplcValue(input, pos)
-            case (TypeVarRepresentation(isBuiltin), PrimitiveRepresentation.Constant) =>
-                if isBuiltin then input
+            case (tvr: TypeVarRepresentation, PrimitiveRepresentation.Constant) =>
+                if tvr.isBuiltin then input
                 else dataToUplcValue(input, pos)
-            case (TypeVarRepresentation(isBuiltin), PrimitiveRepresentation.PackedData) =>
-                if isBuiltin then uplcToDataValue(input, pos)
+            case (tvr: TypeVarRepresentation, PrimitiveRepresentation.PackedData) =>
+                if tvr.isBuiltin then uplcToDataValue(input, pos)
                 else input
-            case (PrimitiveRepresentation.Constant, TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then input
+            case (PrimitiveRepresentation.Constant, tvr: TypeVarRepresentation) =>
+                if tvr.isBuiltin then input
                 else uplcToDataValue(input, pos)
-            case (PrimitiveRepresentation.PackedData, TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then dataToUplcValue(input, pos)
+            case (PrimitiveRepresentation.PackedData, tvr: TypeVarRepresentation) =>
+                if tvr.isBuiltin then dataToUplcValue(input, pos)
                 else input
-            case (TypeVarRepresentation(inBuiltin), TypeVarRepresentation(outBuiltin)) =>
-                if outBuiltin then input
-                else if inBuiltin then {
+            case (inTvr: TypeVarRepresentation, outTvr: TypeVarRepresentation) =>
+                if outTvr.isBuiltin then input
+                else if inTvr.isBuiltin then {
                     // impossible, but let it will be here
                     RepresentationProxyLoweredValue(
                       uplcToDataValue(input, pos),

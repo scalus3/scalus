@@ -369,7 +369,11 @@ final class SIRCompiler(
         val typeParams = td.tpe.typeParams
         val typeParamsSymbols = typeParams.map(_.paramRef.typeSymbol)
         val sirTypeParams = typeParamsSymbols.map { tps =>
-            SIRType.TypeVar(tps.name.show, Some(tps.hashCode), false)
+            SIRType.TypeVar(
+              tps.name.show,
+              Some(tps.hashCode),
+              SIRType.TypeVarKind.DefaultDataRepresentation
+            )
         }
         val sirTypeVars = (typeParamsSymbols zip sirTypeParams).toMap
 
@@ -776,7 +780,11 @@ final class SIRCompiler(
     private def makeDataDecl(dataInfo: AdtTypeInfo, env: Env, srcPos: SrcPos) = {
         val dataFullName = FullName(dataInfo.dataTypeSymbol)
         val dataTypeParams = dataInfo.dataTypeParams.map { tp =>
-            SIRType.TypeVar(tp.typeSymbol.name.show, None, false)
+            SIRType.TypeVar(
+              tp.typeSymbol.name.show,
+              None,
+              SIRType.TypeVarKind.DefaultDataRepresentation
+            )
         }
         val constrDecls = dataInfo.constructorsSymbols.map { sym =>
             makeConstrDecl(env, srcPos, sym)
@@ -806,11 +814,19 @@ final class SIRCompiler(
         //    acc + (tp -> SIRType.TypeVar(tp.name.show, Some(tp.hashCode), false))
         // }
         val pcTypeParams = primaryConstructorTypeParams(constrSymbol).map(tp =>
-            SIRType.TypeVar(tp.name.show, Some(tp.hashCode), false)
+            SIRType.TypeVar(
+              tp.name.show,
+              Some(tp.hashCode),
+              SIRType.TypeVarKind.DefaultDataRepresentation
+            )
         )
         val envTypeVars2 = primaryConstructorTypeParams(constrSymbol).foldLeft(env.typeVars) {
             case (acc, tp) =>
-                acc + (tp -> SIRType.TypeVar(tp.name.show, Some(tp.hashCode), false))
+                acc + (tp -> SIRType.TypeVar(
+                  tp.name.show,
+                  Some(tp.hashCode),
+                  SIRType.TypeVarKind.DefaultDataRepresentation
+                ))
         }
         val nEnv = env.copy(typeVars = envTypeVars2)
         val params = primaryConstructorParams(constrSymbol).map { p =>
@@ -1242,7 +1258,11 @@ final class SIRCompiler(
             val params = dd.paramss.flatten.collect { case vd: ValDef => vd }
             val typeParams = dd.paramss.flatten.collect { case td: TypeDef => td }
             val sirTypeParams = typeParams.map { td =>
-                SIRType.TypeVar(td.symbol.name.show, Some(td.symbol.hashCode), false)
+                SIRType.TypeVar(
+                  td.symbol.name.show,
+                  Some(td.symbol.hashCode),
+                  SIRType.TypeVarKind.DefaultDataRepresentation
+                )
             }
             val typeParamsMap =
                 typeParams.zip(sirTypeParams).map { case (tp, tv) => (tp.symbol, tv) }.toMap
@@ -2054,8 +2074,8 @@ final class SIRCompiler(
                           TypeMismatch(
                             fun.toString,
                             SIRType.BuiltinPair(
-                              SIRType.TypeVar("A", None, true),
-                              SIRType.TypeVar("B", None, true)
+                              SIRType.TypeVar("A", None, SIRType.TypeVarKind.Transparent),
+                              SIRType.TypeVar("B", None, SIRType.TypeVarKind.Transparent)
                             ),
                             other,
                             tree.srcPos
@@ -2080,8 +2100,8 @@ final class SIRCompiler(
                           TypeMismatch(
                             fun.toString,
                             SIRType.BuiltinPair(
-                              SIRType.TypeVar("A", None, true),
-                              SIRType.TypeVar("B", None, true)
+                              SIRType.TypeVar("A", None, SIRType.TypeVarKind.Transparent),
+                              SIRType.TypeVar("B", None, SIRType.TypeVarKind.Transparent)
                             ),
                             other,
                             tree.srcPos
@@ -2181,7 +2201,10 @@ final class SIRCompiler(
                         error(
                           TypeMismatch(
                             fun.toString,
-                            SIRType.List(SIRType.TypeVar("A", None, false)),
+                            SIRType.List(
+                              SIRType
+                                  .TypeVar("A", None, SIRType.TypeVarKind.DefaultDataRepresentation)
+                            ),
                             other,
                             tree.srcPos
                           ),
@@ -2462,8 +2485,13 @@ final class SIRCompiler(
                           TypeMismatch(
                             "Function type",
                             SIRType.Fun(
-                              SIRType.TypeVar("A", None, false),
-                              SIRType.TypeVar("B", None, false)
+                              SIRType.TypeVar(
+                                "A",
+                                None,
+                                SIRType.TypeVarKind.DefaultDataRepresentation
+                              ),
+                              SIRType
+                                  .TypeVar("B", None, SIRType.TypeVarKind.DefaultDataRepresentation)
                             ),
                             tp,
                             f.srcPos
@@ -3666,7 +3694,13 @@ final class SIRCompiler(
                 val tupleNameHash = tupleName.hashCode
                 val tupleTypeParams =
                     (1 to size)
-                        .map(i => SIRType.TypeVar(s"T$i", Some(tupleNameHash + i * 5), false))
+                        .map(i =>
+                            SIRType.TypeVar(
+                              s"T$i",
+                              Some(tupleNameHash + i * 5),
+                              SIRType.TypeVarKind.DefaultDataRepresentation
+                            )
+                        )
                         .toList
                 val tupleParams =
                     tupleTypeParams.zipWithIndex

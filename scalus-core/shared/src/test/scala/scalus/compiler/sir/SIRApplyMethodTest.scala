@@ -121,7 +121,7 @@ class SIRApplyMethodTest extends AnyFunSuite:
 
     test("apply polymorphic function with TypeLambda") {
         // Create a polymorphic identity function: ∀A. A -> A
-        val typeVar = SIRType.TypeVar("A", None, false)
+        val typeVar = SIRType.TypeVar("A", None, SIRType.TypeVarKind.DefaultDataRepresentation)
         val polyType = SIRType.TypeLambda(
           List(typeVar),
           SIRType.Fun(typeVar, typeVar)
@@ -200,7 +200,7 @@ class SIRApplyMethodTest extends AnyFunSuite:
 
     test("apply fails on TypeLambda with non-function body") {
         // Create a type lambda that doesn't wrap a function
-        val typeVar = SIRType.TypeVar("A", None, false)
+        val typeVar = SIRType.TypeVar("A", None, SIRType.TypeVarKind.DefaultDataRepresentation)
         val badPolyType = SIRType.TypeLambda(
           List(typeVar),
           SIRType.Integer // Not a function type!

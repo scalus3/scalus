@@ -53,7 +53,10 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     test(s"Script size: ${compiled.script.script.size} bytes") {
         // TODO: review after changing PairData representations
         // assert(compiled.script.script.size == 1485)
-        assert(compiled.script.script.size == 1516)
+        assert(
+          compiled.script.script.size ==
+              (if Options.default.nativeListElements then 1922 else 1516)
+        )
     }
 
     // Expected execution budgets for success tests
@@ -101,18 +104,21 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     )
 
     // TODO: review after changing PairData representations
-    private val expectedFees: Map[String, Coin] = Map(
-      "deposit_successful" -> Coin(5126),
-      "accept_successful" -> Coin(6274),
-      "accept_with_multiple_inputs" -> Coin(6832),
-      "accept_with_datum_attached" -> Coin(6274),
-      "accept_with_multiple_outputs_to_seller" -> Coin(8564),
-      "refund_successful" -> Coin(7522),
-      "refund_after_exact_deadline" -> Coin(7522),
-      "refund_with_multiple_inputs" -> Coin(8079),
-      "refund_with_datum_attached" -> Coin(7522),
-      "refund_with_multiple_outputs_to_buyer" -> Coin(9811)
-    )
+    private val expectedFees: Map[String, Coin] = {
+        val native = Options.default.nativeListElements
+        Map(
+          "deposit_successful" -> Coin(if native then 8734 else 5126),
+          "accept_successful" -> Coin(if native then 10704 else 6274),
+          "accept_with_multiple_inputs" -> Coin(if native then 11429 else 6832),
+          "accept_with_datum_attached" -> Coin(if native then 10704 else 6274),
+          "accept_with_multiple_outputs_to_seller" -> Coin(if native then 16088 else 8564),
+          "refund_successful" -> Coin(if native then 11951 else 7522),
+          "refund_after_exact_deadline" -> Coin(if native then 11951 else 7522),
+          "refund_with_multiple_inputs" -> Coin(if native then 12676 else 8079),
+          "refund_with_datum_attached" -> Coin(if native then 11951 else 7522),
+          "refund_with_multiple_outputs_to_buyer" -> Coin(if native then 17336 else 9811)
+        )
+    }
 
     // Generate test cases from the JSON
     private val tests: Seq[ujson.Value] = testsJson("tests").arr.toSeq

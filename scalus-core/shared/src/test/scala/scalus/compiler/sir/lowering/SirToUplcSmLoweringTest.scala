@@ -95,8 +95,11 @@ class SirToUplcSmLoweringTest
 
     test("lower Lam/Apply with builtin type-vars (non-scal)") {
         import SIRType.{TypeLambda, TypeVar, Unit}
-        val idType = TypeLambda(List(TypeVar("A", Some(1), false)), TypeVar("A", Some(1), false))
-        val x = SIR.Var("x", TypeVar("X", Some(2), true), ae)
+        val idType = TypeLambda(
+          List(TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)),
+          TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+        )
+        val x = SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.Transparent), ae)
 
         val sir = SIR.Apply(
           SIR.LamAbs(x, x, List.empty, ae),
@@ -111,8 +114,12 @@ class SirToUplcSmLoweringTest
 
     test("lower Lam/Apply with scala type-vars") {
         import SIRType.{TypeLambda, TypeVar, Unit}
-        val idType = TypeLambda(List(TypeVar("A", Some(1), false)), TypeVar("A", Some(1), false))
-        val x = SIR.Var("x", TypeVar("X", Some(2), false), ae)
+        val idType = TypeLambda(
+          List(TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)),
+          TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+        )
+        val x =
+            SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation), ae)
 
         val sir = SIR.Apply(
           SIR.LamAbs(x, x, List.empty, ae),
@@ -167,8 +174,8 @@ class SirToUplcSmLoweringTest
        TxId(name)
        lowers to (\name TxId -> TxId name) name
          */
-        val a1TypeVar = TypeVar("A", Some(1), false)
-        val a2TypeVar = TypeVar("A", Some(2), false)
+        val a1TypeVar = TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+        val a2TypeVar = TypeVar("A", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation)
         val tailTypeProxy = new TypeProxy(null)
         val listData =
             DataDecl(
@@ -360,8 +367,10 @@ class SirToUplcSmLoweringTest
         lowers to (\Nil Cons -> force Nil) (delay 1) (\h tl -> 2)
          */
         val tailTypeProxy = new SIRType.TypeProxy(null)
-        val a1TypeVar = SIRType.TypeVar("A1", Some(1), false)
-        val a2TypeVar = SIRType.TypeVar("A2", Some(2), false)
+        val a1TypeVar =
+            SIRType.TypeVar("A1", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+        val a2TypeVar =
+            SIRType.TypeVar("A2", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation)
         val nilConstr = ConstrDecl(
           "scalus.cardano.onchain.plutus.prelude.List$.Nil",
           List(),
@@ -512,8 +521,8 @@ class SirToUplcSmLoweringTest
     test("lower Match / SumCaseClass for Option[Int]") {
 
         val someTypeProxy = new SIRType.TypeProxy(null)
-        val aTypeVar = SIRType.TypeVar("A", Some(1), false)
-        val bTypeVar = SIRType.TypeVar("B", Some(2), false)
+        val aTypeVar = SIRType.TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+        val bTypeVar = SIRType.TypeVar("B", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation)
         val noneConstr = ConstrDecl(
           "scalus.cardano.onchain.plutus.prelude.Option$.None",
           List(),

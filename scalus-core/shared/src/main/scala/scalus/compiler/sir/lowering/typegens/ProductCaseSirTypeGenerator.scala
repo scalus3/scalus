@@ -354,9 +354,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 }
             case (
                   _: ProductCaseClassRepresentation.ProdBuiltinPair,
-                  TypeVarRepresentation(isBuiltin)
+                  tvr: TypeVarRepresentation
                 ) =>
-                if isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
+                if tvr.isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
                 else
                     val typeVarRepr = lctx
                         .typeGenerator(input.sirType)
@@ -369,20 +369,20 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(representation, pos)
             case (
-                  TypeVarRepresentation(isBuiltin),
+                  _: TypeVarRepresentation,
                   ProductCaseClassRepresentation.ProdDataConstr
                 ) =>
                 RepresentationProxyLoweredValue(input, representation, pos)
-            case (TypeVarRepresentation(isBuiltin), _) =>
-                if isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
+            case (tvr: TypeVarRepresentation, _) =>
+                if tvr.isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
                 else {
                     val inputDataConstr =
                         input.toRepresentation(ProductCaseClassRepresentation.ProdDataConstr, pos)
                     val output = inputDataConstr.toRepresentation(representation, pos)
                     output
                 }
-            case (_, TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then input else toRepresentation(input, ProdDataConstr, pos)
+            case (_, tvr: TypeVarRepresentation) =>
+                if tvr.isBuiltin then input else toRepresentation(input, ProdDataConstr, pos)
             case _ =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $representation",

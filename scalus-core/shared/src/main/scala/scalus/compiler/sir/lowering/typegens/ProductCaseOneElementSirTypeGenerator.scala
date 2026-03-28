@@ -75,27 +75,28 @@ case class ProductCaseOneElementSirTypeGenerator(
                 input.toRepresentation(ProdDataList, pos).toRepresentation(ProdDataConstr, pos)
             case (
                   ProductCaseClassRepresentation.OneElementWrapper(argRepr),
-                  outRepr @ TypeVarRepresentation(isBuiltin)
+                  tvr: TypeVarRepresentation
                 ) =>
-                if isBuiltin then input
+                if tvr.isBuiltin then input
                 else
                     val argValue = argLoweredValue(input)
-                    if argRepr.isCompatibleOn(argValue.sirType, outRepr, pos) then
-                        new RepresentationProxyLoweredValue(input, outRepr, pos)
+                    if argRepr.isCompatibleOn(argValue.sirType, tvr, pos) then
+                        new RepresentationProxyLoweredValue(input, tvr, pos)
                     else
                         val newArg = argGenerator.toRepresentation(argValue, representation, pos)
                         val inPos = pos
                         new TypeRepresentationProxyLoweredValue(
                           newArg,
                           input.sirType,
-                          outRepr,
+                          tvr,
                           inPos
                         )
             case (
-                  inRepr @ TypeVarRepresentation(isBuiltin),
+                  tvr: TypeVarRepresentation,
                   outRepr @ ProductCaseClassRepresentation.OneElementWrapper(argRepr)
                 ) =>
-                if isBuiltin then new RepresentationProxyLoweredValue(input, representation, pos)
+                if tvr.isBuiltin then
+                    new RepresentationProxyLoweredValue(input, representation, pos)
                 else
                     val argValue = argLoweredValue(input)
                     if argRepr.isCompatibleOn(argValue.sirType, argValue.representation, pos) then
@@ -275,8 +276,8 @@ case class ProductCaseOneElementSirTypeGenerator(
                   input.representation match {
                       case ProductCaseClassRepresentation.OneElementWrapper(argRepr) =>
                           argRepr
-                      case TypeVarRepresentation(isBuiltin) =>
-                          if isBuiltin then argGenerator.defaultRepresentation(argType)
+                      case tvr: TypeVarRepresentation =>
+                          if tvr.isBuiltin then argGenerator.defaultRepresentation(argType)
                           else argGenerator.defaultTypeVarReperesentation(argType)
                       case _ =>
                           throw LoweringException(

@@ -35,7 +35,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     }
 
     test("Unification with upcasting [List[?] and Cons[A]]") {
-        val tA = SIRType.TypeVar("A", Some(11L), false)
+        val tA = SIRType.TypeVar("A", Some(11L), SIRType.TypeVarKind.DefaultDataRepresentation)
 
         val listTp = SIRType.List(SIRType.FreeUnificator)
 
@@ -54,7 +54,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     }
 
     test("parentSeq fron Cons[A] to List[?]") {
-        val tA = SIRType.TypeVar("A", Some(11L), false)
+        val tA = SIRType.TypeVar("A", Some(11L), SIRType.TypeVarKind.DefaultDataRepresentation)
         val consTp = SIRType.List.Cons(tA)
         val listTp = SIRType.List(SIRType.FreeUnificator)
 
@@ -120,8 +120,8 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     }
 
     test("calculating a type for foldLeft") {
-        val tpA = SIRType.TypeVar("A", Some(1L), false)
-        val tpB = SIRType.TypeVar("B", Some(2L), false)
+        val tpA = SIRType.TypeVar("A", Some(1L), SIRType.TypeVarKind.DefaultDataRepresentation)
+        val tpB = SIRType.TypeVar("B", Some(2L), SIRType.TypeVarKind.DefaultDataRepresentation)
         // foldLeft: (A,B): List[A] => B => ((B,A) => B) => B
 
         val tupleBigIntStringFun = compile { (x: (BigInt, String)) => x }

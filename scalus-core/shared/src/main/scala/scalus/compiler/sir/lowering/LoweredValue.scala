@@ -1843,7 +1843,7 @@ object LoweredValue {
             }
 
             val targetArgType = argType(f.sirType) match {
-                case tv @ SIRType.TypeVar(name, optId, isBuiltin) =>
+                case tv: SIRType.TypeVar =>
                     val resolvedFArgType = lctx.resolveTypeVarIfNeeded(tv)
                     resolvedFArgType
                 case SIRType.FreeUnificator =>
@@ -1873,13 +1873,14 @@ object LoweredValue {
             }
 
             val (argTypevarResolved, typeAligned) = arg.sirType match {
-                case tv @ SIRType.TypeVar(name, optId, isBuiltin) =>
+                case tv: SIRType.TypeVar =>
                     val resolvedArgType = lctx.resolveTypeVarIfNeeded(arg.sirType)
                     resolvedArgType match
-                        case tv1 @ SIRType.TypeVar(name, optId, isBuiltin) =>
+                        case tv1: SIRType.TypeVar =>
                             val targetArgGen = lctx.typeGenerator(targetArgType)
                             val targetArgRepr =
-                                if isBuiltin then targetArgGen.defaultRepresentation(targetArgType)
+                                if tv.isBuiltin then
+                                    targetArgGen.defaultRepresentation(targetArgType)
                                 else targetArgGen.defaultTypeVarReperesentation(targetArgType)
                             val argTyped = new TypeRepresentationProxyLoweredValue(
                               arg,
@@ -1891,7 +1892,7 @@ object LoweredValue {
                         case other =>
                             val gen = lctx.typeGenerator(other)
                             val targetArgRepr =
-                                if isBuiltin then gen.defaultRepresentation(other)
+                                if tv.isBuiltin then gen.defaultRepresentation(other)
                                 else gen.defaultTypeVarReperesentation(other)
                             val argTyped = new TypeRepresentationProxyLoweredValue(
                               arg,
@@ -1914,10 +1915,10 @@ object LoweredValue {
             val fRepresentationPair = f.representation match {
                 case lr: LambdaRepresentation =>
                     lr.reprFun(argUpcasted.sirType, inPos, argUpcasted.representation)
-                case TypeVarRepresentation(isBuiltin) =>
+                case tvr: TypeVarRepresentation =>
                     InOutRepresentationPair(
-                      TypeVarRepresentation(isBuiltin),
-                      TypeVarRepresentation(isBuiltin)
+                      tvr,
+                      tvr
                     )
                 case _ =>
                     throw LoweringException(
@@ -2582,10 +2583,10 @@ object LoweredValue {
                                       pair.inRepr,
                                       pair.outRepr
                                     )
-                                case TypeVarRepresentation(isBuiltin) =>
+                                case tvr: TypeVarRepresentation =>
                                     (
-                                      TypeVarRepresentation(isBuiltin),
-                                      TypeVarRepresentation(isBuiltin)
+                                      tvr,
+                                      tvr
                                     )
                                 case _ =>
                                     throw LoweringException(
@@ -2605,10 +2606,10 @@ object LoweredValue {
                                           pair.inRepr,
                                           pair.outRepr
                                         )
-                                    case TypeVarRepresentation(isBuiltin) =>
+                                    case tvr: TypeVarRepresentation =>
                                         (
-                                          TypeVarRepresentation(isBuiltin),
-                                          TypeVarRepresentation(isBuiltin)
+                                          tvr,
+                                          tvr
                                         )
                                     case _ =>
                                         throw LoweringException(
