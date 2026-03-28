@@ -13,10 +13,10 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         tp: SIRType
     )(using lctx: LoweringContext): LoweredValueRepresentation = {
         tp match
-            case SIRType.TypeVar(_, _, isBuiltin) =>
-                TypeVarRepresentation(isBuiltin)
+            case tv: SIRType.TypeVar =>
+                TypeVarRepresentation(tv.kind)
             case SIRType.FreeUnificator =>
-                TypeVarRepresentation(false)
+                TypeVarRepresentation(SIRType.TypeVarKind.DefaultDataRepresentation)
             case SIRType.TypeLambda(params, body) =>
                 defaultRepresentation(body)
             case _ =>
@@ -28,7 +28,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation = {
-        TypeVarRepresentation(false)
+        TypeVarRepresentation(SIRType.TypeVarKind.DefaultDataRepresentation)
     }
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
@@ -68,8 +68,8 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                 .map(x => lctx.typeGenerator(x.sirType).toRepresentation(x, representation, pos))
                 .getOrElse {
                     representation match
-                        case TypeVarRepresentation(isBuiltin) =>
-                            if isBuiltin then input
+                        case tvr: TypeVarRepresentation =>
+                            if tvr.isBuiltin then input
                             else // TODO: think about conversion between built-in and non-built-in
                                 new RepresentationProxyLoweredValue(input, representation, pos)
                         case sumRepr: SumCaseClassRepresentation =>

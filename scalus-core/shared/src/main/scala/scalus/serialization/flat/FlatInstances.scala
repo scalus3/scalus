@@ -669,6 +669,7 @@ object FlatInstances:
         override def encodeHC(a: SIRType.TypeVar, encode: HashConsedEncoderState): Unit =
             summon[Flat[String]].encode(a.name, encode.encode)
             summon[Flat[Long]].encode(a.optId.getOrElse(0L), encode.encode)
+            // Backward-compatible: serialize as boolean (Transparent=true, else false)
             summon[Flat[Boolean]].encode(a.isBuiltin, encode.encode)
 
         override def decodeHC(decode: HashConsedDecoderState): SIRType.TypeVar =
@@ -677,7 +678,7 @@ object FlatInstances:
                 case 0  => None
                 case id => Some(id)
             val isBuiltin = summon[Flat[Boolean]].decode(decode.decode)
-            SIRType.TypeVar(name, optId, isBuiltin)
+            SIRType.TypeVar(name, optId, SIRType.TypeVarKind.fromIsBuiltin(isBuiltin))
 
     object SIRTypeSumCaseClassFlat extends HashConsedMutRefReprFlat[SIRType, SIRTypeHashConsedRef] {
 

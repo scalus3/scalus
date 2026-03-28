@@ -101,9 +101,9 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
                         )
                 case (
                       inLambda: LambdaRepresentation,
-                      TypeVarRepresentation(isBuiltin)
+                      tvr: TypeVarRepresentation
                     ) =>
-                    if isBuiltin then input
+                    if tvr.isBuiltin then input
                     else
                         RepresentationProxyLoweredValue(
                           input,
@@ -111,7 +111,7 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
                           pos
                         )
                 case (
-                      TypeVarRepresentation(isBuiltin),
+                      tvr: TypeVarRepresentation,
                       LambdaRepresentation(outInRepr, outOutRepr)
                     ) =>
                     new RepresentationProxyLoweredValue(
@@ -119,8 +119,8 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
                       outputRepresentation,
                       pos
                     )
-                case (TypeVarRepresentation(isBuiltin1), TypeVarRepresentation(isBuiltin2)) =>
-                    if isBuiltin2 then input
+                case (tvr1: TypeVarRepresentation, tvr2: TypeVarRepresentation) =>
+                    if tvr2.isBuiltin then input
                     else
                         new RepresentationProxyLoweredValue(
                           input,

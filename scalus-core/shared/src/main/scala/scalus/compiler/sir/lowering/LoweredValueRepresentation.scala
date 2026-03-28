@@ -494,8 +494,8 @@ object ProductCaseClassRepresentation {
                       otherSnd,
                       pos
                     )
-                case TypeVarRepresentation(isBuiltin) =>
-                    if isBuiltin then true
+                case tvr: TypeVarRepresentation =>
+                    if tvr.isBuiltin then true
                     else
                         val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp)
                         resolved.isCompatibleOn(tp, this, pos)
@@ -565,8 +565,8 @@ object ProductCaseClassRepresentation {
                         case Some(elemType) =>
                             elementRepr.isCompatibleOn(elemType, otherElemRepr, pos)
                         case None => elementRepr.isDataCentric && otherElemRepr.isDataCentric
-                case TypeVarRepresentation(isBuiltin) =>
-                    if isBuiltin then true
+                case tvr: TypeVarRepresentation =>
+                    if tvr.isBuiltin then true
                     else
                         val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp)
                         resolved.isCompatibleOn(tp, this, pos)
@@ -644,8 +644,8 @@ object ProductCaseClassRepresentation {
                     SIRType.substitute(param.tp, typeParamsMap, Map.empty)
                 case None =>
                     tp match
-                        case SIRType.TypeVar(name, optId, isBuiltin) => tp
-                        case SIRType.FreeUnificator                  => tp
+                        case _: SIRType.TypeVar     => tp
+                        case SIRType.FreeUnificator => tp
                         case SIRType.TypeLambda(params, body) =>
                             retrieveArgType(body, pos)
                         case SIRType.TypeProxy(ref) =>
@@ -707,8 +707,8 @@ case class LambdaRepresentation(
                     )
                 inRepr.isCompatibleOn(inputType, otherInRepr, pos) &&
                 outRepr.isCompatibleOn(outputType, otherOutRepr, pos)
-            case TypeVarRepresentation(isBuiltin) =>
-                isBuiltin || {
+            case tvr: TypeVarRepresentation =>
+                tvr.isBuiltin || {
                     val (inputType, outputType) = retrieveInputAndOutputType(tp, pos)
                     val InOutRepresentationPair(inRepr, outRepr) =
                         reprFun(inputType, pos, canonicalRepresentationPair.inRepr)
@@ -891,9 +891,9 @@ case class LambdaRepresentation(
                         case _ => resolve(defBody, argumentType, declaredRepr)
                 case _ =>
                     declaredRepr match
-                        case TypeVarRepresentation(true) =>
+                        case tvr: TypeVarRepresentation if tvr.isBuiltin =>
                             lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
-                        case TypeVarRepresentation(false) =>
+                        case tvr: TypeVarRepresentation if !tvr.isBuiltin =>
                             lctx.typeGenerator(argumentType)
                                 .defaultTypeVarReperesentation(argumentType)
                         case SumCaseClassRepresentation.SumBuiltinList(innerRepr)
@@ -1036,12 +1036,12 @@ case class LambdaRepresentation(
 
     private def retrieveInputAndOutputType(tp: SIRType, pos: SIRPosition): (SIRType, SIRType) = {
         tp match {
-            case SIRType.Fun(in, out)                  => (in, out)
-            case SIRType.TypeLambda(_, body)           => retrieveInputAndOutputType(body, pos)
-            case SIRType.TypeProxy(ref)                => retrieveInputAndOutputType(ref, pos)
-            case tv @ SIRType.TypeVar(_, _, isBuiltin) => (tv, tv)
-            case SIRType.FreeUnificator => (SIRType.FreeUnificator, SIRType.FreeUnificator)
-            case SIRType.TypeNothing    => (SIRType.TypeNothing, SIRType.TypeNothing)
+            case SIRType.Fun(in, out)        => (in, out)
+            case SIRType.TypeLambda(_, body) => retrieveInputAndOutputType(body, pos)
+            case SIRType.TypeProxy(ref)      => retrieveInputAndOutputType(ref, pos)
+            case tv: SIRType.TypeVar         => (tv, tv)
+            case SIRType.FreeUnificator      => (SIRType.FreeUnificator, SIRType.FreeUnificator)
+            case SIRType.TypeNothing         => (SIRType.TypeNothing, SIRType.TypeNothing)
             case _ =>
                 throw LoweringException(
                   s"Can't retrieve input type from ${tp.show}, which is not a function type",
@@ -1103,15 +1103,21 @@ object PrimitiveRepresentation {
 }
 
 /** TypeVarRepresentation is used for type variables. Usually this is a synonym for some other
-  * specific-type representation. When this is builtin type variable, it can be freely used in any
-  * type representation, but when it is not builtin (scala type-var) it can be used only with packed
-  * data representation.
+  * specific-type representation.
+  *   - Transparent: builtin UPLC type variable, can be freely used in any representation
+  *   - DefaultRepresentation: Scala type variable with native representation
+  *   - DefaultDataRepresentation: Scala type variable that must use Data representation
   */
-case class TypeVarRepresentation(isBuiltin: Boolean) extends LoweredValueRepresentation {
+case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValueRepresentation {
+
+    import SIRType.TypeVarKind
+
+    /** Backward-compatible check */
+    inline def isBuiltin: Boolean = kind == TypeVarKind.Transparent
 
     // assume that TypeVarDataRepresentation is a packed data.
     //  (this is not true for lambda, will check this in code. Usually in all places we also known type)
-    override def isPackedData: Boolean = !isBuiltin
+    override def isPackedData: Boolean = kind == TypeVarKind.DefaultDataRepresentation
 
     override def isDataCentric: Boolean = isPackedData
 
@@ -1153,9 +1159,20 @@ case class TypeVarRepresentation(isBuiltin: Boolean) extends LoweredValueReprese
                 resolved.defaultUni(semanticType)
 
     override def doc: Doc = {
-        Doc.text("TypeVar") + (if isBuiltin then Doc.text("(B)") else Doc.empty)
+        val suffix = kind match
+            case TypeVarKind.Transparent               => "(B)"
+            case TypeVarKind.DefaultRepresentation     => "(R)"
+            case TypeVarKind.DefaultDataRepresentation => ""
+        Doc.text("TypeVar") + Doc.text(suffix)
     }
 
+}
+
+object TypeVarRepresentation {
+
+    /** Backward-compatible factory from isBuiltin flag */
+    def apply(isBuiltin: Boolean): TypeVarRepresentation =
+        TypeVarRepresentation(SIRType.TypeVarKind.fromIsBuiltin(isBuiltin))
 }
 
 case object ErrorRepresentation extends LoweredValueRepresentation {
@@ -1223,13 +1240,13 @@ object LoweredValueRepresentation {
                   tp,
                   InOutRepresentationPair(inRepresentation, outRepresentation)
                 )
-            case tv @ SIRType.TypeVar(_, _, isBuiltin) =>
+            case tv: SIRType.TypeVar =>
                 lc.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(tp) => constRepresentation(tp)
                     case None =>
-                        TypeVarRepresentation(isBuiltin)
+                        TypeVarRepresentation(tv.kind)
             case SIRType.FreeUnificator =>
-                TypeVarRepresentation(isBuiltin = false)
+                TypeVarRepresentation(SIRType.TypeVarKind.DefaultDataRepresentation)
             case proxy: SIRType.TypeProxy =>
                 constRepresentation(proxy.ref)
             case SIRType.TypeNothing => ErrorRepresentation

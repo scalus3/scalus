@@ -45,7 +45,7 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
         // Data is default representation, so we should not cases, except TypeVae
         outputRepresentation match {
             case SumCaseClassRepresentation.DataData => input
-            case TypeVarRepresentation(isBuiltin)    => input
+            case _: TypeVarRepresentation            => input
             case _ =>
                 throw LoweringException(
                   s"Conversion Data to representation $outputRepresentation should not happen",

@@ -143,28 +143,22 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     repr: LoweredValueRepresentation
                 ): LoweredValueRepresentation =
                     repr match
-                        case TypeVarRepresentation(isBuiltin) =>
+                        case tvr: TypeVarRepresentation =>
                             val gen = lctx.typeGenerator(elemType)
-                            if isBuiltin || lctx.nativeTypeVarRepresentation then
-                                gen.defaultRepresentation(elemType)
+                            if !tvr.isPackedData then gen.defaultRepresentation(elemType)
                             else gen.defaultTypeVarReperesentation(elemType)
                         case other => other
                 val resolvedIn = resolveElementRepr(inElemRepr)
                 val resolvedOut = resolveElementRepr(outElemRepr)
-                // Builtin TypeVars are polymorphic — no conversion needed when
-                // the other side has a concrete repr. UPLC builtins accept any list type.
-                val hasBuiltinTypeVar = (inElemRepr, outElemRepr) match
-                    case (TypeVarRepresentation(true), _) | (_, TypeVarRepresentation(true)) => true
-                    case _ => false
-                val nativeTypeVarCompat = lctx.nativeTypeVarRepresentation && lctx.nativeListElements &&
-                    ((inElemRepr, outElemRepr) match
-                        case (_: TypeVarRepresentation, _) | (_, _: TypeVarRepresentation) => true
-                        case _ => false)
+                // Non-packed TypeVars (Transparent or DefaultRepresentation) are native
+                val hasNonPackedTypeVar = (inElemRepr, outElemRepr) match
+                    case (tvr: TypeVarRepresentation, _) if !tvr.isPackedData => true
+                    case (_, tvr: TypeVarRepresentation) if !tvr.isPackedData => true
+                    case _                                                    => false
                 if resolvedIn == resolvedOut
                     || elemType == SIRType.FreeUnificator
                     || elemType == SIRType.TypeNothing
-                    || hasBuiltinTypeVar
-                    || nativeTypeVarCompat
+                    || hasNonPackedTypeVar
                 then RepresentationProxyLoweredValue(input, outputRepresentation, pos)
                 else
                     convertBuiltinList(
@@ -371,15 +365,16 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(pairRepr, pos)
                     .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
-            case (_, tv @ TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then input
+            case (_, tv: TypeVarRepresentation) =>
+                if tv.isBuiltin then input
                 else {
                     val inputAsData =
                         input.toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
                     new RepresentationProxyLoweredValue(inputAsData, tv, pos)
                 }
-            case (TypeVarRepresentation(isBuiltin), _) =>
-                if isBuiltin then RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+            case (tv: TypeVarRepresentation, _) =>
+                if tv.isBuiltin then
+                    RepresentationProxyLoweredValue(input, outputRepresentation, pos)
                 else if input.representation == outputRepresentation then input
                 else
                     val r0 = RepresentationProxyLoweredValue(
@@ -435,9 +430,9 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                       input.representation,
                       pos
                     )
-            case TypeVarRepresentation(isBuiltin) =>
+            case tvr: TypeVarRepresentation =>
                 val targetRepresentation = {
-                    if isBuiltin then defaultRepresentation(input.sirType)
+                    if tvr.isBuiltin then defaultRepresentation(input.sirType)
                     else this.defaultTypeVarReperesentation(input.sirType)
                 }
                 val alignedInput = input.toRepresentation(

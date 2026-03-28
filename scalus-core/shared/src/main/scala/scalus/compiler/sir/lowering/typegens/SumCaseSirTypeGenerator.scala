@@ -116,13 +116,13 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 val asDataList = toRepresentation(input, SumBuiltinList(elemRepr), pos)
                 asDataList.toRepresentation(PackedSumDataList, pos)
-            case (TypeVarRepresentation(inBuiltin), outRepr) =>
-                if inBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
+            case (inTvr: TypeVarRepresentation, outRepr) =>
+                if inTvr.isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
                 else
                     val r0 = RepresentationProxyLoweredValue(input, DataConstr, pos)
                     toRepresentation(r0, representation, pos)
-            case (inRepr, TypeVarRepresentation(outBuiltin)) =>
-                if outBuiltin then input
+            case (inRepr, outTvr: TypeVarRepresentation) =>
+                if outTvr.isBuiltin then input
                 else toRepresentation(input, DataConstr, pos)
             case (_, _) =>
                 throw LoweringException(

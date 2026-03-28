@@ -6,6 +6,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
+import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
@@ -303,7 +304,10 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
           changeAddress = Alice.address,
           signer = Alice.signer
         )
-        assertResult(ExUnits(memory = 195396, steps = 56_687212)):
+        assertResult(
+          if Options.default.nativeListElements then ExUnits(memory = 213264, steps = 61_547338)
+          else ExUnits(memory = 195396, steps = 56_687212)
+        ):
             burnTx.witnessSet.redeemers.get.value.totalExUnits
         val burnResult = provider.submit(burnTx).await()
         assert(burnResult.isRight, s"Burn should succeed: $burnResult")
