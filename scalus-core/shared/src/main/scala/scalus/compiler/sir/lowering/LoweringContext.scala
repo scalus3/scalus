@@ -32,6 +32,7 @@ class LoweringContext(
       * (SumBuiltinList(DataData/PackedData)).
       */
     val nativeListElements: Boolean = true,
+    val nativeTypeVarRepresentation: Boolean = false,
 ) {
 
     private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]

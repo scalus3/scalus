@@ -289,7 +289,7 @@ object SirTypeUplcGenerator {
             TypeVarRepresentation(false)
         else
             elemType match
-                case SIRType.TypeVar(_, _, isBuiltin)      => TypeVarRepresentation(isBuiltin)
+                case SIRType.TypeVar(_, _, isBuiltin) => TypeVarRepresentation(isBuiltin)
                 case SIRType.TypeLambda(_, body)           => elementReprFor(body)
                 case SIRType.TypeProxy(ref) if ref != null => elementReprFor(ref)
                 case _ =>

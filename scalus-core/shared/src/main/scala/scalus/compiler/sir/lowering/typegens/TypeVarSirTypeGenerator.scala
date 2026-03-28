@@ -32,9 +32,10 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     }
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValueRepresentation =
-        defaultDataRepresentation(tp)
+        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+        else defaultDataRepresentation(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         tp match {
@@ -176,20 +177,28 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                         case PrimitiveRepresentation.PackedData =>
                             new RepresentationProxyLoweredValue(input, representation, pos)
                         case PrimitiveRepresentation.Constant =>
-                            val r1 = input.toRepresentation(
-                              PrimitiveRepresentation.PackedData,
-                              pos
-                            )
-                            input.sirType match {
-                                case p: SIRType.Primitive =>
-                                    lctx.typeGenerator(p)
-                                        .toRepresentation(r1, PrimitiveRepresentation.Constant, pos)
-                                case _ =>
-                                    throw LoweringException(
-                                      s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
-                                      pos
-                                    )
-                            }
+                            if lctx.nativeTypeVarRepresentation then
+                                // Value is already in native representation, no conversion needed
+                                new RepresentationProxyLoweredValue(input, representation, pos)
+                            else
+                                val r1 = input.toRepresentation(
+                                  PrimitiveRepresentation.PackedData,
+                                  pos
+                                )
+                                input.sirType match {
+                                    case p: SIRType.Primitive =>
+                                        lctx.typeGenerator(p)
+                                            .toRepresentation(
+                                              r1,
+                                              PrimitiveRepresentation.Constant,
+                                              pos
+                                            )
+                                    case _ =>
+                                        throw LoweringException(
+                                          s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
+                                          pos
+                                        )
+                                }
                         case ErrorRepresentation =>
                             TypeNothingSirTypeGenerator.toRepresentation(input, representation, pos)
                         case LambdaRepresentation(inRepr, outRepr) =>

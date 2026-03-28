@@ -145,7 +145,8 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     repr match
                         case TypeVarRepresentation(isBuiltin) =>
                             val gen = lctx.typeGenerator(elemType)
-                            if isBuiltin then gen.defaultRepresentation(elemType)
+                            if isBuiltin || lctx.nativeTypeVarRepresentation then
+                                gen.defaultRepresentation(elemType)
                             else gen.defaultTypeVarReperesentation(elemType)
                         case other => other
                 val resolvedIn = resolveElementRepr(inElemRepr)
@@ -155,10 +156,15 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 val hasBuiltinTypeVar = (inElemRepr, outElemRepr) match
                     case (TypeVarRepresentation(true), _) | (_, TypeVarRepresentation(true)) => true
                     case _ => false
+                val nativeTypeVarCompat = lctx.nativeTypeVarRepresentation && lctx.nativeListElements &&
+                    ((inElemRepr, outElemRepr) match
+                        case (_: TypeVarRepresentation, _) | (_, _: TypeVarRepresentation) => true
+                        case _ => false)
                 if resolvedIn == resolvedOut
                     || elemType == SIRType.FreeUnificator
                     || elemType == SIRType.TypeNothing
                     || hasBuiltinTypeVar
+                    || nativeTypeVarCompat
                 then RepresentationProxyLoweredValue(input, outputRepresentation, pos)
                 else
                     convertBuiltinList(

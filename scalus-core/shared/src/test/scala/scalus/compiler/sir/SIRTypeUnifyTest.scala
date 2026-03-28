@@ -331,4 +331,75 @@ class SIRTypeUnifyTest extends AnyFunSuite {
         // But for type tests we need to check if Done is a variant OF Status
     }
 
+    // Tests for TypeLambda unification (needed for ExtractNilParameter transformation)
+
+    test("unify Fun type with TypeLambda-wrapped Fun type") {
+        // Simulates: after prepending __nil param to fill, the recursive call
+        // sees the new type [A] =>> NilTp -> A -> Int -> List[A]
+        // but the Apply node expects the original A -> Int -> List[A]
+        val tA = SIRType.TypeVar("A", Some(100L), false)
+        val listA = SIRType.List(tA)
+
+        // left: A -> Int -> List[A]  (original function type body)
+        val originalBody = SIRType.Fun(tA, SIRType.Fun(SIRType.Integer, listA))
+
+        // right: [A] =>> A -> Int -> List[A]  (TypeLambda-wrapped)
+        val lambdaWrapped = SIRType.TypeLambda(scala.List(tA), originalBody)
+
+        val result = SIRUnify.topLevelUnifyType(originalBody, lambdaWrapped, SIRUnify.Env.empty)
+        info(s"unify($originalBody, $lambdaWrapped) = $result")
+        assert(result.isSuccess, s"Expected success, got $result")
+    }
+
+    test("unify Int -> List[A] with [A] =>> A -> Int -> List[A]") {
+        // This is the exact error from ExtractNilParameter:
+        // left = Int -> List[A] (Apply node tp after applying value:A)
+        // right = [A] =>> A -> Int -> List[A] (function type from Var node)
+        val tA = SIRType.TypeVar("A", Some(100L), false)
+        val listA = SIRType.List(tA)
+
+        val left = SIRType.Fun(SIRType.Integer, listA)
+        val right = SIRType.TypeLambda(
+          scala.List(tA),
+          SIRType.Fun(tA, SIRType.Fun(SIRType.Integer, listA))
+        )
+
+        val result = SIRUnify.topLevelUnifyType(left, right, SIRUnify.Env.empty)
+        info(s"unify(${left.show}, ${right.show}) = $result")
+        // Different arities after TypeLambda unwrap: (Int -> List[A]) vs (A' -> Int -> List[A'])
+        assert(result.isFailure, s"Expected failure (different arity), got $result")
+    }
+
+    test("unify with TypeLambda and different arity") {
+        // left: Int -> List[A]  (2 levels: Int -> List[A])
+        // right: [A] =>> A -> Int -> List[A]  (unwraps to 3 levels: A -> Int -> List[A])
+        // After unwrapping TypeLambda, unification should try A=Int, then Int=List[A] which fails
+        // This SHOULD fail — the arities don't match after binding A=Int
+        val tA = SIRType.TypeVar("A", Some(100L), false)
+        val listA = SIRType.List(tA)
+
+        val left = SIRType.Fun(SIRType.Integer, listA)
+        val right = SIRType.TypeLambda(
+          scala.List(tA),
+          SIRType.Fun(tA, SIRType.Fun(SIRType.Integer, listA))
+        )
+
+        val result = SIRUnify.topLevelUnifyType(left, right, SIRUnify.Env.empty)
+        info(s"Result: $result")
+        // This test documents behavior — whether it succeeds or fails tells us
+        // if SIRUnify handles this case
+    }
+
+    test("unify Fun with TypeLambda — same structure after unwrap") {
+        // left: Int -> Bool
+        // right: [A] =>> Int -> Bool  (trivial TypeLambda, A unused)
+        val tA = SIRType.TypeVar("A", Some(100L), false)
+        val funTp = SIRType.Fun(SIRType.Integer, SIRType.Boolean)
+        val lambdaWrapped = SIRType.TypeLambda(scala.List(tA), funTp)
+
+        val result = SIRUnify.topLevelUnifyType(funTp, lambdaWrapped, SIRUnify.Env.empty)
+        info(s"unify(${funTp.show}, ${lambdaWrapped.show}) = $result")
+        assert(result.isSuccess, s"Expected success, got $result")
+    }
+
 }

@@ -39,12 +39,13 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
-    ): LoweredValueRepresentation = {
-        val elemType = extractElemType(tp)
-        if lctx.typeGenerator(elemType).canBeConvertedToData(elemType) then
-            ProductCaseClassRepresentation.PackedArrayAsList
-        else arrayRepr(tp)
-    }
+    ): LoweredValueRepresentation =
+        if lctx.nativeTypeVarRepresentation then arrayRepr(tp)
+        else
+            val elemType = extractElemType(tp)
+            if lctx.typeGenerator(elemType).canBeConvertedToData(elemType) then
+                ProductCaseClassRepresentation.PackedArrayAsList
+            else arrayRepr(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         val elemType = extractElemType(tp)

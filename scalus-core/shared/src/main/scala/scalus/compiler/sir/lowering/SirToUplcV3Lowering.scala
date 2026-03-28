@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.*
-import scalus.compiler.sir.{Module, SIR, SIRType}
+import scalus.compiler.sir.{ExtractNilParameter, Module, SIR, SIRType}
 import scalus.uplc.*
 
 import scala.collection.mutable.Map as MutableMap
@@ -17,7 +17,8 @@ class SirToUplcV3Lowering(
     targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     intrinsicModules: Map[String, Module] = Map.empty,
     supportModules: Map[String, Module] = Map.empty,
-    nativeListElements: Boolean = true
+    nativeListElements: Boolean = true,
+    nativeTypeVarRepresentation: Boolean = false
 ) {
 
     private var _lastLoweredValue: Option[LoweredValue] = None
@@ -93,7 +94,8 @@ class SirToUplcV3Lowering(
           debug = debug,
           intrinsicModules = intrinsicModules,
           supportModules = supportModules,
-          nativeListElements = nativeListElements
+          nativeListElements = nativeListElements,
+          nativeTypeVarRepresentation = nativeTypeVarRepresentation
         )
         ScalusRuntime.initContext(retval)
         retval.initSupportBindings()
@@ -111,14 +113,17 @@ object SirToUplcV3Lowering {
         options: scalus.compiler.Options,
         debug: Boolean = false
     ): SirToUplcV3Lowering =
+        val transformedSir =
+            if options.nativeTypeVarRepresentation then ExtractNilParameter(sir) else sir
         SirToUplcV3Lowering(
-          sir = sir,
+          sir = transformedSir,
           generateErrorTraces = options.generateErrorTraces,
           debug = debug,
           targetLanguage = options.targetLanguage,
           targetProtocolVersion = options.targetProtocolVersion,
           intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
           supportModules = IntrinsicResolver.defaultSupportModules,
-          nativeListElements = options.nativeListElements
+          nativeListElements = options.nativeListElements,
+          nativeTypeVarRepresentation = options.nativeTypeVarRepresentation
         )
 }

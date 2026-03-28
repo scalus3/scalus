@@ -18,7 +18,9 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
 
     def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
-    ): LoweredValueRepresentation = PrimitiveRepresentation.PackedData
+    ): LoweredValueRepresentation =
+        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+        else PrimitiveRepresentation.PackedData
 
     def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = true
 
@@ -39,16 +41,18 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
             case (PrimitiveRepresentation.PackedData, PrimitiveRepresentation.Constant) =>
                 dataToUplcValue(input, pos)
             case (TypeVarRepresentation(isBuiltin), PrimitiveRepresentation.Constant) =>
-                if isBuiltin then input
+                if isBuiltin || lctx.nativeTypeVarRepresentation then input
                 else dataToUplcValue(input, pos)
             case (TypeVarRepresentation(isBuiltin), PrimitiveRepresentation.PackedData) =>
                 if isBuiltin then uplcToDataValue(input, pos)
+                else if lctx.nativeTypeVarRepresentation then uplcToDataValue(input, pos)
                 else input
             case (PrimitiveRepresentation.Constant, TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then input
+                if isBuiltin || lctx.nativeTypeVarRepresentation then input
                 else uplcToDataValue(input, pos)
             case (PrimitiveRepresentation.PackedData, TypeVarRepresentation(isBuiltin)) =>
                 if isBuiltin then dataToUplcValue(input, pos)
+                else if lctx.nativeTypeVarRepresentation then dataToUplcValue(input, pos)
                 else input
             case (TypeVarRepresentation(inBuiltin), TypeVarRepresentation(outBuiltin)) =>
                 if outBuiltin then input

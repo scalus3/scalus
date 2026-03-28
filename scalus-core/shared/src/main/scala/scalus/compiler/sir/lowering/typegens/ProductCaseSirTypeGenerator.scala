@@ -50,7 +50,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         loweringContext: LoweringContext
     ): LoweredValueRepresentation =
-        ProductCaseClassRepresentation.ProdDataConstr
+        if loweringContext.nativeTypeVarRepresentation then defaultRepresentation(tp)
+        else ProductCaseClassRepresentation.ProdDataConstr
 
     override def canBeConvertedToData(
         tp: SIRType
