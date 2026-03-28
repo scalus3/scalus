@@ -53,11 +53,11 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
     test("lower Lam/Apply") {
         import SIRType.{TypeLambda, TypeVar, Unit}
         val idType = TypeLambda(
-          List(TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)),
-          TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+          List(TypeVar("A", Some(1), SIRType.TypeVarKind.ListAffected)),
+          TypeVar("A", Some(1), SIRType.TypeVarKind.ListAffected)
         )
         val x =
-            SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation), ae)
+            SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.ListAffected), ae)
         SIR.Apply(
           SIR.LamAbs(x, x, List.empty, ae),
           SIR.Const(Constant.Unit, Unit, ae),
@@ -108,8 +108,8 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
        TxId(name)
        lowers to (\name TxId -> TxId name) name
          */
-        val a1TypeVar = TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
-        val a2TypeVar = TypeVar("A", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation)
+        val a1TypeVar = TypeVar("A", Some(1), SIRType.TypeVarKind.ListAffected)
+        val a2TypeVar = TypeVar("A", Some(2), SIRType.TypeVarKind.ListAffected)
         val tailTypeProxy = new TypeProxy(null)
         val listData =
             DataDecl(
@@ -190,9 +190,9 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
          */
         val tailTypeProxy = new SIRType.TypeProxy(null)
         val a1TypeVar =
-            SIRType.TypeVar("A1", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+            SIRType.TypeVar("A1", Some(1), SIRType.TypeVarKind.ListAffected)
         val a2TypeVar =
-            SIRType.TypeVar("A2", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation)
+            SIRType.TypeVar("A2", Some(2), SIRType.TypeVarKind.ListAffected)
         val nilConstr = ConstrDecl("Nil", List(), List(), List(), ae)
         val consConstr = ConstrDecl(
           "Cons",

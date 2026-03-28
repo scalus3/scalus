@@ -298,24 +298,25 @@ object SIRType {
           */
         case DefaultRepresentation
 
-        /** Scala type variable that must use Data representation. Used for type parameters of List,
-          * AssocMap, SortedMap, Value.
+        /** Scala type variable that flows into a list element position (List, AssocMap, SortedMap,
+          * Value). Must use Data representation because abstract type vars can't have
+          * representation conversions generated for them.
           */
-        case DefaultDataRepresentation
+        case ListAffected
     }
 
     object TypeVarKind {
 
-        /** Transparent > DefaultDataRepresentation > DefaultRepresentation */
+        /** Transparent > ListAffected > DefaultRepresentation */
         def max(a: TypeVarKind, b: TypeVarKind): TypeVarKind = (a, b) match
             case (Transparent, _) | (_, Transparent) => Transparent
-            case (DefaultDataRepresentation, _) | (_, DefaultDataRepresentation) =>
-                DefaultDataRepresentation
+            case (ListAffected, _) | (_, ListAffected) =>
+                ListAffected
             case _ => DefaultRepresentation
 
         /** Convert from legacy isBuiltin flag */
         def fromIsBuiltin(isBuiltin: Boolean): TypeVarKind =
-            if isBuiltin then Transparent else DefaultDataRepresentation
+            if isBuiltin then Transparent else ListAffected
     }
 
     /** Type variable have two forms: when id is not set, that means that for each instantiation of
@@ -326,7 +327,7 @@ object SIRType {
       * @param kind - controls representation during lowering.
       *             Transparent: builtin UPLC type variable, can use any representation.
       *             DefaultRepresentation: Scala type variable with native representation.
-      *             DefaultDataRepresentation: Scala type variable that must use Data representation.
+      *             ListAffected: Scala type variable that must use Data representation.
       */
     case class TypeVar(name: String, optId: Option[Long] = None, kind: TypeVarKind)
         extends SIRType {
@@ -505,16 +506,16 @@ object SIRType {
 
         lazy val dataDecl: DataDecl = {
             val proxy = new TypeProxy(null)
-            val aInCons = TypeVar("A", Some(1), TypeVarKind.DefaultDataRepresentation)
+            val aInCons = TypeVar("A", Some(1), TypeVarKind.ListAffected)
             val retval = DataDecl(
               "scalus.cardano.onchain.plutus.prelude.List",
               scala.List(NilConstr, Cons.buildConstr(aInCons, proxy)),
-              scala.List(TypeVar("A", Some(2), TypeVarKind.DefaultDataRepresentation)),
+              scala.List(TypeVar("A", Some(2), TypeVarKind.ListAffected)),
               AnnotationsDecl.empty
             )
             proxy.ref = SumCaseClass(
               retval,
-              scala.List(TypeVar("A", Some(1), TypeVarKind.DefaultDataRepresentation))
+              scala.List(TypeVar("A", Some(1), TypeVarKind.ListAffected))
             )
             if !checkAllProxiesFilled(retval.tp) then
                 throw new IllegalStateException(s"List dataDecl has unfilled proxies: ${retval.tp}")
@@ -758,9 +759,9 @@ object SIRType {
 
         lazy val dataDecl: DataDecl = {
             val consProxy = new TypeProxy(null)
-            val a = TypeVar("A", Some(2), TypeVarKind.DefaultDataRepresentation)
+            val a = TypeVar("A", Some(2), TypeVarKind.ListAffected)
             val consA: SIRType.TypeVar =
-                TypeVar("A", Some(1), TypeVarKind.DefaultDataRepresentation)
+                TypeVar("A", Some(1), TypeVarKind.ListAffected)
             val retval = DataDecl(
               name,
               scala.List(

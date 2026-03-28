@@ -60,11 +60,11 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
     test("lower Lam/Apply") {
         import SIRType.{TypeLambda, TypeVar, Unit}
         val idType = TypeLambda(
-          List(TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)),
-          TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+          List(TypeVar("A", Some(1), SIRType.TypeVarKind.ListAffected)),
+          TypeVar("A", Some(1), SIRType.TypeVarKind.ListAffected)
         )
         val x =
-            SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation), ae)
+            SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.ListAffected), ae)
 
         SIR.Apply(
           SIR.LamAbs(x, x, List.empty, ae),

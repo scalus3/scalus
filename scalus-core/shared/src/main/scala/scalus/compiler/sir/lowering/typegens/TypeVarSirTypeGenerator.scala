@@ -16,7 +16,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             case tv: SIRType.TypeVar =>
                 TypeVarRepresentation(tv.kind)
             case SIRType.FreeUnificator =>
-                TypeVarRepresentation(SIRType.TypeVarKind.DefaultDataRepresentation)
+                TypeVarRepresentation(SIRType.TypeVarKind.ListAffected)
             case SIRType.TypeLambda(params, body) =>
                 defaultRepresentation(body)
             case _ =>
@@ -28,7 +28,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation = {
-        TypeVarRepresentation(SIRType.TypeVarKind.DefaultDataRepresentation)
+        TypeVarRepresentation(SIRType.TypeVarKind.ListAffected)
     }
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
