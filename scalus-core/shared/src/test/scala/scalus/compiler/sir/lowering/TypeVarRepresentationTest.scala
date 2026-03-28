@@ -72,6 +72,7 @@ class TypeVarRepresentationTest extends AnyFunSuite {
             def singleton[A](x: A): List[A] = Cons(x, Nil)
             singleton[BigInt](BigInt(7))
         }
+        if native && typevar then info(s"singleton SIR:\n${sir.show}")
         val result = sir.toUplc().evaluateDebug
         result match
             case Result.Success(term, _, _, _) =>

@@ -37,6 +37,9 @@ object ExtractNilParameter {
         // Phase 1: collect
         val needsNil = new JIdentityHashMap[Let, scala.List[SIRType]]()
         collect(sir, needsNil, Set.empty)
+        needsNil.forEach((k, v) =>
+            System.err.println(s"[ExtractNil] collected: ${k.bindings.map(_.name).mkString(",")} nilTypes=${v.map(_.show).mkString(",")}")
+        )
         if needsNil.isEmpty then sir
         else
             // Phase 2: single top-down transform
@@ -160,7 +163,15 @@ object ExtractNilParameter {
         case And(a, b, _)         => collectNilTypes(a, None, inScopeTVs) ++ collectNilTypes(b, None, inScopeTVs)
         case Or(a, b, _)          => collectNilTypes(a, None, inScopeTVs) ++ collectNilTypes(b, None, inScopeTVs)
         case Not(a, _)            => collectNilTypes(a, None, inScopeTVs)
-        case Constr(_, _, args, _, _) => args.flatMap(a => collectNilTypes(a, None, inScopeTVs))
+        case Constr(cname, data, args, tp, _) =>
+            // For Cons(head, tail), the tail arg has the same list type as the Cons result
+            val argExpectedTypes = data.constructors
+                .find(_.name == cname)
+                .map(_.params.map(p => Some(p.tp)))
+                .getOrElse(args.map(_ => None))
+            args.zip(argExpectedTypes.padTo(args.size, None)).flatMap {
+                case (a, exp) => collectNilTypes(a, exp.orElse(expectedType), inScopeTVs)
+            }
         case Decl(_, term)        => collectNilTypes(term, None, inScopeTVs)
         case _                    => scala.Nil
 
@@ -417,8 +428,15 @@ object ExtractNilParameter {
                goA(b, needsNil, scope, enclosingEntry, None), anns)
         case Not(a, anns) =>
             Not(goA(a, needsNil, scope, enclosingEntry, None), anns)
-        case Constr(name, data, args, tp, anns) =>
-            Constr(name, data, args.map(a => go(a, needsNil, scope, enclosingEntry, None)), tp, anns)
+        case Constr(cname, data, args, tp, anns) =>
+            val argExpectedTypes = data.constructors
+                .find(_.name == cname)
+                .map(_.params.map(p => Some(p.tp)))
+                .getOrElse(args.map(_ => None))
+            val newArgs = args.zip(argExpectedTypes.padTo(args.size, None)).map {
+                case (a, exp) => go(a, needsNil, scope, enclosingEntry, exp.orElse(expectedType), typeSubst)
+            }
+            Constr(cname, data, newArgs, tp, anns)
         case Decl(data, term) =>
             Decl(data, go(term, needsNil, scope, enclosingEntry, None))
         case _ => sir
