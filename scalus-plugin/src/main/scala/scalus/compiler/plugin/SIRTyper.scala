@@ -193,7 +193,7 @@ class SIRTyper(using Context) {
                 SIRType.TypeVar(
                   paramName,
                   Some(tp.typeSymbol.hashCode),
-                  SIRType.TypeVarKind.DefaultDataRepresentation
+                  SIRType.TypeVarKind.CanBeListAffected
                 )
             case tpc: ThisType =>
                 sirTypeInEnv(tpc.underlying, env)
@@ -208,7 +208,7 @@ class SIRTyper(using Context) {
                     SIRType.TypeVar(
                       name.show,
                       Some(ref.typeSymbol.hashCode()),
-                      SIRType.TypeVarKind.DefaultDataRepresentation
+                      SIRType.TypeVarKind.CanBeListAffected
                     )
                 }
                 SIRType.TypeLambda(params, sirTypeInEnvWithErr(tpp.resultType, env))
@@ -217,7 +217,7 @@ class SIRTyper(using Context) {
                     SIRType.TypeVar(
                       name.show,
                       Some(ref.typeSymbol.hashCode()),
-                      SIRType.TypeVarKind.DefaultDataRepresentation
+                      SIRType.TypeVarKind.CanBeListAffected
                     )
                 }
                 SIRType.TypeLambda(params, sirTypeInEnvWithErr(tpl.resType, env))
@@ -249,7 +249,7 @@ class SIRTyper(using Context) {
                                 SIRType.TypeVar(
                                   paramName,
                                   Some(symCode),
-                                  SIRType.TypeVarKind.DefaultDataRepresentation
+                                  SIRType.TypeVarKind.CanBeListAffected
                                 )
                             case other =>
                                 // this is a filled typeVar, which can be substitutef
@@ -644,7 +644,7 @@ class SIRTyper(using Context) {
                 SIRType.TypeVar(
                   s.name.show,
                   Some(s.hashCode),
-                  SIRType.TypeVarKind.DefaultDataRepresentation
+                  SIRType.TypeVarKind.CanBeListAffected
                 )
             )
         val nVars = env.vars ++ typeParamSymbols.zip(tparams)
@@ -792,7 +792,7 @@ class SIRTyper(using Context) {
                         SIRType.TypeVar(
                           tps.name.show,
                           Some(tps.hashCode),
-                          SIRType.TypeVarKind.DefaultDataRepresentation
+                          SIRType.TypeVarKind.CanBeListAffected
                         )
                     )
                 val newVars = s.typeParams.zip(sirTypeParams).toMap
@@ -825,7 +825,7 @@ class SIRTyper(using Context) {
                 SIRType.TypeVar(
                   tp.name.show,
                   Some(tp.hashCode()),
-                  SIRType.TypeVarKind.DefaultDataRepresentation
+                  SIRType.TypeVarKind.CanBeListAffected
                 )
             )
         val dataDeclBaseAnns = AnnotationsDecl.fromSym(typeSymbol)

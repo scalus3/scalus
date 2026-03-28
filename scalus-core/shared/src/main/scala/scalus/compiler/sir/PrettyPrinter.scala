@@ -289,9 +289,9 @@ object PrettyPrinter:
         sirType match
             case SIRType.TypeVar(name, optId, kind) =>
                 val kindSuffix = kind match
-                    case SIRType.TypeVarKind.Transparent               => "(b)"
-                    case SIRType.TypeVarKind.DefaultRepresentation     => "(r)"
-                    case SIRType.TypeVarKind.DefaultDataRepresentation => ""
+                    case SIRType.TypeVarKind.Transparent           => "(b)"
+                    case SIRType.TypeVarKind.DefaultRepresentation => "(r)"
+                    case SIRType.TypeVarKind.CanBeListAffected          => ""
                 text(name + optId.fold("")(id => s"#${id}") + kindSuffix)
             case SIRType.Fun(in, out) =>
                 inParens(pretty(in) + text(" -> ") + pretty(out))

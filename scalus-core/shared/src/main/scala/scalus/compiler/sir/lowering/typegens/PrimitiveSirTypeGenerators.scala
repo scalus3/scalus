@@ -24,6 +24,18 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
 
     def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = true
 
+    /** Check if a TypeVarRepresentation is native (no Data conversion needed).
+      *   - Transparent: always native
+      *   - DefaultRepresentation: native when nativeTypeVarRepresentation=true
+      *   - CanBeListAffected: native when nativeListElements=true
+      */
+    private def isNativeTypeVar(tvr: TypeVarRepresentation)(using lctx: LoweringContext): Boolean =
+        import SIRType.TypeVarKind.*
+        tvr.kind match
+            case Transparent             => true
+            case DefaultRepresentation   => lctx.nativeTypeVarRepresentation
+            case CanBeListAffected            => lctx.nativeListElements
+
     def toRepresentation(
         input: LoweredValue,
         outputRepresentation: LoweredValueRepresentation,
@@ -41,16 +53,16 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
             case (PrimitiveRepresentation.PackedData, PrimitiveRepresentation.Constant) =>
                 dataToUplcValue(input, pos)
             case (tvr: TypeVarRepresentation, PrimitiveRepresentation.Constant) =>
-                if !tvr.isPackedData then input
+                if isNativeTypeVar(tvr) then input
                 else dataToUplcValue(input, pos)
             case (tvr: TypeVarRepresentation, PrimitiveRepresentation.PackedData) =>
-                if !tvr.isPackedData then uplcToDataValue(input, pos)
+                if isNativeTypeVar(tvr) then uplcToDataValue(input, pos)
                 else input
             case (PrimitiveRepresentation.Constant, tvr: TypeVarRepresentation) =>
-                if !tvr.isPackedData then input
+                if isNativeTypeVar(tvr) then input
                 else uplcToDataValue(input, pos)
             case (PrimitiveRepresentation.PackedData, tvr: TypeVarRepresentation) =>
-                if !tvr.isPackedData then dataToUplcValue(input, pos)
+                if isNativeTypeVar(tvr) then dataToUplcValue(input, pos)
                 else input
             case (inTvr: TypeVarRepresentation, outTvr: TypeVarRepresentation) =>
                 if outTvr.isBuiltin then input

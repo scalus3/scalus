@@ -136,12 +136,12 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
                         val aTp = new SIRType.TypeVar(
                           "A",
                           None,
-                          SIRType.TypeVarKind.DefaultDataRepresentation
+                          SIRType.TypeVarKind.CanBeListAffected
                         )
                         val bTp = new SIRType.TypeVar(
                           "B",
                           None,
-                          SIRType.TypeVarKind.DefaultDataRepresentation
+                          SIRType.TypeVarKind.CanBeListAffected
                         )
                         val tpf1 = tpf match {
                             case SIRType.TypeLambda(params, SIRType.Fun(ltp, rtpf1)) =>

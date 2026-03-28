@@ -150,15 +150,21 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                         case other => other
                 val resolvedIn = resolveElementRepr(inElemRepr)
                 val resolvedOut = resolveElementRepr(outElemRepr)
-                // Non-packed TypeVars (Transparent or DefaultRepresentation) are native
-                val hasNonPackedTypeVar = (inElemRepr, outElemRepr) match
-                    case (tvr: TypeVarRepresentation, _) if !tvr.isPackedData => true
-                    case (_, tvr: TypeVarRepresentation) if !tvr.isPackedData => true
-                    case _                                                    => false
+                // Check if TypeVar is native based on its kind and corresponding flag
+                def isNativeTypeVar(tvr: TypeVarRepresentation): Boolean =
+                    import SIRType.TypeVarKind.*
+                    tvr.kind match
+                        case Transparent           => true
+                        case DefaultRepresentation => lctx.nativeTypeVarRepresentation
+                        case CanBeListAffected          => lctx.nativeListElements
+                val hasNativeTypeVar = (inElemRepr, outElemRepr) match
+                    case (tvr: TypeVarRepresentation, _) if isNativeTypeVar(tvr) => true
+                    case (_, tvr: TypeVarRepresentation) if isNativeTypeVar(tvr) => true
+                    case _                                                       => false
                 if resolvedIn == resolvedOut
                     || elemType == SIRType.FreeUnificator
                     || elemType == SIRType.TypeNothing
-                    || hasNonPackedTypeVar
+                    || hasNativeTypeVar
                 then RepresentationProxyLoweredValue(input, outputRepresentation, pos)
                 else
                     convertBuiltinList(

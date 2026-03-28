@@ -54,9 +54,9 @@ class SIRLoweringRepresentationTest extends AnyFunSuite {
 
     test("get default representation for Option.None") {
         val optionTypeVar =
-            SIRType.TypeVar("A", Some(11L), SIRType.TypeVarKind.DefaultDataRepresentation)
+            SIRType.TypeVar("A", Some(11L), SIRType.TypeVarKind.CanBeListAffected)
         val someTypeVar =
-            SIRType.TypeVar("A", Some(12L), SIRType.TypeVarKind.DefaultDataRepresentation)
+            SIRType.TypeVar("A", Some(12L), SIRType.TypeVarKind.CanBeListAffected)
         val optionProxy = SIRType.TypeProxy(null)
         val someConstrDecl = ConstrDecl(
           "scalus.cardano.onchain.plutus.prelude.Option$.Some",

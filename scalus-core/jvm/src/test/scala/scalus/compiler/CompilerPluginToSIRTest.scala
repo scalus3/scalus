@@ -239,7 +239,7 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
 
         val compiledTp = sir.tp
 
-        val a = TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+        val a = TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
         val builtinListA = SIRType.BuiltinList(a)
         val builtinListData = SIRType.BuiltinList(SIRType.Data.tp)
         val tailType = SIRType.TypeLambda(List(a), Fun(builtinListA, builtinListA))
@@ -367,11 +367,11 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
             if summon[Options].targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then {
                 val a1Tp =
-                    SIRType.TypeVar("A", Some(1), SIRType.TypeVarKind.DefaultDataRepresentation)
+                    SIRType.TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
                 val a2Tp =
-                    SIRType.TypeVar("A", Some(2), SIRType.TypeVarKind.DefaultDataRepresentation)
+                    SIRType.TypeVar("A", Some(2), SIRType.TypeVarKind.CanBeListAffected)
                 val a3Tp =
-                    SIRType.TypeVar("A", Some(3), SIRType.TypeVarKind.DefaultDataRepresentation)
+                    SIRType.TypeVar("A", Some(3), SIRType.TypeVarKind.CanBeListAffected)
                 Let(
                   immutable.List(
                     Binding("a$proxy1", sirInt, Const(Constant.Integer(1), sirInt, AnE))
