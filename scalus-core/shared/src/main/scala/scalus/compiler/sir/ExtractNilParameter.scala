@@ -44,9 +44,14 @@ object ExtractNilParameter {
     )
 
     def apply(sir: SIR): SIR = {
-        // Phase 1: collect
+        // Phase 1a: collect direct nil types
         val needsNil = new JIdentityHashMap[Let, scala.List[SIRType]]()
         collect(sir, needsNil, Set.empty)
+
+        // Phase 1b: propagate nil needs transitively — if function A calls
+        // function B which needs nil, A also needs nil to forward to B.
+        propagateNilNeeds(sir, needsNil)
+
         needsNil.forEach((k, v) =>
             System.err.println(s"[ExtractNil] collected: ${k.bindings.map(_.name).mkString(",")} nilTypes=${v.map(_.show).mkString(",")}")
         )
@@ -208,6 +213,78 @@ object ExtractNilParameter {
         names
     }
 
+    // ===================== Phase 1b: Propagate nil needs transitively =====================
+
+    /** Build a map from binding name → (Let, nilTypes) for all entries in needsNil,
+      * plus a map from binding name → Set[calledName] for all Let bindings with TypeParams.
+      * Then iteratively propagate: if A calls B which needs nil, A also needs nil.
+      */
+    private def propagateNilNeeds(
+        sir: SIR,
+        needsNil: JIdentityHashMap[Let, scala.List[SIRType]]
+    ): Unit = {
+        import scala.jdk.CollectionConverters.*
+
+        // Build name → Let index
+        val nameToLet = new scala.collection.mutable.HashMap[String, Let]()
+        // Build name → set of ExternalVar names called from its rhs
+        val callGraph = new scala.collection.mutable.HashMap[String, Set[String]]()
+
+        // Walk the SIR tree to find all Let bindings with TypeParams
+        def indexLets(s: SIR): Unit = s match
+            case let @ Let(scala.List(Binding(name, _, rhs)), body, _, _) if hasTypeParams(rhs) =>
+                nameToLet(name) = let
+                callGraph(name) = calledNames(rhs)
+                indexLets(rhs)
+                indexLets(body)
+            case Let(bindings, body, _, _) =>
+                bindings.foreach(b => indexLets(b.value))
+                indexLets(body)
+            case LamAbs(_, term, _, _)     => indexLets(term)
+            case Apply(f, arg, _, _)       => indexLets(f); indexLets(arg)
+            case IfThenElse(c, t, f, _, _) => indexLets(c); indexLets(t); indexLets(f)
+            case Match(scr, cases, _, _)   => indexLets(scr); cases.foreach(c => indexLets(c.body))
+            case Constr(_, _, args, _, _)   => args.foreach(indexLets)
+            case Cast(expr, _, _)          => indexLets(expr)
+            case And(a, b, _)              => indexLets(a); indexLets(b)
+            case Or(a, b, _)               => indexLets(a); indexLets(b)
+            case Not(a, _)                 => indexLets(a)
+            case Select(s, _, _, _)        => indexLets(s)
+            case Decl(_, term)             => indexLets(term)
+            case _                         =>
+        indexLets(sir)
+
+        // Names of functions that currently need nil
+        val nilNames = needsNil.entrySet().asScala
+            .flatMap(e => e.getKey.bindings.map(_.name))
+            .toSet
+
+        // Iterate: propagate nil needs from callees to callers
+        var changed = true
+        while changed do
+            changed = false
+            for (callerName, calledFns) <- callGraph do
+                val callerLet = nameToLet.get(callerName)
+                callerLet match
+                    case Some(let) if !needsNil.containsKey(let) =>
+                        // Check if caller calls any nil-needing function
+                        val calledNilNames = calledFns.intersect(nilNames)
+                        if calledNilNames.nonEmpty then
+                            // Propagate: collect nil types from called functions,
+                            // deduplicate by structural type match (not ==)
+                            val raw = calledNilNames.toList.flatMap { cn =>
+                                nameToLet.get(cn).flatMap(l => Option(needsNil.get(l))).getOrElse(scala.Nil)
+                            }
+                            val propagated = raw.foldLeft(scala.List.empty[SIRType]) { (acc, tp) =>
+                                if acc.exists(t => typesMatch(t, tp)) then acc
+                                else acc :+ tp
+                            }
+                            if propagated.nonEmpty then
+                                needsNil.put(let, propagated)
+                                changed = true
+                    case _ => // already has nil or not found
+    }
+
     // ===================== Phase 2: Transform (single top-down pass) =====================
 
     /** Compute result type of applying one argument to a function type. Preserves TypeLambda. */
@@ -322,10 +399,17 @@ object ExtractNilParameter {
                         SIRType.Fun(ctxTp, acc)
                     }
 
-            // Build Nil constructors for external call sites — use context type
+            // Build Nil constructors for external call sites — use context type.
+            // Determine constructor name and data decl from the type (List vs PairList).
             val nilConstrs: scala.List[(SIRType, SIR)] = nilContextTypes.map { ctxTp =>
-                val constrName = SIRType.List.NilConstr.name // TODO: handle PairList
-                (ctxTp, Constr(constrName, SIRType.List.dataDecl, scala.Nil,
+                val (constrName, dataDecl) = ctxTp match
+                    case SIRType.SumCaseClass(decl, _) if decl.name == SIRType.PairList.DataDeclName =>
+                        (SIRType.PairList.PairNilName, decl)
+                    case SIRType.SumCaseClass(decl, _) =>
+                        (SIRType.List.NilConstr.name, decl)
+                    case _ =>
+                        (SIRType.List.NilConstr.name, SIRType.List.dataDecl)
+                (ctxTp, Constr(constrName, dataDecl, scala.Nil,
                     ctxTp, AnnotationsDecl.empty): SIR)
             }
 
@@ -362,7 +446,7 @@ object ExtractNilParameter {
             Let(scala.List(Binding(name, newTp, transformedRhs)), transformedBody, flags, anns)
 
         // ---- Nil constructor: replace with __nil from enclosing entry ----
-        case Constr(name, _, _, _, _) if AllNilNames.contains(name) =>
+        case Constr(name, _, _, tp, _) if AllNilNames.contains(name) =>
             enclosingEntry.flatMap { entry =>
                 if entry.nilArgs.size == 1 then
                     // Single nil param — always use it
