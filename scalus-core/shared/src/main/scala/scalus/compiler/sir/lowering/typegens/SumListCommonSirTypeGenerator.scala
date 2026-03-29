@@ -605,9 +605,12 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                             pos
                           )
                         )
+                    // Use constructor's own typeParams for substitution — they share
+                    // TypeVar identity with the constructor's param types.
+                    val substEnv = pairCons.typeParams.zip(typeArgs).toMap
                     SIRType.substitute(
                       pairCons.params.head.tp,
-                      decl.typeParams.zip(typeArgs).toMap,
+                      substEnv,
                       Map.empty
                     )
                 else typeArgs.head

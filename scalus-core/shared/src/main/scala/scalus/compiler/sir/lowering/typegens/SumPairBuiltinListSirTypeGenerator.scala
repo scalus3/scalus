@@ -74,7 +74,9 @@ object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator 
                   s"SumPairBuiltinListSirTypeGenerator.genNil: expected SumPairBuiltinList but got $other",
                   pos
                 )
-        val elemUni = pairRepr.defaultUni(elemType)
+        val elemUni = try pairRepr.defaultUni(elemType)
+        catch case e: IllegalStateException =>
+            throw new IllegalStateException(s"genNil: resType=${resType.show} elemType=${elemType.show} pairRepr=$pairRepr\n  ${e.getMessage}", e)
         ConstantLoweredValue(
           SIR.Const(
             scalus.uplc.Constant.List(elemUni, Nil),
