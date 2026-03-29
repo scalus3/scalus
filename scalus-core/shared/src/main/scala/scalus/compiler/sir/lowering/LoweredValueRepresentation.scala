@@ -1151,7 +1151,19 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
 
     override def defaultUni(semanticType: SIRType)(using lctx: LoweringContext): DefaultUni =
         semanticType match
-            case _: SIRType.TypeVar | SIRType.FreeUnificator => DefaultUni.Data
+            case tv: SIRType.TypeVar =>
+                lctx.tryResolveTypeVar(tv) match
+                    case Some(resolved) =>
+                        val gen = lctx.typeGenerator(resolved)
+                        gen.defaultRepresentation(resolved).defaultUni(resolved)
+                    case None =>
+                        if lctx.nativeTypeVarRepresentation then
+                            throw new IllegalStateException(
+                              s"TypeVarRepresentation.defaultUni: unresolved TypeVar ${tv.show} with nativeTypeVarRepresentation=true.\n" +
+                                  s"  This TypeVar needs to be resolved via unification env or ExtractNilParameter."
+                            )
+                        else DefaultUni.Data
+            case SIRType.FreeUnificator => DefaultUni.Data
             case _ =>
                 val gen = lctx.typeGenerator(semanticType)
                 val resolved =
