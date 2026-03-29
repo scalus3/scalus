@@ -12,6 +12,14 @@ import scala.util.control.NonFatal
   */
 trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
+    /** Check if a TypeVarRepresentation is native based on its kind and the corresponding flag. */
+    protected def isNativeTypeVar(tvr: TypeVarRepresentation)(using lctx: LoweringContext): Boolean =
+        import SIRType.TypeVarKind.*
+        tvr.kind match
+            case Transparent           => true
+            case DefaultRepresentation => lctx.nativeTypeVarRepresentation
+            case CanBeListAffected     => lctx.nativeListElements
+
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValueRepresentation
@@ -150,13 +158,6 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                         case other => other
                 val resolvedIn = resolveElementRepr(inElemRepr)
                 val resolvedOut = resolveElementRepr(outElemRepr)
-                // Check if TypeVar is native based on its kind and corresponding flag
-                def isNativeTypeVar(tvr: TypeVarRepresentation): Boolean =
-                    import SIRType.TypeVarKind.*
-                    tvr.kind match
-                        case Transparent           => true
-                        case DefaultRepresentation => lctx.nativeTypeVarRepresentation
-                        case CanBeListAffected          => lctx.nativeListElements
                 val hasNativeTypeVar = (inElemRepr, outElemRepr) match
                     case (tvr: TypeVarRepresentation, _) if isNativeTypeVar(tvr) => true
                     case (_, tvr: TypeVarRepresentation) if isNativeTypeVar(tvr) => true
@@ -372,14 +373,14 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
             case (_, tv: TypeVarRepresentation) =>
-                if tv.isBuiltin then input
+                if tv.isBuiltin || isNativeTypeVar(tv) then input
                 else {
                     val inputAsData =
                         input.toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
                     new RepresentationProxyLoweredValue(inputAsData, tv, pos)
                 }
             case (tv: TypeVarRepresentation, _) =>
-                if tv.isBuiltin then
+                if tv.isBuiltin || isNativeTypeVar(tv) then
                     RepresentationProxyLoweredValue(input, outputRepresentation, pos)
                 else if input.representation == outputRepresentation then input
                 else
