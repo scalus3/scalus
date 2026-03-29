@@ -2405,7 +2405,17 @@ object LoweredValue {
                         // DataConstr and ProdDataConstr are compatible representations
                         val targetGen = lctx.typeGenerator(targetType)
                         val targetTypeVarRepr = targetGen.defaultTypeVarReperesentation(targetType)
-                        (converted, targetTypeVarRepr)
+                        // When casting Data to a native list representation
+                        // (e.g., DataData → SumBuiltinList(Constant)), perform actual
+                        // conversion so list elements are unwrapped from Data to native.
+                        val needsConversion =
+                            converted.representation == SumCaseClassRepresentation.DataData &&
+                                converted.representation != targetTypeVarRepr
+                        if needsConversion then
+                            val fullyConverted =
+                                converted.toRepresentation(targetTypeVarRepr, inPos)
+                            (fullyConverted, targetTypeVarRepr)
+                        else (converted, targetTypeVarRepr)
                     else (value, value.representation)
                 TypeRepresentationProxyLoweredValue(
                   tvRepr,
