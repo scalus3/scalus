@@ -231,17 +231,22 @@ object ExtractNilParameter {
       * @param expectedType expected type from parent node (for determining Nil's actual type)
       */
     /** Extract TypeVar→ConcreteType substitutions from a function application.
-      * Compares the declared function return type with the Apply's actual result type.
+      * Collects from both return type and parameter type vs argument type.
       */
     private def extractSubst(
         funTp: SIRType,
-        applyTp: SIRType
+        applyTp: SIRType,
+        argTp: Option[SIRType] = None
     ): Map[SIRType.TypeVar, SIRType] = {
-        val returnTp = funTp match
-            case SIRType.TypeLambda(_, SIRType.Fun(_, out)) => out
-            case SIRType.Fun(_, out)                        => out
-            case _                                          => return Map.empty
-        collectSubst(returnTp, applyTp)
+        val (paramTp, returnTp) = funTp match
+            case SIRType.TypeLambda(_, SIRType.Fun(in, out)) => (Some(in), out)
+            case SIRType.Fun(in, out)                        => (Some(in), out)
+            case _                                           => return Map.empty
+        val returnSubst = collectSubst(returnTp, applyTp)
+        val paramSubst = (paramTp, argTp) match
+            case (Some(p), Some(a)) => collectSubst(p, a)
+            case _                  => Map.empty
+        returnSubst ++ paramSubst
     }
 
     /** Structurally match two types to extract TypeVar bindings. */
@@ -380,7 +385,7 @@ object ExtractNilParameter {
         // ---- Apply: extract type substitutions and recurse ----
         case Apply(f, arg, tp, anns) =>
             // Extract TypeVar substitutions from this Apply level
-            val newSubst = extractSubst(f.tp, tp)
+            val newSubst = extractSubst(f.tp, tp, Some(arg.tp))
             if newSubst.nonEmpty || typeSubst.nonEmpty then
                 System.err.println(s"[Apply] f.tp=${f.tp.show} tp=${tp.show} newSubst=${newSubst.map((k,v) => s"${k.show}->${v.show}").mkString(",")} inherited=${typeSubst.map((k,v) => s"${k.show}->${v.show}").mkString(",")}")
             val mergedSubst = typeSubst ++ newSubst
