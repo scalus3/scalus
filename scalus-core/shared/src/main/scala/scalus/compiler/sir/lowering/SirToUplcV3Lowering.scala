@@ -17,7 +17,7 @@ class SirToUplcV3Lowering(
     targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     intrinsicModules: Map[String, Module] = Map.empty,
     supportModules: Map[String, Module] = Map.empty,
-    nativeListElements: Boolean = true,
+    nativeListElements: Boolean = false,
     nativeTypeVarRepresentation: Boolean = false
 ) {
 

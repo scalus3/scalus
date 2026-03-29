@@ -31,7 +31,7 @@ class LoweringContext(
       * When false (default), all lists use Data element storage
       * (SumBuiltinList(DataData/PackedData)).
       */
-    val nativeListElements: Boolean = true,
+    val nativeListElements: Boolean = false,
     val nativeTypeVarRepresentation: Boolean = false,
 ) {
 

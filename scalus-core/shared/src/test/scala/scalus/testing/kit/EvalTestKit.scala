@@ -45,8 +45,9 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
     protected given Options = compilerOptions
 
-    /** Compiler options with nativeListElements enabled. */
-    protected lazy val nativeOpts: Options = compilerOptions.copy(nativeListElements = true)
+    /** Compiler options with both nativeListElements and nativeTypeVarRepresentation enabled. */
+    protected lazy val nativeOpts: Options =
+        compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true)
 
     /** Default PlutusVM - can be overridden by subclasses */
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()

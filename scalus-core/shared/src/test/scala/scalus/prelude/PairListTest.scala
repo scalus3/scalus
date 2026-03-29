@@ -16,7 +16,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 5856, steps = 1632628),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 5856,
               steps = 1_632_628
             )
@@ -32,7 +32,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 3196, steps = 719380),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 3196,
               steps = 719_380
             )
@@ -48,7 +48,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 1964, steps = 445717),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 1964,
               steps = 445_717
             )
@@ -61,7 +61,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 1964, steps = 445717),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 1964,
               steps = 445_717
             )

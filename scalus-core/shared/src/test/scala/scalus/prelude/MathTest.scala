@@ -32,7 +32,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 1802, steps = 391986),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 1802,
               steps = 391_986
             )
@@ -46,7 +46,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 1802, steps = 391986),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 1802,
               steps = 391_986
             )
@@ -60,7 +60,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 2204, steps = 557194),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 2204,
               steps = 557_194
             )
@@ -79,7 +79,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 439986),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 2102,
               steps = 439_986
             )
@@ -91,7 +91,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 439986),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 2102,
               steps = 439_986
             )
@@ -110,7 +110,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 439986),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 2102,
               steps = 439_986
             )
@@ -122,7 +122,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 439986),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 2102,
               steps = 439_986
             )
@@ -168,7 +168,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1208368),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 6104,
               steps = 1_208_368
             )
@@ -180,7 +180,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 15713, steps = 3525304),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 15713,
               steps = 3_525_304
             )
@@ -192,7 +192,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 15713, steps = 3525304),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 15713,
               steps = 3_525_304
             )
@@ -212,7 +212,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1199872),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 6104,
               steps = 1_199_872
             )
@@ -224,7 +224,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1199872),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 6104,
               steps = 1_199_872
             )
@@ -236,7 +236,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 35665, steps = 12811018),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 35665,
               steps = 12_811_018
             )
@@ -252,7 +252,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 37969, steps = 13421696),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 37969,
               steps = 13_421_696
             )
@@ -264,7 +264,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 42676, steps = 14820672),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 42676,
               steps = 14_820_672
             )
@@ -276,7 +276,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 55213, steps = 18370167),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 55213,
               steps = 18_370_167
             )
@@ -290,7 +290,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1209821),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 6104,
               steps = 1_209_821
             )
@@ -302,7 +302,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1209821),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 6104,
               steps = 1_209_821
             )
@@ -314,7 +314,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 18928, steps = 4865297),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 18928,
               steps = 4_865_297
             )
@@ -326,7 +326,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 18928, steps = 4865297),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 18928,
               steps = 4_865_297
             )
@@ -338,7 +338,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 18124, steps = 4545136),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 18124,
               steps = 4_545_136
             )
@@ -350,7 +350,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 18928, steps = 4865297),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 18928,
               steps = 4_865_297
             )
@@ -362,7 +362,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 42164, steps = 11215766),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 42164,
               steps = 11_215_766
             )
@@ -376,7 +376,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 441439),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 2102,
               steps = 441_439
             )
@@ -388,7 +388,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 5309, steps = 3758628),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 5309,
               steps = 3_758_628
             )
@@ -400,7 +400,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 5309, steps = 3758628),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 5309,
               steps = 3_758_628
             )
@@ -412,7 +412,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 5309, steps = 3758628),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 5309,
               steps = 3_758_628
             )
@@ -424,7 +424,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 5309, steps = 3758628),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 5309,
               steps = 3_758_628
             )
@@ -436,7 +436,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 5319, steps = 3939663),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 5319,
               steps = 3_939_663
             )
@@ -492,7 +492,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 16619, steps = 3944756),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 16619,
               steps = 3_944_756
             )
@@ -504,7 +504,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 23829, steps = 5805710),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 23829,
               steps = 5_805_710
             )
@@ -516,7 +516,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 16619, steps = 3944756),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 16619,
               steps = 3_944_756
             )
@@ -528,7 +528,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 2702, steps = 535986),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 2702,
               steps = 535_986
             )
@@ -540,7 +540,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 9409, steps = 2083802),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 9409,
               steps = 2_083_802
             )
@@ -552,7 +552,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 5804, steps = 1153325),
-            compilerOptions.copy(nativeListElements = true) -> ExUnits(
+            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
               memory = 5804,
               steps = 1_153_325
             )
