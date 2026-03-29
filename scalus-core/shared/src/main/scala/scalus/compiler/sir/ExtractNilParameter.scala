@@ -300,9 +300,13 @@ object ExtractNilParameter {
             val nilContextTypes = needsNil.get(let) // context types like List[A]
             // Use the context type (e.g. List[A]) for both parameter and call-site Nil.
             // During lowering, when A=BigInt resolves, this becomes List[Integer].
+            // Use function name in nil var names to avoid shadowing across scopes.
+            val shortName = name.lastIndexOf('.') match
+                case -1  => name
+                case dot => name.substring(dot + 1)
             val nilVars: scala.List[(SIRType, Var)] = nilContextTypes.zipWithIndex.map {
                 case (ctxTp, idx) =>
-                    val paramName = if nilContextTypes.size == 1 then "__nil" else s"__nil$idx"
+                    val paramName = s"__nil_${shortName}_$idx"
                     (ctxTp, Var(paramName, ctxTp, AnnotationsDecl.empty))
             }
 
