@@ -418,8 +418,35 @@ object ExtractNilParameter {
             // Scope entry for let body (external calls use concrete Nil constructors)
             val bodyEntry = ScopeEntry(nilConstrs, newTp)
 
-            val rhsScope = scope + (name -> rhsEntry)
+            var rhsScope = scope + (name -> rhsEntry)
             val bodyScope = scope + (name -> bodyEntry)
+
+            // Override scope entries for called nil-needing functions:
+            // forward THIS function's __nil vars instead of their own fresh Nil constructors.
+            // This handles transitive nil propagation at the call site level.
+            import scala.jdk.CollectionConverters.*
+            for entry <- needsNil.entrySet().asScala do
+                val calledName = entry.getKey.bindings.head.name
+                if calledName != name && calledNames(rhs).contains(calledName) then
+                    System.err.println(s"[forward] $name → $calledName")
+                    val calledNilTypes = entry.getValue
+                    // Match this function's nil vars to the called function's nil types
+                    val forwardedNilArgs = calledNilTypes.map { calledNilTp =>
+                        nilVars.find((myTp, _) => typesMatch(myTp, calledNilTp)) match
+                            case Some((_, myNilVar)) => (calledNilTp, myNilVar: SIR)
+                            case None                => (calledNilTp, nilConstrs.find((tp, _) => typesMatch(tp, calledNilTp)).map(_._2).getOrElse(
+                                Constr(SIRType.List.NilConstr.name, SIRType.List.dataDecl, scala.Nil, calledNilTp, AnnotationsDecl.empty)
+                            ): SIR)
+                    }
+                    // Get or reconstruct the called function's new type
+                    val calledOrigTp = entry.getKey.bindings.head.tp
+                    val calledNewTp = calledOrigTp match
+                        case SIRType.TypeLambda(params, bodyTp) =>
+                            val extendedBody = forwardedNilArgs.foldRight(bodyTp) { case ((tp, _), acc) => SIRType.Fun(tp, acc) }
+                            SIRType.TypeLambda(params, extendedBody)
+                        case other =>
+                            forwardedNilArgs.foldRight(other) { case ((tp, _), acc) => SIRType.Fun(tp, acc) }
+                    rhsScope = rhsScope + (calledName -> ScopeEntry(forwardedNilArgs, calledNewTp))
 
             // Transform rhs: wrap with nil LamAbs params, recurse into body
             val transformedRhs = rhs match
