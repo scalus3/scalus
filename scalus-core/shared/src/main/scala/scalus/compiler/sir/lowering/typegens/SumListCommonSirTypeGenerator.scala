@@ -18,7 +18,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         tvr.kind match
             case Transparent           => true
             case DefaultRepresentation => lctx.nativeTypeVarRepresentation
-            case CanBeListAffected     => lctx.nativeListElements
+            case CanBeListAffected     => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
 
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext

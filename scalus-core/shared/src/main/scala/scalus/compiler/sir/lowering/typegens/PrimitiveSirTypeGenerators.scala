@@ -34,7 +34,7 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
         tvr.kind match
             case Transparent             => true
             case DefaultRepresentation   => lctx.nativeTypeVarRepresentation
-            case CanBeListAffected            => lctx.nativeListElements
+            case CanBeListAffected            => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
 
     def toRepresentation(
         input: LoweredValue,
