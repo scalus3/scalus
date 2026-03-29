@@ -345,13 +345,17 @@ object ExtractNilParameter {
         // ---- Nil constructor: replace with __nil from enclosing entry ----
         case Constr(name, _, _, _, _) if AllNilNames.contains(name) =>
             enclosingEntry.flatMap { entry =>
-                expectedType.flatMap { expTp =>
-                    // Find the nilArg whose type matches the expected type
-                    entry.nilArgs.collectFirst {
-                        case (nilTp, nilArg) if typesMatch(nilTp, expTp) => nilArg
+                if entry.nilArgs.size == 1 then
+                    // Single nil param — always use it
+                    Some(entry.nilArgs.head._2)
+                else
+                    // Multiple nil params — match by expected type
+                    expectedType.flatMap { expTp =>
+                        entry.nilArgs.collectFirst {
+                            case (nilTp, nilArg) if typesMatch(nilTp, expTp) => nilArg
+                        }
                     }
-                }
-            }.getOrElse(sir) // no match → leave Nil unchanged
+            }.getOrElse(sir) // no enclosing entry → leave Nil unchanged
 
         // ---- Var/ExternalVar in scope: inject nil applications with type substitution ----
         case Var(n, _, vAnns) if scope.contains(n) =>

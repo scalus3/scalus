@@ -102,6 +102,7 @@ class TypeVarRepresentationTest extends AnyFunSuite {
             val list = Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
             list.map[BigInt](x => x + BigInt(10))
         }
+        if native && typevar then info(s"map SIR:\n${sir.show}")
         val result = sir.toUplc().evaluateDebug
         result match
             case Result.Success(term, _, _, _) =>
