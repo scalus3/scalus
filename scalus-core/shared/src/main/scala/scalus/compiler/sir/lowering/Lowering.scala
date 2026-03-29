@@ -601,11 +601,25 @@ object Lowering {
         val arg = lowerSIR(app.arg)
         // lctx.debug = prevDebug
 
-        // Try intrinsic resolution using the already-lowered arg's representation
-        if lctx.intrinsicModules.nonEmpty then
-            IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(using
-              lctx
-            ) match
+        // Try intrinsic resolution using the already-lowered arg's representation.
+        // ExtractNilParameter annotates nil-injection Apply nodes with extractNilApply.
+        // Two cases:
+        //   1. THIS Apply is annotated → skip intrinsic (nil arg, not the real arg)
+        //   2. app.f is an annotated Apply → peel the nil and resolve with the real arg
+        if lctx.intrinsicModules.nonEmpty
+            && !ExtractNilParameter.isNilInjectionApply(app.anns)
+        then
+            val intrinsicResult = app.f match
+                case SIR.Apply(innerF, _, _, innerAnns)
+                    if ExtractNilParameter.isNilInjectionApply(innerAnns) =>
+                    IntrinsicResolver.tryResolve(innerF, app.arg, arg, app.tp, app.anns.pos)(
+                      using lctx
+                    )
+                case _ =>
+                    IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(
+                      using lctx
+                    )
+            intrinsicResult match
                 case Some(result) =>
                     if lctx.debug then
                         lctx.log(

@@ -27,6 +27,16 @@ object ExtractNilParameter {
       SIRType.PairList.PairNilName
     )
 
+    /** Annotation key placed on Apply nodes created by this transformation (nil injection). */
+    val ExtractNilApplyAnnotation: String = "extractNilApply"
+
+    /** Check if an Apply node was created by ExtractNilParameter (nil injection). */
+    def isNilInjectionApply(anns: AnnotationsDecl): Boolean =
+        anns.data.contains(ExtractNilApplyAnnotation)
+
+    private val nilInjectionAnns: AnnotationsDecl =
+        AnnotationsDecl(SIRPosition.empty, data = Map(ExtractNilApplyAnnotation -> SIR.Const(scalus.uplc.Constant.Bool(true), SIRType.Boolean, AnnotationsDecl(SIRPosition.empty))))
+
     /** Scope entry for a transformed binding. */
     private case class ScopeEntry(
         nilArgs: scala.List[(SIRType, SIR)], // (nilType, argToPass) — Var(__nil) inside rhs, Constr(Nil) externally
@@ -475,7 +485,7 @@ object ExtractNilParameter {
                     System.err.println(s"[nilSubst] ${c.tp.show} → ${concreteTp.show}")
                     Constr(c.name, c.data, c.args, concreteTp, c.anns)
                 case other => other
-            current = Apply(current, concreteNilArg.asInstanceOf[AnnotatedSIR], resultTp, AnnotationsDecl.empty)
+            current = Apply(current, concreteNilArg.asInstanceOf[AnnotatedSIR], resultTp, nilInjectionAnns)
             currentTp = resultTp
         current
     }
