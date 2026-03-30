@@ -947,14 +947,24 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         val constrIndex = retrieveConstrIndex(constr.tp, constr.anns.pos)
+        val constrDecl = retrieveConstrDecl(constr.tp, constr.anns.pos)
         val loweredArgs = constr.args.map(arg => lctx.lower(arg))
 
-        // Store fields as-is — ProdUplcConstr records their actual representations
-        val fieldReprs = loweredArgs.map(_.representation).toList
+        // Adopt lambda fields: compute canonical LambdaRepresentation from the
+        // declared field type (with TypeVars) and toRepresentation to wrap.
+        // FunSirTypeGenerator.toRepresentation handles LambdaRepr → LambdaRepr wrapping.
+        // Non-function fields stay as-is.
+        val adoptedArgs = loweredArgs.zip(constrDecl.params).map { (arg, param) =>
+            if SIRType.isPolyFunOrFun(param.tp) then
+                val canonicalRepr = FunSirTypeGenerator.defaultRepresentation(param.tp)
+                arg.toRepresentation(canonicalRepr, constr.anns.pos)
+            else arg
+        }
+        val fieldReprs = adoptedArgs.map(_.representation).toList
         val repr = ProdUplcConstr(constrIndex, fieldReprs)
 
         // Build Term.Constr(tag, [t1, t2, ...])
-        new ComplexLoweredValue(Set.empty, loweredArgs*) {
+        new ComplexLoweredValue(Set.empty, adoptedArgs*) {
             override def sirType: SIRType = constr.tp
             override def representation: LoweredValueRepresentation = repr
             override def pos: SIRPosition = constr.anns.pos
@@ -962,7 +972,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             override def termInternal(gctx: TermGenerationContext): Term = {
                 Term.Constr(
                   scalus.cardano.ledger.Word64(constrIndex.toLong),
-                  loweredArgs.map(_.termWithNeededVars(gctx)).toList,
+                  adoptedArgs.map(_.termWithNeededVars(gctx)).toList,
                   UplcAnnotation(constr.anns.pos)
                 )
             }
@@ -970,7 +980,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
                 val left = Doc.text(s"UplcConstr($constrIndex, ")
                 val right = Doc.text(")")
-                val args = loweredArgs.map(_.docRef(ctx))
+                val args = adoptedArgs.map(_.docRef(ctx))
                 Doc.intercalate(Doc.comma + Doc.space, args).bracketBy(left, right)
             }
 

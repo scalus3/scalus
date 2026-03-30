@@ -53,12 +53,67 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         ProductCaseSirTypeGenerator.genConstrUplcConstr(constr)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValue = {
-        throw LoweringException(
-          s"ProductCaseUplcOnlySirTypeGenerator does not support select yet",
-          sel.anns.pos
+        import scalus.compiler.sir.lowering.LoweredValue.Builder.*
+        import scalus.uplc.{Term, UplcAnnotation}
+
+        val pos = sel.anns.pos
+        val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(
+          loweredScrutinee.sirType, pos
         )
+        val fieldIndex = constrDecl.params.indexWhere(_.name == sel.field)
+        if fieldIndex < 0 then
+            throw LoweringException(s"Unknown field ${sel.field} for ${constrDecl.name}", pos)
+
+        // Get field repr from the ProdUplcConstr stored in the scrutinee's representation
+        val puc = loweredScrutinee.representation match
+            case p: ProductCaseClassRepresentation.ProdUplcConstr => p
+            case s: SumCaseClassRepresentation.SumUplcConstr =>
+                val constrIndex = ProductCaseSirTypeGenerator.retrieveConstrIndex(
+                  loweredScrutinee.sirType, pos
+                )
+                s.variants.getOrElse(constrIndex,
+                  throw LoweringException(
+                    s"Variant $constrIndex not found in SumUplcConstr for select", pos
+                  )
+                )
+            case other =>
+                throw LoweringException(
+                  s"genSelect on UplcConstr: unexpected repr $other", pos
+                )
+
+        val fieldType = lctx.resolveTypeVarIfNeeded(constrDecl.params(fieldIndex).tp)
+        val fieldRepr = puc.fieldReprs(fieldIndex)
+
+        // Case(scrutinee, [λf0.λf1...λfN. fi]) — extract field i
+        val fieldNames = constrDecl.params.indices.map(i => lctx.uniqueVarName(s"_sel_f$i"))
+        val selectedFieldName = fieldNames(fieldIndex)
+
+        new ComplexLoweredValue(Set.empty, loweredScrutinee) {
+            override def sirType: SIRType = fieldType
+            override def representation: LoweredValueRepresentation = fieldRepr
+            override def pos: SIRPosition = sel.anns.pos
+
+            override def termInternal(gctx: TermGenerationContext): Term = {
+                val innerCtx = gctx.copy(generatedVars = gctx.generatedVars ++ fieldNames)
+                val body = Term.Var(scalus.uplc.NamedDeBruijn(selectedFieldName))
+                val branch = fieldNames.foldRight(body: Term) { (name, inner) =>
+                    Term.LamAbs(name, inner, UplcAnnotation(sel.anns.pos))
+                }
+                Term.Case(
+                  loweredScrutinee.termWithNeededVars(gctx),
+                  scala.List(branch),
+                  UplcAnnotation(sel.anns.pos)
+                )
+            }
+
+            override def docDef(ctx: LoweredValue.PrettyPrintingContext): org.typelevel.paiges.Doc =
+                org.typelevel.paiges.Doc.text(s"${sel.field}(") + loweredScrutinee.docRef(ctx) +
+                    org.typelevel.paiges.Doc.text(")")
+            override def docRef(ctx: LoweredValue.PrettyPrintingContext): org.typelevel.paiges.Doc =
+                docDef(ctx)
+        }
     }
 
     override def genMatch(
