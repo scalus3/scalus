@@ -50,7 +50,7 @@ object Lowering {
                     if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
                     then
-                            optTargetType match
+                        optTargetType match
                             case Some(targetType) =>
                                 (lctx.typeGenerator(targetType), constr.copy(tp = targetType))
                             case None =>
@@ -607,7 +607,11 @@ object Lowering {
                     if ExtractNilParameter.isNilInjectionApply(innerAnns) =>
                     val arg = lowerSIR(app.arg)
                     val intrinsicResult = IntrinsicResolver.tryResolve(
-                      innerF, app.arg, arg, app.tp, app.anns.pos
+                      innerF,
+                      app.arg,
+                      arg,
+                      app.tp,
+                      app.anns.pos
                     )(using lctx)
                     intrinsicResult match
                         case Some(result) =>
@@ -618,7 +622,6 @@ object Lowering {
                             return result
                         case None => // fall through
                 case _ => // fall through
-
         val prevDebug = lctx.debug
         // lctx.debug = false
         val fun = lowerSIR(app.f)
@@ -629,8 +632,8 @@ object Lowering {
         if lctx.intrinsicModules.nonEmpty
             && !ExtractNilParameter.isNilInjectionApply(app.anns)
         then
-            IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(
-              using lctx
+            IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(using
+              lctx
             ) match
                 case Some(result) =>
                     if lctx.debug then

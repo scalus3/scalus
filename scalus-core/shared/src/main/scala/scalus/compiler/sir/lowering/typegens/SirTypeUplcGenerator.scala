@@ -294,7 +294,7 @@ object SirTypeUplcGenerator {
             TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
         else
             elemType match
-                case tv: SIRType.TypeVar => TypeVarRepresentation(tv.kind)
+                case tv: SIRType.TypeVar                   => TypeVarRepresentation(tv.kind)
                 case SIRType.TypeLambda(_, body)           => elementReprFor(body)
                 case SIRType.TypeProxy(ref) if ref != null => elementReprFor(ref)
                 case _ =>

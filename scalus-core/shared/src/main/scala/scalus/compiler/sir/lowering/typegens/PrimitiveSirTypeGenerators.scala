@@ -32,9 +32,9 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
     private def isNativeTypeVar(tvr: TypeVarRepresentation)(using lctx: LoweringContext): Boolean =
         import SIRType.TypeVarKind.*
         tvr.kind match
-            case Transparent             => true
-            case DefaultRepresentation   => lctx.nativeTypeVarRepresentation
-            case CanBeListAffected            => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
+            case Transparent           => true
+            case DefaultRepresentation => lctx.nativeTypeVarRepresentation
+            case CanBeListAffected => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
 
     def toRepresentation(
         input: LoweredValue,

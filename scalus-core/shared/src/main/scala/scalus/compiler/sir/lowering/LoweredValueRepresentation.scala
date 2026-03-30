@@ -1175,7 +1175,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
         val suffix = kind match
             case TypeVarKind.Transparent           => "(B)"
             case TypeVarKind.DefaultRepresentation => "(R)"
-            case TypeVarKind.CanBeListAffected          => ""
+            case TypeVarKind.CanBeListAffected     => ""
         Doc.text("TypeVar") + Doc.text(suffix)
     }
 
