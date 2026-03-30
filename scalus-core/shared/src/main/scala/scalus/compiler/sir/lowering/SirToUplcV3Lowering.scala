@@ -113,8 +113,12 @@ object SirToUplcV3Lowering {
         options: scalus.compiler.Options,
         debug: Boolean = false
     ): SirToUplcV3Lowering =
-        val transformedSir =
-            if options.nativeTypeVarRepresentation then ExtractNilParameter(sir) else sir
+        if options.nativeTypeVarRepresentation then
+            throw new UnsupportedOperationException(
+              "nativeTypeVarRepresentation=true is not yet implemented. " +
+                  "Requires NativeList + NativeRepr infrastructure (see design in project memory)."
+            )
+        val transformedSir = sir
         SirToUplcV3Lowering(
           sir = transformedSir,
           generateErrorTraces = options.generateErrorTraces,

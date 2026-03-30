@@ -32,8 +32,8 @@ class TypeVarRepresentationTest extends AnyFunSuite {
 
     private val allModes: scala.List[(Boolean, Boolean, String)] = scala.List(
       (false, false, "native=off, typevar=off"),
-      // (true, false) and (false, true) excluded: need isListElement on TypeVarRepresentation
-      (true, true, "native=on, typevar=on")
+      (true, false, "native=on, typevar=off")
+      // (true, true) disabled: nativeTypeVarRepresentation requires NativeList + NativeRepr infrastructure
     )
 
     private def withAllModes(testName: String)(body: (Boolean, Boolean) => Unit): Unit =

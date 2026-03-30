@@ -600,8 +600,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 500, steps = 64100),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(memory = 500, steps = 64_100)
+                .copy(nativeListElements = false) -> ExUnits(memory = 500, steps = 64100)
           )
         )
 
@@ -611,8 +610,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 500, steps = 64100),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(memory = 500, steps = 64_100)
+                .copy(nativeListElements = false) -> ExUnits(memory = 500, steps = 64100)
           )
         )
 
@@ -740,11 +738,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 3864, steps = 749717),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 3864,
-              steps = 749_717
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 3864, steps = 749717)
           )
         )
 
@@ -754,11 +748,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6430, steps = 1_465582),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 6430,
-              steps = 1_465_582
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 6430, steps = 1_465582)
           )
         )
 
@@ -791,11 +781,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 3864, steps = 749717),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 3864,
-              steps = 749_717
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 3864, steps = 749717)
           )
         )
 
@@ -805,11 +791,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6430, steps = 1_465582),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 6430,
-              steps = 1_465_582
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 6430, steps = 1_465582)
           )
         )
 
@@ -850,11 +832,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 16600, steps = 4_361718),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 22192,
-              steps = 5_749_625
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 16600, steps = 4_361718)
           )
         )
 
@@ -895,11 +873,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 16832, steps = 4_475381),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 22424,
-              steps = 5_863_288
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 16832, steps = 4_475381)
           )
         )
 
@@ -1022,11 +996,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5796, steps = 1_121963),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5796,
-              steps = 1_121_963
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5796, steps = 1_121963)
           )
         )
 
@@ -1072,11 +1042,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6096, steps = 1_169963),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 6096,
-              steps = 1_169_963
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 6096, steps = 1_169963)
           )
         )
 
@@ -1086,11 +1052,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13482, steps = 3_480276),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 13482,
-              steps = 3_480_276
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 13482, steps = 3_480276)
           )
         )
 
@@ -1138,11 +1100,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6696, steps = 1_265963),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 6696,
-              steps = 1_265_963
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 6696, steps = 1_265963)
           )
         )
 
@@ -1152,11 +1110,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 14219, steps = 3_528813),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 14219,
-              steps = 3_528_813
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 14219, steps = 3_528813)
           )
         )
 
@@ -1210,11 +1164,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5864, steps = 1_069717),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5864,
-              steps = 1_069_717
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5864, steps = 1_069717)
           )
         )
 
@@ -1224,11 +1174,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.Some((BigInt(1), BigInt(1))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12610, steps = 3_600479),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 12610,
-              steps = 3_600_479
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 12610, steps = 3_600479)
           )
         )
 
@@ -1238,11 +1184,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12586, steps = 3_135561),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 12586,
-              steps = 3_135_561
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 12586, steps = 3_135561)
           )
         )
 
@@ -1293,11 +1235,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5864, steps = 1_069717),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5864,
-              steps = 1_069_717
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5864, steps = 1_069717)
           )
         )
 
@@ -1310,11 +1248,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.Some(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 14044, steps = 3_986750),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 14044,
-              steps = 3_986_750
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 14044, steps = 3_986750)
           )
         )
 
@@ -1327,11 +1261,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 14452, steps = 3_718426),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 14452,
-              steps = 3_718_426
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 14452, steps = 3_718426)
           )
         )
 
@@ -1379,11 +1309,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5996, steps = 1_106461),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5996,
-              steps = 1_106_461
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5996, steps = 1_106461)
           )
         )
 
@@ -1394,11 +1320,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(2),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 22756, steps = 6_071963),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 22756,
-              steps = 6_071_963
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 22756, steps = 6_071963)
           )
         )
 
@@ -1432,11 +1354,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5996, steps = 1_106461),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5996,
-              steps = 1_106_461
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5996, steps = 1_106461)
           )
         )
 
@@ -1447,11 +1365,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(2),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18996, steps = 5_157423),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 18996,
-              steps = 5_157_423
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 18996, steps = 5_157423)
           )
         )
 
@@ -1486,11 +1400,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5264, steps = 973717),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5264,
-              steps = 973_717
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5264, steps = 973717)
           )
         )
 
@@ -1500,11 +1410,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.Some(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12860, steps = 3_431831),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 12860,
-              steps = 3_431_831
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 12860, steps = 3_431831)
           )
         )
 
@@ -1514,11 +1420,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           Option.None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 9528, steps = 2_291710),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 9528,
-              steps = 2_291_710
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 9528, steps = 2_291710)
           )
         )
 
@@ -1571,11 +1473,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4430, steps = 1_188263),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 25010,
-              steps = 6_642_091
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 4430, steps = 1_188263)
           )
         )
 
@@ -1629,11 +1527,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4430, steps = 1_188263),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 25010,
-              steps = 6_642_091
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 4430, steps = 1_188263)
           )
         )
 
@@ -1729,11 +1623,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5096, steps = 1_009963),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5096,
-              steps = 1_009_963
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5096, steps = 1_009963)
           )
         )
 
@@ -1784,11 +1674,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5096, steps = 1_009963),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5096,
-              steps = 1_009_963
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5096, steps = 1_009963)
           )
         )
 
@@ -1798,11 +1684,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11828, steps = 3_185235),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 11828,
-              steps = 3_185_235
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 11828, steps = 3_185235)
           )
         )
 
@@ -1812,11 +1694,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 14192, steps = 3_758591),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 14192,
-              steps = 3_758_591
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 14192, steps = 3_758591)
           )
         )
 

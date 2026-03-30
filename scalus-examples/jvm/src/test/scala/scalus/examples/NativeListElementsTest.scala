@@ -29,7 +29,7 @@ class NativeListElementsTest extends AnyFunSuite {
       optimizeUplc = true
     )
 
-    private val nativeOpts = standardOpts.copy(nativeListElements = true, nativeTypeVarRepresentation = true)
+    private val nativeOpts = standardOpts.copy(nativeListElements = true)
 
     /** Compile SIR with both standard and native options, apply args, and verify both succeed or
       * both fail with consistent results.

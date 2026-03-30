@@ -980,7 +980,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.getLovelace,
           Value.zero,
           BigInt(0),
-          ExUnits(memory = 8530, steps = 1_780582)
+          ExUnits(memory = 8762, steps = 1_833326)
         )
     }
 
@@ -998,7 +998,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.getLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           BigInt(0),
-          ExUnits(memory = 14226, steps = 3_325898)
+          ExUnits(memory = 14458, steps = 3_378642)
         )
     }
 
@@ -1007,7 +1007,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.getLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 0),
           BigInt(0),
-          ExUnits(memory = 8530, steps = 1_780582)
+          ExUnits(memory = 8762, steps = 1_833326)
         )
     }
 
@@ -1123,7 +1123,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value.zero,
           BigInt(0),
-          ExUnits(memory = 8530, steps = 1_780582)
+          ExUnits(memory = 8762, steps = 1_833326)
         )
     }
 
@@ -1132,7 +1132,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(utf8"CS", utf8"TN"),
           Value.zero,
           BigInt(0),
-          ExUnits(memory = 8530, steps = 1_780582)
+          ExUnits(memory = 8762, steps = 1_833326)
         )
     }
 
@@ -1150,7 +1150,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(utf8"CS", utf8"TN"),
           Value.lovelace(1000),
           BigInt(0),
-          ExUnits(memory = 18626, steps = 4_604417)
+          ExUnits(memory = 18858, steps = 4_657161)
         )
     }
 
@@ -1159,7 +1159,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           BigInt(0),
-          ExUnits(memory = 14226, steps = 3_325898)
+          ExUnits(memory = 14458, steps = 3_378642)
         )
     }
 

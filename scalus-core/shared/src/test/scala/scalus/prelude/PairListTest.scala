@@ -15,11 +15,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           (BigInt(1), BigInt(2)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5856, steps = 1632628),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 5856,
-              steps = 1_632_628
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 5856, steps = 1632628)
           )
         )
     }
@@ -31,11 +27,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairCons((BigInt(3), BigInt(4)), PairNil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 3196, steps = 719380),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 3196,
-              steps = 719_380
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 3196, steps = 719380)
           )
         )
     }
@@ -47,11 +39,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           true,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 1964, steps = 445717),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 1964,
-              steps = 445_717
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 1964, steps = 445717)
           )
         )
         assertEvalWithBudgets(
@@ -60,11 +48,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           false,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 1964, steps = 445717),
-            compilerOptions.copy(nativeListElements = true, nativeTypeVarRepresentation = true) -> ExUnits(
-              memory = 1964,
-              steps = 445_717
-            )
+                .copy(nativeListElements = false) -> ExUnits(memory = 1964, steps = 445717)
           )
         )
     }
