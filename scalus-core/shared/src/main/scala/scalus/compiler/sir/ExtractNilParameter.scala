@@ -58,7 +58,26 @@ object ExtractNilParameter {
         if needsNil.isEmpty then sir
         else
             // Phase 2: single top-down transform
-            go(sir, needsNil, Map.empty, None, None)
+            val result = go(sir, needsNil, Map.empty, None, None)
+            // Debug: find any remaining Nil Constr nodes
+            def findNils(s: SIR, path: String): Unit = s match
+                case Constr(n, _, _, tp, anns) if AllNilNames.contains(n) =>
+                    System.err.println(s"[remainingNil] $n tp=${tp.show} at $path (${anns.pos.file}:${anns.pos.startLine})")
+                case Let(bs, body, _, _) => bs.foreach(b => findNils(b.value, path + "/" + b.name)); findNils(body, path + "/body")
+                case LamAbs(p, t, _, _) => findNils(t, path + "/lam(" + p.name + ")")
+                case Apply(f, a, _, _) => findNils(f, path + "/app.f"); findNils(a, path + "/app.arg")
+                case IfThenElse(c, t, f, _, _) => findNils(c, path + "/if.c"); findNils(t, path + "/if.t"); findNils(f, path + "/if.f")
+                case Match(s, cs, _, _) => findNils(s, path + "/match.scr"); cs.zipWithIndex.foreach((c,i) => findNils(c.body, path + s"/case$i"))
+                case Constr(_, _, args, _, _) => args.zipWithIndex.foreach((a,i) => findNils(a, path + s"/arg$i"))
+                case Cast(e, _, _) => findNils(e, path + "/cast")
+                case And(a, b, _) => findNils(a, path + "/and.l"); findNils(b, path + "/and.r")
+                case Or(a, b, _) => findNils(a, path + "/or.l"); findNils(b, path + "/or.r")
+                case Not(a, _) => findNils(a, path + "/not")
+                case Select(s, _, _, _) => findNils(s, path + "/sel")
+                case Decl(_, t) => findNils(t, path + "/decl")
+                case _ =>
+            findNils(result, "root")
+            result
     }
 
     // ===================== Phase 1: Collect =====================
