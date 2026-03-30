@@ -5,7 +5,7 @@ import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.compiler
 import scalus.compiler.sir.lowering.SirToUplcV3Lowering
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
-import scalus.compiler.sir.{AnnotationsDecl, ExtractNilParameter, RemoveTraces, SIR, SIRType, TargetLoweringBackend}
+import scalus.compiler.sir.{AnnotationsDecl, RemoveTraces, SIR, SIRType, TargetLoweringBackend}
 import scalus.compiler.{compileInlineWithOptions, Options}
 import scalus.uplc.builtin.Data
 import scalus.uplc.Constant.asConstant
@@ -79,9 +79,13 @@ sealed abstract class CompiledPlutus[A](
 
     /** Lowers the SIR to UPLC using the configured backend and applies optimization if enabled. */
     protected def toUplc: Term = {
+        if options.nativeTypeVarRepresentation then
+            throw new UnsupportedOperationException(
+              "nativeTypeVarRepresentation=true is not yet implemented. " +
+                  "Requires NativeList + NativeRepr infrastructure (see design in project memory)."
+            )
         val sir1 = if options.removeTraces then RemoveTraces.transform(sir) else sir
-        val sirToLower =
-            if options.nativeTypeVarRepresentation then ExtractNilParameter(sir1) else sir1
+        val sirToLower = sir1
         val backend = options.targetLoweringBackend
         val uplc = backend match
             case TargetLoweringBackend.ScottEncodingLowering =>

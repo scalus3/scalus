@@ -41,8 +41,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                if Options.default.nativeListElements then
-                    ExUnits(memory = 204281467, steps = 52963867280L)
+                if options.nativeListElements then ExUnits(memory = 204281467, steps = 52963867280L)
                 else ExUnits(memory = 185_927967, steps = 49_131_853260L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)

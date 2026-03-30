@@ -478,9 +478,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 3000),
           if compilerOptions.nativeListElements then ExUnits(memory = 140788, steps = 38295286)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 140788, steps = 38295286)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 140788, steps = 38295286)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 140788, steps = 38295286)
           else ExUnits(memory = 109331, steps = 31_853640)
         )
     }
@@ -491,9 +488,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           if compilerOptions.nativeListElements then ExUnits(memory = 112042, steps = 29380312)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 112042, steps = 29380312)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 112042, steps = 29380312)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 112042, steps = 29380312)
           else ExUnits(memory = 77790, steps = 20_687872)
         )
     }
@@ -504,9 +498,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           if compilerOptions.nativeListElements then ExUnits(memory = 110578, steps = 28890324)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 110578, steps = 28890324)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 110578, steps = 28890324)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 110578, steps = 28890324)
           else ExUnits(memory = 76326, steps = 20_197884)
         )
     }
@@ -517,9 +508,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.lovelace(1000),
           Value.lovelace(3000),
           if compilerOptions.nativeListElements then ExUnits(memory = 140788, steps = 38295174)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 140788, steps = 38295174)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 140788, steps = 38295174)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 140788, steps = 38295174)
           else ExUnits(memory = 109331, steps = 31_853528)
         )
     }
@@ -558,9 +546,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           if compilerOptions.nativeListElements then ExUnits(memory = 211493, steps = 57170708)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 211493, steps = 57170708)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 211493, steps = 57170708)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 211493, steps = 57170708)
           else ExUnits(memory = 144412, steps = 40_495182)
         )
     }
@@ -571,9 +556,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
           if compilerOptions.nativeListElements then ExUnits(memory = 107704, steps = 28587808)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 107704, steps = 28587808)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 107704, steps = 28587808)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 107704, steps = 28587808)
           else ExUnits(memory = 84135, steps = 24_235494)
         )
     }
@@ -584,9 +566,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.lovelace(1000),
           Value.zero,
           if compilerOptions.nativeListElements then ExUnits(memory = 107704, steps = 28587696)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 107704, steps = 28587696)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 107704, steps = 28587696)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 107704, steps = 28587696)
           else ExUnits(memory = 84135, steps = 24_235382)
         )
     }
@@ -614,12 +593,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ),
           Value.zero,
           if compilerOptions.nativeListElements then ExUnits(memory = 445380, steps = 118460502)
-          else if compilerOptions.nativeListElements then
-              ExUnits(memory = 445380, steps = 118460502)
-          else if compilerOptions.nativeListElements then
-              ExUnits(memory = 445380, steps = 118460502)
-          else if compilerOptions.nativeListElements then
-              ExUnits(memory = 445380, steps = 118460502)
           else ExUnits(memory = 294316, steps = 83_973613)
         )
     }
@@ -646,9 +619,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ),
           Value.lovelace(1000),
           if compilerOptions.nativeListElements then ExUnits(memory = 325336, steps = 86222183)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 325336, steps = 86222183)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 325336, steps = 86222183)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 325336, steps = 86222183)
           else ExUnits(memory = 223288, steps = 63_205459)
         )
     }
@@ -672,9 +642,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           if compilerOptions.nativeListElements then ExUnits(memory = 328924, steps = 87004485)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 328924, steps = 87004485)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 328924, steps = 87004485)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 328924, steps = 87004485)
           else ExUnits(memory = 217572, steps = 60_827641)
         )
     }
@@ -1015,11 +982,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalWithBudget(
           Value.lovelace(1000).lovelaceAmount,
           BigInt(1000),
-          if compilerOptions.nativeListElements then
-              if compilerOptions.nativeListElements then ExUnits(memory = 200, steps = 16100)
-              else ExUnits(memory = 1240725, steps = 331377666)
-          else if compilerOptions.nativeListElements then
-              ExUnits(memory = 1240725, steps = 331377666)
+          if compilerOptions.nativeListElements then ExUnits(memory = 200, steps = 16100)
           else ExUnits(memory = 200, steps = 16_100)
         )
     }
@@ -1247,9 +1210,6 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           Value.lovelace(1000),
           List((Value.adaPolicyId, Value.adaTokenName, BigInt(1000))),
           if compilerOptions.nativeListElements then ExUnits(memory = 91596, steps = 22807756)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 91596, steps = 22807756)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 91596, steps = 22807756)
-          else if compilerOptions.nativeListElements then ExUnits(memory = 91596, steps = 22807756)
           else ExUnits(memory = 37148, steps = 10_363303)
         )
     }

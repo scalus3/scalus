@@ -45,8 +45,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                if Options.default.nativeListElements then
-                    ExUnits(memory = 42559844, steps = 11342654812L)
+                if options.nativeListElements then ExUnits(memory = 42559844, steps = 11342654812L)
                 else ExUnits(memory = 36_027664, steps = 10_166_683088L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 75014277L, steps = 22595514040L)
