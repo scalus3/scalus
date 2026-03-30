@@ -58,7 +58,9 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
             case (DataConstr, _: SumUplcConstr) =>
-                ???
+                // DataConstr and SumUplcConstr both use the same UPLC Constr structure.
+                // The conversion is a representation proxy (no UPLC code change).
+                new RepresentationProxyLoweredValue(input, representation, pos)
             case (DataConstr, UplcConstrOnData) =>
                 ???
             case (SumBuiltinList(_), DataConstr) =>
@@ -123,6 +125,48 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 else
                     val r0 = RepresentationProxyLoweredValue(input, DataConstr, pos)
                     toRepresentation(r0, representation, pos)
+            // ProdUplcConstr → SumUplcConstr: check field reprs compatibility per variant
+            case (inProd: ProductCaseClassRepresentation.ProdUplcConstr, outSum: SumUplcConstr) =>
+                outSum.variants.get(inProd.tag) match
+                    case Some(expectedProd)
+                        if inProd.fieldReprs.size == expectedProd.fieldReprs.size
+                            && inProd.fieldReprs.zip(expectedProd.fieldReprs).forall {
+                                (inR, outR) =>
+                                    inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
+                            } =>
+                        // Field reprs compatible — same UPLC structure, proxy is safe
+                        new RepresentationProxyLoweredValue(input, representation, pos)
+                    case Some(expectedProd) =>
+                        // Field reprs incompatible — convert each field
+                        // TODO: unpack Constr fields, convert each, rebuild
+                        throw LoweringException(
+                          s"ProdUplcConstr → SumUplcConstr field repr mismatch for tag ${inProd.tag}: " +
+                              s"got ${inProd.fieldReprs} but expected ${expectedProd.fieldReprs}",
+                          pos
+                        )
+                    case None =>
+                        // Tag not in target variants — extend target with actual reprs
+                        val extendedSum = SumUplcConstr(outSum.variants + (inProd.tag -> inProd))
+                        new RepresentationProxyLoweredValue(input, extendedSum, pos)
+            // SumUplcConstr → SumUplcConstr: check per-variant compatibility
+            case (inSum: SumUplcConstr, outSum: SumUplcConstr) =>
+                val allCompatible = inSum.variants.forall { (tag, inProd) =>
+                    outSum.variants.get(tag) match
+                        case None => true // unknown variant, allow
+                        case Some(outProd) =>
+                            inProd.fieldReprs.size == outProd.fieldReprs.size &&
+                            inProd.fieldReprs.zip(outProd.fieldReprs).forall {
+                                (inR, outR) =>
+                                    inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
+                            }
+                }
+                if allCompatible then
+                    new RepresentationProxyLoweredValue(input, representation, pos)
+                else
+                    throw LoweringException(
+                      s"SumUplcConstr → SumUplcConstr variant repr mismatch",
+                      pos
+                    )
             case (inRepr, outTvr: TypeVarRepresentation) =>
                 if outTvr.isBuiltin then input
                 else toRepresentation(input, DataConstr, pos)

@@ -5,15 +5,40 @@ import scalus.compiler.sir.*
 
 object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
+    /** Build SumUplcConstr with proper variant info from the type's DataDecl. */
+    private def buildSumUplcConstr(tp: SIRType)(using
+        lctx: LoweringContext
+    ): SumCaseClassRepresentation.SumUplcConstr = {
+        val (constructors, typeArgs) = tp match
+            case SIRType.SumCaseClass(decl, tArgs)      => (decl.constructors, tArgs)
+            case SIRType.CaseClass(cd, tArgs, Some(parent)) =>
+                parent match
+                    case SIRType.SumCaseClass(decl, pArgs) => (decl.constructors, pArgs)
+                    case _                                 => (scala.List(cd), tArgs)
+            case SIRType.CaseClass(cd, tArgs, None)     => (scala.List(cd), tArgs)
+            case SIRType.TypeLambda(_, body)             => return buildSumUplcConstr(body)
+            case SIRType.TypeProxy(ref)                  => return buildSumUplcConstr(ref)
+            case _ => return SumCaseClassRepresentation.SumUplcConstr(Map.empty)
+
+        val variants = constructors.zipWithIndex.map { (constrDecl, idx) =>
+            val fieldReprs = constrDecl.params.map { param =>
+                val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
+                lctx.typeGenerator(paramType).defaultRepresentation(paramType)
+            }
+            idx -> ProductCaseClassRepresentation.ProdUplcConstr(idx, fieldReprs)
+        }.toMap
+        SumCaseClassRepresentation.SumUplcConstr(variants)
+    }
+
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumCaseClassRepresentation.SumUplcConstr(Map.empty)
+        buildSumUplcConstr(tp)
 
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumCaseClassRepresentation.SumUplcConstr(Map.empty)
+        buildSumUplcConstr(tp)
 
     // TODO: set position in LoweringContext
     override def defaultTypeVarReperesentation(

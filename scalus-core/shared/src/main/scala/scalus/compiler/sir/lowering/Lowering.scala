@@ -55,7 +55,21 @@ object Lowering {
                                 (lctx.typeGenerator(targetType), constr.copy(tp = targetType))
                             case None =>
                                 (lctx.typeGenerator(resolvedType), constr)
-                    else (lctx.typeGenerator(resolvedType), constr)
+                    else
+                        // For constructors with a parent sum type, check if the parent
+                        // uses UplcConstr. If so, use the parent's type generator so the
+                        // constructor produces UplcConstr (not DataConstr).
+                        val parentTypeGen = resolvedType match
+                            case SIRType.CaseClass(_, _, Some(parent)) =>
+                                val parentGen = lctx.typeGenerator(parent)
+                                parentGen.defaultRepresentation(parent) match
+                                    case _: SumCaseClassRepresentation.SumUplcConstr =>
+                                        Some(parentGen)
+                                    case _ => None
+                            case _ => None
+                        parentTypeGen match
+                            case Some(gen) => (gen, constr)
+                            case None      => (lctx.typeGenerator(resolvedType), constr)
                 typeGenerator.genConstr(effectiveConstr)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
