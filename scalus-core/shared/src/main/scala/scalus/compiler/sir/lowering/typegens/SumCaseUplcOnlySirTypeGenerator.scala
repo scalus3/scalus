@@ -39,10 +39,7 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValue = ???
 
     override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
-        throw LoweringException(
-          s"SumCaseUplcOnlySirTypeGenerator does not support constructors, got ${constr.name}",
-          constr.anns.pos
-        )
+        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr)
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
@@ -61,7 +58,7 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
     )(using
         lctx: LoweringContext
     ): LoweredValue = {
-        ???
+        SumCaseSirTypeGenerator.genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
     }
 
 }
