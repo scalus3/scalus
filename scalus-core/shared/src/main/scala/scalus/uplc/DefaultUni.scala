@@ -83,16 +83,24 @@ object DefaultUni:
                 indexedSeqFlat(using flatForUni(a)).asInstanceOf[Flat[Any]]
             case Apply(Apply(ProtoPair, a), b) =>
                 pairFlat(using flatForUni(a), flatForUni(b)).asInstanceOf[Flat[Any]]
-            case BuiltinValue => builtinValueFlat.asInstanceOf[Flat[Any]]
-            case BLS12_381_G1_Element =>
-                throw new Exception(
-                  "Flat encoding is not supported for bls12_381_G1_element: use bls12_381_G1_compress to obtain a bytestring instead"
-                )
-            case BLS12_381_G2_Element =>
-                throw new Exception(
-                  "Flat encoding is not supported for bls12_381_G2_element: use bls12_381_G2_compress to obtain a bytestring instead"
-                )
-            case _ => throw new Exception(s"Unsupported uni: $uni")
+            case BuiltinValue         => builtinValueFlat.asInstanceOf[Flat[Any]]
+            case BLS12_381_G1_Element => blsStubFlat("bls12_381_G1_element")
+            case BLS12_381_G2_Element => blsStubFlat("bls12_381_G2_element")
+            case BLS12_381_MlResult   => blsStubFlat("bls12_381_MlResult")
+            case _                    => throw new Exception(s"Unsupported uni: $uni")
+
+    /** Stub Flat instance for BLS types. Matches Haskell Plutus behavior: the Flat instance exists
+      * (so containers like empty List[G1Element] can be serialized) but throws if actual value
+      * encoding/decoding is attempted.
+      */
+    private def blsStubFlat(name: String): Flat[Any] =
+        new Flat[Any]:
+            private def error() = throw new Exception(
+              s"Flat encoding is not supported for $name: use PrepareForSerialization transformer"
+            )
+            def bitSize(a: Any): Int = error()
+            def encode(a: Any, encode: scalus.serialization.flat.EncoderState): Unit = error()
+            def decode(decode: scalus.serialization.flat.DecoderState): Any = error()
 
     // Flat instance for BuiltinValue - serializes through Data encoding
     private def builtinValueFlat(using Flat[builtin.Data]): Flat[builtin.BuiltinValue] =

@@ -1,5 +1,6 @@
 package scalus.examples.paymentsplitter
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data
@@ -26,32 +27,31 @@ class NaivePaymentSplitterValidatorTest
     private val scriptHash = contract.script.scriptHash
 
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "success when payments are correctly split for a single payee" -> ExUnits(
-        memory = 385827,
-        steps = 113_407560
-      ),
-      "success when payments are correctly split between 2 payees" -> ExUnits(
-        memory = 623360,
-        steps = 182_669889
-      ),
-      "success when payments are correctly split between 3 payees" -> ExUnits(
-        memory = 912059,
-        steps = 267_362556
-      ),
-      "success when split equally and remainder compensates fee - o1" -> ExUnits(
-        memory = 912059,
-        steps = 267_362556
-      ),
-      "success when split equally and remainder compensates fee - o2" -> ExUnits(
-        memory = 912059,
-        steps = 267_362556
-      ),
-      "success when split equally and remainder compensates fee - o3" -> ExUnits(
-        memory = 912059,
-        steps = 267_362556
-      ),
-      "success between 5 payees" -> ExUnits(memory = 1_653155, steps = 486_961914),
-      "success with multiple contract UTxOs" -> ExUnits(memory = 1_161281, steps = 339_599410)
+      "success when payments are correctly split for a single payee" ->
+          (if Options.default.nativeListElements then ExUnits(memory = 402635, steps = 117_768375)
+           else ExUnits(memory = 385827, steps = 113_407560)),
+      "success when payments are correctly split between 2 payees" ->
+          (if Options.default.nativeListElements then ExUnits(memory = 636156, steps = 185_321621)
+           else ExUnits(memory = 623360, steps = 182_669889)),
+      "success when payments are correctly split between 3 payees" ->
+          (if Options.default.nativeListElements then ExUnits(memory = 918191, steps = 267_143433)
+           else ExUnits(memory = 912059, steps = 267_362556)),
+      "success when split equally and remainder compensates fee - o1" ->
+          (if Options.default.nativeListElements then ExUnits(memory = 918191, steps = 267_143433)
+           else ExUnits(memory = 912059, steps = 267_362556)),
+      "success when split equally and remainder compensates fee - o2" ->
+          (if Options.default.nativeListElements then ExUnits(memory = 918191, steps = 267_143433)
+           else ExUnits(memory = 912059, steps = 267_362556)),
+      "success when split equally and remainder compensates fee - o3" ->
+          (if Options.default.nativeListElements then ExUnits(memory = 918191, steps = 267_143433)
+           else ExUnits(memory = 912059, steps = 267_362556)),
+      "success between 5 payees" -> (if Options.default.nativeListElements then
+                                         ExUnits(memory = 1638003, steps = 477515765L)
+                                     else ExUnits(memory = 1_653155, steps = 486_961914)),
+      "success with multiple contract UTxOs" -> (if Options.default.nativeListElements then
+                                                     ExUnits(memory = 1180517, steps = 343222425L)
+                                                 else
+                                                     ExUnits(memory = 1_161281, steps = 339_599410))
     )
 
     // Run all shared test cases

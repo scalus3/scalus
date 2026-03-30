@@ -18,9 +18,23 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
 
     def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
-    ): LoweredValueRepresentation = PrimitiveRepresentation.PackedData
+    ): LoweredValueRepresentation =
+        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+        else PrimitiveRepresentation.PackedData
 
     def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = true
+
+    /** Check if a TypeVarRepresentation is native (no Data conversion needed).
+      *   - Transparent: always native
+      *   - DefaultRepresentation: native when nativeTypeVarRepresentation=true
+      *   - CanBeListAffected: native when nativeListElements=true
+      */
+    private def isNativeTypeVar(tvr: TypeVarRepresentation)(using lctx: LoweringContext): Boolean =
+        import SIRType.TypeVarKind.*
+        tvr.kind match
+            case Transparent           => true
+            case DefaultRepresentation => lctx.nativeTypeVarRepresentation
+            case CanBeListAffected => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
 
     def toRepresentation(
         input: LoweredValue,
@@ -38,21 +52,21 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
                 uplcToDataValue(input, pos)
             case (PrimitiveRepresentation.PackedData, PrimitiveRepresentation.Constant) =>
                 dataToUplcValue(input, pos)
-            case (TypeVarRepresentation(isBuiltin), PrimitiveRepresentation.Constant) =>
-                if isBuiltin then input
+            case (tvr: TypeVarRepresentation, PrimitiveRepresentation.Constant) =>
+                if isNativeTypeVar(tvr) then input
                 else dataToUplcValue(input, pos)
-            case (TypeVarRepresentation(isBuiltin), PrimitiveRepresentation.PackedData) =>
-                if isBuiltin then uplcToDataValue(input, pos)
+            case (tvr: TypeVarRepresentation, PrimitiveRepresentation.PackedData) =>
+                if isNativeTypeVar(tvr) then uplcToDataValue(input, pos)
                 else input
-            case (PrimitiveRepresentation.Constant, TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then input
+            case (PrimitiveRepresentation.Constant, tvr: TypeVarRepresentation) =>
+                if isNativeTypeVar(tvr) then input
                 else uplcToDataValue(input, pos)
-            case (PrimitiveRepresentation.PackedData, TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then dataToUplcValue(input, pos)
+            case (PrimitiveRepresentation.PackedData, tvr: TypeVarRepresentation) =>
+                if isNativeTypeVar(tvr) then dataToUplcValue(input, pos)
                 else input
-            case (TypeVarRepresentation(inBuiltin), TypeVarRepresentation(outBuiltin)) =>
-                if outBuiltin then input
-                else if inBuiltin then {
+            case (inTvr: TypeVarRepresentation, outTvr: TypeVarRepresentation) =>
+                if outTvr.isBuiltin then input
+                else if inTvr.isBuiltin then {
                     // impossible, but let it will be here
                     RepresentationProxyLoweredValue(
                       uplcToDataValue(input, pos),

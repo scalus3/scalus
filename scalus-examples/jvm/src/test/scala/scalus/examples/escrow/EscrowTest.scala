@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
+import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await
@@ -108,7 +109,10 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        assertResult(ExUnits(memory = 339295, steps = 99_130660)):
+        assertResult(
+          if Options.default.nativeListElements then ExUnits(memory = 394639, steps = 113_710691)
+          else ExUnits(memory = 339295, steps = 99_130660)
+        ):
             depositTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(depositTx).await()
         assert(result.isRight, s"Deposit tx failed: $result")
@@ -178,7 +182,10 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        assertResult(ExUnits(memory = 316841, steps = 92_380001)):
+        assertResult(
+          if Options.default.nativeListElements then ExUnits(memory = 361965, steps = 104_491984)
+          else ExUnits(memory = 316841, steps = 92_380001)
+        ):
             payTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(payTx).await()
         assert(result.isRight, s"Pay tx failed: $result")
@@ -261,7 +268,10 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        assertResult(ExUnits(memory = 350158, steps = 102_030576)):
+        assertResult(
+          if Options.default.nativeListElements then ExUnits(memory = 398874, steps = 115_223308)
+          else ExUnits(memory = 350158, steps = 102_030576)
+        ):
             refundTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(refundTx).await()
         assert(result.isRight, s"Refund tx failed: $result")

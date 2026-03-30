@@ -483,9 +483,12 @@ class BuiltinValueCompileTest extends AnyFunSuite {
                 Builtins.unionValue(acc, v)
             }
         }
+        given opts: scalus.compiler.Options = scalus.compiler.Options(
+          targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
+          nativeListElements = false
+        )
         val uplc = sir.toUplc()
         // Build the list as UPLC terms - list elements are in Data representation
-        // because type parameter A uses PackedData representation for BuiltinValue
         val listTerm = Term.Const(
           Constant.List(
             DefaultUni.Data,

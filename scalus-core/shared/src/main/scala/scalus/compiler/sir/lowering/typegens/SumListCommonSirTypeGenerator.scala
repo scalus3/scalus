@@ -12,6 +12,16 @@ import scala.util.control.NonFatal
   */
 trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
+    /** Check if a TypeVarRepresentation is native based on its kind and the corresponding flag. */
+    protected def isNativeTypeVar(tvr: TypeVarRepresentation)(using
+        lctx: LoweringContext
+    ): Boolean =
+        import SIRType.TypeVarKind.*
+        tvr.kind match
+            case Transparent           => true
+            case DefaultRepresentation => lctx.nativeTypeVarRepresentation
+            case CanBeListAffected => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
+
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValueRepresentation
@@ -143,22 +153,21 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     repr: LoweredValueRepresentation
                 ): LoweredValueRepresentation =
                     repr match
-                        case TypeVarRepresentation(isBuiltin) =>
+                        case tvr: TypeVarRepresentation =>
                             val gen = lctx.typeGenerator(elemType)
-                            if isBuiltin then gen.defaultRepresentation(elemType)
+                            if !tvr.isPackedData then gen.defaultRepresentation(elemType)
                             else gen.defaultTypeVarReperesentation(elemType)
                         case other => other
                 val resolvedIn = resolveElementRepr(inElemRepr)
                 val resolvedOut = resolveElementRepr(outElemRepr)
-                // Builtin TypeVars are polymorphic — no conversion needed when
-                // the other side has a concrete repr. UPLC builtins accept any list type.
-                val hasBuiltinTypeVar = (inElemRepr, outElemRepr) match
-                    case (TypeVarRepresentation(true), _) | (_, TypeVarRepresentation(true)) => true
-                    case _ => false
+                val hasNativeTypeVar = (inElemRepr, outElemRepr) match
+                    case (tvr: TypeVarRepresentation, _) if isNativeTypeVar(tvr) => true
+                    case (_, tvr: TypeVarRepresentation) if isNativeTypeVar(tvr) => true
+                    case _                                                       => false
                 if resolvedIn == resolvedOut
                     || elemType == SIRType.FreeUnificator
                     || elemType == SIRType.TypeNothing
-                    || hasBuiltinTypeVar
+                    || hasNativeTypeVar
                 then RepresentationProxyLoweredValue(input, outputRepresentation, pos)
                 else
                     convertBuiltinList(
@@ -239,11 +248,11 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                           s"type=${input.sirType.show} createdEx=${input.createdEx}",
                       pos
                     )
-                else if inElemRepr.isCompatibleOn(SIRType.Data.tp, outElemRepr, pos) then
-                    RepresentationProxyLoweredValue(input, out, pos)
                 else
                     val elemType = retrieveElementType(input.sirType, pos)
-                    convertBuiltinList(input, elemType, inElemRepr, outElemRepr, out, pos)
+                    if inElemRepr.isCompatibleOn(elemType, outElemRepr, pos) then
+                        RepresentationProxyLoweredValue(input, out, pos)
+                    else convertBuiltinList(input, elemType, inElemRepr, outElemRepr, out, pos)
             // === SumBuiltinList → SumDataAssocMap (go through SumPairBuiltinList) ===
             case (
                   SumCaseClassRepresentation.SumBuiltinList(_),
@@ -365,15 +374,16 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(pairRepr, pos)
                     .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
-            case (_, tv @ TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then input
+            case (_, tv: TypeVarRepresentation) =>
+                if tv.isBuiltin || isNativeTypeVar(tv) then input
                 else {
                     val inputAsData =
                         input.toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
                     new RepresentationProxyLoweredValue(inputAsData, tv, pos)
                 }
-            case (TypeVarRepresentation(isBuiltin), _) =>
-                if isBuiltin then RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+            case (tv: TypeVarRepresentation, _) =>
+                if tv.isBuiltin || isNativeTypeVar(tv) then
+                    RepresentationProxyLoweredValue(input, outputRepresentation, pos)
                 else if input.representation == outputRepresentation then input
                 else
                     val r0 = RepresentationProxyLoweredValue(
@@ -429,9 +439,9 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                       input.representation,
                       pos
                     )
-            case TypeVarRepresentation(isBuiltin) =>
+            case tvr: TypeVarRepresentation =>
                 val targetRepresentation = {
-                    if isBuiltin then defaultRepresentation(input.sirType)
+                    if tvr.isBuiltin then defaultRepresentation(input.sirType)
                     else this.defaultTypeVarReperesentation(input.sirType)
                 }
                 val alignedInput = input.toRepresentation(
@@ -597,9 +607,12 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                             pos
                           )
                         )
+                    // Use constructor's own typeParams for substitution — they share
+                    // TypeVar identity with the constructor's param types.
+                    val substEnv = pairCons.typeParams.zip(typeArgs).toMap
                     SIRType.substitute(
                       pairCons.params.head.tp,
-                      decl.typeParams.zip(typeArgs).toMap,
+                      substEnv,
                       Map.empty
                     )
                 else typeArgs.head

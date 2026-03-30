@@ -246,9 +246,13 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
     /** Flat-encoded representation of the program.
       *
       * The flat-encoded representation is a byte array that contains the program in a flat format.
-      * This format is used to serialize the program to CBOR.
+      * This format is used to serialize the program to CBOR. BLS12-381 constants are automatically
+      * replaced with uncompress(compressed_bytes) since they have no flat encoding.
       */
-    lazy val flatEncoded: Array[Byte] = ProgramFlatCodec.encodeFlat(this)
+    lazy val flatEncoded: Array[Byte] = {
+        val prepared = transform.PrepareForSerialization(term)
+        ProgramFlatCodec.encodeFlat(DeBruijnedProgram(version, prepared))
+    }
 
     /** CBOR-encoded representation of the program.
       *

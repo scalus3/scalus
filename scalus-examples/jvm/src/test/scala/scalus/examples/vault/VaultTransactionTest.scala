@@ -1,5 +1,6 @@
 package scalus.examples.vault
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.*
@@ -137,7 +138,11 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(result.isSuccess)
         // TODO: review after changing PairData representations
         // assert(result.budget == ExUnits(memory = 264301, steps = 78_973160))
-        assert(result.budget == ExUnits(memory = 264601, steps = 79_021160))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 310289, steps = 91305889L)
+                            else ExUnits(memory = 264601, steps = 79_021160))
+        )
 
         provider.setSlot(currentSlot)
 
@@ -225,7 +230,11 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, depositTx, vaultUtxo.input)
         assert(result.isSuccess, s"Deposit should succeed: $result")
-        assert(result.budget == ExUnits(memory = 370230, steps = 107_747403))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 417850, steps = 120469126L)
+                            else ExUnits(memory = 370230, steps = 107_747403))
+        )
 
         assert(provider.submit(depositTx).await().isRight)
 
@@ -367,7 +376,11 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
         // TODO: review after changing PairData representations
         // assert(withdrawResult.budget == ExUnits(memory = 264301, steps = 78_973160))
-        assert(withdrawResult.budget == ExUnits(memory = 264601, steps = 79_021160))
+        assert(
+          withdrawResult.budget == (if Options.default.nativeListElements then
+                                        ExUnits(memory = 310289, steps = 91305889L)
+                                    else ExUnits(memory = 264601, steps = 79_021160))
+        )
 
         provider.setSlot(withdrawSlot)
         assert(provider.submit(withdrawTx).await().isRight)
@@ -414,7 +427,11 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
         // TODO: review after changing PairData representations
         // assert(finalizeResult.budget == ExUnits(memory = 324554, steps = 92_685932))
-        assert(finalizeResult.budget == ExUnits(memory = 324854, steps = 92_733932))
+        assert(
+          finalizeResult.budget == (if Options.default.nativeListElements then
+                                        ExUnits(memory = 375706, steps = 105989806L)
+                                    else ExUnits(memory = 324854, steps = 92_733932))
+        )
 
         provider.setSlot(finalizeSlot)
         assert(provider.submit(finalizeTx).await().isRight)

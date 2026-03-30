@@ -32,9 +32,9 @@ object UnitSirTypeGenerator extends SirTypeUplcGenerator {
         (input.representation, outputRepresentation) match
             case (PrimitiveRepresentation.Constant, PrimitiveRepresentation.Constant) =>
                 input
-            case (TypeVarRepresentation(isBuiltin), PrimitiveRepresentation.Constant) =>
+            case (_: TypeVarRepresentation, PrimitiveRepresentation.Constant) =>
                 input
-            case (PrimitiveRepresentation.Constant, TypeVarRepresentation(isBuiltin)) =>
+            case (PrimitiveRepresentation.Constant, _: TypeVarRepresentation) =>
                 input
             case (TypeVarRepresentation(_), TypeVarRepresentation(_)) =>
                 input

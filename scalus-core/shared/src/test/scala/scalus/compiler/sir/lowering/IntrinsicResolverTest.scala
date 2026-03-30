@@ -16,7 +16,7 @@ class IntrinsicResolverTest extends AnyFunSuite {
     private val ae = AnnotationsDecl.empty
 
     // --- Helper types ---
-    private val typeA = SIRType.TypeVar("A", Some(1), isBuiltin = false)
+    private val typeA = SIRType.TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
     private val listTypeA = SIRType.List(typeA)
     private val builtinListData = SIRType.BuiltinList(SIRType.Data.tp)
 

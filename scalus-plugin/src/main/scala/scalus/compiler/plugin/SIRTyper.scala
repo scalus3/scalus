@@ -190,7 +190,11 @@ class SIRTyper(using Context) {
                     binder
                         .paramNames(tp.paramNum)
                         .show // TODO: better way to get the name as string
-                SIRType.TypeVar(paramName, Some(tp.typeSymbol.hashCode), false)
+                SIRType.TypeVar(
+                  paramName,
+                  Some(tp.typeSymbol.hashCode),
+                  SIRType.TypeVarKind.CanBeListAffected
+                )
             case tpc: ThisType =>
                 sirTypeInEnv(tpc.underlying, env)
             case tpc: RecThis =>
@@ -201,12 +205,20 @@ class SIRTyper(using Context) {
                 makeSIRFunType(tpm, env)
             case tpp: PolyType =>
                 val params = (tpp.paramNames zip tpp.paramRefs).map { (name, ref) =>
-                    SIRType.TypeVar(name.show, Some(ref.typeSymbol.hashCode()), false)
+                    SIRType.TypeVar(
+                      name.show,
+                      Some(ref.typeSymbol.hashCode()),
+                      SIRType.TypeVarKind.CanBeListAffected
+                    )
                 }
                 SIRType.TypeLambda(params, sirTypeInEnvWithErr(tpp.resultType, env))
             case tpl: HKTypeLambda =>
                 val params = (tpl.paramNames zip tpl.paramRefs).map { (name, ref) =>
-                    SIRType.TypeVar(name.show, Some(ref.typeSymbol.hashCode()), false)
+                    SIRType.TypeVar(
+                      name.show,
+                      Some(ref.typeSymbol.hashCode()),
+                      SIRType.TypeVarKind.CanBeListAffected
+                    )
                 }
                 SIRType.TypeLambda(params, sirTypeInEnvWithErr(tpl.resType, env))
             case tpp: TypeBounds =>
@@ -234,7 +246,11 @@ class SIRTyper(using Context) {
                                 //  not sure, if typeVar,typeSymbol is exista and is unique.
                                 // code as binding symbol ?
                                 // TODO: make SymCode long to accept such encoding
-                                SIRType.TypeVar(paramName, Some(symCode), false)
+                                SIRType.TypeVar(
+                                  paramName,
+                                  Some(symCode),
+                                  SIRType.TypeVarKind.CanBeListAffected
+                                )
                             case other =>
                                 // this is a filled typeVar, which can be substitutef
                                 sirTypeInEnvWithErr(other, env)
@@ -624,7 +640,13 @@ class SIRTyper(using Context) {
         val (typeParamSymbols, paramSymbols) =
             retrieveTypeParamsAndParamsFromConstructor(typeSymbol, env)
         val tparams =
-            typeParamSymbols.map(s => SIRType.TypeVar(s.name.show, Some(s.hashCode), false))
+            typeParamSymbols.map(s =>
+                SIRType.TypeVar(
+                  s.name.show,
+                  Some(s.hashCode),
+                  SIRType.TypeVarKind.CanBeListAffected
+                )
+            )
         val nVars = env.vars ++ typeParamSymbols.zip(tparams)
         val nEnv = env.copy(vars = nVars)
         val params = paramSymbols.map { s =>
@@ -767,7 +789,11 @@ class SIRTyper(using Context) {
                 val syntethicName = SIRType.syntheticNarrowConstrDeclName(typeSymbol.fullName.show)
                 val sirTypeParams =
                     s.typeParams.map(tps =>
-                        SIRType.TypeVar(tps.name.show, Some(tps.hashCode), false)
+                        SIRType.TypeVar(
+                          tps.name.show,
+                          Some(tps.hashCode),
+                          SIRType.TypeVarKind.CanBeListAffected
+                        )
                     )
                 val newVars = s.typeParams.zip(sirTypeParams).toMap
                 val nEnv = env.copy(vars = env.vars ++ newVars)
@@ -796,7 +822,11 @@ class SIRTyper(using Context) {
         }
         val typeParams =
             typeSymbol.typeParams.map(tp =>
-                SIRType.TypeVar(tp.name.show, Some(tp.hashCode()), false)
+                SIRType.TypeVar(
+                  tp.name.show,
+                  Some(tp.hashCode()),
+                  SIRType.TypeVarKind.CanBeListAffected
+                )
             )
         val dataDeclBaseAnns = AnnotationsDecl.fromSym(typeSymbol)
         val dataDeclReprData = extractUplcReprAnnotation(typeSymbol)

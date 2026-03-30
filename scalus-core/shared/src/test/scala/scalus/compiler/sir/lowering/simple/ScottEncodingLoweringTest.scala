@@ -52,8 +52,12 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
 
     test("lower Lam/Apply") {
         import SIRType.{TypeLambda, TypeVar, Unit}
-        val idType = TypeLambda(List(TypeVar("A", Some(1), false)), TypeVar("A", Some(1), false))
-        val x = SIR.Var("x", TypeVar("X", Some(2), false), ae)
+        val idType = TypeLambda(
+          List(TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)),
+          TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
+        )
+        val x =
+            SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.CanBeListAffected), ae)
         SIR.Apply(
           SIR.LamAbs(x, x, List.empty, ae),
           SIR.Const(Constant.Unit, Unit, ae),
@@ -104,8 +108,8 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
        TxId(name)
        lowers to (\name TxId -> TxId name) name
          */
-        val a1TypeVar = TypeVar("A", Some(1), false)
-        val a2TypeVar = TypeVar("A", Some(2), false)
+        val a1TypeVar = TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
+        val a2TypeVar = TypeVar("A", Some(2), SIRType.TypeVarKind.CanBeListAffected)
         val tailTypeProxy = new TypeProxy(null)
         val listData =
             DataDecl(
@@ -185,8 +189,10 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
         lowers to (\Nil Cons -> force Nil) (delay 1) (\h tl -> 2)
          */
         val tailTypeProxy = new SIRType.TypeProxy(null)
-        val a1TypeVar = SIRType.TypeVar("A1", Some(1), false)
-        val a2TypeVar = SIRType.TypeVar("A2", Some(2), false)
+        val a1TypeVar =
+            SIRType.TypeVar("A1", Some(1), SIRType.TypeVarKind.CanBeListAffected)
+        val a2TypeVar =
+            SIRType.TypeVar("A2", Some(2), SIRType.TypeVarKind.CanBeListAffected)
         val nilConstr = ConstrDecl("Nil", List(), List(), List(), ae)
         val consConstr = ConstrDecl(
           "Cons",

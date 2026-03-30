@@ -1,6 +1,7 @@
 package scalus.examples.simpletransfer
 
 import org.scalacheck.Gen
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data
@@ -39,7 +40,11 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
             )
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
-        assert(res.budget == ExUnits(memory = 313223, steps = 91_352578))
+        assert(
+          res.budget == (if Options.default.nativeListElements then
+                             ExUnits(memory = 415439, steps = 117747227L)
+                         else ExUnits(memory = 313223, steps = 91_352578))
+        )
     }
 
     test("deposit wrong signed") {
@@ -86,7 +91,11 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         )
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
-        assert(res.budget == ExUnits(memory = 525101, steps = 155_189157))
+        assert(
+          res.budget == (if Options.default.nativeListElements then
+                             ExUnits(memory = 641073, steps = 181757908L)
+                         else ExUnits(memory = 525101, steps = 155_189157))
+        )
     }
 
     test("withdraw wrong signed") {
@@ -114,7 +123,11 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         )
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
-        assert(res.budget == ExUnits(memory = 197128, steps = 57_278276))
+        assert(
+          res.budget == (if Options.default.nativeListElements then
+                             ExUnits(memory = 247724, steps = 70274193L)
+                         else ExUnits(memory = 197128, steps = 57_278276))
+        )
     }
 
     test("withdraw more") {

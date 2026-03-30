@@ -249,7 +249,12 @@ object SirTypeUplcGenerator {
             else if constrDecl.name == SIRType.List.NilConstr.name
                 || constrDecl.name == SIRType.BuiltinList.Nil.name
                 || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
-            then Some(new SumBuiltinListSirTypeGenerator(TypeVarRepresentation(false)))
+            then
+                Some(
+                  new SumBuiltinListSirTypeGenerator(
+                    TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
+                  )
+                )
             else
                 throw LoweringException(
                   s"Cannot determine element representation for list constructor ${constrDecl.name} with typeArgs=${typeArgs.map(_.show)}",
@@ -281,14 +286,22 @@ object SirTypeUplcGenerator {
         if isPair(elemType) then
             val (fstType, sndType) =
                 ProductCaseClassRepresentation.ProdBuiltinPair.extractPairComponentTypes(elemType)
-            val fstRepr = SirTypeUplcGenerator(fstType).defaultDataRepresentation(fstType)
-            val sndRepr = SirTypeUplcGenerator(sndType).defaultDataRepresentation(sndType)
-            ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
-        else if lctx.nativeListElements && isPrimitiveElementType(elemType) then
-            PrimitiveRepresentation.Constant
+            ProductCaseClassRepresentation.ProdBuiltinPair(
+              elementReprFor(fstType),
+              elementReprFor(sndType)
+            )
         else if elemType == SIRType.TypeNothing || elemType == SIRType.Unit then
-            TypeVarRepresentation(false)
-        else SirTypeUplcGenerator(elemType).defaultDataRepresentation(elemType)
+            TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
+        else
+            elemType match
+                case tv: SIRType.TypeVar                   => TypeVarRepresentation(tv.kind)
+                case SIRType.TypeLambda(_, body)           => elementReprFor(body)
+                case SIRType.TypeProxy(ref) if ref != null => elementReprFor(ref)
+                case _ =>
+                    val gen = SirTypeUplcGenerator(elemType)
+                    if lctx.nativeListElements || !gen.canBeConvertedToData(elemType) then
+                        gen.defaultRepresentation(elemType)
+                    else gen.defaultDataRepresentation(elemType)
 
     def isPair(tp: SIRType): Boolean =
         SIRType.retrieveConstrDecl(tp) match {

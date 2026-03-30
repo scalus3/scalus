@@ -1,5 +1,6 @@
 package scalus.examples.cape.twopartyescrow
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits}
@@ -52,46 +53,72 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     test(s"Script size: ${compiled.script.script.size} bytes") {
         // TODO: review after changing PairData representations
         // assert(compiled.script.script.size == 1485)
-        assert(compiled.script.script.size == 1516)
+        assert(
+          compiled.script.script.size ==
+              (if Options.default.nativeListElements then 1922 else 1516)
+        )
     }
 
     // Expected execution budgets for success tests
     // TODO: review after changing PairData representations
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "deposit_successful" -> ExUnits(memory = 57962, steps = 24704298),
+      "deposit_successful" -> (if Options.default.nativeListElements then
+                                   ExUnits(memory = 105395, steps = 36779463L)
+                               else ExUnits(memory = 57962, steps = 24704298)),
       // "accept_successful" -> ExUnits(memory = 73023, steps = 27249620),
-      "accept_successful" -> ExUnits(memory = 73843, steps = 27921848),
+      "accept_successful" -> (if Options.default.nativeListElements then
+                                  ExUnits(memory = 132671, steps = 42275948L)
+                              else ExUnits(memory = 73843, steps = 27921848)),
       // "accept_with_multiple_inputs" -> ExUnits(memory = 78845, steps = 30325979),
-      "accept_with_multiple_inputs" -> ExUnits(memory = 79665, steps = 30998207),
+      "accept_with_multiple_inputs" -> (if Options.default.nativeListElements then
+                                            ExUnits(memory = 140725, steps = 45885745L)
+                                        else ExUnits(memory = 79665, steps = 30998207)),
       // "accept_with_datum_attached" -> ExUnits(memory = 73023, steps = 27249620),
-      "accept_with_datum_attached" -> ExUnits(memory = 73843, steps = 27921848),
+      "accept_with_datum_attached" -> (if Options.default.nativeListElements then
+                                           ExUnits(memory = 132671, steps = 42275948L)
+                                       else ExUnits(memory = 73843, steps = 27921848)),
       // "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 97969, steps = 37424519),
-      "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 99909, steps = 38816975),
+      "accept_with_multiple_outputs_to_seller" -> (if Options.default.nativeListElements then
+                                                       ExUnits(memory = 199549, steps = 63439122L)
+                                                   else ExUnits(memory = 99909, steps = 38816975)),
       // "refund_successful" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_successful" -> ExUnits(memory = 88610, steps = 33401267),
+      "refund_successful" -> (if Options.default.nativeListElements then
+                                  ExUnits(memory = 147438, steps = 47755367L)
+                              else ExUnits(memory = 88610, steps = 33401267)),
       // "refund_after_exact_deadline" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_after_exact_deadline" -> ExUnits(memory = 88610, steps = 33401267),
+      "refund_after_exact_deadline" -> (if Options.default.nativeListElements then
+                                            ExUnits(memory = 147438, steps = 47755367L)
+                                        else ExUnits(memory = 88610, steps = 33401267)),
       // "refund_with_multiple_inputs" -> ExUnits(memory = 93612, steps = 35805398),
-      "refund_with_multiple_inputs" -> ExUnits(memory = 94432, steps = 36477626),
+      "refund_with_multiple_inputs" -> (if Options.default.nativeListElements then
+                                            ExUnits(memory = 155492, steps = 51365164L)
+                                        else ExUnits(memory = 94432, steps = 36477626)),
       // "refund_with_datum_attached" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_with_datum_attached" -> ExUnits(memory = 88610, steps = 33401267),
+      "refund_with_datum_attached" -> (if Options.default.nativeListElements then
+                                           ExUnits(memory = 147438, steps = 47755367L)
+                                       else ExUnits(memory = 88610, steps = 33401267)),
       // "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 112736, steps = 42903938)
-      "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 114676, steps = 44296394)
+      "refund_with_multiple_outputs_to_buyer" -> (if Options.default.nativeListElements then
+                                                      ExUnits(memory = 214316, steps = 68918541L)
+                                                  else ExUnits(memory = 114676, steps = 44296394))
     )
 
     // TODO: review after changing PairData representations
-    private val expectedFees: Map[String, Coin] = Map(
-      "deposit_successful" -> Coin(5126),
-      "accept_successful" -> Coin(6274),
-      "accept_with_multiple_inputs" -> Coin(6832),
-      "accept_with_datum_attached" -> Coin(6274),
-      "accept_with_multiple_outputs_to_seller" -> Coin(8564),
-      "refund_successful" -> Coin(7522),
-      "refund_after_exact_deadline" -> Coin(7522),
-      "refund_with_multiple_inputs" -> Coin(8079),
-      "refund_with_datum_attached" -> Coin(7522),
-      "refund_with_multiple_outputs_to_buyer" -> Coin(9811)
-    )
+    private val expectedFees: Map[String, Coin] = {
+        val native = Options.default.nativeListElements
+        Map(
+          "deposit_successful" -> Coin(if native then 8734 else 5126),
+          "accept_successful" -> Coin(if native then 10704 else 6274),
+          "accept_with_multiple_inputs" -> Coin(if native then 11429 else 6832),
+          "accept_with_datum_attached" -> Coin(if native then 10704 else 6274),
+          "accept_with_multiple_outputs_to_seller" -> Coin(if native then 16088 else 8564),
+          "refund_successful" -> Coin(if native then 11951 else 7522),
+          "refund_after_exact_deadline" -> Coin(if native then 11951 else 7522),
+          "refund_with_multiple_inputs" -> Coin(if native then 12676 else 8079),
+          "refund_with_datum_attached" -> Coin(if native then 11951 else 7522),
+          "refund_with_multiple_outputs_to_buyer" -> Coin(if native then 17336 else 9811)
+        )
+    }
 
     // Generate test cases from the JSON
     private val tests: Seq[ujson.Value] = testsJson("tests").arr.toSeq

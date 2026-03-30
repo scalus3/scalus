@@ -161,7 +161,8 @@ object SIRBuiltins {
     // Bool
     val ifThenElse: SIR.Builtin = SIR.Builtin(
       DefaultFun.IfThenElse, {
-          val a = SIRType.TypeVar("A", Some("ifThenElse_A".hashCode), true)
+          val a =
+              SIRType.TypeVar("A", Some("ifThenElse_A".hashCode), SIRType.TypeVarKind.Transparent)
           a :=>> (SIRType.Boolean ->: a ->: a ->: a)
       },
       AnnotationsDecl.empty
@@ -171,7 +172,8 @@ object SIRBuiltins {
     val chooseUnit: SIR.Builtin =
         SIR.Builtin(
           DefaultFun.ChooseUnit, {
-              val a = SIRType.TypeVar("A", Some("chooseUnit_A".hashCode), true)
+              val a = SIRType
+                  .TypeVar("A", Some("chooseUnit_A".hashCode), SIRType.TypeVarKind.Transparent)
               a :=>> (SIRType.Unit ->: a ->: a)
           },
           AnnotationsDecl.empty

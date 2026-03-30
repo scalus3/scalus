@@ -13,10 +13,10 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         tp: SIRType
     )(using lctx: LoweringContext): LoweredValueRepresentation = {
         tp match
-            case SIRType.TypeVar(_, _, isBuiltin) =>
-                TypeVarRepresentation(isBuiltin)
+            case tv: SIRType.TypeVar =>
+                TypeVarRepresentation(tv.kind)
             case SIRType.FreeUnificator =>
-                TypeVarRepresentation(false)
+                TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
             case SIRType.TypeLambda(params, body) =>
                 defaultRepresentation(body)
             case _ =>
@@ -28,13 +28,14 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation = {
-        TypeVarRepresentation(false)
+        TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
     }
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValueRepresentation =
-        defaultDataRepresentation(tp)
+        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+        else defaultDataRepresentation(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         tp match {
@@ -67,8 +68,8 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                 .map(x => lctx.typeGenerator(x.sirType).toRepresentation(x, representation, pos))
                 .getOrElse {
                     representation match
-                        case TypeVarRepresentation(isBuiltin) =>
-                            if isBuiltin then input
+                        case tvr: TypeVarRepresentation =>
+                            if tvr.isBuiltin then input
                             else // TODO: think about conversion between built-in and non-built-in
                                 new RepresentationProxyLoweredValue(input, representation, pos)
                         case sumRepr: SumCaseClassRepresentation =>
@@ -176,25 +177,33 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                         case PrimitiveRepresentation.PackedData =>
                             new RepresentationProxyLoweredValue(input, representation, pos)
                         case PrimitiveRepresentation.Constant =>
-                            val r1 = input.toRepresentation(
-                              PrimitiveRepresentation.PackedData,
-                              pos
-                            )
-                            input.sirType match {
-                                case p: SIRType.Primitive =>
-                                    lctx.typeGenerator(p)
-                                        .toRepresentation(r1, PrimitiveRepresentation.Constant, pos)
-                                case _ =>
-                                    throw LoweringException(
-                                      s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
-                                      pos
-                                    )
-                            }
+                            if lctx.nativeTypeVarRepresentation then
+                                // Value is already in native representation, no conversion needed
+                                new RepresentationProxyLoweredValue(input, representation, pos)
+                            else
+                                val r1 = input.toRepresentation(
+                                  PrimitiveRepresentation.PackedData,
+                                  pos
+                                )
+                                input.sirType match {
+                                    case p: SIRType.Primitive =>
+                                        lctx.typeGenerator(p)
+                                            .toRepresentation(
+                                              r1,
+                                              PrimitiveRepresentation.Constant,
+                                              pos
+                                            )
+                                    case _ =>
+                                        throw LoweringException(
+                                          s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
+                                          pos
+                                        )
+                                }
                         case ErrorRepresentation =>
                             TypeNothingSirTypeGenerator.toRepresentation(input, representation, pos)
                         case LambdaRepresentation(inRepr, outRepr) =>
                             RepresentationProxyLoweredValue(input, representation, pos)
-                        case null =>
+                        case _ =>
                             throw LoweringException(
                               s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
                               pos

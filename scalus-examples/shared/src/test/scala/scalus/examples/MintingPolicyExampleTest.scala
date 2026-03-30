@@ -180,6 +180,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
     test("Minting Policy Validator") {
         // Import the V3 backend configuration from MintingPolicy
         import MintingPolicy.given scalus.Compiler.Options
+        val options = summon[scalus.compiler.Options]
 
         // Compile evaledTokens with the same V3 backend
         val evaledTokensV3 =
@@ -196,7 +197,9 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokensV3
         val flatSize = Program.plutusV1(appliedValidator).flatEncoded.length
-        assert(flatSize == 1221)
+        val expectedSize1 =
+            if options.nativeListElements then 1290 else 1221
+        assert(flatSize == expectedSize1)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
 
     }
@@ -213,7 +216,9 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV2(appliedValidator).flatEncoded.length
-        assert(flatSize == 1223)
+        val expectedSize2 =
+            if summon[scalus.compiler.Options].nativeListElements then 1237 else 1223
+        assert(flatSize == expectedSize2)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV2)
     }
 

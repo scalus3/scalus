@@ -79,7 +79,13 @@ sealed abstract class CompiledPlutus[A](
 
     /** Lowers the SIR to UPLC using the configured backend and applies optimization if enabled. */
     protected def toUplc: Term = {
-        val sirToLower = if options.removeTraces then RemoveTraces.transform(sir) else sir
+        if options.nativeTypeVarRepresentation then
+            throw new UnsupportedOperationException(
+              "nativeTypeVarRepresentation=true is not yet implemented. " +
+                  "Requires NativeList + NativeRepr infrastructure (see design in project memory)."
+            )
+        val sir1 = if options.removeTraces then RemoveTraces.transform(sir) else sir
+        val sirToLower = sir1
         val backend = options.targetLoweringBackend
         val uplc = backend match
             case TargetLoweringBackend.ScottEncodingLowering =>
@@ -107,7 +113,8 @@ sealed abstract class CompiledPlutus[A](
                       scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
                   supportModules =
                       scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules,
-                  nativeListElements = options.nativeListElements
+                  nativeListElements = options.nativeListElements,
+                  nativeTypeVarRepresentation = options.nativeTypeVarRepresentation
                 ).lower()
         if options.uplcOptimizers.nonEmpty then
             options.uplcOptimizers.foldLeft(uplc)((term, opt) => opt(term))
@@ -417,6 +424,14 @@ final case class PlutusV3[A] private[uplc] (
       */
     def withErrorTraces: PlutusV3[A] =
         copy(options = options.copy(generateErrorTraces = true, removeTraces = false))
+
+    /** Returns a copy of this compiled script with different compiler options.
+      *
+      * The SIR is shared; only the lowering (lazy `program`) is recomputed with the new options.
+      * Useful for testing the same code under different lowering configurations.
+      */
+    def withOptions(newOptions: Options): PlutusV3[A] =
+        copy(options = newOptions)
 }
 
 /** Factory methods for creating compiled Plutus V3 scripts. */

@@ -133,8 +133,16 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
                           _
                         ) =>
                         assert(name == "scalus.cardano.onchain.plutus.prelude.List$.contains")
-                        val aTp = new SIRType.TypeVar("A", None, false)
-                        val bTp = new SIRType.TypeVar("B", None, false)
+                        val aTp = new SIRType.TypeVar(
+                          "A",
+                          None,
+                          SIRType.TypeVarKind.CanBeListAffected
+                        )
+                        val bTp = new SIRType.TypeVar(
+                          "B",
+                          None,
+                          SIRType.TypeVarKind.CanBeListAffected
+                        )
                         val tpf1 = tpf match {
                             case SIRType.TypeLambda(params, SIRType.Fun(ltp, rtpf1)) =>
                                 rtpf1 match {

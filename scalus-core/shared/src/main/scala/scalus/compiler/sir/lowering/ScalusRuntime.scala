@@ -445,8 +445,8 @@ object ScalusRuntime {
       */
     private def genMapList(name: String)(using lctx: LoweringContext): LoweredValue = {
         val hc = name.hashCode
-        val tpA = SIRType.TypeVar("A", Some(hc), isBuiltin = true)
-        val tpB = SIRType.TypeVar("B", Some(hc), isBuiltin = true)
+        val tpA = SIRType.TypeVar("A", Some(hc), SIRType.TypeVarKind.Transparent)
+        val tpB = SIRType.TypeVar("B", Some(hc), SIRType.TypeVarKind.Transparent)
         val tpInList = SIRType.BuiltinList(tpA)
         val tpOutList = SIRType.BuiltinList(tpB)
         val tpFn = SIRType.Fun(tpA, tpB)
@@ -454,8 +454,8 @@ object ScalusRuntime {
         val funType = tpFn ->: tpOutList ->: tpInList ->: tpOutList
         val lambdaType = SIRType.TypeLambda(List(tpA, tpB), funType)
 
-        val tvReprA = TypeVarRepresentation(isBuiltin = true)
-        val tvReprB = TypeVarRepresentation(isBuiltin = true)
+        val tvReprA = TypeVarRepresentation(SIRType.TypeVarKind.Transparent)
+        val tvReprB = TypeVarRepresentation(SIRType.TypeVarKind.Transparent)
         val tvListReprIn = SumCaseClassRepresentation.SumBuiltinList(tvReprA)
         val tvListReprOut = SumCaseClassRepresentation.SumBuiltinList(tvReprB)
         val fnRepr = LambdaRepresentation(

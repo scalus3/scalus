@@ -1,5 +1,6 @@
 package scalus.examples.betting
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData
@@ -288,7 +289,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, joinTx, betUtxo.input)
         assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 489565, steps = 150_726305))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 620109, steps = 185630610L)
+                            else ExUnits(memory = 489565, steps = 150_726305))
+        )
 
         provider.setSlot(beforeSlot - 1)
         assert(provider.submit(joinTx).await().isRight)
@@ -511,7 +516,11 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, winTx, joinedBetUtxo.input)
         assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 369653, steps = 115_044654))
+        assert(
+          result.budget == (if Options.default.nativeListElements then
+                                ExUnits(memory = 478661, steps = 144493410L)
+                            else ExUnits(memory = 369653, steps = 115_044654))
+        )
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
 

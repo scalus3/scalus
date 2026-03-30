@@ -1,5 +1,6 @@
 package scalus.examples.pricebet
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.*
@@ -53,7 +54,11 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         val joinResult = assertSuccess(provider, joinTx, pricebetUtxo._1)
-        assert(joinResult.budget == ExUnits(memory = 255453, steps = 76_358740))
+        assert(
+          joinResult.budget == (if Options.default.nativeListElements then
+                                    ExUnits(memory = 283109, steps = 83600763L)
+                                else ExUnits(memory = 255453, steps = 76_358740))
+        )
     }
 
     test("Doesn't allow double join") {
@@ -127,7 +132,11 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(beforeSlot)
         val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
-        assert(winResult.budget == ExUnits(memory = 120152, steps = 40_584894))
+        assert(
+          winResult.budget == (if Options.default.nativeListElements then
+                                   ExUnits(memory = 138020, steps = 45445020L)
+                               else ExUnits(memory = 120152, steps = 40_584894))
+        )
     }
 
     test("Fails to win with a low rate") {
@@ -186,7 +195,11 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(afterDeadlineSlot)
         val timeoutResult = assertSuccess(provider, timeoutTx, pricebetUtxo._1)
-        assert(timeoutResult.budget == ExUnits(memory = 64673, steps = 20_962262))
+        assert(
+          timeoutResult.budget == (if Options.default.nativeListElements then
+                                       ExUnits(memory = 82541, steps = 25822388L)
+                                   else ExUnits(memory = 64673, steps = 20_962262))
+        )
     }
 
     test("Cannot timeout before deadline") {
@@ -228,7 +241,11 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         provider.setSlot(updateSlot)
         val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
-        assert(updateResult.budget == ExUnits(memory = 109121, steps = 35_635189))
+        assert(
+          updateResult.budget == (if Options.default.nativeListElements then
+                                      ExUnits(memory = 127289, steps = 40543315L)
+                                  else ExUnits(memory = 109121, steps = 35_635189))
+        )
     }
 
     test("Oracle forbids unauthorized price updates") {

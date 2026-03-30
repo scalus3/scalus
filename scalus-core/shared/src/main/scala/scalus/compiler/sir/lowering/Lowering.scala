@@ -593,14 +593,45 @@ object Lowering {
                   s"  arg.tp = ${app.arg.tp.show}\n" +
                   s"  f = ${app.f.pretty.render(100)}\n"
             )
+        // Try intrinsic resolution BEFORE lowering app.f when it's a nil-injection Apply.
+        // ExtractNilParameter annotates nil-injection Apply nodes with extractNilApply.
+        // Two cases:
+        //   1. THIS Apply is annotated → skip intrinsic (nil arg, not the real arg)
+        //   2. app.f is an annotated Apply → peel the nil and resolve with the real arg
+        //      BEFORE lowering app.f (which would crash on unresolved TypeVar Nil)
+        if lctx.intrinsicModules.nonEmpty
+            && !ExtractNilParameter.isNilInjectionApply(app.anns)
+        then
+            app.f match
+                case SIR.Apply(innerF, _, _, innerAnns)
+                    if ExtractNilParameter.isNilInjectionApply(innerAnns) =>
+                    val arg = lowerSIR(app.arg)
+                    val intrinsicResult = IntrinsicResolver.tryResolve(
+                      innerF,
+                      app.arg,
+                      arg,
+                      app.tp,
+                      app.anns.pos
+                    )(using lctx)
+                    intrinsicResult match
+                        case Some(result) =>
+                            if lctx.debug then
+                                lctx.log(
+                                  s"Intrinsic resolved (peeled): ${app.f.pretty.render(60)} -> ${result.pretty.render(100)}"
+                                )
+                            return result
+                        case None => // fall through
+                case _ => // fall through
         val prevDebug = lctx.debug
         // lctx.debug = false
         val fun = lowerSIR(app.f)
         val arg = lowerSIR(app.arg)
         // lctx.debug = prevDebug
 
-        // Try intrinsic resolution using the already-lowered arg's representation
-        if lctx.intrinsicModules.nonEmpty then
+        // Standard intrinsic resolution for non-nil-injection cases
+        if lctx.intrinsicModules.nonEmpty
+            && !ExtractNilParameter.isNilInjectionApply(app.anns)
+        then
             IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(using
               lctx
             ) match

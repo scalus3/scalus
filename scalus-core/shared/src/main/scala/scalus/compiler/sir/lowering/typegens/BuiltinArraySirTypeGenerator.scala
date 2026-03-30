@@ -39,12 +39,13 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
-    ): LoweredValueRepresentation = {
-        val elemType = extractElemType(tp)
-        if lctx.typeGenerator(elemType).canBeConvertedToData(elemType) then
-            ProductCaseClassRepresentation.PackedArrayAsList
-        else arrayRepr(tp)
-    }
+    ): LoweredValueRepresentation =
+        if lctx.nativeTypeVarRepresentation then arrayRepr(tp)
+        else
+            val elemType = extractElemType(tp)
+            if lctx.typeGenerator(elemType).canBeConvertedToData(elemType) then
+                ProductCaseClassRepresentation.PackedArrayAsList
+            else arrayRepr(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         val elemType = extractElemType(tp)
@@ -121,8 +122,8 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
                 input
 
             // TypeVar handling
-            case (_, tv @ TypeVarRepresentation(isBuiltin)) =>
-                if isBuiltin then
+            case (_, tv: TypeVarRepresentation) =>
+                if tv.isBuiltin then
                     val r0 = input.toRepresentation(arrayRepr(input.sirType), pos)
                     RepresentationProxyLoweredValue(r0, tv, pos)
                 else
@@ -130,8 +131,8 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
                     val r1 = input.toRepresentation(typeVarRepr, pos)
                     new RepresentationProxyLoweredValue(r1, tv, pos)
 
-            case (TypeVarRepresentation(isBuiltin), _) =>
-                if isBuiltin then
+            case (tv: TypeVarRepresentation, _) =>
+                if tv.isBuiltin then
                     val r0 = RepresentationProxyLoweredValue(input, arrayRepr(input.sirType), pos)
                     r0.toRepresentation(outputRepresentation, pos)
                 else

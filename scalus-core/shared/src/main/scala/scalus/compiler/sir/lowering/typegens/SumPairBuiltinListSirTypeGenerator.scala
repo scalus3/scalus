@@ -1,7 +1,6 @@
 package scalus.compiler.sir.lowering
 package typegens
 
-import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
 /** Generator for BuiltinList[BuiltinPair[Data,Data]] — pair lists. Uses SumPairBuiltinList
@@ -22,9 +21,10 @@ object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator 
         SumCaseClassRepresentation.SumDataAssocMap
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValueRepresentation =
-        SumCaseClassRepresentation.SumDataAssocMap
+        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+        else SumCaseClassRepresentation.SumDataAssocMap
 
     override def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
@@ -58,7 +58,30 @@ object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator 
             )
     }
 
-    override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue =
-        lvPairDataNil(pos, resType, defaultListRepresentation(resType, pos))
+    override def genNil(resType: SIRType, pos: SIRPosition)(using
+        lctx: LoweringContext
+    ): LoweredValue = {
+        val listRepr = defaultListRepresentation(resType, pos)
+        val elemType = retrieveElementType(resType, pos)
+        val (keyType, valueType) =
+            SumCaseClassRepresentation.SumPairBuiltinList.extractKeyValueTypes(elemType)
+        val pairRepr = listRepr match
+            case SumCaseClassRepresentation.SumPairBuiltinList(keyRepr, valueRepr) =>
+                ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valueRepr)
+            case other =>
+                throw LoweringException(
+                  s"SumPairBuiltinListSirTypeGenerator.genNil: expected SumPairBuiltinList but got $other",
+                  pos
+                )
+        val elemUni = pairRepr.defaultUni(elemType)
+        ConstantLoweredValue(
+          SIR.Const(
+            scalus.uplc.Constant.List(elemUni, Nil),
+            resType,
+            AnnotationsDecl(pos)
+          ),
+          listRepr
+        )
+    }
 
 }
