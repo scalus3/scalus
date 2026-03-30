@@ -233,6 +233,42 @@ test("minting policy validates token name") {
 }
 ```
 
+## Pre-initializing UTxOs from JSON
+
+You can initialize the emulator with UTxOs declared in a JSON file using `Preconfiguration`. Address keys can be test party names (`"alice"`, `"bob"`) or raw bech32 addresses:
+
+```json
+{
+  "utxo": {
+    "alice": [
+      { "ada": 10000 },
+      { "ada": 5, "datum": { "int": 42 } }
+    ],
+    "bob": [{ "ada": 5000, "datum_hash": "abcd..." }],
+    "addr_test1qz...": [{ "ada": 100, "tx_id": "abcd...", "idx": 0 }]
+  }
+}
+```
+
+Each UTxO entry supports:
+- `ada` (required) — amount in ADA
+- `datum` — inline datum as a Plutus JSON Data value
+- `datum_cbor` — inline datum as a CBOR hex string
+- `datum_hash` — datum hash hex (produces a datum-hash reference, not inline)
+- `tx_id`, `idx` — explicit transaction input; if absent, a genesis hash and auto-index are used
+
+```scala
+import scalus.testing.{ImmutableEmulator, Preconfiguration}
+
+// From a JSON string
+val emulator = ImmutableEmulator.fromJson(json)
+
+// Or parse and resolve separately
+val config = Preconfiguration.fromJson(json)
+val utxos = Preconfiguration.resolveUtxos(config)
+val emulator = Emulator(initialUtxos = utxos)
+```
+
 ## See Also
 
 - [JS/TS Emulator](/docs/testing/js-emulator) — Emulator for JavaScript and TypeScript

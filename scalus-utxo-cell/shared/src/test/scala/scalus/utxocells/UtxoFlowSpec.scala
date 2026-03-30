@@ -8,7 +8,7 @@ import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.ByteString.utf8
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.OnchainError
-import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.onchain.plutus.v1.{PolicyId, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.onchain.plutus.prelude.Option as POption
 import cps.*
@@ -34,6 +34,18 @@ object FlowParams
 
 class UtxoFlowSpec extends AnyFunSuite {
 
+    /** Stub CellContext that throws OnchainError on any method call. */
+    private val noCtx: CellContext = new CellContext {
+        private def fail: Nothing = throw OnchainError("CellContext not provided in test")
+        def txInfo: CellTxInfo = fail
+        def ownPolicyId: PolicyId = fail
+        def ownInputValue: Value = fail
+        def mint(tokenName: ByteString, amount: BigInt): Unit = fail
+        def setContinuingValue(value: Value): Unit = fail
+        def requireInputToken(policyId: PolicyId, tokenName: ByteString, quantity: BigInt): Unit =
+            fail
+    }
+
     // ================================================================
     // Single await tests (refactored from spike)
     // ================================================================
@@ -53,11 +65,11 @@ class UtxoFlowSpec extends AnyFunSuite {
         )
         val redeemer = Bid(bidder, BigInt(1_000_000)).toData
 
-        // ctx is null so requireSignedBy will NPE, but that proves decode + body ran
-        val ex = intercept[NullPointerException] {
-            flowDispatch(datum, redeemer, null)
+        // noCtx throws OnchainError, proving decode + body ran
+        val ex = intercept[OnchainError] {
+            flowDispatch(datum, redeemer, noCtx)
         }
-        info(s"Single await dispatch correctly reached ctx.txInfo (NPE: ${ex.getMessage})")
+        info(s"Single await dispatch correctly reached ctx.txInfo (${ex.getMessage})")
     }
 
     test("dispatch throws OnchainError on unknown chunk tag") {
@@ -75,7 +87,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         ).toData
 
         val ex = intercept[OnchainError] {
-            flowDispatch(datum, redeemer, null)
+            flowDispatch(datum, redeemer, noCtx)
         }
         assert(ex.getMessage.contains("unknown chunk tag"))
     }
@@ -110,13 +122,12 @@ class UtxoFlowSpec extends AnyFunSuite {
         val bid = Bid(bidder, BigInt(1_000_000))
         val redeemer = bid.toData
 
-        // ctx is null — requireSignedBy will NPE
-        // But chunk 0 is non-terminal, so the macro body should run first,
-        // hitting the NPE before reaching the continuation return
-        val ex = intercept[NullPointerException] {
-            flowDispatch(datum, redeemer, null)
+        // noCtx throws OnchainError when requireSignedBy is called
+        // Chunk 0 is non-terminal, so the macro body should run first
+        val ex = intercept[OnchainError] {
+            flowDispatch(datum, redeemer, noCtx)
         }
-        info(s"Chunk 0 correctly executed body before continuation (NPE: ${ex.getMessage})")
+        info(s"Chunk 0 correctly executed body before continuation (${ex.getMessage})")
     }
 
     test("two awaits — chunk 1 dispatch returns POption.None (terminal)") {
@@ -131,7 +142,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         val confirm = Confirm(true)
         val redeemer = confirm.toData
 
-        val result = flowDispatch(datum, redeemer, null)
+        val result = flowDispatch(datum, redeemer, noCtx)
         assert(result == POption.None, s"Expected POption.None for terminal chunk, got $result")
         info("Chunk 1 (terminal) correctly returned POption.None")
     }
@@ -158,7 +169,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         val bid = Bid(bidder, BigInt(500_000))
         val redeemer0 = bid.toData
 
-        val result0 = flowDispatch(datum0, redeemer0, null)
+        val result0 = flowDispatch(datum0, redeemer0, noCtx)
         result0 match
             case POption.Some(nextDatum) =>
                 info(s"Chunk 0 returned: POption.Some($nextDatum)")
@@ -171,15 +182,15 @@ class UtxoFlowSpec extends AnyFunSuite {
                         fail(s"Expected Constr, got $other")
 
                 // Chunk 1: datum has bid captured, redeemer is Confirm
-                // Body calls ctx.txInfo.requireSignedBy(bid.bidder) — will NPE on null ctx
+                // Body calls ctx.txInfo.requireSignedBy(bid.bidder) — throws OnchainError via noCtx
                 val confirm = Confirm(true)
                 val redeemer1 = confirm.toData
 
-                val ex = intercept[NullPointerException] {
-                    flowDispatch(nextDatum, redeemer1, null)
+                val ex = intercept[OnchainError] {
+                    flowDispatch(nextDatum, redeemer1, noCtx)
                 }
                 info(
-                  s"Chunk 1 correctly decoded captured bid and reached ctx.txInfo (NPE: ${ex.getMessage})"
+                  s"Chunk 1 correctly decoded captured bid and reached ctx.txInfo (${ex.getMessage})"
                 )
             case POption.None =>
                 fail("Chunk 0 should return POption.Some (non-terminal)")
@@ -194,17 +205,17 @@ class UtxoFlowSpec extends AnyFunSuite {
             // bid is NOT referenced here — only confirm is used
         }
 
-        // Chunk 0: body uses bid.bidder with ctx, will NPE
+        // Chunk 0: body uses bid.bidder with ctx, noCtx will throw
         val datum0 = Data.Constr(0, PList.Nil)
         val bidder = PubKeyHash(
           ByteString.fromHex("aabbccddaabbccddaabbccddaabbccddaabbccddaabbccddaabbccdd")
         )
         val bid = Bid(bidder, BigInt(500_000))
 
-        val ex = intercept[NullPointerException] {
-            flowDispatch(datum0, bid.toData, null)
+        val ex = intercept[OnchainError] {
+            flowDispatch(datum0, bid.toData, noCtx)
         }
-        info(s"Chunk 0 ran body with ctx access (NPE as expected)")
+        info(s"Chunk 0 ran body with ctx access (${ex.getMessage})")
     }
 
     // ================================================================
@@ -212,7 +223,7 @@ class UtxoFlowSpec extends AnyFunSuite {
     // ================================================================
 
     test("full lifecycle — two awaits without ctx calls") {
-        // A simple flow with no ctx calls to avoid NPE, just data flow
+        // A simple flow with no ctx calls, just data flow
         val flowDispatch = UtxoFlow.define { ctx =>
             val bid = await(UtxoFlow.suspend[Bid])
             val confirm = await(UtxoFlow.suspend[Confirm])
@@ -226,14 +237,14 @@ class UtxoFlowSpec extends AnyFunSuite {
           ),
           BigInt(1_000_000)
         )
-        val result0 = flowDispatch(datum0, bid.toData, null)
+        val result0 = flowDispatch(datum0, bid.toData, noCtx)
         result0 match
             case POption.Some(nextDatum) =>
                 info(s"After chunk 0: $nextDatum")
 
                 // Step 2: dispatch chunk 1 with the datum from step 1
                 val confirm = Confirm(true)
-                val result1 = flowDispatch(nextDatum, confirm.toData, null)
+                val result1 = flowDispatch(nextDatum, confirm.toData, noCtx)
                 assert(
                   result1 == POption.None,
                   s"Chunk 1 (terminal) should return POption.None, got $result1"
@@ -259,7 +270,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // confirmed=true → should continue to next chunk (POption.Some)
         val confirmed = Confirm(true)
-        val resultTrue = flowDispatch(datum0, confirmed.toData, null)
+        val resultTrue = flowDispatch(datum0, confirmed.toData, noCtx)
         resultTrue match {
             case POption.Some(nextDatum) =>
                 info(s"confirmed=true → POption.Some($nextDatum)")
@@ -274,7 +285,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // confirmed=false → should terminate (POption.None)
         val notConfirmed = Confirm(false)
-        val resultFalse = flowDispatch(datum0, notConfirmed.toData, null)
+        val resultFalse = flowDispatch(datum0, notConfirmed.toData, noCtx)
         assert(resultFalse == POption.None, s"confirmed=false should terminate, got $resultFalse")
         info("confirmed=false → POption.None (terminal)")
     }
@@ -293,7 +304,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // High bid → continue
         val highBid = Bid(bidder, BigInt(1_000_000))
-        val resultHigh = flowDispatch(datum0, highBid.toData, null)
+        val resultHigh = flowDispatch(datum0, highBid.toData, noCtx)
         resultHigh match {
             case POption.Some(nextDatum) =>
                 info(s"High bid → POption.Some($nextDatum)")
@@ -303,7 +314,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // Low bid → terminal
         val lowBid = Bid(bidder, BigInt(50))
-        val resultLow = flowDispatch(datum0, lowBid.toData, null)
+        val resultLow = flowDispatch(datum0, lowBid.toData, noCtx)
         assert(resultLow == POption.None, s"Low bid should terminate, got $resultLow")
         info("Low bid → POption.None (terminal)")
     }
@@ -321,7 +332,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // confirmed=true → POption.Some(Constr for bid chunk)
         val confirmed = Confirm(true)
-        val resultTrue = flowDispatch(datum0, confirmed.toData, null)
+        val resultTrue = flowDispatch(datum0, confirmed.toData, noCtx)
         resultTrue match {
             case POption.Some(nextDatum) =>
                 nextDatum match {
@@ -335,7 +346,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // confirmed=false → POption.Some(Constr for retry chunk)
         val notConfirmed = Confirm(false)
-        val resultFalse = flowDispatch(datum0, notConfirmed.toData, null)
+        val resultFalse = flowDispatch(datum0, notConfirmed.toData, noCtx)
         resultFalse match {
             case POption.Some(nextDatum) =>
                 nextDatum match {
@@ -366,7 +377,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         // Chunk 0: await Confirm (main flow entry)
         val datum0 = Data.Constr(0, PList.Nil)
         val first = Confirm(false)
-        val result0 = flowDispatch(datum0, first.toData, null)
+        val result0 = flowDispatch(datum0, first.toData, noCtx)
         result0 match {
             case POption.Some(nextDatum) =>
                 info(s"Chunk 0 → POption.Some($nextDatum)")
@@ -380,7 +391,7 @@ class UtxoFlowSpec extends AnyFunSuite {
                 // Chunk 1: await Confirm (function entry)
                 // Send confirmed=false → should self-loop back to chunk 1
                 val notConfirmed = Confirm(false)
-                val result1 = flowDispatch(nextDatum, notConfirmed.toData, null)
+                val result1 = flowDispatch(nextDatum, notConfirmed.toData, noCtx)
                 result1 match {
                     case POption.Some(loopDatum) =>
                         info(s"Chunk 1 (not confirmed) → POption.Some($loopDatum)")
@@ -395,7 +406,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
                         // Send confirmed=true → should terminate
                         val confirmed = Confirm(true)
-                        val result2 = flowDispatch(loopDatum, confirmed.toData, null)
+                        val result2 = flowDispatch(loopDatum, confirmed.toData, noCtx)
                         assert(
                           result2 == POption.None,
                           s"Expected terminal POption.None, got $result2"
@@ -430,7 +441,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         val bid = Bid(bidder, BigInt(500_000))
 
         // Chunk 0: await Bid → enters loop
-        val result0 = flowDispatch(datum0, bid.toData, null)
+        val result0 = flowDispatch(datum0, bid.toData, noCtx)
         result0 match {
             case POption.Some(loopDatum) =>
                 info(s"Chunk 0 → POption.Some($loopDatum)")
@@ -466,7 +477,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         // Chunk 0: await Bid (main entry)
         val datum0 = Data.Constr(0, PList.Nil)
         val bid1 = Bid(bidder, BigInt(100))
-        val result0 = flowDispatch(datum0, bid1.toData, null)
+        val result0 = flowDispatch(datum0, bid1.toData, noCtx)
         val loopDatum1 = result0 match {
             case POption.Some(d) =>
                 info(s"Chunk 0 → loop entry: $d")
@@ -476,7 +487,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // Chunk 1 (loop entry): await Confirm; confirmed=false → await Bid (chunk 2)
         val notConfirmed = Confirm(false)
-        val result1 = flowDispatch(loopDatum1, notConfirmed.toData, null)
+        val result1 = flowDispatch(loopDatum1, notConfirmed.toData, noCtx)
         val awaitNewBidDatum = result1 match {
             case POption.Some(d) =>
                 info(s"Loop (not confirmed) → await new bid: $d")
@@ -486,7 +497,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // Chunk 2: await Bid → loop(newBid) → back to chunk 1
         val bid2 = Bid(bidder, BigInt(200))
-        val result2 = flowDispatch(awaitNewBidDatum, bid2.toData, null)
+        val result2 = flowDispatch(awaitNewBidDatum, bid2.toData, noCtx)
         val loopDatum2 = result2 match {
             case POption.Some(d) =>
                 info(s"Re-bid → back to loop entry: $d")
@@ -496,7 +507,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // Chunk 1 again: confirmed=true → terminal
         val confirmed = Confirm(true)
-        val result3 = flowDispatch(loopDatum2, confirmed.toData, null)
+        val result3 = flowDispatch(loopDatum2, confirmed.toData, noCtx)
         assert(result3 == POption.None, s"Expected terminal, got $result3")
         info("Full recursion lifecycle: entry → loop → re-bid → loop → terminal")
     }
@@ -530,7 +541,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         // Chunk 0: await Bid → enters bidLoop
         val datum0 = Data.Constr(0, PList.Nil)
         val bid1 = Bid(seller, BigInt(500))
-        val result0 = flowDispatch(datum0, bid1.toData, null)
+        val result0 = flowDispatch(datum0, bid1.toData, noCtx)
         val loopDatum = result0 match {
             case POption.Some(d) =>
                 info(s"Chunk 0 → loop entry: $d")
@@ -547,7 +558,7 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // Chunk 1 (loop entry): await Confirm; confirmed=false → chunk 2 (await Bid)
         val notConfirmed = Confirm(false)
-        val result1 = flowDispatch(loopDatum, notConfirmed.toData, null)
+        val result1 = flowDispatch(loopDatum, notConfirmed.toData, noCtx)
         val awaitBidDatum = result1 match {
             case POption.Some(d) =>
                 info(s"Loop (not confirmed) → await new bid: $d")
@@ -558,7 +569,7 @@ class UtxoFlowSpec extends AnyFunSuite {
         // Chunk 2: await Bid → calls bidLoop(newBid) → back to chunk 1
         // This tests transitive free var: seller must be carried through chunk 2
         val bid2 = Bid(seller, BigInt(1000))
-        val result2 = flowDispatch(awaitBidDatum, bid2.toData, null)
+        val result2 = flowDispatch(awaitBidDatum, bid2.toData, noCtx)
         val loopDatum2 = result2 match {
             case POption.Some(d) =>
                 info(s"Re-bid → back to loop: $d")
@@ -575,10 +586,10 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // Chunk 1 again: confirmed=true → terminal (uses seller via ctx)
         val confirmed = Confirm(true)
-        val ex = intercept[NullPointerException] {
-            flowDispatch(loopDatum2, confirmed.toData, null)
+        val ex = intercept[OnchainError] {
+            flowDispatch(loopDatum2, confirmed.toData, noCtx)
         }
-        info(s"Terminal reached ctx.txInfo.requireSignedBy(seller) (NPE: ${ex.getMessage})")
+        info(s"Terminal reached ctx.txInfo.requireSignedBy(seller) (${ex.getMessage})")
     }
 
     test("parameterized flow — multiple outer params + function param in datum") {
@@ -618,14 +629,14 @@ class UtxoFlowSpec extends AnyFunSuite {
         // Bid below minBid should fail
         val lowBid = Bid(seller, BigInt(50))
         val ex = intercept[IllegalArgumentException] {
-            flowDispatch(datum0, lowBid.toData, null)
+            flowDispatch(datum0, lowBid.toData, noCtx)
         }
         assert(ex.getMessage.contains("bid too low"))
         info(s"Low bid rejected: ${ex.getMessage}")
 
         // Valid bid → enters loop
         val bid1 = Bid(seller, BigInt(500))
-        val result0 = flowDispatch(datum0, bid1.toData, null)
+        val result0 = flowDispatch(datum0, bid1.toData, noCtx)
         val loopDatum = result0 match {
             case POption.Some(d) =>
                 d match {
@@ -641,12 +652,12 @@ class UtxoFlowSpec extends AnyFunSuite {
 
         // Chunk 1 (loop): confirmed=true → terminal (uses seller + currentBid)
         val confirmed = Confirm(true)
-        // Will NPE on ctx.txInfo.requireSignedBy, proving seller was decoded
-        val npe = intercept[NullPointerException] {
-            flowDispatch(loopDatum, confirmed.toData, null)
+        // noCtx throws OnchainError on ctx.txInfo.requireSignedBy, proving seller was decoded
+        val ex2 = intercept[OnchainError] {
+            flowDispatch(loopDatum, confirmed.toData, noCtx)
         }
         info(
-          s"Terminal used seller from outer scope and currentBid from param (NPE: ${npe.getMessage})"
+          s"Terminal used seller from outer scope and currentBid from param (${ex2.getMessage})"
         )
     }
 
@@ -664,13 +675,13 @@ class UtxoFlowSpec extends AnyFunSuite {
         )
         val datum0 = Data.Constr(0, PList.Nil)
         val bid = Bid(bidder, BigInt(500_000))
-        val result0 = flowDispatch(datum0, bid.toData, null)
+        val result0 = flowDispatch(datum0, bid.toData, noCtx)
 
         result0 match {
             case POption.Some(datum1) =>
                 info(s"Chunk 0 returned: POption.Some($datum1)")
                 val confirm = Confirm(true)
-                val result1 = flowDispatch(datum1, confirm.toData, null)
+                val result1 = flowDispatch(datum1, confirm.toData, noCtx)
                 result1 match {
                     case POption.Some(datum2) =>
                         info(s"Chunk 1 (confirmed=true) returned: POption.Some($datum2)")
@@ -683,13 +694,13 @@ class UtxoFlowSpec extends AnyFunSuite {
                                 )
                                 info(s"Next datum: tag=$tag, fields=$fields")
 
-                                // Dispatch chunk 2 — body uses bid.bidder via ctx, will NPE
+                                // Dispatch chunk 2 — body uses bid.bidder via ctx, noCtx throws
                                 val bid2 = Bid(bidder, BigInt(100))
-                                val ex = intercept[NullPointerException] {
-                                    flowDispatch(datum2, bid2.toData, null)
+                                val ex = intercept[OnchainError] {
+                                    flowDispatch(datum2, bid2.toData, noCtx)
                                 }
                                 info(
-                                  s"Chunk 2 decoded captured bid, reached ctx.txInfo (NPE: ${ex.getMessage})"
+                                  s"Chunk 2 decoded captured bid, reached ctx.txInfo (${ex.getMessage})"
                                 )
                             case other => fail(s"Expected Constr, got $other")
                         }

@@ -146,6 +146,8 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
 // CONTRACT COMPILATION
 // ============================================================================
 
-private given Options = Options.release
+private object MembershipTokenCompilation:
+    private given Options = Options.release
+    lazy val contract = PlutusV3.compile(MembershipTokenValidator.validate)
 
-lazy val MembershipTokenContract = PlutusV3.compile(MembershipTokenValidator.validate)
+lazy val MembershipTokenContract = MembershipTokenCompilation.contract

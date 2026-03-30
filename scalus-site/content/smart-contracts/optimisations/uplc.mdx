@@ -14,7 +14,7 @@ Scalus optimizes Untyped Plutus Core (UPLC) scripts to reduce script size and ex
 The optimizer runs several passes in sequence:
 
 1. **EtaReduce** — eliminates redundant lambda wrappers (`λx. f x` → `f`)
-2. **Inliner** — beta-reduction, dead code elimination, constant folding (runs 3 times)
+2. **Inliner** — beta-reduction, dead code elimination, constant folding via `PartialEvaluator` (runs 3 times)
 3. **StrictIf** — converts eligible `if/then/else` to strict evaluation
 4. **ForcedBuiltinsExtractor** — hoists shared `Force(Builtin(...))` subexpressions
 5. **CaseConstrApply** — rewrites multi-argument application as `Case`/`Constr` nodes

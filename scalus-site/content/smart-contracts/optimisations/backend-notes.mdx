@@ -1,0 +1,38 @@
+---
+title: Backend-Specific Notes
+sidebarTitle: Backend-Specific Notes
+---
+
+# Backend-Specific Notes
+
+## V3 Lowering Backend (Default)
+
+The V3 Lowering Backend represents most types as `Data` internally, so `toData` is often a NOOP -- no conversion happens.
+
+By default, the backend infers the UPLC representation from the type structure: case classes become `Constr(tag, fields)`, enums use different constructor tags, etc. You can override this with the `@UplcRepr` annotation to control how a type is represented at the UPLC level:
+
+| `UplcRepresentation` | Effect |
+|---|---|
+| `ProductCase` | Multi-field case class as `Constr(tag, [field1, field2, ...])` (default for case classes) |
+| `SumCase` | Enum variants with different constructor tags (default for enums) |
+| `ProductCaseOneElement` | Single-field wrapper unwrapped to just the inner type |
+| `Map` | Key-value pairs as a Plutus map |
+| `Data` | Keep as raw `Data`, no structural encoding |
+| `BuiltinArray` | Array-like structure |
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.compiler.annotations.{UplcRepr, UplcRepresentation}
+import scalus.uplc.builtin.ByteString
+
+// Single-field wrapper: unwrapped to just ByteString (no Constr overhead)
+@UplcRepr(UplcRepresentation.ProductCaseOneElement)
+case class PubKeyHash(hash: ByteString)
+
+// Map representation instead of List of pairs
+@UplcRepr(UplcRepresentation.Map)
+case class AssocMap[K, V](inner: scalus.cardano.onchain.plutus.prelude.List[(K, V)])
+```
+
+## Template-Based Backends
+
+With the Scott Encoding and Sum of Products backends, `toData`/`fromData` conversions have real cost because types are not kept as `Data` internally. Using `@UplcRepr(UplcRepresentation.Data)` on types that don't need structural access can avoid this overhead.
