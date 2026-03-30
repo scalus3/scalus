@@ -199,7 +199,45 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(outPair, pos)
-            case (_: ProdUplcConstr, ProdDataList) => ???
+            case (puc: ProdUplcConstr, ProdDataList) =>
+                // ProdUplcConstr → ProdDataList: Case(input, [λf0.λf1...λfN. mkCons(toData(f0), ...)])
+                val constrDecl = retrieveConstrDecl(input.sirType, pos)
+                val fieldNames = constrDecl.params.indices.map(i => lctx.uniqueVarName(s"_uc_f$i"))
+                val fieldTypes = constrDecl.params.map(p => lctx.resolveTypeVarIfNeeded(p.tp))
+                val fieldVars = fieldNames.zip(fieldTypes).zip(puc.fieldReprs).map {
+                    case ((name, tp), repr) =>
+                        new VariableLoweredValue(
+                          id = name, name = name,
+                          sir = SIR.Var(name, tp, AnnotationsDecl(pos)),
+                          representation = repr
+                        )
+                }
+                val dataListNil = lvDataDataListNil(pos)
+                val dataList = fieldVars.zip(fieldTypes).foldRight(dataListNil: LoweredValue) {
+                    case ((fv, tp), acc) =>
+                        val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                        lvBuiltinApply2(SIRBuiltins.mkCons,
+                          fv.toRepresentation(dataRepr, pos), acc,
+                          SIRType.List(SIRType.Data.tp),
+                          SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                          pos)
+                }
+                new ComplexLoweredValue(fieldVars.toSet, input, dataList) {
+                    override def sirType = input.sirType
+                    override def representation = ProdDataList
+                    override def pos = input.pos
+                    override def termInternal(gctx: TermGenerationContext) = {
+                        val innerCtx = gctx.copy(generatedVars = gctx.generatedVars ++ fieldVars.map(_.id))
+                        val body = dataList.termWithNeededVars(innerCtx)
+                        val branch = fieldVars.foldRight(body) { (fv, inner) =>
+                            Term.LamAbs(fv.id, inner, UplcAnnotation(pos))
+                        }
+                        Term.Case(input.termWithNeededVars(gctx), scala.List(branch), UplcAnnotation(pos))
+                    }
+                    override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
+                        Doc.text("UplcConstr→DataList(") + input.docRef(ctx) + Doc.text(")")
+                    override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
+                }
             case (_: ProdUplcConstr, PackedDataList) =>
                 input
                     .toRepresentation(ProdDataList, pos)
@@ -209,7 +247,10 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(ProdDataConstr, pos)
             case (_: ProdUplcConstr, PairIntDataList) =>
-                ???
+                // ProdUplcConstr → PairIntDataList: go through ProdDataList first
+                input
+                    .toRepresentation(ProdDataList, pos)
+                    .toRepresentation(PairIntDataList, pos)
             case (_: ProdUplcConstr, _: ProdUplcConstr) =>
                 input
             case (
@@ -426,6 +467,14 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                       s"Unkonow constructor name for data-list: ${constrDecl.name}",
                       pos
                     )
+            case targetUplcConstr: SumCaseClassRepresentation.SumUplcConstr =>
+                // Target is SumUplcConstr — keep native Constr representation
+                new TypeRepresentationProxyLoweredValue(
+                  input,
+                  targetType,
+                  targetUplcConstr,
+                  pos
+                )
             case other =>
                 // all other types should be convertible to data-constr
                 val asDataConstr = input.toRepresentation(

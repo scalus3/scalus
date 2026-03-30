@@ -32,8 +32,7 @@ class UplcConstrTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
     private given Options = Options()
 
-    // TODO: needs ProdUplcConstr → ProdDataList conversion path in ProductCaseSirTypeGenerator
-    ignore("enum with function variant: construct and match") {
+    test("enum with function variant: construct and match") {
         val sir = compile {
             val a1 = Action.Const(BigInt(10))
             val a2 = Action.Transform(x => x + BigInt(1))

@@ -59,10 +59,12 @@ object Lowering {
                         // For constructors with a parent sum type, check if the parent
                         // uses UplcConstr. If so, use the parent's type generator so the
                         // constructor produces UplcConstr (not DataConstr).
+                        // parent type check for UplcConstr dispatch
                         val parentTypeGen = resolvedType match
                             case SIRType.CaseClass(_, _, Some(parent)) =>
                                 val parentGen = lctx.typeGenerator(parent)
-                                parentGen.defaultRepresentation(parent) match
+                                val parentRepr = parentGen.defaultRepresentation(parent)
+                                parentRepr match
                                     case _: SumCaseClassRepresentation.SumUplcConstr =>
                                         Some(parentGen)
                                     case _ => None
