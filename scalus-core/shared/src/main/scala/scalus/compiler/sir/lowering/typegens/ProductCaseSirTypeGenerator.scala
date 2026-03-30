@@ -897,7 +897,36 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     def genConstrUplcConstr(constr: SIR.Constr)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        ???
+        val constrIndex = retrieveConstrIndex(constr.tp, constr.anns.pos)
+        val loweredArgs = constr.args.map(arg => lctx.lower(arg))
+
+        // Store fields as-is — ProdUplcConstr records their actual representations
+        val fieldReprs = loweredArgs.map(_.representation).toList
+        val repr = ProdUplcConstr(constrIndex, fieldReprs)
+
+        // Build Term.Constr(tag, [t1, t2, ...])
+        new ComplexLoweredValue(Set.empty, loweredArgs*) {
+            override def sirType: SIRType = constr.tp
+            override def representation: LoweredValueRepresentation = repr
+            override def pos: SIRPosition = constr.anns.pos
+
+            override def termInternal(gctx: TermGenerationContext): Term = {
+                Term.Constr(
+                  scalus.cardano.ledger.Word64(constrIndex.toLong),
+                  loweredArgs.map(_.termWithNeededVars(gctx)).toList,
+                  UplcAnnotation(constr.anns.pos)
+                )
+            }
+
+            override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+                val left = Doc.text(s"UplcConstr($constrIndex, ")
+                val right = Doc.text(")")
+                val args = loweredArgs.map(_.docRef(ctx))
+                Doc.intercalate(Doc.comma + Doc.space, args).bracketBy(left, right)
+            }
+
+            override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
+        }
     }
 
     def retrieveConstrIndex(tp: SIRType, pos: SIRPosition): Int = {

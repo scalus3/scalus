@@ -5,6 +5,8 @@ import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
+import scalus.uplc.{Term, UplcAnnotation}
+import org.typelevel.paiges.Doc
 
 import scala.collection.mutable
 
@@ -570,12 +572,132 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         ScopeBracketsLoweredValue(scopedVars, body)
     }
 
+    /** Match on UplcConstr representation using the Case builtin.
+      *
+      * Case(scrutinee, [branch0, branch1, ...]) where each branch is a nested lambda
+      * that binds the constructor's fields: λf0.λf1.…λfN.body
+      *
+      * Fields are bound with their native representations (from ProdUplcConstr.fieldReprs
+      * or derived from the constructor's parameter types).
+      */
     def genMatchUplcConstr(
-        mathData: SIR.Match,
+        matchData: SIR.Match,
         loweredScrutinee: LoweredValue,
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        ???
+
+        val prevScope = lctx.scope
+        val orderedCases = prepareCases(matchData, loweredScrutinee)
+        val pos = matchData.anns.pos
+
+        // For each ordered case, generate a branch lambda that binds the constructor's fields
+        val branches = orderedCases.map { preparedCase =>
+            genMatchUplcConstrCase(preparedCase.sirCase, optTargetType)
+        }
+
+        lctx.scope = prevScope
+
+        // Determine result type and repr from the first branch
+        val resultRepr = branches.head.representation
+        val resultType = optTargetType.getOrElse(matchData.tp)
+
+        // Generate Case(scrutinee, [branch0, branch1, ...])
+        new ComplexLoweredValue(Set.empty, (loweredScrutinee :: branches.toList)*) {
+            override def sirType: SIRType = resultType
+            override def representation: LoweredValueRepresentation = resultRepr
+            override def pos: SIRPosition = matchData.anns.pos
+
+            override def termInternal(gctx: TermGenerationContext): Term = {
+                Term.Case(
+                  loweredScrutinee.termWithNeededVars(gctx),
+                  branches.map(_.termWithNeededVars(gctx)).toList,
+                  UplcAnnotation(matchData.anns.pos)
+                )
+            }
+
+            override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+                import Doc.*
+                val branchDocs = branches.zipWithIndex.map { (b, i) =>
+                    line + text(s"$i ->") + (lineOrSpace + b.docRef(ctx)).nested(2)
+                }
+                ((text("case") + space + loweredScrutinee.docRef(ctx) + space + text("of"))
+                    + branchDocs.foldLeft(empty)(_ + _.grouped)).aligned
+            }
+
+            override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
+        }
+    }
+
+    /** Generate a single branch for UplcConstr match.
+      * For Constr patterns: builds nested lambda λf0.λf1.…λfN.body
+      * For Wildcard: just the body (no lambdas)
+      */
+    private def genMatchUplcConstrCase(
+        sirCase: SIR.Case,
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
+        val caseScope = lctx.scope
+        val pos = sirCase.anns.pos
+
+        sirCase.pattern match
+            case constrPattern: Pattern.Constr =>
+                val constrDecl = constrPattern.constr
+
+                // Create variables for each field — fields are in native representation
+                val fieldVars = constrPattern.bindings.zip(constrDecl.params).map {
+                    (name, typeBinding) =>
+                        val tp = lctx.resolveTypeVarIfNeeded(typeBinding.tp)
+                        val fieldRepr = lctx.typeGenerator(tp).defaultRepresentation(tp)
+                        val fieldVar = new VariableLoweredValue(
+                          id = lctx.uniqueVarName(name),
+                          name = name,
+                          sir = SIR.Var(name, tp, AnnotationsDecl(pos)),
+                          representation = fieldRepr
+                        )
+                        lctx.scope = lctx.scope.add(fieldVar)
+                        fieldVar
+                }
+
+                // Lower the case body with field variables in scope
+                val body = lctx.lower(sirCase.body, optTargetType)
+                lctx.scope = caseScope
+
+                // Build nested lambda: λf0.λf1.…λfN.body
+                fieldVars.foldRight(body) { (fieldVar, inner) =>
+                    new ComplexLoweredValue(Set(fieldVar), inner) {
+                        override def sirType: SIRType = inner.sirType
+                        override def representation: LoweredValueRepresentation =
+                            inner.representation
+                        override def pos: SIRPosition = sirCase.anns.pos
+
+                        override def termInternal(gctx: TermGenerationContext): Term = {
+                            val innerCtx =
+                                gctx.copy(generatedVars = gctx.generatedVars + fieldVar.id)
+                            Term.LamAbs(
+                              fieldVar.id,
+                              inner.termWithNeededVars(innerCtx),
+                              UplcAnnotation(sirCase.anns.pos)
+                            )
+                        }
+
+                        override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
+                            Doc.text(s"λ${fieldVar.name}.") + inner.docRef(ctx)
+
+                        override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc =
+                            docDef(ctx)
+                    }
+                }
+
+            case Pattern.Wildcard =>
+                val body = lctx.lower(sirCase.body, optTargetType)
+                lctx.scope = caseScope
+                body
+
+            case other =>
+                throw LoweringException(
+                  s"Unexpected pattern in UplcConstr match: $other",
+                  pos
+                )
     }
 
     def findConstructors(sirType: SIRType, pos: SIRPosition): Seq[ConstrDecl] = {
