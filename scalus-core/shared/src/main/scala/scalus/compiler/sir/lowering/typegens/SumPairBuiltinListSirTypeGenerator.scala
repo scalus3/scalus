@@ -1,7 +1,6 @@
 package scalus.compiler.sir.lowering
 package typegens
 
-import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
 /** Generator for BuiltinList[BuiltinPair[Data,Data]] — pair lists. Uses SumPairBuiltinList

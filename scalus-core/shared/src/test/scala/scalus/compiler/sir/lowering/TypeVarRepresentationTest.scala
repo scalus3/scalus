@@ -8,9 +8,6 @@ import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
-import scalus.uplc.*
-import scalus.uplc.Term.asTerm
-import scalus.uplc.builtin.Data
 
 /** Tests for nativeTypeVarRepresentation flag.
   *

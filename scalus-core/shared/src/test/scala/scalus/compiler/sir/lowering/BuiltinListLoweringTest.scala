@@ -437,12 +437,11 @@ class BuiltinListLoweringTest extends AnyFunSuite {
 
     withBothFlags("List.single with fromData argument") { native =>
         import scalus.cardano.onchain.plutus.prelude.List
-        import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
         import scalus.cardano.onchain.plutus.prelude.{===, Eq}
         import scalus.uplc.*
         import scalus.uplc.Term.asTerm
         import scalus.uplc.builtin.Data
-        import scalus.uplc.builtin.Data.{toData, FromData}
+        import scalus.uplc.builtin.Data.toData
         given Options = Options(
           targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = true,
@@ -472,11 +471,10 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     withBothFlags("List.quicksort") { native =>
         import scalus.cardano.onchain.plutus.prelude.List
         import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
-        import scalus.cardano.onchain.plutus.prelude.{===, Eq}
         import scalus.uplc.*
         import scalus.uplc.Term.asTerm
         import scalus.uplc.builtin.Data
-        import scalus.uplc.builtin.Data.{toData, FromData}
+        import scalus.uplc.builtin.Data.toData
         given Options = Options(
           targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = true,
@@ -503,11 +501,10 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     withBothFlags("List.map2") { native =>
         import scalus.cardano.onchain.plutus.prelude.List
         import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
-        import scalus.cardano.onchain.plutus.prelude.{===, Eq}
         import scalus.uplc.*
         import scalus.uplc.Term.asTerm
         import scalus.uplc.builtin.Data
-        import scalus.uplc.builtin.Data.{toData, FromData}
+        import scalus.uplc.builtin.Data.toData
         given Options = Options(
           targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = true,
@@ -533,11 +530,10 @@ class BuiltinListLoweringTest extends AnyFunSuite {
 
     withBothFlags("List.zip") { native =>
         import scalus.cardano.onchain.plutus.prelude.List
-        import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
         import scalus.uplc.*
         import scalus.uplc.Term.asTerm
         import scalus.uplc.builtin.Data
-        import scalus.uplc.builtin.Data.{toData, FromData}
+        import scalus.uplc.builtin.Data.toData
         given Options = Options(
           targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = true,
@@ -561,11 +557,10 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     withBothFlags("List.take") { native =>
         import scalus.cardano.onchain.plutus.prelude.List
         import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
-        import scalus.cardano.onchain.plutus.prelude.{===, Eq}
         import scalus.uplc.*
         import scalus.uplc.Term.asTerm
         import scalus.uplc.builtin.Data
-        import scalus.uplc.builtin.Data.{toData, FromData}
+        import scalus.uplc.builtin.Data.toData
         given Options = Options(
           targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = true,
@@ -590,11 +585,10 @@ class BuiltinListLoweringTest extends AnyFunSuite {
     withBothFlags("List.lastOption") { native =>
         import scalus.cardano.onchain.plutus.prelude.List
         import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
-        import scalus.cardano.onchain.plutus.prelude.{Option as ScalusOption, ===, Eq}
         import scalus.uplc.*
         import scalus.uplc.Term.asTerm
         import scalus.uplc.builtin.Data
-        import scalus.uplc.builtin.Data.{toData, FromData}
+        import scalus.uplc.builtin.Data.toData
         given Options = Options(
           targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = true,
@@ -620,7 +614,7 @@ class BuiltinListLoweringTest extends AnyFunSuite {
         import scalus.uplc.*
         import scalus.uplc.Term.asTerm
         import scalus.uplc.builtin.Data
-        import scalus.uplc.builtin.Data.{toData, FromData}
+        import scalus.uplc.builtin.Data.toData
         given Options = optionsWithFlag(native)
         val compiled = PlutusV3.compile { (d: Data) =>
             d.to[List[List[BigInt]]].flatten

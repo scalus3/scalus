@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.*
-import scalus.compiler.sir.{ExtractNilParameter, Module, SIR, SIRType}
+import scalus.compiler.sir.{Module, SIR, SIRType}
 import scalus.uplc.*
 
 import scala.collection.mutable.Map as MutableMap
