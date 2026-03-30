@@ -86,7 +86,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
             case (ProdDataList, PairIntDataList) =>
                 toRepresentation(input, ProdDataConstr, pos).toRepresentation(PairIntDataList, pos)
-            case (ProdDataList, UplcConstr) =>
+            case (ProdDataList, _: ProdUplcConstr) =>
                 ???
             case (ProdDataList, outRep @ ProductCaseClassRepresentation.OneElementWrapper(_)) =>
                 lvBuiltinApply(SIRBuiltins.headList, input, input.sirType, outRep, pos)
@@ -147,10 +147,10 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
             case (PackedDataList, PackedDataList) =>
                 input
-            case (PackedDataList, UplcConstr) =>
+            case (PackedDataList, puc: ProdUplcConstr) =>
                 input
                     .toRepresentation(ProdDataList, pos)
-                    .toRepresentation(UplcConstr, pos)
+                    .toRepresentation(puc, pos)
             case (
                   PackedDataList,
                   outputRep @ ProductCaseClassRepresentation.OneElementWrapper(_)
@@ -191,26 +191,26 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   ProductCaseClassRepresentation.PairIntDataList,
                   pos
                 )
-            case (ProdDataConstr, UplcConstr) =>
+            case (ProdDataConstr, puc: ProdUplcConstr) =>
                 input
                     .toRepresentation(ProdDataList, pos)
-                    .toRepresentation(UplcConstr, pos)
+                    .toRepresentation(puc, pos)
             case (ProdDataConstr, outPair: ProductCaseClassRepresentation.ProdBuiltinPair) =>
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(outPair, pos)
-            case (UplcConstr, ProdDataList) => ???
-            case (UplcConstr, PackedDataList) =>
+            case (_: ProdUplcConstr, ProdDataList) => ???
+            case (_: ProdUplcConstr, PackedDataList) =>
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(PackedDataList, pos)
-            case (UplcConstr, ProdDataConstr) =>
+            case (_: ProdUplcConstr, ProdDataConstr) =>
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(ProdDataConstr, pos)
-            case (UplcConstr, PairIntDataList) =>
+            case (_: ProdUplcConstr, PairIntDataList) =>
                 ???
-            case (UplcConstr, UplcConstr) =>
+            case (_: ProdUplcConstr, _: ProdUplcConstr) =>
                 input
             case (
                   ProductCaseClassRepresentation.OneElementWrapper(internalInputRep),

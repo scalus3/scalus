@@ -369,15 +369,25 @@ object SumCaseClassRepresentation {
     /** Representation as tern Constr(i,x1,...,xn) where i is the index of the constructor and x is
       * a field
       */
-    case object UplcConstr extends SumCaseClassRepresentation(false, false) {
+    /** Parameterized sum constructor representation. Each variant (constructor tag) has its own
+      * `ProdUplcConstr` with per-field representations.
+      *
+      * UPLC form: `Constr(tag, [v1, v2, ...])` where fields are in the variant's representations.
+      * Pattern matching uses the `Case` builtin to dispatch on the tag.
+      *
+      * @param variants
+      *   map from constructor tag to its ProdUplcConstr (field representations)
+      */
+    case class SumUplcConstr(
+        variants: Map[Int, ProductCaseClassRepresentation.ProdUplcConstr]
+    ) extends SumCaseClassRepresentation(false, false) {
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            DefaultUni.Data // UplcConstr values are not stored as list elements
+            DefaultUni.Data // Constr values stored as Data in list elements
     }
 
     /** Representation as Constr(i,x1,...,xn) where i is the index of the constructor and x is a
-      * field represented as data.
+      * field represented as data. Deprecated — use SumUplcConstr with per-field reprs instead.
       */
-    // TODO: remove UplcConstrOnData, use UplcConstr with element representations instead
     case object UplcConstrOnData extends SumCaseClassRepresentation(false, true) {
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
             DefaultUni.Data // placeholder, not actually packed data
@@ -528,9 +538,42 @@ object ProductCaseClassRepresentation {
                 case _                           => (SIRType.Data.tp, SIRType.Data.tp)
     }
 
-    case object UplcConstr extends ProductCaseClassRepresentation(false, false) {
+    /** Parameterized constructor representation where each field has its own representation.
+      *
+      * UPLC form: `Constr(tag, [v1, v2, ..., vN])` where each `vi` is in `fieldReprs(i)`.
+      * Unlike `ProdDataConstr` which forces all fields to Data, this allows native field
+      * representations (e.g., `Constr(0, [Integer(42), ByteString(#ff)])`).
+      *
+      * @param tag
+      *   constructor tag (index in the DataDecl's constructor list)
+      * @param fieldReprs
+      *   representation for each field, in order
+      */
+    case class ProdUplcConstr(
+        tag: Int,
+        fieldReprs: scala.List[LoweredValueRepresentation]
+    ) extends ProductCaseClassRepresentation(false, false) {
+
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            DefaultUni.Data // UplcConstr values are not stored as list elements
+            DefaultUni.Data // Constr values stored as Data when used in list elements
+
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            semanticType
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
+            repr match {
+                case ProdUplcConstr(otherTag, otherFieldReprs) =>
+                    tag == otherTag && fieldReprs.size == otherFieldReprs.size &&
+                    fieldReprs.zip(otherFieldReprs).forall { (mine, other) =>
+                        mine.isCompatibleOn(SIRType.FreeUnificator, other, pos)
+                    }
+                case tvr: TypeVarRepresentation => true
+                case _                         => false
+            }
     }
 
     /** BuiltinArray with parameterized element representation.

@@ -8,12 +8,12 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumCaseClassRepresentation.UplcConstr
+        SumCaseClassRepresentation.SumUplcConstr(Map.empty)
 
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumCaseClassRepresentation.UplcConstr
+        SumCaseClassRepresentation.SumUplcConstr(Map.empty)
 
     // TODO: set position in LoweringContext
     override def defaultTypeVarReperesentation(

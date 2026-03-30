@@ -77,7 +77,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                 case SumCaseClassRepresentation.DataConstr |
                                     SumCaseClassRepresentation.DataData =>
                                     new RepresentationProxyLoweredValue(input, representation, pos)
-                                case SumCaseClassRepresentation.UplcConstr |
+                                case _: SumCaseClassRepresentation.SumUplcConstr |
                                     SumCaseClassRepresentation.UplcConstrOnData |
                                     SumCaseClassRepresentation.PairIntDataList =>
                                     val r1 =
@@ -118,7 +118,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                     new RepresentationProxyLoweredValue(input, representation, pos)
                                 case ProductCaseClassRepresentation.PackedDataList |
                                     ProductCaseClassRepresentation.ProdDataList |
-                                    ProductCaseClassRepresentation.UplcConstr |
+                                    _: ProductCaseClassRepresentation.ProdUplcConstr |
                                     ProductCaseClassRepresentation.PairIntDataList =>
                                     val r1 = input.toRepresentation(
                                       ProductCaseClassRepresentation.ProdDataConstr,

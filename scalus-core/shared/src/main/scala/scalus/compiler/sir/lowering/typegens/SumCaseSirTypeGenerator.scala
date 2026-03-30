@@ -55,7 +55,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   PackedSumDataList,
                   pos
                 )
-            case (DataConstr, UplcConstr) =>
+            case (DataConstr, _: SumUplcConstr) =>
                 ???
             case (DataConstr, UplcConstrOnData) =>
                 ???
@@ -77,7 +77,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   PackedSumDataList,
                   pos
                 )
-            case (SumBuiltinList(_), UplcConstr) =>
+            case (SumBuiltinList(_), _: SumUplcConstr) =>
                 ???
             case (SumBuiltinList(_), UplcConstrOnData) =>
                 ???
@@ -102,15 +102,15 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 val asDataList = toRepresentation(input, SumBuiltinList(elemRepr), pos)
                 asDataList.toRepresentation(DataConstr, pos)
-            case (PackedSumDataList, UplcConstr) =>
+            case (PackedSumDataList, _: SumUplcConstr) =>
                 ???
             case (PackedSumDataList, UplcConstrOnData) =>
                 ???
-            case (UplcConstr, DataConstr) =>
+            case (_: SumUplcConstr, DataConstr) =>
                 ???
-            case (UplcConstr, SumBuiltinList(_)) =>
+            case (_: SumUplcConstr, SumBuiltinList(_)) =>
                 ???
-            case (UplcConstr, PackedSumDataList) =>
+            case (_: SumUplcConstr, PackedSumDataList) =>
                 val elemType =
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
                 val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
@@ -222,7 +222,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
                 new SumBuiltinListSirTypeGenerator(elemRepr)
                     .genMatch(matchData, unpackedVar, optTargetType)
-            case UplcConstr =>
+            case _: SumUplcConstr =>
                 genMatchUplcConstr(
                   matchData,
                   loweredScrutinee,
