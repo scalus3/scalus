@@ -50,9 +50,7 @@ object Lowering {
                     if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
                     then
-                        if lctx.nativeTypeVarRepresentation then
-                            System.err.println(s"[Lowering Nil] tp=${tp.show} resolved=${resolvedType.show} optTarget=${optTargetType.map(_.show)} at ${anns.pos.file}:${anns.pos.startLine}")
-                        optTargetType match
+                            optTargetType match
                             case Some(targetType) =>
                                 (lctx.typeGenerator(targetType), constr.copy(tp = targetType))
                             case None =>

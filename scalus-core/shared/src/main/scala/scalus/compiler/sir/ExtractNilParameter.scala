@@ -52,32 +52,10 @@ object ExtractNilParameter {
         // function B which needs nil, A also needs nil to forward to B.
         propagateNilNeeds(sir, needsNil)
 
-        needsNil.forEach((k, v) =>
-            System.err.println(s"[ExtractNil] collected: ${k.bindings.map(_.name).mkString(",")} nilTypes=${v.map(_.show).mkString(",")}")
-        )
         if needsNil.isEmpty then sir
         else
             // Phase 2: single top-down transform
-            val result = go(sir, needsNil, Map.empty, None, None)
-            // Debug: find any remaining Nil Constr nodes
-            def findNils(s: SIR, path: String): Unit = s match
-                case Constr(n, _, _, tp, anns) if AllNilNames.contains(n) =>
-                    System.err.println(s"[remainingNil] $n tp=${tp.show} at $path (${anns.pos.file}:${anns.pos.startLine})")
-                case Let(bs, body, _, _) => bs.foreach(b => findNils(b.value, path + "/" + b.name)); findNils(body, path + "/body")
-                case LamAbs(p, t, _, _) => findNils(t, path + "/lam(" + p.name + ")")
-                case Apply(f, a, _, _) => findNils(f, path + "/app.f"); findNils(a, path + "/app.arg")
-                case IfThenElse(c, t, f, _, _) => findNils(c, path + "/if.c"); findNils(t, path + "/if.t"); findNils(f, path + "/if.f")
-                case Match(s, cs, _, _) => findNils(s, path + "/match.scr"); cs.zipWithIndex.foreach((c,i) => findNils(c.body, path + s"/case$i"))
-                case Constr(_, _, args, _, _) => args.zipWithIndex.foreach((a,i) => findNils(a, path + s"/arg$i"))
-                case Cast(e, _, _) => findNils(e, path + "/cast")
-                case And(a, b, _) => findNils(a, path + "/and.l"); findNils(b, path + "/and.r")
-                case Or(a, b, _) => findNils(a, path + "/or.l"); findNils(b, path + "/or.r")
-                case Not(a, _) => findNils(a, path + "/not")
-                case Select(s, _, _, _) => findNils(s, path + "/sel")
-                case Decl(_, t) => findNils(t, path + "/decl")
-                case _ =>
-            findNils(result, "root")
-            result
+            go(sir, needsNil, Map.empty, None, None)
     }
 
     // ===================== Phase 1: Collect =====================
@@ -360,8 +338,18 @@ object ExtractNilParameter {
         case (SIRType.CaseClass(dC, dArgs, _), SIRType.CaseClass(aC, aArgs, _))
             if dC.name == aC.name && dArgs.size == aArgs.size =>
             dArgs.zip(aArgs).flatMap((d, a) => collectSubst(d, a)).toMap
+        // Cross-match SumCaseClass ↔ CaseClass (same DataDecl name)
+        case (SIRType.SumCaseClass(dDecl, dArgs), SIRType.CaseClass(aC, aArgs, _))
+            if dDecl.name == aC.name && dArgs.size == aArgs.size =>
+            dArgs.zip(aArgs).flatMap((d, a) => collectSubst(d, a)).toMap
+        case (SIRType.CaseClass(dC, dArgs, _), SIRType.SumCaseClass(aDecl, aArgs))
+            if dC.name == aDecl.name && dArgs.size == aArgs.size =>
+            dArgs.zip(aArgs).flatMap((d, a) => collectSubst(d, a)).toMap
         case (SIRType.TypeLambda(_, dBody), SIRType.TypeLambda(_, aBody)) =>
             collectSubst(dBody, aBody)
+        // TypeLambda vs concrete: unwrap and match body
+        case (SIRType.TypeLambda(_, dBody), actual) =>
+            collectSubst(dBody, actual)
         case _ => Map.empty
 
     /** Apply type substitutions to a SIRType. */
@@ -447,7 +435,6 @@ object ExtractNilParameter {
             for entry <- needsNil.entrySet().asScala do
                 val calledName = entry.getKey.bindings.head.name
                 if calledName != name && calledNames(rhs).contains(calledName) then
-                    System.err.println(s"[forward] $name → $calledName")
                     val calledNilTypes = entry.getValue
                     // Match this function's nil vars to the called function's nil types
                     val forwardedNilArgs = calledNilTypes.map { calledNilTp =>
@@ -509,19 +496,15 @@ object ExtractNilParameter {
         // ---- Var/ExternalVar in scope: inject nil applications with type substitution ----
         case Var(n, _, vAnns) if scope.contains(n) =>
             val entry = scope(n)
-            System.err.println(s"[inject] Var($n) typeSubst=${typeSubst.map((k,v) => s"${k.show}->${v.show}").mkString(", ")} nilArgs=${entry.nilArgs.size}")
             injectNilApplications(Var(n, entry.newFunTp, vAnns), entry, typeSubst)
         case ExternalVar(m, n, _, evAnns) if scope.contains(n) =>
             val entry = scope(n)
-            System.err.println(s"[inject] ExternalVar($n) subst=${typeSubst.map((k,v) => s"${k.show}#${k.optId}->${v.show}").mkString(",")} nilArgTps=${entry.nilArgs.map((tp,_) => tp.show).mkString(",")}")
             injectNilApplications(ExternalVar(m, n, entry.newFunTp, evAnns), entry, typeSubst)
 
         // ---- Apply: extract type substitutions and recurse ----
         case Apply(f, arg, tp, anns) =>
             // Extract TypeVar substitutions from this Apply level
             val newSubst = extractSubst(f.tp, tp, Some(arg.tp))
-            if newSubst.nonEmpty || typeSubst.nonEmpty then
-                System.err.println(s"[Apply] f.tp=${f.tp.show} tp=${tp.show} newSubst=${newSubst.map((k,v) => s"${k.show}->${v.show}").mkString(",")} inherited=${typeSubst.map((k,v) => s"${k.show}->${v.show}").mkString(",")}")
             val mergedSubst = typeSubst ++ newSubst
             // Recurse with merged substitutions
             val newF = goA(f, needsNil, scope, enclosingEntry, None, mergedSubst)
@@ -621,7 +604,6 @@ object ExtractNilParameter {
             val concreteNilArg = nilArg match
                 case c: Constr if typeSubst.nonEmpty =>
                     val concreteTp = substituteType(c.tp, typeSubst)
-                    System.err.println(s"[nilSubst] ${c.tp.show} → ${concreteTp.show}")
                     Constr(c.name, c.data, c.args, concreteTp, c.anns)
                 case other => other
             current = Apply(current, concreteNilArg.asInstanceOf[AnnotatedSIR], resultTp, nilInjectionAnns)
