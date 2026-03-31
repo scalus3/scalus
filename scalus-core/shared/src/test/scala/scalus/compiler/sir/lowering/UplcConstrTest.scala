@@ -27,6 +27,9 @@ object ActionModule {
   */
 case class Codec[T](decode: Data => Option[T], encode: T => Data)
 
+// TODO: test SumUplcConstr → DataConstr when @UplcRepr("UplcConstr") annotation is wired.
+// Requires a data-compatible enum annotated to use UplcConstr, stored in a Data-encoded field.
+
 @Compile
 object CodecModule {
     import Option.*
@@ -133,4 +136,5 @@ class UplcConstrTest extends AnyFunSuite {
             case Result.Failure(ex, _, _, _) =>
                 fail(s"Tag > 0 constructor failed: $ex")
     }
+
 }

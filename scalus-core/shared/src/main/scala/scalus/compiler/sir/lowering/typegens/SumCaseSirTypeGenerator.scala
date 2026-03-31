@@ -183,10 +183,105 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 new SumBuiltinListSirTypeGenerator(elemRepr)
                     .toRepresentation(input, representation, pos)
-            case (_: SumUplcConstr, DataConstr) =>
-                ???
+            case (inSum: SumUplcConstr, DataConstr) =>
+                // SumUplcConstr → DataConstr: Case dispatch, each branch converts fields
+                // to Data and calls constrData(tag, dataFieldList).
+                val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
+                val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>
+                    val variantRepr = inSum.variants.getOrElse(
+                      idx,
+                      ProductCaseClassRepresentation.ProdUplcConstr(
+                        idx,
+                        constrDecl.params.map { p =>
+                            val tp = lctx.resolveTypeVarIfNeeded(p.tp)
+                            lctx.typeGenerator(tp).defaultRepresentation(tp)
+                        }
+                      )
+                    )
+                    // Create field variables
+                    val fieldVars =
+                        constrDecl.params.zip(variantRepr.fieldReprs).map { (param, repr) =>
+                            val tp = lctx.resolveTypeVarIfNeeded(param.tp)
+                            val name = lctx.uniqueVarName(s"_uc2dc_f")
+                            new VariableLoweredValue(
+                              id = name,
+                              name = name,
+                              sir = SIR.Var(name, tp, AnnotationsDecl(pos)),
+                              representation = repr
+                            )
+                        }
+                    // Convert each field to Data and build a BuiltinList[Data]
+                    val dataListNil = lvDataDataListNil(pos)
+                    val dataList = fieldVars.foldRight(dataListNil: LoweredValue) { (fv, acc) =>
+                        val tp = lctx.resolveTypeVarIfNeeded(
+                          constrDecl.params(fieldVars.indexOf(fv)).tp
+                        )
+                        val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                        val asData = fv.toRepresentation(dataRepr, pos)
+                        lvBuiltinApply2(
+                          SIRBuiltins.mkCons,
+                          asData,
+                          acc,
+                          SIRType.List(SIRType.Data.tp),
+                          SumBuiltinList(DataData),
+                          pos
+                        )
+                    }
+                    // constrData(tag, dataFieldList)
+                    val tagConst = lvIntConstant(idx, pos)
+                    val constrData = lvBuiltinApply2(
+                      SIRBuiltins.constrData,
+                      tagConst,
+                      dataList,
+                      input.sirType,
+                      DataConstr,
+                      pos
+                    )
+                    // Wrap in nested lambda: λf0.λf1...λfN. constrData(tag, [toData(fi)...])
+                    val inPos = pos
+                    fieldVars.foldRight(constrData: LoweredValue) { (fv, inner) =>
+                        new ComplexLoweredValue(Set(fv), inner) {
+                            override def sirType = inner.sirType
+                            override def representation = inner.representation
+                            override def pos = inPos
+                            override def termInternal(gctx: TermGenerationContext) = {
+                                val ctx = gctx.copy(generatedVars = gctx.generatedVars + fv.id)
+                                Term.LamAbs(
+                                  fv.id,
+                                  inner.termWithNeededVars(ctx),
+                                  UplcAnnotation(inPos)
+                                )
+                            }
+                            override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
+                                Doc.text(s"λ${fv.name}.") + inner.docRef(ctx)
+                            override def docRef(ctx: LoweredValue.PrettyPrintingContext) =
+                                docDef(ctx)
+                        }
+                    }
+                }
+                // Case(input, [branch0, branch1, ...])
+                val inPos = pos
+                new ComplexLoweredValue(Set.empty, (input :: branches.toList)*) {
+                    override def sirType = input.sirType
+                    override def representation = DataConstr
+                    override def pos = inPos
+                    override def termInternal(gctx: TermGenerationContext) =
+                        Term.Case(
+                          input.termWithNeededVars(gctx),
+                          branches.map(_.termWithNeededVars(gctx)).toList,
+                          UplcAnnotation(inPos)
+                        )
+                    override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
+                        Doc.text("UplcConstr→DataConstr(") + input.docRef(ctx) + Doc.text(")")
+                    override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
+                }
             case (_: SumUplcConstr, SumBuiltinList(_)) =>
-                ???
+                // SumUplcConstr → SumBuiltinList: valid for List UplcConstr representation.
+                // Will be implemented when List uses UplcConstr encoding.
+                throw LoweringException(
+                  s"Conversion from SumUplcConstr to SumBuiltinList is not yet supported for ${input.sirType.show}.",
+                  pos
+                )
             case (_: SumUplcConstr, PackedSumDataList) =>
                 val elemType =
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
