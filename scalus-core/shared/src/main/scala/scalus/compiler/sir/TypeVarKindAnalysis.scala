@@ -146,6 +146,12 @@ object TypeVarKindAnalysis {
                 args.foreach(analyzeSir(_, scope))
             case SIR.Match(scrutinee, cases, _, _) =>
                 checkMatchForList(scrutinee.tp)
+                // If scrutinee type IS a non-builtin TypeVar, matching requires known representation
+                scrutinee.tp match {
+                    case tv: SIRType.TypeVar if !tv.isBuiltin =>
+                        upgradeKind(tv, DefaultRepresentation)
+                    case _ =>
+                }
                 analyzeSir(scrutinee, scope)
                 for c <- cases do analyzeSir(c.body, scope)
             case SIR.Apply(f, arg, tp, _) =>
@@ -153,7 +159,13 @@ object TypeVarKindAnalysis {
                 unifyAtApply(f, arg)
                 checkBuiltinListOps(f, arg)
                 checkCallPropagation(f, arg, scope)
-            case SIR.Select(s, _, _, _)        => analyzeSir(s, scope)
+            case SIR.Select(s, field, tp, _) =>
+                s.tp match {
+                    case tv: SIRType.TypeVar if !tv.isBuiltin =>
+                        upgradeKind(tv, DefaultRepresentation)
+                    case _ =>
+                }
+                analyzeSir(s, scope)
             case SIR.Cast(t, _, _)             => analyzeSir(t, scope)
             case SIR.And(a, b, _)              => analyzeSir(a, scope); analyzeSir(b, scope)
             case SIR.Or(a, b, _)               => analyzeSir(a, scope); analyzeSir(b, scope)
@@ -503,21 +515,18 @@ object TypeVarKindAnalysis {
         private def replaceKind(tv: SIRType.TypeVar): SIRType.TypeVar = {
             if tv.kind == Transparent then tv // don't change builtins
             else {
-                val key = find(tvKey(tv))
-                val computedKind = computedKinds.getOrElse(key, CanBeListAffected)
-                // For now, only DefaultRepresentation is a useful change.
-                // Transparent is the same as CanBeListAffected when nativeTypeVarRepresentation=false.
-                // Keep CanBeListAffected as the safe default for passthrough TypeVars.
-                val newKind = computedKind match {
-                    case DefaultRepresentation => DefaultRepresentation
-                    case CanBeListAffected     => CanBeListAffected
-                    case Transparent           => CanBeListAffected // passthrough → safe default
+                val key = tvKey(tv)
+                // Only change TypeVars that were registered as function typeParams
+                if !allScalaTypeVars.contains(key) then tv
+                else {
+                    val canonical = find(key)
+                    val newKind = computedKinds.getOrElse(canonical, Transparent)
+                    if newKind != tv.kind then {
+                        if debug then
+                            println(s"  TypeVar ${tv.name}#${tv.optId.getOrElse(0)}: ${tv.kind} → $newKind")
+                        SIRType.TypeVar(tv.name, tv.optId, newKind)
+                    } else tv
                 }
-                if newKind != tv.kind then {
-                    if debug then
-                        println(s"  TypeVar ${tv.name}#${tv.optId.getOrElse(0)}: ${tv.kind} → $newKind")
-                    SIRType.TypeVar(tv.name, tv.optId, newKind)
-                } else tv
             }
         }
 
