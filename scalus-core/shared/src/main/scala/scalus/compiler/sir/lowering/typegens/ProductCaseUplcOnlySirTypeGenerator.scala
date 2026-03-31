@@ -3,8 +3,8 @@ package typegens
 
 import scalus.compiler.sir.*
 
-/** Type generator for product case classes that cannot be converted to Data
-  * (contain functions or BLS elements). Uses UplcConstr representation.
+/** Type generator for product case classes that cannot be converted to Data (contain functions or
+  * BLS elements). Uses UplcConstr representation.
   */
 object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
@@ -39,8 +39,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
         if input.representation == outputRepresentation then input
-        else
-            ProductCaseSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+        else ProductCaseSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
     }
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
@@ -60,7 +59,8 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
         val pos = sel.anns.pos
         val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(
-          loweredScrutinee.sirType, pos
+          loweredScrutinee.sirType,
+          pos
         )
         val fieldIndex = constrDecl.params.indexWhere(_.name == sel.field)
         if fieldIndex < 0 then
@@ -71,16 +71,20 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
             case p: ProductCaseClassRepresentation.ProdUplcConstr => p
             case s: SumCaseClassRepresentation.SumUplcConstr =>
                 val constrIndex = ProductCaseSirTypeGenerator.retrieveConstrIndex(
-                  loweredScrutinee.sirType, pos
+                  loweredScrutinee.sirType,
+                  pos
                 )
-                s.variants.getOrElse(constrIndex,
+                s.variants.getOrElse(
+                  constrIndex,
                   throw LoweringException(
-                    s"Variant $constrIndex not found in SumUplcConstr for select", pos
+                    s"Variant $constrIndex not found in SumUplcConstr for select",
+                    pos
                   )
                 )
             case other =>
                 throw LoweringException(
-                  s"genSelect on UplcConstr: unexpected repr $other", pos
+                  s"genSelect on UplcConstr: unexpected repr $other",
+                  pos
                 )
 
         val fieldType = lctx.resolveTypeVarIfNeeded(constrDecl.params(fieldIndex).tp)
@@ -101,9 +105,12 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
                 val branch = fieldNames.foldRight(body: Term) { (name, inner) =>
                     Term.LamAbs(name, inner, UplcAnnotation(sel.anns.pos))
                 }
+                // Pad with Error branches for tags < this constructor's tag
+                val errorBranches =
+                    scala.List.fill(puc.tag)(Term.Error(UplcAnnotation(sel.anns.pos)))
                 Term.Case(
                   loweredScrutinee.termWithNeededVars(gctx),
-                  scala.List(branch),
+                  errorBranches :+ branch,
                   UplcAnnotation(sel.anns.pos)
                 )
             }

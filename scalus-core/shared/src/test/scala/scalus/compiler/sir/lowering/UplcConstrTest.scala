@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.compiler.{Compile, compile}
+import scalus.compiler.{compile, Compile}
 import scalus.compiler.Options
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
@@ -21,8 +21,8 @@ object ActionModule {
         case Action.Transform(f) => f(input)
 }
 
-/** A case class with two function fields: decoder and encoder for type T.
-  * Cannot be Data-encoded (functions aren't Data), so uses ProdUplcConstr.
+/** A case class with two function fields: decoder and encoder for type T. Cannot be Data-encoded
+  * (functions aren't Data), so uses ProdUplcConstr.
   */
 case class Codec[T](decode: Data => Option[T], encode: T => Data)
 
@@ -38,9 +38,9 @@ object CodecModule {
 
 /** Tests for UplcConstr representation — case classes/enums with function fields.
   *
-  * Case classes containing function fields (like `BigInt => BigInt`) cannot use
-  * ProdDataConstr because functions can't be converted to Data. They use
-  * ProdUplcConstr/SumUplcConstr instead, stored as UPLC Constr(tag, [fields]).
+  * Case classes containing function fields (like `BigInt => BigInt`) cannot use ProdDataConstr
+  * because functions can't be converted to Data. They use ProdUplcConstr/SumUplcConstr instead,
+  * stored as UPLC Constr(tag, [fields]).
   */
 class UplcConstrTest extends AnyFunSuite {
 

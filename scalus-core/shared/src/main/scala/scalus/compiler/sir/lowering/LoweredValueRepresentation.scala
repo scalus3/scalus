@@ -540,9 +540,9 @@ object ProductCaseClassRepresentation {
 
     /** Parameterized constructor representation where each field has its own representation.
       *
-      * UPLC form: `Constr(tag, [v1, v2, ..., vN])` where each `vi` is in `fieldReprs(i)`.
-      * Unlike `ProdDataConstr` which forces all fields to Data, this allows native field
-      * representations (e.g., `Constr(0, [Integer(42), ByteString(#ff)])`).
+      * UPLC form: `Constr(tag, [v1, v2, ..., vN])` where each `vi` is in `fieldReprs(i)`. Unlike
+      * `ProdDataConstr` which forces all fields to Data, this allows native field representations
+      * (e.g., `Constr(0, [Integer(42), ByteString(#ff)])`).
       *
       * @param tag
       *   constructor tag (index in the DataDecl's constructor list)
@@ -572,7 +572,7 @@ object ProductCaseClassRepresentation {
                         mine.isCompatibleOn(SIRType.FreeUnificator, other, pos)
                     }
                 case tvr: TypeVarRepresentation => true
-                case _                         => false
+                case _                          => false
             }
     }
 

@@ -155,9 +155,8 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         case None => true // unknown variant, allow
                         case Some(outProd) =>
                             inProd.fieldReprs.size == outProd.fieldReprs.size &&
-                            inProd.fieldReprs.zip(outProd.fieldReprs).forall {
-                                (inR, outR) =>
-                                    inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
+                            inProd.fieldReprs.zip(outProd.fieldReprs).forall { (inR, outR) =>
+                                inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
                             }
                 }
                 if allCompatible then
@@ -618,11 +617,11 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
     /** Match on UplcConstr representation using the Case builtin.
       *
-      * Case(scrutinee, [branch0, branch1, ...]) where each branch is a nested lambda
-      * that binds the constructor's fields: λf0.λf1.…λfN.body
+      * Case(scrutinee, [branch0, branch1, ...]) where each branch is a nested lambda that binds the
+      * constructor's fields: λf0.λf1.…λfN.body
       *
-      * Fields are bound with their native representations (from ProdUplcConstr.fieldReprs
-      * or derived from the constructor's parameter types).
+      * Fields are bound with their native representations (from ProdUplcConstr.fieldReprs or
+      * derived from the constructor's parameter types).
       */
     def genMatchUplcConstr(
         matchData: SIR.Match,
@@ -672,9 +671,8 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         }
     }
 
-    /** Generate a single branch for UplcConstr match.
-      * For Constr patterns: builds nested lambda λf0.λf1.…λfN.body
-      * For Wildcard: just the body (no lambdas)
+    /** Generate a single branch for UplcConstr match. For Constr patterns: builds nested lambda
+      * λf0.λf1.…λfN.body For Wildcard: just the body (no lambdas)
       */
     private def genMatchUplcConstrCase(
         sirCase: SIR.Case,
@@ -688,8 +686,8 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val constrDecl = constrPattern.constr
 
                 // Create variables for each field — fields are in native representation
-                val fieldVars = constrPattern.bindings.zip(constrDecl.params).map {
-                    (name, typeBinding) =>
+                val fieldVars =
+                    constrPattern.bindings.zip(constrDecl.params).map { (name, typeBinding) =>
                         val tp = lctx.resolveTypeVarIfNeeded(typeBinding.tp)
                         val fieldRepr = lctx.typeGenerator(tp).defaultRepresentation(tp)
                         val fieldVar = new VariableLoweredValue(
@@ -700,7 +698,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         )
                         lctx.scope = lctx.scope.add(fieldVar)
                         fieldVar
-                }
+                    }
 
                 // Lower the case body with field variables in scope
                 val body = lctx.lower(sirCase.body, optTargetType)

@@ -10,14 +10,14 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): SumCaseClassRepresentation.SumUplcConstr = {
         val (constructors, typeArgs) = tp match
-            case SIRType.SumCaseClass(decl, tArgs)      => (decl.constructors, tArgs)
+            case SIRType.SumCaseClass(decl, tArgs) => (decl.constructors, tArgs)
             case SIRType.CaseClass(cd, tArgs, Some(parent)) =>
                 parent match
                     case SIRType.SumCaseClass(decl, pArgs) => (decl.constructors, pArgs)
                     case _                                 => (scala.List(cd), tArgs)
-            case SIRType.CaseClass(cd, tArgs, None)     => (scala.List(cd), tArgs)
-            case SIRType.TypeLambda(_, body)             => return buildSumUplcConstr(body)
-            case SIRType.TypeProxy(ref)                  => return buildSumUplcConstr(ref)
+            case SIRType.CaseClass(cd, tArgs, None) => (scala.List(cd), tArgs)
+            case SIRType.TypeLambda(_, body)        => return buildSumUplcConstr(body)
+            case SIRType.TypeProxy(ref)             => return buildSumUplcConstr(ref)
             case _ => return SumCaseClassRepresentation.SumUplcConstr(Map.empty)
 
         val variants = constructors.zipWithIndex.map { (constrDecl, idx) =>

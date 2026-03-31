@@ -204,35 +204,48 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val constrDecl = retrieveConstrDecl(input.sirType, pos)
                 val fieldNames = constrDecl.params.indices.map(i => lctx.uniqueVarName(s"_uc_f$i"))
                 val fieldTypes = constrDecl.params.map(p => lctx.resolveTypeVarIfNeeded(p.tp))
-                val fieldVars = fieldNames.zip(fieldTypes).zip(puc.fieldReprs).map {
-                    case ((name, tp), repr) =>
+                val fieldVars =
+                    fieldNames.zip(fieldTypes).zip(puc.fieldReprs).map { case ((name, tp), repr) =>
                         new VariableLoweredValue(
-                          id = name, name = name,
+                          id = name,
+                          name = name,
                           sir = SIR.Var(name, tp, AnnotationsDecl(pos)),
                           representation = repr
                         )
-                }
+                    }
                 val dataListNil = lvDataDataListNil(pos)
                 val dataList = fieldVars.zip(fieldTypes).foldRight(dataListNil: LoweredValue) {
                     case ((fv, tp), acc) =>
                         val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
-                        lvBuiltinApply2(SIRBuiltins.mkCons,
-                          fv.toRepresentation(dataRepr, pos), acc,
+                        lvBuiltinApply2(
+                          SIRBuiltins.mkCons,
+                          fv.toRepresentation(dataRepr, pos),
+                          acc,
                           SIRType.List(SIRType.Data.tp),
-                          SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
-                          pos)
+                          SumCaseClassRepresentation
+                              .SumBuiltinList(SumCaseClassRepresentation.DataData),
+                          pos
+                        )
                 }
                 new ComplexLoweredValue(fieldVars.toSet, input, dataList) {
                     override def sirType = input.sirType
                     override def representation = ProdDataList
                     override def pos = input.pos
                     override def termInternal(gctx: TermGenerationContext) = {
-                        val innerCtx = gctx.copy(generatedVars = gctx.generatedVars ++ fieldVars.map(_.id))
+                        val innerCtx =
+                            gctx.copy(generatedVars = gctx.generatedVars ++ fieldVars.map(_.id))
                         val body = dataList.termWithNeededVars(innerCtx)
                         val branch = fieldVars.foldRight(body) { (fv, inner) =>
                             Term.LamAbs(fv.id, inner, UplcAnnotation(pos))
                         }
-                        Term.Case(input.termWithNeededVars(gctx), scala.List(branch), UplcAnnotation(pos))
+                        // Pad with Error branches for tags < this constructor's tag
+                        val errorBranches =
+                            scala.List.fill(puc.tag)(Term.Error(UplcAnnotation(pos)))
+                        Term.Case(
+                          input.termWithNeededVars(gctx),
+                          errorBranches :+ branch,
+                          UplcAnnotation(pos)
+                        )
                     }
                     override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
                         Doc.text("UplcConstr→DataList(") + input.docRef(ctx) + Doc.text(")")
