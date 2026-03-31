@@ -110,4 +110,19 @@ class UplcConstrTest extends AnyFunSuite {
             case Result.Failure(ex, _, _, _) =>
                 fail(s"UplcConstr enum with function variant failed: $ex")
     }
+
+    test("tag > 0 constructor: direct use of Transform variant") {
+        val sir = compile {
+            // Action.Transform has tag=1 — exercises Case branch padding
+            val t = Action.Transform(x => x + BigInt(1))
+            ActionModule.run(t, BigInt(5))
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(term, _, _, _) =>
+                info(s"Result: ${term.show}")
+                assert(term.show.contains("6"))
+            case Result.Failure(ex, _, _, _) =>
+                fail(s"Tag > 0 constructor failed: $ex")
+    }
 }
