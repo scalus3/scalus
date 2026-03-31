@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.*
-import scalus.compiler.sir.{Module, SIR, SIRType}
+import scalus.compiler.sir.{Module, SIR, SIRType, TypeVarKindAnalysis}
 import scalus.uplc.*
 
 import scala.collection.mutable.Map as MutableMap
@@ -118,9 +118,10 @@ object SirToUplcV3Lowering {
               "nativeTypeVarRepresentation=true is not yet implemented. " +
                   "Requires NativeList + NativeRepr infrastructure (see design in project memory)."
             )
-        val transformedSir = sir
+        val (transformedSir, tvStats) = TypeVarKindAnalysis.analyze(sir, debug)
+        if debug then println(tvStats)
         SirToUplcV3Lowering(
-          sir = transformedSir,
+          sir = sir, // TODO: use transformedSir once analysis handles all cases
           generateErrorTraces = options.generateErrorTraces,
           debug = debug,
           targetLanguage = options.targetLanguage,

@@ -329,7 +329,9 @@ object SIRType {
       *             DefaultRepresentation: Scala type variable with native representation.
       *             CanBeListAffected: Scala type variable that must use Data representation.
       */
-    case class TypeVar(name: String, optId: Option[Long] = None, kind: TypeVarKind)
+    /** Type variable — identity is (name, optId), kind is metadata and excluded from equality.
+      */
+    class TypeVar(val name: String, val optId: Option[Long] = None, val kind: TypeVarKind)
         extends SIRType {
 
         override def show: String = name
@@ -341,6 +343,22 @@ object SIRType {
         /** Backward-compatible check: true if this type variable is from a builtin UPLC function */
         inline def isBuiltin: Boolean = kind == TypeVarKind.Transparent
 
+        override def equals(other: Any): Boolean = other match {
+            case tv: TypeVar => name == tv.name && optId == tv.optId
+            case _           => false
+        }
+
+        override def hashCode: Int = (name, optId).hashCode
+
+        override def toString: String = s"TypeVar($name,$optId,$kind)"
+    }
+
+    object TypeVar {
+        def apply(name: String, optId: Option[Long] = None, kind: TypeVarKind = TypeVarKind.CanBeListAffected): TypeVar =
+            new TypeVar(name, optId, kind)
+
+        def unapply(tv: TypeVar): Some[(String, Option[Long], TypeVarKind)] =
+            Some((tv.name, tv.optId, tv.kind))
     }
 
     trait TypeVarGenerationContext {
@@ -674,7 +692,7 @@ object SIRType {
 
         val constrDecl = {
             val hash = name.hashCode
-            val a = TypeVar("A", Some(hash), TypeVarKind.Transparent)
+            val a = TypeVar("A", Some(hash), TypeVarKind.CanBeListAffected)
             ConstrDecl(
               name,
               scala.List(TypeBinding("list", SIRType.List(a))),

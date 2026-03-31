@@ -1282,7 +1282,16 @@ final class SIRCompiler(
                             SIRTypeEnv(v.srcPos, env.typeVars ++ typeParamsMap)
                         val vType = sirTypeInEnv(v.tpe, tEnv)
                         val variableKey = VariableKey(v.name.show, Some(v.symbol.id))
-                        val anns = AnnotationsDecl.fromSymIn(v.symbol, v.srcPos.sourcePos)
+                        val anns0 = AnnotationsDecl.fromSymIn(v.symbol, v.srcPos.sourcePos)
+                        val anns =
+                            if isFunctionalInterface(v.tpe) then
+                                val traitName = v.tpe.typeSymbol.fullName.toString
+                                anns0 + ("functionalInterface" -> SIR.Const(
+                                  scalus.uplc.Constant.String(traitName),
+                                  SIRType.String,
+                                  AnnotationsDecl.fromSrcPos(v.srcPos)
+                                ))
+                            else anns0
                         SIR.Var(variableKey.varName, vType, anns)
                     }
                     (vars, keys)
