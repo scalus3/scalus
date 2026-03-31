@@ -86,8 +86,12 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
             case (ProdDataList, PairIntDataList) =>
                 toRepresentation(input, ProdDataConstr, pos).toRepresentation(PairIntDataList, pos)
-            case (ProdDataList, _: ProdUplcConstr) =>
-                ???
+            case (ProdDataList, puc: ProdUplcConstr) =>
+                throw LoweringException(
+                  s"Conversion from ProdDataList to ProdUplcConstr($puc) is not yet implemented. " +
+                      "Requires unpacking the list and rebuilding Term.Constr with per-field conversions.",
+                  pos
+                )
             case (ProdDataList, outRep @ ProductCaseClassRepresentation.OneElementWrapper(_)) =>
                 lvBuiltinApply(SIRBuiltins.headList, input, input.sirType, outRep, pos)
             case (
@@ -914,7 +918,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     )
                     throw e
         }
-        // TODO: check UplcConstrOnData, it can be more efficient
+        // TODO: consider using ProdUplcConstr for more efficient encoding
         val s0 = lvDataDataListNil(constr.anns.pos)
         val dataList = dataRepresentations.foldRight(s0) { (arg, acc) =>
             lvBuiltinApply2(

@@ -43,8 +43,12 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
             case (DataConstr, PairIntDataList) =>
                 lvBuiltinApply(SIRBuiltins.unConstrData, input, input.sirType, PairIntDataList, pos)
-            case (DataConstr, SumBuiltinList(_)) =>
-                ???
+            case (DataConstr, SumBuiltinList(elementRepr)) =>
+                // Nil or Cons(head, tail).  In theory should go to SumCommonList
+                toRepresentation(input, PairIntDataList, pos).toRepresentation(
+                  SumBuiltinList(elementRepr),
+                  pos
+                )
             case (DataConstr, PackedSumDataList) =>
                 val elemType =
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
@@ -57,12 +61,102 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   PackedSumDataList,
                   pos
                 )
-            case (DataConstr, _: SumUplcConstr) =>
-                // DataConstr and SumUplcConstr both use the same UPLC Constr structure.
-                // The conversion is a representation proxy (no UPLC code change).
-                new RepresentationProxyLoweredValue(input, representation, pos)
-            case (DataConstr, UplcConstrOnData) =>
-                ???
+            case (DataConstr, outSum: SumUplcConstr) =>
+                // DataConstr → SumUplcConstr: unConstrData → (tag, dataFields) →
+                // dispatch on tag → rebuild Constr(tag, [converted fields])
+                val asConstr = input.toRepresentation(PairIntDataList, pos)
+                val tagVar = lvNewLazyIdVar(
+                  lctx.uniqueVarName("_dc_tag"),
+                  SIRType.Integer,
+                  PrimitiveRepresentation.Constant,
+                  lvBuiltinApply(
+                    SIRBuiltins.fstPair,
+                    asConstr,
+                    SIRType.Integer,
+                    PrimitiveRepresentation.Constant,
+                    pos
+                  ),
+                  pos
+                )
+                val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(DataData)
+                val dataListVar = lvNewLazyIdVar(
+                  lctx.uniqueVarName("_dc_fields"),
+                  SIRType.List(SIRType.Data.tp),
+                  dataListRepr,
+                  lvBuiltinApply(
+                    SIRBuiltins.sndPair,
+                    asConstr,
+                    SIRType.List(SIRType.Data.tp),
+                    dataListRepr,
+                    pos
+                  ),
+                  pos
+                )
+                // For each variant, build a branch that extracts fields and rebuilds as Constr
+                val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
+                val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>
+                    val variantRepr = outSum.variants.getOrElse(
+                      idx,
+                      ProductCaseClassRepresentation.ProdUplcConstr(
+                        idx,
+                        constrDecl.params.map { p =>
+                            val tp = lctx.resolveTypeVarIfNeeded(p.tp)
+                            lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                        }
+                      )
+                    )
+                    // Extract fields from dataListVar via headList/tailList
+                    var currentList: LoweredValue = dataListVar
+                    val fields =
+                        constrDecl.params.zip(variantRepr.fieldReprs).map { (param, fieldRepr) =>
+                            val tp = lctx.resolveTypeVarIfNeeded(param.tp)
+                            val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                            val head =
+                                lvBuiltinApply(SIRBuiltins.headList, currentList, tp, dataRepr, pos)
+                            val tail = lvBuiltinApply(
+                              SIRBuiltins.tailList,
+                              currentList,
+                              SIRType.List(SIRType.Data.tp),
+                              dataListRepr,
+                              pos
+                            )
+                            currentList = tail
+                            head.toRepresentation(fieldRepr, pos)
+                        }
+                    // Build Constr(idx, [fields])
+                    val inPos = pos
+                    new ComplexLoweredValue(Set.empty, fields*) {
+                        override def sirType = input.sirType
+                        override def representation = variantRepr
+                        override def pos = inPos
+                        override def termInternal(gctx: TermGenerationContext) =
+                            Term.Constr(
+                              scalus.cardano.ledger.Word64(idx.toLong),
+                              fields.map(_.termWithNeededVars(gctx)).toList,
+                              UplcAnnotation(inPos)
+                            )
+                        override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
+                            Doc.text(s"DataConstr→UplcConstr($idx)")
+                        override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
+                    }: LoweredValue
+                }
+                // Dispatch on tag using CaseInteger (PlutusV4) or if-then-else chain
+                val result =
+                    if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
+                        lvCaseInteger(tagVar, branches.toList, pos, None)
+                    else
+                        branches.zipWithIndex.foldRight(branches.last: LoweredValue) {
+                            case ((branch, idx), acc) =>
+                                if idx == branches.size - 1 then acc
+                                else
+                                    lvIfThenElse(
+                                      lvEqualsInteger(tagVar, lvIntConstant(idx, pos), pos),
+                                      branch,
+                                      acc,
+                                      pos
+                                    )
+                        }
+                ScopeBracketsLoweredValue(Set(tagVar, dataListVar), result)
             case (SumBuiltinList(_), DataConstr) =>
                 ???
             case (SumBuiltinList(inElemRepr), out @ SumBuiltinList(outElemRepr)) =>
@@ -70,7 +164,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 else
                     new SumBuiltinListSirTypeGenerator(inElemRepr)
                         .toRepresentation(input, out, pos)
-            case (SumBuiltinList(_), PackedSumDataList) =>
+            case (SumBuiltinList(inElementRepr), PackedSumDataList) =>
                 val elemRepr =
                     lctx.typeGenerator(SIRType.Data.tp).defaultDataRepresentation(SIRType.Data.tp)
                 val asDataList = input.toRepresentation(SumBuiltinList(elemRepr), pos)
@@ -82,8 +176,6 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
             case (SumBuiltinList(_), _: SumUplcConstr) =>
-                ???
-            case (SumBuiltinList(_), UplcConstrOnData) =>
                 ???
             case (PackedSumDataList, SumBuiltinList(outElemRepr)) =>
                 val elemType =
@@ -107,8 +199,6 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val asDataList = toRepresentation(input, SumBuiltinList(elemRepr), pos)
                 asDataList.toRepresentation(DataConstr, pos)
             case (PackedSumDataList, _: SumUplcConstr) =>
-                ???
-            case (PackedSumDataList, UplcConstrOnData) =>
                 ???
             case (_: SumUplcConstr, DataConstr) =>
                 ???
@@ -145,9 +235,8 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                           pos
                         )
                     case None =>
-                        // Tag not in target variants — extend target with actual reprs
-                        val extendedSum = SumUplcConstr(outSum.variants + (inProd.tag -> inProd))
-                        new RepresentationProxyLoweredValue(input, extendedSum, pos)
+                        // Tag not in target variants — proxy to requested representation
+                        new RepresentationProxyLoweredValue(input, representation, pos)
             // SumUplcConstr → SumUplcConstr: check per-variant compatibility
             case (inSum: SumUplcConstr, outSum: SumUplcConstr) =>
                 val allCompatible = inSum.variants.forall { (tag, inProd) =>
@@ -273,8 +362,6 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   loweredScrutinee,
                   optTargetType
                 )
-            case UplcConstrOnData =>
-                ???
             case TypeVarRepresentation(_) =>
                 // When we have TypeVarRepresentation, convert to the proper representation
                 // for the scrutinee's actual type and recurse

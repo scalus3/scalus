@@ -385,14 +385,6 @@ object SumCaseClassRepresentation {
             DefaultUni.Data // Constr values stored as Data in list elements
     }
 
-    /** Representation as Constr(i,x1,...,xn) where i is the index of the constructor and x is a
-      * field represented as data. Deprecated — use SumUplcConstr with per-field reprs instead.
-      */
-    case object UplcConstrOnData extends SumCaseClassRepresentation(false, true) {
-        override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            DefaultUni.Data // placeholder, not actually packed data
-    }
-
 }
 
 sealed trait ProductCaseClassRepresentation(val isPackedData: Boolean, val isDataCentric: Boolean)

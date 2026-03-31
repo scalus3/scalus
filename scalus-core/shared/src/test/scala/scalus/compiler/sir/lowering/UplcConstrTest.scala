@@ -8,6 +8,7 @@ import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{fromData, toData}
+import scalus.uplc.{Constant, Term}
 import scalus.uplc.eval.{PlutusVM, Result}
 
 enum Action:
@@ -63,9 +64,10 @@ class UplcConstrTest extends AnyFunSuite {
         }
         val result = sir.toUplc().evaluateDebug
         result match
+            case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
+                assert(v == 42, s"Expected 42, got $v")
             case Result.Success(term, _, _, _) =>
-                info(s"Result: ${term.show}")
-                assert(term.show.contains("42"))
+                fail(s"Expected Integer constant, got ${term.show}")
             case Result.Failure(ex, _, _, _) =>
                 fail(s"Codec roundtrip failed: $ex")
     }
@@ -87,9 +89,13 @@ class UplcConstrTest extends AnyFunSuite {
         }
         val result = sir.toUplc().evaluateDebug
         result match
+            case Result.Success(Term.Const(Constant.ByteString(bs), _), _, _, _) =>
+                assert(
+                  bs == scalus.uplc.builtin.ByteString.fromString("hello"),
+                  s"Expected 'hello', got $bs"
+                )
             case Result.Success(term, _, _, _) =>
-                info(s"Result: ${term.show}")
-                assert(term.show.contains("68656c6c6f")) // "hello" in hex
+                fail(s"Expected ByteString constant, got ${term.show}")
             case Result.Failure(ex, _, _, _) =>
                 fail(s"ByteString codec failed: $ex")
     }
@@ -104,9 +110,10 @@ class UplcConstrTest extends AnyFunSuite {
         }
         val result = sir.toUplc().evaluateDebug
         result match
+            case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
+                assert(v == 16, s"Expected 16, got $v")
             case Result.Success(term, _, _, _) =>
-                info(s"Result: ${term.show}")
-                assert(term.show.contains("16"))
+                fail(s"Expected Integer constant, got ${term.show}")
             case Result.Failure(ex, _, _, _) =>
                 fail(s"UplcConstr enum with function variant failed: $ex")
     }
@@ -119,9 +126,10 @@ class UplcConstrTest extends AnyFunSuite {
         }
         val result = sir.toUplc().evaluateDebug
         result match
+            case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
+                assert(v == 6, s"Expected 6, got $v")
             case Result.Success(term, _, _, _) =>
-                info(s"Result: ${term.show}")
-                assert(term.show.contains("6"))
+                fail(s"Expected Integer constant, got ${term.show}")
             case Result.Failure(ex, _, _, _) =>
                 fail(s"Tag > 0 constructor failed: $ex")
     }
