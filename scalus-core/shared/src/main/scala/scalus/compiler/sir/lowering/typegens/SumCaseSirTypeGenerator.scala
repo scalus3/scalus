@@ -52,11 +52,11 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(PairIntDataList, pos)
                     .toRepresentation(PackedSumDataList, pos)
-            case (DataConstr, outSum: SumUplcConstr) =>
+            case (DataConstr, _: SumUplcConstr) =>
                 // DataConstr → SumUplcConstr: go through PairIntDataList
                 input
                     .toRepresentation(PairIntDataList, pos)
-                    .toRepresentation(outSum, pos)
+                    .toRepresentation(representation, pos)
             // === PairIntDataList conversions ===
             case (PairIntDataList, SumBuiltinList(elementRepr)) =>
                 // PairIntDataList is (tag, dataFieldList). For list types,
@@ -80,96 +80,9 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   PackedSumDataList,
                   pos
                 )
-            case (PairIntDataList, outSum: SumUplcConstr) =>
-                // PairIntDataList → SumUplcConstr: extract tag and fields,
-                // dispatch on tag, rebuild Constr with per-field conversion
-                val tagVar = lvNewLazyIdVar(
-                  lctx.uniqueVarName("_dc_tag"),
-                  SIRType.Integer,
-                  PrimitiveRepresentation.Constant,
-                  lvBuiltinApply(
-                    SIRBuiltins.fstPair,
-                    input,
-                    SIRType.Integer,
-                    PrimitiveRepresentation.Constant,
-                    pos
-                  ),
-                  pos
-                )
-                val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(DataData)
-                val dataListVar = lvNewLazyIdVar(
-                  lctx.uniqueVarName("_dc_fields"),
-                  SIRType.List(SIRType.Data.tp),
-                  dataListRepr,
-                  lvBuiltinApply(
-                    SIRBuiltins.sndPair,
-                    input,
-                    SIRType.List(SIRType.Data.tp),
-                    dataListRepr,
-                    pos
-                  ),
-                  pos
-                )
-                val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
-                val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>
-                    val variantRepr = outSum.variants.getOrElse(
-                      idx,
-                      ProductCaseClassRepresentation.ProdUplcConstr(
-                        idx,
-                        constrDecl.params.map { p =>
-                            val tp = lctx.resolveTypeVarIfNeeded(p.tp)
-                            lctx.typeGenerator(tp).defaultDataRepresentation(tp)
-                        }
-                      )
-                    )
-                    var currentList: LoweredValue = dataListVar
-                    val fields =
-                        constrDecl.params.zip(variantRepr.fieldReprs).map { (param, fieldRepr) =>
-                            val tp = lctx.resolveTypeVarIfNeeded(param.tp)
-                            val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
-                            val head =
-                                lvBuiltinApply(SIRBuiltins.headList, currentList, tp, dataRepr, pos)
-                            currentList = lvBuiltinApply(
-                              SIRBuiltins.tailList,
-                              currentList,
-                              SIRType.List(SIRType.Data.tp),
-                              dataListRepr,
-                              pos
-                            )
-                            head.toRepresentation(fieldRepr, pos)
-                        }
-                    val inPos = pos
-                    new ComplexLoweredValue(Set.empty, fields*) {
-                        override def sirType = input.sirType
-                        override def representation = variantRepr
-                        override def pos = inPos
-                        override def termInternal(gctx: TermGenerationContext) =
-                            Term.Constr(
-                              scalus.cardano.ledger.Word64(idx.toLong),
-                              fields.map(_.termWithNeededVars(gctx)).toList,
-                              UplcAnnotation(inPos)
-                            )
-                        override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
-                            Doc.text(s"PairIntDataList→UplcConstr($idx)")
-                        override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
-                    }: LoweredValue
-                }
-                val result =
-                    if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                        lvCaseInteger(tagVar, branches.toList, pos, None)
-                    else
-                        branches.zipWithIndex.foldRight(branches.last: LoweredValue) {
-                            case ((branch, idx), acc) =>
-                                if idx == branches.size - 1 then acc
-                                else
-                                    lvIfThenElse(
-                                      lvEqualsInteger(tagVar, lvIntConstant(idx, pos), pos),
-                                      branch,
-                                      acc,
-                                      pos
-                                    )
-                        }
-                ScopeBracketsLoweredValue(Set(tagVar, dataListVar), result)
+            // PairIntDataList → SumUplcConstr: delegate
+            case (PairIntDataList, _: SumUplcConstr) =>
+                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
             // All SumBuiltinList source conversions delegate to SumBuiltinListSirTypeGenerator
             case (SumBuiltinList(inElemRepr), _) =>
                 new SumBuiltinListSirTypeGenerator(inElemRepr)
@@ -183,156 +96,18 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 new SumBuiltinListSirTypeGenerator(elemRepr)
                     .toRepresentation(input, representation, pos)
-            case (inSum: SumUplcConstr, DataConstr) =>
-                // SumUplcConstr → DataConstr: Case dispatch, each branch converts fields
-                // to Data and calls constrData(tag, dataFieldList).
-                val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
-                val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>
-                    val variantRepr = inSum.variants.getOrElse(
-                      idx,
-                      ProductCaseClassRepresentation.ProdUplcConstr(
-                        idx,
-                        constrDecl.params.map { p =>
-                            val tp = lctx.resolveTypeVarIfNeeded(p.tp)
-                            lctx.typeGenerator(tp).defaultRepresentation(tp)
-                        }
-                      )
-                    )
-                    // Create field variables
-                    val fieldVars =
-                        constrDecl.params.zip(variantRepr.fieldReprs).map { (param, repr) =>
-                            val tp = lctx.resolveTypeVarIfNeeded(param.tp)
-                            val name = lctx.uniqueVarName(s"_uc2dc_f")
-                            new VariableLoweredValue(
-                              id = name,
-                              name = name,
-                              sir = SIR.Var(name, tp, AnnotationsDecl(pos)),
-                              representation = repr
-                            )
-                        }
-                    // Convert each field to Data and build a BuiltinList[Data]
-                    val dataListNil = lvDataDataListNil(pos)
-                    val dataList = fieldVars.foldRight(dataListNil: LoweredValue) { (fv, acc) =>
-                        val tp = lctx.resolveTypeVarIfNeeded(
-                          constrDecl.params(fieldVars.indexOf(fv)).tp
-                        )
-                        val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
-                        val asData = fv.toRepresentation(dataRepr, pos)
-                        lvBuiltinApply2(
-                          SIRBuiltins.mkCons,
-                          asData,
-                          acc,
-                          SIRType.List(SIRType.Data.tp),
-                          SumBuiltinList(DataData),
-                          pos
-                        )
-                    }
-                    // constrData(tag, dataFieldList)
-                    val tagConst = lvIntConstant(idx, pos)
-                    val constrData = lvBuiltinApply2(
-                      SIRBuiltins.constrData,
-                      tagConst,
-                      dataList,
-                      input.sirType,
-                      DataConstr,
-                      pos
-                    )
-                    // Wrap in nested lambda: λf0.λf1...λfN. constrData(tag, [toData(fi)...])
-                    val inPos = pos
-                    fieldVars.foldRight(constrData: LoweredValue) { (fv, inner) =>
-                        new ComplexLoweredValue(Set(fv), inner) {
-                            override def sirType = inner.sirType
-                            override def representation = inner.representation
-                            override def pos = inPos
-                            override def termInternal(gctx: TermGenerationContext) = {
-                                val ctx = gctx.copy(generatedVars = gctx.generatedVars + fv.id)
-                                Term.LamAbs(
-                                  fv.id,
-                                  inner.termWithNeededVars(ctx),
-                                  UplcAnnotation(inPos)
-                                )
-                            }
-                            override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
-                                Doc.text(s"λ${fv.name}.") + inner.docRef(ctx)
-                            override def docRef(ctx: LoweredValue.PrettyPrintingContext) =
-                                docDef(ctx)
-                        }
-                    }
-                }
-                // Case(input, [branch0, branch1, ...])
-                val inPos = pos
-                new ComplexLoweredValue(Set.empty, (input :: branches.toList)*) {
-                    override def sirType = input.sirType
-                    override def representation = DataConstr
-                    override def pos = inPos
-                    override def termInternal(gctx: TermGenerationContext) =
-                        Term.Case(
-                          input.termWithNeededVars(gctx),
-                          branches.map(_.termWithNeededVars(gctx)).toList,
-                          UplcAnnotation(inPos)
-                        )
-                    override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
-                        Doc.text("UplcConstr→DataConstr(") + input.docRef(ctx) + Doc.text(")")
-                    override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
-                }
-            case (_: SumUplcConstr, SumBuiltinList(_)) =>
-                // SumUplcConstr → SumBuiltinList: valid for List UplcConstr representation.
-                // Will be implemented when List uses UplcConstr encoding.
-                throw LoweringException(
-                  s"Conversion from SumUplcConstr to SumBuiltinList is not yet supported for ${input.sirType.show}.",
-                  pos
-                )
-            case (_: SumUplcConstr, PackedSumDataList) =>
-                val elemType =
-                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
-                val asDataList = toRepresentation(input, SumBuiltinList(elemRepr), pos)
-                asDataList.toRepresentation(PackedSumDataList, pos)
+            // All SumUplcConstr source/target conversions delegate to SumUplcConstrSirTypeGenerator
+            case (_: SumUplcConstr, _) =>
+                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+            case (_, _: SumUplcConstr) =>
+                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+            case (_: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
+                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
             case (inTvr: TypeVarRepresentation, outRepr) =>
                 if inTvr.isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
                 else
                     val r0 = RepresentationProxyLoweredValue(input, DataConstr, pos)
                     toRepresentation(r0, representation, pos)
-            // ProdUplcConstr → SumUplcConstr: check field reprs compatibility per variant
-            case (inProd: ProductCaseClassRepresentation.ProdUplcConstr, outSum: SumUplcConstr) =>
-                outSum.variants.get(inProd.tag) match
-                    case Some(expectedProd)
-                        if inProd.fieldReprs.size == expectedProd.fieldReprs.size
-                            && inProd.fieldReprs.zip(expectedProd.fieldReprs).forall {
-                                (inR, outR) =>
-                                    inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
-                            } =>
-                        // Field reprs compatible — same UPLC structure, proxy is safe
-                        new RepresentationProxyLoweredValue(input, representation, pos)
-                    case Some(expectedProd) =>
-                        // Field reprs incompatible — convert each field
-                        // TODO: unpack Constr fields, convert each, rebuild
-                        throw LoweringException(
-                          s"ProdUplcConstr → SumUplcConstr field repr mismatch for tag ${inProd.tag}: " +
-                              s"got ${inProd.fieldReprs} but expected ${expectedProd.fieldReprs}",
-                          pos
-                        )
-                    case None =>
-                        // Tag not in target variants — proxy to requested representation
-                        new RepresentationProxyLoweredValue(input, representation, pos)
-            // SumUplcConstr → SumUplcConstr: check per-variant compatibility
-            case (inSum: SumUplcConstr, outSum: SumUplcConstr) =>
-                val allCompatible = inSum.variants.forall { (tag, inProd) =>
-                    outSum.variants.get(tag) match
-                        case None => true // unknown variant, allow
-                        case Some(outProd) =>
-                            inProd.fieldReprs.size == outProd.fieldReprs.size &&
-                            inProd.fieldReprs.zip(outProd.fieldReprs).forall { (inR, outR) =>
-                                inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
-                            }
-                }
-                if allCompatible then
-                    new RepresentationProxyLoweredValue(input, representation, pos)
-                else
-                    throw LoweringException(
-                      s"SumUplcConstr → SumUplcConstr variant repr mismatch",
-                      pos
-                    )
             case (inRepr, outTvr: TypeVarRepresentation) =>
                 if outTvr.isBuiltin then input
                 else toRepresentation(input, DataConstr, pos)
@@ -435,7 +210,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 new SumBuiltinListSirTypeGenerator(elemRepr)
                     .genMatch(matchData, unpackedVar, optTargetType)
             case _: SumUplcConstr =>
-                genMatchUplcConstr(
+                SumUplcConstrSirTypeGenerator.genMatchUplcConstr(
                   matchData,
                   loweredScrutinee,
                   optTargetType
@@ -473,7 +248,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
       * @param lctx
       * @return
       */
-    private def prepareCases(
+    private[typegens] def prepareCases(
         matchData: SIR.Match,
         loweredScrutinee: LoweredValue,
     )(using LoweringContext): List[PreparedCase] = {
@@ -780,132 +555,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         ScopeBracketsLoweredValue(scopedVars, body)
     }
 
-    /** Match on UplcConstr representation using the Case builtin.
-      *
-      * Case(scrutinee, [branch0, branch1, ...]) where each branch is a nested lambda that binds the
-      * constructor's fields: λf0.λf1.…λfN.body
-      *
-      * Fields are bound with their native representations (from ProdUplcConstr.fieldReprs or
-      * derived from the constructor's parameter types).
-      */
-    def genMatchUplcConstr(
-        matchData: SIR.Match,
-        loweredScrutinee: LoweredValue,
-        optTargetType: Option[SIRType]
-    )(using lctx: LoweringContext): LoweredValue = {
-
-        val prevScope = lctx.scope
-        val orderedCases = prepareCases(matchData, loweredScrutinee)
-        val pos = matchData.anns.pos
-
-        // For each ordered case, generate a branch lambda that binds the constructor's fields
-        val branches = orderedCases.map { preparedCase =>
-            genMatchUplcConstrCase(preparedCase.sirCase, optTargetType)
-        }
-
-        lctx.scope = prevScope
-
-        // Determine result type and repr from the first branch
-        val resultRepr = branches.head.representation
-        val resultType = optTargetType.getOrElse(matchData.tp)
-
-        // Generate Case(scrutinee, [branch0, branch1, ...])
-        new ComplexLoweredValue(Set.empty, (loweredScrutinee :: branches.toList)*) {
-            override def sirType: SIRType = resultType
-            override def representation: LoweredValueRepresentation = resultRepr
-            override def pos: SIRPosition = matchData.anns.pos
-
-            override def termInternal(gctx: TermGenerationContext): Term = {
-                Term.Case(
-                  loweredScrutinee.termWithNeededVars(gctx),
-                  branches.map(_.termWithNeededVars(gctx)).toList,
-                  UplcAnnotation(matchData.anns.pos)
-                )
-            }
-
-            override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
-                import Doc.*
-                val branchDocs = branches.zipWithIndex.map { (b, i) =>
-                    line + text(s"$i ->") + (lineOrSpace + b.docRef(ctx)).nested(2)
-                }
-                ((text("case") + space + loweredScrutinee.docRef(ctx) + space + text("of"))
-                    + branchDocs.foldLeft(empty)(_ + _.grouped)).aligned
-            }
-
-            override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
-        }
-    }
-
-    /** Generate a single branch for UplcConstr match. For Constr patterns: builds nested lambda
-      * λf0.λf1.…λfN.body For Wildcard: just the body (no lambdas)
-      */
-    private def genMatchUplcConstrCase(
-        sirCase: SIR.Case,
-        optTargetType: Option[SIRType]
-    )(using lctx: LoweringContext): LoweredValue = {
-        val caseScope = lctx.scope
-        val pos = sirCase.anns.pos
-
-        sirCase.pattern match
-            case constrPattern: Pattern.Constr =>
-                val constrDecl = constrPattern.constr
-
-                // Create variables for each field — fields are in native representation
-                val fieldVars =
-                    constrPattern.bindings.zip(constrDecl.params).map { (name, typeBinding) =>
-                        val tp = lctx.resolveTypeVarIfNeeded(typeBinding.tp)
-                        val fieldRepr = lctx.typeGenerator(tp).defaultRepresentation(tp)
-                        val fieldVar = new VariableLoweredValue(
-                          id = lctx.uniqueVarName(name),
-                          name = name,
-                          sir = SIR.Var(name, tp, AnnotationsDecl(pos)),
-                          representation = fieldRepr
-                        )
-                        lctx.scope = lctx.scope.add(fieldVar)
-                        fieldVar
-                    }
-
-                // Lower the case body with field variables in scope
-                val body = lctx.lower(sirCase.body, optTargetType)
-                lctx.scope = caseScope
-
-                // Build nested lambda: λf0.λf1.…λfN.body
-                fieldVars.foldRight(body) { (fieldVar, inner) =>
-                    new ComplexLoweredValue(Set(fieldVar), inner) {
-                        override def sirType: SIRType = inner.sirType
-                        override def representation: LoweredValueRepresentation =
-                            inner.representation
-                        override def pos: SIRPosition = sirCase.anns.pos
-
-                        override def termInternal(gctx: TermGenerationContext): Term = {
-                            val innerCtx =
-                                gctx.copy(generatedVars = gctx.generatedVars + fieldVar.id)
-                            Term.LamAbs(
-                              fieldVar.id,
-                              inner.termWithNeededVars(innerCtx),
-                              UplcAnnotation(sirCase.anns.pos)
-                            )
-                        }
-
-                        override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
-                            Doc.text(s"λ${fieldVar.name}.") + inner.docRef(ctx)
-
-                        override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc =
-                            docDef(ctx)
-                    }
-                }
-
-            case Pattern.Wildcard =>
-                val body = lctx.lower(sirCase.body, optTargetType)
-                lctx.scope = caseScope
-                body
-
-            case other =>
-                throw LoweringException(
-                  s"Unexpected pattern in UplcConstr match: $other",
-                  pos
-                )
-    }
+    // genMatchUplcConstr and genMatchUplcConstrCase moved to SumUplcConstrSirTypeGenerator
 
     def findConstructors(sirType: SIRType, pos: SIRPosition): Seq[ConstrDecl] = {
         sirType match
