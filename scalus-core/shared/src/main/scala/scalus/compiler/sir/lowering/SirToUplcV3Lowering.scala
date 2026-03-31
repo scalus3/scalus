@@ -121,7 +121,7 @@ object SirToUplcV3Lowering {
         val (transformedSir, tvStats) = TypeVarKindAnalysis.analyze(sir, debug)
         if debug then println(tvStats)
         SirToUplcV3Lowering(
-          sir = sir, // TODO: use transformedSir once analysis handles all cases
+          sir = transformedSir,
           generateErrorTraces = options.generateErrorTraces,
           debug = debug,
           targetLanguage = options.targetLanguage,

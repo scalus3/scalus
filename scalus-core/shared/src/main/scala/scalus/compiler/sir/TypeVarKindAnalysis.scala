@@ -128,6 +128,8 @@ object TypeVarKindAnalysis {
                     b.value match {
                         case lam: SIR.LamAbs if lam.typeParams.nonEmpty =>
                             val (tps, params) = extractTypeParamsAndParams(lam)
+                            if debug then
+                                println(s"  function ${b.name}: typeParams=${tps.map(tv => s"${tv.name}#${tv.optId.getOrElse(0)}").mkString(",")}")
                             registerTypeParams(tps)
                             sc + (b.name -> FunctionInfo(tps, params, lam))
                         case _ => sc
@@ -149,6 +151,7 @@ object TypeVarKindAnalysis {
             case SIR.Apply(f, arg, tp, _) =>
                 analyzeSir(f, scope); analyzeSir(arg, scope)
                 unifyAtApply(f, arg)
+                checkBuiltinListOps(f, arg)
                 checkCallPropagation(f, arg, scope)
             case SIR.Select(s, _, _, _)        => analyzeSir(s, scope)
             case SIR.Cast(t, _, _)             => analyzeSir(t, scope)
@@ -171,11 +174,14 @@ object TypeVarKindAnalysis {
                     SIRUnify.topLevelUnifyType(pt, arg.tp, SIRUnify.Env.empty.withUpcasting) match {
                         case SIRUnify.UnificationSuccess(env, _) =>
                             // filledTypes maps TypeVars → their resolved types
-                            for (tv, resolved) <- env.filledTypes do {
+                            if debug && env.filledTypes.nonEmpty then
+                            println(s"  unifyApply filledTypes: ${env.filledTypes.map((k, v) => s"${k.name}#${k.optId.getOrElse(0)} → ${v.show}").mkString(", ")}")
+                        if debug && env.eqTypes.nonEmpty then
+                            println(s"  unifyApply eqTypes: ${env.eqTypes.map((k, v) => s"${k.name}#${k.optId.getOrElse(0)} → ${v.map(tv => s"${tv.name}#${tv.optId.getOrElse(0)}").mkString(",")}").mkString("; ")}")
+                        for (tv, resolved) <- env.filledTypes do {
                                 resolved match {
                                     case rtv: SIRType.TypeVar
                                         if tv.optId.isDefined && rtv.optId.isDefined =>
-                                        // Two TypeVars with defined IDs are equivalent — union them
                                         union(tvKey(tv), tvKey(rtv))
                                     case _ =>
                                 }
@@ -195,6 +201,42 @@ object TypeVarKindAnalysis {
             case SIRType.TypeLambda(_, body)    => extractArgType(body)
             case tp: SIRType.TypeProxy if tp.ref != null => extractArgType(tp.ref)
             case _                             => None
+        }
+
+        /** Detect builtin list operations (mkCons, constrData, mapData, listData).
+          * When mkCons(element, tail) is called, the element's TypeVars are list-affected.
+          */
+        private def checkBuiltinListOps(f: SIR, arg: SIR): Unit = {
+            import scalus.uplc.DefaultFun
+            // Peel Apply chain to find the root builtin
+            val (root, allArgs) = peelApplyChain(f, List(arg))
+            root match {
+                case Some(SIR.Builtin(fn, _, _)) =>
+                    fn match {
+                        case DefaultFun.MkCons =>
+                            // mkCons(element, tail) — first arg is list element
+                            if allArgs.nonEmpty then
+                                collectTypeVarsFrom(allArgs.head.tp)
+                                    .foreach(tv => upgradeKind(tv, CanBeListAffected))
+                        case DefaultFun.ConstrData =>
+                            // constrData(tag, fields) — second arg is List[Data], fields are list elements
+                            if allArgs.size >= 2 then
+                                collectTypeVarsFrom(allArgs(1).tp)
+                                    .foreach(tv => upgradeKind(tv, CanBeListAffected))
+                        case DefaultFun.MapData | DefaultFun.ListData =>
+                            // mapData(list) / listData(list) — arg elements are list-affected
+                            if allArgs.nonEmpty then
+                                collectTypeVarsFrom(allArgs.head.tp)
+                                    .foreach(tv => upgradeKind(tv, CanBeListAffected))
+                        case DefaultFun.MkPairData =>
+                            // mkPairData(fst, snd) — both args become pair elements in a list
+                            for a <- allArgs do
+                                collectTypeVarsFrom(a.tp)
+                                    .foreach(tv => upgradeKind(tv, CanBeListAffected))
+                        case _ =>
+                    }
+                case _ =>
+            }
         }
 
         private def checkFunctionalInterfaceParams(lam: SIR.LamAbs): Unit = {
@@ -238,6 +280,11 @@ object TypeVarKindAnalysis {
 
         private def markElementTypeVars(constrType: SIRType): Unit = {
             val typeArgs = extractTypeArgs(constrType)
+            if debug then {
+                val tvs = typeArgs.flatMap(collectTypeVarsFrom)
+                if tvs.nonEmpty then
+                    println(s"  markElement: ${constrType.show} → TVs: ${tvs.map(tv => s"${tv.name}#${tv.optId.getOrElse(0)}").mkString(", ")}")
+            }
             for arg <- typeArgs do
                 collectTypeVarsFrom(arg).foreach(tv => upgradeKind(tv, CanBeListAffected))
         }
@@ -245,6 +292,11 @@ object TypeVarKindAnalysis {
         private def checkMatchForList(scrutineeType: SIRType): Unit = {
             extractDataDecl(scrutineeType) match {
                 case Some((decl, typeArgs)) if isListLikeDecl(decl) =>
+                    if debug then {
+                        val tvs = typeArgs.flatMap(collectTypeVarsFrom)
+                        if tvs.nonEmpty then
+                            println(s"  matchList: ${scrutineeType.show} → TVs: ${tvs.map(tv => s"${tv.name}#${tv.optId.getOrElse(0)}").mkString(", ")}")
+                    }
                     for arg <- typeArgs do
                         collectTypeVarsFrom(arg).foreach(tv => upgradeKind(tv, CanBeListAffected))
                 case _ =>
@@ -287,6 +339,7 @@ object TypeVarKindAnalysis {
             case SIR.Apply(inner, arg, _, _) => peelApplyChain(inner, arg :: args)
             case v: SIR.Var                  => (Some(v), args)
             case v: SIR.ExternalVar          => (Some(v), args)
+            case b: SIR.Builtin              => (Some(b), args)
             case _                           => (None, args)
         }
 
@@ -451,7 +504,15 @@ object TypeVarKindAnalysis {
             if tv.kind == Transparent then tv // don't change builtins
             else {
                 val key = find(tvKey(tv))
-                val newKind = computedKinds.getOrElse(key, Transparent)
+                val computedKind = computedKinds.getOrElse(key, CanBeListAffected)
+                // For now, only DefaultRepresentation is a useful change.
+                // Transparent is the same as CanBeListAffected when nativeTypeVarRepresentation=false.
+                // Keep CanBeListAffected as the safe default for passthrough TypeVars.
+                val newKind = computedKind match {
+                    case DefaultRepresentation => DefaultRepresentation
+                    case CanBeListAffected     => CanBeListAffected
+                    case Transparent           => CanBeListAffected // passthrough → safe default
+                }
                 if newKind != tv.kind then {
                     if debug then
                         println(s"  TypeVar ${tv.name}#${tv.optId.getOrElse(0)}: ${tv.kind} → $newKind")
