@@ -373,6 +373,38 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(pairRepr, pos)
                     .toRepresentation(outputRepresentation, pos)
+            // === DataConstr → list repr: go through PackedSumDataList ===
+            case (SumCaseClassRepresentation.DataConstr, _) =>
+                input
+                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
+                    .toRepresentation(outputRepresentation, pos)
+            // === PairIntDataList → list repr: go through DataConstr → PackedSumDataList ===
+            case (SumCaseClassRepresentation.PairIntDataList, _) =>
+                // PairIntDataList is (tag, fieldList) from unConstrData.
+                // For lists, reconstruct DataConstr, then go through PackedSumDataList.
+                val asDataConstr = lvBuiltinApply2(
+                  SIRBuiltins.constrData,
+                  lvBuiltinApply(
+                    SIRBuiltins.fstPair,
+                    input,
+                    SIRType.Integer,
+                    PrimitiveRepresentation.Constant,
+                    pos
+                  ),
+                  lvBuiltinApply(
+                    SIRBuiltins.sndPair,
+                    input,
+                    SIRType.List(SIRType.Data.tp),
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                    pos
+                  ),
+                  input.sirType,
+                  SumCaseClassRepresentation.DataConstr,
+                  pos
+                )
+                asDataConstr
+                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
+                    .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
             case (_, tv: TypeVarRepresentation) =>
                 if tv.isBuiltin || isNativeTypeVar(tv) then input

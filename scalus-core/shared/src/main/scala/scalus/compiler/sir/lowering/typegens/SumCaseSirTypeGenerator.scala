@@ -57,29 +57,19 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(PairIntDataList, pos)
                     .toRepresentation(representation, pos)
-            // === PairIntDataList conversions ===
+            // === PairIntDataList → list reprs: delegate to list generator ===
             case (PairIntDataList, SumBuiltinList(elementRepr)) =>
-                // PairIntDataList is (tag, dataFieldList). For list types,
-                // the dataFieldList is in sndPair.
-                val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(DataData)
-                val asDataList = lvBuiltinApply(
-                  SIRBuiltins.sndPair,
-                  input,
-                  SIRType.List(SIRType.Data.tp),
-                  dataListRepr,
-                  pos
-                )
-                if elementRepr == DataData then asDataList
-                else asDataList.toRepresentation(SumBuiltinList(elementRepr), pos)
+                val elemType =
+                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                new SumBuiltinListSirTypeGenerator(elemRepr)
+                    .toRepresentation(input, representation, pos)
             case (PairIntDataList, PackedSumDataList) =>
-                val asDataList = input.toRepresentation(SumBuiltinList(DataData), pos)
-                lvBuiltinApply(
-                  SIRBuiltins.listData,
-                  asDataList,
-                  input.sirType,
-                  PackedSumDataList,
-                  pos
-                )
+                val elemType =
+                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                new SumBuiltinListSirTypeGenerator(elemRepr)
+                    .toRepresentation(input, representation, pos)
             // PairIntDataList → SumUplcConstr: delegate
             case (PairIntDataList, _: SumUplcConstr) =>
                 SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)

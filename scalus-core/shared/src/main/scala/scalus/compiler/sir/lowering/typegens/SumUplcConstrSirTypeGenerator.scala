@@ -195,6 +195,30 @@ object SumUplcConstrSirTypeGenerator {
             // SumUplcConstr → SumUplcConstr: check per-variant compatibility
             case (inSum: SumUplcConstr, outSum: SumUplcConstr) =>
                 sumUplcConstrToSumUplcConstr(input, inSum, outSum, pos)
+            // DataConstr → SumUplcConstr: go through PairIntDataList
+            case (DataConstr, _: SumUplcConstr) =>
+                input
+                    .toRepresentation(PairIntDataList, pos)
+                    .toRepresentation(representation, pos)
+            // TypeVarRepresentation → UplcConstr: go through defaultTypeVarRepresentation
+            case (tvr: TypeVarRepresentation, _: SumUplcConstr) =>
+                if tvr.isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
+                else
+                    val typeGen = lctx.typeGenerator(input.sirType)
+                    val tvRepr = typeGen.defaultTypeVarReperesentation(input.sirType)
+                    val r0 = input.toRepresentation(tvRepr, pos)
+                    r0.toRepresentation(representation, pos)
+            // UplcConstr/ProdUplcConstr → TypeVarRepresentation: go through defaultTypeVarRepresentation
+            case (
+                  _: SumUplcConstr | _: ProductCaseClassRepresentation.ProdUplcConstr,
+                  tvr: TypeVarRepresentation
+                ) =>
+                if tvr.isBuiltin then input
+                else
+                    val typeGen = lctx.typeGenerator(input.sirType)
+                    val tvRepr = typeGen.defaultTypeVarReperesentation(input.sirType)
+                    input
+                        .toRepresentation(tvRepr, pos)
             case _ =>
                 throw LoweringException(
                   s"SumUplcConstrSirTypeGenerator: unsupported conversion from ${input.representation} to $representation for ${input.sirType.show}",
