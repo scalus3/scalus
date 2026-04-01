@@ -94,6 +94,41 @@ object ListReprRules {
     val pairListRules: Map[String, ReprRule] = listRules
 }
 
+/** Repr rules for native list intrinsics (IntrinsicsNativeList). */
+object NativeListReprRules {
+    import ListReprRules.{headRule, tailRule, isEmptyRule, dropRule, atRule}
+
+    private def listRepr(inRepr: LoweredValueRepresentation): LoweredValueRepresentation = inRepr
+
+    /** map: List[A] → List[B] — output list with same repr kind */
+    val mapRule: ReprRule = (_, inRepr, _) => listRepr(inRepr)
+
+    /** filter: List[A] → List[A] — same list repr */
+    val filterRule: ReprRule = (_, inRepr, _) => listRepr(inRepr)
+
+    /** foldLeft: List[A] → B — output depends on return type */
+    val foldLeftRule: ReprRule = (outTp, _, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    /** foldRight: same as foldLeft */
+    val foldRightRule: ReprRule = foldLeftRule
+
+    /** find: List[A] → Option[A] */
+    val findRule: ReprRule = (outTp, _, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    val rules: Map[String, ReprRule] = Map(
+      "isEmpty" -> isEmptyRule,
+      "head" -> headRule,
+      "tail" -> tailRule,
+      "map" -> mapRule,
+      "filter" -> filterRule,
+      "foldLeft" -> foldLeftRule,
+      "foldRight" -> foldRightRule,
+      "find" -> findRule
+    )
+}
+
 // ---------------------------------------------------------------------------
 //  List[A] intrinsics — unified for all SumBuiltinList(*) representations
 // ---------------------------------------------------------------------------
