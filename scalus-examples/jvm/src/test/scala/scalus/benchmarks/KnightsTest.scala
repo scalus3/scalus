@@ -36,7 +36,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                 val result = term.evaluateProfile
                 result.profile.foreach(p => info(ProfileFormatter.toText(p)))
                 result
-            else term.evalWithOptionalProfile
+            else term.evaluateDebug
 
     test("100_4x4") {
         val sir = compile {
