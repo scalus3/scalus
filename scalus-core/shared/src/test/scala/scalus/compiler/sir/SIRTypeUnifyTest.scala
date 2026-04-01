@@ -35,7 +35,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     }
 
     test("Unification with upcasting [List[?] and Cons[A]]") {
-        val tA = SIRType.TypeVar("A", Some(11L), SIRType.TypeVarKind.CanBeListAffected)
+        val tA = SIRType.TypeVar("A", Some(11L), SIRType.TypeVarKind.Fixed)
 
         val listTp = SIRType.List(SIRType.FreeUnificator)
 
@@ -54,7 +54,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     }
 
     test("parentSeq fron Cons[A] to List[?]") {
-        val tA = SIRType.TypeVar("A", Some(11L), SIRType.TypeVarKind.CanBeListAffected)
+        val tA = SIRType.TypeVar("A", Some(11L), SIRType.TypeVarKind.Fixed)
         val consTp = SIRType.List.Cons(tA)
         val listTp = SIRType.List(SIRType.FreeUnificator)
 
@@ -120,8 +120,8 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     }
 
     test("calculating a type for foldLeft") {
-        val tpA = SIRType.TypeVar("A", Some(1L), SIRType.TypeVarKind.CanBeListAffected)
-        val tpB = SIRType.TypeVar("B", Some(2L), SIRType.TypeVarKind.CanBeListAffected)
+        val tpA = SIRType.TypeVar("A", Some(1L), SIRType.TypeVarKind.Fixed)
+        val tpB = SIRType.TypeVar("B", Some(2L), SIRType.TypeVarKind.Fixed)
         // foldLeft: (A,B): List[A] => B => ((B,A) => B) => B
 
         val tupleBigIntStringFun = compile { (x: (BigInt, String)) => x }
@@ -337,7 +337,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
         // Simulates: after prepending __nil param to fill, the recursive call
         // sees the new type [A] =>> NilTp -> A -> Int -> List[A]
         // but the Apply node expects the original A -> Int -> List[A]
-        val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.CanBeListAffected)
+        val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.Fixed)
         val listA = SIRType.List(tA)
 
         // left: A -> Int -> List[A]  (original function type body)
@@ -355,7 +355,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
         // Unifying a partially applied function type with a TypeLambda-wrapped one:
         // left = Int -> List[A] (Apply node tp after applying value:A)
         // right = [A] =>> A -> Int -> List[A] (function type from Var node)
-        val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.CanBeListAffected)
+        val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.Fixed)
         val listA = SIRType.List(tA)
 
         val left = SIRType.Fun(SIRType.Integer, listA)
@@ -375,7 +375,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
         // right: [A] =>> A -> Int -> List[A]  (unwraps to 3 levels: A -> Int -> List[A])
         // After unwrapping TypeLambda, unification should try A=Int, then Int=List[A] which fails
         // This SHOULD fail — the arities don't match after binding A=Int
-        val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.CanBeListAffected)
+        val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.Fixed)
         val listA = SIRType.List(tA)
 
         val left = SIRType.Fun(SIRType.Integer, listA)
@@ -393,7 +393,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     test("unify Fun with TypeLambda — same structure after unwrap") {
         // left: Int -> Bool
         // right: [A] =>> Int -> Bool  (trivial TypeLambda, A unused)
-        val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.CanBeListAffected)
+        val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.Fixed)
         val funTp = SIRType.Fun(SIRType.Integer, SIRType.Boolean)
         val lambdaWrapped = SIRType.TypeLambda(scala.List(tA), funTp)
 

@@ -252,7 +252,7 @@ object SirTypeUplcGenerator {
             then
                 Some(
                   new SumBuiltinListSirTypeGenerator(
-                    TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
+                    TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
                   )
                 )
             else
@@ -291,7 +291,7 @@ object SirTypeUplcGenerator {
               elementReprFor(sndType)
             )
         else if elemType == SIRType.TypeNothing || elemType == SIRType.Unit then
-            TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
+            TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
         else
             elemType match
                 case tv: SIRType.TypeVar                   => TypeVarRepresentation(tv.kind)

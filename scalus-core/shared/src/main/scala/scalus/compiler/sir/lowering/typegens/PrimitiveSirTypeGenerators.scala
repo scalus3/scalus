@@ -25,15 +25,14 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
 
     /** Check if a TypeVarRepresentation is native (no Data conversion needed).
       *   - Transparent: always native
-      *   - DefaultRepresentation: always false (Data conversion needed)
-      *   - CanBeListAffected: always false (Data conversion needed)
+      *   - Fixed: always false (Data conversion needed)
+      *   - Fixed: always false (Data conversion needed)
       */
     private def isNativeTypeVar(tvr: TypeVarRepresentation)(using lctx: LoweringContext): Boolean =
         import SIRType.TypeVarKind.*
         tvr.kind match
-            case Transparent           => true
-            case DefaultRepresentation => false
-            case CanBeListAffected     => false
+            case Transparent => true
+            case Fixed       => false
 
     def toRepresentation(
         input: LoweredValue,

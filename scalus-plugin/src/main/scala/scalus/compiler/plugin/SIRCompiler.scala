@@ -372,7 +372,7 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tps.name.show,
               Some(tps.hashCode),
-              SIRType.TypeVarKind.CanBeListAffected
+              SIRType.TypeVarKind.Fixed
             )
         }
         val sirTypeVars = (typeParamsSymbols zip sirTypeParams).toMap
@@ -783,7 +783,7 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tp.typeSymbol.name.show,
               None,
-              SIRType.TypeVarKind.CanBeListAffected
+              SIRType.TypeVarKind.Fixed
             )
         }
         val constrDecls = dataInfo.constructorsSymbols.map { sym =>
@@ -817,7 +817,7 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tp.name.show,
               Some(tp.hashCode),
-              SIRType.TypeVarKind.CanBeListAffected
+              SIRType.TypeVarKind.Fixed
             )
         )
         val envTypeVars2 = primaryConstructorTypeParams(constrSymbol).foldLeft(env.typeVars) {
@@ -825,7 +825,7 @@ final class SIRCompiler(
                 acc + (tp -> SIRType.TypeVar(
                   tp.name.show,
                   Some(tp.hashCode),
-                  SIRType.TypeVarKind.CanBeListAffected
+                  SIRType.TypeVarKind.Fixed
                 ))
         }
         val nEnv = env.copy(typeVars = envTypeVars2)
@@ -1261,7 +1261,7 @@ final class SIRCompiler(
                 SIRType.TypeVar(
                   td.symbol.name.show,
                   Some(td.symbol.hashCode),
-                  SIRType.TypeVarKind.CanBeListAffected
+                  SIRType.TypeVarKind.Fixed
                 )
             }
             val typeParamsMap =
@@ -2203,7 +2203,7 @@ final class SIRCompiler(
                             fun.toString,
                             SIRType.List(
                               SIRType
-                                  .TypeVar("A", None, SIRType.TypeVarKind.CanBeListAffected)
+                                  .TypeVar("A", None, SIRType.TypeVarKind.Fixed)
                             ),
                             other,
                             tree.srcPos
@@ -2488,10 +2488,10 @@ final class SIRCompiler(
                               SIRType.TypeVar(
                                 "A",
                                 None,
-                                SIRType.TypeVarKind.CanBeListAffected
+                                SIRType.TypeVarKind.Fixed
                               ),
                               SIRType
-                                  .TypeVar("B", None, SIRType.TypeVarKind.CanBeListAffected)
+                                  .TypeVar("B", None, SIRType.TypeVarKind.Fixed)
                             ),
                             tp,
                             f.srcPos
@@ -3698,7 +3698,7 @@ final class SIRCompiler(
                             SIRType.TypeVar(
                               s"T$i",
                               Some(tupleNameHash + i * 5),
-                              SIRType.TypeVarKind.CanBeListAffected
+                              SIRType.TypeVarKind.Fixed
                             )
                         )
                         .toList

@@ -18,9 +18,8 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
     ): Boolean =
         import SIRType.TypeVarKind.*
         tvr.kind match
-            case Transparent           => true
-            case DefaultRepresentation => false
-            case CanBeListAffected     => false
+            case Transparent => true
+            case Fixed       => false
 
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext

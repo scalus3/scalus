@@ -1140,9 +1140,9 @@ object PrimitiveRepresentation {
 /** TypeVarRepresentation is used for type variables. Usually this is a synonym for some other
   * specific-type representation.
   *   - Transparent: builtin UPLC type variable, can be freely used in any representation
-  *   - DefaultRepresentation: Scala type variable with native representation
-  *   - CanBeListAffected: Scala type variable that flows into list element position, uses Data
-  *     representation when nativeListElements = false
+  *   - Fixed: Scala type variable with native representation
+  *   - Fixed: Scala type variable that flows into list element position, uses Data representation
+  *     when nativeListElements = false
   */
 case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValueRepresentation {
 
@@ -1153,7 +1153,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
 
     // assume that TypeVarDataRepresentation is a packed data.
     //  (this is not true for lambda, will check this in code. Usually in all places we also known type)
-    override def isPackedData: Boolean = kind == TypeVarKind.CanBeListAffected
+    override def isPackedData: Boolean = kind == TypeVarKind.Fixed
 
     override def isDataCentric: Boolean = isPackedData
 
@@ -1203,9 +1203,9 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
 
     override def doc: Doc = {
         val suffix = kind match
-            case TypeVarKind.Transparent           => "(B)"
-            case TypeVarKind.DefaultRepresentation => "(R)"
-            case TypeVarKind.CanBeListAffected     => ""
+            case TypeVarKind.Transparent => "(B)"
+            case TypeVarKind.Fixed       => "(R)"
+            case TypeVarKind.Fixed       => ""
         Doc.text("TypeVar") + Doc.text(suffix)
     }
 
@@ -1289,7 +1289,7 @@ object LoweredValueRepresentation {
                     case None =>
                         TypeVarRepresentation(tv.kind)
             case SIRType.FreeUnificator =>
-                TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
+                TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
             case proxy: SIRType.TypeProxy =>
                 constRepresentation(proxy.ref)
             case SIRType.TypeNothing => ErrorRepresentation
