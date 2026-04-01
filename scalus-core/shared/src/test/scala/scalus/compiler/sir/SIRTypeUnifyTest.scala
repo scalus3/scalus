@@ -331,7 +331,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
         // But for type tests we need to check if Done is a variant OF Status
     }
 
-    // Tests for TypeLambda unification (needed for ExtractNilParameter transformation)
+    // Tests for TypeLambda unification
 
     test("unify Fun type with TypeLambda-wrapped Fun type") {
         // Simulates: after prepending __nil param to fill, the recursive call
@@ -352,7 +352,7 @@ class SIRTypeUnifyTest extends AnyFunSuite {
     }
 
     test("unify Int -> List[A] with [A] =>> A -> Int -> List[A]") {
-        // This is the exact error from ExtractNilParameter:
+        // Unifying a partially applied function type with a TypeLambda-wrapped one:
         // left = Int -> List[A] (Apply node tp after applying value:A)
         // right = [A] =>> A -> Int -> List[A] (function type from Var node)
         val tA = SIRType.TypeVar("A", Some(100L), SIRType.TypeVarKind.CanBeListAffected)
