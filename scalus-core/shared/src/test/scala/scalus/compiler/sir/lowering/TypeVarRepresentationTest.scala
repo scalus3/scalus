@@ -133,4 +133,32 @@ class TypeVarRepresentationTest extends AnyFunSuite {
             case Result.Failure(ex, _, _, _) =>
                 fail(s"wrap failed: $ex")
     }
+
+    // === Budget comparison ===
+    test("Budget comparison: foldLeft sum — native vs Data") {
+        val sir1 = compile {
+            val list = Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+            list.foldLeft[BigInt](BigInt(0))((acc, x) => acc + x)
+        }
+        val sir2 = compile {
+            val list = Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+            list.foldLeft[BigInt](BigInt(0))((acc, x) => acc + x)
+        }
+        val sTerm = sir1.toUplc(using opts(native = false))()
+        val nTerm = sir2.toUplc(using opts(native = true))()
+
+        val sResult = sTerm.evaluateDebug
+        val nResult = nTerm.evaluateDebug
+
+        (sResult, nResult) match {
+            case (Result.Success(_, sBudget, _, _), Result.Success(_, nBudget, _, _)) =>
+                info(s"Standard budget: $sBudget")
+                info(s"Native   budget: $nBudget")
+                info(s"Savings: mem=${sBudget.memory - nBudget.memory}, steps=${sBudget.steps - nBudget.steps}")
+            case (Result.Failure(ex, _, _, _), _) =>
+                fail(s"Standard failed: $ex")
+            case (_, Result.Failure(ex, _, _, _)) =>
+                fail(s"Native failed: $ex")
+        }
+    }
 }
