@@ -859,9 +859,12 @@ class CekMachine(
         def getSpentBudget: ExUnits = wrapped.getSpentBudget
 
         def getProfile: ProfilingData = {
-            val locations = byLocation.iterator.map { case (pos, arr) =>
-                SourceLocationProfile(pos.file, pos.startLine + 1, arr(0), arr(1), arr(2))
-            }.toSeq.sortBy(e => (-e.memory, -e.cpu))
+            val locations = byLocation.iterator
+                .map { case (pos, arr) =>
+                    SourceLocationProfile(pos.file, pos.startLine + 1, arr(0), arr(1), arr(2))
+                }
+                .toSeq
+                .sortBy(e => (-e.memory, -e.cpu))
 
             val builtinValues = DefaultFun.values
             val functions = {

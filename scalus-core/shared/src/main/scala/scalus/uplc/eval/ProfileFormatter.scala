@@ -56,7 +56,16 @@ object ProfileFormatter {
             val cpuWidth = math.max(3, rows.map(_.cpu.toString.length).max)
 
             sb.append(
-              formatRow("function", "count", "mem", "cpu", nameWidth, countWidth, memWidth, cpuWidth)
+              formatRow(
+                "function",
+                "count",
+                "mem",
+                "cpu",
+                nameWidth,
+                countWidth,
+                memWidth,
+                cpuWidth
+              )
             )
             sb.append('\n')
             rows.foreach { e =>
@@ -115,7 +124,9 @@ tr:hover { background: #e8f4fd; }
             data.bySourceLocation.foreach { e =>
                 val barWidth = (e.memory * 100 / maxMem).toInt
                 sb.append(
-                  s"""<tr><td>${escapeHtml(e.file)}:${e.line}</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td><td><span class="bar" style="width:${barWidth}px"></span></td></tr>\n"""
+                  s"""<tr><td>${escapeHtml(
+                        e.file
+                      )}:${e.line}</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td><td><span class="bar" style="width:${barWidth}px"></span></td></tr>\n"""
                 )
             }
             sb.append("</table>\n")
@@ -131,7 +142,9 @@ tr:hover { background: #e8f4fd; }
             data.byFunction.foreach { e =>
                 val barWidth = (e.memory * 100 / maxMem).toInt
                 sb.append(
-                  s"""<tr><td>${escapeHtml(e.name)}</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td><td><span class="bar" style="width:${barWidth}px"></span></td></tr>\n"""
+                  s"""<tr><td>${escapeHtml(
+                        e.name
+                      )}</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td><td><span class="bar" style="width:${barWidth}px"></span></td></tr>\n"""
                 )
             }
             sb.append("</table>\n")
