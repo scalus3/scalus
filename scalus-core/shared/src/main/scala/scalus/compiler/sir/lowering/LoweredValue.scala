@@ -1874,12 +1874,13 @@ object LoweredValue {
 
             val (argTypevarResolved, typeAligned) = arg.sirType match {
                 case tv: SIRType.TypeVar =>
+                    val useNative = tv.isBuiltin || tv.kind == SIRType.TypeVarKind.DefaultRepresentation
                     val resolvedArgType = lctx.resolveTypeVarIfNeeded(arg.sirType)
                     resolvedArgType match
                         case tv1: SIRType.TypeVar =>
                             val targetArgGen = lctx.typeGenerator(targetArgType)
                             val targetArgRepr =
-                                if tv.isBuiltin then
+                                if useNative then
                                     targetArgGen.defaultRepresentation(targetArgType)
                                 else targetArgGen.defaultTypeVarReperesentation(targetArgType)
                             val argTyped = new TypeRepresentationProxyLoweredValue(
@@ -1892,7 +1893,7 @@ object LoweredValue {
                         case other =>
                             val gen = lctx.typeGenerator(other)
                             val targetArgRepr =
-                                if tv.isBuiltin then gen.defaultRepresentation(other)
+                                if useNative then gen.defaultRepresentation(other)
                                 else gen.defaultTypeVarReperesentation(other)
                             val argTyped = new TypeRepresentationProxyLoweredValue(
                               arg,

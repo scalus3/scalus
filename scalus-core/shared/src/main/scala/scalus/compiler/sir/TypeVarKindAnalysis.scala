@@ -291,13 +291,15 @@ object TypeVarKindAnalysis {
                 val l = current.asInstanceOf[SIR.LamAbs]
                 l.param.anns.data.get(FunctionalInterfaceAnnotationKey) match {
                     case Some(SIR.Const(scalus.uplc.Constant.String(traitName), _, _)) =>
+                        // FI-annotated parameter: kind depends on trait
                         val kind =
                             if dataRepresentationTraits.contains(traitName) then CanBeListAffected
                             else DefaultRepresentation
                         collectTypeVarsFrom(l.param.tp).foreach(tv => upgradeKind(tv, kind))
                     case _ =>
                         // Non-FI callback: we can't see inside it, so TypeVars
-                        // in its type must be at least CanBeListAffected (conservative)
+                        // in its type must be at least CanBeListAffected (conservative).
+                        // Only applies to function-typed parameters (callbacks).
                         if SIRType.isPolyFunOrFun(l.param.tp) then
                             collectTypeVarsFrom(l.param.tp)
                                 .foreach(tv => upgradeKind(tv, CanBeListAffected))
@@ -576,6 +578,18 @@ object TypeVarKindAnalysis {
         }
 
         // ------- Statistics -------
+
+        def printDefaultReprDetails(): Unit = {
+            for key <- allScalaTypeVars do {
+                val canonical = find(key)
+                computedKinds.get(canonical) match {
+                    case Some(DefaultRepresentation) =>
+                        // Find which function this TypeVar belongs to
+                        println(s"  DefaultRepr: ${key._1}#${key._2.getOrElse(0)}")
+                    case _ =>
+                }
+            }
+        }
 
         def computeStats(): Stats = {
             var transparent = 0

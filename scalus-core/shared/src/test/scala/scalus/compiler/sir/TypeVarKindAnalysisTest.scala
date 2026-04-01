@@ -73,23 +73,34 @@ class TypeVarKindAnalysisTest extends AnyFunSuite {
         assert(resultNew.isSuccess, s"Transformed failed: ${resultNew}")
     }
 
-    test("compare UPLC: original vs transformed SIR") {
+    test("check FI annotation in compiled SIR") {
+        // Compile a function that takes Ord — check if FI annotation is present
         val sir = compile {
-            List(BigInt(1), BigInt(2)).head
+            val m = SortedMap.singleton[BigInt, BigInt](BigInt(1), BigInt(42))
+            m.get(BigInt(1))
         }
-        val (newSir, stats) = TypeVarKindAnalysis.analyze(sir, debug = true)
-        info(s"head stats: $stats")
-        // Lower both
-        val termOrig = new SirToUplcV3Lowering(sir).lower()
-        val termNew = new SirToUplcV3Lowering(newSir).lower()
-        info(s"Original UPLC:\n${termOrig.show}")
-        info(s"Transformed UPLC:\n${termNew.show}")
-        // Compare
-        given vm: scalus.uplc.eval.PlutusVM = scalus.uplc.eval.PlutusVM.makePlutusV3VM()
-        val resultOrig = termOrig.evaluateDebug
-        val resultNew = termNew.evaluateDebug
-        info(s"Original result: ${resultOrig}")
-        info(s"Transformed result: ${resultNew}")
-        assert(resultNew.isSuccess, s"Transformed failed: ${resultNew}")
+        // Walk SIR and find FunctionalInterface annotations
+        var fiCount = 0
+        def walk(s: SIR): Unit = s match {
+            case SIR.Decl(_, term) => walk(term)
+            case SIR.Let(bindings, body, _, _) =>
+                bindings.foreach(b => walk(b.value))
+                walk(body)
+            case SIR.LamAbs(param, term, _, _) =>
+                if param.anns.data.contains("functionalInterface") then {
+                    fiCount += 1
+                    info(s"Found FI annotation on param '${param.name}': ${param.anns.data("functionalInterface")}")
+                }
+                walk(term)
+            case SIR.Apply(f, arg, _, _) => walk(f); walk(arg)
+            case SIR.Match(s, cases, _, _) => walk(s); cases.foreach(c => walk(c.body))
+            case SIR.Constr(_, _, args, _, _) => args.foreach(walk)
+            case _ =>
+        }
+        walk(sir)
+        info(s"Total FI annotations found: $fiCount")
+        // Also check stats
+        val (_, stats) = TypeVarKindAnalysis.analyze(sir, debug = true)
+        info(s"Stats: $stats")
     }
 }

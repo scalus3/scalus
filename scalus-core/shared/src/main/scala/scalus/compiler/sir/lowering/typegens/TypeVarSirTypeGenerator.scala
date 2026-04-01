@@ -34,8 +34,14 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
-        else defaultDataRepresentation(tp)
+        tp match {
+            case tv: SIRType.TypeVar if tv.kind == SIRType.TypeVarKind.DefaultRepresentation =>
+                // DefaultRepresentation: always native — TypeVar is used for inspection (Eq/Ord)
+                defaultRepresentation(tp)
+            case _ =>
+                if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+                else defaultDataRepresentation(tp)
+        }
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         tp match {
@@ -288,7 +294,9 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                         val gen = lctx.typeGenerator(resolvedType)
                         val repr =
                             if tv.isBuiltin then gen.defaultRepresentation(resolvedType)
-                            else gen.defaultTypeVarReperesentation(resolvedType)
+                            else if tv.kind == SIRType.TypeVarKind.DefaultRepresentation then {
+                                    gen.defaultRepresentation(resolvedType)
+                            } else gen.defaultTypeVarReperesentation(resolvedType)
                         val proxy = new TypeRepresentationProxyLoweredValue(
                           input,
                           resolvedType,
