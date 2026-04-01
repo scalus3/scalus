@@ -72,70 +72,21 @@ class PlutusVM(
       * @return
       *   The result of the evaluation
       */
-    def evaluateScriptDebug(program: DeBruijnedProgram): Result = {
-        val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
-        try
-            val result = evaluateScript(program, spenderLogger, spenderLogger)
-            Result.Success(
-              result,
-              spenderLogger.getSpentBudget,
-              spenderLogger.costs.toMap,
-              spenderLogger.getLogsWithBudget
-            )
-        catch
-            case e: Exception =>
-                Result.Failure(
-                  e,
-                  spenderLogger.getSpentBudget,
-                  spenderLogger.costs.toMap,
-                  spenderLogger.getLogsWithBudget
-                )
-    }
+    def evaluateScriptDebug(program: DeBruijnedProgram): Result =
+        runWithBudgetTracking(program.term, validateResult = true)
 
     /** Evaluates a Plutus script with profiling enabled.
       *
       * Like [[evaluateScriptDebug]] but also collects profiling data by source location and
-      * function.
+      * function. Access profiling data via `result.profile`.
       *
       * @param program
       *   The Plutus script
       * @return
-      *   A tuple of (Result, ProfilingData)
+      *   Result with `profile` set
       */
-    def evaluateScriptProfile(program: DeBruijnedProgram): (Result, ProfilingData) = {
-        val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
-        val cek = new CekMachine(
-          machineParams,
-          spenderLogger,
-          spenderLogger,
-          builtins.getBuiltinRuntime,
-          caseOnBuiltinsEnabled,
-          profiling = true
-        )
-        try
-            val term = DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(program.term))
-            if !isResultValid(term) then throw new InvalidReturnValue(term)
-            (
-              Result.Success(
-                term,
-                spenderLogger.getSpentBudget,
-                spenderLogger.costs.toMap,
-                spenderLogger.getLogsWithBudget
-              ),
-              cek.getProfile.get
-            )
-        catch
-            case e: Exception =>
-                (
-                  Result.Failure(
-                    e,
-                    spenderLogger.getSpentBudget,
-                    spenderLogger.costs.toMap,
-                    spenderLogger.getLogsWithBudget
-                  ),
-                  cek.getProfile.get
-                )
-    }
+    def evaluateScriptProfile(program: DeBruijnedProgram): Result =
+        runWithBudgetTracking(program.term, profiling = true, validateResult = true)
 
     /** Evaluates a debruijned term using the CEK machine. This method does not follow CIP-117.
       *
@@ -166,14 +117,22 @@ class PlutusVM(
 
     /** Evaluates a debruijned term with profiling enabled. Does not follow CIP-117.
       *
-      * Like [[evaluateDeBruijnedTerm]] but also collects profiling data.
+      * Like [[evaluateDeBruijnedTerm]] but also collects profiling data. Access profiling data via
+      * `result.profile`.
       *
       * @param debruijnedTerm
       *   The debruijned term
       * @return
-      *   A tuple of (Result, ProfilingData)
+      *   Result with `profile` set
       */
-    def evaluateDeBruijnedTermProfile(debruijnedTerm: Term): (Result, ProfilingData) = {
+    def evaluateDeBruijnedTermProfile(debruijnedTerm: Term): Result =
+        runWithBudgetTracking(debruijnedTerm, profiling = true)
+
+    private def runWithBudgetTracking(
+        debruijnedTerm: Term,
+        profiling: Boolean = false,
+        validateResult: Boolean = false
+    ): Result = {
         val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
         val cek = new CekMachine(
           machineParams,
@@ -181,29 +140,26 @@ class PlutusVM(
           spenderLogger,
           builtins.getBuiltinRuntime,
           caseOnBuiltinsEnabled,
-          profiling = true
+          profiling = profiling
         )
         try
-            val result = DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
-            (
-              Result.Success(
-                result,
-                spenderLogger.getSpentBudget,
-                spenderLogger.costs.toMap,
-                spenderLogger.getLogsWithBudget
-              ),
-              cek.getProfile.get
+            val term = DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
+            if validateResult && !isResultValid(term) then throw new InvalidReturnValue(term)
+            Result.Success(
+              term,
+              spenderLogger.getSpentBudget,
+              spenderLogger.costs.toMap,
+              spenderLogger.getLogsWithBudget,
+              profile = cek.getProfile
             )
         catch
             case e: Exception =>
-                (
-                  Result.Failure(
-                    e,
-                    spenderLogger.getSpentBudget,
-                    spenderLogger.costs.toMap,
-                    spenderLogger.getLogsWithBudget
-                  ),
-                  cek.getProfile.get
+                Result.Failure(
+                  e,
+                  spenderLogger.getSpentBudget,
+                  spenderLogger.costs.toMap,
+                  spenderLogger.getLogsWithBudget,
+                  profile = cek.getProfile
                 )
     }
 

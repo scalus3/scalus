@@ -509,18 +509,20 @@ enum Result:
     val budget: ExUnits
     val logs: Seq[String]
     val costs: collection.Map[ExBudgetCategory, collection.Seq[ExUnits]]
-    var profile: Option[ProfilingData] = None
+    val profile: Option[ProfilingData]
     case Success(
         term: Term,
         budget: ExUnits,
         costs: Map[ExBudgetCategory, collection.Seq[ExUnits]],
-        logs: Seq[String]
+        logs: Seq[String],
+        profile: Option[ProfilingData] = None
     )
     case Failure(
         exception: Throwable,
         budget: ExUnits,
         costs: Map[ExBudgetCategory, collection.Seq[ExUnits]],
-        logs: Seq[String]
+        logs: Seq[String],
+        profile: Option[ProfilingData] = None
     )
 
     /** Compare this `Result` with `that` for semantic equality.
@@ -583,6 +585,19 @@ enum Result:
               | logs: ${logs.mkString("\n")}""".stripMargin
 
 object Result:
+
+    // Custom 4-param unapply for backward compatibility with existing pattern matches
+    object Success:
+        def unapply(
+            s: Result.Success
+        ): Some[(Term, ExUnits, Map[ExBudgetCategory, collection.Seq[ExUnits]], Seq[String])] =
+            Some((s.term, s.budget, s.costs, s.logs))
+
+    object Failure:
+        def unapply(
+            f: Result.Failure
+        ): Some[(Throwable, ExUnits, Map[ExBudgetCategory, collection.Seq[ExUnits]], Seq[String])] =
+            Some((f.exception, f.budget, f.costs, f.logs))
 
     /** Formats execution costs as an aligned table string.
       *
@@ -808,41 +823,57 @@ class CekMachine(
         if t == null then ScalusSourcePos.empty else t.sourcePos
 
     private class ProfilingBudgetSpender(wrapped: BudgetSpender) extends BudgetSpender {
-        private val byLocation = HashMap[String, (Long, Long, Long)]()
-        private val byFunction = HashMap[String, (Long, Long, Long)]()
+        // Use ScalusSourcePos as key directly (case class has structural hashCode/equals)
+        // and Array[Long](3) as value to avoid per-step tuple/boxing allocations
+        private val byLocation = HashMap[ScalusSourcePos, Array[Long]]()
+        // Use ordinal-indexed array for builtins — no toString per step
+        private val byFunction = new Array[Array[Long]](DefaultFun.values.length)
         private var totalMem = 0L
         private var totalCpu = 0L
 
         def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
             wrapped.spendBudget(cat, budget, env)
-            totalMem += budget.memory
-            totalCpu += budget.steps
+            val mem = budget.memory
+            val steps = budget.steps
+            totalMem += mem
+            totalCpu += steps
             val pos = lastSourcePos
             if !pos.isEmpty then
-                val key = s"${pos.file}:${pos.startLine + 1}"
-                val (m, c, n) = byLocation.getOrElse(key, (0L, 0L, 0L))
-                byLocation(key) = (m + budget.memory, c + budget.steps, n + 1)
+                val arr = byLocation.getOrElseUpdate(pos, new Array[Long](3))
+                arr(0) += mem
+                arr(1) += steps
+                arr(2) += 1
             cat match
                 case ExBudgetCategory.BuiltinApp(bi) =>
-                    val name = bi.toString
-                    val (m, c, n) = byFunction.getOrElse(name, (0L, 0L, 0L))
-                    byFunction(name) = (m + budget.memory, c + budget.steps, n + 1)
+                    val idx = bi.ordinal
+                    var arr = byFunction(idx)
+                    if arr == null then
+                        arr = new Array[Long](3)
+                        byFunction(idx) = arr
+                    arr(0) += mem
+                    arr(1) += steps
+                    arr(2) += 1
                 case _ => ()
         }
 
         def getSpentBudget: ExUnits = wrapped.getSpentBudget
 
         def getProfile: ProfilingData = {
-            val locations = byLocation.toSeq.map { case (key, (mem, cpu, cnt)) =>
-                val colonIdx = key.lastIndexOf(':')
-                val file = key.substring(0, colonIdx)
-                val line = key.substring(colonIdx + 1).toInt
-                SourceLocationProfile(file, line, mem, cpu, cnt)
-            }.sortBy(e => (-e.memory, -e.cpu))
+            val locations = byLocation.iterator.map { case (pos, arr) =>
+                SourceLocationProfile(pos.file, pos.startLine + 1, arr(0), arr(1), arr(2))
+            }.toSeq.sortBy(e => (-e.memory, -e.cpu))
 
-            val functions = byFunction.toSeq.map { case (name, (mem, cpu, cnt)) =>
-                FunctionProfile(name, mem, cpu, cnt)
-            }.sortBy(e => (-e.memory, -e.cpu))
+            val builtinValues = DefaultFun.values
+            val functions = {
+                val buf = ArrayBuffer[FunctionProfile]()
+                var i = 0
+                while i < byFunction.length do
+                    val arr = byFunction(i)
+                    if arr != null then
+                        buf += FunctionProfile(builtinValues(i).toString, arr(0), arr(1), arr(2))
+                    i += 1
+                buf.toSeq.sortBy(e => (-e.memory, -e.cpu))
+            }
 
             ProfilingData(locations, functions, ExUnits(totalMem, totalCpu))
         }

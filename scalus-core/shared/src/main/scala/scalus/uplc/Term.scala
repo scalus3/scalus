@@ -264,11 +264,7 @@ enum Term:
       *   [[scalus.uplc.eval.Result]] with `profile` set to `Some(profilingData)`
       */
     def evaluateProfile(using vm: PlutusVM): Result =
-        val (result, profileData) = vm.evaluateDeBruijnedTermProfile(
-          DeBruijn.deBruijnTerm(this)
-        )
-        result.profile = Some(profileData)
-        result
+        vm.evaluateDeBruijnedTermProfile(DeBruijn.deBruijnTerm(this))
 
     /** Wrap the term in a Plutus V1 program. */
     def plutusV1: Program = Program.plutusV1(this)

@@ -1,7 +1,6 @@
 package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.ExUnits
 import scalus.uplc.*
 import scalus.uplc.Term.*
 import scalus.uplc.eval.*
@@ -100,8 +99,9 @@ class CekProfilerTest extends AnyFunSuite {
         val term = Term.Const(Constant.Unit)
         val program = Program.plutusV3(term).deBruijnedProgram
         given vm: PlutusVM = PlutusVM.makePlutusV3VM()
-        val (result, profile) = vm.evaluateScriptProfile(program)
+        val result = vm.evaluateScriptProfile(program)
         assert(result.isSuccess)
-        assert(profile.totalBudget.memory > 0)
+        assert(result.profile.isDefined)
+        assert(result.profile.get.totalBudget.memory > 0)
     }
 }
