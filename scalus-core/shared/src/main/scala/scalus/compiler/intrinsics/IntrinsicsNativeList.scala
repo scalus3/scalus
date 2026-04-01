@@ -17,6 +17,8 @@ import scalus.uplc.builtin.Builtins.*
 @Compile
 object IntrinsicsNativeList {
 
+    def unboxedNil[A]: List[A] = List.Nil
+
     def isEmpty[A](self: List[A]): Boolean =
         nullList(typeProxy[BuiltinList[A]](self))
 

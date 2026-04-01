@@ -80,6 +80,7 @@ object IntrinsicResolver {
       */
     private val registry: Map[String, List[RegistryEntry]] = Map(
       ListModule -> List(
+        (WildcardRepr, 0, NativeListOps, NativeListReprRules.factoryRules, NoArgConvert),
         (NativeBuiltinListRepr, 0, NativeListOps, NativeListReprRules.rules, NoArgConvert),
         (BuiltinListRepr, 0, ListOps, ListReprRules.listRules, NoArgConvert),
         (BuiltinListRepr, 11, ListOpsV11, ListReprRules.listRules, NoArgConvert)
