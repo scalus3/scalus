@@ -9,7 +9,7 @@ import java.util.IdentityHashMap as JIdentityHashMap
   *
   * UPLC has no polymorphism — an empty list constant must have a concrete element type. Inside a
   * recursive generic function, TypeVars are unresolved, so Nil defaults to `List[Data]`. With
-  * `nativeTypeVarRepresentation`, callers pass native values, causing type mismatch.
+  * native list elements, callers pass native values, causing type mismatch.
   *
   * The actual Nil type is determined from the **parent node's expected type** (`tp` field of
   * enclosing IfThenElse, Match, etc.), not from Nil itself (which is always `List[Nothing]`).

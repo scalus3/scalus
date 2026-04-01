@@ -79,11 +79,6 @@ sealed abstract class CompiledPlutus[A](
 
     /** Lowers the SIR to UPLC using the configured backend and applies optimization if enabled. */
     protected def toUplc: Term = {
-        if options.nativeTypeVarRepresentation then
-            throw new UnsupportedOperationException(
-              "nativeTypeVarRepresentation=true is not yet implemented. " +
-                  "Requires NativeList + NativeRepr infrastructure (see design in project memory)."
-            )
         val sir1 = if options.removeTraces then RemoveTraces.transform(sir) else sir
         val sirToLower = sir1
         val backend = options.targetLoweringBackend
@@ -113,8 +108,7 @@ sealed abstract class CompiledPlutus[A](
                       scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
                   supportModules =
                       scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules,
-                  nativeListElements = options.nativeListElements,
-                  nativeTypeVarRepresentation = options.nativeTypeVarRepresentation
+                  nativeListElements = options.nativeListElements
                 ).lower()
         if options.uplcOptimizers.nonEmpty then
             options.uplcOptimizers.foldLeft(uplc)((term, opt) => opt(term))

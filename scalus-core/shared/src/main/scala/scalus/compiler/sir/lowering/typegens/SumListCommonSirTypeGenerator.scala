@@ -12,15 +12,15 @@ import scala.util.control.NonFatal
   */
 trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
-    /** Check if a TypeVarRepresentation is native based on its kind and the corresponding flag. */
+    /** Check if a TypeVarRepresentation is native based on its kind. */
     protected def isNativeTypeVar(tvr: TypeVarRepresentation)(using
         lctx: LoweringContext
     ): Boolean =
         import SIRType.TypeVarKind.*
         tvr.kind match
             case Transparent           => true
-            case DefaultRepresentation => lctx.nativeTypeVarRepresentation
-            case CanBeListAffected => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
+            case DefaultRepresentation => false
+            case CanBeListAffected     => false
 
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext

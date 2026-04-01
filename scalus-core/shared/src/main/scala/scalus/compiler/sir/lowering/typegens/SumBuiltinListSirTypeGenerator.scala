@@ -27,8 +27,7 @@ class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then listRepr
-        else defaultDataRepresentation(tp)
+        defaultDataRepresentation(tp)
 
     override def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext
