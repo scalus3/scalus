@@ -12,12 +12,13 @@ object ProfileFormatter {
       *   Formatted text output
       */
     def toText(data: ProfilingData, maxRows: Int = 50): String = {
+        val effectiveMaxRows = math.max(1, maxRows)
         val sb = new StringBuilder
 
         sb.append("=== Profile by Source Location ===\n")
         if data.bySourceLocation.isEmpty then sb.append("  (no source locations recorded)\n")
         else
-            val rows = data.bySourceLocation.take(maxRows)
+            val rows = data.bySourceLocation.take(effectiveMaxRows)
             val locWidth = math.max(8, rows.map(e => s"${e.file}:${e.line}".length).max)
             val countWidth = math.max(5, rows.map(_.count.toString.length).max)
             val memWidth = math.max(3, rows.map(_.memory.toString.length).max)
@@ -42,14 +43,14 @@ object ProfileFormatter {
                 )
                 sb.append('\n')
             }
-            if data.bySourceLocation.size > maxRows then
-                sb.append(s"  ... and ${data.bySourceLocation.size - maxRows} more\n")
+            if data.bySourceLocation.size > effectiveMaxRows then
+                sb.append(s"  ... and ${data.bySourceLocation.size - effectiveMaxRows} more\n")
 
         sb.append('\n')
         sb.append("=== Profile by Function ===\n")
         if data.byFunction.isEmpty then sb.append("  (no functions recorded)\n")
         else
-            val rows = data.byFunction.take(maxRows)
+            val rows = data.byFunction.take(effectiveMaxRows)
             val nameWidth = math.max(8, rows.map(_.name.length).max)
             val countWidth = math.max(5, rows.map(_.count.toString.length).max)
             val memWidth = math.max(3, rows.map(_.memory.toString.length).max)
@@ -83,8 +84,8 @@ object ProfileFormatter {
                 )
                 sb.append('\n')
             }
-            if data.byFunction.size > maxRows then
-                sb.append(s"  ... and ${data.byFunction.size - maxRows} more\n")
+            if data.byFunction.size > effectiveMaxRows then
+                sb.append(s"  ... and ${data.byFunction.size - effectiveMaxRows} more\n")
 
         sb.append(s"\nTotal: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}")
         sb.toString

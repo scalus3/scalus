@@ -823,23 +823,19 @@ class CekMachine(
         if t == null then ScalusSourcePos.empty else t.sourcePos
 
     private class ProfilingBudgetSpender(wrapped: BudgetSpender) extends BudgetSpender {
-        // Use ScalusSourcePos as key directly (case class has structural hashCode/equals)
-        // and Array[Long](3) as value to avoid per-step tuple/boxing allocations
-        private val byLocation = HashMap[ScalusSourcePos, Array[Long]]()
+        // Key by (file, line) to aggregate across different column/endLine/inlinedFrom variants
+        private val byLocation = HashMap[(String, Int), Array[Long]]()
         // Use ordinal-indexed array for builtins — no toString per step
         private val byFunction = new Array[Array[Long]](DefaultFun.values.length)
-        private var totalMem = 0L
-        private var totalCpu = 0L
 
         def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
             wrapped.spendBudget(cat, budget, env)
             val mem = budget.memory
             val steps = budget.steps
-            totalMem += mem
-            totalCpu += steps
             val pos = lastSourcePos
             if !pos.isEmpty then
-                val arr = byLocation.getOrElseUpdate(pos, new Array[Long](3))
+                val key = (pos.file, pos.startLine + 1)
+                val arr = byLocation.getOrElseUpdate(key, new Array[Long](3))
                 arr(0) += mem
                 arr(1) += steps
                 arr(2) += 1
@@ -860,8 +856,8 @@ class CekMachine(
 
         def getProfile: ProfilingData = {
             val locations = byLocation.iterator
-                .map { case (pos, arr) =>
-                    SourceLocationProfile(pos.file, pos.startLine + 1, arr(0), arr(1), arr(2))
+                .map { case ((file, line), arr) =>
+                    SourceLocationProfile(file, line, arr(0), arr(1), arr(2))
                 }
                 .toSeq
                 .sortBy(e => (-e.memory, -e.cpu))
@@ -878,7 +874,7 @@ class CekMachine(
                 buf.toSeq.sortBy(e => (-e.memory, -e.cpu))
             }
 
-            ProfilingData(locations, functions, ExUnits(totalMem, totalCpu))
+            ProfilingData(locations, functions, wrapped.getSpentBudget)
         }
     }
 
