@@ -100,11 +100,14 @@ object NativeListReprRules {
 
     private def listRepr(inRepr: LoweredValueRepresentation): LoweredValueRepresentation = inRepr
 
-    /** map: List[A] → List[B] — output list with same repr kind */
-    val mapRule: ReprRule = (_, inRepr, _) => listRepr(inRepr)
+    /** map/filter/etc: after self substitution, outTp is the remaining curried function.
+      * Use defaultRepresentation which handles Fun types correctly.
+      */
+    val mapRule: ReprRule = (outTp, inRepr, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
 
-    /** filter: List[A] → List[A] — same list repr */
-    val filterRule: ReprRule = (_, inRepr, _) => listRepr(inRepr)
+    val filterRule: ReprRule = (outTp, inRepr, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
 
     /** foldLeft: List[A] → B — output depends on return type */
     val foldLeftRule: ReprRule = (outTp, _, lctx) =>

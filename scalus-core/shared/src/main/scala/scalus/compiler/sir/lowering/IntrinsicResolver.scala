@@ -137,10 +137,14 @@ object IntrinsicResolver {
         extractModuleAndMethod(f) match
             case None => None
             case Some((moduleName, methodName)) =>
+                if lctx.debug then
+                    lctx.log(s"IntrinsicResolver: module=$moduleName method=$methodName repr=${loweredArg.representation.doc.render(80)}")
                 registry.get(moduleName) match
                     case None => None
                     case Some(entries) =>
                         val reprNames = representationNames(loweredArg.representation)
+                        if lctx.debug then
+                            lctx.log(s"IntrinsicResolver: reprNames=$reprNames entries=${entries.map(e => s"(${e._1},${e._2},${e._3})").mkString(",")}")
                         val pvVersion = lctx.targetProtocolVersion.version
 
                         // Find best matching provider: most specific repr name first,
@@ -175,6 +179,10 @@ object IntrinsicResolver {
                                 }
                         }
 
+                        if lctx.debug && bestBinding.isEmpty then
+                            lctx.log(s"IntrinsicResolver: no binding found for $methodName")
+                        if lctx.debug && bestBinding.isDefined then
+                            lctx.log(s"IntrinsicResolver: FOUND binding for $methodName, reprPriority=$bestReprPriority")
                         bestBinding.map { binding =>
                             val substituted = substituteSelf(binding.value, argSir)
                             // Apply arg conversion if rule exists for this method

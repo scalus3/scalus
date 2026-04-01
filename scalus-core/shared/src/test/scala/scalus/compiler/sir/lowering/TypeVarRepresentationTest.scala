@@ -100,7 +100,14 @@ class TypeVarRepresentationTest extends AnyFunSuite {
             list.map[BigInt](x => x + BigInt(10))
         }
         if native && typevar then info(s"map SIR:\n${sir.show}")
-        val result = sir.toUplc().evaluateDebug
+        val result =
+            if native && !typevar then
+                // Debug mode for the failing combination
+                scalus.compiler.sir.lowering.SirToUplcV3Lowering
+                    .fromOptions(sir, summon[Options], debug = true)
+                    .lower()
+                    .evaluateDebug
+            else sir.toUplc().evaluateDebug
         result match
             case Result.Success(term, _, _, _) =>
                 info(s"Result: ${term.show}")
