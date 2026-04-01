@@ -1,0 +1,108 @@
+---
+title: Profiling Cardano Smart Contracts
+sidebarTitle: Profiling
+description: Profile CEK machine execution to find expensive source lines and builtin functions in your Cardano smart contracts.
+---
+
+# Profiling Cardano Smart Contracts
+
+Scalus includes a built-in CEK machine profiler that shows where execution budget is spent — by source location and by builtin function.
+
+## Quick Start
+
+Replace `evaluateDebug` with `evaluateProfile` to collect profiling data:
+
+```scala
+import scalus.uplc.eval.{ProfileFormatter, PlutusVM}
+
+given PlutusVM = PlutusVM.makePlutusV3VM()
+
+val result = compiled.toUplc().evaluateProfile
+
+// result.isSuccess, result.budget, etc. work as usual
+assert(result.isSuccess)
+
+// Access profiling data
+result.profile.foreach { profile =>
+  println(ProfileFormatter.toText(profile))
+}
+```
+
+## Output
+
+`ProfileFormatter.toText` produces two tables:
+
+```
+=== Profile by Source Location ===
+location                              count      mem         cpu
+MyValidator.scala:42                    153   153000    24480000
+Prelude/List.scala:903                   87    87000    13920000
+
+=== Profile by Function ===
+function               count      mem         cpu
+HeadList               74755  2392160  6215878250
+UnIData                45025  1440800   933998600
+MkCons                 42126  1348032  3048321612
+
+Total: mem=185927967 cpu=49131853260
+```
+
+**By Source Location** shows which lines of your Scala source code are most expensive.
+**By Function** shows which UPLC builtin functions consume the most budget.
+
+Both tables are sorted by memory descending.
+
+## HTML Output
+
+For a richer view with heat-bar visualization:
+
+```scala
+import java.nio.file.{Files, Paths}
+
+result.profile.foreach { profile =>
+  Files.writeString(Paths.get("profile.html"), ProfileFormatter.toHtml(profile))
+}
+```
+
+## Toggle Profiling in Tests
+
+Add a flag to switch between `evaluateDebug` and `evaluateProfile` without changing test assertions:
+
+```scala
+class MyValidatorTest extends AnyFunSuite, ScalusTest {
+  val profilingEnabled = false  // flip to true when needed
+
+  extension (term: scalus.uplc.Term)
+    private def eval(using PlutusVM): Result =
+      if profilingEnabled then
+        val result = term.evaluateProfile
+        result.profile.foreach(p => info(ProfileFormatter.toText(p)))
+        result
+      else term.evaluateDebug
+
+  test("validator budget") {
+    val result = compiled.toUplc().eval  // uses evaluateDebug or evaluateProfile
+    assert(result.isSuccess)
+  }
+}
+```
+
+The `result.profile.foreach` line is safe to leave permanently — when profiling is off, `profile` is `None`.
+
+## PlutusVM Methods
+
+For script-level profiling (with CIP-117 validation):
+
+```scala
+val result = vm.evaluateScriptProfile(program.deBruijnedProgram)
+// result.profile contains profiling data
+```
+
+## Performance
+
+Profiling adds ~40% overhead to CEK evaluation (measured on the Knights benchmark: 6s vs 8.4s). When `profiling = false` (the default), there is zero overhead.
+
+## See Also
+
+- **[Debugging](/docs/testing/debugging)** — IDE debugging, logging, error traces
+- **[Unit Testing](/docs/testing/unit-testing)** — Test validators with budget assertions

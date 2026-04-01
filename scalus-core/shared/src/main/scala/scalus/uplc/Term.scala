@@ -251,6 +251,21 @@ enum Term:
                   spenderLogger.getLogsWithBudget
                 )
 
+    /** Evaluate the term with profiling enabled.
+      *
+      * Like [[evaluateDebug]] but also collects profiling data by source location and function.
+      * Access profiling data via `result.profile`.
+      *
+      * @note
+      *   This method just runs the CEK machine on the term. It does not follow Plutus specification
+      *   like CIP-117
+      *
+      * @return
+      *   [[scalus.uplc.eval.Result]] with `profile` set to `Some(profilingData)`
+      */
+    def evaluateProfile(using vm: PlutusVM): Result =
+        vm.evaluateDeBruijnedTermProfile(DeBruijn.deBruijnTerm(this))
+
     /** Wrap the term in a Plutus V1 program. */
     def plutusV1: Program = Program.plutusV1(this)
 
