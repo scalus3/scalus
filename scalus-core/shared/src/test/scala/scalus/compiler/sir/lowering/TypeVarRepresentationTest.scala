@@ -154,7 +154,9 @@ class TypeVarRepresentationTest extends AnyFunSuite {
             case (Result.Success(_, sBudget, _, _), Result.Success(_, nBudget, _, _)) =>
                 info(s"Standard budget: $sBudget")
                 info(s"Native   budget: $nBudget")
-                info(s"Savings: mem=${sBudget.memory - nBudget.memory}, steps=${sBudget.steps - nBudget.steps}")
+                info(
+                  s"Savings: mem=${sBudget.memory - nBudget.memory}, steps=${sBudget.steps - nBudget.steps}"
+                )
             case (Result.Failure(ex, _, _, _), _) =>
                 fail(s"Standard failed: $ex")
             case (_, Result.Failure(ex, _, _, _)) =>

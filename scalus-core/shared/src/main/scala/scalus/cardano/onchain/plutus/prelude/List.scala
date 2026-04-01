@@ -29,12 +29,12 @@ object List {
 
     /** Creates an empty list with unboxed element representation.
       *
-      * When `nativeListElements=true`, elements are stored in their native UPLC
-      * representation (Integer, ByteString, Data.Constr, etc.) instead of being
-      * boxed as Data. This avoids iData/unIData wrapping overhead.
+      * When `nativeListElements=true`, elements are stored in their native UPLC representation
+      * (Integer, ByteString, Data.Constr, etc.) instead of being boxed as Data. This avoids
+      * iData/unIData wrapping overhead.
       *
-      * Requires A to be a concrete type — fails at lowering time if A is a TypeVar,
-      * because the element representation can't be determined for unknown types.
+      * Requires A to be a concrete type — fails at lowering time if A is a TypeVar, because the
+      * element representation can't be determined for unknown types.
       *
       * @tparam A
       *   Must be a concrete type (BigInt, ByteString, a case class, etc.)

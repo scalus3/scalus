@@ -96,12 +96,12 @@ object ListReprRules {
 
 /** Repr rules for native list intrinsics (IntrinsicsNativeList). */
 object NativeListReprRules {
-    import ListReprRules.{headRule, tailRule, isEmptyRule, dropRule, atRule}
+    import ListReprRules.{atRule, dropRule, headRule, isEmptyRule, tailRule}
 
     private def listRepr(inRepr: LoweredValueRepresentation): LoweredValueRepresentation = inRepr
 
-    /** map/filter/etc: after self substitution, outTp is the remaining curried function.
-      * Use defaultRepresentation which handles Fun types correctly.
+    /** map/filter/etc: after self substitution, outTp is the remaining curried function. Use
+      * defaultRepresentation which handles Fun types correctly.
       */
     val mapRule: ReprRule = (outTp, inRepr, lctx) =>
         lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)

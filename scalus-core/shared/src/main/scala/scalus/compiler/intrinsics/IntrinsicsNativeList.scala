@@ -8,11 +8,11 @@ import scalus.uplc.builtin.Builtins.*
 
 /** Native list intrinsics — list operations with builtin (Transparent) TypeVars.
   *
-  * Elements are stored in native UPLC representation via defaultRepresentation(elementType).
-  * No extra iData/unIData wrapping needed — headList/mkCons work on native values.
+  * Elements are stored in native UPLC representation via defaultRepresentation(elementType). No
+  * extra iData/unIData wrapping needed — headList/mkCons work on native values.
   *
-  * The IntrinsicResolver dispatches to these when the list has native element
-  * representation (SumBuiltinList with !isPackedData element repr).
+  * The IntrinsicResolver dispatches to these when the list has native element representation
+  * (SumBuiltinList with !isPackedData element repr).
   */
 @Compile
 object IntrinsicsNativeList {
