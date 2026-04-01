@@ -296,6 +296,11 @@ object TypeVarKindAnalysis {
                             else DefaultRepresentation
                         collectTypeVarsFrom(l.param.tp).foreach(tv => upgradeKind(tv, kind))
                     case _ =>
+                        // Non-FI callback: we can't see inside it, so TypeVars
+                        // in its type must be at least CanBeListAffected (conservative)
+                        if SIRType.isPolyFunOrFun(l.param.tp) then
+                            collectTypeVarsFrom(l.param.tp)
+                                .foreach(tv => upgradeKind(tv, CanBeListAffected))
                 }
                 current = l.term
             }
