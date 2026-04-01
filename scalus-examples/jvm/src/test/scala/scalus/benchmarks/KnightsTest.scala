@@ -9,6 +9,7 @@ import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.ScalusTest
+import scalus.uplc.eval.{ProfileFormatter, Result}
 
 class KnightsTest extends AnyFunSuite, ScalusTest:
     import KnightsTest.{*, given}
@@ -27,6 +28,15 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     )
 
     val printComparison = true
+    val profilingEnabled = false
+
+    extension (term: scalus.uplc.Term)
+        private def evalWithOptionalProfile(using PlutusVM): Result =
+            if profilingEnabled then
+                val result = term.evaluateProfile
+                result.profile.foreach(p => info(ProfileFormatter.toText(p)))
+                result
+            else term.evalWithOptionalProfile
 
     test("100_4x4") {
         val sir = compile {
@@ -36,7 +46,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         }
         // val lw = sir.toLoweredValue()
         // println(s"Lowered value: ${lw.pretty.render(100)}")
-        val result = sir.toUplcOptimized(false).evaluateDebug
+        val result = sir.toUplcOptimized(false).evalWithOptionalProfile
 
         val options = summon[Options]
         val scalusBudget =
@@ -137,7 +147,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             require(result === expected)
         }
             .toUplcOptimized(false)
-            .evaluateDebug
+            .evalWithOptionalProfile
 
         val options = summon[Options]
         val scalusBudget =
@@ -241,7 +251,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             require(result === expected)
         }
             .toUplcOptimized(false)
-            .evaluateDebug
+            .evalWithOptionalProfile
 
         val options = summon[Options]
         val scalusBudget =

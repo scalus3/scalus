@@ -92,6 +92,51 @@ class PlutusVM(
                 )
     }
 
+    /** Evaluates a Plutus script with profiling enabled.
+      *
+      * Like [[evaluateScriptDebug]] but also collects profiling data by source location and
+      * function.
+      *
+      * @param program
+      *   The Plutus script
+      * @return
+      *   A tuple of (Result, ProfilingData)
+      */
+    def evaluateScriptProfile(program: DeBruijnedProgram): (Result, ProfilingData) = {
+        val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
+        val cek = new CekMachine(
+          machineParams,
+          spenderLogger,
+          spenderLogger,
+          builtins.getBuiltinRuntime,
+          caseOnBuiltinsEnabled,
+          profiling = true
+        )
+        try
+            val term = DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(program.term))
+            if !isResultValid(term) then throw new InvalidReturnValue(term)
+            (
+              Result.Success(
+                term,
+                spenderLogger.getSpentBudget,
+                spenderLogger.costs.toMap,
+                spenderLogger.getLogsWithBudget
+              ),
+              cek.getProfile.get
+            )
+        catch
+            case e: Exception =>
+                (
+                  Result.Failure(
+                    e,
+                    spenderLogger.getSpentBudget,
+                    spenderLogger.costs.toMap,
+                    spenderLogger.getLogsWithBudget
+                  ),
+                  cek.getProfile.get
+                )
+    }
+
     /** Evaluates a debruijned term using the CEK machine. This method does not follow CIP-117.
       *
       * @param debruijnedTerm
@@ -117,6 +162,49 @@ class PlutusVM(
           caseOnBuiltinsEnabled
         )
         DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
+    }
+
+    /** Evaluates a debruijned term with profiling enabled. Does not follow CIP-117.
+      *
+      * Like [[evaluateDeBruijnedTerm]] but also collects profiling data.
+      *
+      * @param debruijnedTerm
+      *   The debruijned term
+      * @return
+      *   A tuple of (Result, ProfilingData)
+      */
+    def evaluateDeBruijnedTermProfile(debruijnedTerm: Term): (Result, ProfilingData) = {
+        val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
+        val cek = new CekMachine(
+          machineParams,
+          spenderLogger,
+          spenderLogger,
+          builtins.getBuiltinRuntime,
+          caseOnBuiltinsEnabled,
+          profiling = true
+        )
+        try
+            val result = DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
+            (
+              Result.Success(
+                result,
+                spenderLogger.getSpentBudget,
+                spenderLogger.costs.toMap,
+                spenderLogger.getLogsWithBudget
+              ),
+              cek.getProfile.get
+            )
+        catch
+            case e: Exception =>
+                (
+                  Result.Failure(
+                    e,
+                    spenderLogger.getSpentBudget,
+                    spenderLogger.costs.toMap,
+                    spenderLogger.getLogsWithBudget
+                  ),
+                  cek.getProfile.get
+                )
     }
 
     /** Plutus V3 and V4 require the result to be `Unit` to be considered valid.

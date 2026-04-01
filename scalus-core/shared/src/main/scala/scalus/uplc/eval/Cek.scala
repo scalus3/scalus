@@ -509,6 +509,7 @@ enum Result:
     val budget: ExUnits
     val logs: Seq[String]
     val costs: collection.Map[ExBudgetCategory, collection.Seq[ExUnits]]
+    var profile: Option[ProfilingData] = None
     case Success(
         term: Term,
         budget: ExUnits,
@@ -790,7 +791,8 @@ class CekMachine(
     budgetSpender: BudgetSpender,
     logger: Logger,
     getBuiltinRuntime: DefaultFun => BuiltinRuntime,
-    caseOnBuiltinsEnabled: Boolean = false
+    caseOnBuiltinsEnabled: Boolean = false,
+    profiling: Boolean = false
 ) {
     import CekValue.*
     import Context.*
@@ -804,6 +806,56 @@ class CekMachine(
     private def lastSourcePos: ScalusSourcePos =
         val t = this.term
         if t == null then ScalusSourcePos.empty else t.sourcePos
+
+    private class ProfilingBudgetSpender(wrapped: BudgetSpender) extends BudgetSpender {
+        private val byLocation = HashMap[String, (Long, Long, Long)]()
+        private val byFunction = HashMap[String, (Long, Long, Long)]()
+        private var totalMem = 0L
+        private var totalCpu = 0L
+
+        def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
+            wrapped.spendBudget(cat, budget, env)
+            totalMem += budget.memory
+            totalCpu += budget.steps
+            val pos = lastSourcePos
+            if !pos.isEmpty then
+                val key = s"${pos.file}:${pos.startLine + 1}"
+                val (m, c, n) = byLocation.getOrElse(key, (0L, 0L, 0L))
+                byLocation(key) = (m + budget.memory, c + budget.steps, n + 1)
+            cat match
+                case ExBudgetCategory.BuiltinApp(bi) =>
+                    val name = bi.toString
+                    val (m, c, n) = byFunction.getOrElse(name, (0L, 0L, 0L))
+                    byFunction(name) = (m + budget.memory, c + budget.steps, n + 1)
+                case _ => ()
+        }
+
+        def getSpentBudget: ExUnits = wrapped.getSpentBudget
+
+        def getProfile: ProfilingData = {
+            val locations = byLocation.toSeq.map { case (key, (mem, cpu, cnt)) =>
+                val colonIdx = key.lastIndexOf(':')
+                val file = key.substring(0, colonIdx)
+                val line = key.substring(colonIdx + 1).toInt
+                SourceLocationProfile(file, line, mem, cpu, cnt)
+            }.sortBy(e => (-e.memory, -e.cpu))
+
+            val functions = byFunction.toSeq.map { case (name, (mem, cpu, cnt)) =>
+                FunctionProfile(name, mem, cpu, cnt)
+            }.sortBy(e => (-e.memory, -e.cpu))
+
+            ProfilingData(locations, functions, ExUnits(totalMem, totalCpu))
+        }
+    }
+
+    private val effectiveSpender: BudgetSpender =
+        if profiling then new ProfilingBudgetSpender(budgetSpender)
+        else budgetSpender
+
+    /** Returns profiling data if profiling was enabled, None otherwise. */
+    def getProfile: Option[ProfilingData] = effectiveSpender match
+        case p: ProfilingBudgetSpender => Some(p.getProfile)
+        case _                         => None
 
     /** Evaluates a UPLC term.
       *
@@ -1211,6 +1263,6 @@ class CekMachine(
         budget: ExUnits,
         env: CekValEnv
     ): Unit = {
-        budgetSpender.spendBudget(cat, budget, env)
+        effectiveSpender.spendBudget(cat, budget, env)
     }
 }
