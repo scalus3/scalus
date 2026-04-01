@@ -140,6 +140,8 @@ object TypeVarKindAnalysis {
             case lam: SIR.LamAbs =>
                 registerTypeParams(lam.typeParams)
                 checkFunctionalInterfaceParams(lam)
+                // Check if TypeVars appear in list element positions in the function's type
+                checkTypeForListElements(lam.tp)
                 analyzeSir(lam.term, scope)
             case SIR.Constr(_, data, args, tp, _) =>
                 if isListLikeDecl(data) then markElementTypeVars(tp)
@@ -213,6 +215,38 @@ object TypeVarKindAnalysis {
             case SIRType.TypeLambda(_, body)    => extractArgType(body)
             case tp: SIRType.TypeProxy if tp.ref != null => extractArgType(tp.ref)
             case _                             => None
+        }
+
+        /** Check a type for list element positions — TypeVars in List[T]/PairList[A,B] etc.
+          * are CanBeListAffected even if the function body doesn't directly construct/match lists.
+          */
+        private def checkTypeForListElements(tp: SIRType): Unit = {
+            val visited = new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
+            def walk(t: SIRType, inListElement: Boolean): Unit = t match {
+                case tv: SIRType.TypeVar =>
+                    if inListElement then upgradeKind(tv, CanBeListAffected)
+                case SIRType.Fun(in, out) =>
+                    walk(in, false); walk(out, false)
+                case SIRType.CaseClass(cd, typeArgs, parent) =>
+                    val isListLike = parent match {
+                        case Some(SIRType.SumCaseClass(decl, _)) => listLikeDeclNames.contains(decl.name)
+                        case _ => false
+                    }
+                    typeArgs.foreach(a => walk(a, isListLike || inListElement))
+                    parent.foreach(p => walk(p, false))
+                case SIRType.SumCaseClass(decl, typeArgs) =>
+                    val isListLike = listLikeDeclNames.contains(decl.name)
+                    typeArgs.foreach(a => walk(a, isListLike || inListElement))
+                case SIRType.TypeLambda(_, body) =>
+                    walk(body, false)
+                case tp: SIRType.TypeProxy =>
+                    if tp.ref != null && !visited.containsKey(tp) then {
+                        visited.put(tp, true)
+                        walk(tp.ref, inListElement)
+                    }
+                case _ =>
+            }
+            walk(tp, false)
         }
 
         /** Detect builtin list operations (mkCons, constrData, mapData, listData).

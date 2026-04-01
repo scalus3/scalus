@@ -120,10 +120,8 @@ object SirToUplcV3Lowering {
             )
         val (transformedSir, tvStats) = TypeVarKindAnalysis.analyze(sir, debug)
         if debug then println(tvStats)
-        // Analysis produces stats; transformed SIR not used yet —
-        // Transparent handling in makeResolvedProxy needs rework first
         SirToUplcV3Lowering(
-          sir = sir,
+          sir = transformedSir,
           generateErrorTraces = options.generateErrorTraces,
           debug = debug,
           targetLanguage = options.targetLanguage,
