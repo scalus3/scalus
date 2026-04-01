@@ -29,7 +29,7 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         SumCaseClassRepresentation.DataData
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         LoweringContext
     ): LoweredValueRepresentation =
         SumCaseClassRepresentation.DataData

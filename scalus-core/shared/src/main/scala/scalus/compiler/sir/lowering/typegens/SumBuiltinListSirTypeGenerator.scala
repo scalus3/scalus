@@ -24,11 +24,17 @@ class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation
     ): LoweredValueRepresentation =
         SumCaseClassRepresentation.PackedSumDataList
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then listRepr
-        else defaultDataRepresentation(tp)
+        kind match {
+            case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+            case SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+            case SIRType.TypeVarKind.CanBeListAffected =>
+                if lctx.nativeTypeVarRepresentation then listRepr
+                else defaultDataRepresentation(tp)
+        }
 
     override def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext

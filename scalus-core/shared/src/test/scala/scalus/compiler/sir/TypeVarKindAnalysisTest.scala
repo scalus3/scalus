@@ -73,6 +73,51 @@ class TypeVarKindAnalysisTest extends AnyFunSuite {
         assert(resultNew.isSuccess, s"Transformed failed: ${resultNew}")
     }
 
+    test("DefaultRepresentation produces different UPLC") {
+        // Eq.by only uses Eq, no lists — A should be DefaultRepresentation
+        import scalus.cardano.onchain.plutus.prelude.Eq
+        val sir = compile {
+            val eq = Eq.by[BigInt, BigInt](x => x + BigInt(1))
+            eq(BigInt(1), BigInt(2))
+        }
+        val (newSir, stats) = TypeVarKindAnalysis.analyze(sir, debug = true)
+        info(s"Eq.by stats: $stats")
+        val termOrig = new SirToUplcV3Lowering(sir).lower()
+        val termNew = new SirToUplcV3Lowering(newSir).lower()
+        val origStr = termOrig.show
+        val newStr = termNew.show
+        if origStr != newStr then {
+            info("UPLC CHANGED!")
+            info(s"Original:\n$origStr")
+            info(s"Transformed:\n$newStr")
+        } else {
+            info("UPLC unchanged")
+        }
+        given vm: scalus.uplc.eval.PlutusVM = scalus.uplc.eval.PlutusVM.makePlutusV3VM()
+        val result = termNew.evaluateDebug
+        assert(result.isSuccess, s"Failed: $result")
+    }
+
+    test("contains with Eq — boundary conversion between list and Eq repr") {
+        import scalus.cardano.onchain.plutus.prelude.Eq
+        // contains[A] has A as CanBeListAffected (from list)
+        // Eq[A] has A as DefaultRepresentation (from FI annotation)
+        // When contains calls eq(head, elem), conversion Data→native should be inserted
+        val sir = compile {
+            val l = List(BigInt(1), BigInt(2), BigInt(3))
+            val eq = Eq[BigInt]
+            l.find(x => eq(x, BigInt(2))).isDefined
+        }
+        val (newSir, stats) = TypeVarKindAnalysis.analyze(sir, debug = true)
+        info(s"contains stats: $stats")
+        // Lower with transformed SIR and evaluate
+        val term = new SirToUplcV3Lowering(newSir).lower()
+        given vm: scalus.uplc.eval.PlutusVM = scalus.uplc.eval.PlutusVM.makePlutusV3VM()
+        val result = term.evaluateDebug
+        info(s"Result: ${result}")
+        assert(result.isSuccess, s"Failed: ${result}")
+    }
+
     test("check FI annotation in compiled SIR") {
         // Compile a function that takes Ord — check if FI annotation is present
         val sir = compile {

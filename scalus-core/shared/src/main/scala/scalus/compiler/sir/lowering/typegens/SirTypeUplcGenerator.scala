@@ -17,11 +17,12 @@ trait SirTypeUplcGenerator {
       */
     def defaultDataRepresentation(tp: SIRType)(using LoweringContext): LoweredValueRepresentation
 
-    /** Get default representation for type variable. This representation is used when converting to
-      * parameters of scala functions with type parameters. (Usually the same as
-      * defaultDataRepresentation, except Lambdas).
+    /** Get default representation for type variable with the given kind.
+      *   - Transparent: exception (transparent uses input representation as-is)
+      *   - DefaultRepresentation: native representation (for Eq/Ord inspection)
+      *   - CanBeListAffected: data representation (for list elements)
       */
-    def defaultTypeVarReperesentation(tp: SIRType)(using
+    def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         LoweringContext
     ): LoweredValueRepresentation
 

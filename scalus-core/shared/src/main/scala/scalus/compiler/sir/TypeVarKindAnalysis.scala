@@ -128,9 +128,8 @@ object TypeVarKindAnalysis {
                     b.value match {
                         case lam: SIR.LamAbs if lam.typeParams.nonEmpty =>
                             val (tps, params) = extractTypeParamsAndParams(lam)
-                            if debug then
-                                println(s"  function ${b.name}: typeParams=${tps.map(tv => s"${tv.name}#${tv.optId.getOrElse(0)}").mkString(",")}")
                             registerTypeParams(tps)
+                            for tv <- tps do functionForTypeVar(tvKey(tv)) = b.name
                             sc + (b.name -> FunctionInfo(tps, params, lam))
                         case _ => sc
                     }
@@ -580,16 +579,20 @@ object TypeVarKindAnalysis {
         // ------- Statistics -------
 
         def printDefaultReprDetails(): Unit = {
+            // Find function names for DefaultRepresentation TypeVars
             for key <- allScalaTypeVars do {
                 val canonical = find(key)
                 computedKinds.get(canonical) match {
                     case Some(DefaultRepresentation) =>
-                        // Find which function this TypeVar belongs to
-                        println(s"  DefaultRepr: ${key._1}#${key._2.getOrElse(0)}")
+                        val funcName = functionForTypeVar.getOrElse(key, "unknown")
+                        println(s"  DefaultRepr: ${key._1}#${key._2.getOrElse(0)} in $funcName")
                     case _ =>
                 }
             }
         }
+
+        /** Maps TypeVar key → function name it was registered from. */
+        val functionForTypeVar = mutable.Map.empty[TVKey, String]
 
         def computeStats(): Stats = {
             var transparent = 0

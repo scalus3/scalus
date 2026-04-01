@@ -86,7 +86,7 @@ object Lowering {
                                         val representation =
                                             if tv.isBuiltin then
                                                 gen.defaultRepresentation(resolvedType)
-                                            else gen.defaultTypeVarReperesentation(resolvedType)
+                                            else gen.defaultTypeVarReperesentation(resolvedType, tv.kind)
                                         TypeRepresentationProxyLoweredValue(
                                           value,
                                           resolvedType,
@@ -99,7 +99,7 @@ object Lowering {
                                         val gen = lctx.typeGenerator(tp)
                                         val repr =
                                             if tv.isBuiltin then gen.defaultRepresentation(tp)
-                                            else gen.defaultTypeVarReperesentation(tp)
+                                            else gen.defaultTypeVarReperesentation(tp, tv.kind)
                                         TypeRepresentationProxyLoweredValue(
                                           value,
                                           tp,

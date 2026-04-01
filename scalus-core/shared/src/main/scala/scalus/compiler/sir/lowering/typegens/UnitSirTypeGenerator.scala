@@ -18,9 +18,15 @@ object UnitSirTypeGenerator extends SirTypeUplcGenerator {
         )
 
     override def defaultTypeVarReperesentation(
-        tp: SIRType
+        tp: SIRType, kind: SIRType.TypeVarKind
     )(using lctx: LoweringContext): LoweredValueRepresentation =
-        PrimitiveRepresentation.Constant
+        kind match {
+            case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+            case SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+            case SIRType.TypeVarKind.CanBeListAffected =>
+                PrimitiveRepresentation.Constant
+        }
 
     override def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = false
 

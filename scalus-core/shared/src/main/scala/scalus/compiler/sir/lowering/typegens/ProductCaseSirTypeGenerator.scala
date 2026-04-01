@@ -47,11 +47,17 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         ProductCaseClassRepresentation.ProdDataConstr
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         loweringContext: LoweringContext
     ): LoweredValueRepresentation =
-        if loweringContext.nativeTypeVarRepresentation then defaultRepresentation(tp)
-        else ProductCaseClassRepresentation.ProdDataConstr
+        kind match {
+            case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+            case SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+            case SIRType.TypeVarKind.CanBeListAffected =>
+                if loweringContext.nativeTypeVarRepresentation then defaultRepresentation(tp)
+                else ProductCaseClassRepresentation.ProdDataConstr
+        }
 
     override def canBeConvertedToData(
         tp: SIRType
@@ -361,7 +367,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 else
                     val typeVarRepr = lctx
                         .typeGenerator(input.sirType)
-                        .defaultTypeVarReperesentation(input.sirType)
+                        .defaultTypeVarReperesentation(input.sirType, tvr.kind)
                     input
                         .toRepresentation(typeVarRepr, pos)
                         .toRepresentation(representation, pos)

@@ -17,12 +17,18 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
     // TODO: set position in LoweringContext
     override def defaultTypeVarReperesentation(
-        tp: SIRType
+        tp: SIRType, kind: SIRType.TypeVarKind
     )(using LoweringContext): LoweredValueRepresentation =
-        throw LoweringException(
-          "Type variables with lambdas are not supported in sum cases yet",
-          SIRPosition.empty
-        )
+        kind match {
+            case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+            case SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+            case SIRType.TypeVarKind.CanBeListAffected =>
+                throw LoweringException(
+                  "Type variables with lambdas are not supported in sum cases yet",
+                  SIRPosition.empty
+                )
+        }
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = false
 

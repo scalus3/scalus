@@ -497,7 +497,7 @@ object ProductCaseClassRepresentation {
                 case tvr: TypeVarRepresentation =>
                     if tvr.isBuiltin then true
                     else
-                        val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp)
+                        val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp, tvr.kind)
                         resolved.isCompatibleOn(tp, this, pos)
                 case _ => false
             }
@@ -568,7 +568,7 @@ object ProductCaseClassRepresentation {
                 case tvr: TypeVarRepresentation =>
                     if tvr.isBuiltin then true
                     else
-                        val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp)
+                        val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp, tvr.kind)
                         resolved.isCompatibleOn(tp, this, pos)
                 case _ => false
             }
@@ -853,7 +853,7 @@ case class LambdaRepresentation(
                 case tv: SIRType.TypeVar if tv.isBuiltin && reprSubstitutes.contains(tv) =>
                     reprSubstitutes(tv)
                 case tv: SIRType.TypeVar if !tv.isBuiltin =>
-                    lctx.typeGenerator(argumentType).defaultTypeVarReperesentation(argumentType)
+                    lctx.typeGenerator(argumentType).defaultTypeVarReperesentation(argumentType, tv.kind)
                 case SIRType.Fun(defIn, defOut) =>
                     (argumentType, declaredRepr) match
                         case (SIRType.Fun(argIn, argOut), lr: LambdaRepresentation) =>
@@ -895,7 +895,7 @@ case class LambdaRepresentation(
                             lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
                         case tvr: TypeVarRepresentation if !tvr.isBuiltin =>
                             lctx.typeGenerator(argumentType)
-                                .defaultTypeVarReperesentation(argumentType)
+                                .defaultTypeVarReperesentation(argumentType, tvr.kind)
                         case SumCaseClassRepresentation.SumBuiltinList(innerRepr)
                             if lctx.nativeListElements
                                 && SumCaseClassRepresentation.SumBuiltinList
@@ -1146,7 +1146,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
                 val gen = lctx.typeGenerator(semanticType)
                 val resolved =
                     if isBuiltin then gen.defaultRepresentation(semanticType)
-                    else gen.defaultTypeVarReperesentation(semanticType)
+                    else gen.defaultTypeVarReperesentation(semanticType, kind)
                 resolved.uplcType(semanticType)
 
     override def defaultUni(semanticType: SIRType)(using lctx: LoweringContext): DefaultUni =
@@ -1168,7 +1168,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
                 val gen = lctx.typeGenerator(semanticType)
                 val resolved =
                     if isBuiltin then gen.defaultRepresentation(semanticType)
-                    else gen.defaultTypeVarReperesentation(semanticType)
+                    else gen.defaultTypeVarReperesentation(semanticType, kind)
                 resolved.defaultUni(semanticType)
 
     override def doc: Doc = {

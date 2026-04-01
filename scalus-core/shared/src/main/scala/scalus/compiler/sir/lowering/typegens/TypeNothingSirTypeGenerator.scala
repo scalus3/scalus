@@ -19,7 +19,7 @@ object TypeNothingSirTypeGenerator extends SirTypeUplcGenerator {
           "Can't ask defaultDataRepresentation on Nothing type generator"
         )
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
         ErrorRepresentation

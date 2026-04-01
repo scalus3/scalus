@@ -16,11 +16,16 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
     def defaultDataRepresentation(tp: SIRType)(using LoweringContext): LoweredValueRepresentation =
         PrimitiveRepresentation.PackedData
 
-    def defaultTypeVarReperesentation(tp: SIRType)(using
+    def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         lctx: LoweringContext
-    ): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
-        else PrimitiveRepresentation.PackedData
+    ): LoweredValueRepresentation = kind match {
+        case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+        case SIRType.TypeVarKind.Transparent =>
+            throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+        case SIRType.TypeVarKind.CanBeListAffected =>
+            if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+            else PrimitiveRepresentation.PackedData
+    }
 
     def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = true
 
@@ -830,7 +835,7 @@ object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         throw IllegalArgumentException("MLResultGenerator does not support data representation")
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         LoweringContext
     ): LoweredValueRepresentation =
         PrimitiveRepresentation.Constant

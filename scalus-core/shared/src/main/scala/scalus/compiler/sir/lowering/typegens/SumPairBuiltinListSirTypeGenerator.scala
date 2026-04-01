@@ -20,11 +20,17 @@ object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator 
     ): LoweredValueRepresentation =
         SumCaseClassRepresentation.SumDataAssocMap
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
-        else SumCaseClassRepresentation.SumDataAssocMap
+        kind match {
+            case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+            case SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+            case SIRType.TypeVarKind.CanBeListAffected =>
+                if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+                else SumCaseClassRepresentation.SumDataAssocMap
+        }
 
     override def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext

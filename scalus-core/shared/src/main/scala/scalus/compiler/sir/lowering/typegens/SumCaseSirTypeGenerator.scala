@@ -24,10 +24,16 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         SumCaseClassRepresentation.DataConstr
     }
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        SumCaseClassRepresentation.DataConstr
+        kind match {
+            case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+            case SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+            case SIRType.TypeVarKind.CanBeListAffected =>
+                SumCaseClassRepresentation.DataConstr
+        }
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = true
 
@@ -230,12 +236,12 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
             case UplcConstrOnData =>
                 ???
-            case TypeVarRepresentation(_) =>
+            case TypeVarRepresentation(tvrKind) =>
                 // When we have TypeVarRepresentation, convert to the proper representation
                 // for the scrutinee's actual type and recurse
                 val gen = lctx.typeGenerator(loweredScrutinee.sirType)
                 val properRepresentation =
-                    gen.defaultTypeVarReperesentation(loweredScrutinee.sirType)
+                    gen.defaultTypeVarReperesentation(loweredScrutinee.sirType, tvrKind)
 
                 val scrutineeWithProperRepr = TypeRepresentationProxyLoweredValue(
                   loweredScrutinee,

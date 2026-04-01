@@ -16,7 +16,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
           "Can't ask defaultDataRepresentaion access product case type generator"
         )
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         LoweringContext
     ): LoweredValueRepresentation = ???
 

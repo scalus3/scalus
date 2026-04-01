@@ -31,16 +31,22 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
     }
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        tp match {
-            case tv: SIRType.TypeVar if tv.kind == SIRType.TypeVarKind.DefaultRepresentation =>
-                // DefaultRepresentation: always native — TypeVar is used for inspection (Eq/Ord)
-                defaultRepresentation(tp)
-            case _ =>
-                if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
-                else defaultDataRepresentation(tp)
+        kind match {
+            case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+            case SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+            case SIRType.TypeVarKind.CanBeListAffected =>
+                tp match {
+                    case tv: SIRType.TypeVar if tv.kind == SIRType.TypeVarKind.DefaultRepresentation =>
+                        // DefaultRepresentation: always native — TypeVar is used for inspection (Eq/Ord)
+                        defaultRepresentation(tp)
+                    case _ =>
+                        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+                        else defaultDataRepresentation(tp)
+                }
         }
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
@@ -161,7 +167,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                             val tp1 = constrDecl.params.head.tp
                                             val inrepr = lctx
                                                 .typeGenerator(tp1)
-                                                .defaultTypeVarReperesentation(tp1)
+                                                .defaultTypeVarReperesentation(tp1, SIRType.TypeVarKind.CanBeListAffected)
                                             val r1 = input.toRepresentation(inrepr, pos)
                                             new RepresentationProxyLoweredValue(
                                               r1,
@@ -296,7 +302,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                             if tv.isBuiltin then gen.defaultRepresentation(resolvedType)
                             else if tv.kind == SIRType.TypeVarKind.DefaultRepresentation then {
                                     gen.defaultRepresentation(resolvedType)
-                            } else gen.defaultTypeVarReperesentation(resolvedType)
+                            } else gen.defaultTypeVarReperesentation(resolvedType, tv.kind)
                         val proxy = new TypeRepresentationProxyLoweredValue(
                           input,
                           resolvedType,

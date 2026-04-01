@@ -1882,7 +1882,7 @@ object LoweredValue {
                             val targetArgRepr =
                                 if useNative then
                                     targetArgGen.defaultRepresentation(targetArgType)
-                                else targetArgGen.defaultTypeVarReperesentation(targetArgType)
+                                else targetArgGen.defaultTypeVarReperesentation(targetArgType, tv.kind)
                             val argTyped = new TypeRepresentationProxyLoweredValue(
                               arg,
                               targetArgType,
@@ -1894,7 +1894,7 @@ object LoweredValue {
                             val gen = lctx.typeGenerator(other)
                             val targetArgRepr =
                                 if useNative then gen.defaultRepresentation(other)
-                                else gen.defaultTypeVarReperesentation(other)
+                                else gen.defaultTypeVarReperesentation(other, tv.kind)
                             val argTyped = new TypeRepresentationProxyLoweredValue(
                               arg,
                               other,
@@ -2399,13 +2399,13 @@ object LoweredValue {
                     if changeRepresentation then
                         val valueGen = lctx.typeGenerator(value.sirType)
                         val converted = value.toRepresentation(
-                          valueGen.defaultTypeVarReperesentation(value.sirType),
+                          valueGen.defaultTypeVarReperesentation(value.sirType, SIRType.TypeVarKind.CanBeListAffected),
                           inPos
                         )
                         // Use target type's default TypeVar representation for the result
                         // DataConstr and ProdDataConstr are compatible representations
                         val targetGen = lctx.typeGenerator(targetType)
-                        val targetTypeVarRepr = targetGen.defaultTypeVarReperesentation(targetType)
+                        val targetTypeVarRepr = targetGen.defaultTypeVarReperesentation(targetType, SIRType.TypeVarKind.CanBeListAffected)
                         // When casting Data to a native list representation
                         // (e.g., DataData → SumBuiltinList(Constant)), perform actual
                         // conversion so list elements are unwrapped from Data to native.
@@ -2430,7 +2430,7 @@ object LoweredValue {
             // no UPLC conversion code generated
             if isTypeProxy then {
                 val targetGen = lctx.typeGenerator(targetType)
-                val targetRepr = targetGen.defaultTypeVarReperesentation(targetType)
+                val targetRepr = targetGen.defaultTypeVarReperesentation(targetType, SIRType.TypeVarKind.CanBeListAffected)
                 new TypeRepresentationProxyLoweredValue(expr, targetType, targetRepr, inPos)
             } else {
 

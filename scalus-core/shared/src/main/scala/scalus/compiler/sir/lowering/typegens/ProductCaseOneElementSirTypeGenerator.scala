@@ -26,13 +26,19 @@ case class ProductCaseOneElementSirTypeGenerator(
         )
 
     override def defaultTypeVarReperesentation(
-        tp: SIRType
+        tp: SIRType, kind: SIRType.TypeVarKind
     )(using lctx: LoweringContext): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
-        else
-            ProductCaseClassRepresentation.OneElementWrapper(
-              argGenerator.defaultTypeVarReperesentation(tp)
-            )
+        kind match {
+            case SIRType.TypeVarKind.DefaultRepresentation => defaultRepresentation(tp)
+            case SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(s"Transparent TypeVar: ${tp.show}", SIRPosition.empty)
+            case SIRType.TypeVarKind.CanBeListAffected =>
+                if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
+                else
+                    ProductCaseClassRepresentation.OneElementWrapper(
+                      argGenerator.defaultTypeVarReperesentation(tp, kind)
+                    )
+        }
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean =
         argGenerator.canBeConvertedToData(tp)
@@ -280,7 +286,7 @@ case class ProductCaseOneElementSirTypeGenerator(
                           argRepr
                       case tvr: TypeVarRepresentation =>
                           if tvr.isBuiltin then argGenerator.defaultRepresentation(argType)
-                          else argGenerator.defaultTypeVarReperesentation(argType)
+                          else argGenerator.defaultTypeVarReperesentation(argType, tvr.kind)
                       case _ =>
                           throw LoweringException(
                             s"Expected OneElementWrapper representation, got ${input.representation}",

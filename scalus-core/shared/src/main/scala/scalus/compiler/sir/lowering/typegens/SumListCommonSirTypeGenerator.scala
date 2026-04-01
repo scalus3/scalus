@@ -156,7 +156,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                         case tvr: TypeVarRepresentation =>
                             val gen = lctx.typeGenerator(elemType)
                             if !tvr.isPackedData then gen.defaultRepresentation(elemType)
-                            else gen.defaultTypeVarReperesentation(elemType)
+                            else gen.defaultTypeVarReperesentation(elemType, tvr.kind)
                         case other => other
                 val resolvedIn = resolveElementRepr(inElemRepr)
                 val resolvedOut = resolveElementRepr(outElemRepr)
@@ -442,7 +442,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             case tvr: TypeVarRepresentation =>
                 val targetRepresentation = {
                     if tvr.isBuiltin then defaultRepresentation(input.sirType)
-                    else this.defaultTypeVarReperesentation(input.sirType)
+                    else this.defaultTypeVarReperesentation(input.sirType, tvr.kind)
                 }
                 val alignedInput = input.toRepresentation(
                   targetRepresentation,

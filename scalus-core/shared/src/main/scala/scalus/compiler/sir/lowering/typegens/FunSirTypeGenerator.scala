@@ -43,7 +43,7 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
         )
 
     override def defaultTypeVarReperesentation(
-        tp: SIRType
+        tp: SIRType, kind: SIRType.TypeVarKind
     )(using lctx: LoweringContext): LoweredValueRepresentation = {
         // unchanged function.
         defaultRepresentation(tp)

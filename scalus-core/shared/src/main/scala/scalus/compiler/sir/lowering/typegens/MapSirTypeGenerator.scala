@@ -22,7 +22,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
         ProductCaseClassRepresentation.PackedDataMap
     }
 
-    override def defaultTypeVarReperesentation(tp: SIRType)(using
+    override def defaultTypeVarReperesentation(tp: SIRType, kind: SIRType.TypeVarKind)(using
         LoweringContext
     ): LoweredValueRepresentation = {
         ProductCaseClassRepresentation.PackedDataMap
