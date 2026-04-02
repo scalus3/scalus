@@ -73,52 +73,25 @@ class LoweringContext(
       * lowering. Pass 2 lowers each binding, using monitoredExternalVars to detect self-references
       * and wrap with LetRec only when needed.
       */
-    def initSupportBindings(): Unit = {
-        // Pass 1: add placeholders so recursive ExternalVar references resolve
-        val placeholders = for {
-            (_, module) <- supportModules.toSeq
-            binding <- module.defs
-        } yield {
-            val repr = SirTypeUplcGenerator(binding.value.tp)(using this)
-                .defaultRepresentation(binding.tp)(using this)
-            val placeholder = VariableLoweredValue(
-              id = uniqueVarName(binding.name),
-              name = binding.name,
-              sir = SIR.Var(binding.name, binding.tp, AnnotationsDecl(SIRPosition.empty)),
-              representation = repr
+    /** Resolve a support module binding on demand. Called when an ExternalVar is not found in scope
+      * — checks support modules and lowers the binding lazily (only when first referenced).
+      */
+    def resolveSupportBinding(name: String): Option[LoweredValue] = {
+        val binding = supportModules.values
+            .flatMap(_.defs)
+            .find(_.name == name)
+        binding.map { b =>
+            given LoweringContext = this
+            val lowered = Lowering.lowerSIR(b.value)
+            val varVal = LoweredValue.Builder.lvNewLazyNamedVar(
+              b.name,
+              b.tp,
+              lowered.representation,
+              lowered,
+              SIRPosition.empty
             )
-            scope = scope.add(placeholder)
-            (binding, placeholder)
+            varVal
         }
-
-        // Pass 2: lower each binding, detect recursion, wrap accordingly
-        for (binding, placeholder) <- placeholders do
-            val monitor = MutableSet.empty[String]
-            monitoredExternalVars = Some(monitor)
-            val lowered = Lowering.lowerSIR(binding.value)(using this)
-            monitoredExternalVars = None
-            val isRecursive = monitor.contains(binding.name)
-
-            val varVal = if isRecursive then
-                zCombinatorNeeded = true
-                val letRec =
-                    LetRecLoweredValue(placeholder, lowered, placeholder, SIRPosition.empty)
-                VariableLoweredValue(
-                  id = uniqueVarName(binding.name),
-                  name = binding.name,
-                  sir = SIR.Var(binding.name, binding.tp, AnnotationsDecl(SIRPosition.empty)),
-                  representation = lowered.representation,
-                  optRhs = Some(letRec)
-                )
-            else
-                VariableLoweredValue(
-                  id = uniqueVarName(binding.name),
-                  name = binding.name,
-                  sir = SIR.Var(binding.name, binding.tp, AnnotationsDecl(SIRPosition.empty)),
-                  representation = lowered.representation,
-                  optRhs = Some(lowered)
-                )
-            scope = scope.add(varVal)
     }
 
     def uniqueVarName(prefix: String = "_v"): String = {

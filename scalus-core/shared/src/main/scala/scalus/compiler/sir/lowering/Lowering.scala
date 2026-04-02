@@ -158,10 +158,14 @@ object Lowering {
                                   s"This usually indicates the function is being used incorrectly in the code.",
                               ev.anns.pos
                             )
-                        throw LoweringException(
-                          s"External variable $name not found in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}",
-                          ev.anns.pos
-                        )
+                        // Try support modules on demand
+                        lctx.resolveSupportBinding(name) match
+                            case Some(value) => value
+                            case None =>
+                                throw LoweringException(
+                                  s"External variable $name not found in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}",
+                                  ev.anns.pos
+                                )
                 myVar
                 // StaticLoweredValue(
                 //  ev,

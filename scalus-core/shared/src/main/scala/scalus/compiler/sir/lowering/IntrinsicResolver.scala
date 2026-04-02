@@ -47,11 +47,13 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.IntrinsicsNativeList"
         )
 
-    /** Support modules — their bindings are added to scope for normal function calls from intrinsic
-      * provider bodies. Unlike intrinsic modules, these are NOT used for provider substitution.
+    /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
+      * intrinsic modules, these are NOT used for provider substitution.
       */
     lazy val defaultSupportModules: Map[String, Module] =
-        Map.empty
+        scalus.compiler.compiledModules(
+          "scalus.compiler.intrinsics.NativeListOperations"
+        )
 
     // Representation name constants for registry lookup
     private val BuiltinListRepr = "BuiltinList"

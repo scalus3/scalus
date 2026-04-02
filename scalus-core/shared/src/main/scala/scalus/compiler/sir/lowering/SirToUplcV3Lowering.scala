@@ -96,7 +96,6 @@ class SirToUplcV3Lowering(
           nativeListElements = nativeListElements
         )
         ScalusRuntime.initContext(retval)
-        retval.initSupportBindings()
         retval
     }
 
