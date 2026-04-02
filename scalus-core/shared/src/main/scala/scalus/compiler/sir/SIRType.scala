@@ -290,33 +290,22 @@ object SIRType {
     enum TypeVarKind {
 
         /** Type variable from a builtin UPLC function (e.g., headList, chooseList). Can use any
-          * representation transparently.
+          * representation — the value passes through without conversion.
           */
         case Transparent
 
-        /** Scala type variable that uses native (default) representation.
+        /** Type variable with a fixed representation determined by the lowering context. The
+          * representation is chosen based on the concrete type when known, or defaults to Data when
+          * the type is abstract.
           */
-        case DefaultRepresentation
-
-        /** Scala type variable that flows into a list element position (List, AssocMap, SortedMap,
-          * Value). Must use Data representation because abstract type vars can't have
-          * representation conversions generated for them.
-          */
-        case CanBeListAffected
+        case Fixed
     }
 
     object TypeVarKind {
 
-        /** Transparent > CanBeListAffected > DefaultRepresentation */
-        def max(a: TypeVarKind, b: TypeVarKind): TypeVarKind = (a, b) match
-            case (Transparent, _) | (_, Transparent) => Transparent
-            case (CanBeListAffected, _) | (_, CanBeListAffected) =>
-                CanBeListAffected
-            case _ => DefaultRepresentation
-
         /** Convert from legacy isBuiltin flag */
         def fromIsBuiltin(isBuiltin: Boolean): TypeVarKind =
-            if isBuiltin then Transparent else CanBeListAffected
+            if isBuiltin then Transparent else Fixed
     }
 
     /** Type variable have two forms: when id is not set, that means that for each instantiation of
@@ -326,8 +315,8 @@ object SIRType {
       * @param id
       * @param kind - controls representation during lowering.
       *             Transparent: builtin UPLC type variable, can use any representation.
-      *             DefaultRepresentation: Scala type variable with native representation.
-      *             CanBeListAffected: Scala type variable that must use Data representation.
+      *             Fixed: Scala type variable with native representation.
+      *             Fixed: Scala type variable that must use Data representation.
       */
     case class TypeVar(name: String, optId: Option[Long] = None, kind: TypeVarKind)
         extends SIRType {
@@ -506,16 +495,16 @@ object SIRType {
 
         lazy val dataDecl: DataDecl = {
             val proxy = new TypeProxy(null)
-            val aInCons = TypeVar("A", Some(1), TypeVarKind.CanBeListAffected)
+            val aInCons = TypeVar("A", Some(1), TypeVarKind.Fixed)
             val retval = DataDecl(
               "scalus.cardano.onchain.plutus.prelude.List",
               scala.List(NilConstr, Cons.buildConstr(aInCons, proxy)),
-              scala.List(TypeVar("A", Some(2), TypeVarKind.CanBeListAffected)),
+              scala.List(TypeVar("A", Some(2), TypeVarKind.Fixed)),
               AnnotationsDecl.empty
             )
             proxy.ref = SumCaseClass(
               retval,
-              scala.List(TypeVar("A", Some(1), TypeVarKind.CanBeListAffected))
+              scala.List(TypeVar("A", Some(1), TypeVarKind.Fixed))
             )
             if !checkAllProxiesFilled(retval.tp) then
                 throw new IllegalStateException(s"List dataDecl has unfilled proxies: ${retval.tp}")
@@ -759,9 +748,9 @@ object SIRType {
 
         lazy val dataDecl: DataDecl = {
             val consProxy = new TypeProxy(null)
-            val a = TypeVar("A", Some(2), TypeVarKind.CanBeListAffected)
+            val a = TypeVar("A", Some(2), TypeVarKind.Fixed)
             val consA: SIRType.TypeVar =
-                TypeVar("A", Some(1), TypeVarKind.CanBeListAffected)
+                TypeVar("A", Some(1), TypeVarKind.Fixed)
             val retval = DataDecl(
               name,
               scala.List(

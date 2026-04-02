@@ -55,7 +55,23 @@ object Lowering {
                                 (lctx.typeGenerator(targetType), constr.copy(tp = targetType))
                             case None =>
                                 (lctx.typeGenerator(resolvedType), constr)
-                    else (lctx.typeGenerator(resolvedType), constr)
+                    else
+                        // For constructors with a parent sum type, check if the parent
+                        // uses UplcConstr. If so, use the parent's type generator so the
+                        // constructor produces UplcConstr (not DataConstr).
+                        // parent type check for UplcConstr dispatch
+                        val parentTypeGen = resolvedType match
+                            case SIRType.CaseClass(_, _, Some(parent)) =>
+                                val parentGen = lctx.typeGenerator(parent)
+                                val parentRepr = parentGen.defaultRepresentation(parent)
+                                parentRepr match
+                                    case _: SumCaseClassRepresentation.SumUplcConstr =>
+                                        Some(parentGen)
+                                    case _ => None
+                            case _ => None
+                        parentTypeGen match
+                            case Some(gen) => (gen, constr)
+                            case None      => (lctx.typeGenerator(resolvedType), constr)
                 typeGenerator.genConstr(effectiveConstr)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
@@ -142,10 +158,14 @@ object Lowering {
                                   s"This usually indicates the function is being used incorrectly in the code.",
                               ev.anns.pos
                             )
-                        throw LoweringException(
-                          s"External variable $name not found in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}",
-                          ev.anns.pos
-                        )
+                        // Try support modules on demand
+                        lctx.resolveSupportBinding(name) match
+                            case Some(value) => value
+                            case None =>
+                                throw LoweringException(
+                                  s"External variable $name not found in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}",
+                                  ev.anns.pos
+                                )
                 myVar
                 // StaticLoweredValue(
                 //  ev,
@@ -593,45 +613,11 @@ object Lowering {
                   s"  arg.tp = ${app.arg.tp.show}\n" +
                   s"  f = ${app.f.pretty.render(100)}\n"
             )
-        // Try intrinsic resolution BEFORE lowering app.f when it's a nil-injection Apply.
-        // ExtractNilParameter annotates nil-injection Apply nodes with extractNilApply.
-        // Two cases:
-        //   1. THIS Apply is annotated → skip intrinsic (nil arg, not the real arg)
-        //   2. app.f is an annotated Apply → peel the nil and resolve with the real arg
-        //      BEFORE lowering app.f (which would crash on unresolved TypeVar Nil)
-        if lctx.intrinsicModules.nonEmpty
-            && !ExtractNilParameter.isNilInjectionApply(app.anns)
-        then
-            app.f match
-                case SIR.Apply(innerF, _, _, innerAnns)
-                    if ExtractNilParameter.isNilInjectionApply(innerAnns) =>
-                    val arg = lowerSIR(app.arg)
-                    val intrinsicResult = IntrinsicResolver.tryResolve(
-                      innerF,
-                      app.arg,
-                      arg,
-                      app.tp,
-                      app.anns.pos
-                    )(using lctx)
-                    intrinsicResult match
-                        case Some(result) =>
-                            if lctx.debug then
-                                lctx.log(
-                                  s"Intrinsic resolved (peeled): ${app.f.pretty.render(60)} -> ${result.pretty.render(100)}"
-                                )
-                            return result
-                        case None => // fall through
-                case _ => // fall through
-        val prevDebug = lctx.debug
-        // lctx.debug = false
         val fun = lowerSIR(app.f)
         val arg = lowerSIR(app.arg)
-        // lctx.debug = prevDebug
 
-        // Standard intrinsic resolution for non-nil-injection cases
-        if lctx.intrinsicModules.nonEmpty
-            && !ExtractNilParameter.isNilInjectionApply(app.anns)
-        then
+        // Try intrinsic resolution
+        if lctx.intrinsicModules.nonEmpty then
             IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(using
               lctx
             ) match

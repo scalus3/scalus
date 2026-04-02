@@ -96,8 +96,8 @@ class SirToUplcSmLoweringTest
     test("lower Lam/Apply with builtin type-vars (non-scal)") {
         import SIRType.{TypeLambda, TypeVar, Unit}
         val idType = TypeLambda(
-          List(TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)),
-          TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
+          List(TypeVar("A", Some(1), SIRType.TypeVarKind.Fixed)),
+          TypeVar("A", Some(1), SIRType.TypeVarKind.Fixed)
         )
         val x = SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.Transparent), ae)
 
@@ -115,11 +115,11 @@ class SirToUplcSmLoweringTest
     test("lower Lam/Apply with scala type-vars") {
         import SIRType.{TypeLambda, TypeVar, Unit}
         val idType = TypeLambda(
-          List(TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)),
-          TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
+          List(TypeVar("A", Some(1), SIRType.TypeVarKind.Fixed)),
+          TypeVar("A", Some(1), SIRType.TypeVarKind.Fixed)
         )
         val x =
-            SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.CanBeListAffected), ae)
+            SIR.Var("x", TypeVar("X", Some(2), SIRType.TypeVarKind.Fixed), ae)
 
         val sir = SIR.Apply(
           SIR.LamAbs(x, x, List.empty, ae),
@@ -174,8 +174,8 @@ class SirToUplcSmLoweringTest
        TxId(name)
        lowers to (\name TxId -> TxId name) name
          */
-        val a1TypeVar = TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
-        val a2TypeVar = TypeVar("A", Some(2), SIRType.TypeVarKind.CanBeListAffected)
+        val a1TypeVar = TypeVar("A", Some(1), SIRType.TypeVarKind.Fixed)
+        val a2TypeVar = TypeVar("A", Some(2), SIRType.TypeVarKind.Fixed)
         val tailTypeProxy = new TypeProxy(null)
         val listData =
             DataDecl(
@@ -368,9 +368,9 @@ class SirToUplcSmLoweringTest
          */
         val tailTypeProxy = new SIRType.TypeProxy(null)
         val a1TypeVar =
-            SIRType.TypeVar("A1", Some(1), SIRType.TypeVarKind.CanBeListAffected)
+            SIRType.TypeVar("A1", Some(1), SIRType.TypeVarKind.Fixed)
         val a2TypeVar =
-            SIRType.TypeVar("A2", Some(2), SIRType.TypeVarKind.CanBeListAffected)
+            SIRType.TypeVar("A2", Some(2), SIRType.TypeVarKind.Fixed)
         val nilConstr = ConstrDecl(
           "scalus.cardano.onchain.plutus.prelude.List$.Nil",
           List(),
@@ -521,8 +521,8 @@ class SirToUplcSmLoweringTest
     test("lower Match / SumCaseClass for Option[Int]") {
 
         val someTypeProxy = new SIRType.TypeProxy(null)
-        val aTypeVar = SIRType.TypeVar("A", Some(1), SIRType.TypeVarKind.CanBeListAffected)
-        val bTypeVar = SIRType.TypeVar("B", Some(2), SIRType.TypeVarKind.CanBeListAffected)
+        val aTypeVar = SIRType.TypeVar("A", Some(1), SIRType.TypeVarKind.Fixed)
+        val bTypeVar = SIRType.TypeVar("B", Some(2), SIRType.TypeVarKind.Fixed)
         val noneConstr = ConstrDecl(
           "scalus.cardano.onchain.plutus.prelude.Option$.None",
           List(),

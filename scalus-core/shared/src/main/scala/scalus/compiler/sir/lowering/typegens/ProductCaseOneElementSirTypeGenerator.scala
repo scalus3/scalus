@@ -28,11 +28,9 @@ case class ProductCaseOneElementSirTypeGenerator(
     override def defaultTypeVarReperesentation(
         tp: SIRType
     )(using lctx: LoweringContext): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
-        else
-            ProductCaseClassRepresentation.OneElementWrapper(
-              argGenerator.defaultTypeVarReperesentation(tp)
-            )
+        ProductCaseClassRepresentation.OneElementWrapper(
+          argGenerator.defaultTypeVarReperesentation(tp)
+        )
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean =
         argGenerator.canBeConvertedToData(tp)

@@ -24,6 +24,7 @@ object IntrinsicResolver {
 
     private val ListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
     private val ListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
+    private val NativeListOps = "scalus.compiler.intrinsics.IntrinsicsNativeList$"
 
     private val PairListOps = "scalus.compiler.intrinsics.BuiltinPairListOperations$"
     private val PairListOpsV11 = "scalus.compiler.intrinsics.BuiltinPairListOperationsV11$"
@@ -42,17 +43,21 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.BuiltinPairListOperations",
           "scalus.compiler.intrinsics.BuiltinPairListOperationsV11",
           "scalus.compiler.intrinsics.SortedMapIntrinsics",
-          "scalus.compiler.intrinsics.AssocMapIntrinsics"
+          "scalus.compiler.intrinsics.AssocMapIntrinsics",
+          "scalus.compiler.intrinsics.IntrinsicsNativeList"
         )
 
-    /** Support modules — their bindings are added to scope for normal function calls from intrinsic
-      * provider bodies. Unlike intrinsic modules, these are NOT used for provider substitution.
+    /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
+      * intrinsic modules, these are NOT used for provider substitution.
       */
     lazy val defaultSupportModules: Map[String, Module] =
-        Map.empty
+        scalus.compiler.compiledModules(
+          "scalus.compiler.intrinsics.NativeListOperations"
+        )
 
     // Representation name constants for registry lookup
     private val BuiltinListRepr = "BuiltinList"
+    private val NativeBuiltinListRepr = "NativeBuiltinList"
     private val PairListRepr = "PairList"
     private val WildcardRepr = "_"
 
@@ -67,7 +72,7 @@ object IntrinsicResolver {
         Map[String, scalus.compiler.intrinsics.ArgReprConvertRule]
     )
 
-    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules}
+    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules}
 
     private val NoArgConvert: Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] = Map.empty
 
@@ -77,6 +82,8 @@ object IntrinsicResolver {
       */
     private val registry: Map[String, List[RegistryEntry]] = Map(
       ListModule -> List(
+        (WildcardRepr, 0, NativeListOps, NativeListReprRules.factoryRules, NoArgConvert),
+        (NativeBuiltinListRepr, 0, NativeListOps, NativeListReprRules.rules, NoArgConvert),
         (BuiltinListRepr, 0, ListOps, ListReprRules.listRules, NoArgConvert),
         (BuiltinListRepr, 11, ListOpsV11, ListReprRules.listRules, NoArgConvert)
       ),
@@ -133,15 +140,25 @@ object IntrinsicResolver {
         extractModuleAndMethod(f) match
             case None => None
             case Some((moduleName, methodName)) =>
+                if lctx.debug then
+                    lctx.log(
+                      s"IntrinsicResolver: module=$moduleName method=$methodName repr=${loweredArg.representation.doc.render(80)}"
+                    )
                 registry.get(moduleName) match
                     case None => None
                     case Some(entries) =>
-                        val reprName = representationName(loweredArg.representation)
+                        val reprNames = representationNames(loweredArg.representation)
+                        if lctx.debug then
+                            lctx.log(
+                              s"IntrinsicResolver: reprNames=$reprNames entries=${entries.map(e => s"(${e._1},${e._2},${e._3})").mkString(",")}"
+                            )
                         val pvVersion = lctx.targetProtocolVersion.version
 
-                        // Find best matching provider: highest minPV that satisfies constraints
+                        // Find best matching provider: most specific repr name first,
+                        // then highest minPV that satisfies constraints
                         var bestBinding: Option[Binding] = None
                         var bestPV = -1
+                        var bestReprPriority = Int.MaxValue
                         var bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
                             Map.empty
                         var bestArgConvertRules
@@ -149,19 +166,32 @@ object IntrinsicResolver {
                             Map.empty
                         for (repr, minPV, providerModuleName, reprRules, argConvertRules) <-
                                 entries
-                        do
-                            if (repr == reprName || (repr == WildcardRepr && reprRules.contains(
-                                  methodName
-                                ))) && pvVersion >= minPV && minPV > bestPV
+                        do {
+                            val reprPriority = reprNames.indexOf(repr) match {
+                                case -1 if repr == WildcardRepr && reprRules.contains(methodName) =>
+                                    reprNames.size // wildcard has lowest priority
+                                case -1 => -1 // no match
+                                case i  => i
+                            }
+                            if reprPriority >= 0 && pvVersion >= minPV &&
+                                (reprPriority < bestReprPriority || (reprPriority == bestReprPriority && minPV > bestPV))
                             then
                                 lctx.findProviderBinding(providerModuleName, methodName).foreach {
                                     b =>
                                         bestBinding = Some(b)
                                         bestPV = minPV
+                                        bestReprPriority = reprPriority
                                         bestReprRules = reprRules
                                         bestArgConvertRules = argConvertRules
                                 }
+                        }
 
+                        if lctx.debug && bestBinding.isEmpty then
+                            lctx.log(s"IntrinsicResolver: no binding found for $methodName")
+                        if lctx.debug && bestBinding.isDefined then
+                            lctx.log(
+                              s"IntrinsicResolver: FOUND binding for $methodName, reprPriority=$bestReprPriority"
+                            )
                         bestBinding.map { binding =>
                             val substituted = substituteSelf(binding.value, argSir)
                             // Apply arg conversion if rule exists for this method
@@ -209,12 +239,20 @@ object IntrinsicResolver {
       * SumDataList/SumDataPairList are val aliases for SumBuiltinList instances, so the
       * SumBuiltinList patterns handle them via case class equality.
       */
-    private def representationName(repr: LoweredValueRepresentation): String = repr match
-        case SumCaseClassRepresentation.SumBuiltinList(_)        => BuiltinListRepr
-        case SumCaseClassRepresentation.SumPairBuiltinList(_, _) => PairListRepr
-        case SumCaseClassRepresentation.PackedSumDataList        => "PackedSumDataList"
-        case SumCaseClassRepresentation.DataConstr               => "DataConstr"
-        case _ => repr.getClass.getSimpleName.stripSuffix("$")
+    /** All representation names that match a given representation, most specific first. */
+    private def representationNames(repr: LoweredValueRepresentation): List[String] = repr match
+        case SumCaseClassRepresentation.SumBuiltinList(er) if !er.isPackedData =>
+            List(NativeBuiltinListRepr, BuiltinListRepr)
+        case SumCaseClassRepresentation.SumBuiltinList(_) =>
+            List(BuiltinListRepr)
+        case SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
+            List(PairListRepr)
+        case SumCaseClassRepresentation.PackedSumDataList =>
+            List("PackedSumDataList")
+        case SumCaseClassRepresentation.DataConstr =>
+            List("DataConstr")
+        case _ =>
+            List(repr.getClass.getSimpleName.stripSuffix("$"))
 
     /** Substitute the `self` parameter and type variables in a provider binding body.
       *

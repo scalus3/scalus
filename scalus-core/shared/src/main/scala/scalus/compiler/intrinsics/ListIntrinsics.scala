@@ -94,6 +94,54 @@ object ListReprRules {
     val pairListRules: Map[String, ReprRule] = listRules
 }
 
+/** Repr rules for native list intrinsics (IntrinsicsNativeList). */
+object NativeListReprRules {
+    import ListReprRules.{atRule, dropRule, headRule, isEmptyRule, tailRule}
+
+    private def listRepr(inRepr: LoweredValueRepresentation): LoweredValueRepresentation = inRepr
+
+    /** map/filter/etc: after self substitution, outTp is the remaining curried function. Use
+      * defaultRepresentation which handles Fun types correctly.
+      */
+    val mapRule: ReprRule = (outTp, inRepr, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    val filterRule: ReprRule = (outTp, inRepr, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    /** foldLeft: List[A] → B — output depends on return type */
+    val foldLeftRule: ReprRule = (outTp, _, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    /** foldRight: same as foldLeft */
+    val foldRightRule: ReprRule = foldLeftRule
+
+    /** find: List[A] → Option[A] */
+    val findRule: ReprRule = (outTp, _, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    /** unboxedNil: creates empty list with native element repr */
+    val unboxedNilRule: ReprRule = (outTp, _, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    /** Factory rules — for methods with no list argument (WildcardRepr). */
+    val factoryRules: Map[String, ReprRule] = Map(
+      "unboxedNil" -> unboxedNilRule
+    )
+
+    val rules: Map[String, ReprRule] = Map(
+      "unboxedNil" -> unboxedNilRule,
+      "isEmpty" -> isEmptyRule,
+      "head" -> headRule,
+      "tail" -> tailRule,
+      "map" -> mapRule,
+      "filter" -> filterRule,
+      "foldLeft" -> foldLeftRule,
+      "foldRight" -> foldRightRule,
+      "find" -> findRule
+    )
+}
+
 // ---------------------------------------------------------------------------
 //  List[A] intrinsics — unified for all SumBuiltinList(*) representations
 // ---------------------------------------------------------------------------

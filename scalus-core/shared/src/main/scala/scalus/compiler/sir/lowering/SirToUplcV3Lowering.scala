@@ -17,8 +17,7 @@ class SirToUplcV3Lowering(
     targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     intrinsicModules: Map[String, Module] = Map.empty,
     supportModules: Map[String, Module] = Map.empty,
-    nativeListElements: Boolean = false,
-    nativeTypeVarRepresentation: Boolean = false
+    nativeListElements: Boolean = false
 ) {
 
     private var _lastLoweredValue: Option[LoweredValue] = None
@@ -94,11 +93,9 @@ class SirToUplcV3Lowering(
           debug = debug,
           intrinsicModules = intrinsicModules,
           supportModules = supportModules,
-          nativeListElements = nativeListElements,
-          nativeTypeVarRepresentation = nativeTypeVarRepresentation
+          nativeListElements = nativeListElements
         )
         ScalusRuntime.initContext(retval)
-        retval.initSupportBindings()
         retval
     }
 
@@ -113,11 +110,6 @@ object SirToUplcV3Lowering {
         options: scalus.compiler.Options,
         debug: Boolean = false
     ): SirToUplcV3Lowering =
-        if options.nativeTypeVarRepresentation then
-            throw new UnsupportedOperationException(
-              "nativeTypeVarRepresentation=true is not yet implemented. " +
-                  "Requires NativeList + NativeRepr infrastructure (see design in project memory)."
-            )
         val transformedSir = sir
         SirToUplcV3Lowering(
           sir = transformedSir,
@@ -127,7 +119,6 @@ object SirToUplcV3Lowering {
           targetProtocolVersion = options.targetProtocolVersion,
           intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
           supportModules = IntrinsicResolver.defaultSupportModules,
-          nativeListElements = options.nativeListElements,
-          nativeTypeVarRepresentation = options.nativeTypeVarRepresentation
+          nativeListElements = options.nativeListElements
         )
 }

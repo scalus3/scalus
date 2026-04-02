@@ -19,22 +19,20 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
     def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
-        else PrimitiveRepresentation.PackedData
+        PrimitiveRepresentation.PackedData
 
     def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = true
 
     /** Check if a TypeVarRepresentation is native (no Data conversion needed).
       *   - Transparent: always native
-      *   - DefaultRepresentation: native when nativeTypeVarRepresentation=true
-      *   - CanBeListAffected: native when nativeListElements=true
+      *   - Fixed: always false (Data conversion needed)
+      *   - Fixed: always false (Data conversion needed)
       */
     private def isNativeTypeVar(tvr: TypeVarRepresentation)(using lctx: LoweringContext): Boolean =
         import SIRType.TypeVarKind.*
         tvr.kind match
-            case Transparent           => true
-            case DefaultRepresentation => lctx.nativeTypeVarRepresentation
-            case CanBeListAffected => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
+            case Transparent => true
+            case Fixed       => false
 
     def toRepresentation(
         input: LoweredValue,

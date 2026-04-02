@@ -369,18 +369,20 @@ object SumCaseClassRepresentation {
     /** Representation as tern Constr(i,x1,...,xn) where i is the index of the constructor and x is
       * a field
       */
-    case object UplcConstr extends SumCaseClassRepresentation(false, false) {
-        override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            DefaultUni.Data // UplcConstr values are not stored as list elements
-    }
-
-    /** Representation as Constr(i,x1,...,xn) where i is the index of the constructor and x is a
-      * field represented as data.
+    /** Parameterized sum constructor representation. Each variant (constructor tag) has its own
+      * `ProdUplcConstr` with per-field representations.
+      *
+      * UPLC form: `Constr(tag, [v1, v2, ...])` where fields are in the variant's representations.
+      * Pattern matching uses the `Case` builtin to dispatch on the tag.
+      *
+      * @param variants
+      *   map from constructor tag to its ProdUplcConstr (field representations)
       */
-    // TODO: remove UplcConstrOnData, use UplcConstr with element representations instead
-    case object UplcConstrOnData extends SumCaseClassRepresentation(false, true) {
+    case class SumUplcConstr(
+        variants: Map[Int, ProductCaseClassRepresentation.ProdUplcConstr]
+    ) extends SumCaseClassRepresentation(false, false) {
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            DefaultUni.Data // placeholder, not actually packed data
+            DefaultUni.Data // Constr values stored as Data in list elements
     }
 
 }
@@ -528,9 +530,42 @@ object ProductCaseClassRepresentation {
                 case _                           => (SIRType.Data.tp, SIRType.Data.tp)
     }
 
-    case object UplcConstr extends ProductCaseClassRepresentation(false, false) {
+    /** Parameterized constructor representation where each field has its own representation.
+      *
+      * UPLC form: `Constr(tag, [v1, v2, ..., vN])` where each `vi` is in `fieldReprs(i)`. Unlike
+      * `ProdDataConstr` which forces all fields to Data, this allows native field representations
+      * (e.g., `Constr(0, [Integer(42), ByteString(#ff)])`).
+      *
+      * @param tag
+      *   constructor tag (index in the DataDecl's constructor list)
+      * @param fieldReprs
+      *   representation for each field, in order
+      */
+    case class ProdUplcConstr(
+        tag: Int,
+        fieldReprs: scala.List[LoweredValueRepresentation]
+    ) extends ProductCaseClassRepresentation(false, false) {
+
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            DefaultUni.Data // UplcConstr values are not stored as list elements
+            DefaultUni.Data // Constr values stored as Data when used in list elements
+
+        override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
+            semanticType
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
+            repr match {
+                case ProdUplcConstr(otherTag, otherFieldReprs) =>
+                    tag == otherTag && fieldReprs.size == otherFieldReprs.size &&
+                    fieldReprs.zip(otherFieldReprs).forall { (mine, other) =>
+                        mine.isCompatibleOn(SIRType.FreeUnificator, other, pos)
+                    }
+                case tvr: TypeVarRepresentation => true
+                case _                          => false
+            }
     }
 
     /** BuiltinArray with parameterized element representation.
@@ -1105,9 +1140,9 @@ object PrimitiveRepresentation {
 /** TypeVarRepresentation is used for type variables. Usually this is a synonym for some other
   * specific-type representation.
   *   - Transparent: builtin UPLC type variable, can be freely used in any representation
-  *   - DefaultRepresentation: Scala type variable with native representation
-  *   - CanBeListAffected: Scala type variable that flows into list element position, uses Data
-  *     representation when nativeListElements = false
+  *   - Fixed: Scala type variable with native representation
+  *   - Fixed: Scala type variable that flows into list element position, uses Data representation
+  *     when nativeListElements = false
   */
 case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValueRepresentation {
 
@@ -1118,7 +1153,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
 
     // assume that TypeVarDataRepresentation is a packed data.
     //  (this is not true for lambda, will check this in code. Usually in all places we also known type)
-    override def isPackedData: Boolean = kind == TypeVarKind.CanBeListAffected
+    override def isPackedData: Boolean = kind == TypeVarKind.Fixed
 
     override def isDataCentric: Boolean = isPackedData
 
@@ -1157,12 +1192,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
                         val gen = lctx.typeGenerator(resolved)
                         gen.defaultRepresentation(resolved).defaultUni(resolved)
                     case None =>
-                        if lctx.nativeTypeVarRepresentation then
-                            throw new IllegalStateException(
-                              s"TypeVarRepresentation.defaultUni: unresolved TypeVar ${tv.show} with nativeTypeVarRepresentation=true.\n" +
-                                  s"  This TypeVar needs to be resolved via unification env or ExtractNilParameter."
-                            )
-                        else DefaultUni.Data
+                        DefaultUni.Data
             case SIRType.FreeUnificator => DefaultUni.Data
             case _ =>
                 val gen = lctx.typeGenerator(semanticType)
@@ -1173,9 +1203,9 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
 
     override def doc: Doc = {
         val suffix = kind match
-            case TypeVarKind.Transparent           => "(B)"
-            case TypeVarKind.DefaultRepresentation => "(R)"
-            case TypeVarKind.CanBeListAffected     => ""
+            case TypeVarKind.Transparent => "(B)"
+            case TypeVarKind.Fixed       => "(R)"
+            case TypeVarKind.Fixed       => ""
         Doc.text("TypeVar") + Doc.text(suffix)
     }
 
@@ -1259,7 +1289,7 @@ object LoweredValueRepresentation {
                     case None =>
                         TypeVarRepresentation(tv.kind)
             case SIRType.FreeUnificator =>
-                TypeVarRepresentation(SIRType.TypeVarKind.CanBeListAffected)
+                TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
             case proxy: SIRType.TypeProxy =>
                 constRepresentation(proxy.ref)
             case SIRType.TypeNothing => ErrorRepresentation

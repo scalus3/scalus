@@ -23,8 +23,7 @@ object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        if lctx.nativeTypeVarRepresentation then defaultRepresentation(tp)
-        else SumCaseClassRepresentation.SumDataAssocMap
+        SumCaseClassRepresentation.SumDataAssocMap
 
     override def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext

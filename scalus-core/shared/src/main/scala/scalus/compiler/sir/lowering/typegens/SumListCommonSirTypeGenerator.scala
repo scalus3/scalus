@@ -12,15 +12,14 @@ import scala.util.control.NonFatal
   */
 trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
-    /** Check if a TypeVarRepresentation is native based on its kind and the corresponding flag. */
+    /** Check if a TypeVarRepresentation is native based on its kind. */
     protected def isNativeTypeVar(tvr: TypeVarRepresentation)(using
         lctx: LoweringContext
     ): Boolean =
         import SIRType.TypeVarKind.*
         tvr.kind match
-            case Transparent           => true
-            case DefaultRepresentation => lctx.nativeTypeVarRepresentation
-            case CanBeListAffected => lctx.nativeListElements && lctx.nativeTypeVarRepresentation
+            case Transparent => true
+            case Fixed       => false
 
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext
@@ -372,6 +371,38 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, pos)
                 input
                     .toRepresentation(pairRepr, pos)
+                    .toRepresentation(outputRepresentation, pos)
+            // === DataConstr → list repr: go through PackedSumDataList ===
+            case (SumCaseClassRepresentation.DataConstr, _) =>
+                input
+                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
+                    .toRepresentation(outputRepresentation, pos)
+            // === PairIntDataList → list repr: go through DataConstr → PackedSumDataList ===
+            case (SumCaseClassRepresentation.PairIntDataList, _) =>
+                // PairIntDataList is (tag, fieldList) from unConstrData.
+                // For lists, reconstruct DataConstr, then go through PackedSumDataList.
+                val asDataConstr = lvBuiltinApply2(
+                  SIRBuiltins.constrData,
+                  lvBuiltinApply(
+                    SIRBuiltins.fstPair,
+                    input,
+                    SIRType.Integer,
+                    PrimitiveRepresentation.Constant,
+                    pos
+                  ),
+                  lvBuiltinApply(
+                    SIRBuiltins.sndPair,
+                    input,
+                    SIRType.List(SIRType.Data.tp),
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                    pos
+                  ),
+                  input.sirType,
+                  SumCaseClassRepresentation.DataConstr,
+                  pos
+                )
+                asDataConstr
+                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
                     .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
             case (_, tv: TypeVarRepresentation) =>

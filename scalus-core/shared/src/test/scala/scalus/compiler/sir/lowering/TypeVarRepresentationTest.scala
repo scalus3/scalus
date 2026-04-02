@@ -9,12 +9,12 @@ import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.prelude.List.{Cons, Nil}
 
-/** Tests for nativeTypeVarRepresentation flag.
+/** Tests for type variable representations with nativeListElements flag.
   *
-  * Explores how type variables interact with native representations. The core question: when a
-  * generic function like `fill[A]` creates Nil inside its body, what UPLC element type should the
-  * empty list have? UPLC has no polymorphism — `List(Integer, [])` and `List(Data, [])` are
-  * different values.
+  * Explores how type variables interact with native list element representations. The core
+  * question: when a generic function like `fill[A]` creates Nil inside its body, what UPLC element
+  * type should the empty list have? UPLC has no polymorphism — `List(Integer, [])` and
+  * `List(Data, [])` are different values.
   *
   * Scenarios:
   *   1. identity[A](x: A) = x — no list creation, should work
@@ -27,29 +27,27 @@ class TypeVarRepresentationTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
-    private val allModes: scala.List[(Boolean, Boolean, String)] = scala.List(
-      (false, false, "native=off, typevar=off"),
-      (true, false, "native=on, typevar=off")
-      // (true, true) disabled: nativeTypeVarRepresentation requires NativeList + NativeRepr infrastructure
+    private val allModes: scala.List[(Boolean, String)] = scala.List(
+      (false, "nativeListElements=off"),
+      (true, "nativeListElements=on")
     )
 
-    private def withAllModes(testName: String)(body: (Boolean, Boolean) => Unit): Unit =
-        allModes.foreach { case (native, typevar, label) =>
+    private def withAllModes(testName: String)(body: Boolean => Unit): Unit =
+        allModes.foreach { case (native, label) =>
             test(s"$testName [$label]") {
-                body(native, typevar)
+                body(native)
             }
         }
 
-    private def opts(native: Boolean, typevar: Boolean): Options = Options(
+    private def opts(native: Boolean): Options = Options(
       targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
-      nativeListElements = native,
-      nativeTypeVarRepresentation = typevar
+      nativeListElements = native
     )
 
     // === Scenario 1: identity — no list ops, just pass-through ===
-    withAllModes("identity[BigInt] — no list, just type var pass-through") { (native, typevar) =>
-        given Options = opts(native, typevar)
+    withAllModes("identity[BigInt] — no list, just type var pass-through") { native =>
+        given Options = opts(native)
         val sir = compile {
             def identity[A](x: A): A = x
             identity[BigInt](BigInt(42))
@@ -63,13 +61,12 @@ class TypeVarRepresentationTest extends AnyFunSuite {
     }
 
     // === Scenario 2: singleton — creates Nil for List[A] ===
-    withAllModes("singleton[BigInt] — Cons(x, Nil) with type var") { (native, typevar) =>
-        given Options = opts(native, typevar)
+    withAllModes("singleton[BigInt] — Cons(x, Nil) with type var") { native =>
+        given Options = opts(native)
         val sir = compile {
             def singleton[A](x: A): List[A] = Cons(x, Nil)
             singleton[BigInt](BigInt(7))
         }
-        if native && typevar then info(s"singleton SIR:\n${sir.show}")
         val result = sir.toUplc().evaluateDebug
         result match
             case Result.Success(term, _, _, _) =>
@@ -79,8 +76,8 @@ class TypeVarRepresentationTest extends AnyFunSuite {
     }
 
     // === Scenario 3: fill — recursive, creates Nil at base case ===
-    withAllModes("fill[BigInt] — recursive generic with Nil base case") { (native, typevar) =>
-        given Options = opts(native, typevar)
+    withAllModes("fill[BigInt] — recursive generic with Nil base case") { native =>
+        given Options = opts(native)
         val sir = compile {
             List.fill[BigInt](BigInt(1), BigInt(3))
         }
@@ -93,13 +90,12 @@ class TypeVarRepresentationTest extends AnyFunSuite {
     }
 
     // === Scenario 4: map — transforms elements, Nil at base ===
-    withAllModes("List.map[BigInt, BigInt] — generic map with Nil base") { (native, typevar) =>
-        given Options = opts(native, typevar)
+    withAllModes("List.map[BigInt, BigInt] — generic map with Nil base") { native =>
+        given Options = opts(native)
         val sir = compile {
             val list = Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
             list.map[BigInt](x => x + BigInt(10))
         }
-        if native && typevar then info(s"map SIR:\n${sir.show}")
         val result = sir.toUplc().evaluateDebug
         result match
             case Result.Success(term, _, _, _) =>
@@ -109,8 +105,8 @@ class TypeVarRepresentationTest extends AnyFunSuite {
     }
 
     // === Scenario 5: foldLeft — accumulator is type var B ===
-    withAllModes("List.foldLeft[BigInt] — accumulator type var") { (native, typevar) =>
-        given Options = opts(native, typevar)
+    withAllModes("List.foldLeft[BigInt] — accumulator type var") { native =>
+        given Options = opts(native)
         val sir = compile {
             val list = Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
             list.foldLeft[BigInt](BigInt(0))((acc, x) => acc + x)
@@ -124,8 +120,8 @@ class TypeVarRepresentationTest extends AnyFunSuite {
     }
 
     // === Scenario 6: non-recursive generic returning List ===
-    withAllModes("non-recursive wrap[BigInt] — single Cons, no recursion") { (native, typevar) =>
-        given Options = opts(native, typevar)
+    withAllModes("non-recursive wrap[BigInt] — single Cons, no recursion") { native =>
+        given Options = opts(native)
         val sir = compile {
             def wrap[A](x: A, y: A): List[A] = Cons(x, Cons(y, Nil))
             wrap[BigInt](BigInt(10), BigInt(20))
@@ -136,5 +132,35 @@ class TypeVarRepresentationTest extends AnyFunSuite {
                 info(s"Result: ${term.show}")
             case Result.Failure(ex, _, _, _) =>
                 fail(s"wrap failed: $ex")
+    }
+
+    // === Budget comparison ===
+    test("Budget comparison: foldLeft sum — native vs Data") {
+        val sir1 = compile {
+            val list = Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+            list.foldLeft[BigInt](BigInt(0))((acc, x) => acc + x)
+        }
+        val sir2 = compile {
+            val list = Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+            list.foldLeft[BigInt](BigInt(0))((acc, x) => acc + x)
+        }
+        val sTerm = sir1.toUplc(using opts(native = false))()
+        val nTerm = sir2.toUplc(using opts(native = true))()
+
+        val sResult = sTerm.evaluateDebug
+        val nResult = nTerm.evaluateDebug
+
+        (sResult, nResult) match {
+            case (Result.Success(_, sBudget, _, _), Result.Success(_, nBudget, _, _)) =>
+                info(s"Standard budget: $sBudget")
+                info(s"Native   budget: $nBudget")
+                info(
+                  s"Savings: mem=${sBudget.memory - nBudget.memory}, steps=${sBudget.steps - nBudget.steps}"
+                )
+            case (Result.Failure(ex, _, _, _), _) =>
+                fail(s"Standard failed: $ex")
+            case (_, Result.Failure(ex, _, _, _)) =>
+                fail(s"Native failed: $ex")
+        }
     }
 }
