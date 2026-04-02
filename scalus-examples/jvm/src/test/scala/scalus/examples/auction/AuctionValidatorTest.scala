@@ -64,7 +64,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.Bid(bidAmount = 3_000_000L),
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 314879, steps = 94_705535))
+        assert(budget == ExUnits(memory = 314279, steps = 94_609535))
     }
 
     test("budget: outbid with refund") {
@@ -72,7 +72,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.Outbid(newBidAmount = 5_000_000L),
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 411158, steps = 122_148616))
+        assert(budget == ExUnits(memory = 410558, steps = 122_052616))
     }
 
     test("budget: end auction with winner") {
@@ -80,7 +80,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.EndWithWinner,
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 449019, steps = 130_996609))
+        assert(budget == ExUnits(memory = 448419, steps = 130_900609))
     }
 
     test("budget: end auction without bids") {
@@ -88,7 +88,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.EndNoBids,
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 347537, steps = 102_323364))
+        assert(budget == ExUnits(memory = 346937, steps = 102_227364))
     }
 }
 
