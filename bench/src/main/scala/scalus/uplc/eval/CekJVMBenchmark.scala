@@ -10,6 +10,7 @@ import org.openjdk.jmh.annotations.Setup
 import org.openjdk.jmh.annotations.State
 import scalus.*
 import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.DeBruijnedProgram
 
 import java.nio.file.Files
@@ -41,7 +42,7 @@ class CekJVMBenchmark:
     private var file: String = ""
     private var path: Path = null
     private var program: DeBruijnedProgram = null
-    private val vm = PlutusVM.makePlutusV1VM()
+    private val vm = PlutusVM.makePlutusV1VM(MajorProtocolVersion.vanRossemPV)
 
     @Setup
     def readProgram() = {
