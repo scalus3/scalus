@@ -286,4 +286,5 @@ class NormalizedIntervalTest extends AnyFunSuite with EvalTestKit {
             interval.show === "NormalizedInterval.Always"
         }
     }
+
 }
