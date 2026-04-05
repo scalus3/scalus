@@ -14,6 +14,7 @@ case class Options(
     optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
     uplcOptimizers: Seq[scalus.uplc.transform.Optimizer] = Seq.empty,
     cseIterations: Int = 2,
+    cceEnabled: Boolean = false,
     debugLevel: Int = SIRDefaultOptions.debugLevel,
     debug: Boolean = false,
     nativeListElements: Boolean = false

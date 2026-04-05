@@ -24,7 +24,7 @@ class V1V2Optimizer extends Optimizer {
     def logs: Seq[String] = logger.getLogs.toVector
 }
 
-class V3Optimizer(cseIterations: Int = 2) extends Optimizer {
+class V3Optimizer(cseIterations: Int = 2, cceEnabled: Boolean = false) extends Optimizer {
     private val logger = Log()
     def apply(term: Term): Term = {
         logger.clear()
@@ -35,6 +35,7 @@ class V3Optimizer(cseIterations: Int = 2) extends Optimizer {
         val etaReduce = new EtaReduce(logger)
         val strictIf = new StrictIf(logger)
         val cse = new CommonSubexpressionElimination(logger)
+        val cce = new CommonContextExtraction(logger)
 
         // Phase 1: Run eta-reduce/inline passes 3 times to handle patterns created by inlining
         val simplified = term |> etaReduce.apply |> inliner.apply
@@ -48,8 +49,13 @@ class V3Optimizer(cseIterations: Int = 2) extends Optimizer {
             t |> cse.apply |> inliner.apply
         }
 
-        // Phase 3: Final passes
-        withCse |> caseConstr.apply // optimize multiple applys to more optimal case/constr nodes
+        // Phase 3: CCE followed by inliner to clean up single-use lambdas
+        val withCce =
+            if cceEnabled then withCse |> cce.apply |> inliner.apply
+            else withCse
+
+        // Phase 4: Final passes
+        withCce |> caseConstr.apply // optimize multiple applys to more optimal case/constr nodes
     }
     def logs: Seq[String] = logger.getLogs.toVector
 }

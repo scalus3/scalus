@@ -496,8 +496,6 @@ object CommonSubexpressionElimination {
     /** Applies CSE to a term using default settings. */
     def apply(term: Term): Term = {
         val cse = new CommonSubexpressionElimination()
-        val r = cse(term)
-        println(cse.logs.mkString("\n"))
-        r
+        cse(term)
     }
 }

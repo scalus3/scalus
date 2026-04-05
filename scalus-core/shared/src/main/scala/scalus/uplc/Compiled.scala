@@ -456,7 +456,7 @@ object PlutusV3 {
       */
     inline def compile[A](inline code: A)(using opts: Options): PlutusV3[A] = {
         val sir = compileInlineWithOptions(opts, code)
-        PlutusV3(() => code, sir, opts, new V3Optimizer(opts.cseIterations))
+        PlutusV3(() => code, sir, opts, new V3Optimizer(opts.cseIterations, opts.cceEnabled))
     }
 
     /** @return

@@ -375,7 +375,7 @@ class CommonSubexpressionEliminationTest
     test("V3Optimizer with CSE disabled (0 iterations) preserves semantics") {
         val mulXY = MultiplyInteger $ vr"x" $ vr"y"
         val term = λ("x", "y")(AddInteger $ mulXY $ mulXY) $ 3 $ 4
-        val optimizer = new V3Optimizer(cseIterations = 0)
+        val optimizer = new V3Optimizer(cseIterations = 0, cceEnabled = false)
         val result = optimizer(term)
         val origEval = term.evaluate
         val optEval = result.evaluate
@@ -627,7 +627,8 @@ class CommonSubexpressionEliminationTest
         val opts = Options(
           generateErrorTraces = true,
           optimizeUplc = true,
-          cseIterations = 0 // disable CSE to get pre-CSE UPLC
+          cseIterations = 0, // disable CSE to get pre-CSE UPLC
+          cceEnabled = false // disable CCE too
         )
         given Options = opts
 
