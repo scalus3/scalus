@@ -91,6 +91,44 @@ class CommonContextExtractionTest
     }
 
     // ========================================================================
+    // templateHeadName tests
+    // ========================================================================
+
+    test("templateHeadName: single builtin uses full name") {
+        val template = Force(Builtin(HeadList)) $ holeSentinel
+        assert(templateHeadName(template) == "HeadList")
+    }
+
+    test("templateHeadName: multiple builtins abbreviated") {
+        val headList = Force(Builtin(HeadList))
+        val template = headList $ (Force(Force(Builtin(UnConstrData))) $ holeSentinel)
+        assert(templateHeadName(template) == "Hd_UnConstr")
+    }
+
+    test("templateHeadName: deep chain all abbreviated") {
+        val hd = Force(Builtin(HeadList))
+        val tl = Force(Builtin(TailList))
+        val snd = Force(Force(Builtin(SndPair)))
+        val unc = Force(Force(Builtin(UnConstrData)))
+        val template = hd $ (tl $ (snd $ (unc $ holeSentinel)))
+        assert(templateHeadName(template) == "Hd_Tl_Snd_UnConstr")
+    }
+
+    test("templateHeadName: variable head with multiple fns") {
+        val template = vr"myFunc" $ (vr"g" $ holeSentinel)
+        assert(templateHeadName(template) == "myFunc_g")
+    }
+
+    test("templateHeadName: single variable uses full name") {
+        val template = vr"myFunc" $ holeSentinel
+        assert(templateHeadName(template) == "myFunc")
+    }
+
+    test("templateHeadName: non-Apply returns fallback") {
+        assert(templateHeadName(holeSentinel) == "app")
+    }
+
+    // ========================================================================
     // Basic extraction tests
     // ========================================================================
 
@@ -109,6 +147,8 @@ class CommonContextExtractionTest
         assert(result ~!=~ term, s"Expected transformation, got: ${result.show}")
         assert(cce.logs.nonEmpty, "Expected log entries for CCE extraction")
         assert(cce.logs.exists(_.contains("CCE:")))
+        // The extracted lambda should be named after the chain builtins (abbreviated)
+        assert(cce.logs.exists(_.contains("as __cce_Hd_UnConstr")), s"Expected __cce_Hd_UnConstr in logs: ${cce.logs}")
     }
 
     test("should not extract when only 1 occurrence") {

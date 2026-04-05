@@ -37,7 +37,7 @@ import scala.collection.mutable
   *      - Conditional boundary safety: no hoisting shape-partial builtins across Case/Delay
   *   1. '''Substitute pass''': For each candidate (largest template first):
   *      - Re-count in (possibly modified) term
-  *      - Create fresh name `__cce_N`
+  *      - Create fresh name `__cce_<HeadBuiltin>[_N]` (e.g. `__cce_HeadList`, `__cce_SndPair_1`)
   *      - Replace each matching Apply chain with `Apply(Var(lambdaName), leaf)`
   *      - Insert at bind path: `Apply(LamAbs(lambdaName, body), LamAbs(param, templateBody))`
   *
@@ -171,13 +171,17 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
 
         // Collect all existing names to avoid collisions
         val existingNames = collectNames(term)
-        var nameCounter = 0
-        def freshCceName(): String = {
-            var name = s"__cce_$nameCounter"
-            nameCounter += 1
+        // Track how many times each head-name base has been used, for disambiguation
+        val headNameCounts = mutable.HashMap.empty[String, Int]
+        def freshCceName(template: Term): String = {
+            val base = templateHeadName(template)
+            val count = headNameCounts.getOrElse(base, 0)
+            headNameCounts(base) = count + 1
+            var name = if count == 0 then s"__cce_$base" else s"__cce_${base}_$count"
             while existingNames.contains(name) do
-                name = s"__cce_$nameCounter"
-                nameCounter += 1
+                val c = headNameCounts(base)
+                headNameCounts(base) = c + 1
+                name = s"__cce_${base}_$c"
             existingNames += name
             name
         }
@@ -257,8 +261,8 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
                     reCrossesConditional && referencesPartialBuiltin(cand.key.term)
 
                 if reSafe && !reUnsafeCaseCrossing then
-                    val lambdaName = freshCceName()
-                    var paramName = s"${lambdaName}_p"
+                    val lambdaName = freshCceName(cand.key.term)
+                    var paramName = s"${lambdaName}_a"
                     while existingNames.contains(paramName) do paramName = s"${paramName}_"
                     existingNames += paramName
                     val varTerm = Var(NamedDeBruijn(lambdaName))
@@ -442,6 +446,65 @@ object CommonContextExtraction {
                 else done = true
             paths.head.take(prefixLen)
     }
+
+    /** Builds a short, human-readable name from the functions in a template's right spine.
+      *
+      * Walks the Apply chain collecting each function position:
+      *   - Single function: full name, e.g. `"HeadList"`
+      *   - Multiple functions: abbreviated and joined, e.g. `"Hd_Tl_Snd_UnConstr"`
+      *   - Variable head: uses the variable name
+      *   - Fallback: `"app"`
+      */
+    private[transform] def templateHeadName(template: Term): String = {
+        val fns = collectSpineFunctions(template)
+        fns match
+            case Nil          => "app"
+            case single :: Nil => single
+            case multiple     => multiple.map(abbreviateBuiltin).mkString("_")
+    }
+
+    /** Walks the right spine of a template, collecting a name for each function position. */
+    private def collectSpineFunctions(t: Term): List[String] = t match
+        case Apply(f, arg, _) => extractFunctionName(f) :: collectSpineFunctions(arg)
+        case _                => Nil
+
+    /** Extracts a readable name from a function term (stripping Force wrappers). */
+    private def extractFunctionName(t: Term): String = t match
+        case Builtin(bn, _)                                            => bn.toString
+        case Force(inner, _)                                           => extractFunctionName(inner)
+        case Var(NamedDeBruijn(name, _), _) if name != holeSentinelName => name
+        case _                                                         => "app"
+
+    // @formatter:off
+    private val builtinAbbreviations: Map[String, String] = Map(
+        "HeadList"              -> "Hd",
+        "TailList"              -> "Tl",
+        "FstPair"               -> "Fst",
+        "SndPair"               -> "Snd",
+        "UnConstrData"          -> "UnConstr",
+        "UnMapData"             -> "UnMap",
+        "UnListData"            -> "UnList",
+        "UnIData"               -> "UnI",
+        "UnBData"               -> "UnB",
+        "NullList"              -> "Null",
+        "MkCons"                -> "Cons",
+        "IfThenElse"            -> "If",
+        "ChooseList"            -> "Choose",
+        "EqualsData"            -> "EqD",
+        "EqualsInteger"         -> "EqI",
+        "EqualsByteString"      -> "EqBs",
+        "LessThanInteger"       -> "LtI",
+        "LessThanEqualsInteger" -> "LeI",
+        "AddInteger"            -> "Add",
+        "SubtractInteger"       -> "Sub",
+        "MultiplyInteger"       -> "Mul",
+        "DivideInteger"         -> "Div",
+        "AppendByteString"      -> "AppBs",
+    )
+    // @formatter:on
+
+    private def abbreviateBuiltin(name: String): String =
+        builtinAbbreviations.getOrElse(name, name)
 
     /** Collect all variable/lambda names used in a term. */
     private def collectNames(t: Term): mutable.HashSet[String] = {
