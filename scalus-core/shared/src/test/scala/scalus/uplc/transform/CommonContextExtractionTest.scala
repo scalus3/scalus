@@ -548,25 +548,48 @@ class CommonContextExtractionTest
     // Script size measurement
     // ========================================================================
 
-    test("CCE on compiled List.at preserves semantics") {
-        import scalus.cardano.onchain.plutus.prelude.List
+    test("CCE on compiled field-accessor lambda preserves semantics") {
         import scalus.compiler.Options
         import scalus.uplc.PlutusV3
+        import scalus.uplc.builtin.Data
+        // Compile a lambda that accesses fields from two Data arguments at runtime.
+        // The accessor chains (unConstrData, sndPair, headList, tailList) are
+        // applied to different args, making them CCE candidates.
         val opts = Options(
-          generateErrorTraces = true,
+          generateErrorTraces = false,
           optimizeUplc = true,
           cseIterations = 0,
           cceEnabled = false // get pre-CCE UPLC
         )
         given Options = opts
 
-        val compiled = PlutusV3.compile(List.single(BigInt(1)).at(0))
+        val compiled = PlutusV3.compile { (a: Data, b: Data) =>
+            val fa = a.toConstr.snd.head.toBigInt
+            val fb = b.toConstr.snd.head.toBigInt
+            fa + fb
+        }
         val noCce = compiled.program.term
 
         val cce = new CommonContextExtraction()
         val withCce = cce(noCce)
 
-        assert(Try(noCce.evaluate).isSuccess, "Without CCE should succeed")
-        assert(Try(withCce.evaluate).isSuccess, "With CCE should succeed")
+        // CCE should have found common accessor chains on different leaves (a vs b)
+        assert(cce.logs.nonEmpty, s"Expected CCE extractions, got none. Term: ${noCce.show}")
+
+        // Build a test Data argument: Constr(0, [42])
+        import scalus.cardano.onchain.plutus.prelude.{List => PList}
+        val testData = Data.Constr(0, PList(Data.I(42)))
+        val testArg = Const(Constant.Data(testData))
+        val noCceApplied = noCce $ testArg $ testArg
+        val withCceApplied = withCce $ testArg $ testArg
+
+        val noCceResult = Try(noCceApplied.evaluate)
+        val withCceResult = Try(withCceApplied.evaluate)
+        assert(noCceResult.isSuccess, s"Without CCE should succeed: $noCceResult")
+        assert(withCceResult.isSuccess, s"With CCE should succeed: $withCceResult")
+        assert(
+          noCceResult.get == withCceResult.get,
+          s"Results should match: ${noCceResult.get} != ${withCceResult.get}"
+        )
     }
 }
