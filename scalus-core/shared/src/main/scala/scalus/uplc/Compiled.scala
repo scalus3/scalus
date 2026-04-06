@@ -140,7 +140,7 @@ sealed abstract class CompiledPlutus[A](
   * @param optimizer
   *   the UPLC optimizer to apply (if optimization is enabled)
   */
-final case class PlutusV1[A] private[uplc] (
+final case class PlutusV1[A](
     override val lazyCode: () => A,
     override val sir: SIR,
     override val options: Options,
@@ -262,7 +262,7 @@ object PlutusV1 {
   * @param optimizer
   *   the UPLC optimizer to apply (if optimization is enabled)
   */
-final case class PlutusV2[A] private[uplc] (
+final case class PlutusV2[A](
     override val lazyCode: () => A,
     override val sir: SIR,
     override val options: Options,
@@ -389,7 +389,7 @@ object PlutusV2 {
   * @param optimizer
   *   the UPLC optimizer to apply (if optimization is enabled)
   */
-final case class PlutusV3[A] private[uplc] (
+final case class PlutusV3[A](
     override val lazyCode: () => A,
     override val sir: SIR,
     override val options: Options,

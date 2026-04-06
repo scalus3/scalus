@@ -397,7 +397,8 @@ object CommonSubexpressionElimination {
       *   - `MkCons` / `Trace` — while non-total, blocking them is too conservative in practice
       *     since they appear pervasively in smart contract code
       *
-      * @see [[DefaultFun.isTotal]] for the full list of non-total builtins
+      * @see
+      *   [[DefaultFun.isTotal]] for the full list of non-total builtins
       */
     private val shapePartialBuiltins: Set[DefaultFun] = Set(
       // Data destructors: fail on wrong Data variant (shape-dependent)
@@ -493,7 +494,7 @@ object CommonSubexpressionElimination {
     }
 
     /** Applies CSE to a term using default settings. */
-    def apply(term: Term): Term = { 
+    def apply(term: Term): Term = {
         val cse = new CommonSubexpressionElimination()
         val r = cse(term)
         println(cse.logs.mkString("\n"))

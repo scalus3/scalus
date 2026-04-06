@@ -138,7 +138,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 503620, steps = 144436670L)
-                            else ExUnits(memory = 454936, steps = 131_388367))
+                            else ExUnits(memory = 345620, steps = 97_938642))
         )
 
         val submitResult = provider.submit(withdrawTx).await()
@@ -173,7 +173,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 615070, steps = 178193175L)
-                            else ExUnits(memory = 558830, steps = 163_247969))
+                            else ExUnits(memory = 421981, steps = 121_637266))
         )
 
         val submitResult = provider.submit(withdrawTx).await()

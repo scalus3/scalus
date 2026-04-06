@@ -306,7 +306,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
         )
         assertResult(
           if Options.default.nativeListElements then ExUnits(memory = 213264, steps = 61_547338)
-          else ExUnits(memory = 195396, steps = 56_687212)
+          else ExUnits(memory = 131924, steps = 37_507776)
         ):
             burnTx.witnessSet.redeemers.get.value.totalExUnits
         val burnResult = provider.submit(burnTx).await()

@@ -43,7 +43,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         assert(
           res.budget == (if Options.default.nativeListElements then
                              ExUnits(memory = 415439, steps = 117747227L)
-                         else ExUnits(memory = 313223, steps = 91_352578))
+                         else ExUnits(memory = 300379, steps = 85_655001))
         )
     }
 
@@ -94,7 +94,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         assert(
           res.budget == (if Options.default.nativeListElements then
                              ExUnits(memory = 641073, steps = 181757908L)
-                         else ExUnits(memory = 525101, steps = 155_189157))
+                         else ExUnits(memory = 508057, steps = 144_679180))
         )
     }
 
@@ -126,7 +126,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         assert(
           res.budget == (if Options.default.nativeListElements then
                              ExUnits(memory = 247724, steps = 70274193L)
-                         else ExUnits(memory = 197128, steps = 57_278276))
+                         else ExUnits(memory = 196893, steps = 55_546796))
         )
     }
 

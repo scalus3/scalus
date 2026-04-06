@@ -29,29 +29,28 @@ class NaivePaymentSplitterValidatorTest
     private val expectedBudgets: Map[String, ExUnits] = Map(
       "success when payments are correctly split for a single payee" ->
           (if Options.default.nativeListElements then ExUnits(memory = 402635, steps = 117_768375)
-           else ExUnits(memory = 385827, steps = 113_407560)),
+           else ExUnits(memory = 313755, steps = 91_658_696)),
       "success when payments are correctly split between 2 payees" ->
           (if Options.default.nativeListElements then ExUnits(memory = 636156, steps = 185_321621)
-           else ExUnits(memory = 623360, steps = 182_669889)),
+           else ExUnits(memory = 522104, steps = 151_823_157)),
       "success when payments are correctly split between 3 payees" ->
           (if Options.default.nativeListElements then ExUnits(memory = 918191, steps = 267_143433)
-           else ExUnits(memory = 912059, steps = 267_362556)),
+           else ExUnits(memory = 784751, steps = 227_851_845)),
       "success when split equally and remainder compensates fee - o1" ->
           (if Options.default.nativeListElements then ExUnits(memory = 918191, steps = 267_143433)
-           else ExUnits(memory = 912059, steps = 267_362556)),
+           else ExUnits(memory = 784751, steps = 227_851_845)),
       "success when split equally and remainder compensates fee - o2" ->
           (if Options.default.nativeListElements then ExUnits(memory = 918191, steps = 267_143433)
-           else ExUnits(memory = 912059, steps = 267_362556)),
+           else ExUnits(memory = 784751, steps = 227_851_845)),
       "success when split equally and remainder compensates fee - o3" ->
           (if Options.default.nativeListElements then ExUnits(memory = 918191, steps = 267_143433)
-           else ExUnits(memory = 912059, steps = 267_362556)),
+           else ExUnits(memory = 784751, steps = 227_851_845)),
       "success between 5 payees" -> (if Options.default.nativeListElements then
                                          ExUnits(memory = 1638003, steps = 477515765L)
-                                     else ExUnits(memory = 1_653155, steps = 486_961914)),
+                                     else ExUnits(memory = 1_483_139, steps = 431_612_130)),
       "success with multiple contract UTxOs" -> (if Options.default.nativeListElements then
                                                      ExUnits(memory = 1180517, steps = 343222425L)
-                                                 else
-                                                     ExUnits(memory = 1_161281, steps = 339_599410))
+                                                 else ExUnits(memory = 976381, steps = 283_784_909))
     )
 
     // Run all shared test cases
