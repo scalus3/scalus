@@ -170,13 +170,16 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
 
         // Collect all existing names to avoid collisions
         val existingNames = collectNames(term)
-        var nameCounter = 0
-        def freshCseName(): String = {
-            var name = s"__cse_$nameCounter"
-            nameCounter += 1
+        val nameBaseCounts = mutable.HashMap.empty[String, Int]
+        def freshCseName(extracted: Term): String = {
+            val base = TermNaming.termDescription(extracted)
+            val count = nameBaseCounts.getOrElse(base, 0)
+            nameBaseCounts(base) = count + 1
+            var name = if count == 0 then s"__cse_$base" else s"__cse_${base}_$count"
             while existingNames.contains(name) do
-                name = s"__cse_$nameCounter"
-                nameCounter += 1
+                val c = nameBaseCounts(base)
+                nameBaseCounts(base) = c + 1
+                name = s"__cse_${base}_$c"
             existingNames += name
             name
         }
@@ -249,7 +252,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
                 val reUnsafeCaseCrossing =
                     reCrossesConditional && referencesPartialBuiltin(cand.key.term)
                 if reSafe && !reUnsafeCaseCrossing then
-                    val freshName = freshCseName()
+                    val freshName = freshCseName(cand.key.term)
                     val varTerm = Var(NamedDeBruijn(freshName))
 
                     // Substitute all occurrences with the fresh variable

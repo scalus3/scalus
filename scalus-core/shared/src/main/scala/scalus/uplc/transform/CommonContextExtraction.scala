@@ -635,7 +635,7 @@ object CommonContextExtraction {
         fns match
             case Nil           => "app"
             case single :: Nil => single
-            case multiple      => multiple.map(abbreviateBuiltin).mkString("_")
+            case multiple      => multiple.map(TermNaming.abbreviateBuiltin).mkString("_")
     }
 
     /** Collects readable names from a template for naming purposes.
@@ -644,50 +644,13 @@ object CommonContextExtraction {
       * name based on the outermost constructor.
       */
     private def collectTemplateFunctions(t: Term): List[String] = t match
-        case Apply(f, arg, _) => extractFunctionName(f) :: collectTemplateFunctions(arg)
-        case Case(_, _, _)    => List("Case")
-        case Constr(_, _, _)  => List("Constr")
-        case Force(_, _)      => List("Force")
-        case Delay(_, _)      => List("Delay")
-        case _                => Nil
-
-    /** Extracts a readable name from a function term (stripping Force wrappers). */
-    private def extractFunctionName(t: Term): String = t match
-        case Builtin(bn, _)  => bn.toString
-        case Force(inner, _) => extractFunctionName(inner)
-        case Var(NamedDeBruijn(name, _), _) if name != holeSentinelName => name
-        case _                                                          => "app"
-
-    // @formatter:off
-    private val builtinAbbreviations: Map[String, String] = Map(
-        "HeadList"              -> "Hd",
-        "TailList"              -> "Tl",
-        "FstPair"               -> "Fst",
-        "SndPair"               -> "Snd",
-        "UnConstrData"          -> "UnConstr",
-        "UnMapData"             -> "UnMap",
-        "UnListData"            -> "UnList",
-        "UnIData"               -> "UnI",
-        "UnBData"               -> "UnB",
-        "NullList"              -> "Null",
-        "MkCons"                -> "Cons",
-        "IfThenElse"            -> "If",
-        "ChooseList"            -> "Choose",
-        "EqualsData"            -> "EqD",
-        "EqualsInteger"         -> "EqI",
-        "EqualsByteString"      -> "EqBs",
-        "LessThanInteger"       -> "LtI",
-        "LessThanEqualsInteger" -> "LeI",
-        "AddInteger"            -> "Add",
-        "SubtractInteger"       -> "Sub",
-        "MultiplyInteger"       -> "Mul",
-        "DivideInteger"         -> "Div",
-        "AppendByteString"      -> "AppBs",
-    )
-    // @formatter:on
-
-    private def abbreviateBuiltin(name: String): String =
-        builtinAbbreviations.getOrElse(name, name)
+        case Apply(f, arg, _) =>
+            TermNaming.extractFunctionName(f, holeSentinelName) :: collectTemplateFunctions(arg)
+        case Case(_, _, _)   => List("Case")
+        case Constr(_, _, _) => List("Constr")
+        case Force(_, _)     => List("Force")
+        case Delay(_, _)     => List("Delay")
+        case _               => Nil
 
     /** Collect all variable/lambda names used in a term. */
     private def collectNames(t: Term): mutable.HashSet[String] = {
