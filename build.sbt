@@ -18,7 +18,7 @@ val cardanoClientLibVersion = "0.7.1"
 val yaciVersion = "0.4.0"
 val yaciCardanoTestVersion = "0.1.0"
 val nobleCurvesVersion = "1.9.7"
-val scalatestVersion = "3.2.19"
+val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.19.0"
 val borerVersion = "1.16.2"
 val slf4jVersion = "2.0.17"
@@ -323,9 +323,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "org.typelevel" %%% "cats-core" % "2.13.0",
       libraryDependencies += "org.typelevel" %%% "cats-parse" % "1.1.0",
       libraryDependencies += "org.typelevel" %%% "paiges-core" % "0.4.4",
-      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.2",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.8",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.8" % "compile",
+      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.9",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.9" % "compile",
       libraryDependencies ++= Seq(
         "io.bullet" %%% "borer-core" % borerVersion,
         "io.bullet" %%% "borer-derivation" % borerVersion
@@ -476,8 +476,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion,
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.0",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.0",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.1",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.1",
       // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
       Compile / sourceGenerators += Def.task {
           val baseDir =
@@ -505,7 +505,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
-      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.15",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.21",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test
     )
     .jsSettings(
@@ -570,7 +570,7 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.0",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.1",
       publish / skip := true
     )
     .jvmSettings(Test / fork := true)
@@ -663,7 +663,7 @@ lazy val bench = project
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.0",
+      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.2",
       libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )
@@ -683,7 +683,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       ),
       // For tx builder
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.outr" %%% "scribe" % "3.17.0", // logging
+      libraryDependencies += "com.outr" %%% "scribe" % "3.19.0", // logging
       libraryDependencies ++= Seq(
         "dev.optics" %%% "monocle-core" % monocleVersion,
         "dev.optics" %%% "monocle-macro" % monocleVersion,
@@ -692,7 +692,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.15",
+      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.21",
       inConfig(Test)(PluginDependency),
       publish / skip := false
     )
@@ -775,8 +775,8 @@ lazy val scalusEthereumKzgCeremony = project
     .settings(
       name := "scalus-ethereum-kzg-ceremony",
       scalacOptions ++= commonScalacOptions,
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.8",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.8" % "compile",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.9",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.9" % "compile",
     )
 
 lazy val scalusCardanoLedgerIt = project
@@ -798,7 +798,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
-      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.2" % "test",
+      libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
