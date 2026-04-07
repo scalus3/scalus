@@ -61,7 +61,7 @@ object JScalus {
       * @param doubleCborHex
       *   The double-CBOR-encoded hex representation of the Plutus script.
       * @param data
-      *   The JSON representation of the [[Data]] argument to apply.
+      *   The JSON representation of the [[scalus.uplc.builtin.Data]] argument to apply.
       * @return
       *   The double-CBOR-encoded hex representation of the script with the data argument applied.
       */

@@ -9,7 +9,8 @@ import scalus.cardano.ledger.PlutusScript
   * producing diagnostic logs.
   *
   * DebugScript wraps either:
-  *   - A pre-compiled debug [[PlutusScript]] (for external builders like meshJS that have CBOR)
+  *   - A pre-compiled debug [[scalus.cardano.ledger.PlutusScript]] (for external builders like
+  *     meshJS that have CBOR)
   *   - A lazy computation from [[CompiledPlutus]] (deferred SIR recompilation until failure)
   *
   * @param compute

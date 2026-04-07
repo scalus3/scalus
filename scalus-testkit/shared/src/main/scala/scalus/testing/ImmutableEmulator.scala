@@ -9,8 +9,9 @@ import scala.concurrent.{ExecutionContext, Future}
 
 /** An immutable emulator for Cardano transactions.
   *
-  * Unlike [[Emulator]], this emulator is fully immutable: every state-changing operation (submit,
-  * advanceSlot) returns a new [[ImmutableEmulator]] instance, leaving the original unchanged.
+  * Unlike [[scalus.cardano.node.Emulator]], this emulator is fully immutable: every state-changing
+  * operation (submit, advanceSlot) returns a new [[ImmutableEmulator]] instance, leaving the
+  * original unchanged.
   *
   * This makes it suitable for use in functional state-threading patterns such as the [[Scenario]]
   * monad, where branching and backtracking require independent state copies.
@@ -60,7 +61,7 @@ case class ImmutableEmulator(
     def findUtxos(query: UtxoQuery): Either[UtxoQueryError, Utxos] =
         Right(EmulatorBase.evalQuery(utxos, query))
 
-    /** Create a read-only [[BlockchainReader]] snapshot.
+    /** Create a read-only [[scalus.cardano.node.BlockchainReader]] snapshot.
       *
       * This provides read-only access to the emulator's state without submit capability. Uses
       * `ExecutionContext.global` to avoid deadlocks when callers use `Await.result` on the returned
@@ -77,7 +78,7 @@ case class ImmutableEmulator(
             Future.successful(env.slot)
     }
 
-    /** Create a [[BlockchainProvider]] snapshot.
+    /** Create a [[scalus.cardano.node.BlockchainProvider]] snapshot.
       *
       * Submit through this provider works but discards the resulting state changes (the provider
       * cannot update the immutable emulator).
@@ -102,7 +103,7 @@ case class ImmutableEmulator(
             Future.successful(env.slot)
     }
 
-    /** Convert to a mutable [[Emulator]]. */
+    /** Convert to a mutable [[scalus.cardano.node.Emulator]]. */
     def toEmulator: Emulator = {
         val context = Context(env = env, slotConfig = slotConfig, evaluatorMode = evaluatorMode)
         new Emulator(
@@ -116,7 +117,7 @@ case class ImmutableEmulator(
 
 object ImmutableEmulator {
 
-    /** Create an ImmutableEmulator from a mutable [[EmulatorBase]].
+    /** Create an ImmutableEmulator from a mutable [[scalus.cardano.node.EmulatorBase]].
       *
       * Captures a snapshot of the emulator's current state.
       */

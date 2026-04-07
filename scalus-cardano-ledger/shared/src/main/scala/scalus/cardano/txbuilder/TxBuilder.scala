@@ -393,7 +393,7 @@ case class TxBuilder(
     ): TxBuilder =
         spend(utxo, redeemer, script).requireSignatures(requiredSigners)
 
-    /** Spends a script-protected UTXO using a [[CompiledPlutus]] script.
+    /** Spends a script-protected UTXO using a [[scalus.uplc.CompiledPlutus]] script.
       *
       * The compiled script is used both for the on-chain script (via `.script`) and registered as a
       * debug script for diagnostic replay. If the script was compiled with `Options.release` (no
@@ -426,7 +426,8 @@ case class TxBuilder(
         requiredSigners: Set[AddrKeyHash]
     ): TxBuilder = spend(utxo, redeemer, compiled).requireSignatures(requiredSigners)
 
-    /** Spends a script-protected UTXO with a delayed redeemer using a [[CompiledPlutus]] script.
+    /** Spends a script-protected UTXO with a delayed redeemer using a
+      * [[scalus.uplc.CompiledPlutus]] script.
       *
       * @param utxo
       *   the UTXO to spend
@@ -793,7 +794,7 @@ case class TxBuilder(
     ): TxBuilder =
         mint(script, assets, redeemer).requireSignatures(requiredSigners)
 
-    /** Mints or burns native tokens using a [[CompiledPlutus]] script.
+    /** Mints or burns native tokens using a [[scalus.uplc.CompiledPlutus]] script.
       *
       * The compiled script is used both for the on-chain script and registered as a debug script
       * for diagnostic replay.
@@ -826,7 +827,8 @@ case class TxBuilder(
     ): TxBuilder =
         mint(compiled, assets, redeemer).requireSignatures(requiredSigners)
 
-    /** Mints or burns native tokens with a delayed redeemer using a [[CompiledPlutus]] script.
+    /** Mints or burns native tokens with a delayed redeemer using a [[scalus.uplc.CompiledPlutus]]
+      * script.
       *
       * @param compiled
       *   compiled Plutus script (carries SIR for diagnostic replay)
@@ -1941,9 +1943,9 @@ case class TxBuilder(
       * logs, the evaluator will use the registered debug script to replay the failing evaluation,
       * producing diagnostic logs.
       *
-      * This overload accepts a [[DebugScript]] directly, which can wrap either a pre-compiled debug
-      * [[scalus.cardano.ledger.PlutusScript]] (for external builders) or a lazy recompilation from
-      * [[CompiledPlutus]].
+      * This overload accepts a [[scalus.uplc.DebugScript]] directly, which can wrap either a
+      * pre-compiled debug [[scalus.cardano.ledger.PlutusScript]] (for external builders) or a lazy
+      * recompilation from [[scalus.uplc.CompiledPlutus]].
       *
       * @param scriptHash
       *   the script hash of the release script (used for lookup)
@@ -1961,8 +1963,8 @@ case class TxBuilder(
       * traces and replay the failing evaluation, producing diagnostic logs.
       *
       * This is automatically called by the `spend`, `mint`, `payTo`, and `references` overloads
-      * that accept [[CompiledPlutus]]. Use this method directly for other use cases where you want
-      * diagnostic replay.
+      * that accept [[scalus.uplc.CompiledPlutus]]. Use this method directly for other use cases
+      * where you want diagnostic replay.
       *
       * '''Migration note:''' If you previously used `validator.script` (a `PlutusScript`) with
       * `spend` or `mint`, pass `validator` (a `CompiledPlutus`) directly instead to enable

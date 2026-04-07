@@ -32,8 +32,8 @@ type DiffHandler = (Value, Transaction) => Either[TxBalancingError, Transaction]
 /** Redeemer whose value is computed from the final transaction.
   *
   * Registered when a spend/mint step receives a `Transaction => Data` builder. After all steps are
-  * processed, [[replaceDelayedRedeemers]] invokes the builder with the sorted [[Transaction]] and
-  * patches the placeholder.
+  * processed, [[TransactionBuilder.replaceDelayedRedeemers]] invokes the builder with the sorted
+  * [[scalus.cardano.ledger.Transaction]] and patches the placeholder.
   */
 case class DelayedRedeemerSpec(
     purpose: RedeemerPurpose,
@@ -44,8 +44,8 @@ case class DelayedRedeemerSpec(
 /** Inline datum whose value is computed from the final transaction.
   *
   * Registered when [[TransactionBuilderStep.SendWithDatumBuilder]] is processed. After all steps
-  * are processed, [[replaceDelayedDatums]] invokes the builder and patches the placeholder output
-  * at `outputIndex`.
+  * are processed, [[TransactionBuilder.replaceDelayedDatums]] invokes the builder and patches the
+  * placeholder output at `outputIndex`.
   */
 case class DelayedDatumSpec(
     outputIndex: Int,

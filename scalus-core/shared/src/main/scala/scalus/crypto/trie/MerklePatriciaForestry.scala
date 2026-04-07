@@ -44,12 +44,14 @@ case class MerklePatriciaForestry(root: Node) {
         doGet(root, path, 0)
     }
 
-    /** Creates a succinct, on-chain compatible proof of inclusion of an element by this [[key]].
+    /** Creates a succinct, on-chain compatible proof of inclusion of an element by the given `key`.
       *
       * Proofs are compact because branch nodes with 2+ siblings use a sparse merkle tree encoding
       * (4 hashes / 128 bytes) rather than storing all 15 sibling hashes. Branches with a single
-      * sibling are encoded as a [[ProofStep.Fork]] or [[ProofStep.Leaf]], requiring even less
-      * space.
+      * sibling are encoded as a
+      * [[scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.ProofStep.Fork]] or
+      * [[scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry.ProofStep.Leaf]],
+      * requiring even less space.
       *
       * If there's no element by this key, throws an exception.
       */
@@ -69,7 +71,9 @@ case class MerklePatriciaForestry(root: Node) {
         expanded.proveMembership(key)
     }
 
-    /** Wrap the root hash as an on-chain [[OnChainForestry]] value. */
+    /** Wrap the root hash as an on-chain
+      * [[scalus.cardano.onchain.plutus.crypto.trie.MerklePatriciaForestry]] value.
+      */
     def toOnChain: OnChainForestry = OnChainForestry(rootHash)
 }
 

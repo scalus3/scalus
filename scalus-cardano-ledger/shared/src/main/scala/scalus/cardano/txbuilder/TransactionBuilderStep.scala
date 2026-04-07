@@ -27,10 +27,11 @@ object TransactionBuilderStep {
 
     /** Like [[Send]], but the inline datum is computed from the fully-assembled transaction.
       *
-      * The [[datumBuilder]] receives the sorted, finalised [[Transaction]] (same object passed to
-      * delayed-redeemer builders) and must return the [[Data]] to embed as an inline datum. The
-      * output is first added with a placeholder datum; the placeholder is replaced just before the
-      * transaction is finalised, after all delayed redeemers have also been resolved.
+      * The [[datumBuilder]] receives the sorted, finalised [[scalus.cardano.ledger.Transaction]]
+      * (same object passed to delayed-redeemer builders) and must return the
+      * [[scalus.uplc.builtin.Data]] to embed as an inline datum. The output is first added with a
+      * placeholder datum; the placeholder is replaced just before the transaction is finalised,
+      * after all delayed redeemers have also been resolved.
       */
     case class SendWithDatumBuilder(
         output: TransactionOutput,

@@ -85,7 +85,7 @@ object EmulatorBase {
     /** Evaluate a UTxO query against a UTxO set.
       *
       * This is the pure, static query evaluation logic shared by both the mutable [[Emulator]] and
-      * the immutable [[scalus.testing.ImmutableEmulator]].
+      * the immutable `scalus.testing.ImmutableEmulator` (defined in the `scalus-testkit` module).
       */
     def evalQuery(utxos: Utxos, query: UtxoQuery): Utxos = {
         // Evaluate source to get candidate UTxOs
@@ -149,7 +149,8 @@ object EmulatorBase {
         }.toMap
     }
 
-    /** Builds a [[CertState]] with the given stake credentials pre-registered.
+    /** Builds a [[scalus.cardano.ledger.CertState]] with the given stake credentials
+      * pre-registered.
       *
       * Each credential is inserted into `deposits` (using the protocol parameter deposit amount)
       * and `rewards` with the provided balance, so the ledger treats them as registered stake

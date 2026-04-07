@@ -319,7 +319,7 @@ object Scenario {
             }
         }
 
-    /** Get a [[BlockchainProviderTF]] that operates within the Scenario monad.
+    /** Get a [[scalus.cardano.node.BlockchainProviderTF]] that operates within the Scenario monad.
       *
       * Each call reads/updates the latest emulator state.
       */
@@ -377,11 +377,11 @@ object Scenario {
         scenarioLogicMonad.pure(p)
     }
 
-    /** Get a read-only [[BlockchainReader]] snapshot from the current state. */
+    /** Get a read-only [[scalus.cardano.node.BlockchainReader]] snapshot from the current state. */
     def snapshotReader: Scenario[BlockchainReader] =
         leaf(s => Done(s, s.emulator.asReader))
 
-    /** Get a read-only [[BlockchainProvider]] snapshot from the current state.
+    /** Get a read-only [[scalus.cardano.node.BlockchainProvider]] snapshot from the current state.
       *
       * @deprecated
       *   Use [[snapshotReader]] instead. The `submit` method on this provider discards state
@@ -450,9 +450,9 @@ object Scenario {
       *
       * Convenience method that delegates to [[ScenarioExplorer.explore]].
       *
-      * The step function receives a [[BlockchainReader]] and should perform one step of the
-      * contract interaction using normal Scenario operations ([[submit]], [[sleep]], etc.). Actions
-      * are automatically logged and included in [[Violation.path]] if a check fails.
+      * The step function receives a [[scalus.cardano.node.BlockchainReader]] and should perform one
+      * step of the contract interaction using normal Scenario operations ([[submit]], [[sleep]],
+      * etc.). Actions are automatically logged and included in [[Violation.path]] if a check fails.
       *
       * @param maxDepth
       *   maximum number of steps to explore

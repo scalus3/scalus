@@ -31,8 +31,8 @@ import scala.quoted.*
   *   the types described by these schemas are used as datums, redeemers and parameters. As such,
   *   only onchain data should be described by `PlutusDataSchema`. Therefore, attempting to derive
   *   schemas for types that cannot be on chain will lead to compile time errors. Generally, if one
-  *   can derive [[scalus.builtin.Data.FromData]] for a type, one can also do so for the schema. If
-  *   one cannot derive [[scalus.builtin.Data.FromData]], it means that the type cannot exist on
+  *   can derive [[scalus.uplc.builtin.FromData]] for a type, one can also do so for the schema. If
+  *   one cannot derive [[scalus.uplc.builtin.FromData]], it means that the type cannot exist on
   *   chain, and therefore should not be described with `PlutusDataSchema`
   */
 case class PlutusDataSchema(

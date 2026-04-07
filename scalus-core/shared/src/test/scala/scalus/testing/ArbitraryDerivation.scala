@@ -19,6 +19,10 @@ object ArbitraryDerivation extends AutoDerivation[Arbitrary] {
         override def flatMap[A, B](from: Gen[A])(fn: A => Gen[B]): Gen[B] = from.flatMap(fn)
     }
 
+    /** Magnolia callback: derives an `Arbitrary[T]` for a product type by recursively combining
+      * generators for each field. Falls back to the implicit `Fallback[T]` once the size budget is
+      * exhausted to avoid unbounded recursion.
+      */
     def join[T](caseClass: CaseClass[Arbitrary, T]): Arbitrary[T] = Arbitrary {
         Gen.lzy(Gen.sized { size =>
             if size >= 0 then {
@@ -32,6 +36,10 @@ object ArbitraryDerivation extends AutoDerivation[Arbitrary] {
         })
     }
 
+    /** Magnolia callback: derives an `Arbitrary[T]` for a sum type by uniformly choosing one of its
+      * subtypes and delegating to that subtype's generator. Falls back to the implicit
+      * `Fallback[T]` once the size budget is exhausted to avoid unbounded recursion.
+      */
     def split[T](sealedTrait: SealedTrait[Arbitrary, T]): Arbitrary[T] = Arbitrary {
         Gen.sized { size =>
             if size > 0 then
