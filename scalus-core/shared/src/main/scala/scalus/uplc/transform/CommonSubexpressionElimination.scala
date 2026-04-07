@@ -440,10 +440,11 @@ object CommonSubexpressionElimination {
     private[transform] def isSkippable(t: Term): Boolean = t match
         case _: Var | _: Const | _: LamAbs | _: Delay | _: Builtin => true
         case _: Error                                              => true
-        // Bare Force(Builtin) / Force(Force(Builtin)) -- handled by ForcedBuiltinsExtractor
-        case Force(Builtin(_, _), _)           => true
-        case Force(Force(Builtin(_, _), _), _) => true
-        // Unsaturated builtin applications are value forms -- not worth extracting
+        // Force(Builtin) / Force(Force(Builtin)) are value forms but worth extracting:
+        // duplicating them costs runtime memory/cpu (Force costs 100/16000 each).
+        case Force(Builtin(_, _), _)           => false
+        case Force(Force(Builtin(_, _), _), _) => false
+        // Other unsaturated builtin applications are value forms -- not worth extracting
         case _ if t.isValueForm => true
         // Terms containing Error will definitely fail when evaluated --
         // extracting them to an eagerly-evaluated binding would change semantics

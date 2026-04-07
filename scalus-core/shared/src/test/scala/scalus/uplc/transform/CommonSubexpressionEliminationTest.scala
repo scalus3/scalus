@@ -297,9 +297,11 @@ class CommonSubexpressionEliminationTest
         assert(isSkippable(Error()))
     }
 
-    test("isSkippable: Force(Builtin) is skippable") {
-        assert(isSkippable(Force(Builtin(HeadList))))
-        assert(isSkippable(Force(Force(Builtin(FstPair)))))
+    test("isSkippable: Force(Builtin) / Force(Force(Builtin)) are NOT skippable") {
+        // CSE extracts these to subsume what ForcedBuiltinsExtractor does -- duplicating
+        // them costs runtime memory/cpu (Force costs 100/16000 each).
+        assert(!isSkippable(Force(Builtin(HeadList))))
+        assert(!isSkippable(Force(Force(Builtin(FstPair)))))
     }
 
     test("isSkippable: saturated builtin application is not skippable") {
