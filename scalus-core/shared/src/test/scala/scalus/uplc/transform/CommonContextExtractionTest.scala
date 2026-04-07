@@ -73,6 +73,171 @@ class CommonContextExtractionTest
     }
 
     // ========================================================================
+    // decompose tests
+    // ========================================================================
+
+    test("decompose: Apply(f, x) yields hole-at-f and hole-at-arg") {
+        val t = AddInteger $ vr"x"
+        val results = decompose(t).toList
+        // Should have at least: (HOLE $ x, AddInteger) and (AddInteger $ HOLE, x)
+        assert(
+          results.exists { case (tmpl, leaf) =>
+              (tmpl ~=~ (holeSentinel $ vr"x")) && (leaf ~=~ AddInteger)
+          },
+          s"Missing hole-at-f decomposition in ${results.map(_._1.show)}"
+        )
+        assert(
+          results.exists { case (tmpl, leaf) =>
+              (tmpl ~=~ (AddInteger $ holeSentinel)) && (leaf ~=~ vr"x")
+          },
+          s"Missing hole-at-arg decomposition in ${results.map(_._1.show)}"
+        )
+    }
+
+    test("decompose: nested Apply yields deeper decompositions") {
+        // f(g(x)) should yield decompositions with hole at f, at g(x), at g, and at x
+        val headList = Force(Builtin(HeadList))
+        val unConstr = Force(Force(Builtin(UnConstrData)))
+        val t = headList $ (unConstr $ vr"x")
+        val results = decompose(t).toList
+        // Should include a deep decomposition: headList(unConstrData(HOLE)) with leaf x
+        assert(
+          results.exists { case (tmpl, leaf) =>
+              (tmpl ~=~ (headList $ (unConstr $ holeSentinel))) && (leaf ~=~ vr"x")
+          },
+          s"Missing deep right-spine decomposition"
+        )
+        // Should include hole at function position: HOLE(unConstrData(x))
+        assert(
+          results.exists { case (tmpl, leaf) =>
+              (tmpl ~=~ (holeSentinel $ (unConstr $ vr"x"))) && (leaf ~=~ headList)
+          },
+          s"Missing hole-at-f decomposition"
+        )
+    }
+
+    test("decompose: Force yields hole at inner") {
+        val t = Force(Builtin(HeadList))
+        val results = decompose(t).toList
+        assert(results.exists { case (tmpl, leaf) =>
+            (tmpl ~=~ Force(holeSentinel)) && (leaf ~=~ Builtin(HeadList))
+        })
+    }
+
+    test("decompose: Case yields hole at scrutinee") {
+        val branch0: Term = λ("x")(vr"x")
+        val branch1: Term = λ("x")(42)
+        val t = Case(vr"s", List(branch0, branch1))
+        val results = decompose(t).toList
+        assert(
+          results.exists { case (tmpl, leaf) =>
+              (tmpl ~=~ Case(holeSentinel, List(branch0, branch1))) && (leaf ~=~ vr"s")
+          },
+          s"Missing hole-at-scrutinee decomposition"
+        )
+    }
+
+    test("decompose: Constr yields hole at each arg") {
+        val t = Constr(Word64.Zero, List[Term](vr"a", vr"b", vr"c"))
+        val results = decompose(t).toList
+        // Hole at position 0
+        assert(
+          results.exists { case (tmpl, leaf) =>
+              (tmpl ~=~ Constr(Word64.Zero, List(holeSentinel, vr"b", vr"c"))) && (leaf ~=~ vr"a")
+          },
+          "Missing hole at arg 0"
+        )
+        // Hole at position 1
+        assert(
+          results.exists { case (tmpl, leaf) =>
+              (tmpl ~=~ Constr(Word64.Zero, List(vr"a", holeSentinel, vr"c"))) && (leaf ~=~ vr"b")
+          },
+          "Missing hole at arg 1"
+        )
+        // Hole at position 2
+        assert(
+          results.exists { case (tmpl, leaf) =>
+              (tmpl ~=~ Constr(Word64.Zero, List(vr"a", vr"b", holeSentinel))) && (leaf ~=~ vr"c")
+          },
+          "Missing hole at arg 2"
+        )
+    }
+
+    test("decompose: leaf nodes return empty") {
+        assert(decompose(vr"x").isEmpty)
+        assert(decompose(42.asTerm).isEmpty)
+        assert(decompose(Builtin(AddInteger)).isEmpty)
+        assert(decompose(Error()).isEmpty)
+    }
+
+    test("decompose: LamAbs returns empty (scope boundary)") {
+        assert(decompose(λ("x")(vr"x")).isEmpty)
+    }
+
+    // ========================================================================
+    // matchTemplate tests
+    // ========================================================================
+
+    test("matchTemplate: matches simple Apply with hole at arg") {
+        val template = AddInteger $ holeSentinel
+        val term = AddInteger $ vr"x"
+        val result = matchTemplate(template, term)
+        assert(result.contains(vr"x") || result.exists(_ ~=~ vr"x"))
+    }
+
+    test("matchTemplate: matches Apply with hole at function") {
+        val template = holeSentinel $ vr"x"
+        val term = AddInteger $ vr"x"
+        val result = matchTemplate(template, term)
+        assert(result.exists(_ ~=~ AddInteger))
+    }
+
+    test("matchTemplate: matches Case with hole at scrutinee") {
+        val branch: Term = λ("z")(vr"z")
+        val template = Case(holeSentinel, List(branch))
+        val term = Case(vr"x", List(branch))
+        val result = matchTemplate(template, term)
+        assert(result.exists(_ ~=~ vr"x"))
+    }
+
+    test("matchTemplate: matches Constr with hole at specific arg") {
+        val template = Constr(Word64.Zero, List(vr"a", holeSentinel, vr"c"))
+        val term = Constr(Word64.Zero, List[Term](vr"a", vr"b", vr"c"))
+        val result = matchTemplate(template, term)
+        assert(result.exists(_ ~=~ vr"b"))
+    }
+
+    test("matchTemplate: returns None on structural mismatch") {
+        val template = AddInteger $ holeSentinel
+        val term = MultiplyInteger $ vr"x"
+        assert(matchTemplate(template, term).isEmpty)
+    }
+
+    test("matchTemplate: returns None when no hole in template") {
+        val template = AddInteger $ vr"x"
+        val term = AddInteger $ vr"x"
+        assert(matchTemplate(template, term).isEmpty)
+    }
+
+    test("matchTemplate: returns None on arity mismatch") {
+        val template = Constr(Word64.Zero, List(holeSentinel, vr"b"))
+        val term = Constr(Word64.Zero, List[Term](vr"a", vr"b", vr"c"))
+        assert(matchTemplate(template, term).isEmpty)
+    }
+
+    // ========================================================================
+    // containsHole tests
+    // ========================================================================
+
+    test("containsHole: detects hole sentinel") {
+        assert(containsHole(holeSentinel))
+        assert(containsHole(AddInteger $ holeSentinel))
+        assert(containsHole(Force(holeSentinel)))
+        assert(!containsHole(vr"x"))
+        assert(!containsHole(AddInteger $ vr"x"))
+    }
+
+    // ========================================================================
     // replaceHole tests
     // ========================================================================
 
@@ -148,7 +313,10 @@ class CommonContextExtractionTest
         assert(cce.logs.nonEmpty, "Expected log entries for CCE extraction")
         assert(cce.logs.exists(_.contains("CCE:")))
         // The extracted lambda should be named after the chain builtins (abbreviated)
-        assert(cce.logs.exists(_.contains("as __cce_Hd_UnConstr")), s"Expected __cce_Hd_UnConstr in logs: ${cce.logs}")
+        assert(
+          cce.logs.exists(_.contains("as __cce_Hd_UnConstr")),
+          s"Expected __cce_Hd_UnConstr in logs: ${cce.logs}"
+        )
     }
 
     test("should not extract when only 1 occurrence") {
@@ -358,7 +526,7 @@ class CommonContextExtractionTest
         val cce = new CommonContextExtraction()
         val result = cce(term)
         assert(result ~!=~ term, s"Expected extraction, got: ${result.show}")
-        assert(cce.logs.exists(_.contains("3 occurrences")))
+        assert(cce.logs.exists(_.contains("3 occ")))
     }
 
     // ========================================================================
@@ -525,6 +693,81 @@ class CommonContextExtractionTest
     }
 
     // ========================================================================
+    // Generalized extraction: left-spine Apply
+    // ========================================================================
+
+    test("should extract left-spine common context: f(x, z) and f(y, z)") {
+        // Apply(Apply(f, HOLE), z) — hole at left child of outer Apply
+        // We need template size >= 5 for profitability. Use a deeper structure:
+        // Apply(Apply(Apply(g, Apply(f, HOLE)), z1), z2)
+        // = g(f(x), z1, z2) and g(f(y), z1, z2)
+        val g = vr"g"
+        val f = vr"f"
+        val chain1 = g $ (f $ vr"x") $ vr"z1" $ vr"z2"
+        val chain2 = g $ (f $ vr"y") $ vr"z1" $ vr"z2"
+        val chain3 = g $ (f $ vr"w") $ vr"z1" $ vr"z2"
+        val term = Constr(Word64.Zero, List(chain1, chain2, chain3))
+
+        val cce = new CommonContextExtraction()
+        val result = cce(term)
+        // Should extract the common context g(f(HOLE), z1, z2)
+        assert(result ~!=~ term, s"Expected extraction, got: ${result.show}")
+        assert(cce.logs.exists(_.contains("CCE:")), s"Expected CCE log: ${cce.logs}")
+    }
+
+    test("should extract Case scrutinee common context") {
+        // Case(HOLE, [branch0, branch1]) — hole at scrutinee position
+        // Need template size >= 5: Case node + 2 branches of size >= 1 each = size >= 4
+        // Use slightly bigger branches to hit MinTemplateSize
+        val branch0 = λ("x")(AddInteger $ vr"x" $ (1: Term))
+        val branch1 = λ("x")(MultiplyInteger $ vr"x" $ (2: Term))
+        val term1 = Case(vr"a", List(branch0, branch1))
+        val term2 = Case(vr"b", List(branch0, branch1))
+        val term3 = Case(vr"c", List(branch0, branch1))
+        val term = Constr(Word64.Zero, List(term1, term2, term3))
+
+        val cce = new CommonContextExtraction()
+        val result = cce(term)
+        assert(
+          result ~!=~ term,
+          s"Expected extraction of Case scrutinee pattern, got: ${result.show}"
+        )
+        assert(cce.logs.exists(_.contains("CCE:")), s"Expected CCE log: ${cce.logs}")
+    }
+
+    test("should extract Constr argument common context") {
+        // Constr(0, [a, HOLE, c]) — hole at middle arg
+        // Need template size >= 5: 1 (Constr) + 1 (a) + 1 (HOLE) + 1 (c) = 4, need bigger args
+        val a: Term = AddInteger $ vr"fixed1" $ (1: Term)
+        val c: Term = MultiplyInteger $ vr"fixed2" $ (2: Term)
+        val term1 = Constr(Word64.Zero, List(a, vr"x", c))
+        val term2 = Constr(Word64.Zero, List(a, vr"y", c))
+        val term3 = Constr(Word64.Zero, List(a, vr"z", c))
+        val term = Constr(Word64(1), List(term1, term2, term3))
+
+        val cce = new CommonContextExtraction()
+        val result = cce(term)
+        assert(result ~!=~ term, s"Expected extraction of Constr arg pattern, got: ${result.show}")
+        assert(cce.logs.exists(_.contains("CCE:")), s"Expected CCE log: ${cce.logs}")
+    }
+
+    test("should extract Force-wrapped common context") {
+        // Force(Apply(f, HOLE)) — inner hole in Force-wrapped application
+        // Template: Force(Apply(Apply(g, Apply(f, HOLE)), z))
+        val g = Force(Builtin(HeadList))
+        val f = Force(Force(Builtin(UnConstrData)))
+        // g(f(x)) and g(f(y)) — same as existing right-spine, but verifying Force still works
+        val chain1 = g $ (f $ vr"x")
+        val chain2 = g $ (f $ vr"y")
+        val chain3 = g $ (f $ vr"z")
+        val term = Constr(Word64.Zero, List(chain1, chain2, chain3))
+
+        val cce = new CommonContextExtraction()
+        val result = cce(term)
+        assert(result ~!=~ term, s"Expected extraction with Force, got: ${result.show}")
+    }
+
+    // ========================================================================
     // Force wrapping
     // ========================================================================
 
@@ -577,7 +820,7 @@ class CommonContextExtractionTest
         assert(cce.logs.nonEmpty, s"Expected CCE extractions, got none. Term: ${noCce.show}")
 
         // Build a test Data argument: Constr(0, [42])
-        import scalus.cardano.onchain.plutus.prelude.{List => PList}
+        import scalus.cardano.onchain.plutus.prelude.List as PList
         val testData = Data.Constr(0, PList(Data.I(42)))
         val testArg = Const(Constant.Data(testData))
         val noCceApplied = noCce $ testArg $ testArg
