@@ -5,9 +5,6 @@ import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
-import scalus.uplc.{Term, UplcAnnotation}
-import org.typelevel.paiges.Doc
-
 import scala.collection.mutable
 
 object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {

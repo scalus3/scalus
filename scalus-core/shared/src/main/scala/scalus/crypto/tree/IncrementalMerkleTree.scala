@@ -30,7 +30,6 @@ class IncrementalMerkleTree private (
     private val root: MerkleNode,
     private val keyToSlot: Map[ByteString, Int]
 ) {
-    import IncrementalMerkleTree.*
 
     /** Number of leaf slots (2^depth). */
     def capacity: Int = 1 << depth

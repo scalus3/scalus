@@ -6,7 +6,6 @@ import scalus.compiler.{compile, Options}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.*
 import scalus.uplc.eval.*
-import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data.toData

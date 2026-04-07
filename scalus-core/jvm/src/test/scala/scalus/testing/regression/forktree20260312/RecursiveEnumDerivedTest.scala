@@ -6,7 +6,7 @@ import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.v1.Datum
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, *}
 import scalus.uplc.eval.PlutusVM
 
 /** Regression: recursive enum with derived FromData/ToData fails to compile.

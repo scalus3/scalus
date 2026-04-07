@@ -14,7 +14,6 @@ import scalus.testing.kit.Party
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.TestUtil.genAdaOnlyPubKeyUtxo
 import scalus.utils.await
-import scalus.toUplc
 
 import java.time.Instant
 import scala.collection.immutable.SortedMap

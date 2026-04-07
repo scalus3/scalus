@@ -129,8 +129,7 @@ case class EditableNftTransactions(
             .spend(
               refNftUtxo,
               buildContinuationSpendRedeemer(userNftUtxo, oldDatum.refNftName),
-              parameterizedScript,
-              Set.empty
+              parameterizedScript
             )
             .spend(userNftUtxo)
             .payTo(scriptAddr, refNftUtxo.output.value, newDatum)
@@ -154,8 +153,7 @@ case class EditableNftTransactions(
             .spend(
               refNftUtxo,
               buildContinuationSpendRedeemer(userNftUtxo, oldDatum.refNftName),
-              parameterizedScript,
-              Set.empty
+              parameterizedScript
             )
             .spend(userNftUtxo)
             .payTo(scriptAddr, refNftUtxo.output.value, newDatum)

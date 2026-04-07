@@ -2,7 +2,7 @@ package scalus.uplc.transform
 
 import scalus.uplc.Term
 import scalus.uplc.Term.*
-import scalus.uplc.{DefaultFun, Meaning, NamedDeBruijn}
+import scalus.uplc.{DefaultFun, NamedDeBruijn}
 import scalus.uplc.eval.{Log, Logger}
 import scalus.uplc.transform.TermAnalysis.{freeVars, isValueForm}
 

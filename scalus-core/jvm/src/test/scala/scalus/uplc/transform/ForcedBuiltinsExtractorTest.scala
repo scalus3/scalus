@@ -4,10 +4,9 @@ import scalus.*
 import scalus.uplc.builtin.Builtins.*
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
-import scalus.uplc.Constant.given
 import scalus.uplc.Term.*
 import scalus.uplc.eval.Log
-import scalus.uplc.{Constant, DefaultFun, Term}
+import scalus.uplc.{DefaultFun, Term}
 
 class ForcedBuiltinsExtractorTest extends AnyFunSuite {
 

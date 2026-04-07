@@ -1,6 +1,5 @@
 package scalus.benchmarks
 
-import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}

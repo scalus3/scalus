@@ -6,7 +6,6 @@ import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.compiler.sir.SIRType
 import scalus.compiler.sir.lowering.*
 import scalus.uplc.builtin.Builtins.*
-import scalus.uplc.builtin.{BuiltinList, BuiltinPair, Data}
 import scalus.uplc.builtin.internal.UniversalDataConversion
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,7 @@ import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.{PlutusV3, Program, Term}
 import scalus.uplc.transform.V3Optimizer
-import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
+import scalus.cardano.ledger.{ExUnitPrices, NonNegativeInterval}
 import scalus.examples.auction.AuctionValidator
 import scalus.examples.paymentsplitter.{NaivePaymentSplitterValidator, OptimizedPaymentSplitterValidator}
 

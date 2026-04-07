@@ -300,15 +300,12 @@ object UtxoFlowMacros {
         def flattenStatement(stmt: Statement): List[Statement] = stmt match
             case Inlined(_, bindings, inner) =>
                 val flatBindings = bindings.flatMap(flattenStatement)
-                inner match
-                    case t: Term =>
-                        val (innerStats, innerExpr) = flattenBlock(t)
-                        flatBindings ++ innerStats ++ (
-                          innerExpr match
-                              case Literal(UnitConstant()) => Nil
-                              case _                       => List(innerExpr)
-                        )
-                    case _ => flatBindings :+ inner
+                val (innerStats, innerExpr) = flattenBlock(inner)
+                flatBindings ++ innerStats ++ (
+                  innerExpr match
+                      case Literal(UnitConstant()) => Nil
+                      case _                       => List(innerExpr)
+                )
             case Block(stats, expr) =>
                 val flatStats = stats.flatMap(flattenStatement)
                 val (innerStats, innerExpr) = flattenBlock(expr)

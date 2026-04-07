@@ -109,7 +109,6 @@ class OpaqueTypeTest extends AnyFunSuite {
 
     test("opaque type in @Compile object: factory method via companion pattern") {
         import scalus.compiler.sir.opaquetypes.TopMyInt
-        import TopMyInt.*
 
         val sir = compile { (x: BigInt) =>
             TopMyInt(x)

@@ -1205,7 +1205,6 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
         val suffix = kind match
             case TypeVarKind.Transparent => "(B)"
             case TypeVarKind.Fixed       => "(R)"
-            case TypeVarKind.Fixed       => ""
         Doc.text("TypeVar") + Doc.text(suffix)
     }
 
@@ -1293,8 +1292,6 @@ object LoweredValueRepresentation {
             case proxy: SIRType.TypeProxy =>
                 constRepresentation(proxy.ref)
             case SIRType.TypeNothing => ErrorRepresentation
-            case SIRType.TypeProxy(ref) =>
-                constRepresentation(ref)
             case SIRType.TypeNonCaseModule(name) =>
                 throw LoweringException(
                   "TypeNonCaseModule is not supported in lowered value representation",

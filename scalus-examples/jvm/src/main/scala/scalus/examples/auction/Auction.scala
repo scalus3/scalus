@@ -679,9 +679,9 @@ class AuctionInstance(
                           )
                           .toData
                   },
-                  compiledContract,
-                  Set(AddrKeyHash.fromByteString(bidderPkh.hash))
+                  compiledContract
                 )
+                .requireSignature(AddrKeyHash.fromByteString(bidderPkh.hash))
                 .payTo(scriptAddress, newAuctionValue, newDatum)
                 .validTo(Instant.ofEpochMilli(currentDatum.auctionEndTime.toLong - 1000))
 
@@ -770,9 +770,9 @@ class AuctionInstance(
                           .End(BigInt(inputIdx), BigInt(sellerOutputIdx), BigInt(winnerOutputIdx))
                           .toData
                   },
-                  compiledContract,
-                  spendRequiredSigners
+                  compiledContract
                 )
+                .requireSignatures(spendRequiredSigners)
                 .validFrom(Instant.ofEpochMilli(currentDatum.auctionEndTime.toLong + 1000))
 
             builderWithOutputs = winnerAddr match

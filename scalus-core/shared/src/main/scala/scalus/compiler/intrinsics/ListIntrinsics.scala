@@ -96,7 +96,7 @@ object ListReprRules {
 
 /** Repr rules for native list intrinsics (IntrinsicsNativeList). */
 object NativeListReprRules {
-    import ListReprRules.{atRule, dropRule, headRule, isEmptyRule, tailRule}
+    import ListReprRules.{headRule, isEmptyRule, tailRule}
 
     private def listRepr(inRepr: LoweredValueRepresentation): LoweredValueRepresentation = inRepr
 

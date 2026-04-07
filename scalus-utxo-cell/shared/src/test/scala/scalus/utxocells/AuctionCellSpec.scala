@@ -7,7 +7,6 @@ import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{FromData, ToData}
 import scalus.cardano.ledger.{CardanoInfo, Value as LedgerValue, *}
 import scalus.cardano.node.Emulator

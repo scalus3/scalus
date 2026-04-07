@@ -54,7 +54,6 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        import scalus.compiler.sir.lowering.LoweredValue.Builder.*
         import scalus.uplc.{Term, UplcAnnotation}
 
         val pos = sel.anns.pos

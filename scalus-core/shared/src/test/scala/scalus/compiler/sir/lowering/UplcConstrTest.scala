@@ -5,7 +5,6 @@ import scalus.*
 import scalus.compiler.{compile, Compile}
 import scalus.compiler.Options
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.{Constant, Term}
