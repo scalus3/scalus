@@ -3271,22 +3271,38 @@ final class SIRCompiler(
                     if call.isEmpty then env
                     else env.pushInlineCall(SIRPosition.fromSrcPos(call.srcPos))
                 // Filter out synthetic scope proxy bindings from inline expansion of opaque types.
-                // These are module.$asInstanceOf$[RefinedType] references that exist only for
-                // type-level scope resolution and have no runtime value.
-                val filteredBindings = bindings.filter {
-                    case vd: ValDef =>
-                        vd.rhs match
-                            case TypeApply(sel: Select, _) =>
-                                // Only filter out $package module proxy bindings (from opaque type
-                                // inline expansion). Regular @Compile object proxies are needed.
-                                val isPackageProxy =
-                                    sel.qualifier.symbol.is(Flags.Module) &&
-                                        sel.qualifier.symbol.name.toString.endsWith("$package") &&
-                                        (sel.symbol == defn.Any_asInstanceOf ||
-                                            sel.name.toString == "$asInstanceOf$")
-                                !isPackageProxy
-                            case _ => true
-                    case _ => true
+                // These bindings form a chain:
+                //   $proxy1 = $package.$asInstanceOf$[RefinedType]       (scope proxy)
+                //   Foo$package$_this = $proxy1                          (alias)
+                //   self$proxy1 = arg.$asInstanceOf$[... & $proxy1.T]   (self cast)
+                // All are purely type-level and have no runtime value.
+                // We transitively filter any binding whose RHS is an Ident referencing
+                // a removed binding, or an $asInstanceOf$ cast on $package / removed proxy.
+                val (filteredBindings, _) = bindings.foldLeft(
+                  (List.empty[Tree], Set.empty[Symbol])
+                ) { case ((kept, removed), bind) =>
+                    bind match
+                        case vd: ValDef =>
+                            val shouldRemove = vd.rhs match
+                                case TypeApply(sel: Select, _)
+                                    if sel.symbol == defn.Any_asInstanceOf ||
+                                        sel.name.toString == "$asInstanceOf$" =>
+                                    val isPackageProxy =
+                                        sel.qualifier.symbol.is(Flags.Module) &&
+                                            sel.qualifier.symbol.name.toString
+                                                .endsWith("$package")
+                                    val refersToRemoved =
+                                        sel.qualifier match
+                                            case id: Ident =>
+                                                removed.contains(id.symbol)
+                                            case _ => false
+                                    isPackageProxy || refersToRemoved
+                                case id: Ident =>
+                                    removed.contains(id.symbol)
+                                case _ => false
+                            if shouldRemove then (kept, removed + vd.symbol)
+                            else (kept :+ vd, removed)
+                        case other => (kept :+ other, removed)
                 }
                 val r = compileBlock(newEnv, filteredBindings, expr)
                 // val t = r.asTerm.show
