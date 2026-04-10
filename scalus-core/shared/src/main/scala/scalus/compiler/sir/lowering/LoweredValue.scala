@@ -56,12 +56,12 @@ trait LoweredValue {
       */
     def representation: LoweredValueRepresentation
 
-    /** Convert this value to the giveb representation,
+    /** Convert this value to the given representation.
       */
     def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValue = {
-        summon[LoweringContext].typeGenerator(sirType).toRepresentation(this, representation, pos)
+        lctx.typeGenerator(sirType).toRepresentation(this, representation, pos)
     }
 
     def upcastOne(targetType: SIRType, pos: SIRPosition)(using
@@ -1428,8 +1428,20 @@ object LoweredValue {
                 )
             }
 
+            def checkSumRepr(name: String, branch: LoweredValue, phase: String): Unit =
+                if SIRType.isSum(branch.sirType) && branch.representation
+                        .isInstanceOf[ProductCaseClassRepresentation.ProdUplcConstr]
+                then
+                    throw LoweringException(
+                      s"GUARD lvIfThenElse $phase $name: Sum type ${branch.sirType.show} with ProdUplcConstr repr ${branch.representation} createdEx=${branch.createdEx}",
+                      inPos
+                    )
+            checkSumRepr("then", thenBranch, "BEFORE upcast")
+            checkSumRepr("else", elseBranch, "BEFORE upcast")
             val thenBranchUpcasted = thenBranch.maybeUpcast(resType, inPos)
             val elseBranchUpcasted = elseBranch.maybeUpcast(resType, inPos)
+            checkSumRepr("then", thenBranchUpcasted, "AFTER upcast")
+            checkSumRepr("else", elseBranchUpcasted, "AFTER upcast")
 
             val targetRepresentation = chooseCommonRepresentation(
               Seq(thenBranchUpcasted, elseBranchUpcasted),
@@ -1940,6 +1952,10 @@ object LoweredValue {
                       targetArgRepresentation,
                       inPos
                     )
+                } else if argUpcasted.representation
+                        .isCompatibleOn(argUpcasted.sirType, targetArgRepresentation, inPos)
+                then {
+                    argUpcasted
                 } else {
                     argUpcasted.toRepresentation(targetArgRepresentation, inPos)
                 }

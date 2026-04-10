@@ -173,6 +173,14 @@ object SumCaseClassRepresentation {
                                 )
                             elementRepr.isCompatibleOn(elemType, otherElemRepr, pos)
                         case None => elementRepr.isDataCentric
+                // SumUplcConstr is compatible with SumBuiltinList(Transparent) —
+                // Transparent element TypeVar accepts any list representation as proxy
+                case _: SumUplcConstr =>
+                    elementRepr match
+                        case tvr: TypeVarRepresentation
+                            if tvr.kind == SIRType.TypeVarKind.Transparent =>
+                            true
+                        case _ => false
                 case _ => this == repr
             }
 
@@ -382,7 +390,56 @@ object SumCaseClassRepresentation {
         variants: Map[Int, ProductCaseClassRepresentation.ProdUplcConstr]
     ) extends SumCaseClassRepresentation(false, false) {
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            DefaultUni.Data // Constr values stored as Data in list elements
+            DefaultUni.BuiltinValue // Native Constr values stored as BuiltinValue in lists
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using lctx: LoweringContext): Boolean = repr match
+            case proxy: SumReprProxy => isCompatibleOn(tp, proxy.ref, pos)
+            case other: SumUplcConstr =>
+                this == other || variants.forall { (tag, inProd) =>
+                    other.variants.get(tag) match
+                        case None => true
+                        case Some(outProd) =>
+                            inProd.fieldReprs.size == outProd.fieldReprs.size &&
+                            inProd.fieldReprs.zip(outProd.fieldReprs).forall { (inR, outR) =>
+                                inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
+                            }
+                }
+            case other => this == other
+    }
+
+    /** Mutable proxy for self-referential sum representations. Like TypeProxy for SIRType — allows
+      * circular references in recursive types (e.g., List tail field references the parent List's
+      * SumUplcConstr). Set `ref` after constructing the real representation.
+      */
+    class SumReprProxy(var ref: SumCaseClassRepresentation)
+        extends SumCaseClassRepresentation(false, false) {
+
+        override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
+            if ref != null then ref.defaultUni(semanticType)
+            else DefaultUni.BuiltinValue
+
+        override def isCompatibleOn(
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using lctx: LoweringContext): Boolean = repr match
+            // Self-referential proxy — always compatible with same family
+            case _: SumUplcConstr | _: SumReprProxy => true
+            case _ =>
+                if ref != null then ref.isCompatibleOn(tp, repr, pos)
+                else false
+
+        override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean =
+            if ref != null then ref.isCompatibleWithType(tp)
+            else true
+
+        override def doc: Doc =
+            if ref != null then ref.doc
+            else Doc.text("SumReprProxy(unset)")
     }
 
 }
@@ -547,7 +604,7 @@ object ProductCaseClassRepresentation {
     ) extends ProductCaseClassRepresentation(false, false) {
 
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            DefaultUni.Data // Constr values stored as Data when used in list elements
+            DefaultUni.BuiltinValue // Native Constr values stored as BuiltinValue in lists
 
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             semanticType
@@ -563,7 +620,7 @@ object ProductCaseClassRepresentation {
                     fieldReprs.zip(otherFieldReprs).forall { (mine, other) =>
                         mine.isCompatibleOn(SIRType.FreeUnificator, other, pos)
                     }
-                case tvr: TypeVarRepresentation => true
+                case tvr: TypeVarRepresentation => tvr.isBuiltin
                 case _                          => false
             }
     }
@@ -944,9 +1001,15 @@ case class LambdaRepresentation(
                                 SumCaseClassRepresentation.SumBuiltinList
                                     .retrieveListElementType(argumentType)
                                     .get
-                            SumCaseClassRepresentation.SumBuiltinList(
-                              resolve(declaredElemType, argElemType, innerRepr)
-                            )
+                            val resolvedElemRepr = resolve(declaredElemType, argElemType, innerRepr)
+                            resolvedElemRepr match
+                                case _: ProductCaseClassRepresentation.ProdUplcConstr |
+                                    _: SumCaseClassRepresentation.SumUplcConstr =>
+                                    // UplcConstr element → whole list is SumUplcConstr
+                                    lctx.typeGenerator(argumentType)
+                                        .defaultRepresentation(argumentType)
+                                case _ =>
+                                    SumCaseClassRepresentation.SumBuiltinList(resolvedElemRepr)
                         case SumCaseClassRepresentation.SumPairBuiltinList(keyRepr, valRepr)
                             if lctx.nativeListElements
                                 && SumCaseClassRepresentation.SumBuiltinList
@@ -988,9 +1051,70 @@ case class LambdaRepresentation(
                               resolve(declFst, argFst, fstRepr),
                               resolve(declSnd, argSnd, sndRepr)
                             )
-                        case _ =>
-                            lctx.typeGenerator(argumentType)
+                        case suc: SumCaseClassRepresentation.SumUplcConstr =>
+                            // Canonical repr is SumUplcConstr — rebuild for concrete type.
+                            // Build mapping from data decl's TypeVars to concrete type args.
+                            val dataDeclOpt = SIRType.retrieveDataDecl(argumentType)
+                            val typeArgSubst: Map[SIRType.TypeVar, SIRType] = argumentType match
+                                case SIRType.SumCaseClass(decl, typeArgs) =>
+                                    decl.typeParams
+                                        .zip(typeArgs)
+                                        .collect { case (tv: SIRType.TypeVar, arg) => tv -> arg }
+                                        .toMap
+                                case _ => Map.empty
+                            dataDeclOpt match
+                                case Right(dataDecl) =>
+                                    val resolvedVariants =
+                                        suc.variants.map { (tag, puc) =>
+                                            val argConstr = dataDecl.constructors.lift(tag)
+                                            val resolvedFieldReprs =
+                                                puc.fieldReprs.zipWithIndex.map {
+                                                    (fieldRepr, fieldIdx) =>
+                                                        fieldRepr match
+                                                            case _: TypeVarRepresentation =>
+                                                                val argFieldTp = argConstr
+                                                                    .flatMap(
+                                                                      _.params.lift(fieldIdx)
+                                                                    )
+                                                                    .map(p =>
+                                                                        SIRType.substitute(
+                                                                          p.tp,
+                                                                          typeArgSubst,
+                                                                          Map.empty
+                                                                        )
+                                                                    )
+                                                                    .getOrElse(
+                                                                      SIRType.FreeUnificator
+                                                                    )
+                                                                val resolved =
+                                                                    lctx.resolveTypeVarIfNeeded(
+                                                                      argFieldTp
+                                                                    )
+                                                                lctx
+                                                                    .typeGenerator(resolved)
+                                                                    .defaultRepresentation(
+                                                                      resolved
+                                                                    )
+                                                            case other => other
+                                                }
+                                            (
+                                              tag,
+                                              ProductCaseClassRepresentation.ProdUplcConstr(
+                                                tag,
+                                                resolvedFieldReprs
+                                              )
+                                            )
+                                        }
+                                    SumCaseClassRepresentation.SumUplcConstr(resolvedVariants)
+                                case Left(_) =>
+                                    lctx
+                                        .typeGenerator(argumentType)
+                                        .defaultRepresentation(argumentType)
+                        case other =>
+                            val result = lctx
+                                .typeGenerator(argumentType)
                                 .defaultRepresentation(argumentType)
+                            result
 
         resolve(declaredParamType, argumentType, declaredRepr)
     }
@@ -1017,6 +1141,18 @@ case class LambdaRepresentation(
                 typeArgs.headOption match
                     case Some(tv: SIRType.TypeVar) if builtinTypeVars.contains(tv) =>
                         Map(tv -> elemRepr)
+                    case _ => Map.empty
+            case (
+                  SIRType.SumCaseClass(decl, typeArgs),
+                  outSum: SumCaseClassRepresentation.SumUplcConstr
+                ) =>
+                // UplcConstr list: extract element repr from Cons variant's head field
+                val elemRepr = outSum.variants.values
+                    .find(_.fieldReprs.nonEmpty)
+                    .map(_.fieldReprs.head)
+                typeArgs.headOption match
+                    case Some(tv: SIRType.TypeVar) if builtinTypeVars.contains(tv) =>
+                        elemRepr.map(r => Map(tv -> r)).getOrElse(Map.empty)
                     case _ => Map.empty
             case (
                   SIRType.SumCaseClass(decl, typeArgs),
@@ -1227,6 +1363,13 @@ case object ErrorRepresentation extends LoweredValueRepresentation {
 
     override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = true
 
+    // Error is unreachable at runtime — compatible with any target repr
+    override def isCompatibleOn(
+        tp: SIRType,
+        repr: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using LoweringContext): Boolean = true
+
 }
 
 object LoweredValueRepresentation {
@@ -1292,6 +1435,8 @@ object LoweredValueRepresentation {
             case proxy: SIRType.TypeProxy =>
                 constRepresentation(proxy.ref)
             case SIRType.TypeNothing => ErrorRepresentation
+            case SIRType.Annotated(tp, _) =>
+                constRepresentation(tp)
             case SIRType.TypeNonCaseModule(name) =>
                 throw LoweringException(
                   "TypeNonCaseModule is not supported in lowered value representation",

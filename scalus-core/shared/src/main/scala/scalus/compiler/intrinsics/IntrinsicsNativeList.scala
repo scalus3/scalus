@@ -5,6 +5,7 @@ import scalus.cardano.onchain.plutus.prelude.{List, Option}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.uplc.builtin.BuiltinList
 import scalus.uplc.builtin.Builtins.*
+import scalus.compiler.intrinsics.IntrinsicHelpers.toDefaultTypeVarRepr
 
 /** Native list intrinsics — thin delegation to NativeListOperations.
   *
@@ -44,5 +45,12 @@ object IntrinsicsNativeList {
 
     def find[A](self: List[A], predicate: A => Boolean): Option[A] =
         NativeListOperations.find(self, predicate)
+
+    def contains[A](self: List[A], elem: A, eq: (A, A) => Boolean): Boolean =
+        NativeListOperations.contains(
+          self,
+          elem,
+          (a: A, b: A) => eq(toDefaultTypeVarRepr(a), toDefaultTypeVarRepr(b))
+        )
 
 }

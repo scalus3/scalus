@@ -1,6 +1,7 @@
 package scalus.compiler.sir.lowering
 
 import scalus.compiler.sir.*
+import scalus.compiler.sir.lowering.typegens.*
 
 /** Resolves intrinsic implementations for method calls based on argument representation and
   * protocol version.
@@ -25,6 +26,7 @@ object IntrinsicResolver {
     private val ListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
     private val ListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
     private val NativeListOps = "scalus.compiler.intrinsics.IntrinsicsNativeList$"
+    private val UplcConstrListOps = "scalus.compiler.intrinsics.IntrinsicsUplcConstrList$"
 
     private val PairListOps = "scalus.compiler.intrinsics.BuiltinPairListOperations$"
     private val PairListOpsV11 = "scalus.compiler.intrinsics.BuiltinPairListOperationsV11$"
@@ -36,28 +38,72 @@ object IntrinsicResolver {
       * `compiledModules(...)` and replaces it with `SIRLinker.readModules(...)` that accesses the
       * objects' `sirModule` vals.
       */
-    lazy val defaultIntrinsicModules: Map[String, Module] =
-        scalus.compiler.compiledModules(
+    lazy val defaultIntrinsicModules: Map[String, Module] = {
+        val modules = scalus.compiler.compiledModules(
           "scalus.compiler.intrinsics.BuiltinListOperations",
           "scalus.compiler.intrinsics.BuiltinListOperationsV11",
           "scalus.compiler.intrinsics.BuiltinPairListOperations",
           "scalus.compiler.intrinsics.BuiltinPairListOperationsV11",
           "scalus.compiler.intrinsics.SortedMapIntrinsics",
           "scalus.compiler.intrinsics.AssocMapIntrinsics",
-          "scalus.compiler.intrinsics.IntrinsicsNativeList"
+          "scalus.compiler.intrinsics.IntrinsicsNativeList",
+          "scalus.compiler.intrinsics.IntrinsicsUplcConstrList"
         )
+        // Post-process IntrinsicsNativeList: make TypeVars Transparent so that
+        // native values pass through without implicit Data conversion at boundaries.
+        // HO function arguments (like Eq in contains) are explicitly wrapped with
+        // toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
+        modules.map { (name, module) =>
+            if name == NativeListOps || name == UplcConstrListOps then
+                val transparentDefs = module.defs.map { binding =>
+                    val newValue =
+                        SIR.mapTypeVars(
+                          binding.value,
+                          _.copy(kind = SIRType.TypeVarKind.Transparent)
+                        )
+                    val newTp =
+                        SIRType.mapTypeVars(
+                          binding.tp,
+                          _.copy(kind = SIRType.TypeVarKind.Transparent)
+                        )
+                    Binding(binding.name, newTp, newValue)
+                }
+                name -> module.copy(defs = transparentDefs)
+            else name -> module
+        }
+    }
 
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
       * intrinsic modules, these are NOT used for provider substitution.
+      *
+      * NativeListOperations has its TypeVars post-processed to Transparent so that
+      * headList/mkCons/nullList use passthrough representations (no Data wrapping).
       */
-    lazy val defaultSupportModules: Map[String, Module] =
-        scalus.compiler.compiledModules(
-          "scalus.compiler.intrinsics.NativeListOperations"
+    lazy val defaultSupportModules: Map[String, Module] = {
+        val modules = scalus.compiler.compiledModules(
+          "scalus.compiler.intrinsics.NativeListOperations",
+          "scalus.compiler.intrinsics.UplcConstrListOperations"
         )
+        // Post-process support modules: make all TypeVars Transparent so list
+        // operations use passthrough representations. For methods that take pre-compiled
+        // HO functions (like contains with Eq), the intrinsic body wraps the HO function
+        // with representation conversion adapters.
+        modules.map { (name, module) =>
+            val transparentDefs = module.defs.map { binding =>
+                val newValue =
+                    SIR.mapTypeVars(binding.value, _.copy(kind = SIRType.TypeVarKind.Transparent))
+                val newTp =
+                    SIRType.mapTypeVars(binding.tp, _.copy(kind = SIRType.TypeVarKind.Transparent))
+                Binding(binding.name, newTp, newValue)
+            }
+            name -> module.copy(defs = transparentDefs)
+        }
+    }
 
     // Representation name constants for registry lookup
     private val BuiltinListRepr = "BuiltinList"
     private val NativeBuiltinListRepr = "NativeBuiltinList"
+    private val UplcConstrListRepr = "UplcConstrList"
     private val PairListRepr = "PairList"
     private val WildcardRepr = "_"
 
@@ -72,7 +118,7 @@ object IntrinsicResolver {
         Map[String, scalus.compiler.intrinsics.ArgReprConvertRule]
     )
 
-    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules}
+    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules, UplcConstrListReprRules}
 
     private val NoArgConvert: Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] = Map.empty
 
@@ -82,6 +128,7 @@ object IntrinsicResolver {
       */
     private val registry: Map[String, List[RegistryEntry]] = Map(
       ListModule -> List(
+        (UplcConstrListRepr, 0, UplcConstrListOps, UplcConstrListReprRules.rules, NoArgConvert),
         (WildcardRepr, 0, NativeListOps, NativeListReprRules.factoryRules, NoArgConvert),
         (NativeBuiltinListRepr, 0, NativeListOps, NativeListReprRules.rules, NoArgConvert),
         (BuiltinListRepr, 0, ListOps, ListReprRules.listRules, NoArgConvert),
@@ -140,6 +187,7 @@ object IntrinsicResolver {
         extractModuleAndMethod(f) match
             case None => None
             case Some((moduleName, methodName)) =>
+                val reprNames0 = representationNames(loweredArg.representation)
                 if lctx.debug then
                     lctx.log(
                       s"IntrinsicResolver: module=$moduleName method=$methodName repr=${loweredArg.representation.doc.render(80)}"
@@ -204,8 +252,15 @@ object IntrinsicResolver {
                                 case None => loweredArg
                             lctx.precomputedValues.put(argSir, effectiveArg)
                             val lowered =
-                                try Lowering.lowerSIR(substituted, Some(appType))
-                                finally lctx.precomputedValues.remove(argSir)
+                                try {
+                                    // For UplcConstr list intrinsics, temporarily swap policy
+                                    // so List constructors (Cons/Nil) produce Constr terms
+                                    val savedPolicy = lctx.uplcGeneratorPolicy
+                                    if reprNames.contains(UplcConstrListRepr) then
+                                        lctx.uplcGeneratorPolicy = uplcConstrListPolicy
+                                    try Lowering.lowerSIR(substituted, Some(appType))
+                                    finally lctx.uplcGeneratorPolicy = savedPolicy
+                                } finally lctx.precomputedValues.remove(argSir)
                             // Apply repr rule to set correct output representation
                             bestReprRules.get(methodName) match
                                 case Some(rule) =>
@@ -241,6 +296,8 @@ object IntrinsicResolver {
       */
     /** All representation names that match a given representation, most specific first. */
     private def representationNames(repr: LoweredValueRepresentation): List[String] = repr match
+        case _: SumCaseClassRepresentation.SumUplcConstr =>
+            List(UplcConstrListRepr)
         case SumCaseClassRepresentation.SumBuiltinList(er) if !er.isPackedData =>
             List(NativeBuiltinListRepr, BuiltinListRepr)
         case SumCaseClassRepresentation.SumBuiltinList(_) =>
@@ -259,6 +316,8 @@ object IntrinsicResolver {
       * Unwraps the outer lambda, infers type variable bindings by unifying the parameter type with
       * the actual argument type, then substitutes both the expression variable and all type
       * occurrences in the body.
+      *
+      * Returns (substituted body, typeEnv) so the caller can also substitute TypeVars in appType.
       */
     private def substituteSelf(bindingValue: SIR, arg: SIR): SIR = bindingValue match
         case SIR.LamAbs(param, body, typeParams, _) =>
@@ -360,5 +419,21 @@ object IntrinsicResolver {
                 SIR.Error(goExpr(msg, locals), anns, cause)
 
         go(sir, Set.empty)
+    }
+
+    /** UplcConstr list policy: for List types with Transparent TypeVar elements, use SumUplcConstr
+      * representation (Case/Constr) instead of SumBuiltinList.
+      */
+    val uplcConstrListPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
+        given LoweringContext = lctx
+        def isListType(t: SIRType): Boolean = t match
+            case SIRType.SumCaseClass(decl, _)
+                if decl.name == "scalus.cardano.onchain.plutus.prelude.List" =>
+                true
+            case SIRType.TypeLambda(_, body) => isListType(body)
+            case SIRType.TypeProxy(ref)      => isListType(ref)
+            case _                           => false
+        if isListType(tp) then SumCaseUplcConstrSirTypeGenerator
+        else SirTypeUplcGenerator(tp, lctx.debugLevel > 30)
     }
 }

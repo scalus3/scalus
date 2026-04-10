@@ -5,6 +5,7 @@ import scalus.cardano.onchain.plutus.prelude.{List, Option}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.uplc.builtin.BuiltinList
 import scalus.uplc.builtin.Builtins.*
+import scalus.uplc.builtin.Data
 
 /** Native list operations — implementations with Transparent TypeVars.
   *
@@ -75,6 +76,18 @@ object NativeListOperations {
                 val t = tailList(lst)
                 if predicate(h) then Option.Some(h)
                 else go(t)
+            }
+        go(blist)
+    }
+
+    def contains[A](self: List[A], elem: A, eq: (A, A) => Boolean): Boolean = {
+        val blist = typeProxy[BuiltinList[A]](self)
+        def go(lst: BuiltinList[A]): Boolean =
+            if nullList(lst) then false
+            else {
+                val h = headList(lst)
+                if eq(h, elem) then true
+                else go(tailList(lst))
             }
         go(blist)
     }

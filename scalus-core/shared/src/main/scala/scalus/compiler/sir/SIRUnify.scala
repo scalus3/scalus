@@ -478,6 +478,13 @@ object SIRUnify {
                                     .updated(v1, v1EqTypes + v2)
                                     .updated(v2, v2EqTypes + v1)
                                 UnificationSuccess(env.copy(eqTypes = nEqTypes), v1)
+            // Unwrap Annotated before TypeVar — annotations are representation hints,
+            // not structural type information. Must come before TypeVar wildcards so
+            // that TypeVars get filled with the unwrapped type.
+            case (SIRType.Annotated(tp, _), _) =>
+                unifyType(tp, right, env)
+            case (_, SIRType.Annotated(tp, _)) =>
+                unifyType(left, tp, env)
             case (v: SIRType.TypeVar, _) =>
                 val nEnv = env.copy(filledTypes = env.filledTypes.updated(v, right))
                 checkEqType(nEnv, v, right)

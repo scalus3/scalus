@@ -74,7 +74,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
             state match
                 case LinkingDefState.Linked(b) =>
                     SIR.Let(
-                      List(Binding(b.name, b.body.tp, b.body)),
+                      List(Binding(b.name, b.declaredTp.getOrElse(b.body.tp), b.body)),
                       acc match {
                           case annssir: AnnotatedSIR => annssir
                           case _ =>
@@ -194,18 +194,28 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
     private def findAndLinkDefinition(
         defs: collection.Map[String, SIR],
         fullName: String,
-        @unused tp: SIRType,
+        tp: SIRType,
         srcPos: SIRPosition
     ): Boolean = {
         val found = defs.get(fullName)
         for sir <- found do
             globalDefs.update(fullName, LinkingDefState.Linking)
             val nSir = traverseAndLink(sir, srcPos)
+            // Preserve declared type if it contains annotations (e.g., @UplcRepr on return type).
+            // Only checks Fun/TypeLambda nesting — no cycle risk from SumCaseClass/CaseClass.
+            def funContainsAnnotated(tp: SIRType): Boolean = tp match
+                case _: SIRType.Annotated => true
+                case SIRType.Fun(in, out) => funContainsAnnotated(in) || funContainsAnnotated(out)
+                case SIRType.TypeLambda(_, body) => funContainsAnnotated(body)
+                case _                           => false
+            val declTp = if funContainsAnnotated(tp) then Some(tp) else None
             // TODO: research.  removing 'remove' triggers fail of  scalus.CompilerPluginTest. 'compile fieldAsData macro'
             globalDefs.remove(fullName)
             globalDefs.update(
               fullName,
-              LinkingDefState.Linked(SIRLinkedBinding(fullName, SIR.LetFlags.Recursivity, nSir))
+              LinkingDefState.Linked(
+                SIRLinkedBinding(fullName, SIR.LetFlags.Recursivity, nSir, declTp)
+              )
             )
         found.isDefined
     }
@@ -279,7 +289,8 @@ object SIRLinker {
     class SIRLinkedBinding(
         val name: String,
         val flags: SIR.LetFlags,
-        val body: SIR
+        val body: SIR,
+        val declaredTp: Option[SIRType] = None
     )
 
     enum LinkingDefState {

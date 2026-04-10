@@ -140,6 +140,8 @@ final class SIRCompiler(
         requiredModule("scalus.compiler.intrinsics.IntrinsicHelpers")
     private val typeProxyMethod = typeProxyReprModule.requiredMethod("typeProxy")
     private val typeProxyReprMethod = typeProxyReprModule.requiredMethod("typeProxyRepr")
+    private val toDefaultTypeVarReprMethod =
+        typeProxyReprModule.requiredMethod("toDefaultTypeVarRepr")
     private val moduleToExprSymbol = Symbols.requiredModule("scalus.compiler.sir.ModuleToExpr")
     private val sirBodyAnnotation = requiredClass("scalus.compiler.sir.SIRBodyAnnotation")
     private val sirModuleWithDepsType = requiredClassRef("scalus.compiler.sir.SIRModuleWithDeps")
@@ -645,22 +647,59 @@ final class SIRCompiler(
         }
     }
 
-    /** Encodes the UplcRepresentation enum value to SIR. The tree should be a reference to a
-      * UplcRepresentation case object.
+    /** Encodes a UplcRepresentation enum value to SIR.
+      *
+      * Case objects (like UplcRepresentation.UplcConstr) are encoded as string constants. Case
+      * classes (like UplcRepresentation.SumBuiltinList(elem)) are encoded as SIR.Constr with args.
       */
     private def encodeUplcRepresentation(tree: Tree): Option[SIR] = {
-        val termSym = tree.tpe.termSymbol
-        if termSym.exists && tree.tpe.derivesFrom(uplcRepresentationClass) then
-            // Extract just the case object name (e.g., "Map", "ProductCaseOneElement")
-            val reprName = termSym.name.show
-            Some(
-              SIR.Const(
-                scalus.uplc.Constant.String(reprName),
-                SIRType.String,
-                AnnotationsDecl.emptyModule
-              )
-            )
-        else None
+        tree match
+            // Unwrap Typed wrapper
+            case Typed(inner, _) => return encodeUplcRepresentation(inner)
+            case _               =>
+        tree match
+            // Case class: Apply(fun, args) — e.g., UplcRepresentation.SumBuiltinList(UplcRepresentation.UplcConstr)
+            case Apply(fun, args) if tree.tpe.derivesFrom(uplcRepresentationClass) =>
+                val constrName = tree.tpe.classSymbol.fullName.show
+                val encodedArgs = args.flatMap(encodeUplcRepresentation)
+                val constrDecl = scalus.compiler.sir.ConstrDecl(
+                  constrName,
+                  encodedArgs.map(_ =>
+                      scalus.compiler.sir.TypeBinding("arg", SIRType.FreeUnificator)
+                  ),
+                  Nil,
+                  Nil,
+                  AnnotationsDecl.emptyModule
+                )
+                val dataDecl = scalus.compiler.sir.DataDecl(
+                  constrName,
+                  scala.List(constrDecl),
+                  Nil,
+                  AnnotationsDecl.emptyModule
+                )
+                Some(
+                  SIR.Constr(
+                    constrName,
+                    dataDecl,
+                    encodedArgs,
+                    SIRType.FreeUnificator,
+                    AnnotationsDecl.emptyModule
+                  )
+                )
+            // Case object — e.g., UplcRepresentation.UplcConstr
+            case _ =>
+                val termSym = tree.tpe.termSymbol
+                if termSym.exists && tree.tpe.derivesFrom(uplcRepresentationClass) then
+                    val reprName = termSym.name.show
+                    // Encode as string for backward compatibility
+                    Some(
+                      SIR.Const(
+                        scalus.uplc.Constant.String(reprName),
+                        SIRType.String,
+                        AnnotationsDecl.emptyModule
+                      )
+                    )
+                else None
     }
 
     private def writeModule(module: Module, className: String): Unit = {
@@ -831,7 +870,17 @@ final class SIRCompiler(
         val nEnv = env.copy(typeVars = envTypeVars2)
         val params = primaryConstructorParams(constrSymbol).map { p =>
             val pType = sirTypeInEnv(p.info, srcPos, nEnv)
-            TypeBinding(p.name.show, pType)
+            // Check both parameter and class member for @UplcRepr
+            val fieldReprData = extractUplcReprAnnotation(p) match
+                case m if m.nonEmpty => m
+                case _ =>
+                    val classMember = constrSymbol.info.member(p.name)
+                    if classMember.exists then extractUplcReprAnnotation(classMember.symbol)
+                    else Map.empty
+            val fieldAnns =
+                if fieldReprData.isEmpty then AnnotationsDecl.emptyModule
+                else AnnotationsDecl(SIRPosition.fromSrcPos(srcPos), data = fieldReprData)
+            TypeBinding(p.name.show, pType, fieldAnns)
         }
         val constrType = typer.constructorResultType(constrSymbol)
         val optBaseClass = constrSymbol.info.baseClasses.find { b =>
@@ -1280,7 +1329,19 @@ final class SIRCompiler(
                     val vars = params.map { case v: ValDef =>
                         val tEnv =
                             SIRTypeEnv(v.srcPos, env.typeVars ++ typeParamsMap)
-                        val vType = sirTypeInEnv(v.tpe, tEnv)
+                        val vType0 = sirTypeInEnv(v.tpe, tEnv)
+                        // Wrap parameter type in Annotated if @UplcRepr is present
+                        val reprData = extractUplcReprAnnotation(v.symbol)
+                        val vType =
+                            if reprData.nonEmpty then
+                                SIRType.Annotated(
+                                  vType0,
+                                  AnnotationsDecl(
+                                    SIRPosition.fromSrcPos(v.srcPos),
+                                    data = reprData
+                                  )
+                                )
+                            else vType0
                         val variableKey = VariableKey(v.name.show, Some(v.symbol.id))
                         val anns = AnnotationsDecl.fromSymIn(v.symbol, v.srcPos.sourcePos)
                         SIR.Var(variableKey.varName, vType, anns)
@@ -2387,9 +2448,18 @@ final class SIRCompiler(
     ): AnnotatedSIR = {
 
         def retrieveAnnsData(tpe: Type): Map[String, SIR] = {
-            if tpe.baseType(FromDataSymbol).exists then Map("fromData" -> SIR.Const.boolean(true))
-            else if tpe.baseType(ToDataSymbol).exists then Map("toData" -> SIR.Const.boolean(true))
-            else Map.empty[String, SIR]
+            val base =
+                if tpe.baseType(FromDataSymbol).exists then
+                    Map("fromData" -> SIR.Const.boolean(true))
+                else if tpe.baseType(ToDataSymbol).exists then
+                    Map("toData" -> SIR.Const.boolean(true))
+                else Map.empty[String, SIR]
+            // For FunctionalInterface types, store the full type name so the
+            // lowerer can dispatch to repr-specific intrinsics (Eq, Ord, etc.)
+            if isFunctionalInterface(tpe) then
+                base + ("functionalInterfaceType" -> SIR.Const
+                    .string(tpe.typeSymbol.fullName.toString))
+            else base
         }
 
         if env0.debug then
@@ -3206,6 +3276,11 @@ final class SIRCompiler(
             case Apply(TypeApply(f, targs), List(arg, reprArg))
                 if f.symbol == typeProxyReprMethod && targs.size == 1 =>
                 compileTypeProxyRepr(env, targs, arg, reprArg, tree)
+            // toDefaultTypeVarRepr[A](x) — convert to defaultTypeVarRepresentation
+            case Apply(TypeApply(f, targs), List(arg))
+                if f.symbol == toDefaultTypeVarReprMethod && targs.size == 1 =>
+                println(s"PLUGIN: intercepted toDefaultTypeVarRepr")
+                compileToDefaultTypeVarRepr(env, targs, arg, tree)
             // Generic Apply
             case a @ Apply(pf @ TypeApply(f, targs), args) =>
                 compileApply(env, f, targs, args, tree.tpe, a)
@@ -3543,6 +3618,30 @@ final class SIRCompiler(
           compiledArg,
           targetType,
           anns
+        )
+    }
+
+    /** Compile `toDefaultTypeVarRepr[A](x)` — convert x to defaultTypeVarRepresentation(A). */
+    private def compileToDefaultTypeVarRepr(
+        env: Env,
+        targs: List[Tree],
+        arg: Tree,
+        tree: Tree
+    ): AnnotatedSIR = {
+        val targetType = sirTypeInEnv(targs(0).tpe.widen, tree.srcPos, env)
+        val compiledArg = compileExpr(env, arg)
+        val moduleName = "scalus.compiler.intrinsics.IntrinsicHelpers$"
+        val fullName = s"$moduleName.toDefaultTypeVarRepr"
+        SIR.Apply(
+          SIR.ExternalVar(
+            moduleName,
+            fullName,
+            SIRType.Fun(targetType, targetType),
+            AnnotationsDecl.fromSrcPos(tree.srcPos)
+          ),
+          compiledArg,
+          targetType,
+          AnnotationsDecl.fromSrcPos(tree.srcPos)
         )
     }
 

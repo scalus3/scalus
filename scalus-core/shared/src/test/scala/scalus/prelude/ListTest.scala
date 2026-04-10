@@ -918,8 +918,8 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 11116, steps = 2_822872),
             compilerOptions.copy(nativeListElements = true) -> ExUnits(
-              memory = 15976,
-              steps = 4_071_183
+              memory = 10684,
+              steps = 2_736_721
             )
           )
         )

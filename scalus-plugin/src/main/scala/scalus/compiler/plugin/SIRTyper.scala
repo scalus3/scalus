@@ -1,6 +1,7 @@
 package scalus.compiler.plugin
 
 import dotty.tools.dotc.*
+import dotty.tools.dotc.ast.tpd.*
 import dotty.tools.dotc.core.*
 import dotty.tools.dotc.core.Contexts.Context
 import dotty.tools.dotc.core.StdNames.*
@@ -38,21 +39,64 @@ class SIRTyper(using Context) {
             case Some(annot) =>
                 annot.argument(0) match {
                     case Some(tree) =>
-                        val termSym = tree.tpe.termSymbol
-                        if termSym.exists && tree.tpe.derivesFrom(uplcRepresentationClass) then
-                            val reprName = termSym.name.show
-                            Map(
-                              "uplcRepr" -> SIR.Const(
-                                scalus.uplc.Constant.String(reprName),
-                                SIRType.String,
-                                AnnotationsDecl.emptyModule
-                              )
-                            )
-                        else Map.empty
+                        encodeReprTag(tree) match
+                            case Some(encoded) => Map("uplcRepr" -> encoded)
+                            case None          => Map.empty
                     case None => Map.empty
                 }
             case None => Map.empty
         }
+    }
+
+    /** Encode a UplcRepresentation value to SIR. */
+    private def encodeReprTag(tree: Tree): Option[SIR] = {
+        tree match
+            // Unwrap Typed wrapper
+            case Typed(inner, _) => return encodeReprTag(inner)
+            case _               =>
+        tree match
+            // Case class: Apply(fun, args) — e.g., UplcRepresentation.SumBuiltinList(UplcRepresentation.UplcConstr)
+            case Apply(fun, args) =>
+                if !tree.tpe.derivesFrom(uplcRepresentationClass) then return None
+                val constrName = tree.tpe.classSymbol.fullName.show
+                val encodedArgs = args.flatMap(encodeReprTag)
+                val constrDecl = scalus.compiler.sir.ConstrDecl(
+                  constrName,
+                  encodedArgs.map(_ =>
+                      scalus.compiler.sir.TypeBinding("arg", SIRType.FreeUnificator)
+                  ),
+                  Nil,
+                  Nil,
+                  AnnotationsDecl.emptyModule
+                )
+                val dataDecl = scalus.compiler.sir.DataDecl(
+                  constrName,
+                  scala.List(constrDecl),
+                  Nil,
+                  AnnotationsDecl.emptyModule
+                )
+                Some(
+                  SIR.Constr(
+                    constrName,
+                    dataDecl,
+                    encodedArgs,
+                    SIRType.FreeUnificator,
+                    AnnotationsDecl.emptyModule
+                  )
+                )
+            // Case object — e.g., UplcRepresentation.UplcConstr
+            case _ =>
+                val termSym = tree.tpe.termSymbol
+                if termSym.exists && tree.tpe.derivesFrom(uplcRepresentationClass) then
+                    val reprName = termSym.name.show
+                    Some(
+                      SIR.Const(
+                        scalus.uplc.Constant.String(reprName),
+                        SIRType.String,
+                        AnnotationsDecl.emptyModule
+                      )
+                    )
+                else None
     }
 
     def sirTypeInEnv(tp: Type, env0: SIRTypeEnv): SIRType = {
@@ -163,7 +207,23 @@ class SIRTyper(using Context) {
                             unsupportedType(tp, s"AppliedType ${tp.show}", env)
                 }
             case tp: AnnotatedType =>
-                sirTypeInEnvWithErr(tp.underlying, env)
+                val underlying = sirTypeInEnvWithErr(tp.underlying, env)
+                // Check if annotation is @UplcRepr — wrap in SIRType.Annotated
+                if tp.annot.symbol == uplcReprAnnotation then
+                    tp.annot.argument(0) match
+                        case Some(tree) =>
+                            encodeReprTag(tree) match
+                                case Some(encoded) =>
+                                    SIRType.Annotated(
+                                      underlying,
+                                      AnnotationsDecl(
+                                        SIRPosition.fromSrcPos(env.pos),
+                                        data = Map("uplcRepr" -> encoded)
+                                      )
+                                    )
+                                case None => underlying
+                        case None => underlying
+                else underlying
             case tp: AndType =>
                 // For AndType (e.g., from inline expansion of opaque types: x.type & T),
                 // try to resolve a component with a known class or opaque type symbol
@@ -651,7 +711,18 @@ class SIRTyper(using Context) {
         val nEnv = env.copy(vars = nVars)
         val params = paramSymbols.map { s =>
             val t = sirTypeInEnvWithErr(s.info, nEnv)
-            TypeBinding(s.name.show, t)
+            // Check both the parameter symbol and the corresponding class field for @UplcRepr
+            val fieldReprData = extractUplcReprAnnotation(s) match
+                case m if m.nonEmpty => m
+                case _               =>
+                    // Try the class member (field accessor) — Scala 3 may place param annotations there
+                    val classMember = typeSymbol.info.member(s.name)
+                    if classMember.exists then extractUplcReprAnnotation(classMember.symbol)
+                    else Map.empty
+            val fieldAnns =
+                if fieldReprData.isEmpty then AnnotationsDecl.emptyModule
+                else AnnotationsDecl(SIRPosition.empty, data = fieldReprData)
+            TypeBinding(s.name.show, t, fieldAnns)
         }
         val parentTypeArgs = optParentSym.toList.flatMap { parentSym =>
             val ct = constructorResultType(typeSymbol)

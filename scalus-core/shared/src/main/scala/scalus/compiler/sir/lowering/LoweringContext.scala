@@ -16,7 +16,7 @@ class LoweringContext(
     val targetLanguage: Language = Language.PlutusV3,
     val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     val generateErrorTraces: Boolean = false,
-    val uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
+    var uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
         given LoweringContext = lctx
         SirTypeUplcGenerator(tp, lctx.debugLevel > 30)
     },
@@ -77,11 +77,32 @@ class LoweringContext(
       * — checks support modules and lowers the binding lazily (only when first referenced).
       */
     def resolveSupportBinding(name: String): Option[LoweredValue] = {
-        val binding = supportModules.values
-            .flatMap(_.defs)
-            .find(_.name == name)
-        binding.map { b =>
-            given LoweringContext = this
+        val bindingWithModule = supportModules.collectFirst {
+            case (moduleName, module) if module.defs.exists(_.name == name) =>
+                (module.defs.find(_.name == name).get, moduleName)
+        }
+        bindingWithModule.map { (b, moduleName) =>
+            // UplcConstrListOperations needs a policy where List[TypeVar(Transparent)]
+            // resolves to SumUplcConstr instead of SumBuiltinList
+            val effectiveLctx =
+                if moduleName == "scalus.compiler.intrinsics.UplcConstrListOperations$" then
+                    new LoweringContext(
+                      scope = this.scope,
+                      targetLanguage = this.targetLanguage,
+                      targetProtocolVersion = this.targetProtocolVersion,
+                      generateErrorTraces = this.generateErrorTraces,
+                      uplcGeneratorPolicy = IntrinsicResolver.uplcConstrListPolicy,
+                      typeUnifyEnv = this.typeUnifyEnv,
+                      debug = this.debug,
+                      debugLevel = this.debugLevel,
+                      nestingLevel = this.nestingLevel,
+                      enclosingLambdaParams = this.enclosingLambdaParams,
+                      intrinsicModules = this.intrinsicModules,
+                      supportModules = this.supportModules,
+                      nativeListElements = this.nativeListElements,
+                    )
+                else this
+            given LoweringContext = effectiveLctx
             val lowered = Lowering.lowerSIR(b.value)
             val varVal = LoweredValue.Builder.lvNewLazyNamedVar(
               b.name,

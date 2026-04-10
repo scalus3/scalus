@@ -66,11 +66,24 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             makeResolvedProxy(input, pos)
                 .map(x => lctx.typeGenerator(x.sirType).toRepresentation(x, representation, pos))
                 .getOrElse {
+                    // Detect Transparent → Fixed conversion: this is invalid because
+                    // Transparent values are native and can't be serialized to Data.
+                    (input.representation, representation) match
+                        case (
+                              TypeVarRepresentation(SIRType.TypeVarKind.Transparent),
+                              TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
+                            ) =>
+                            throw LoweringException(
+                              s"Cannot convert Transparent TypeVar to Fixed (Data) representation. " +
+                                  s"Type: ${input.sirType.show}. " +
+                                  s"This happens when @UplcRepr(UplcConstr) native values are used in a Data-expecting context.",
+                              pos
+                            )
+                        case _ =>
                     representation match
                         case tvr: TypeVarRepresentation =>
                             if tvr.isBuiltin then input
-                            else // TODO: think about conversion between built-in and non-built-in
-                                new RepresentationProxyLoweredValue(input, representation, pos)
+                            else new RepresentationProxyLoweredValue(input, representation, pos)
                         case sumRepr: SumCaseClassRepresentation =>
                             sumRepr match {
                                 case SumCaseClassRepresentation.DataConstr |

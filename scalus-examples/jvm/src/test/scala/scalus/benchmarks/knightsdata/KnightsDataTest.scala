@@ -1,5 +1,6 @@
-package scalus.benchmarks
+package scalus.benchmarks.knightsdata
 
+import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.{multiplyInteger, remainderInteger}
@@ -7,12 +8,11 @@ import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.testing.kit.ScalusTest
 import scalus.uplc.eval.{ProfileFormatter, Result}
 
-class KnightsTest extends AnyFunSuite, ScalusTest:
-    import KnightsTest.{*, given}
+class KnightsDataTest extends AnyFunSuite, ScalusTest:
+    import KnightsDataTest.{*, given}
     import scalus.uplc.eval.PlutusVM
 
     // Use vanRossemPV VM to evaluate code compiled with protocol version 11 features (case on booleans)
@@ -28,7 +28,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     )
 
     val printComparison = true
-    val profilingEnabled = true
+    val profilingEnabled = false
 
     extension (term: scalus.uplc.Term)
         private def evalWithOptionalProfile(using PlutusVM): Result =
@@ -44,13 +44,15 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             val expected: Solution = List.empty
             require(result === expected)
         }
+        // val lw = sir.toLoweredValue()
+        // println(s"Lowered value: ${lw.pretty.render(100)}")
         val result = sir.toUplcOptimized(false).evalWithOptionalProfile
 
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 if options.nativeListElements then ExUnits(memory = 204281467, steps = 52963867280L)
-                else ExUnits(memory = 144_018_936L, steps = 38_069_006_422L)
+                else ExUnits(memory = 185_927_967L, steps = 49_131_853_260L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -60,12 +62,11 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                 ExUnits(memory = 247_807177L, steps = 44783_358238L)
             }
 
-        if !result.isSuccess then println(s"4x4 Result: $result")
         assert(result.isSuccess)
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
-          testName = "KnightsTest.100_4x4",
+          testName = "KnightsDataTest.100_4x4",
           scalusBudget = scalusBudget,
           refBudget = ExUnits(memory = 160_204421L, steps = 54958_831939L),
           isPrintComparison = printComparison
@@ -77,66 +78,66 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             val result = runKnights(100, 6)
 
             val expected: Solution = List(
-              SolutionEntry(
+              (
                 0,
                 ChessSet(
                   size = 6,
                   moveNumber = 36,
-                  start = Option.Some(Tile(1, 1)),
+                  start = Option.Some((1, 1)),
                   visited = List(
                         // format: off
-                        Tile(3, 2), Tile(5, 3), Tile(6, 1), Tile(4, 2), Tile(3, 4), Tile(2, 6), Tile(4, 5), Tile(6, 6), Tile(5, 4),
-                        Tile(6, 2), Tile(4, 1), Tile(2, 2), Tile(1, 4), Tile(3, 3), Tile(2, 1), Tile(1, 3), Tile(2, 5), Tile(4, 6),
-                        Tile(6, 5), Tile(4, 4), Tile(5, 2), Tile(6, 4), Tile(5, 6), Tile(3, 5), Tile(1, 6), Tile(2, 4), Tile(1, 2),
-                        Tile(3, 1), Tile(4, 3), Tile(5, 1), Tile(6, 3), Tile(5, 5), Tile(3, 6), Tile(1, 5), Tile(2, 3), Tile(1, 1)
+                        (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 6), (4, 5), (6, 6), (5, 4),
+                        (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
+                        (6, 5), (4, 4), (5, 2), (6, 4), (5, 6), (3, 5), (1, 6), (2, 4), (1, 2),
+                        (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
                         // format: on
                       )
                 )
               ),
-              SolutionEntry(
+              (
                 0,
                 ChessSet(
                   size = 6,
                   moveNumber = 36,
-                  start = Option.Some(Tile(1, 1)),
+                  start = Option.Some((1, 1)),
                   visited = List(
                         // format: off
-                        Tile(3, 2), Tile(5, 3), Tile(6, 1), Tile(4, 2), Tile(3, 4), Tile(2, 2), Tile(4, 1), Tile(6, 2), Tile(5, 4),
-                        Tile(6, 6), Tile(4, 5), Tile(2, 6), Tile(1, 4), Tile(3, 3), Tile(2, 1), Tile(1, 3), Tile(2, 5), Tile(4, 6),
-                        Tile(6, 5), Tile(4, 4), Tile(5, 2), Tile(6, 4), Tile(5, 6), Tile(3, 5), Tile(1, 6), Tile(2, 4), Tile(1, 2),
-                        Tile(3, 1), Tile(4, 3), Tile(5, 1), Tile(6, 3), Tile(5, 5), Tile(3, 6), Tile(1, 5), Tile(2, 3), Tile(1, 1)
+                        (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 2), (4, 1), (6, 2), (5, 4),
+                        (6, 6), (4, 5), (2, 6), (1, 4), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
+                        (6, 5), (4, 4), (5, 2), (6, 4), (5, 6), (3, 5), (1, 6), (2, 4), (1, 2),
+                        (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
                         // format: on
                       )
                 )
               ),
-              SolutionEntry(
+              (
                 0,
                 ChessSet(
                   size = 6,
                   moveNumber = 36,
-                  start = Option.Some(Tile(1, 1)),
+                  start = Option.Some((1, 1)),
                   visited = List(
                         // format: off
-                        Tile(3, 2), Tile(5, 3), Tile(6, 1), Tile(4, 2), Tile(3, 4), Tile(2, 2), Tile(1, 4), Tile(2, 6), Tile(4, 5),
-                        Tile(6, 6), Tile(5, 4), Tile(6, 2), Tile(4, 1), Tile(3, 3), Tile(2, 1), Tile(1, 3), Tile(2, 5), Tile(4, 6),
-                        Tile(6, 5), Tile(4, 4), Tile(5, 2), Tile(6, 4), Tile(5, 6), Tile(3, 5), Tile(1, 6), Tile(2, 4), Tile(1, 2),
-                        Tile(3, 1), Tile(4, 3), Tile(5, 1), Tile(6, 3), Tile(5, 5), Tile(3, 6), Tile(1, 5), Tile(2, 3), Tile(1, 1)
+                        (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 2), (1, 4), (2, 6), (4, 5),
+                        (6, 6), (5, 4), (6, 2), (4, 1), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
+                        (6, 5), (4, 4), (5, 2), (6, 4), (5, 6), (3, 5), (1, 6), (2, 4), (1, 2),
+                        (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
                         // format: on
                       )
                 )
               ),
-              SolutionEntry(
+              (
                 0,
                 ChessSet(
                   size = 6,
                   moveNumber = 36,
-                  start = Option.Some(Tile(1, 1)),
+                  start = Option.Some((1, 1)),
                   visited = List(
                         // format: off
-                        Tile(3, 2), Tile(5, 3), Tile(6, 1), Tile(4, 2), Tile(3, 4), Tile(2, 6), Tile(1, 4), Tile(2, 2), Tile(4, 1),
-                        Tile(6, 2), Tile(5, 4), Tile(6, 6), Tile(4, 5), Tile(3, 3), Tile(2, 1), Tile(1, 3), Tile(2, 5), Tile(4, 6),
-                        Tile(6, 5), Tile(4, 4), Tile(5, 2), Tile(6, 4), Tile(5, 6), Tile(3, 5), Tile(1, 6), Tile(2, 4), Tile(1, 2),
-                        Tile(3, 1), Tile(4, 3), Tile(5, 1), Tile(6, 3), Tile(5, 5), Tile(3, 6), Tile(1, 5), Tile(2, 3), Tile(1, 1)
+                        (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 6), (1, 4), (2, 2), (4, 1),
+                        (6, 2), (5, 4), (6, 6), (4, 5), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
+                        (6, 5), (4, 4), (5, 2), (6, 4), (5, 6), (3, 5), (1, 6), (2, 4), (1, 2),
+                        (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
                         // format: on
                       )
                 )
@@ -153,7 +154,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 if Options.default.nativeListElements then
                     ExUnits(memory = 598376876, steps = 146019618948L)
-                else ExUnits(memory = 385_751_075L, steps = 95_802_207_677L)
+                else ExUnits(memory = 506_240_100L, steps = 125_813_708_262L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -167,7 +168,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
-          testName = "KnightsTest.100_6x6",
+          testName = "KnightsDataTest.100_6x6",
           scalusBudget = scalusBudget,
           refBudget = ExUnits(memory = 292_216349L, steps = 131954_064320L),
           isPrintComparison = printComparison
@@ -180,64 +181,64 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
             import scalus.cardano.onchain.plutus.prelude.List.*
             val expected: Solution = Cons(
-              SolutionEntry(
+              (
                 0,
                 ChessSet(
                   size = 8,
                   moveNumber = 64,
-                  start = Option.Some(Tile(1, 1)),
+                  start = Option.Some((1, 1)),
                   visited = List(
                         // format: off
-                        Tile(3, 2), Tile(4, 4), Tile(5, 6), Tile(6, 4), Tile(8, 5), Tile(7, 7), Tile(6, 5), Tile(8, 4), Tile(7, 2),
-                        Tile(5, 3), Tile(3, 4), Tile(4, 6), Tile(5, 8), Tile(6, 6), Tile(4, 5), Tile(3, 7), Tile(1, 8), Tile(2, 6),
-                        Tile(4, 7), Tile(5, 5), Tile(6, 3), Tile(5, 1), Tile(4, 3), Tile(3, 5), Tile(5, 4), Tile(7, 3), Tile(8, 1),
-                        Tile(6, 2), Tile(4, 1), Tile(2, 2), Tile(1, 4), Tile(3, 3), Tile(2, 5), Tile(1, 3), Tile(2, 1), Tile(4, 2),
-                        Tile(6, 1), Tile(8, 2), Tile(7, 4), Tile(8, 6), Tile(7, 8), Tile(5, 7), Tile(3, 8), Tile(1, 7), Tile(3, 6),
-                        Tile(2, 8), Tile(1, 6), Tile(2, 4), Tile(1, 2), Tile(3, 1), Tile(5, 2), Tile(7, 1), Tile(8, 3), Tile(7, 5),
-                        Tile(8, 7), Tile(6, 8), Tile(7, 6), Tile(8, 8), Tile(6, 7), Tile(4, 8), Tile(2, 7), Tile(1, 5), Tile(2, 3),
-                        Tile(1, 1)
+                        (3, 2), (4, 4), (5, 6), (6, 4), (8, 5), (7, 7), (6, 5), (8, 4), (7, 2),
+                        (5, 3), (3, 4), (4, 6), (5, 8), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
+                        (4, 7), (5, 5), (6, 3), (5, 1), (4, 3), (3, 5), (5, 4), (7, 3), (8, 1),
+                        (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 5), (1, 3), (2, 1), (4, 2),
+                        (6, 1), (8, 2), (7, 4), (8, 6), (7, 8), (5, 7), (3, 8), (1, 7), (3, 6),
+                        (2, 8), (1, 6), (2, 4), (1, 2), (3, 1), (5, 2), (7, 1), (8, 3), (7, 5),
+                        (8, 7), (6, 8), (7, 6), (8, 8), (6, 7), (4, 8), (2, 7), (1, 5), (2, 3),
+                        (1, 1)
                         // format: on
                       )
                 )
               ),
               Cons(
-                SolutionEntry(
+                (
                   0,
                   ChessSet(
                     size = 8,
                     moveNumber = 64,
-                    start = Option.Some(Tile(1, 1)),
+                    start = Option.Some((1, 1)),
                     visited = List(
                           // format: off
-                          Tile(3, 2), Tile(4, 4), Tile(5, 6), Tile(7, 7), Tile(8, 5), Tile(6, 4), Tile(7, 2), Tile(8, 4), Tile(6, 5),
-                          Tile(5, 3), Tile(3, 4), Tile(4, 6), Tile(5, 8), Tile(6, 6), Tile(4, 5), Tile(3, 7), Tile(1, 8), Tile(2, 6),
-                          Tile(4, 7), Tile(5, 5), Tile(6, 3), Tile(5, 1), Tile(4, 3), Tile(3, 5), Tile(5, 4), Tile(7, 3), Tile(8, 1),
-                          Tile(6, 2), Tile(4, 1), Tile(2, 2), Tile(1, 4), Tile(3, 3), Tile(2, 5), Tile(1, 3), Tile(2, 1), Tile(4, 2),
-                          Tile(6, 1), Tile(8, 2), Tile(7, 4), Tile(8, 6), Tile(7, 8), Tile(5, 7), Tile(3, 8), Tile(1, 7), Tile(3, 6),
-                          Tile(2, 8), Tile(1, 6), Tile(2, 4), Tile(1, 2), Tile(3, 1), Tile(5, 2), Tile(7, 1), Tile(8, 3), Tile(7, 5),
-                          Tile(8, 7), Tile(6, 8), Tile(7, 6), Tile(8, 8), Tile(6, 7), Tile(4, 8), Tile(2, 7), Tile(1, 5), Tile(2, 3),
-                          Tile(1, 1)
+                          (3, 2), (4, 4), (5, 6), (7, 7), (8, 5), (6, 4), (7, 2), (8, 4), (6, 5),
+                          (5, 3), (3, 4), (4, 6), (5, 8), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
+                          (4, 7), (5, 5), (6, 3), (5, 1), (4, 3), (3, 5), (5, 4), (7, 3), (8, 1),
+                          (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 5), (1, 3), (2, 1), (4, 2),
+                          (6, 1), (8, 2), (7, 4), (8, 6), (7, 8), (5, 7), (3, 8), (1, 7), (3, 6),
+                          (2, 8), (1, 6), (2, 4), (1, 2), (3, 1), (5, 2), (7, 1), (8, 3), (7, 5),
+                          (8, 7), (6, 8), (7, 6), (8, 8), (6, 7), (4, 8), (2, 7), (1, 5), (2, 3),
+                          (1, 1)
                           // format: on
                         )
                   )
                 ),
                 Cons(
-                  SolutionEntry(
+                  (
                     0,
                     ChessSet(
                       size = 8,
                       moveNumber = 64,
-                      start = Option.Some(Tile(1, 1)),
+                      start = Option.Some((1, 1)),
                       visited = List(
                             // format: off
-                            Tile(3, 2), Tile(4, 4), Tile(6, 5), Tile(8, 4), Tile(7, 2), Tile(5, 3), Tile(3, 4), Tile(4, 6), Tile(5, 8),
-                            Tile(7, 7), Tile(5, 6), Tile(6, 4), Tile(8, 5), Tile(6, 6), Tile(4, 5), Tile(3, 7), Tile(1, 8), Tile(2, 6),
-                            Tile(4, 7), Tile(5, 5), Tile(6, 3), Tile(5, 1), Tile(4, 3), Tile(3, 5), Tile(5, 4), Tile(7, 3), Tile(8, 1),
-                            Tile(6, 2), Tile(4, 1), Tile(2, 2), Tile(1, 4), Tile(3, 3), Tile(2, 5), Tile(1, 3), Tile(2, 1), Tile(4, 2),
-                            Tile(6, 1), Tile(8, 2), Tile(7, 4), Tile(8, 6), Tile(7, 8), Tile(5, 7), Tile(3, 8), Tile(1, 7), Tile(3, 6),
-                            Tile(2, 8), Tile(1, 6), Tile(2, 4), Tile(1, 2), Tile(3, 1), Tile(5, 2), Tile(7, 1), Tile(8, 3), Tile(7, 5),
-                            Tile(8, 7), Tile(6, 8), Tile(7, 6), Tile(8, 8), Tile(6, 7), Tile(4, 8), Tile(2, 7), Tile(1, 5), Tile(2, 3),
-                            Tile(1, 1),
+                            (3, 2), (4, 4), (6, 5), (8, 4), (7, 2), (5, 3), (3, 4), (4, 6), (5, 8),
+                            (7, 7), (5, 6), (6, 4), (8, 5), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
+                            (4, 7), (5, 5), (6, 3), (5, 1), (4, 3), (3, 5), (5, 4), (7, 3), (8, 1),
+                            (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 5), (1, 3), (2, 1), (4, 2),
+                            (6, 1), (8, 2), (7, 4), (8, 6), (7, 8), (5, 7), (3, 8), (1, 7), (3, 6),
+                            (2, 8), (1, 6), (2, 4), (1, 2), (3, 1), (5, 2), (7, 1), (8, 3), (7, 5),
+                            (8, 7), (6, 8), (7, 6), (8, 8), (6, 7), (4, 8), (2, 7), (1, 5), (2, 3),
+                            (1, 1),
                             // format: on
                           )
                     )
@@ -257,7 +258,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 if Options.default.nativeListElements then
                     ExUnits(memory = 1238044719, steps = 297766687086L)
-                else ExUnits(memory = 696_725_021L, steps = 170_273_778_448L)
+                else ExUnits(memory = 1_037_856_223L, steps = 253_647_841_283L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -271,16 +272,16 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         assert(result.budget == scalusBudget)
 
         compareBudgetWithReferenceValue(
-          testName = "KnightsTest.100_8x8",
+          testName = "KnightsDataTest.100_8x8",
           scalusBudget = scalusBudget,
           refBudget = ExUnits(memory = 540_217437L, steps = 270266_226527L),
         )
     }
 
-end KnightsTest
+end KnightsDataTest
 
 @Compile
-object KnightsTest:
+object KnightsDataTest:
     enum Direction:
         case UL, UR, DL, DR, LU, LD, RU, RD
 
@@ -298,42 +299,30 @@ object KnightsTest:
         )
     }
 
-    @UplcRepr(UplcRepresentation.UplcConstr)
-    case class Tile(x: BigInt, y: BigInt)
-
-    given Eq[Tile] = Eq.derived
-    given Ord[Tile] = (lhs: Tile, rhs: Tile) => (lhs.x <=> rhs.x) ifEqualThen (lhs.y <=> rhs.y)
+    type Tile = (BigInt, BigInt)
 
     extension (self: Tile)
         def move(direction: Direction): Tile =
+            val (x, y) = self
             import Direction.*
             direction match
-                case UL => Tile(self.x - 1, self.y - 2)
-                case UR => Tile(self.x + 1, self.y - 2)
-                case DL => Tile(self.x - 1, self.y + 2)
-                case DR => Tile(self.x + 1, self.y + 2)
-                case LU => Tile(self.x - 2, self.y - 1)
-                case LD => Tile(self.x - 2, self.y + 1)
-                case RU => Tile(self.x + 2, self.y - 1)
-                case RD => Tile(self.x + 2, self.y + 1)
+                case UL => (x - 1, y - 2)
+                case UR => (x + 1, y - 2)
+                case DL => (x - 1, y + 2)
+                case DR => (x + 1, y + 2)
+                case LU => (x - 2, y - 1)
+                case LD => (x - 2, y + 1)
+                case RU => (x + 2, y - 1)
+                case RD => (x + 2, y + 1)
 
     end extension
 
-    @UplcRepr(UplcRepresentation.UplcConstr)
-    case class SolutionEntry(depth: BigInt, board: ChessSet)
+    type Solution = List[(BigInt, ChessSet)]
 
-    given Eq[SolutionEntry] = Eq.derived
-    given Ord[SolutionEntry] = (lhs: SolutionEntry, rhs: SolutionEntry) =>
-        (lhs.depth <=> rhs.depth) ifEqualThen (lhs.board <=> rhs.board)
-
-    type Solution = List[SolutionEntry]
-
-    @UplcRepr(UplcRepresentation.UplcConstr)
     case class ChessSet(
         size: BigInt,
         moveNumber: BigInt,
         start: Option[Tile],
-        @UplcRepr(UplcRepresentation.UplcConstr)
         visited: List[Tile]
     )
 
@@ -350,21 +339,23 @@ object KnightsTest:
         createBoard(size, tile)
 
     given Eq[ChessSet] = Eq.derived
+
     given Ord[ChessSet] = (lhs: ChessSet, rhs: ChessSet) => lhs.visited <=> rhs.visited
 
     extension (self: ChessSet)
-        def addPiece(tile: Tile): ChessSet = ChessSet(
-          size = self.size,
-          moveNumber = self.moveNumber + 1,
-          start = self.start,
-          visited = self.visited.prepended(tile)
-        )
+        def addPiece(tile: Tile): ChessSet =
+            ChessSet(
+              size = self.size,
+              moveNumber = self.moveNumber + 1,
+              start = self.start,
+              visited = self.visited.prepended(tile)
+            )
 
         def firstPiece: Tile = self.start.get
         def lastPiece: Tile = self.visited.head
 
         def deleteFirst: ChessSet =
-            extension [A](@UplcRepr(UplcRepresentation.UplcConstr) self: List[A])
+            extension [A](self: List[A])
                 def secondLast: Option[A] =
                     self.reverse match
                         case List.Nil => fail()
@@ -387,9 +378,9 @@ object KnightsTest:
         def isSquareFree(tile: Tile): Boolean = !self.visited.contains(tile)
 
         def canMoveTo(tile: Tile): Boolean =
-            tile.x >= 1 && tile.x <= self.size && tile.y >= 1 && tile.y <= self.size && isSquareFree(
-              tile
-            )
+            val (x, y) = tile
+            val size = self.size
+            x >= 1 && x <= size && y >= 1 && y <= size && isSquareFree(tile)
 
         def canMove(direction: Direction): Boolean = canMoveTo(lastPiece.move(direction))
         def moveKnight(direction: Direction): ChessSet = addPiece(lastPiece.move(direction))
@@ -397,12 +388,13 @@ object KnightsTest:
         def allDescend: List[ChessSet] = possibleMoves.map(moveKnight)
 
         def descAndNo: Solution = allDescend.map { item =>
-            SolutionEntry(item.deleteFirst.possibleMoves.length, item)
+            (item.deleteFirst.possibleMoves.length, item)
         }
 
         def singleDescend: List[ChessSet] =
             descAndNo.filterMap { item =>
-                if item.depth === BigInt(1) then Option.Some(item.board) else Option.empty
+                val (moves, board) = item
+                if moves === BigInt(1) then Option.Some(board) else Option.empty
             }
 
         def isDeadEnd: Boolean = possibleMoves.isEmpty
@@ -413,7 +405,7 @@ object KnightsTest:
             else
                 val singles = singleDescend
                 singles match
-                    case List.Nil              => descAndNo.quicksort.map { _.board }
+                    case List.Nil              => descAndNo.quicksort.map { _._2 }
                     case List.Cons(head, tail) => if tail.isEmpty then singles else List.empty
         }
 
@@ -422,44 +414,43 @@ object KnightsTest:
 
     end extension
 
-    opaque type Queue = List[SolutionEntry]
+    opaque type Queue[A] = List[A]
 
-    def emptyQueue: Queue = List.empty[SolutionEntry]
+    def emptyQueue[A]: Queue[A] = List.empty[A]
 
-    extension (self: Queue)
-        def toList: List[SolutionEntry] = self
+    extension [A](self: Queue[A])
+        def toList: List[A] = self
         def isEmpty: Boolean = List.isEmpty(self)
-        def appendFront(item: SolutionEntry): Queue = List.prepended(self)(item)
-        def appendAllFront(list: List[SolutionEntry]): Queue = list ++ self
-        def removeFront: Queue = List.tail(self)
-        def head: SolutionEntry = List.head(self)
+        def appendFront(item: A): Queue[A] = List.prepended(self)(item)
+        def appendAllFront(list: List[A]): Queue[A] = list ++ self
+        def removeFront: Queue[A] = List.tail(self)
+        def head: A = List.head(self)
 
     end extension
 
-    def isDone(item: SolutionEntry): Boolean = item.board.isTourFinished
+    def isDone(item: (BigInt, ChessSet)): Boolean = item._2.isTourFinished
 
-    def grow(item: SolutionEntry): List[SolutionEntry] =
-        item.board.descendants.map { board => SolutionEntry(item.depth + 1, board) }
+    def grow(item: (BigInt, ChessSet)): List[(BigInt, ChessSet)] =
+        val (x, board) = item
+        board.descendants.map { (x + 1, _) }
 
-    def makeStarts(size: BigInt): List[SolutionEntry] =
+    def makeStarts(size: BigInt): List[(BigInt, ChessSet)] =
         val it = List.range(1, size)
-        val l = it.flatMap { x => it.map { y => startTour(Tile(x, y), size) } }
+        val l = it.flatMap { x => it.map { y => startTour((x, y), size) } }
         val length = l.length
         require(length == size * size)
-        List.fill(1 - length, length).zip(l).map { pair =>
-            SolutionEntry(pair._1, pair._2)
-        }
+        List.fill(1 - length, length).zip(l)
 
-    def root(size: BigInt): Queue =
-        emptyQueue.appendAllFront(makeStarts(size))
+    def root(size: BigInt): Queue[(BigInt, ChessSet)] =
+        emptyQueue[(BigInt, ChessSet)].appendAllFront(makeStarts(size))
 
-    def depthSearch(
+    def depthSearch[A](
         depth: BigInt,
-        queue: Queue,
-        grow: SolutionEntry => List[SolutionEntry],
-        done: SolutionEntry => Boolean
-    ): Queue = {
-        if depth === BigInt(0) || queue.isEmpty then emptyQueue
+        queue: Queue[A],
+        grow: A => List[A],
+        done: A => Boolean
+    ): Queue[A] = {
+        if depth === BigInt(0) || queue.isEmpty then emptyQueue[A]
         else if done(queue.head) then
             depthSearch(depth - 1, queue.removeFront, grow, done).appendFront(queue.head)
         else depthSearch(depth - 1, queue.removeFront.appendAllFront(grow(queue.head)), grow, done)
@@ -468,4 +459,4 @@ object KnightsTest:
     def runKnights(depth: BigInt, boardSize: BigInt): Solution =
         depthSearch(depth, root(boardSize), grow, isDone).toList
 
-end KnightsTest
+end KnightsDataTest
