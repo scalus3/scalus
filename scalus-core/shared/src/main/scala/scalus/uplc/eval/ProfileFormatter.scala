@@ -19,7 +19,7 @@ object ProfileFormatter {
         if data.bySourceLocation.isEmpty then sb.append("  (no source locations recorded)\n")
         else
             val rows = data.bySourceLocation.take(effectiveMaxRows)
-            val locWidth = math.max(8, rows.map(e => s"${e.file}:${e.line}".length).max)
+            val locWidth = math.max(8, rows.map(e => s"${shortFile(e.file)}:${e.line}".length).max)
             val countWidth = math.max(5, rows.map(_.count.toString.length).max)
             val memWidth = math.max(3, rows.map(_.memory.toString.length).max)
             val cpuWidth = math.max(3, rows.map(_.cpu.toString.length).max)
@@ -31,7 +31,7 @@ object ProfileFormatter {
             rows.foreach { e =>
                 sb.append(
                   formatRow(
-                    s"${e.file}:${e.line}",
+                    s"${shortFile(e.file)}:${e.line}",
                     e.count.toString,
                     e.memory.toString,
                     e.cpu.toString,
@@ -86,6 +86,18 @@ object ProfileFormatter {
             }
             if data.byFunction.size > effectiveMaxRows then
                 sb.append(s"  ... and ${data.byFunction.size - effectiveMaxRows} more\n")
+
+        if data.transitions.nonEmpty then
+            sb.append('\n')
+            sb.append("=== Transitions (source location flow) ===\n")
+            val rows = data.transitions.take(effectiveMaxRows)
+            rows.foreach { t =>
+                val from = s"${shortFile(t.fromFile)}:${t.fromLine}"
+                val to = s"${shortFile(t.toFile)}:${t.toLine}"
+                sb.append(f"  ${t.count}%8d  $from%s -> $to%s\n")
+            }
+            if data.transitions.size > effectiveMaxRows then
+                sb.append(s"  ... and ${data.transitions.size - effectiveMaxRows} more\n")
 
         sb.append(s"\nTotal: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}")
         sb.toString
@@ -165,6 +177,14 @@ tr:hover { background: #e8f4fd; }
         cpuWidth: Int
     ): String = {
         s"${col1.padTo(col1Width, ' ')}  ${count.reverse.padTo(countWidth, ' ').reverse}  ${mem.reverse.padTo(memWidth, ' ').reverse}  ${cpu.reverse.padTo(cpuWidth, ' ').reverse}"
+    }
+
+    /** Shorten file path to just the filename without extension. */
+    private def shortFile(path: String): String = {
+        val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+        val name = if sep >= 0 then path.substring(sep + 1) else path
+        val dot = name.lastIndexOf('.')
+        if dot > 0 then name.substring(0, dot) else name
     }
 
     private def escapeHtml(s: String): String =

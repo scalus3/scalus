@@ -891,6 +891,10 @@ class CekMachine(
         private val byLocation = HashMap[(String, Int), Array[Long]]()
         // Use ordinal-indexed array for builtins — no toString per step
         private val byFunction = new Array[Array[Long]](DefaultFun.values.length)
+        // Transition counts: (fromFile, fromLine, toFile, toLine) → count
+        private val transitions = HashMap[(String, Int, String, Int), Long]()
+        private var prevFile: String = ""
+        private var prevLine: Int = 0
 
         def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
             wrapped.spendBudget(cat, budget, env)
@@ -898,11 +902,22 @@ class CekMachine(
             val steps = budget.steps
             val pos = lastSourcePos
             if !pos.isEmpty then
-                val key = (pos.file, pos.startLine + 1)
+                val file = pos.file
+                val line = pos.startLine + 1
+                val key = (file, line)
                 val arr = byLocation.getOrElseUpdate(key, new Array[Long](3))
                 arr(0) += mem
                 arr(1) += steps
                 arr(2) += 1
+                // Track transitions between source locations
+                if prevFile.nonEmpty && (file ne prevFile) || line != prevLine then
+                    val tkey = (prevFile, prevLine, file, line)
+                    transitions.updateWith(tkey) {
+                        case Some(c) => Some(c + 1)
+                        case None    => Some(1)
+                    }
+                prevFile = file
+                prevLine = line
             cat match
                 case ExBudgetCategory.BuiltinApp(bi) =>
                     val idx = bi.ordinal
@@ -938,7 +953,14 @@ class CekMachine(
                 buf.toSeq.sortBy(e => (-e.memory, -e.cpu))
             }
 
-            ProfilingData(locations, functions, wrapped.getSpentBudget)
+            val transitionSeq = transitions.iterator
+                .map { case ((fromFile, fromLine, toFile, toLine), count) =>
+                    SourceTransition(fromFile, fromLine, toFile, toLine, count)
+                }
+                .toSeq
+                .sortBy(-_.count)
+
+            ProfilingData(locations, functions, transitionSeq, wrapped.getSpentBudget)
         }
     }
 

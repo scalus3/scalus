@@ -19,17 +19,30 @@ case class FunctionProfile(
     count: Long
 )
 
+/** Transition count between two source locations. */
+case class SourceTransition(
+    fromFile: String,
+    fromLine: Int,
+    toFile: String,
+    toLine: Int,
+    count: Long
+)
+
 /** Aggregated profiling data from a CEK evaluation.
   *
   * @param bySourceLocation
   *   Budget accumulated by source location (file:line), sorted by (mem, cpu) descending
   * @param byFunction
   *   Budget accumulated by function name, sorted by (mem, cpu) descending
+  * @param transitions
+  *   Execution flow: how many times control transitioned from one source location to another,
+  *   sorted by count descending
   * @param totalBudget
   *   Total budget spent during profiled execution
   */
 case class ProfilingData(
     bySourceLocation: Seq[SourceLocationProfile],
     byFunction: Seq[FunctionProfile],
+    transitions: Seq[SourceTransition],
     totalBudget: ExUnits
 )
