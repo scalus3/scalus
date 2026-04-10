@@ -304,7 +304,7 @@ object KnightsTest:
     given Eq[Tile] = Eq.derived
     given Ord[Tile] = (lhs: Tile, rhs: Tile) => (lhs.x <=> rhs.x) ifEqualThen (lhs.y <=> rhs.y)
 
-    extension (self: Tile)
+    extension (@UplcRepr(UplcRepresentation.UplcConstr) self: Tile)
         def move(direction: Direction): Tile =
             import Direction.*
             direction match
@@ -352,8 +352,8 @@ object KnightsTest:
     given Eq[ChessSet] = Eq.derived
     given Ord[ChessSet] = (lhs: ChessSet, rhs: ChessSet) => lhs.visited <=> rhs.visited
 
-    extension (self: ChessSet)
-        def addPiece(tile: Tile): ChessSet = ChessSet(
+    extension (@UplcRepr(UplcRepresentation.UplcConstr) self: ChessSet)
+        def addPiece(@UplcRepr(UplcRepresentation.UplcConstr) tile: Tile): ChessSet = ChessSet(
           size = self.size,
           moveNumber = self.moveNumber + 1,
           start = self.start,
@@ -384,9 +384,10 @@ object KnightsTest:
               visited = newVisited
             )
 
-        def isSquareFree(tile: Tile): Boolean = !self.visited.contains(tile)
+        def isSquareFree(@UplcRepr(UplcRepresentation.UplcConstr) tile: Tile): Boolean =
+            !self.visited.contains(tile)
 
-        def canMoveTo(tile: Tile): Boolean =
+        def canMoveTo(@UplcRepr(UplcRepresentation.UplcConstr) tile: Tile): Boolean =
             tile.x >= 1 && tile.x <= self.size && tile.y >= 1 && tile.y <= self.size && isSquareFree(
               tile
             )
@@ -436,9 +437,10 @@ object KnightsTest:
 
     end extension
 
-    def isDone(item: SolutionEntry): Boolean = item.board.isTourFinished
+    def isDone(@UplcRepr(UplcRepresentation.UplcConstr) item: SolutionEntry): Boolean =
+        item.board.isTourFinished
 
-    def grow(item: SolutionEntry): List[SolutionEntry] =
+    def grow(@UplcRepr(UplcRepresentation.UplcConstr) item: SolutionEntry): List[SolutionEntry] =
         item.board.descendants.map { board => SolutionEntry(item.depth + 1, board) }
 
     def makeStarts(size: BigInt): List[SolutionEntry] =

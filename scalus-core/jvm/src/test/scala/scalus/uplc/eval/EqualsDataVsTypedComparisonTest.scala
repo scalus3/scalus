@@ -294,6 +294,51 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
     }
 
+    test("pack+equalsData vs Case+equalsInteger for 2-field UplcConstr type") {
+        // Compare cost of two approaches for comparing UplcConstr values:
+        //   1. Pack to Data (ConstrData + IData per field) then equalsData
+        //   2. Case extract fields + equalsInteger per field
+        // Input: Constr(0, [raw_int, raw_int]) — UplcConstr Tile with 2 BigInt fields
+        val packAndEqualsData = PlutusV3.compile { (d1: Data, d2: Data) =>
+            // Simulate UplcConstr→Data packing + equalsData
+            val p1 = unConstrData(d1)
+            val p2 = unConstrData(d2)
+            val f1 = sndPair(p1)
+            val f2 = sndPair(p2)
+            val packed1 = constrData(
+              fstPair(p1),
+              mkCons(
+                iData(unIData(headList(f1))),
+                mkCons(iData(unIData(headList(tailList(f1)))), mkNilData())
+              )
+            )
+            val packed2 = constrData(
+              fstPair(p2),
+              mkCons(
+                iData(unIData(headList(f2))),
+                mkCons(iData(unIData(headList(tailList(f2)))), mkNilData())
+              )
+            )
+            equalsData(packed1, packed2)
+        }
+        val nativeFieldEq = PlutusV3.compile { (d1: Data, d2: Data) =>
+            // Native field comparison: extract fields, compare with equalsInteger
+            val p1 = unConstrData(d1)
+            val p2 = unConstrData(d2)
+            val f1 = sndPair(p1)
+            val f2 = sndPair(p2)
+            equalsInteger(unIData(headList(f1)), unIData(headList(f2)))
+            && equalsInteger(unIData(headList(tailList(f1))), unIData(headList(tailList(f2))))
+        }
+        val d = constrData(BigInt(0), mkCons(iData(42), mkCons(iData(7), mkNilData())))
+        val packBudget = (packAndEqualsData.program $ d $ d).evaluateDebug.budget
+        val nativeBudget = (nativeFieldEq.program $ d $ d).evaluateDebug.budget
+        val packSize = packAndEqualsData.program.cborEncoded.length
+        val nativeSize = nativeFieldEq.program.cborEncoded.length
+        info(formatLine("pack+equalsData", packBudget, packSize))
+        info(formatLine("field-by-field", nativeBudget, nativeSize))
+    }
+
     test("forAll (TxOutRef, Address): === vs equalsData") {
         import scalus.cardano.onchain.plutus.v3.ArbitraryInstances.given
         val eqData = PlutusV3.compile { (d1: Data, d2: Data) => equalsData(d1, d2) }

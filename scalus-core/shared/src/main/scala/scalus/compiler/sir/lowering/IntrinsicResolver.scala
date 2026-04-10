@@ -256,10 +256,14 @@ object IntrinsicResolver {
                                     // For UplcConstr list intrinsics, temporarily swap policy
                                     // so List constructors (Cons/Nil) produce Constr terms
                                     val savedPolicy = lctx.uplcGeneratorPolicy
+                                    val savedUnifyEnv = lctx.typeUnifyEnv
                                     if reprNames.contains(UplcConstrListRepr) then
                                         lctx.uplcGeneratorPolicy = uplcConstrListPolicy
+                                        bindElementTypeVars(binding, argSir.tp, lctx)
                                     try Lowering.lowerSIR(substituted, Some(appType))
-                                    finally lctx.uplcGeneratorPolicy = savedPolicy
+                                    finally
+                                        lctx.uplcGeneratorPolicy = savedPolicy
+                                        lctx.typeUnifyEnv = savedUnifyEnv
                                 } finally lctx.precomputedValues.remove(argSir)
                             // Apply repr rule to set correct output representation
                             bestReprRules.get(methodName) match
@@ -419,6 +423,43 @@ object IntrinsicResolver {
                 SIR.Error(goExpr(msg, locals), anns, cause)
 
         go(sir, Set.empty)
+    }
+
+    /** Bind intrinsic TypeVars to Annotated(elementType, UplcConstr) in the unify env.
+      *
+      * This lets equalsRepr inside the intrinsic body resolve TypeVars to Annotated types, enabling
+      * field-by-field comparison instead of pack+equalsData fallback.
+      */
+    private def bindElementTypeVars(
+        binding: Binding,
+        listType: SIRType,
+        lctx: LoweringContext
+    ): Unit = {
+        val elemType = SumCaseClassRepresentation.SumBuiltinList
+            .retrieveListElementType(listType)
+            .getOrElse(return)
+        // Collect TypeVars from the intrinsic binding's type
+        val typeVars = scala.collection.mutable.Set.empty[SIRType.TypeVar]
+        SIRType.mapTypeVars(binding.tp, tv => { typeVars += tv; tv })
+        // Annotate element type with UplcConstr repr
+        val annotatedElemType = SIRType.Annotated(
+          elemType,
+          AnnotationsDecl(
+            SIRPosition.empty,
+            None,
+            Map(
+              "uplcRepr" -> SIR.Const(
+                scalus.uplc.Constant.String("UplcConstr"),
+                SIRType.String,
+                AnnotationsDecl.empty
+              )
+            )
+          )
+        )
+        val newFilledTypes = typeVars.foldLeft(lctx.typeUnifyEnv.filledTypes) { (acc, tv) =>
+            acc + (tv -> annotatedElemType)
+        }
+        lctx.typeUnifyEnv = lctx.typeUnifyEnv.copy(filledTypes = newFilledTypes)
     }
 
     /** UplcConstr list policy: for List types with Transparent TypeVar elements, use SumUplcConstr

@@ -546,16 +546,24 @@ object Lowering {
         case SIR.ExternalVar(_, name, _, _) => name == ToDefaultTypeVarReprName
         case _                              => false
 
-    /** Check if this is equalsRepr(a, b) — the outer Apply of curried application. */
-    private def isEqualsReprApp(app: SIR.Apply): Boolean = app.f match
-        case SIR.Apply(f2, _, _, _) =>
-            f2 match
-                case SIR.ExternalVar(_, name, _, _) => name == EqualsReprName
-                case SIR.Var(name, _, _)            => name == EqualsReprName
-                case _                              => false
-        case _ => false
+    /** Check if this is equalsRepr(a, b) — the outer Apply of curried application. Handles both
+      * `Apply(Apply(ExternalVar, a), b)` and `Apply(Apply(TypeApply(ExternalVar, A), a), b)` (when
+      * type parameter is present).
+      */
+    private def isEqualsReprApp(app: SIR.Apply): Boolean = {
+        def isEqualsReprRef(sir: SIR): Boolean = sir match
+            case SIR.ExternalVar(_, name, _, _) => name == EqualsReprName
+            case SIR.Var(name, _, _)            => name == EqualsReprName
+            case _                              => false
+        app.f match
+            case SIR.Apply(f2, _, _, _) =>
+                isEqualsReprRef(f2) || (f2 match
+                    case SIR.Apply(f3, _, _, _) => isEqualsReprRef(f3)
+                    case _                      => false)
+            case _ => false
+    }
 
-    /** Lower equalsRepr(a, b) — generate repr-specific equality. */
+    /** Lower equalsRepr(a, b) — convert to Data and use equalsData. */
     private def lowerEqualsRepr(
         app: SIR.Apply
     )(using lctx: LoweringContext): LoweredValue = {
@@ -660,55 +668,75 @@ object Lowering {
         generateEqualsForRepr(lhs, rhs, pos)
     }
 
-    /** Generate repr-specific equality comparison. */
+    /** Generate repr-specific equality comparison.
+      *
+      * Dispatches based on resolved type and representation:
+      *   - Primitives (Integer, ByteString, String): specialized builtins
+      *   - BLS curve elements: bls12_381_G1/G2_equal
+      *   - BLS MlResult, Fun: compile error (no equality)
+      *   - @UplcRepr(UplcConstr) products: field-by-field with genSelect
+      *   - @UplcRepr(UplcConstr) sums: TODO
+      *   - Everything else: convert to Data, equalsData
+      */
     private def generateEqualsForRepr(
         lhs: LoweredValue,
         rhs: LoweredValue,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        lhs.sirType match
+        // Resolve TypeVar to concrete type for dispatch
+        val resolvedType = lhs.sirType match
+            case tv: SIRType.TypeVar =>
+                lctx.tryResolveTypeVar(tv).getOrElse(tv)
+            case other => other
+        resolvedType match
             case SIRType.Integer =>
-                val xc = lhs.toRepresentation(PrimitiveRepresentation.Constant, pos)
-                val yc = rhs.toRepresentation(PrimitiveRepresentation.Constant, pos)
-                lvBuiltinApply2(
-                  SIRBuiltins.equalsInteger,
-                  xc,
-                  yc,
-                  SIRType.Boolean,
-                  PrimitiveRepresentation.Constant,
-                  pos
-                )
+                generatePrimitiveEquals(SIRBuiltins.equalsInteger, lhs, rhs, pos)
             case SIRType.ByteString =>
-                val xc = lhs.toRepresentation(PrimitiveRepresentation.Constant, pos)
-                val yc = rhs.toRepresentation(PrimitiveRepresentation.Constant, pos)
-                lvBuiltinApply2(
-                  SIRBuiltins.equalsByteString,
-                  xc,
-                  yc,
-                  SIRType.Boolean,
-                  PrimitiveRepresentation.Constant,
-                  pos
-                )
+                generatePrimitiveEquals(SIRBuiltins.equalsByteString, lhs, rhs, pos)
             case SIRType.String =>
-                val xc = lhs.toRepresentation(PrimitiveRepresentation.Constant, pos)
-                val yc = rhs.toRepresentation(PrimitiveRepresentation.Constant, pos)
-                lvBuiltinApply2(
-                  SIRBuiltins.equalsString,
-                  xc,
-                  yc,
-                  SIRType.Boolean,
-                  PrimitiveRepresentation.Constant,
+                generatePrimitiveEquals(SIRBuiltins.equalsString, lhs, rhs, pos)
+            case SIRType.BLS12_381_G1_Element =>
+                generatePrimitiveEquals(SIRBuiltins.bls12_381_G1_equal, lhs, rhs, pos)
+            case SIRType.BLS12_381_G2_Element =>
+                generatePrimitiveEquals(SIRBuiltins.bls12_381_G2_equal, lhs, rhs, pos)
+            case SIRType.BLS12_381_MlResult =>
+                ??? // MlResult has finalVerify but not clear if it should be used for Eq
+            case SIRType.Fun(_, _) =>
+                throw LoweringException(
+                  "Equality is not defined for function types",
                   pos
                 )
-            case _ =>
-                // Dispatch on representation
-                lhs.representation match
-                    case prod: ProductCaseClassRepresentation.ProdUplcConstr =>
-                        // ProdUplcConstr: extract fields via genSelect, compare recursively
-                        generateProdUplcConstrEquals(lhs, rhs, pos)
-                    case _ =>
-                        // General case: convert both to Data and use equalsData
+            case SIRType.Annotated(innerType, anns) =>
+                anns.data.get("uplcRepr") match
+                    case Some(reprSir) =>
+                        val repr = typegens.SirTypeUplcGenerator
+                            .resolveReprAnnotation(reprSir, innerType)
+                        repr match
+                            case _: ProductCaseClassRepresentation.ProdUplcConstr =>
+                                generateProdUplcConstrEquals(lhs, rhs, innerType, pos)
+                            case _: SumCaseClassRepresentation.SumUplcConstr =>
+                                ??? // TODO: sum UplcConstr equality
+                            case _ =>
+                                generateDataEquals(lhs, rhs, pos)
+                    case None =>
                         generateDataEquals(lhs, rhs, pos)
+            case _ =>
+                lhs.representation match
+                    case _: ProductCaseClassRepresentation.ProdUplcConstr =>
+                        generateProdUplcConstrEquals(lhs, rhs, lhs.sirType, pos)
+                    case _ =>
+                        generateDataEquals(lhs, rhs, pos)
+    }
+
+    private def generatePrimitiveEquals(
+        builtin: SIR.Builtin,
+        lhs: LoweredValue,
+        rhs: LoweredValue,
+        pos: SIRPosition
+    )(using LoweringContext): LoweredValue = {
+        val xc = lhs.toRepresentation(PrimitiveRepresentation.Constant, pos)
+        val yc = rhs.toRepresentation(PrimitiveRepresentation.Constant, pos)
+        lvBuiltinApply2(builtin, xc, yc, SIRType.Boolean, PrimitiveRepresentation.Constant, pos)
     }
 
     /** Generate equalsData after converting both values to their Data representation. */
@@ -735,22 +763,27 @@ object Lowering {
 
     /** Generate Case-based field comparison for ProdUplcConstr values. Each field is extracted via
       * genSelect and compared recursively.
+      *
+      * @param knownType
+      *   concrete type for field extraction (may differ from lhs.sirType when lhs has TypeVar type
+      *   but the concrete type is known from annotation)
       */
     private def generateProdUplcConstrEquals(
         lhs: LoweredValue,
         rhs: LoweredValue,
+        knownType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val constrDecl = typegens.ProductCaseSirTypeGenerator.retrieveConstrDecl(lhs.sirType, pos)
+        val constrDecl = typegens.ProductCaseSirTypeGenerator.retrieveConstrDecl(knownType, pos)
         val fields = constrDecl.params
         if fields.isEmpty then
             // No fields: always equal (same type, same tag)
             lvBoolConstant(true, pos)
         else
-            val gen = lctx.typeGenerator(lhs.sirType)
+            val gen = lctx.typeGenerator(knownType)
             val fieldComparisons = fields.map { param =>
                 val sel = SIR.Select(
-                  SIR.Var("_eq_lhs", lhs.sirType, AnnotationsDecl(pos)),
+                  SIR.Var("_eq_lhs", knownType, AnnotationsDecl(pos)),
                   param.name,
                   lctx.resolveTypeVarIfNeeded(param.tp),
                   AnnotationsDecl(pos)
