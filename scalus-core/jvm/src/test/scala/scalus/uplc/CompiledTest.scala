@@ -34,16 +34,46 @@ class CompiledTest extends AnyFunSuite {
         assert(dataToBigInt(3.toData).code == BigInt(3))
     }
 
-    test("PlutusV1 should produce correct script hash prefix") {
-        assert(PlutusV1.alwaysOk.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV1])
+    test("PlutusV1 should produce correct script hash") {
+        val alwaysOk = PlutusV1.alwaysOk
+        assert(
+          alwaysOk.script.scriptHash.toHex == "fc61e623d413aa67dc9367e8e48f5ab7f38093e871af6d9dd27b717e"
+        )
+        val expected = Program
+            .parseUplc("(program 1.0.0 (lam x (lam y (lam z (con unit ())))))")
+            .toOption
+            .get
+            .deBruijnedProgram
+            .term
+        assert(alwaysOk.program.deBruijnedProgram.term α_== expected)
     }
 
-    test("PlutusV2 should produce correct script hash prefix") {
-        assert(PlutusV2.alwaysOk.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV2])
+    test("PlutusV2 should produce correct script hash") {
+        val alwaysOk = PlutusV2.alwaysOk
+        assert(
+          alwaysOk.script.scriptHash.toHex == "52c6af0c9b744b4eecce838538a52ceb155038b3de68e2bb2fa8fc37"
+        )
+        val expected = Program
+            .parseUplc("(program 1.0.0 (lam x (lam y (lam z (con unit ())))))")
+            .toOption
+            .get
+            .deBruijnedProgram
+            .term
+        assert(alwaysOk.program.deBruijnedProgram.term α_== expected)
     }
 
-    test("PlutusV3 should produce correct script hash prefix") {
-        assert(PlutusV3.alwaysOk.script.isInstanceOf[scalus.cardano.ledger.Script.PlutusV3])
+    test("PlutusV3 should produce correct script hash") {
+        val alwaysOk = PlutusV3.alwaysOk
+        assert(
+          alwaysOk.script.scriptHash.toHex == "186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4"
+        )
+        val expected = Program
+            .parseUplc("(program 1.1.0 (lam x (con unit ())))")
+            .toOption
+            .get
+            .deBruijnedProgram
+            .term
+        assert(alwaysOk.program.deBruijnedProgram.term α_== expected)
     }
 
     test("withErrorTraces should work for all versions") {
