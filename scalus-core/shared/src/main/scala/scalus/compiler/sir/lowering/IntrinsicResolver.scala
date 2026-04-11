@@ -1,7 +1,9 @@
 package scalus.compiler.sir.lowering
 
+import org.typelevel.paiges.Doc
 import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.typegens.*
+import scalus.uplc.Term
 
 /** Resolves intrinsic implementations for method calls based on argument representation and
   * protocol version.
@@ -270,13 +272,44 @@ object IntrinsicResolver {
                                 case Some(rule) =>
                                     val outputRepr =
                                         rule(appType, effectiveArg.representation, lctx)
-                                    if lowered.representation == outputRepr then lowered
+                                    // Propagate @UplcRepr annotation from input to output sirType
+                                    // when the output is the same list type (sameListRule).
+                                    // This ensures typeGenerator(sirType) returns the correct
+                                    // generator when the result is used in toRepresentation.
+                                    // Annotate the final return position (walking through Fun types)
+                                    def annotateReturnType(
+                                        tp: SIRType,
+                                        anns: AnnotationsDecl
+                                    ): SIRType = tp match
+                                        case SIRType.Fun(arg, ret) =>
+                                            SIRType.Fun(arg, annotateReturnType(ret, anns))
+                                        case t if SIRType.isSum(t) =>
+                                            SIRType.Annotated(t, anns)
+                                        case _ => tp
+                                    val outputSirType = effectiveArg.sirType match
+                                        case SIRType.Annotated(_, anns)
+                                            if anns.data.contains("uplcRepr") =>
+                                            annotateReturnType(lowered.sirType, anns)
+                                        case _ => lowered.sirType
+                                    if lowered.representation == outputRepr
+                                        && outputSirType == lowered.sirType
+                                    then lowered
                                     else
-                                        RepresentationProxyLoweredValue(
+                                        new BaseRepresentationProxyLoweredValue(
                                           lowered,
                                           outputRepr,
                                           pos
-                                        )
+                                        ) {
+                                            override def sirType: SIRType = outputSirType
+                                            override def termInternal(
+                                                gctx: TermGenerationContext
+                                            ): Term =
+                                                lowered.termInternal(gctx)
+                                            override def docDef(
+                                                ctx: LoweredValue.PrettyPrintingContext
+                                            ): Doc =
+                                                lowered.docRef(ctx)
+                                        }
                                 case None => lowered
                         }
     }
