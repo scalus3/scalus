@@ -43,8 +43,16 @@ sealed abstract class CompiledPlutus[A](
     /** The Plutus language version (V1, V2, V3, etc.). */
     def language: Language
 
-    /** The compiled UPLC program. Lazily computed on first access. */
-    @threadUnsafe lazy val program: Program = makeProgram(toUplc)
+    /** The compiled UPLC program. Lazily computed on first access.
+      *
+      * If `options.addScalusTag` is set, the term is wrapped in the [[ScalusTag]] marker after
+      * optimization (so the UPLC optimizer cannot eliminate the tag as dead code).
+      */
+    @threadUnsafe lazy val program: Program = {
+        val term = toUplc
+        val tagged = if options.addScalusTag then ScalusTag.wrap(term) else term
+        makeProgram(tagged)
+    }
 
     /** The Plutus script in its serialized form. Lazily computed on first access. */
     @threadUnsafe lazy val script: PlutusScript = makeScript(program)
@@ -206,7 +214,7 @@ object PlutusV1 {
       *   passed
       */
     def alwaysOk: PlutusV1[Data => Data => Data => Unit] =
-        compile((_: Data) => (_: Data) => (_: Data) => ())(using Options.release)
+        compile((_: Data) => (_: Data) => (_: Data) => ())(using Options.releaseUntagged)
 
     /** Extension methods for applying arguments to compiled Plutus V1 functions.
       *
@@ -328,7 +336,7 @@ object PlutusV2 {
       *   passed
       */
     def alwaysOk: PlutusV2[Data => Data => Data => Unit] =
-        compile((_: Data) => (_: Data) => (_: Data) => ())(using Options.release)
+        compile((_: Data) => (_: Data) => (_: Data) => ())(using Options.releaseUntagged)
 
     /** Extension methods for applying arguments to compiled Plutus V2 functions.
       *
@@ -463,7 +471,7 @@ object PlutusV3 {
       *   the simplest script that always succeeds regardless of the
       *   [[scalus.cardano.onchain.plutus.ScriptContext]] passed
       */
-    def alwaysOk: PlutusV3[Data => Unit] = compile((_: Data) => ())(using Options.release)
+    def alwaysOk: PlutusV3[Data => Unit] = compile((_: Data) => ())(using Options.releaseUntagged)
 
     /** Extension methods for applying arguments to compiled Plutus V3 functions.
       *

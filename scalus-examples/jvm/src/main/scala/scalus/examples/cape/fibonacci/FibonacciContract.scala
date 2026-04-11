@@ -11,7 +11,7 @@ import java.nio.file.Files
 import java.time.Instant
 
 object FibonacciContract {
-    private given Options = Options.release
+    private given Options = Options.releaseUntagged
 
     lazy val baseCompiled = PlutusV3.compile(FibonacciBase.fibonacci)
     lazy val baseProgram: Program = baseCompiled.program

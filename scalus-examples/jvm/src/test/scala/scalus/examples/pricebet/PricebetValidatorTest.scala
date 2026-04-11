@@ -57,7 +57,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         assert(
           joinResult.budget == (if Options.default.nativeListElements then
                                     ExUnits(memory = 283109, steps = 83600763L)
-                                else ExUnits(memory = 201861, steps = 59_690684))
+                                else ExUnits(memory = 202161, steps = 59_738684))
         )
     }
 
@@ -135,7 +135,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         assert(
           winResult.budget == (if Options.default.nativeListElements then
                                    ExUnits(memory = 138020, steps = 45445020L)
-                               else ExUnits(memory = 115856, steps = 37_597425))
+                               else ExUnits(memory = 116156, steps = 37_645425))
         )
     }
 
@@ -198,7 +198,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         assert(
           timeoutResult.budget == (if Options.default.nativeListElements then
                                        ExUnits(memory = 82541, steps = 25822388L)
-                                   else ExUnits(memory = 62393, steps = 19_311376))
+                                   else ExUnits(memory = 62693, steps = 19_359376))
         )
     }
 
@@ -244,7 +244,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         assert(
           updateResult.budget == (if Options.default.nativeListElements then
                                       ExUnits(memory = 127289, steps = 40543315L)
-                                  else ExUnits(memory = 108173, steps = 34_335685))
+                                  else ExUnits(memory = 108473, steps = 34_383685))
         )
     }
 

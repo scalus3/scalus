@@ -9,7 +9,7 @@ import java.nio.file.Files
 import java.time.Instant
 
 object TwoPartyEscrowContract {
-    private given Options = Options.release
+    private given Options = Options.releaseUntagged
     lazy val compiled = PlutusV3.compile(TwoPartyEscrowValidator.validate)
 
     @main def compileTwoPartyEscrow(): Unit = {

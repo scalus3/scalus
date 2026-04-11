@@ -17,8 +17,19 @@ case class Options(
     cceEnabled: Boolean = false,
     debugLevel: Int = SIRDefaultOptions.debugLevel,
     debug: Boolean = false,
-    nativeListElements: Boolean = false
-)
+    nativeListElements: Boolean = false,
+    /** When true, wraps the compiled UPLC program in `[(lam _ body) (con string "S")]` so offchain
+      * tooling can identify the script as Scalus-generated. Adds ~6 bytes to the serialized script.
+      * Enabling or disabling this changes the script hash, so do not toggle for an already-deployed
+      * contract.
+      */
+    addScalusTag: Boolean = false
+) {
+
+    /** Returns a copy with `addScalusTag` set to `enable`. */
+    def withScalusTag(enable: Boolean = true): Options =
+        copy(addScalusTag = enable)
+}
 
 object Options {
     val default: Options = Options()
@@ -35,8 +46,15 @@ object Options {
       generateErrorTraces = false,
       removeTraces = true,
       optimizeUplc = true,
-      debug = false
+      debug = false,
+      addScalusTag = true
     )
+
+    /** Same as [[release]] but without the Scalus identification tag. Use this when byte-for-byte
+      * output stability matters — e.g. pinned script hashes in tests, or existing deployed
+      * contracts being recompiled for verification.
+      */
+    val releaseUntagged: Options = release.withScalusTag(false)
 
     /** Preset for van Rossem hard fork (protocol version 11) features. Enables case-on-builtins,
       * batch6 builtins, and dropList field access.

@@ -292,7 +292,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 620109, steps = 185630610L)
-                            else ExUnits(memory = 321497, steps = 96_325066))
+                            else ExUnits(memory = 321797, steps = 96_373066))
         )
 
         provider.setSlot(beforeSlot - 1)
@@ -519,7 +519,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 478661, steps = 144493410L)
-                            else ExUnits(memory = 205581, steps = 63_261292))
+                            else ExUnits(memory = 205881, steps = 63_309292))
         )
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
