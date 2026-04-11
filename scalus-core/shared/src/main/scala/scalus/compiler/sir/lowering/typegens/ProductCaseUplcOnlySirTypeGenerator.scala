@@ -88,8 +88,6 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
         val rawFieldType = lctx.resolveTypeVarIfNeeded(constrDecl.params(fieldIndex).tp)
         val fieldRepr = puc.fieldReprs(fieldIndex)
-        // Preserve field-level @UplcRepr annotation in the sirType so that
-        // typeGenerator(sirType) returns the correct generator for toRepresentation.
         val fieldParam = constrDecl.params(fieldIndex)
         val fieldType =
             if fieldParam.annotations.data.contains("uplcRepr") then

@@ -19,15 +19,6 @@ sealed trait LoweredValueRepresentation {
     def doc: Doc = Doc.text(this.toString)
     def show = doc.render(80)
 
-    /** Proxy-aware structural compatibility. Unlike `==`, treats SumReprProxy instances as
-      * equivalent and uses `isCompatibleOn` semantics (e.g., TypeVarRepresentation(Transparent) is
-      * compatible with any concrete repr).
-      */
-    final def structurallyCompatible(other: LoweredValueRepresentation)(using
-        LoweringContext
-    ): Boolean =
-        LoweredValueRepresentation.structurallyCompatible(this, other)
-
     /** The SIR type that values actually have at the UPLC level for this representation.
       *
       * @param semanticType
@@ -51,52 +42,6 @@ sealed trait LoweredValueRepresentation {
 }
 
 object LoweredValueRepresentation {
-
-    /** Proxy-aware structural compatibility for representations.
-      *
-      * Unlike `==`, handles:
-      *   - SumReprProxy: all instances are equivalent (recursive self-references)
-      *   - TypeVarRepresentation(Transparent): compatible with any concrete repr
-      *   - Recurses into ProdUplcConstr/SumUplcConstr field-by-field
-      */
-    def structurallyCompatible(
-        a: LoweredValueRepresentation,
-        b: LoweredValueRepresentation
-    )(using LoweringContext): Boolean =
-        if a eq b then true
-        else if a == b then true
-        else
-            (a, b) match
-                // SumReprProxy: recursive self-references are always compatible
-                case (
-                      _: SumCaseClassRepresentation.SumReprProxy,
-                      _: SumCaseClassRepresentation.SumReprProxy
-                    ) =>
-                    true
-                // Transparent TypeVars are compatible with anything
-                case (TypeVarRepresentation(SIRType.TypeVarKind.Transparent), _) => true
-                case (_, TypeVarRepresentation(SIRType.TypeVarKind.Transparent)) => true
-                // ProdUplcConstr: compare tag + fields recursively
-                case (
-                      ProductCaseClassRepresentation.ProdUplcConstr(tagA, fieldsA),
-                      ProductCaseClassRepresentation.ProdUplcConstr(tagB, fieldsB)
-                    ) =>
-                    tagA == tagB && fieldsA.size == fieldsB.size &&
-                    fieldsA
-                        .zip(fieldsB)
-                        .forall((fa, fb) => structurallyCompatible(fa, fb))
-                // SumUplcConstr: compare variants recursively
-                case (
-                      SumCaseClassRepresentation.SumUplcConstr(variantsA),
-                      SumCaseClassRepresentation.SumUplcConstr(variantsB)
-                    ) =>
-                    variantsA.size == variantsB.size &&
-                    variantsA.forall { (tag, prodA) =>
-                        variantsB
-                            .get(tag)
-                            .exists(prodB => structurallyCompatible(prodA, prodB))
-                    }
-                case _ => false
 
     def constRepresentation(tp: SIRType)(using lc: LoweringContext): LoweredValueRepresentation = {
         tp match
@@ -330,6 +275,10 @@ object SumCaseClassRepresentation {
                     typeArgs.headOption
                 case SIRType.TypeLambda(params, body) =>
                     retrieveListElementType(body)
+                case SIRType.Annotated(inner, _) =>
+                    retrieveListElementType(inner)
+                case SIRType.TypeProxy(ref) if ref != null =>
+                    retrieveListElementType(ref)
                 case _ =>
                     None
         }
@@ -526,19 +475,80 @@ object SumCaseClassRepresentation {
             tp: SIRType,
             repr: LoweredValueRepresentation,
             pos: SIRPosition
+        )(using lctx: LoweringContext): Boolean =
+            isCompatibleOnTracked(repr, Set.empty, pos)
+
+        /** Proxy-tracked compatibility check. The `seen` set tracks SumReprProxy instances already
+          * being compared to detect cycles in recursive types (e.g., List tail → List).
+          */
+        private[lowering] def isCompatibleOnTracked(
+            repr: LoweredValueRepresentation,
+            seen: Set[SumReprProxy],
+            pos: SIRPosition
         )(using lctx: LoweringContext): Boolean = repr match
-            case proxy: SumReprProxy => isCompatibleOn(tp, proxy.ref, pos)
+            case proxy: SumReprProxy =>
+                if seen.contains(proxy) then true // cycle — already comparing this proxy
+                else if proxy.ref != null then isCompatibleOnTracked(proxy.ref, seen + proxy, pos)
+                else true
             case other: SumUplcConstr =>
                 this == other || variants.forall { (tag, inProd) =>
                     other.variants.get(tag) match
                         case None => true
                         case Some(outProd) =>
-                            inProd.fieldReprs.size == outProd.fieldReprs.size &&
-                            inProd.fieldReprs.zip(outProd.fieldReprs).forall { (inR, outR) =>
-                                inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
-                            }
+                            SumUplcConstr.fieldsCompatibleTracked(
+                              inProd.fieldReprs,
+                              outProd.fieldReprs,
+                              seen,
+                              pos
+                            )
                 }
-            case other => this == other
+            case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
+            case other                                                  => this == other
+    }
+
+    object SumUplcConstr {
+
+        /** Compare field repr lists with proxy tracking. */
+        private[lowering] def fieldsCompatibleTracked(
+            inFields: scala.List[LoweredValueRepresentation],
+            outFields: scala.List[LoweredValueRepresentation],
+            seen: Set[SumReprProxy],
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
+            inFields.size == outFields.size &&
+                inFields.zip(outFields).forall { (inR, outR) =>
+                    (inR, outR) match
+                        case (a: SumUplcConstr, b) =>
+                            a.isCompatibleOnTracked(b, seen, pos)
+                        case (a: SumReprProxy, b: SumReprProxy) =>
+                            if seen.contains(a) || seen.contains(b) then true
+                            else if a.ref != null && b.ref != null then
+                                a.ref match
+                                    case aSum: SumUplcConstr =>
+                                        aSum.isCompatibleOnTracked(b.ref, seen + a + b, pos)
+                                    case _ => a.ref == b.ref
+                            else true
+                        case (a: SumReprProxy, b) =>
+                            if seen.contains(a) then true
+                            else if a.ref != null then
+                                a.ref match
+                                    case aSum: SumUplcConstr =>
+                                        aSum.isCompatibleOnTracked(b, seen + a, pos)
+                                    case _ => a.ref.isCompatibleOn(SIRType.FreeUnificator, b, pos)
+                            else true
+                        case (a, b: SumReprProxy) =>
+                            if seen.contains(b) then true
+                            else if b.ref != null then
+                                a.isCompatibleOn(SIRType.FreeUnificator, b.ref, pos)
+                            else true
+                        case (
+                              ProductCaseClassRepresentation.ProdUplcConstr(tagA, fieldsA),
+                              ProductCaseClassRepresentation.ProdUplcConstr(tagB, fieldsB)
+                            ) =>
+                            tagA == tagB && fieldsCompatibleTracked(fieldsA, fieldsB, seen, pos)
+                        case _ =>
+                            inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
+                }
     }
 
     /** Mutable proxy for self-referential sum representations. Like TypeProxy for SIRType — allows
@@ -744,14 +754,25 @@ object ProductCaseClassRepresentation {
             repr: LoweredValueRepresentation,
             pos: SIRPosition
         )(using LoweringContext): Boolean =
+            isCompatibleOnTracked(repr, Set.empty, pos)
+
+        private[lowering] def isCompatibleOnTracked(
+            repr: LoweredValueRepresentation,
+            seen: Set[SumCaseClassRepresentation.SumReprProxy],
+            pos: SIRPosition
+        )(using LoweringContext): Boolean =
             repr match {
                 case ProdUplcConstr(otherTag, otherFieldReprs) =>
-                    tag == otherTag && fieldReprs.size == otherFieldReprs.size &&
-                    fieldReprs.zip(otherFieldReprs).forall { (mine, other) =>
-                        mine.isCompatibleOn(SIRType.FreeUnificator, other, pos)
-                    }
-                case tvr: TypeVarRepresentation => tvr.isBuiltin
-                case _                          => false
+                    tag == otherTag &&
+                    SumCaseClassRepresentation.SumUplcConstr.fieldsCompatibleTracked(
+                      fieldReprs,
+                      otherFieldReprs,
+                      seen,
+                      pos
+                    )
+                case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
+                case tvr: TypeVarRepresentation                             => tvr.isBuiltin
+                case _                                                      => false
             }
     }
 

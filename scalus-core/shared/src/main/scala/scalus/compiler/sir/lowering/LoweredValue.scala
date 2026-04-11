@@ -347,7 +347,10 @@ class VariableLoweredValue(
     override def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(
         using lctx: LoweringContext
     ): LoweredValue = {
-        if this.representation.structurallyCompatible(representation) then this
+        if representation == this.representation then this
+        else if this.representation.isCompatibleOn(sirType, representation, pos) then
+            // Compatible but not identical — relabel without conversion
+            RepresentationProxyLoweredValue(this, representation, pos)
         else
             otherRepresentations.get(representation) match {
                 case Some(depVar) =>
@@ -456,8 +459,12 @@ case class DependendVariableLoweredValue(
     override def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(
         using LoweringContext
     ): LoweredValue = {
-        if this.representation.structurallyCompatible(representation) then this
-        else if parent.representation.structurallyCompatible(representation) then parent
+        if representation == this.representation then this
+        else if this.representation.isCompatibleOn(sirType, representation, pos) then
+            RepresentationProxyLoweredValue(this, representation, pos)
+        else if representation == parent.representation then parent
+        else if parent.representation.isCompatibleOn(sirType, representation, pos) then
+            RepresentationProxyLoweredValue(parent, representation, pos)
         else {
             parent.otherRepresentations.get(representation) match
                 case Some(depVar) =>
