@@ -47,8 +47,9 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         // intermediates with SumBuiltinList repr should go through SumBuiltinList handler directly.
         (input.representation, representation) match
             // Identity
-            case (a, b) if a == b                                  => input
-            case (a, b) if a.isCompatibleOn(input.sirType, b, pos) => input
+            case (a, b) if a == b => input
+            case (a, b) if a.isCompatibleOn(input.sirType, b, pos) =>
+                RepresentationProxyLoweredValue(input, representation, pos)
             // SumBuiltinList → DataConstr: listData(input) → PackedSumDataList → DataConstr
             case (
                   SumCaseClassRepresentation.SumBuiltinList(elemRepr),
