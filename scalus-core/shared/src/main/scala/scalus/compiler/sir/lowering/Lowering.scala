@@ -481,7 +481,7 @@ object Lowering {
                         case List(Binding(name, tp, rhs)) =>
                             lctx.zCombinatorNeeded = true
                             val rhsRepr =
-                                SirTypeUplcGenerator(rhs.tp).defaultRepresentation(tp)
+                                lctx.typeGenerator(rhs.tp).defaultRepresentation(tp)
                             val newVar = VariableLoweredValue(
                               id = lctx.uniqueVarName(name),
                               name = name,
