@@ -134,6 +134,9 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         outputRepresentation: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
+        if input.representation == outputRepresentation then return input
+        if input.representation.isCompatibleOn(input.sirType, outputRepresentation, pos) then
+            return RepresentationProxyLoweredValue(input, outputRepresentation, pos)
         (input.representation, outputRepresentation) match
             // === SumBuiltinList identity ===
             case (
