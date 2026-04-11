@@ -28,7 +28,7 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
     )
 
     val printComparison = true
-    val profilingEnabled = false
+    val profilingEnabled = true
 
     extension (term: scalus.uplc.Term)
         private def evalWithOptionalProfile(using PlutusVM): Result =

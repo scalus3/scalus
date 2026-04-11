@@ -19,6 +19,16 @@ case class FunctionProfile(
     count: Long
 )
 
+/** Which builtins are called from a given source location. */
+case class LocationFunctionProfile(
+    file: String,
+    line: Int,
+    functionName: String,
+    memory: Long,
+    cpu: Long,
+    count: Long
+)
+
 /** Transition count between two source locations. */
 case class SourceTransition(
     fromFile: String,
@@ -34,6 +44,8 @@ case class SourceTransition(
   *   Budget accumulated by source location (file:line), sorted by (mem, cpu) descending
   * @param byFunction
   *   Budget accumulated by function name, sorted by (mem, cpu) descending
+  * @param byLocationFunction
+  *   Builtins called from each source location, sorted by (mem, cpu) descending
   * @param transitions
   *   Execution flow: how many times control transitioned from one source location to another,
   *   sorted by count descending
@@ -43,6 +55,7 @@ case class SourceTransition(
 case class ProfilingData(
     bySourceLocation: Seq[SourceLocationProfile],
     byFunction: Seq[FunctionProfile],
+    byLocationFunction: Seq[LocationFunctionProfile],
     transitions: Seq[SourceTransition],
     totalBudget: ExUnits
 )

@@ -347,7 +347,7 @@ class VariableLoweredValue(
     override def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(
         using lctx: LoweringContext
     ): LoweredValue = {
-        if representation == this.representation then this
+        if this.representation.structurallyCompatible(representation) then this
         else
             otherRepresentations.get(representation) match {
                 case Some(depVar) =>
@@ -456,8 +456,8 @@ case class DependendVariableLoweredValue(
     override def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(
         using LoweringContext
     ): LoweredValue = {
-        if representation == this.representation then this
-        else if representation == parent.representation then parent
+        if this.representation.structurallyCompatible(representation) then this
+        else if parent.representation.structurallyCompatible(representation) then parent
         else {
             parent.otherRepresentations.get(representation) match
                 case Some(depVar) =>

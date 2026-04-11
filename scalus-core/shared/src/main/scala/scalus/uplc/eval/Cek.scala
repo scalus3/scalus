@@ -891,6 +891,8 @@ class CekMachine(
         private val byLocation = HashMap[(String, Int), Array[Long]]()
         // Use ordinal-indexed array for builtins — no toString per step
         private val byFunction = new Array[Array[Long]](DefaultFun.values.length)
+        // Per-location per-builtin: (file, line, builtinOrdinal) → [mem, cpu, count]
+        private val byLocationFunction = HashMap[(String, Int, Int), Array[Long]]()
         // Transition counts: (fromFile, fromLine, toFile, toLine) → count
         private val transitions = HashMap[(String, Int, String, Int), Long]()
         private var prevFile: String = ""
@@ -910,7 +912,7 @@ class CekMachine(
                 arr(1) += steps
                 arr(2) += 1
                 // Track transitions between source locations
-                if prevFile.nonEmpty && (file ne prevFile) || line != prevLine then
+                if prevFile.nonEmpty && ((file ne prevFile) || line != prevLine) then
                     val tkey = (prevFile, prevLine, file, line)
                     transitions.updateWith(tkey) {
                         case Some(c) => Some(c + 1)
@@ -928,6 +930,17 @@ class CekMachine(
                     arr(0) += mem
                     arr(1) += steps
                     arr(2) += 1
+                    // Track which builtins are called from which source locations.
+                    // Use last known position as fallback for generated code without annotations.
+                    val lfFile = if !pos.isEmpty then pos.file else prevFile
+                    val lfLine =
+                        if !pos.isEmpty then pos.startLine + 1 else prevLine
+                    if lfFile.nonEmpty then
+                        val lfKey = (lfFile, lfLine, idx)
+                        val lfArr = byLocationFunction.getOrElseUpdate(lfKey, new Array[Long](3))
+                        lfArr(0) += mem
+                        lfArr(1) += steps
+                        lfArr(2) += 1
                 case _ => ()
         }
 
@@ -953,6 +966,20 @@ class CekMachine(
                 buf.toSeq.sortBy(e => (-e.memory, -e.cpu))
             }
 
+            val builtinsByLocation = byLocationFunction.iterator
+                .map { case ((file, line, biIdx), arr) =>
+                    LocationFunctionProfile(
+                      file,
+                      line,
+                      builtinValues(biIdx).toString,
+                      arr(0),
+                      arr(1),
+                      arr(2)
+                    )
+                }
+                .toSeq
+                .sortBy(e => (-e.memory, -e.cpu))
+
             val transitionSeq = transitions.iterator
                 .map { case ((fromFile, fromLine, toFile, toLine), count) =>
                     SourceTransition(fromFile, fromLine, toFile, toLine, count)
@@ -960,7 +987,13 @@ class CekMachine(
                 .toSeq
                 .sortBy(-_.count)
 
-            ProfilingData(locations, functions, transitionSeq, wrapped.getSpentBudget)
+            ProfilingData(
+              locations,
+              functions,
+              builtinsByLocation,
+              transitionSeq,
+              wrapped.getSpentBudget
+            )
         }
     }
 

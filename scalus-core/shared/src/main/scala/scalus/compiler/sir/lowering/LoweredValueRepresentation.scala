@@ -19,6 +19,15 @@ sealed trait LoweredValueRepresentation {
     def doc: Doc = Doc.text(this.toString)
     def show = doc.render(80)
 
+    /** Proxy-aware structural compatibility. Unlike `==`, treats SumReprProxy instances as
+      * equivalent and uses `isCompatibleOn` semantics (e.g., TypeVarRepresentation(Transparent) is
+      * compatible with any concrete repr).
+      */
+    final def structurallyCompatible(other: LoweredValueRepresentation)(using
+        LoweringContext
+    ): Boolean =
+        LoweredValueRepresentation.structurallyCompatible(this, other)
+
     /** The SIR type that values actually have at the UPLC level for this representation.
       *
       * @param semanticType
@@ -39,6 +48,127 @@ sealed trait LoweredValueRepresentation {
       *   PackedData)
       */
     def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni
+}
+
+object LoweredValueRepresentation {
+
+    /** Proxy-aware structural compatibility for representations.
+      *
+      * Unlike `==`, handles:
+      *   - SumReprProxy: all instances are equivalent (recursive self-references)
+      *   - TypeVarRepresentation(Transparent): compatible with any concrete repr
+      *   - Recurses into ProdUplcConstr/SumUplcConstr field-by-field
+      */
+    def structurallyCompatible(
+        a: LoweredValueRepresentation,
+        b: LoweredValueRepresentation
+    )(using LoweringContext): Boolean =
+        if a eq b then true
+        else if a == b then true
+        else
+            (a, b) match
+                // SumReprProxy: recursive self-references are always compatible
+                case (
+                      _: SumCaseClassRepresentation.SumReprProxy,
+                      _: SumCaseClassRepresentation.SumReprProxy
+                    ) =>
+                    true
+                // Transparent TypeVars are compatible with anything
+                case (TypeVarRepresentation(SIRType.TypeVarKind.Transparent), _) => true
+                case (_, TypeVarRepresentation(SIRType.TypeVarKind.Transparent)) => true
+                // ProdUplcConstr: compare tag + fields recursively
+                case (
+                      ProductCaseClassRepresentation.ProdUplcConstr(tagA, fieldsA),
+                      ProductCaseClassRepresentation.ProdUplcConstr(tagB, fieldsB)
+                    ) =>
+                    tagA == tagB && fieldsA.size == fieldsB.size &&
+                    fieldsA
+                        .zip(fieldsB)
+                        .forall((fa, fb) => structurallyCompatible(fa, fb))
+                // SumUplcConstr: compare variants recursively
+                case (
+                      SumCaseClassRepresentation.SumUplcConstr(variantsA),
+                      SumCaseClassRepresentation.SumUplcConstr(variantsB)
+                    ) =>
+                    variantsA.size == variantsB.size &&
+                    variantsA.forall { (tag, prodA) =>
+                        variantsB
+                            .get(tag)
+                            .exists(prodB => structurallyCompatible(prodA, prodB))
+                    }
+                case _ => false
+
+    def constRepresentation(tp: SIRType)(using lc: LoweringContext): LoweredValueRepresentation = {
+        tp match
+            case SIRType.BuiltinList(elemType) =>
+                if typegens.SirTypeUplcGenerator.isPair(elemType) then
+                    SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType)
+                else
+                    SumCaseClassRepresentation.SumBuiltinList(
+                      typegens.SirTypeUplcGenerator.elementReprFor(elemType)
+                    )
+            case SIRType.BuiltinArray(elemType) =>
+                ProductCaseClassRepresentation.ProdBuiltinArray(constRepresentation(elemType))
+            case SIRType.SumCaseClass(decl, typeArgs) =>
+                if decl.name == SIRType.Data.name then SumCaseClassRepresentation.DataData
+                else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" || decl.name == SIRType.BuiltinList.name
+                then
+                    if typeArgs.nonEmpty then
+                        if ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(
+                              typeArgs.head
+                            )
+                        then
+                            SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
+                              typeArgs.head
+                            )
+                        else
+                            SumCaseClassRepresentation.SumBuiltinList(
+                              typegens.SirTypeUplcGenerator.elementReprFor(typeArgs.head)
+                            )
+                    else
+                        throw LoweringException(
+                          s"List type without type parameter in constant representation",
+                          SIRPosition.empty
+                        )
+                else SumCaseClassRepresentation.DataConstr
+            case SIRType.CaseClass(constrDecl, targs, parent) =>
+                ProductCaseClassRepresentation.ProdDataConstr
+            case SIRType.TypeLambda(params, body) =>
+                constRepresentation(body)
+            case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean |
+                SIRType.Unit | SIRType.BLS12_381_G1_Element | SIRType.BLS12_381_G2_Element |
+                SIRType.BLS12_381_MlResult | SIRType.BuiltinValue =>
+                PrimitiveRepresentation.Constant
+            case SIRType.Fun(in, out) =>
+                val inRepresentation = lc.typeGenerator(in).defaultRepresentation(in)
+                val outRepresentation = lc.typeGenerator(out).defaultRepresentation(out)
+                LambdaRepresentation(
+                  tp,
+                  InOutRepresentationPair(inRepresentation, outRepresentation)
+                )
+            case tv: SIRType.TypeVar =>
+                lc.typeUnifyEnv.filledTypes.get(tv) match
+                    case Some(tp) => constRepresentation(tp)
+                    case None =>
+                        TypeVarRepresentation(tv.kind)
+            case SIRType.FreeUnificator =>
+                TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
+            case proxy: SIRType.TypeProxy =>
+                constRepresentation(proxy.ref)
+            case SIRType.TypeNothing => ErrorRepresentation
+            case SIRType.Annotated(tp, _) =>
+                constRepresentation(tp)
+            case SIRType.TypeNonCaseModule(name) =>
+                throw LoweringException(
+                  "TypeNonCaseModule is not supported in lowered value representation",
+                  SIRPosition.empty
+                )
+            case null =>
+                throw LoweringException(
+                  "Type is null, this is a bug in the compiler",
+                  SIRPosition.empty
+                )
+    }
 }
 
 /** Mixin for representations that always store values as Data at the UPLC level. */
@@ -1369,84 +1499,5 @@ case object ErrorRepresentation extends LoweredValueRepresentation {
         repr: LoweredValueRepresentation,
         pos: SIRPosition
     )(using LoweringContext): Boolean = true
-
-}
-
-object LoweredValueRepresentation {
-
-    def constRepresentation(tp: SIRType)(using lc: LoweringContext): LoweredValueRepresentation = {
-        tp match
-            case SIRType.BuiltinList(elemType) =>
-                if typegens.SirTypeUplcGenerator.isPair(elemType) then
-                    SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType)
-                else
-                    SumCaseClassRepresentation.SumBuiltinList(
-                      typegens.SirTypeUplcGenerator.elementReprFor(elemType)
-                    )
-            case SIRType.BuiltinArray(elemType) =>
-                ProductCaseClassRepresentation.ProdBuiltinArray(constRepresentation(elemType))
-            case SIRType.SumCaseClass(decl, typeArgs) =>
-                // Data type uses DataData representation, not DataConstr
-                if decl.name == SIRType.Data.name then SumCaseClassRepresentation.DataData
-                // scalus.prelude.List uses native UPLC list representation for Data-compatible elements
-                // TODO: add containsFun check like in SirTypeUplcGenerator.apply
-                else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" || decl.name == SIRType.BuiltinList.name
-                then
-                    if typeArgs.nonEmpty then
-                        if ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(
-                              typeArgs.head
-                            )
-                        then
-                            SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
-                              typeArgs.head
-                            )
-                        else
-                            SumCaseClassRepresentation.SumBuiltinList(
-                              typegens.SirTypeUplcGenerator.elementReprFor(typeArgs.head)
-                            )
-                    else
-                        throw LoweringException(
-                          s"List type without type parameter in constant representation",
-                          SIRPosition.empty
-                        )
-                else SumCaseClassRepresentation.DataConstr
-            case SIRType.CaseClass(constrDecl, targs, parent) =>
-                ProductCaseClassRepresentation.ProdDataConstr
-            case SIRType.TypeLambda(params, body) =>
-                constRepresentation(body)
-            case SIRType.Integer | SIRType.ByteString | SIRType.String | SIRType.Boolean |
-                SIRType.Unit | SIRType.BLS12_381_G1_Element | SIRType.BLS12_381_G2_Element |
-                SIRType.BLS12_381_MlResult | SIRType.BuiltinValue =>
-                PrimitiveRepresentation.Constant
-            case SIRType.Fun(in, out) =>
-                val inRepresentation = lc.typeGenerator(in).defaultRepresentation(in)
-                val outRepresentation = lc.typeGenerator(out).defaultRepresentation(out)
-                LambdaRepresentation(
-                  tp,
-                  InOutRepresentationPair(inRepresentation, outRepresentation)
-                )
-            case tv: SIRType.TypeVar =>
-                lc.typeUnifyEnv.filledTypes.get(tv) match
-                    case Some(tp) => constRepresentation(tp)
-                    case None =>
-                        TypeVarRepresentation(tv.kind)
-            case SIRType.FreeUnificator =>
-                TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
-            case proxy: SIRType.TypeProxy =>
-                constRepresentation(proxy.ref)
-            case SIRType.TypeNothing => ErrorRepresentation
-            case SIRType.Annotated(tp, _) =>
-                constRepresentation(tp)
-            case SIRType.TypeNonCaseModule(name) =>
-                throw LoweringException(
-                  "TypeNonCaseModule is not supported in lowered value representation",
-                  SIRPosition.empty
-                )
-            case null =>
-                throw LoweringException(
-                  "Type is null, this is a bug in the compiler",
-                  SIRPosition.empty
-                )
-    }
 
 }

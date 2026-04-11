@@ -309,8 +309,9 @@ object SumUplcConstrSirTypeGenerator {
         val caseScope = lctx.scope
         val pos = sirCase.anns.pos
 
-        // Get variant field reprs from the scrutinee's SumUplcConstr representation.
+        // Get variant field reprs from the scrutinee's UplcConstr representation.
         // Unwrap SumReprProxy to get the real variants.
+        // Handle ProdUplcConstr directly (product types with known field reprs).
         val variantFieldReprs: Option[scala.List[LoweredValueRepresentation]] =
             loweredScrutinee.representation match
                 case proxy: SumCaseClassRepresentation.SumReprProxy =>
@@ -319,6 +320,8 @@ object SumUplcConstrSirTypeGenerator {
                         case _                  => None
                 case sum: SumUplcConstr =>
                     sum.variants.get(constrIndex).map(_.fieldReprs)
+                case prod: ProductCaseClassRepresentation.ProdUplcConstr =>
+                    Some(prod.fieldReprs)
                 case _ => None
 
         sirCase.pattern match

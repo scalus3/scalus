@@ -9,8 +9,8 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.{Constant, Term}
 import scalus.compiler.{UplcRepr, UplcRepresentation}
-import scalus.cardano.ledger.MajorProtocolVersion
-import scalus.uplc.eval.{PlutusVM, Result}
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
+import scalus.uplc.eval.{PlutusVM, ProfileFormatter, Result}
 
 /** Data-compatible case class with @UplcRepr(UplcConstr). */
 @UplcRepr(UplcRepresentation.UplcConstr)
@@ -41,6 +41,10 @@ object PointModule {
     def pointSetReverse(ps: PointSet): List[Point] = ps.points.reverse
     def pointSetFilter(ps: PointSet, x: BigInt): List[Point] =
         ps.points.filter(p => p.x === x)
+    def pointSetInit(ps: PointSet): PointSet =
+        PointSet(ps.name, ps.points.init)
+    def pointSetMap(ps: PointSet): List[BigInt] =
+        ps.points.map(p => p.x + p.y)
 }
 
 enum Action:
@@ -80,8 +84,11 @@ object CodecModule {
   */
 class UplcConstrTest extends AnyFunSuite {
 
-    private given PlutusVM = PlutusVM.makePlutusV3VM()
-    private given Options = Options()
+    private given PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+    private given Options = Options(
+      targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
+      targetProtocolVersion = MajorProtocolVersion.vanRossemPV
+    )
 
     test("case class with two function fields: codec roundtrip") {
         val sir = compile {
@@ -220,15 +227,7 @@ class UplcConstrTest extends AnyFunSuite {
                 PointModule.pointSetContains(ps, PointModule.mkPoint(BigInt(3), BigInt(4)))
             if contains then BigInt(1) else BigInt(0)
         }
-        java.nio.file.Files
-            .writeString(java.nio.file.Path.of("/tmp/pointset_sir.txt"), sir.pretty.render(200))
-        val lw = sir.toLoweredValue()
-        java.nio.file.Files
-            .writeString(java.nio.file.Path.of("/tmp/pointset_lowered.txt"), lw.pretty.render(200))
-        val uplc = sir.toUplc()
-        java.nio.file.Files
-            .writeString(java.nio.file.Path.of("/tmp/pointset_uplc.txt"), uplc.pretty.render(120))
-        val result = uplc.evaluateDebug
+        val result = sir.toUplc().evaluateDebug
         result match
             case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
                 assert(v == 1, s"Expected 1, got $v")
@@ -273,15 +272,7 @@ class UplcConstrTest extends AnyFunSuite {
             val initPts = ps.points.init
             initPts.length
         }
-        java.nio.file.Files
-            .writeString(java.nio.file.Path.of("/tmp/init_sir.txt"), sir.pretty.render(200))
-        val lw = sir.toLoweredValue()
-        java.nio.file.Files
-            .writeString(java.nio.file.Path.of("/tmp/init_lowered.txt"), lw.pretty.render(200))
-        val uplc = sir.toUplc()
-        java.nio.file.Files
-            .writeString(java.nio.file.Path.of("/tmp/init_uplc.txt"), uplc.pretty.render(120))
-        val result = uplc.evaluateDebug
+        val result = sir.toUplc().evaluateDebug
         result match
             case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
                 assert(v == 2, s"Expected 2, got $v")
@@ -391,6 +382,107 @@ class UplcConstrTest extends AnyFunSuite {
                 fail(s"Expected Integer constant, got ${term.show}")
             case Result.Failure(ex, _, _, _) =>
                 fail(s"Tag > 0 constructor failed: $ex")
+    }
+
+    // === Scaling tests: UplcConstr vs Data list contains ===
+
+    test("list contains scaling: UplcConstr Point vs Data tuple") {
+        // Compile functions once, run with different list sizes.
+        // Element (0,0) is not in the list, so contains traverses the full list.
+        val dataContainsFn = compile { (n: BigInt) =>
+            val lst = List.range(BigInt(1), n).map { i => (i, i) }
+            lst.contains((BigInt(0), BigInt(0)))
+        }
+        val dataProgram = dataContainsFn.toUplcOptimized(false)
+
+        val constrContainsFn = compile { (n: BigInt) =>
+            val lst = List.range(BigInt(1), n).map { i => PointModule.mkPoint(i, i) }
+            PointModule.listContainsPoint(lst, PointModule.mkPoint(BigInt(0), BigInt(0)))
+        }
+        val constrProgram = constrContainsFn.toUplcOptimized(false)
+
+        info("=== List Contains Scaling: Data (BigInt,BigInt) vs UplcConstr Point ===")
+        info(
+          f"${"n"}%5s  ${"Data mem"}%12s  ${"Data cpu"}%16s  ${"Constr mem"}%12s  ${"Constr cpu"}%16s  ${"mem ratio"}%10s  ${"cpu ratio"}%10s"
+        )
+
+        for n <- scala.List(10, 20, 30, 40, 100) do
+            val nTerm = Term.Const(Constant.Integer(n))
+            val dataResult = (dataProgram $ nTerm).evaluateDebug
+            val constrResult = (constrProgram $ nTerm).evaluateDebug
+
+            assert(dataResult.isSuccess, s"Data contains n=$n failed: $dataResult")
+            assert(constrResult.isSuccess, s"UplcConstr contains n=$n failed: $constrResult")
+
+            val dMem = dataResult.budget.memory
+            val dCpu = dataResult.budget.steps
+            val cMem = constrResult.budget.memory
+            val cCpu = constrResult.budget.steps
+            val memRatio = f"${cMem.toDouble / dMem}%.2fx"
+            val cpuRatio = f"${cCpu.toDouble / dCpu}%.2fx"
+
+            info(
+              s"n=$n  Data: mem=$dMem cpu=$dCpu  |  UplcConstr: mem=$cMem cpu=$cCpu  |  ratio: mem=$memRatio cpu=$cpuRatio"
+            )
+    }
+
+    test("list contains scaling: profile n=40 to see ChooseList") {
+        val constrContainsFn = compile { (n: BigInt) =>
+            val lst = List.range(BigInt(1), n).map { i => PointModule.mkPoint(i, i) }
+            PointModule.listContainsPoint(lst, PointModule.mkPoint(BigInt(0), BigInt(0)))
+        }
+        val constrProgram = constrContainsFn.toUplcOptimized(false)
+        val nTerm = Term.Const(Constant.Integer(40))
+        val result = (constrProgram $ nTerm).evaluateProfile
+        assert(result.isSuccess, s"UplcConstr contains n=40 failed: $result")
+        result.profile.foreach { p => info(ProfileFormatter.toText(p)) }
+    }
+
+    test("profile: PointSet construction only — baseline ChooseList") {
+        val sir = compile {
+            val pts = List(Point(1, 2), Point(3, 4), Point(5, 6), Point(7, 8), Point(9, 10))
+            val ps = PointModule.mkPointSet(BigInt(1), pts)
+            PointModule.pointSetSize(ps)
+        }
+        val result = sir.toUplcOptimized(false).evaluateProfile
+        assert(result.isSuccess, s"PointSet construction failed: $result")
+        result.profile.foreach { p => info(ProfileFormatter.toText(p)) }
+    }
+
+    test("profile: PointSet.init — does it trigger ChooseList?") {
+        val sir = compile {
+            val pts = List(Point(1, 2), Point(3, 4), Point(5, 6), Point(7, 8), Point(9, 10))
+            val ps = PointModule.mkPointSet(BigInt(1), pts)
+            val ps2 = PointModule.pointSetInit(ps)
+            PointModule.pointSetSize(ps2)
+        }
+        val result = sir.toUplcOptimized(false).evaluateProfile
+        assert(result.isSuccess, s"PointSet.init failed: $result")
+        result.profile.foreach { p => info(ProfileFormatter.toText(p)) }
+    }
+
+    test("profile: PointSet.map — does it trigger ChooseList?") {
+        val sir = compile {
+            val pts = List(Point(1, 2), Point(3, 4), Point(5, 6), Point(7, 8), Point(9, 10))
+            val ps = PointModule.mkPointSet(BigInt(1), pts)
+            val sums = PointModule.pointSetMap(ps)
+            sums.length
+        }
+        val result = sir.toUplcOptimized(false).evaluateProfile
+        assert(result.isSuccess, s"PointSet.map failed: $result")
+        result.profile.foreach { p => info(ProfileFormatter.toText(p)) }
+    }
+
+    test("profile: PointSet.filter — does it trigger ChooseList?") {
+        val sir = compile {
+            val pts = List(Point(1, 2), Point(3, 4), Point(5, 6), Point(7, 8), Point(9, 10))
+            val ps = PointModule.mkPointSet(BigInt(1), pts)
+            val filtered = PointModule.pointSetFilter(ps, BigInt(3))
+            filtered.length
+        }
+        val result = sir.toUplcOptimized(false).evaluateProfile
+        assert(result.isSuccess, s"PointSet.filter failed: $result")
+        result.profile.foreach { p => info(ProfileFormatter.toText(p)) }
     }
 
 }

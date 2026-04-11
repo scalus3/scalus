@@ -270,7 +270,8 @@ object IntrinsicResolver {
                                 case Some(rule) =>
                                     val outputRepr =
                                         rule(appType, effectiveArg.representation, lctx)
-                                    if lowered.representation == outputRepr then lowered
+                                    if lowered.representation.structurallyCompatible(outputRepr)
+                                    then lowered
                                     else
                                         RepresentationProxyLoweredValue(
                                           lowered,

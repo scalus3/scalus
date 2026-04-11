@@ -87,6 +87,31 @@ object ProfileFormatter {
             if data.byFunction.size > effectiveMaxRows then
                 sb.append(s"  ... and ${data.byFunction.size - effectiveMaxRows} more\n")
 
+        if data.byLocationFunction.nonEmpty then
+            sb.append('\n')
+            sb.append("=== Builtins by Source Location ===\n")
+            val lfRows = data.byLocationFunction.take(effectiveMaxRows)
+            val lfLocWidth =
+                math.max(8, lfRows.map(e => s"${shortFile(e.file)}:${e.line}".length).max)
+            val lfNameWidth = math.max(8, lfRows.map(_.functionName.length).max)
+            val lfCountWidth = math.max(5, lfRows.map(_.count.toString.length).max)
+            val lfMemWidth = math.max(3, lfRows.map(_.memory.toString.length).max)
+            val lfCpuWidth = math.max(3, lfRows.map(_.cpu.toString.length).max)
+
+            sb.append(
+              s"${"location".padTo(lfLocWidth, ' ')}  ${"function".padTo(lfNameWidth, ' ')}  ${"count".reverse.padTo(lfCountWidth, ' ').reverse}  ${"mem".reverse.padTo(lfMemWidth, ' ').reverse}  ${"cpu".reverse.padTo(lfCpuWidth, ' ').reverse}\n"
+            )
+            lfRows.foreach { e =>
+                val loc = s"${shortFile(e.file)}:${e.line}"
+                sb.append(
+                  s"${loc.padTo(lfLocWidth, ' ')}  ${e.functionName.padTo(lfNameWidth, ' ')}  ${e.count.toString.reverse.padTo(lfCountWidth, ' ').reverse}  ${e.memory.toString.reverse.padTo(lfMemWidth, ' ').reverse}  ${e.cpu.toString.reverse.padTo(lfCpuWidth, ' ').reverse}\n"
+                )
+            }
+            if data.byLocationFunction.size > effectiveMaxRows then
+                sb.append(
+                  s"  ... and ${data.byLocationFunction.size - effectiveMaxRows} more\n"
+                )
+
         if data.transitions.nonEmpty then
             sb.append('\n')
             sb.append("=== Transitions (source location flow) ===\n")
