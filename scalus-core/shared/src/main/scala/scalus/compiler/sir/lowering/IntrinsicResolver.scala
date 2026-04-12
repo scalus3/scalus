@@ -261,7 +261,7 @@ object IntrinsicResolver {
                                     val savedUnifyEnv = lctx.typeUnifyEnv
                                     if reprNames.contains(UplcConstrListRepr) then
                                         lctx.uplcGeneratorPolicy = uplcConstrListPolicy
-                                        bindElementTypeVars(binding, argSir.tp, lctx)
+                                        bindElementTypeVars(binding, argSir.tp, appType, lctx)
                                     try Lowering.lowerSIR(substituted, Some(appType))
                                     finally
                                         lctx.uplcGeneratorPolicy = savedPolicy
@@ -466,22 +466,26 @@ object IntrinsicResolver {
     private def bindElementTypeVars(
         binding: Binding,
         listType: SIRType,
+        appType: SIRType,
         lctx: LoweringContext
     ): Unit = {
         val elemType = SumCaseClassRepresentation.SumBuiltinList
             .retrieveListElementType(listType)
             .getOrElse(return)
-        // Collect TypeVars from the SELF PARAMETER type only (not the full signature).
-        // For multi-TypeVar signatures like map[A, B](self: List[A], mapper: A => B): List[B],
-        // only A should be bound to the input element type. B is the output element type and
-        // must stay free — its repr is determined by the mapper's actual return value, not
-        // by the input list's element type.
-        val selfParamType = binding.tp match
-            case SIRType.Fun(paramTp, _) => paramTp
-            case _                       => binding.tp
-        val typeVars = scala.collection.mutable.Set.empty[SIRType.TypeVar]
-        SIRType.mapTypeVars(selfParamType, tv => { typeVars += tv; tv })
-        // Annotate element type with UplcConstr repr
+        // Role-aware TypeVar binding:
+        //   1. SELF-PARAMETER TypeVars (e.g., A in map[A, B](self: List[A], ...))
+        //      get bound to Annotated(inputElementType, UplcConstr) — this lets
+        //      equalsRepr inside intrinsic bodies dispatch on element type structure.
+        //   2. OUTPUT-SIDE TypeVars (e.g., B in map[A, B](...): List[B])
+        //      get bound by unifying the rest of the binding signature with appType.
+        //      Without this, B stays free and downstream lowering can't resolve it
+        //      (producing either mis-binding to A's type or StackOverflow).
+        val (selfParamType, restType) = binding.tp match
+            case SIRType.Fun(paramTp, retType) => (paramTp, retType)
+            case _                             => (binding.tp, SIRType.Unit)
+        val selfTypeVars = scala.collection.mutable.Set.empty[SIRType.TypeVar]
+        SIRType.mapTypeVars(selfParamType, tv => { selfTypeVars += tv; tv })
+        // Annotate element type with UplcConstr repr (for role 1 — self TypeVars)
         val annotatedElemType = SIRType.Annotated(
           elemType,
           AnnotationsDecl(
@@ -496,10 +500,20 @@ object IntrinsicResolver {
             )
           )
         )
-        val newFilledTypes = typeVars.foldLeft(lctx.typeUnifyEnv.filledTypes) { (acc, tv) =>
+        // Role 2: unify restType (signature after self) with appType to bind output TypeVars
+        val outputBindings: Map[SIRType.TypeVar, SIRType] =
+            SIRUnify.topLevelUnifyType(restType, appType, SIRUnify.Env.empty) match
+                case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
+                case _                                   => Map.empty
+        // Build the final filledTypes map
+        val afterSelf = selfTypeVars.foldLeft(lctx.typeUnifyEnv.filledTypes) { (acc, tv) =>
             acc + (tv -> annotatedElemType)
         }
-        lctx.typeUnifyEnv = lctx.typeUnifyEnv.copy(filledTypes = newFilledTypes)
+        val finalFilledTypes = outputBindings.foldLeft(afterSelf) { case (acc, (tv, t)) =>
+            if selfTypeVars.contains(tv) then acc // already bound (role 1 wins)
+            else acc + (tv -> t)
+        }
+        lctx.typeUnifyEnv = lctx.typeUnifyEnv.copy(filledTypes = finalFilledTypes)
     }
 
     /** UplcConstr list policy: for List types with Transparent TypeVar elements, use SumUplcConstr
