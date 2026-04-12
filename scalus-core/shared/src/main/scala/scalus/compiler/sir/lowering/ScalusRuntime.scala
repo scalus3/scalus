@@ -93,11 +93,11 @@ object ScalusRuntime {
         outType: SIRType,
         outRepresentation: LoweredValueRepresentation
     )(using lctx: LoweringContext): LoweredValue = {
-        val useCase = lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV &&
-            !listRepresentation.isInstanceOf[SumCaseClassRepresentation.SumBuiltinList]
+        val useCase = lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV
         if useCase then {
-            // For PlutusV4 with Constr-based lists: use Case with head/tail as lambda parameters
-            // SumBuiltinList must always use ChooseList since Case only works on Constr values
+            // PV>=11: use Term.Case (caseList semantics) for both SumUplcConstr and SumBuiltinList.
+            // Term.Case dispatches directly on Constant.List scrutinees (see Cek.scala:1144),
+            // avoiding the Delay+Force+ChooseList overhead of the PV<11 path.
             val headValId = lctx.uniqueVarName("headVal")
             val headVal = new VariableLoweredValue(
               id = headValId,
