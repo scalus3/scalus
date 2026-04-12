@@ -527,14 +527,23 @@ object SumUplcConstrSirTypeGenerator {
         outSum: SumUplcConstr,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        // Find SumReprProxy fields across all variants
-        val proxies = (inSum.variants.values.flatMap(_.fieldReprs) ++
-            outSum.variants.values.flatMap(_.fieldReprs)).collect {
+        // Find SumReprProxy fields, counted per-side. Each side normally has at most
+        // one proxy (a single self-recursive field, e.g., List's tail). >1 within one
+        // side means the type has multiple recursive fields per variant (e.g., a binary
+        // tree Branch(l, r)), which the single recCall letrec below cannot handle.
+        // inSum and outSum each have their OWN SumReprProxy instance self-referring to
+        // themselves — combining them and using reference equality would falsely trip.
+        val inProxies = inSum.variants.values.flatMap(_.fieldReprs).collect {
             case p: SumCaseClassRepresentation.SumReprProxy => p
         }.toSet
-        if proxies.size > 1 then
+        val outProxies = outSum.variants.values.flatMap(_.fieldReprs).collect {
+            case p: SumCaseClassRepresentation.SumReprProxy => p
+        }.toSet
+        if inProxies.size > 1 || outProxies.size > 1 then
             throw LoweringException(
-              s"SumUplcConstr→SumUplcConstr: multiple different SumReprProxy found, not supported. Type: ${input.sirType.show}",
+              s"SumUplcConstr→SumUplcConstr: multiple recursive proxies within one side " +
+                  s"(tree-like types with >1 self-reference per variant), not supported. " +
+                  s"Type: ${input.sirType.show}",
               pos
             )
 
@@ -635,7 +644,7 @@ object SumUplcConstrSirTypeGenerator {
             }
         }
 
-        if proxies.isEmpty then
+        if inProxies.isEmpty && outProxies.isEmpty then
             // No self-referential fields — direct Case conversion
             makeCase(input, makeBranches(None))
         else
