@@ -131,15 +131,31 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                     ProductCaseClassRepresentation.ProdDataList |
                                     _: ProductCaseClassRepresentation.ProdUplcConstr |
                                     ProductCaseClassRepresentation.PairIntDataList =>
-                                    val r1 = input.toRepresentation(
-                                      ProductCaseClassRepresentation.ProdDataConstr,
-                                      pos
-                                    )
-                                    ProductCaseSirTypeGenerator.toRepresentation(
-                                      r1,
-                                      representation,
-                                      pos
-                                    )
+                                    // Delegating to ProductCaseSirTypeGenerator requires the
+                                    // input to have a concrete product sirType so its internal
+                                    // `input.toRepresentation` calls dispatch to ProductCase
+                                    // instead of looping back here via sirType=TypeVar.
+                                    // For unresolved TypeVars we cannot infer the field shape,
+                                    // so fail fast with a clear error instead of infinite
+                                    // recursion through TypeVarSirTypeGenerator.
+                                    input.sirType match
+                                        case _: SIRType.TypeVar =>
+                                            throw LoweringException(
+                                              s"Cannot convert unresolved TypeVar to $representation: " +
+                                                  s"type resolution required. " +
+                                                  s"TypeVar: ${input.sirType.show}",
+                                              pos
+                                            )
+                                        case _ =>
+                                            val r1 = input.toRepresentation(
+                                              ProductCaseClassRepresentation.ProdDataConstr,
+                                              pos
+                                            )
+                                            ProductCaseSirTypeGenerator.toRepresentation(
+                                              r1,
+                                              representation,
+                                              pos
+                                            )
                                 case PackedDataMap =>
                                     new RepresentationProxyLoweredValue(input, representation, pos)
                                 case pbp: ProductCaseClassRepresentation.ProdBuiltinPair =>

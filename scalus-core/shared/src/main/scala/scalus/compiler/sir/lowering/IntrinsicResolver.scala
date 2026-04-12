@@ -471,9 +471,16 @@ object IntrinsicResolver {
         val elemType = SumCaseClassRepresentation.SumBuiltinList
             .retrieveListElementType(listType)
             .getOrElse(return)
-        // Collect TypeVars from the intrinsic binding's type
+        // Collect TypeVars from the SELF PARAMETER type only (not the full signature).
+        // For multi-TypeVar signatures like map[A, B](self: List[A], mapper: A => B): List[B],
+        // only A should be bound to the input element type. B is the output element type and
+        // must stay free — its repr is determined by the mapper's actual return value, not
+        // by the input list's element type.
+        val selfParamType = binding.tp match
+            case SIRType.Fun(paramTp, _) => paramTp
+            case _                       => binding.tp
         val typeVars = scala.collection.mutable.Set.empty[SIRType.TypeVar]
-        SIRType.mapTypeVars(binding.tp, tv => { typeVars += tv; tv })
+        SIRType.mapTypeVars(selfParamType, tv => { typeVars += tv; tv })
         // Annotate element type with UplcConstr repr
         val annotatedElemType = SIRType.Annotated(
           elemType,
