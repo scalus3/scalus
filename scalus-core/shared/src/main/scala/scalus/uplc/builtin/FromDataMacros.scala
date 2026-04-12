@@ -22,7 +22,9 @@ private object FromDataMacros {
                         getUplcRepr[A] match
                             case Some("ProductCaseOneElement") =>
                                 deriveFromDataProductCaseOneElement[A]
-                            case Some("ProductCase") | None =>
+                            // UplcConstr product types share the same Data binary encoding
+                            // as ProductCase (Constr(tag, [fields])), so the same derivation works.
+                            case Some("ProductCase") | Some("UplcConstr") | None =>
                                 deriveFromDataCaseClassApply[A]
                             case Some(other) =>
                                 report.errorAndAbort(
@@ -35,7 +37,7 @@ private object FromDataMacros {
                     }
                 else
                     getUplcRepr[A] match
-                        case Some("SumCase") | None =>
+                        case Some("SumCase") | Some("UplcConstr") | None =>
                             deriveFromDataSumCaseClassApply[A]
                         case Some(other) =>
                             report.errorAndAbort(

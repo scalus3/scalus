@@ -61,7 +61,9 @@ private object ToDataMacros {
                     getUplcRepr[A] match
                         case Some("ProductCaseOneElement") =>
                             deriveToDataProductCaseOneElement[A](a)
-                        case Some("ProductCase") | None =>
+                        // UplcConstr product types share the same Data binary encoding
+                        // as ProductCase (Constr(tag, [fields])), so the same derivation works.
+                        case Some("ProductCase") | Some("UplcConstr") | None =>
                             val constrIndex = findADTConstrIndex[A]
                             deriveToDataCaseClassApply[A](a, constrIndex)
                         case Some(other) =>
@@ -74,7 +76,7 @@ private object ToDataMacros {
                     )
             else
                 getUplcRepr[A] match
-                    case Some("SumCase") | None =>
+                    case Some("SumCase") | Some("UplcConstr") | None =>
                         deriveToDataSumCaseClassApply[A](a)
                     case Some(other) =>
                         report.errorAndAbort(

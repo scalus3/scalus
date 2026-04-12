@@ -5,7 +5,7 @@ import scalus.*
 import scalus.compiler.{compile, Compile}
 import scalus.compiler.Options
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.{Constant, Term}
 import scalus.compiler.{UplcRepr, UplcRepresentation}
@@ -27,6 +27,10 @@ case class PointSet(
 @Compile
 object PointModule {
     given Eq[Point] = Eq.derived
+    given ToData[Point] = ToData.derived
+    given FromData[Point] = FromData.derived
+    given ToData[PointSet] = ToData.derived
+    given FromData[PointSet] = FromData.derived
 
     def mkPoint(x: BigInt, y: BigInt): Point = Point(x, y)
     def sumFields(p: Point): BigInt = p.x + p.y
@@ -483,6 +487,39 @@ class UplcConstrTest extends AnyFunSuite {
         val result = sir.toUplcOptimized(false).evaluateProfile
         assert(result.isSuccess, s"PointSet.filter failed: $result")
         result.profile.foreach { p => info(ProfileFormatter.toText(p)) }
+    }
+
+    // === toData serialization tests ===
+    // These exercise the ProdUplcConstr/SumUplcConstr → SumBuiltinList conversion path
+    // needed when a @UplcRepr(UplcConstr) struct containing a List is serialized to Data.
+
+    test("toData: PointSet with UplcConstr List[Point] serializes to Data") {
+        import PointModule.given
+        val sir = compile {
+            val pts = List(Point(1, 2), Point(3, 4), Point(5, 6))
+            val ps = PointModule.mkPointSet(BigInt(42), pts)
+            toData(ps)
+        }
+        val result = sir.toUplc().evaluateDebug
+        assert(result.isSuccess, s"toData(PointSet) failed: $result")
+    }
+
+    test("toData: roundtrip PointSet via Data") {
+        import PointModule.given
+        val sir = compile {
+            val pts = List(Point(1, 2), Point(3, 4), Point(5, 6))
+            val original = PointModule.mkPointSet(BigInt(42), pts)
+            val asData: Data = toData(original)
+            val roundtripped: PointSet = fromData[PointSet](asData)
+            PointModule.pointSetSize(roundtripped)
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
+                assert(v == 3, s"Expected size=3 after roundtrip, got $v")
+            case Result.Failure(ex, _, _, _) =>
+                fail(s"toData roundtrip failed: $ex")
+            case other => fail(s"Unexpected: $other")
     }
 
 }
