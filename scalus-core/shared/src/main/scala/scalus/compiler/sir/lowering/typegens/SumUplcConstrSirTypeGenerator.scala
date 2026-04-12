@@ -429,9 +429,12 @@ object SumUplcConstrSirTypeGenerator {
                 // concrete (e.g., List[ChessSet]), the runtime conversion dispatches on
                 // the actual head value's sirType even when the field repr is a
                 // Transparent TypeVar left over from intrinsic-body lowering.
-                val elemType = SumCaseClassRepresentation.SumBuiltinList
+                val elemTypeRaw = SumCaseClassRepresentation.SumBuiltinList
                     .retrieveListElementType(input.sirType)
                     .getOrElse(SIRType.Data.tp)
+                // If element type is a TypeVar, try to resolve via lctx.filledTypes first;
+                // only treat it as "unresolved" if resolution also returns a TypeVar.
+                val elemType = lctx.resolveTypeVarIfNeeded(elemTypeRaw)
                 val elemIsTypeVar = elemType match
                     case _: SIRType.TypeVar => true
                     case _                  => false
@@ -561,11 +564,24 @@ object SumUplcConstrSirTypeGenerator {
         // This has two levels: DataDecl.typeParams (like List[A]'s A) map to input.typeArgs;
         // each ConstrDecl has its OWN typeParams (separate instances), wired to DataDecl's
         // via parentTypeArgs. We combine both levels below.
+        // Deref TypeProxy / Annotated / TypeLambda wrappers to find the underlying
+        // SumCaseClass so we can read its typeArgs. Track visited TypeProxies to avoid
+        // infinite loops on recursive types (List's tail refers back to List itself).
+        def derefToSumCaseClass(
+            tp: SIRType,
+            visited: Set[SIRType.TypeProxy]
+        ): Option[SIRType.SumCaseClass] = tp match
+            case sc: SIRType.SumCaseClass => Some(sc)
+            case p: SIRType.TypeProxy if p.ref != null && !visited.contains(p) =>
+                derefToSumCaseClass(p.ref, visited + p)
+            case SIRType.Annotated(inner, _) => derefToSumCaseClass(inner, visited)
+            case SIRType.TypeLambda(_, body) => derefToSumCaseClass(body, visited)
+            case _                           => None
         val dataDeclSubst: Map[SIRType.TypeVar, SIRType] =
             SIRType.retrieveDataDecl(input.sirType) match
                 case Right(decl) =>
-                    input.sirType match
-                        case SIRType.SumCaseClass(_, typeArgs)
+                    derefToSumCaseClass(input.sirType, Set.empty) match
+                        case Some(SIRType.SumCaseClass(_, typeArgs))
                             if typeArgs.length == decl.typeParams.length =>
                             decl.typeParams.zip(typeArgs).toMap
                         case _ => Map.empty
