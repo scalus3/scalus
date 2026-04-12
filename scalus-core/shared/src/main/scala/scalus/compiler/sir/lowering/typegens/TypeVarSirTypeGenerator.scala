@@ -139,13 +139,25 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                     // so fail fast with a clear error instead of infinite
                                     // recursion through TypeVarSirTypeGenerator.
                                     input.sirType match
-                                        case _: SIRType.TypeVar =>
-                                            throw LoweringException(
-                                              s"Cannot convert unresolved TypeVar to $representation: " +
-                                                  s"type resolution required. " +
-                                                  s"TypeVar: ${input.sirType.show}",
-                                              pos
-                                            )
+                                        case tv: SIRType.TypeVar =>
+                                            input.representation match
+                                                case TypeVarRepresentation(
+                                                      SIRType.TypeVarKind.Transparent
+                                                    ) =>
+                                                    // Input is a passthrough TypeVar. The runtime
+                                                    // value has the correct native shape; relabel.
+                                                    new RepresentationProxyLoweredValue(
+                                                      input,
+                                                      representation,
+                                                      pos
+                                                    )
+                                                case _ =>
+                                                    throw LoweringException(
+                                                      s"Cannot convert unresolved TypeVar to $representation: " +
+                                                          s"type resolution required. " +
+                                                          s"TypeVar: ${tv.showDebug} (repr=${input.representation})",
+                                                      pos
+                                                    )
                                         case _ =>
                                             val r1 = input.toRepresentation(
                                               ProductCaseClassRepresentation.ProdDataConstr,

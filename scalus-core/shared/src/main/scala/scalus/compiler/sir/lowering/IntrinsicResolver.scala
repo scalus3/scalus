@@ -258,14 +258,23 @@ object IntrinsicResolver {
                                     // For UplcConstr list intrinsics, temporarily swap policy
                                     // so List constructors (Cons/Nil) produce Constr terms
                                     val savedPolicy = lctx.uplcGeneratorPolicy
-                                    val savedUnifyEnv = lctx.typeUnifyEnv
+                                    val savedFilledTypes = lctx.typeUnifyEnv.filledTypes
                                     if reprNames.contains(UplcConstrListRepr) then
                                         lctx.uplcGeneratorPolicy = uplcConstrListPolicy
-                                        bindElementTypeVars(binding, argSir.tp, appType, lctx)
+                                        bindElementTypeVars(binding, argSir.tp, appType, f.tp, lctx)
                                     try Lowering.lowerSIR(substituted, Some(appType))
                                     finally
                                         lctx.uplcGeneratorPolicy = savedPolicy
-                                        lctx.typeUnifyEnv = savedUnifyEnv
+                                        // Keep the TypeVar bindings we added — they may be
+                                        // needed when the caller converts the intrinsic's
+                                        // result to its target output repr (TypeVar fields
+                                        // in the output's SumUplcConstr/ProdUplcConstr shape
+                                        // still need to be resolvable). Merging preserves
+                                        // both original env and our additions.
+                                        val merged =
+                                            savedFilledTypes ++ lctx.typeUnifyEnv.filledTypes
+                                        lctx.typeUnifyEnv =
+                                            lctx.typeUnifyEnv.copy(filledTypes = merged)
                                 } finally lctx.precomputedValues.remove(argSir)
                             // Apply repr rule to set correct output representation
                             bestReprRules.get(methodName) match
@@ -467,6 +476,7 @@ object IntrinsicResolver {
         binding: Binding,
         listType: SIRType,
         appType: SIRType,
+        callSiteFunType: SIRType,
         lctx: LoweringContext
     ): Unit = {
         val elemType = SumCaseClassRepresentation.SumBuiltinList
@@ -480,9 +490,15 @@ object IntrinsicResolver {
         //      get bound by unifying the rest of the binding signature with appType.
         //      Without this, B stays free and downstream lowering can't resolve it
         //      (producing either mis-binding to A's type or StackOverflow).
-        val (selfParamType, restType) = binding.tp match
+        def stripTypeLambda(tp: SIRType): SIRType = tp match
+            case SIRType.TypeLambda(_, body) => stripTypeLambda(body)
+            case SIRType.TypeProxy(ref) if ref ne null => stripTypeLambda(ref)
+            case _                           => tp
+        val bindingTpStripped = stripTypeLambda(binding.tp)
+        val (selfParamType, restType) = bindingTpStripped match
             case SIRType.Fun(paramTp, retType) => (paramTp, retType)
-            case _                             => (binding.tp, SIRType.Unit)
+            case _                             => (bindingTpStripped, SIRType.Unit)
+        val callSiteTpStripped = stripTypeLambda(callSiteFunType)
         val selfTypeVars = scala.collection.mutable.Set.empty[SIRType.TypeVar]
         SIRType.mapTypeVars(selfParamType, tv => { selfTypeVars += tv; tv })
         // Annotate element type with UplcConstr repr (for role 1 — self TypeVars)
@@ -509,9 +525,41 @@ object IntrinsicResolver {
         val afterSelf = selfTypeVars.foldLeft(lctx.typeUnifyEnv.filledTypes) { (acc, tv) =>
             acc + (tv -> annotatedElemType)
         }
-        val finalFilledTypes = outputBindings.foldLeft(afterSelf) { case (acc, (tv, t)) =>
+        val afterOutput = outputBindings.foldLeft(afterSelf) { case (acc, (tv, t)) =>
             if selfTypeVars.contains(tv) then acc // already bound (role 1 wins)
             else acc + (tv -> t)
+        }
+        // The plugin-generated SIR for `self.method(args)` carries its OWN TypeVar instances
+        // for the method's generic parameters (e.g., A#87374), distinct from the compiled
+        // intrinsic binding's TypeVars (e.g., A#95442). Unify the call-site function type
+        // with the binding signature to discover the call-site→binding TypeVar mapping, then
+        // propagate the concrete bindings to the call-site TypeVars too.
+        // Unify call-site function type with binding signature. Both sides carry free TypeVars
+        // (call-site's and binding's). SIRUnify puts paired free TypeVars into env.eqTypes
+        // (equivalence sets) rather than filledTypes. We then walk eqTypes: for each call-site
+        // TypeVar, find its equivalent binding TypeVar, and look up the binding's concrete
+        // type in our afterOutput map.
+        val unifyResult =
+            SIRUnify.topLevelUnifyType(callSiteTpStripped, bindingTpStripped, SIRUnify.Env.empty)
+        val eqClasses: Map[SIRType.TypeVar, Set[SIRType.TypeVar]] = unifyResult match
+            case SIRUnify.UnificationSuccess(env, _) => env.eqTypes
+            case _                                   => Map.empty
+        val filledFromUnify: Map[SIRType.TypeVar, SIRType] = unifyResult match
+            case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
+            case _                                   => Map.empty
+        // First, propagate filledFromUnify (handles the case where one side was pre-filled
+        // — not expected here but defensive).
+        val afterCrossFilled = filledFromUnify.foldLeft(afterOutput) { case (acc, (tv, t)) =>
+            if acc.contains(tv) then acc else acc + (tv -> t)
+        }
+        // Then walk eqClasses: for each TypeVar not yet bound, if any of its equivalents
+        // IS bound in afterCrossFilled, inherit that concrete type.
+        val finalFilledTypes = eqClasses.foldLeft(afterCrossFilled) { case (acc, (tv, equivs)) =>
+            if acc.contains(tv) then acc
+            else
+                equivs.iterator.flatMap(acc.get).nextOption() match
+                    case Some(concrete) => acc + (tv -> concrete)
+                    case None           => acc
         }
         lctx.typeUnifyEnv = lctx.typeUnifyEnv.copy(filledTypes = finalFilledTypes)
     }
