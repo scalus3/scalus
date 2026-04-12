@@ -687,10 +687,24 @@ class BlockfrostProvider(
             case UtxoSource.FromAddress(addr) =>
                 fetchUtxosFromAddress(addr)
             case UtxoSource.FromAsset(policyId, assetName) =>
-                // Not implemented - would require /assets/{asset}/addresses endpoint
-                Future.successful(
-                  Left(UtxoQueryError.NotSupported(query, "FromAsset not yet implemented"))
-                )
+                val asset = policyId.toHex + assetName.bytes.toHex
+                fetchAssetAddresses(asset)
+                    .flatMap { assetAddresses =>
+                        val futures = assetAddresses.map { aa =>
+                            fetchUtxosFromBech32Address(aa.address, Some(asset))
+                        }
+                        Future.sequence(futures).map { results =>
+                            val errors = results.collect { case Left(e) => e }
+                            val combined = results
+                                .collect { case Right(utxos) => utxos }
+                                .foldLeft(Map.empty: Utxos)(_ ++ _)
+                            if combined.isEmpty && errors.nonEmpty then Left(errors.head)
+                            else Right(combined)
+                        }
+                    }
+                    .recover { case e: Throwable =>
+                        Left(UtxoQueryError.NetworkError(e.getMessage, Some(e)))
+                    }
             case UtxoSource.FromInputs(inputs) =>
                 // Fetch each input individually and combine
                 val futures = inputs.toSeq.map(fetchUtxoFromInput)

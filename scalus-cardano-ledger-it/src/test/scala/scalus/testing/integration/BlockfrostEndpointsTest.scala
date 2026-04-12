@@ -595,6 +595,32 @@ class BlockfrostEndpointsTest extends AnyFunSuite {
                 println(s"  Asset transactions: ${txs.size}")
     }
 
+    test("findUtxos with UtxoSource.FromAsset") {
+        import scalus.cardano.ledger.*
+        import scalus.cardano.node.*
+        import scalus.uplc.builtin.ByteString
+        testAsset match
+            case None => cancel("No native asset found")
+            case Some(asset) =>
+                val policyId = ScriptHash.fromHex(asset.take(56))
+                val assetName = AssetName(ByteString.fromHex(asset.drop(56)))
+                val query = UtxoQuery(UtxoSource.FromAsset(policyId, assetName))
+                val result = provider.findUtxos(query).await(timeout)
+                result match
+                    case Right(utxos) =>
+                        assert(utxos.nonEmpty, "should find UTxOs holding the asset")
+                        utxos.values.foreach { output =>
+                            val hasAsset = output.value.assets.assets.exists {
+                                case (pid, assets) =>
+                                    pid == policyId && assets.contains(assetName)
+                            }
+                            assert(hasAsset, s"each UTxO should contain the queried asset")
+                        }
+                        println(s"  FromAsset UTxOs: ${utxos.size}")
+                    case Left(error) =>
+                        fail(s"Failed to fetch UTxOs by asset: $error")
+    }
+
     // ── Governance ──────────────────────────────────────────────────────────
 
     test("GET /governance/dreps/{id} — fetchDrep") {
