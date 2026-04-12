@@ -25,12 +25,30 @@ class OptimizedPaymentSplitterValidatorTest
     private val scriptHash = contract.script.scriptHash
 
     private val expectedRewardBudgets: Map[String, ExUnits] = Map(
-      "success when payments are correctly split for a single payee" -> ExUnits(memory = 256332, steps = 73_407359),
-      "success when payments are correctly split between 2 payees" -> ExUnits(memory = 360513, steps = 102_434797),
-      "success when payments are correctly split between 3 payees" -> ExUnits(memory = 476716, steps = 134_802039),
-      "success when split equally and remainder compensates fee - o1" -> ExUnits(memory = 476716, steps = 134_802039),
-      "success when split equally and remainder compensates fee - o2" -> ExUnits(memory = 476716, steps = 134_802039),
-      "success when split equally and remainder compensates fee - o3" -> ExUnits(memory = 476716, steps = 134_802039),
+      "success when payments are correctly split for a single payee" -> ExUnits(
+        memory = 256332,
+        steps = 73_407359
+      ),
+      "success when payments are correctly split between 2 payees" -> ExUnits(
+        memory = 360513,
+        steps = 102_434797
+      ),
+      "success when payments are correctly split between 3 payees" -> ExUnits(
+        memory = 476716,
+        steps = 134_802039
+      ),
+      "success when split equally and remainder compensates fee - o1" -> ExUnits(
+        memory = 476716,
+        steps = 134_802039
+      ),
+      "success when split equally and remainder compensates fee - o2" -> ExUnits(
+        memory = 476716,
+        steps = 134_802039
+      ),
+      "success when split equally and remainder compensates fee - o3" -> ExUnits(
+        memory = 476716,
+        steps = 134_802039
+      ),
       "success between 5 payees" -> ExUnits(memory = 745188, steps = 209_555935),
       "success with multiple contract UTxOs" -> ExUnits(memory = 660322, steps = 186_957451)
     )
