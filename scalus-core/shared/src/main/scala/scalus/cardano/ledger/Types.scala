@@ -12,7 +12,7 @@ import scalus.cardano.address.Address
 import scalus.serialization.cbor.Cbor
 import scalus.utils.Hex.toHex
 import scalus.utils.{Pretty, Style}
-import upickle.default.ReadWriter as UpickleReadWriter
+import upickle.default.{readwriter, ReadWriter as UpickleReadWriter}
 
 import java.util
 import scala.annotation.{targetName, threadUnsafe}
@@ -64,6 +64,19 @@ object Coin {
 
     given ToData[Coin] = (coin: Coin) => iData(coin.value)
     given FromData[Coin] = (data: Data) => Coin(unIData(data).toLong)
+
+    /** JSON ReadWriter for Coin that handles both string-encoded ("12345") and numeric (12345) JSON
+      * values. Blockfrost encodes lovelace amounts as strings because they can exceed JS
+      * Number.MAX_SAFE_INTEGER.
+      */
+    given UpickleReadWriter[Coin] = readwriter[ujson.Value].bimap[Coin](
+      c => ujson.Str(c.value.toString),
+      {
+          case ujson.Str(s) => Coin(s.toLong)
+          case ujson.Num(n) => Coin(n.toLong)
+          case v => throw upickle.core.Abort(s"Expected string or number for Coin, got: $v")
+      }
+    )
 
     /** Pretty prints Coin as ADA with 6 decimal places */
     given Pretty[Coin] with
