@@ -547,6 +547,19 @@ object SumUplcConstrSirTypeGenerator {
               pos
             )
 
+        // Build a substitution from the input type's abstract TypeVars to concrete types.
+        // This has two levels: DataDecl.typeParams (like List[A]'s A) map to input.typeArgs;
+        // each ConstrDecl has its OWN typeParams (separate instances), wired to DataDecl's
+        // via parentTypeArgs. We combine both levels below.
+        val dataDeclSubst: Map[SIRType.TypeVar, SIRType] =
+            SIRType.retrieveDataDecl(input.sirType) match
+                case Right(decl) =>
+                    input.sirType match
+                        case SIRType.SumCaseClass(_, typeArgs)
+                            if typeArgs.length == decl.typeParams.length =>
+                            decl.typeParams.zip(typeArgs).toMap
+                        case _ => Map.empty
+                case _ => Map.empty
         def makeBranches(recCall: Option[LoweredValue]): Seq[LoweredValue] = {
             val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
             constructors.zipWithIndex.map { (constrDecl, idx) =>
@@ -558,8 +571,38 @@ object SumUplcConstrSirTypeGenerator {
                   idx,
                   ProductCaseClassRepresentation.ProdUplcConstr(idx, Nil)
                 )
+                // Build constrDecl-level subst: constrDecl.params.tp uses constrDecl.typeParams
+                // (distinct TypeVar instances from dataDecl's). The parentTypeArgs encode how
+                // constrDecl typeParams map onto dataDecl typeParams. Compose both to resolve
+                // constrDecl TypeVars to concrete types.
+                val constrSubst: Map[SIRType.TypeVar, SIRType] =
+                    if dataDeclSubst.isEmpty || constrDecl.parentTypeArgs.isEmpty then
+                        dataDeclSubst
+                    else {
+                        // For each constrDecl TypeVar X: find its position via parentTypeArgs;
+                        // look up concrete type at that position.
+                        // Simpler: unify parentTypeArgs with input.sirType's typeArgs via
+                        // SIRUnify, get constrDecl TypeVars bound to concrete.
+                        val inputArgs = input.sirType match
+                            case SIRType.SumCaseClass(_, ts) => ts
+                            case _                           => Nil
+                        if inputArgs.length != constrDecl.parentTypeArgs.length then dataDeclSubst
+                        else {
+                            val cSubst = constrDecl.parentTypeArgs
+                                .zip(inputArgs)
+                                .flatMap {
+                                    case (tv: SIRType.TypeVar, concrete) => Some((tv, concrete))
+                                    case _                               => None
+                                }
+                                .toMap
+                            dataDeclSubst ++ cSubst
+                        }
+                    }
                 val fieldVars = constrDecl.params.zip(inPuc.fieldReprs).map { (param, repr) =>
-                    val tp = lctx.resolveTypeVarIfNeeded(param.tp)
+                    val paramTpSubst =
+                        if constrSubst.isEmpty then param.tp
+                        else SIRType.substitute(param.tp, constrSubst, Map.empty)
+                    val tp = lctx.resolveTypeVarIfNeeded(paramTpSubst)
                     val name = lctx.uniqueVarName(s"_uc2uc_f")
                     new VariableLoweredValue(
                       id = name,
