@@ -423,18 +423,28 @@ object SumUplcConstrSirTypeGenerator {
                 ScalusRuntime.builtinListToUplcConstr(input, outSum, input.sirType, pos)
             // SumUplcConstr → SumBuiltinList: iterate Constr chain, convert elements, build builtin list
             case (inSum: SumUplcConstr, outBl: SumBuiltinList) =>
-                // Check if any variant has Transparent TypeVar fields —
-                // these can't be converted to Data for SumBuiltinList
+                // Guard: if any variant has Transparent TypeVar fields AND the input's
+                // element type is itself an unresolved TypeVar, we have no concrete type
+                // to drive the per-field conversion — bail out. If the element type IS
+                // concrete (e.g., List[ChessSet]), the runtime conversion dispatches on
+                // the actual head value's sirType even when the field repr is a
+                // Transparent TypeVar left over from intrinsic-body lowering.
+                val elemType = SumCaseClassRepresentation.SumBuiltinList
+                    .retrieveListElementType(input.sirType)
+                    .getOrElse(SIRType.Data.tp)
+                val elemIsTypeVar = elemType match
+                    case _: SIRType.TypeVar => true
+                    case _                  => false
                 val hasTransparent = inSum.variants.values.exists { prod =>
                     prod.fieldReprs.exists {
                         case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
                         case _                                                      => false
                     }
                 }
-                if hasTransparent then
+                if hasTransparent && elemIsTypeVar then
                     throw LoweringException(
-                      s"Cannot convert SumUplcConstr with Transparent TypeVar fields to SumBuiltinList. " +
-                          s"Type: ${input.sirType.show}. " +
+                      s"Cannot convert SumUplcConstr with Transparent TypeVar fields to SumBuiltinList " +
+                          s"when element type is itself unresolved. Type: ${input.sirType.show}. " +
                           s"The return type needs @UplcRepr(UplcConstr) or the containing function needs Transparent-compatible output.",
                       pos
                     )
