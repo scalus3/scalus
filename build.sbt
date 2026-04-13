@@ -151,6 +151,8 @@ lazy val root: Project = project
       scalusUplcJitCompiler,
       scalusCardanoLedger.jvm,
       scalusCardanoLedger.js,
+      scalusCardanoStreaming.jvm,
+      scalusCardanoStreaming.js,
       scalusTestkit.js,
       scalusTestkit.jvm,
       scalusExamples.js,
@@ -177,6 +179,7 @@ lazy val jvm: Project = project
       scalus.jvm,
       scalusUplcJitCompiler,
       scalusCardanoLedger.jvm,
+      scalusCardanoStreaming.jvm,
       scalusTestkit.jvm,
       scalusExamples.jvm,
       scalusUtxoCell.jvm,
@@ -195,6 +198,7 @@ lazy val js: Project = project
     .aggregate(
       scalus.js,
       scalusCardanoLedger.js,
+      scalusCardanoStreaming.js,
       scalusTestkit.js,
       scalusExamples.js,
       scalusUtxoCell.js,
@@ -753,6 +757,22 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       }
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
+
+// Streaming BlockchainStreamProvider with rollback-aware event streams,
+// embedded chain-follower, and (future) N2C/N2N protocol clients plus tx
+// submission. Browser JS is not targeted — raw sockets are required.
+lazy val scalusCardanoStreaming = crossProject(JSPlatform, JVMPlatform)
+    .in(file("scalus-cardano-streaming"))
+    .dependsOn(scalusCardanoLedger % "compile->compile;test->test")
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-cardano-streaming",
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      inConfig(Test)(PluginDependency),
+      publish / skip := false
+    )
 
 // sbt plugin for blueprint generation
 lazy val scalusSbtPlugin = project
