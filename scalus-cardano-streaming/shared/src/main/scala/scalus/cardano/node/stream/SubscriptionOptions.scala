@@ -4,11 +4,23 @@ package scalus.cardano.node.stream
 case class SubscriptionOptions(
     startFrom: StartFrom = StartFrom.Tip,
     /** Number of block confirmations to wait before emitting an event.
-      * `0` (default) emits tentatively — subscribers may see
-      * `RolledBack` events. A value >= securityParam makes rollbacks
-      * invisible at the cost of added latency.
+      * `0` (default) emits tentatively. A value >= the network's
+      * security parameter guarantees no rollbacks but adds latency.
+      *
+      * Usually set implicitly via [[noRollback]] rather than picked by
+      * hand.
       */
     confirmations: Int = 0,
+    /** If `true`, the subscription is guaranteed never to see
+      * `RolledBack` events: the provider internally waits at least the
+      * network's security parameter of confirmations before emitting.
+      * Convenience for subscribers that don't implement rollback
+      * handling (wallets, batchers, dashboards).
+      *
+      * When both [[confirmations]] and `noRollback` are set, the
+      * provider uses `max(confirmations, securityParam)`.
+      */
+    noRollback: Boolean = false,
     bufferPolicy: BufferPolicy = BufferPolicy.default
 )
 

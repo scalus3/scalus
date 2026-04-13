@@ -236,7 +236,7 @@ lazy val scalusPlugin = project
       // COMMENT THIS LINE TO ENABLE VERSION INCREMENT during Scalus plugin development
       // COMMENT THIS LINE when doing plugin development
       // UPDATE VERSION after changes to the plugin
-      // version := "0.13.0+597-4eafe96f+20251217-1256-SNAPSHOT",
+      version := "0.13.0+597-4eafe96f+20251217-1256-SNAPSHOT",
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value // % "provided"
@@ -763,15 +763,25 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
 // submission. Browser JS is not targeted — raw sockets are required.
 lazy val scalusCardanoStreaming = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-cardano-streaming"))
-    .dependsOn(scalusCardanoLedger % "compile->compile;test->test")
+    .dependsOn(scalusCardanoLedger)
     .disablePlugins(MimaPlugin)
     .settings(
       name := "scalus-cardano-streaming",
       scalacOptions ++= commonScalacOptions,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
-      inConfig(Test)(PluginDependency),
+      // Consumer-side stream libraries, used by reader examples/tests to
+      // exercise the producer-side ScalusAsyncStream API against real
+      // stream types. fs2 first; ox next (JVM-only, see jvmSettings);
+      // pekko later if needed.
+      libraryDependencies += "co.fs2" %%% "fs2-core" % "3.11.0" % "test",
+      // No PluginDependency: this module has no onchain code, and the
+      // macros it uses (UtxoQueryMacros) are plain scala.quoted macros.
+      // Skipping the scalus compiler plugin keeps test compiles fast.
       publish / skip := false
+    )
+    .jvmSettings(
+      libraryDependencies += "com.softwaremill.ox" %% "core" % "0.5.3" % "test"
     )
 
 // sbt plugin for blueprint generation

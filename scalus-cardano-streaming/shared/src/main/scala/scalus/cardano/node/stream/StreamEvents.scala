@@ -1,6 +1,6 @@
 package scalus.cardano.node.stream
 
-import scalus.cardano.ledger.{Block, Transaction, TransactionHash, TransactionInput, TransactionOutput}
+import scalus.cardano.ledger.{Block, Transaction, TransactionHash, Utxo}
 
 /** UTxO lifecycle event delivered to a subscriber.
   *
@@ -10,20 +10,10 @@ import scalus.cardano.ledger.{Block, Transaction, TransactionHash, TransactionIn
 enum UtxoEvent {
 
     /** A UTxO matching the subscription was created by `producedBy`. */
-    case Created(
-        input: TransactionInput,
-        output: TransactionOutput,
-        producedBy: TransactionHash,
-        at: ChainPoint
-    )
+    case Created(utxo: Utxo, producedBy: TransactionHash, at: ChainPoint)
 
     /** A UTxO matching the subscription was spent by `spentBy`. */
-    case Spent(
-        input: TransactionInput,
-        output: TransactionOutput,
-        spentBy: TransactionHash,
-        at: ChainPoint
-    )
+    case Spent(utxo: Utxo, spentBy: TransactionHash, at: ChainPoint)
 
     /** The chain has rolled back to the given point. Subscribers must
       * discard all previously delivered events that occurred strictly

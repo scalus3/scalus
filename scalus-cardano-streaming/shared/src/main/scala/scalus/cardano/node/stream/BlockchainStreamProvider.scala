@@ -2,7 +2,7 @@ package scalus.cardano.node.stream
 
 import scalus.cardano.infra.ScalusAsyncStream
 import scalus.cardano.ledger.{Block, Transaction, TransactionInput, TransactionOutput}
-import scalus.cardano.node.{BlockchainProviderTF, BlockchainReaderTF, UtxoQuery}
+import scalus.cardano.node.{BlockchainProviderTF, BlockchainReaderTF}
 
 import scala.concurrent.Future
 
@@ -20,9 +20,13 @@ import scala.concurrent.Future
   */
 trait BlockchainStreamReaderTF[F[_], C[_]: ScalusAsyncStream] extends BlockchainReaderTF[F] {
 
-    /** Subscribe to UTxO events matching a structured query. */
+    /** Subscribe to UTxO events matching a structured query.
+      *
+      * A plain `UtxoQuery` auto-converts to a `UtxoEventQuery` via a
+      * given `Conversion` (both event types, no pagination).
+      */
     def subscribeUtxoQuery(
-        query: UtxoQuery,
+        query: UtxoEventQuery,
         opts: SubscriptionOptions = SubscriptionOptions()
     ): C[UtxoEvent]
 
