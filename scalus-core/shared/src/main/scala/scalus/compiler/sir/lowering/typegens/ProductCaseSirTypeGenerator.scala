@@ -21,14 +21,19 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             case Some(_, constrDecl, _) =>
                 if constrDecl.name == SIRType.BuiltinPair.name
                 then {
-                    // don't change: builtin functions rely on this
+                    // ProdBuiltinPair now carries explicit fstRepr/sndRepr, so use the
+                    // components' natural `defaultRepresentation` (Transparent stays Transparent
+                    // for passthrough; concrete types get their own default). Previously forced
+                    // Data on both components, which silently coerced Transparent TypeVars into
+                    // the Data-centric Fixed fallback and leaked `TypeVarRepresentation(Fixed)`
+                    // into enclosing structures.
                     val (fstType, sndType) =
                         ProductCaseClassRepresentation.ProdBuiltinPair
                             .extractPairComponentTypes(tp)
                     val fstRepr =
-                        loweringContext.typeGenerator(fstType).defaultDataRepresentation(fstType)
+                        loweringContext.typeGenerator(fstType).defaultRepresentation(fstType)
                     val sndRepr =
-                        loweringContext.typeGenerator(sndType).defaultDataRepresentation(sndType)
+                        loweringContext.typeGenerator(sndType).defaultRepresentation(sndType)
                     ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
                 } else if constrDecl.name == SIRType.Tuple2.name
                 then { // here we can change and see tests.

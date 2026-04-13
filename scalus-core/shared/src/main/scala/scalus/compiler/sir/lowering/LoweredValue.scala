@@ -329,18 +329,6 @@ class VariableLoweredValue(
         rhs.addDependent(this)
     }
 
-    // if id == "scalus.cardano.onchain.plutus.v1.Credential$.given_Eq_Credential252" then {
-    //    println(
-    //      s"VariableLoweredValue created with id = $id,  representation = $representation, sirType=${sir.tp.show}"
-    //    )
-    //    println(
-    //      s"SIR=${sir} at ${sir.anns.pos.file}:${sir.anns.pos.startLine + 1}"
-    //    )
-    //    throw new RuntimeException(
-    //      s"VariableLoweredValue created with id = $id,  representation = $representation, sirType=${sir.tp}"
-    //    )
-    // }
-
     override def sirType: SIRType = sir.tp
     override def pos: SIRPosition = sir.anns.pos
 
@@ -1920,7 +1908,30 @@ object LoweredValue {
                               inPos
                             )
                             (argTyped, false)
-                case _ => (arg, false)
+                case _ =>
+                    // arg.sirType isn't a direct TypeVar, but may still carry abstract
+                    // TypeVars *inside* (e.g., List[A#N] from a pattern-bound variable in
+                    // a generic lambda body). If targetArgType is concrete, unifying
+                    // reveals the bindings and lets us substitute arg.sirType to its
+                    // concrete form — so downstream conversion dispatches on the right type.
+                    SIRUnify.topLevelUnifyType(
+                      arg.sirType,
+                      targetArgType,
+                      SIRUnify.Env.empty
+                    ) match
+                        case SIRUnify.UnificationSuccess(uenv, _) if uenv.filledTypes.nonEmpty =>
+                            val substituted =
+                                SIRType.substitute(arg.sirType, uenv.filledTypes, Map.empty)
+                            if substituted eq arg.sirType then (arg, false)
+                            else
+                                val argTyped = new TypeRepresentationProxyLoweredValue(
+                                  arg,
+                                  substituted,
+                                  arg.representation,
+                                  inPos
+                                )
+                                (argTyped, false)
+                        case _ => (arg, false)
             }
 
             val argUpcasted = if !typeAligned && SIRType.isSum(targetArgType) then {

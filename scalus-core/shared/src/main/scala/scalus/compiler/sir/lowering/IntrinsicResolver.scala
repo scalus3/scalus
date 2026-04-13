@@ -128,6 +128,19 @@ object IntrinsicResolver {
       * reprRules, argConvertRules). Use `WildcardRepr` for factory methods whose arguments don't
       * match the module type.
       */
+    /** Modules whose ExternalVar references should have their type-signature TypeLambda TypeVars
+      * rewritten to `Transparent`. These target modules are dispatched by the intrinsic resolver to
+      * providers whose TypeVars are already Transparent (see `defaultIntrinsicModules`
+      * post-processing) and whose HO arguments (like `eq`, `ord`) are wrapped with
+      * `toDefaultTypeVarRepr` inside the provider body. The Scala plugin stamps `Fixed` on all
+      * user-code types, so without this rewrite `Fixed` leaks into the SIR tree and downstream
+      * representation inference treats native lists as Data-encoded, causing runtime mismatches
+      * (e.g., `unConstrData` applied to a native `Constr`).
+      */
+    def isIntrinsicDispatchedModule(moduleName: String): Boolean =
+        moduleName == ListModule || moduleName == PairListModule ||
+            moduleName == SortedMapModule || moduleName == AssocMapModule
+
     private val registry: Map[String, List[RegistryEntry]] = Map(
       ListModule -> List(
         (UplcConstrListRepr, 0, UplcConstrListOps, UplcConstrListReprRules.rules, NoArgConvert),
@@ -243,7 +256,15 @@ object IntrinsicResolver {
                               s"IntrinsicResolver: FOUND binding for $methodName, reprPriority=$bestReprPriority"
                             )
                         bestBinding.map { binding =>
-                            val substituted = substituteSelf(binding.value, argSir)
+                            // Before substituting the argSir into the provider body, rewrite any
+                            // inner ExternalVar references to intrinsic-dispatched modules so
+                            // their TypeLambda TypeVars are Transparent. The Scala plugin stamps
+                            // Fixed by default; without this pre-pass, Fixed leaks into enclosing
+                            // intrinsic bodies via substitution and corrupts output representation
+                            // inference (e.g., `map(quicksort(...))` ends up with element repr
+                            // `TypeVarRepresentation(Fixed)` → runtime crash).
+                            val rewrittenArgSir = rewriteIntrinsicExtVarTypeVars(argSir)
+                            val substituted = substituteSelf(binding.value, rewrittenArgSir)
                             // Apply arg conversion if rule exists for this method
                             val effectiveArg = bestArgConvertRules.get(methodName) match
                                 case Some(convertRule) =>
@@ -340,8 +361,49 @@ object IntrinsicResolver {
       * SumDataList/SumDataPairList are val aliases for SumBuiltinList instances, so the
       * SumBuiltinList patterns handle them via case class equality.
       */
+    /** Walk a SIR tree and rewrite every `ExternalVar(module, ...)` whose module is dispatched by
+      * the intrinsic resolver so its type's TypeVars become `Transparent`. Other nodes are
+      * preserved structurally. Does not recurse into `Decl.data` since DataDecl TypeVars have a
+      * different role (they live in the declaration and are bound to concrete types at use sites).
+      */
+    private def rewriteIntrinsicExtVarTypeVars(sir: SIR): SIR = {
+        def transparentize(tp: SIRType): SIRType =
+            SIRType.mapTypeVars(tp, _.copy(kind = SIRType.TypeVarKind.Transparent))
+        def goE(e: AnnotatedSIR): AnnotatedSIR = e match
+            case ev @ SIR.ExternalVar(moduleName, name, tp, anns)
+                if isIntrinsicDispatchedModule(moduleName) =>
+                SIR.ExternalVar(moduleName, name, transparentize(tp), anns)
+            case SIR.Apply(f, arg, tp, anns) => SIR.Apply(goE(f), goE(arg), tp, anns)
+            case SIR.Select(scr, field, tp, anns) =>
+                SIR.Select(go(scr).asInstanceOf[AnnotatedSIR], field, tp, anns)
+            case SIR.LamAbs(p, body, tps, anns) => SIR.LamAbs(p, go(body), tps, anns)
+            case SIR.Let(bs, body, flags, anns) =>
+                val newBs = bs.map(b => scalus.compiler.sir.Binding(b.name, b.tp, go(b.value)))
+                SIR.Let(newBs, go(body), flags, anns)
+            case SIR.Match(s, cs, tp, anns) =>
+                val newCs = cs.map(c => SIR.Case(c.pattern, go(c.body), c.anns))
+                SIR.Match(goE(s), newCs, tp, anns)
+            case SIR.IfThenElse(c, t, e, tp, anns) =>
+                SIR.IfThenElse(goE(c), goE(t), goE(e), tp, anns)
+            case SIR.And(l, r, anns)   => SIR.And(goE(l), goE(r), anns)
+            case SIR.Or(l, r, anns)    => SIR.Or(goE(l), goE(r), anns)
+            case SIR.Not(t, anns)      => SIR.Not(goE(t), anns)
+            case SIR.Cast(t, tp, anns) => SIR.Cast(goE(t), tp, anns)
+            case SIR.Constr(n, d, args, tp, anns) =>
+                SIR.Constr(n, d, args.map(go), tp, anns)
+            case other => other
+        def go(s: SIR): SIR = s match
+            case SIR.Decl(data, body) => SIR.Decl(data, go(body))
+            case a: AnnotatedSIR      => goE(a)
+        go(sir)
+    }
+
     /** All representation names that match a given representation, most specific first. */
     private def representationNames(repr: LoweredValueRepresentation): List[String] = repr match
+        case proxy: SumCaseClassRepresentation.SumReprProxy =>
+            // Self-referential repr (e.g., Cons tail proxy back to the outer SumUplcConstr) —
+            // dispatch by the underlying representation so recursive list ops resolve.
+            representationNames(proxy.ref)
         case _: SumCaseClassRepresentation.SumUplcConstr =>
             List(UplcConstrListRepr)
         case SumCaseClassRepresentation.SumBuiltinList(er) if !er.isPackedData =>
@@ -491,9 +553,9 @@ object IntrinsicResolver {
         //      Without this, B stays free and downstream lowering can't resolve it
         //      (producing either mis-binding to A's type or StackOverflow).
         def stripTypeLambda(tp: SIRType): SIRType = tp match
-            case SIRType.TypeLambda(_, body) => stripTypeLambda(body)
+            case SIRType.TypeLambda(_, body)           => stripTypeLambda(body)
             case SIRType.TypeProxy(ref) if ref ne null => stripTypeLambda(ref)
-            case _                           => tp
+            case _                                     => tp
         val bindingTpStripped = stripTypeLambda(binding.tp)
         val (selfParamType, restType) = bindingTpStripped match
             case SIRType.Fun(paramTp, retType) => (paramTp, retType)

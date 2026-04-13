@@ -243,7 +243,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6496, steps = 1_300021)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5696, steps = 1_172021)
           )
         )
 
@@ -263,7 +263,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(4), Cons(BigInt(6), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 20408, steps = 4_946969)
+                .copy(nativeListElements = false) -> ExUnits(memory = 19608, steps = 4_818969)
           )
         )
     }
@@ -422,7 +422,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 8164, steps = 1_439027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 7564, steps = 1_343027)
           )
         )
 
@@ -432,7 +432,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 22818, steps = 4_907_569)
+                .copy(nativeListElements = false) -> ExUnits(memory = 22218, steps = 4_811_569)
           )
         )
 
@@ -442,7 +442,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 125943, steps = 30_092_900)
+                .copy(nativeListElements = false) -> ExUnits(memory = 123543, steps = 29_708_900)
           )
         )
     }
@@ -735,7 +735,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, List[BigInt]],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11460, steps = 2_176890)
+                .copy(nativeListElements = false) -> ExUnits(memory = 11360, steps = 2_160890)
           )
         )
 
@@ -745,7 +745,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), List.single(BigInt(1))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 42807, steps = 10_386_156)
+                .copy(nativeListElements = false) -> ExUnits(memory = 43007, steps = 10_418_156)
           )
         )
 
@@ -758,7 +758,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
               Cons((BigInt(1), List.single(BigInt(1))), Nil)
             )
           ),
-          ExUnits(memory = 85546, steps = 21_720_896)
+          ExUnits(memory = 85446, steps = 21_704_896)
         )
 
     }
@@ -782,7 +782,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, List[BigInt]],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11660, steps = 2_208890)
+                .copy(nativeListElements = false) -> ExUnits(memory = 11560, steps = 2_192890)
           )
         )
 
@@ -792,7 +792,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), List.single(BigInt(1))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 43839, steps = 10_561_455)
+                .copy(nativeListElements = false) -> ExUnits(memory = 44271, steps = 10_646_199)
           )
         )
 
@@ -805,7 +805,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
               Cons((BigInt(1), List.single(BigInt(1))), Nil)
             )
           ),
-          ExUnits(memory = 87410, steps = 22_039_494)
+          ExUnits(memory = 87774, steps = 22_128_982)
         )
     }
 
@@ -828,7 +828,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7064, steps = 1_263027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6964, steps = 1_247027)
           )
         )
 
@@ -838,7 +838,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 22175, steps = 5_194_423)
+                .copy(nativeListElements = false) -> ExUnits(memory = 22607, steps = 5_279_167)
           )
         )
 
@@ -848,7 +848,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.unsafeFromList(
             Cons((BigInt(0), BigInt(6)), Cons((BigInt(1), BigInt(4)), Nil))
           ),
-          ExUnits(memory = 136804, steps = 36_701_843)
+          ExUnits(memory = 137032, steps = 36_800_819)
         )
     }
 
@@ -1518,7 +1518,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 23348, steps = 5_026694)
+                .copy(nativeListElements = false) -> ExUnits(memory = 23948, steps = 5_122694)
           )
         )
 
@@ -1528,7 +1528,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(11), Cons(BigInt(101), Cons(BigInt(12), Cons(BigInt(102), Nil)))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 34300, steps = 8_319502)
+                .copy(nativeListElements = false) -> ExUnits(memory = 34900, steps = 8_415502)
           )
         )
     }
@@ -1547,7 +1547,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4696, steps = 904960)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4496, steps = 872960)
           )
         )
 
@@ -1557,7 +1557,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11190, steps = 2_412_635)
+                .copy(nativeListElements = false) -> ExUnits(memory = 11490, steps = 2_460_635)
           )
         )
 
@@ -1567,7 +1567,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(2), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18216, steps = 4_072_672)
+                .copy(nativeListElements = false) -> ExUnits(memory = 19016, steps = 4_200_672)
           )
         )
     }
@@ -1586,7 +1586,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5796, steps = 1_080_960)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5596, steps = 1_048_960)
           )
         )
 
@@ -1596,7 +1596,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13023, steps = 2_849_046)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13323, steps = 2_897_046)
           )
         )
 
@@ -1606,7 +1606,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 19818, steps = 4_480_770)
+                .copy(nativeListElements = false) -> ExUnits(memory = 20618, steps = 4_608_770)
           )
         )
     }
@@ -1637,7 +1637,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15056, steps = 3_315_500)
+                .copy(nativeListElements = false) -> ExUnits(memory = 15356, steps = 3_363_500)
           )
         )
 
@@ -1647,7 +1647,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(3), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 26210, steps = 6_330_564)
+                .copy(nativeListElements = false) -> ExUnits(memory = 26810, steps = 6_426_564)
           )
         )
 
@@ -1667,7 +1667,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5664, steps = 1_039_027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4864, steps = 911027)
           )
         )
 
@@ -1677,7 +1677,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 10594, steps = 2_246917)
+                .copy(nativeListElements = false) -> ExUnits(memory = 9994, steps = 2_150917)
           )
         )
 
@@ -1687,7 +1687,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Some(BigInt(2)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13356, steps = 3_065813)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12956, steps = 3_001813)
           )
         )
     }
@@ -1706,7 +1706,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5164, steps = 959027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4564, steps = 863027)
           )
         )
 
@@ -1716,7 +1716,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13762, steps = 3_189_880)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13162, steps = 3_093_880)
           )
         )
 
@@ -1726,7 +1726,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Some(BigInt(3)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 20594, steps = 5_129_096)
+                .copy(nativeListElements = false) -> ExUnits(memory = 19994, steps = 5_033_096)
           )
         )
     }
@@ -1745,7 +1745,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4496, steps = 867771)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3896, steps = 771771)
           )
         )
 
@@ -1755,7 +1755,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11590, steps = 2_427_573)
+                .copy(nativeListElements = false) -> ExUnits(memory = 10990, steps = 2_331_573)
           )
         )
 
@@ -1765,7 +1765,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(3),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18684, steps = 3_987_375)
+                .copy(nativeListElements = false) -> ExUnits(memory = 18084, steps = 3_891_375)
           )
         )
     }
@@ -1784,7 +1784,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4496, steps = 867771)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3896, steps = 771771)
           )
         )
 
@@ -1794,7 +1794,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 10390, steps = 2_235_573)
+                .copy(nativeListElements = false) -> ExUnits(memory = 9790, steps = 2_139_573)
           )
         )
 
@@ -1804,7 +1804,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(3),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 16284, steps = 3_603_375)
+                .copy(nativeListElements = false) -> ExUnits(memory = 15684, steps = 3_507_375)
           )
         )
     }
@@ -1853,7 +1853,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4696, steps = 899771)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4496, steps = 867771)
           )
         )
         assertEvalWithBudgets(
@@ -1862,7 +1862,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12492, steps = 2_692_912)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12792, steps = 2_740_912)
           )
         )
         assertEvalWithBudgets(
@@ -1871,7 +1871,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12090, steps = 2_527_704)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12390, steps = 2_575_704)
           )
         )
         assertEvalWithBudgets(
@@ -1880,7 +1880,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 19886, steps = 4_320_845)
+                .copy(nativeListElements = false) -> ExUnits(memory = 20686, steps = 4_448_845)
           )
         )
         assertEvalWithBudgets(
@@ -1889,7 +1889,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 19484, steps = 4_155_637)
+                .copy(nativeListElements = false) -> ExUnits(memory = 20284, steps = 4_283_637)
           )
         )
     }
@@ -1911,7 +1911,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 3664, steps = 719027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3864, steps = 751027)
           )
         )
         assertEvalWithBudgets(
@@ -1920,7 +1920,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Some(BigInt(0)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7458, steps = 1_657_859)
+                .copy(nativeListElements = false) -> ExUnits(memory = 7958, steps = 1_737_859)
           )
         )
         assertEvalWithBudgets(
@@ -1929,7 +1929,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 9428, steps = 2_183_912)
+                .copy(nativeListElements = false) -> ExUnits(memory = 9928, steps = 2_263_912)
           )
         )
         assertEvalWithBudgets(
@@ -1938,7 +1938,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Some(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13222, steps = 3_122_744)
+                .copy(nativeListElements = false) -> ExUnits(memory = 14022, steps = 3_250_744)
           )
         )
         assertEvalWithBudgets(
@@ -1947,7 +1947,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15192, steps = 3_648_797)
+                .copy(nativeListElements = false) -> ExUnits(memory = 15992, steps = 3_776_797)
           )
         )
     }
@@ -1966,7 +1966,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(-1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 8062, steps = 1_722636)
+                .copy(nativeListElements = false) -> ExUnits(memory = 8262, steps = 1_754636)
           )
         )
 
@@ -1976,7 +1976,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12020, steps = 2_902_610)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12520, steps = 2_982_610)
           )
         )
 
@@ -1986,7 +1986,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(-1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13526, steps = 3_139_521)
+                .copy(nativeListElements = false) -> ExUnits(memory = 14026, steps = 3_219_521)
           )
         )
 
@@ -1996,7 +1996,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 17484, steps = 4_319_495)
+                .copy(nativeListElements = false) -> ExUnits(memory = 18284, steps = 4_447_495)
           )
         )
 
@@ -2006,7 +2006,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(-1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18990, steps = 4_556406)
+                .copy(nativeListElements = false) -> ExUnits(memory = 19790, steps = 4_684406)
           )
         )
     }
@@ -2408,7 +2408,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4064, steps = 783027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3464, steps = 687027)
           )
         )
 
@@ -2418,7 +2418,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6430, steps = 1_376_260)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5530, steps = 1_232_260)
           )
         )
 
@@ -2428,7 +2428,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15524, steps = 3_454_807)
+                .copy(nativeListElements = false) -> ExUnits(memory = 14324, steps = 3_262_807)
           )
         )
 
@@ -2438,7 +2438,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(2), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12160, steps = 2_712_150)
+                .copy(nativeListElements = false) -> ExUnits(memory = 10960, steps = 2_520_150)
           )
         )
 
@@ -2448,7 +2448,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6430, steps = 1_376_260)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5530, steps = 1_232_260)
           )
         )
     }
@@ -2471,7 +2471,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4864, steps = 911027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5064, steps = 943027)
           )
         )
 
@@ -2481,7 +2481,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7494, steps = 1_645_710)
+                .copy(nativeListElements = false) -> ExUnits(memory = 7994, steps = 1_725_710)
           )
         )
 
@@ -2491,7 +2491,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(2), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7494, steps = 1_645_710)
+                .copy(nativeListElements = false) -> ExUnits(memory = 7994, steps = 1_725_710)
           )
         )
 
@@ -2501,7 +2501,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15716, steps = 3_821_405)
+                .copy(nativeListElements = false) -> ExUnits(memory = 16516, steps = 3_949_405)
           )
         )
 
@@ -2511,7 +2511,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12920, steps = 3_100899)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13720, steps = 3_228899)
           )
         )
 
@@ -2521,7 +2521,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7494, steps = 1_645_710)
+                .copy(nativeListElements = false) -> ExUnits(memory = 7994, steps = 1_725_710)
           )
         )
     }
@@ -2680,7 +2680,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5464, steps = 1_007027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4864, steps = 911027)
           )
         )
 
@@ -2690,7 +2690,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7630, steps = 1_568_260)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6730, steps = 1_424_260)
           )
         )
 
@@ -2700,7 +2700,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 17652, steps = 4_085_831)
+                .copy(nativeListElements = false) -> ExUnits(memory = 16452, steps = 3_893_831)
           )
         )
 
@@ -2710,7 +2710,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13724, steps = 3_107662)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12524, steps = 2_915662)
           )
         )
 
@@ -2720,7 +2720,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7630, steps = 1_568_260)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6730, steps = 1_424_260)
           )
         )
     }
@@ -2798,7 +2798,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6665, steps = 1_216515)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6065, steps = 1_120515)
           )
         )
 
@@ -2808,7 +2808,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7397, steps = 1_461509)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6797, steps = 1_365509)
           )
         )
 
@@ -2818,7 +2818,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6665, steps = 1_216515)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6065, steps = 1_120515)
           )
         )
 
@@ -2828,7 +2828,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 16256, steps = 3_620481)
+                .copy(nativeListElements = false) -> ExUnits(memory = 15656, steps = 3_524481)
           )
         )
 
@@ -2838,7 +2838,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 22514, steps = 5_336664)
+                .copy(nativeListElements = false) -> ExUnits(memory = 21914, steps = 5_240664)
           )
         )
 
@@ -2848,7 +2848,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 25110, steps = 6_025170)
+                .copy(nativeListElements = false) -> ExUnits(memory = 24510, steps = 5_929170)
           )
         )
     }
@@ -2948,7 +2948,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4064, steps = 783027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3464, steps = 687027)
           )
         )
 
@@ -2958,7 +2958,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 8892, steps = 1_853_578)
+                .copy(nativeListElements = false) -> ExUnits(memory = 8292, steps = 1_757_578)
           )
         )
 
@@ -2968,7 +2968,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13720, steps = 2_924_129)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13120, steps = 2_828_129)
           )
         )
     }

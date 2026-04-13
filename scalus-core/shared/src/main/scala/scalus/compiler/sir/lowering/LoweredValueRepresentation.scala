@@ -1204,63 +1204,13 @@ case class LambdaRepresentation(
                             )
                         case suc: SumCaseClassRepresentation.SumUplcConstr =>
                             // Canonical repr is SumUplcConstr — rebuild for concrete type.
-                            // Build mapping from data decl's TypeVars to concrete type args.
-                            val dataDeclOpt = SIRType.retrieveDataDecl(argumentType)
-                            val typeArgSubst: Map[SIRType.TypeVar, SIRType] = argumentType match
-                                case SIRType.SumCaseClass(decl, typeArgs) =>
-                                    decl.typeParams
-                                        .zip(typeArgs)
-                                        .collect { case (tv: SIRType.TypeVar, arg) => tv -> arg }
-                                        .toMap
-                                case _ => Map.empty
-                            dataDeclOpt match
-                                case Right(dataDecl) =>
-                                    val resolvedVariants =
-                                        suc.variants.map { (tag, puc) =>
-                                            val argConstr = dataDecl.constructors.lift(tag)
-                                            val resolvedFieldReprs =
-                                                puc.fieldReprs.zipWithIndex.map {
-                                                    (fieldRepr, fieldIdx) =>
-                                                        fieldRepr match
-                                                            case _: TypeVarRepresentation =>
-                                                                val argFieldTp = argConstr
-                                                                    .flatMap(
-                                                                      _.params.lift(fieldIdx)
-                                                                    )
-                                                                    .map(p =>
-                                                                        SIRType.substitute(
-                                                                          p.tp,
-                                                                          typeArgSubst,
-                                                                          Map.empty
-                                                                        )
-                                                                    )
-                                                                    .getOrElse(
-                                                                      SIRType.FreeUnificator
-                                                                    )
-                                                                val resolved =
-                                                                    lctx.resolveTypeVarIfNeeded(
-                                                                      argFieldTp
-                                                                    )
-                                                                lctx
-                                                                    .typeGenerator(resolved)
-                                                                    .defaultRepresentation(
-                                                                      resolved
-                                                                    )
-                                                            case other => other
-                                                }
-                                            (
-                                              tag,
-                                              ProductCaseClassRepresentation.ProdUplcConstr(
-                                                tag,
-                                                resolvedFieldReprs
-                                              )
-                                            )
-                                        }
-                                    SumCaseClassRepresentation.SumUplcConstr(resolvedVariants)
-                                case Left(_) =>
-                                    lctx
-                                        .typeGenerator(argumentType)
-                                        .defaultRepresentation(argumentType)
+                            // Delegate to the type generator's defaultRepresentation, which for
+                            // SumUplcConstr types goes through `buildSumUplcConstr`. That routine
+                            // substitutes DataDecl TypeVars with concrete type args and forces
+                            // TypeVar fields to Transparent — preventing DataDecl's `Fixed` kind
+                            // from leaking into field reprs (which would later cause Data/native
+                            // mismatches during representation conversion).
+                            lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
                         case other =>
                             val result = lctx
                                 .typeGenerator(argumentType)

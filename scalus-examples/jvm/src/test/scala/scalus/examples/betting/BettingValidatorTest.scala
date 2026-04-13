@@ -89,7 +89,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 147541, steps = 44732278L)
-                            else ExUnits(memory = 129801, steps = 38_312568))
+                            else ExUnits(memory = 136621, steps = 40_306493))
         )
 
     test("Verify that player2 can join an existing bet"):

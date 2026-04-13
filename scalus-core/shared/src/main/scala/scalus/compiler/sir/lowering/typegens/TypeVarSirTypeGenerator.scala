@@ -28,13 +28,35 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation = {
-        TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
+        // Requesting the Data representation of a Transparent TypeVar is a bug: Transparent means
+        // "passthrough — use whatever the caller uses", not Data-encoded. Returning
+        // TypeVarRepresentation(Fixed) silently labels a passthrough value as Data, which
+        // downstream code takes as permission to call Data-only builtins on what may be a
+        // native Constr. Make the call site fail fast so we can route it through a
+        // Transparent-safe path.
+        tp match
+            case tv: SIRType.TypeVar if tv.kind == SIRType.TypeVarKind.Transparent =>
+                throw LoweringException(
+                  s"defaultDataRepresentation requested on Transparent TypeVar ${tv.name}" +
+                      s"(${tv.optId.getOrElse("-")}). Transparent TypeVars must not be coerced " +
+                      s"to Data repr — the caller should stay in the TypeVar's native passthrough " +
+                      s"repr or resolve the TypeVar to a concrete type first.",
+                  SIRPosition.empty
+                )
+            case _ =>
+                TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
     }
 
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        defaultDataRepresentation(tp)
+        // For a Transparent TypeVar, the "default TypeVar repr" is Transparent itself — the value
+        // passes through in whatever native form its enclosing scope uses. Only Fixed kinds fall
+        // back to the Data-equivalent Fixed repr.
+        tp match
+            case tv: SIRType.TypeVar if tv.kind == SIRType.TypeVarKind.Transparent =>
+                TypeVarRepresentation(SIRType.TypeVarKind.Transparent)
+            case _ => defaultDataRepresentation(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         tp match {

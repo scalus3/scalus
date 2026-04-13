@@ -52,7 +52,15 @@ object IntrinsicsUplcConstrList {
         self: List[A],
         ord: (A, A) => scalus.cardano.onchain.plutus.prelude.Order
     ): List[A] =
-        UplcConstrListOperations.quicksort(self, ord)
+        // The user-provided `ord` compiles with `Fixed`-kind TypeVar args (Data-encoded),
+        // but the list elements here are native Constr. Convert to the default TypeVar repr
+        // (Data) before calling ord — matches the pattern in `contains` for `eq`. Without this,
+        // the `Fixed` in ord's signature leaks into downstream representation inference and
+        // triggers a Data/native mismatch at runtime.
+        UplcConstrListOperations.quicksort(
+          self,
+          (a: A, b: A) => ord(toDefaultTypeVarRepr(a), toDefaultTypeVarRepr(b))
+        )
 
     def contains[A](self: List[A], elem: A, eq: (A, A) => Boolean): Boolean =
         UplcConstrListOperations.contains(

@@ -171,7 +171,22 @@ object Lowering {
                           s"Variable $name not found in the scope at ${anns.pos.file}:${anns.pos.startLine}",
                           anns.pos
                         )
-            case ev @ SIR.ExternalVar(moduleName, name, tp, _) =>
+            case ev0 @ SIR.ExternalVar(moduleName, name, tp0, _) =>
+                // If this ExternalVar targets a module dispatched by the intrinsic resolver,
+                // rewrite its type's TypeVars to `Transparent`. The Scala plugin defaults to
+                // `Fixed`; without this rewrite, `Fixed` leaks into enclosing intrinsic-body
+                // substitutions and corrupts output representation inference. The provider's
+                // body already runs with Transparent TypeVars (per `defaultIntrinsicModules`
+                // post-processing) and wraps HO arguments with `toDefaultTypeVarRepr` where
+                // the arg expects Data-encoded values.
+                val tp =
+                    if IntrinsicResolver.isIntrinsicDispatchedModule(moduleName) then
+                        SIRType.mapTypeVars(
+                          tp0,
+                          _.copy(kind = SIRType.TypeVarKind.Transparent)
+                        )
+                    else tp0
+                val ev = if tp eq tp0 then ev0 else ev0.copy(tp = tp)
                 // SIRLinker made usual variable from names.
                 if lctx.debug then
                     lctx.log(

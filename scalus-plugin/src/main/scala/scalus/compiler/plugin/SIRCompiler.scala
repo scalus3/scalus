@@ -647,6 +647,26 @@ final class SIRCompiler(
         }
     }
 
+    /** Wrap `tp` in `SIRType.Annotated` with @UplcRepr taken from `sym`. For Fun/TypeLambda types,
+      * the annotation is attached to the final return position (walking through curried Fun types
+      * and type lambdas), matching how return-type representation is expressed elsewhere in the
+      * lowering pipeline.
+      */
+    private def wrapTypeWithUplcRepr(tp: SIRType, sym: Symbol, srcPos: SrcPos): SIRType = {
+        val reprData = extractUplcReprAnnotation(sym)
+        if reprData.isEmpty then tp
+        else
+            val anns = AnnotationsDecl(SIRPosition.fromSrcPos(srcPos), data = reprData)
+            def annotateReturn(t: SIRType): SIRType = t match
+                case SIRType.Fun(arg, ret) => SIRType.Fun(arg, annotateReturn(ret))
+                case SIRType.TypeLambda(tps, body) =>
+                    SIRType.TypeLambda(tps, annotateReturn(body))
+                case SIRType.Annotated(inner, existing) if existing.data.contains("uplcRepr") =>
+                    t
+                case _ => SIRType.Annotated(t, anns)
+            annotateReturn(tp)
+    }
+
     /** Encodes a UplcRepresentation enum value to SIR.
       *
       * Case objects (like UplcRepresentation.UplcConstr) are encoded as string constants. Case
@@ -1091,7 +1111,8 @@ final class SIRCompiler(
                 )
             // global def, use full name
             case (false, true) =>
-                val origType = sirTypeInEnv(taTree.tpe.widen, e.srcPos, env)
+                val origType0 = sirTypeInEnv(taTree.tpe.widen, e.srcPos, env)
+                val origType = wrapTypeWithUplcRepr(origType0, e.symbol, e.srcPos)
                 val varType =
                     if isNoArgsMethod(e.symbol) then
                         // TODO: if we have type parameters, then we should apply one
@@ -1106,7 +1127,8 @@ final class SIRCompiler(
                   origType
                 )
             case (false, false) =>
-                val origType = sirTypeInEnv(e.tpe.widen.dealias, e.srcPos, env)
+                val origType0 = sirTypeInEnv(e.tpe.widen.dealias, e.srcPos, env)
+                val origType = wrapTypeWithUplcRepr(origType0, e.symbol, e.srcPos)
                 val valType =
                     if isNoArgsMethod(e.symbol) then SIRType.Fun(SIRType.Unit, origType)
                     else origType
@@ -1213,7 +1235,8 @@ final class SIRCompiler(
                     }
                 } else vd.rhs
             val bodyExpr = compileExpr(env, rhsFixed)
-            val valSirType = sirTypeInEnv(vd.tpe.widen, vd.srcPos, env)
+            val valSirType0 = sirTypeInEnv(vd.tpe.widen, vd.srcPos, env)
+            val valSirType = wrapTypeWithUplcRepr(valSirType0, vd.symbol, vd.srcPos)
             // insert Apply if the left part hava a type T and right: Unit=>T
             val bodyExpr1 =
                 if SIRType.isPolyFunOrFunUnit(bodyExpr.tp)
@@ -1229,11 +1252,20 @@ final class SIRCompiler(
                 else bodyExpr
 
             // Here we more precise then scala compiler.
-            val bindingSirType =
+            val bindingSirType0 =
                 if bodyExpr1.tp.isInstanceOf[SIRType.CaseClass] && valSirType
                         .isInstanceOf[SIRType.SumCaseClass]
                 then bodyExpr1.tp
                 else valSirType
+            // Preserve @UplcRepr annotation from the rhs: if the rhs type is Annotated with
+            // `uplcRepr` and the chosen binding type isn't, wrap it so downstream pattern matches
+            // and intrinsic dispatch see the representation hint.
+            val bindingSirType = (bodyExpr1.tp, bindingSirType0) match {
+                case (SIRType.Annotated(_, anns), base)
+                    if anns.data.contains("uplcRepr") && !base.isInstanceOf[SIRType.Annotated] =>
+                    SIRType.Annotated(base, anns)
+                case _ => bindingSirType0
+            }
 
             CompileMemberDefResult.Compiled(
               LocalBinding(
@@ -1359,7 +1391,8 @@ final class SIRCompiler(
             val selfKey =
                 if isGlobalDef then VariableKey.fromName(FullName(dd.symbol).name)
                 else VariableKey(dd.symbol.name.show, Some(dd.symbol.id))
-            val selfTypeFromDef = sirTypeInEnv(dd.tpe, SIRTypeEnv(dd.srcPos, env.typeVars))
+            val selfTypeFromDef0 = sirTypeInEnv(dd.tpe, SIRTypeEnv(dd.srcPos, env.typeVars))
+            val selfTypeFromDef = wrapTypeWithUplcRepr(selfTypeFromDef0, dd.symbol, dd.srcPos)
             // Problem that when self-type is type-lambda, then typevars in params and in sekdfType can be different.
             // i.e.dd.tpe return one set of variable, params - other.
             // So, we need to reassemble them and use type variables from params, to be consistent with body type.
