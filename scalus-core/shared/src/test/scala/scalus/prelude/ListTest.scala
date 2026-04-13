@@ -537,7 +537,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         assertEval(!Cons(BigInt(1), Cons(BigInt(2), Nil)).isDefinedAt(-1))
     }
 
-    test("get") {
+    test("get - property") {
         forAll(bigIntListAndIndexGen) { (list: List[BigInt], index: BigInt) =>
             val scalusResult = list.get(index)
             val scalaResult = list.asScala.lift(index.toInt)
@@ -545,7 +545,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalaResult.asScalus === scalusResult)
             assert(scalusResult.asScala == scalaResult)
         }
+    }
 
+    test("get - empty list, idx 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(0),
           List.empty[BigInt],
@@ -555,6 +557,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5866, steps = 1_192366)
           )
         )
+    }
+
+    test("get - single element, idx 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(0),
           List.single(1),
@@ -564,6 +569,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8164, steps = 1_850_411)
           )
         )
+    }
+
+    test("get - single element, idx 1 (out of bounds)") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(1),
           List.single(1),
@@ -573,6 +581,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 10034, steps = 2_292_613)
           )
         )
+    }
+
+    test("get - single element, idx -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(-1),
           List.single(1),
@@ -582,6 +593,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 3534, steps = 691372)
           )
         )
+    }
+
+    test("get - two-element list, idx 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(0),
           Cons(1, Cons(2, Nil)),
@@ -591,6 +605,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8164, steps = 1_850_411)
           )
         )
+    }
+
+    test("get - two-element list, idx 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(1),
           Cons(1, Cons(2, Nil)),
@@ -600,6 +617,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 12332, steps = 2_950_658)
           )
         )
+    }
+
+    test("get - two-element list, idx 2 (out of bounds)") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(2),
           Cons(1, Cons(2, Nil)),
@@ -609,6 +629,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 14202, steps = 3_392_860)
           )
         )
+    }
+
+    test("get - two-element list, idx -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(-1),
           Cons(1, Cons(2, Nil)),
@@ -852,14 +875,16 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("zip") {
+    test("zip - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1.zip(list2)
             val scalaResult = list1.asScala.zip(list2.asScala)
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("zip - empty zip empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(List.empty[BigInt]),
           List.empty[BigInt],
@@ -869,7 +894,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 4764, steps = 895027)
           )
         )
+    }
 
+    test("zip - single zip empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(List.empty[BigInt]),
           List.single(1),
@@ -879,7 +906,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5496, steps = 1_140021)
           )
         )
+    }
 
+    test("zip - empty zip single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => List.empty[BigInt].zip(list),
           List.single(1),
@@ -889,7 +918,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 4764, steps = 895027)
           )
         )
+    }
 
+    test("zip - single zip single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(List.single(BigInt(2))),
           List.single(1),
@@ -899,7 +930,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 10384, steps = 2_577878)
           )
         )
+    }
 
+    test("zip - two zip two") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(Cons(BigInt(3), Cons(BigInt(4), Nil))),
           Cons(1, Cons(2, Nil)),
@@ -909,7 +942,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 16004, steps = 4_260729)
           )
         )
+    }
 
+    test("zip - two zip single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
@@ -2254,7 +2289,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("drop") {
+    test("drop - property") {
         forAll(bigIntListAndIndexGen) { (list: List[BigInt], number: BigInt) =>
             val scalusResult = list.drop(number)
             val scalaResult = list.asScala.drop(number.toInt)
@@ -2262,7 +2297,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalaResult.asScalus === scalusResult)
             assert(scalusResult.asScala == scalaResult)
         }
+    }
 
+    test("drop - empty drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(1),
           List.empty[BigInt],
@@ -2272,7 +2309,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 4666, steps = 998913)
           )
         )
+    }
 
+    test("drop - single drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(1),
           List.single(1),
@@ -2282,7 +2321,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8102, steps = 1_845_670)
           )
         )
+    }
 
+    test("drop - two drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(1),
           Cons(1, Cons(2, Nil)),
@@ -2292,7 +2333,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8102, steps = 1_845_670)
           )
         )
+    }
 
+    test("drop - two drop 2") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(2),
           Cons(1, Cons(2, Nil)),
@@ -2302,7 +2345,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 12470, steps = 2_969_421)
           )
         )
+    }
 
+    test("drop - two drop 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(0),
           Cons(1, Cons(2, Nil)),
@@ -2312,7 +2357,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 3734, steps = 721919)
           )
         )
+    }
 
+    test("drop - two drop -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(-1),
           Cons(1, Cons(2, Nil)),
