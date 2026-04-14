@@ -1,6 +1,8 @@
 package scalus.examples.streaming.oxbatcher
 
+import org.scalatest.concurrent.Eventually
 import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.time.{Millis, Seconds, Span}
 import ox.*
 import ox.flow.Flow
 import scalus.cardano.ledger.{BlockHash, CardanoInfo}
@@ -19,7 +21,10 @@ import scala.concurrent.duration.*
   * the resulting `Flow`. `closeAllSubs` terminates the underlying
   * channel, which in turn ends the flow cleanly.
   */
-class OxBlockchainStreamProviderTest extends AnyFunSuite {
+class OxBlockchainStreamProviderTest extends AnyFunSuite with Eventually {
+
+    implicit override val patienceConfig: PatienceConfig =
+        PatienceConfig(timeout = Span(2, Seconds), interval = Span(20, Millis))
 
     private given ExecutionContext = ExecutionContext.global
 
@@ -62,10 +67,9 @@ class OxBlockchainStreamProviderTest extends AnyFunSuite {
             val collected = flow.take(5).runToList()
             pusher.join()
             assert(collected.map(_.slot) == (1L to 5L).toList)
-            // Allow the onComplete finalizer to run before checking
-            // the registry.
-            Thread.sleep(50)
-            assert(provider.activeSubscriptionCount == 0)
+            eventually {
+                assert(provider.activeSubscriptionCount == 0)
+            }
         }
     }
 

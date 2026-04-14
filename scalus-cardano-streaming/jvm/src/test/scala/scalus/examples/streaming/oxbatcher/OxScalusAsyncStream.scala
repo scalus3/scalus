@@ -54,14 +54,13 @@ object OxScalusAsyncStream {
             bufferPolicy: BufferPolicy,
             onCancel: () => Unit
         ): (ScalusAsyncSink[A], Flow[A]) = {
-            // ox channels don't expose overflow strategies and have no
-            // unbounded variant. We honour the size and fall back to
-            // backpressure regardless of the requested overflow policy.
-            val capacity = bufferPolicy match {
-                case BufferPolicy.Bounded(size, _) => size
-                case BufferPolicy.Unbounded        => Int.MaxValue >> 1
+            // ox channels don't expose overflow strategies; we honour
+            // the size bound and fall back to backpressure regardless
+            // of the requested overflow policy.
+            val ch = bufferPolicy match {
+                case BufferPolicy.Bounded(size, _) => Channel.buffered[A](size)
+                case BufferPolicy.Unbounded        => Channel.unlimited[A]
             }
-            val ch = Channel.buffered[A](capacity)
             val closed = new AtomicBoolean(false)
 
             val sink = new ScalusAsyncSink[A] {
