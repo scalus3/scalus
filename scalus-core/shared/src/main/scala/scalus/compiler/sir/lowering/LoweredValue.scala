@@ -70,41 +70,68 @@ trait LoweredValue {
         summon[LoweringContext].typeGenerator(sirType).upcastOne(this, targetType, pos)
 
     /** Upcast the value to the target type if needed.
+      *
+      * Also reconciles the value's representation with any `uplcRepr` annotation on the
+      * target type. Even if structural unification succeeds (annotations are stripped by
+      * `SIRUnify`), the target may declare a representation hint that this value's actual
+      * representation doesn't satisfy — in that case, convert via `toRepresentation` so the
+      * returned value's type and repr stay consistent for downstream consumers.
       */
     def maybeUpcast(targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        SIRUnify.topLevelUnifyType(sirType, targetType, SIRUnify.Env.empty.withoutUpcasting) match
-            case SIRUnify.UnificationSuccess(env, tp) =>
-                this
-            case SIRUnify.UnificationFailure(path, l, r) =>
-                // if we cannot unify types, we need to upcast
-                //  to the target type.
-                val parentsSeq = SIRUnify.subtypeSeq(sirType, targetType, SIRUnify.Env.empty)
-                if lctx.debug then
-                    println(s"[maybeUpcast] from ${sirType.show} to ${targetType.show}")
-                    println(s"[maybeUpcast] parentsSeq = ${parentsSeq.map(_.show)}")
-                    println(
-                      s"[maybeUpcast] will upcast to parentsSeq.tail = ${parentsSeq.tail.map(_.show)}"
-                    )
-                if parentsSeq.isEmpty then {
+        val structurallyUpcasted =
+            SIRUnify.topLevelUnifyType(
+              sirType,
+              targetType,
+              SIRUnify.Env.empty.withoutUpcasting
+            ) match
+                case SIRUnify.UnificationSuccess(env, tp) =>
+                    this
+                case SIRUnify.UnificationFailure(path, l, r) =>
+                    val parentsSeq = SIRUnify.subtypeSeq(sirType, targetType, SIRUnify.Env.empty)
                     if lctx.debug then
-                        lctx.log(
-                          s"LoweredValue.maybeUpcast: first unify failure: path = ${path}, left = ${l}, right = ${r}"
+                        println(s"[maybeUpcast] from ${sirType.show} to ${targetType.show}")
+                        println(s"[maybeUpcast] parentsSeq = ${parentsSeq.map(_.show)}")
+                        println(
+                          s"[maybeUpcast] will upcast to parentsSeq.tail = ${parentsSeq.tail.map(_.show)}"
                         )
-                        val debugUnification = SIRUnify.topLevelUnifyType(
-                          sirType,
-                          targetType,
-                          SIRUnify.Env.empty.withoutUpcasting.withDebug
+                    if parentsSeq.isEmpty then {
+                        if lctx.debug then
+                            lctx.log(
+                              s"LoweredValue.maybeUpcast: first unify failure: path = ${path}, left = ${l}, right = ${r}"
+                            )
+                            val debugUnification = SIRUnify.topLevelUnifyType(
+                              sirType,
+                              targetType,
+                              SIRUnify.Env.empty.withoutUpcasting.withDebug
+                            )
+                        throw LoweringException(
+                          s"Cannot upcast ${this.sirType.show} to ${targetType.show}",
+                          pos
                         )
-                    throw LoweringException(
-                      s"Cannot upcast ${this.sirType.show} to ${targetType.show}",
-                      pos
+                    } else
+                        parentsSeq.tail.foldLeft(this) { (s, e) =>
+                            s.upcastOne(e, pos)
+                        }
+        // Annotation-aware repr reconciliation: if targetType carries an explicit `uplcRepr`
+        // hint and the value's actual repr disagrees, coerce. We restrict to explicit
+        // SIRType.Annotated wrappers (rather than always reconciling against the type's
+        // default repr) because over-eager coercion can fail on e.g. List[A] with TypeVar
+        // element A — uplcConstrToBuiltinList requires a concrete element type.
+        targetType match
+            case SIRType.Annotated(_, anns) if anns.data.contains("uplcRepr") =>
+                val targetRepr =
+                    typegens.SirTypeUplcGenerator.resolveReprAnnotation(
+                      anns.data("uplcRepr"),
+                      targetType
                     )
-                } else
-                    parentsSeq.tail.foldLeft(this) { (s, e) =>
-                        s.upcastOne(e, pos)
-                    }
+                if structurallyUpcasted.representation == targetRepr then structurallyUpcasted
+                else if structurallyUpcasted.representation
+                        .isCompatibleOn(targetType, targetRepr, pos)
+                then structurallyUpcasted
+                else structurallyUpcasted.toRepresentation(targetRepr, pos)
+            case _ => structurallyUpcasted
     }
 
     def findSelfOrSubtems(p: LoweredValue => Boolean): Option[LoweredValue]
@@ -1098,6 +1125,11 @@ case class CaseIntegerLoweredValue(
   * where Cons = index 0 (receives head and tail as arguments) and Nil = index 1 (no arguments).
   *
   * The consBranch must be a lambda that accepts head and tail: λhead.λtail.body
+  *
+  * NOTE: This type is only correct for `SumBuiltinList` scrutinees (Plutus `Constant.List`).
+  * For native `SumUplcConstr` lists, Cek dispatches by constructor tag (Nil=0, Cons=1), which
+  * requires the opposite branch order. Intrinsic/match lowerings that may produce either kind
+  * should keep list matches at the `SumBuiltinList` boundary.
   */
 case class CaseListLoweredValue(
     scrutinee: LoweredValue,

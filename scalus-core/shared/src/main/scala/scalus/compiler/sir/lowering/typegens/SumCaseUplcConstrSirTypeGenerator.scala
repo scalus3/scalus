@@ -147,7 +147,36 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     )(using
         lctx: LoweringContext
     ): LoweredValue = {
-        SumUplcConstrSirTypeGenerator.genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
+        // The SIR type is UplcConstr but the lowered value may still carry a SumBuiltinList
+        // repr (e.g. elements produced before the @UplcRepr was picked up during elementReprFor
+        // inference). Dispatch on the actual representation so the Case's branch order matches
+        // the runtime dispatch convention:
+        //   - SumUplcConstr → tag-ordered Case (Nil=0, Cons=1) via genMatchUplcConstr
+        //   - SumBuiltinList → caseList-ordered Case (Cons=0, Nil=1) via SumBuiltinList gen
+        //
+        // TODO(strategic): replace with a LoweringContext.typeGenerator(sirType, repr) API so
+        // every gen* method picks the repr-appropriate generator automatically.
+        loweredScrutinee.representation match
+            case _: SumCaseClassRepresentation.SumUplcConstr =>
+                SumUplcConstrSirTypeGenerator.genMatchUplcConstr(
+                  matchData,
+                  loweredScrutinee,
+                  optTargetType
+                )
+            case sumBL: SumCaseClassRepresentation.SumBuiltinList =>
+                new SumBuiltinListSirTypeGenerator(sumBL.elementRepr).genMatch(
+                  matchData,
+                  loweredScrutinee,
+                  optTargetType
+                )
+            case _ =>
+                val targetRepr = defaultRepresentation(loweredScrutinee.sirType)
+                val coerced = loweredScrutinee.toRepresentation(targetRepr, matchData.anns.pos)
+                SumUplcConstrSirTypeGenerator.genMatchUplcConstr(
+                  matchData,
+                  coerced,
+                  optTargetType
+                )
     }
 
 }

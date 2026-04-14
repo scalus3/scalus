@@ -1125,6 +1125,44 @@ object SIRType {
 
     }
 
+    /** Trip-wire helper: returns true if `tp` contains anywhere a `List[List[…List[X]…]]` chain
+      * of at least `depth` nested List applications. Walks through Fun, TypeLambda, CaseClass,
+      * SumCaseClass arguments, and TypeProxy. Used by diagnostic assertions that catch runaway
+      * type wrapping.
+      */
+    def hasDeepListChain(tp: SIRType, depth: Int): Boolean = {
+        def isList(t: SIRType): Boolean = t match
+            case SumCaseClass(decl, _) =>
+                decl.name == "scalus.cardano.onchain.plutus.prelude.List" ||
+                    decl.name == "scalus.uplc.List" || decl.name == BuiltinList.name
+            case _ => false
+        def listElem(t: SIRType): Option[SIRType] = t match
+            case SumCaseClass(_, args) if isList(t) => args.headOption
+            case _                                  => None
+        val seen = new java.util.IdentityHashMap[SIRType, SIRType]()
+        def walk(t: SIRType): Boolean =
+            if seen.containsKey(t) then false
+            else {
+                val _ = seen.put(t, t)
+                def chainLen(x: SIRType, acc: Int): Int = x match
+                    case TypeLambda(_, body) => chainLen(body, acc)
+                    case TypeProxy(ref) if ref != null => chainLen(ref, acc)
+                    case _ =>
+                        listElem(x) match
+                            case Some(e) => chainLen(e, acc + 1)
+                            case None    => acc
+                if chainLen(t, 0) >= depth then return true
+                t match
+                    case Fun(a, b)                   => walk(a) || walk(b)
+                    case TypeLambda(_, body)         => walk(body)
+                    case CaseClass(_, tArgs, p)      => tArgs.exists(walk) || p.exists(walk)
+                    case SumCaseClass(_, tArgs)      => tArgs.exists(walk)
+                    case TypeProxy(ref) if ref != null => walk(ref)
+                    case _                           => false
+            }
+        walk(tp)
+    }
+
     /** Transform all TypeVars in a type using the given function. Uses IdentityHashMap to prevent
       * infinite recursion on TypeProxy cycles.
       */
