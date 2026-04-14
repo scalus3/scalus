@@ -1,16 +1,48 @@
 package scalus.examples.streaming.oxbatcher
 
 import ox.flow.Flow
-import scalus.cardano.node.stream.BlockchainStreamProviderTF
+import scalus.cardano.ledger.{
+    CardanoInfo,
+    ProtocolParams,
+    SlotNo,
+    Transaction,
+    TransactionHash,
+    Utxos
+}
+import scalus.cardano.node.{SubmitError, TransactionStatus, UtxoQuery, UtxoQueryError}
+import scalus.cardano.node.stream.BaseStreamProvider
 
-import OxScalusAsyncStream.Id
+import OxScalusAsyncStream.{Id, given}
 
-/** A `BlockchainStreamProvider` specialised to ox: identity effect for
-  * the snapshot side, `ox.flow.Flow` for the streaming side.
+/** ox specialisation of [[BaseStreamProvider]].
   *
-  * With this trait the ox batcher stays in direct style end-to-end —
-  * no `Future` bridging at submit call sites.
-  *
-  * Belongs in a future `scalus-streaming-ox` adapter module.
+  * Inherits the per-subscription registry and channel allocation from
+  * the base class; the streaming side delivers events as `ox.flow.Flow`
+  * to consumers. Snapshot-side methods are stubbed pending composition
+  * with an existing `BlockchainProvider`.
   */
-trait OxBlockchainStreamProvider extends BlockchainStreamProviderTF[Id, Flow]
+class OxBlockchainStreamProvider(val cardanoInfo: CardanoInfo)
+    extends BaseStreamProvider[Id, Flow] {
+
+    def close(): Id[Unit] = closeAllSinks()
+
+    private def unimplemented[T]: T =
+        throw new NotImplementedError("snapshot side not wired")
+
+    def fetchLatestParams: Id[ProtocolParams] = unimplemented
+    def findUtxos(query: UtxoQuery): Id[Either[UtxoQueryError, Utxos]] = unimplemented
+    def currentSlot: Id[SlotNo] = unimplemented
+    def checkTransaction(txHash: TransactionHash): Id[TransactionStatus] = unimplemented
+    def submit(transaction: Transaction): Id[Either[SubmitError, TransactionHash]] =
+        unimplemented
+    def pollForConfirmation(
+        txHash: TransactionHash,
+        maxAttempts: Int,
+        delayMs: Long
+    ): Id[TransactionStatus] = unimplemented
+    def submitAndPoll(
+        transaction: Transaction,
+        maxAttempts: Int,
+        delayMs: Long
+    ): Id[Either[SubmitError, TransactionHash]] = unimplemented
+}

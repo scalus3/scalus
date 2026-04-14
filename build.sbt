@@ -781,7 +781,7 @@ lazy val scalusCardanoStreaming = crossProject(JSPlatform, JVMPlatform)
       publish / skip := false
     )
     .jvmSettings(
-      libraryDependencies += "com.softwaremill.ox" %% "core" % "0.5.3" % "test"
+      libraryDependencies += "com.softwaremill.ox" %% "core" % "1.0.2" % "test"
     )
 
 // sbt plugin for blueprint generation
