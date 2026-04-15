@@ -18,3 +18,5 @@ addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.5")
 // buildinfo
 addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.13.1")
+
+Compile / unmanagedSourceDirectories += baseDirectory.value.getParentFile / "scalus-sbt-plugin" / "src" / "main" / "scala"

@@ -1,0 +1,287 @@
+#!/usr/bin/env bash
+#
+# eject-examples — create standalone sbt projects from Scalus examples.
+#
+# Usage:
+#   ./eject-examples --all <target-dir>
+#   ./eject-examples --only <name> [<name> ...] <target-dir>
+#   ./eject-examples --list
+#
+# Each ejected project is a self-contained sbt build that depends on published
+# Scalus artifacts, configures the Scalus compiler plugin, and enables
+# ScalusBlueprintPlugin (so `sbt blueprint` and `sbt deploy` work out of the box).
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
+EXAMPLES_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/main/scala/scalus/examples"
+
+# Extract `val scalusStableVersion = "X.Y.Z"` from build.sbt.
+# `|| true` prevents pipefail from masking the "not found" case.
+SCALUS_VERSION="$({ grep -E '^val scalusStableVersion\s*=' "$SCRIPT_DIR/build.sbt" \
+    || true; } | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"
+if [[ -z "$SCALUS_VERSION" ]]; then
+    echo "error: could not determine scalusStableVersion from build.sbt" >&2
+    exit 1
+fi
+
+# Read sbt version from this repo so ejected projects use the same.
+SBT_VERSION="$({ grep -E '^sbt\.version' "$SCRIPT_DIR/project/build.properties" \
+    || true; } | cut -d= -f2 | tr -d ' ')"
+SBT_VERSION="${SBT_VERSION:-1.12.9}"
+
+SCALA_VERSION="3.3.7"
+
+usage() {
+    cat <<EOF
+Usage:
+  $(basename "$0") [--scalus-version V] --all <target-dir>
+  $(basename "$0") [--scalus-version V] --only <name> [<name> ...] <target-dir>
+  $(basename "$0") --list
+
+Options:
+  --scalus-version Override the Scalus version pinned in the generated project.
+                   Default: \`val scalusStableVersion\` from build.sbt.
+                   Use a locally-published SNAPSHOT (e.g. from \`sbtn publishLocal\`)
+                   when the target version isn't on Maven Central yet.
+  --all            Eject every directory-based example.
+  --only NAMES...  Eject only the named examples (last arg is target dir).
+  --list           Print all available examples and exit.
+
+Each example becomes <target-dir>/<name>/ with its own build.sbt,
+project/plugins.sbt, README.md, and copied sources.
+EOF
+}
+
+list_examples() {
+    find "$EXAMPLES_ROOT" -mindepth 1 -maxdepth 1 -type d \
+        -exec basename {} \; | sort
+}
+
+# ---- generators -------------------------------------------------------------
+
+detect_extra_deps() {
+    local src_dir="$1"
+    local extras=()
+    if grep -rqE '^[[:space:]]*import[[:space:]]+scalus\.bloxbean' "$src_dir" 2>/dev/null; then
+        extras+=( '"org.scalus" %% "scalus-bloxbean-cardano-client-lib" % scalusVersion' )
+    fi
+    if grep -rqE '^[[:space:]]*import[[:space:]]+scalus\.patterns' "$src_dir" 2>/dev/null; then
+        # scalus-design-patterns is JVM-only and not yet on Maven Central;
+        # user must `sbt publishLocal` it.
+        extras+=( '"org.scalus" %% "scalus-design-patterns" % scalusVersion' )
+    fi
+    # Guard empty-array expansion for bash 3.2 under `set -u`.
+    if (( ${#extras[@]} )); then
+        printf '%s\n' "${extras[@]}"
+    fi
+}
+
+gen_build_sbt() {
+    local name="$1" src_dir="$2"
+    local extras
+    extras="$(detect_extra_deps "$src_dir")"
+    local extra_lines=""
+    if [[ -n "$extras" ]]; then
+        while IFS= read -r dep; do
+            extra_lines+=",
+            $dep"
+        done <<< "$extras"
+    fi
+    cat <<EOF
+ThisBuild / scalaVersion := "$SCALA_VERSION"
+ThisBuild / organization := "org.example"
+ThisBuild / version      := "0.1.0-SNAPSHOT"
+
+val scalusVersion = "$SCALUS_VERSION"
+
+lazy val root = (project in file("."))
+    .enablePlugins(ScalusBlueprintPlugin)
+    .settings(
+        name := "$name",
+        scalacOptions ++= Seq("-deprecation", "-feature"),
+        addCompilerPlugin(("org.scalus" %% "scalus-plugin" % scalusVersion).cross(CrossVersion.full)),
+        libraryDependencies ++= Seq(
+            "org.scalus" %% "scalus"                % scalusVersion,
+            "org.scalus" %% "scalus-cardano-ledger" % scalusVersion$extra_lines
+        )
+    )
+EOF
+}
+
+gen_plugins_sbt() {
+    cat <<EOF
+addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "$SCALUS_VERSION")
+EOF
+}
+
+gen_build_properties() {
+    cat <<EOF
+sbt.version=$SBT_VERSION
+EOF
+}
+
+gen_gitignore() {
+    cat <<'EOF'
+target/
+project/target/
+project/project/
+.bsp/
+.bloop/
+.metals/
+.idea/
+.vscode/
+EOF
+}
+
+gen_readme() {
+    local name="$1"
+    cat <<EOF
+# $name
+
+Standalone Scalus example, ejected from
+[scalus3/scalus](https://github.com/scalus3/scalus).
+
+## Build
+
+\`\`\`sh
+sbt compile
+\`\`\`
+
+## Generate a CIP-57 blueprint
+
+\`\`\`sh
+sbt blueprint
+\`\`\`
+
+Blueprint JSON is written to
+\`target/scala-$SCALA_VERSION/classes/META-INF/scalus/blueprints/<Contract>.json\`.
+
+## Deploy as a reference script
+
+Requires a Blockfrost project id and a funded wallet mnemonic on the chosen network.
+
+\`\`\`sh
+sbt "deploy <ContractName> --network preview \\
+    --blockfrost-key <project-id> \\
+    --mnemonic '<24 words>'"
+\`\`\`
+
+Or via environment variables:
+
+\`\`\`sh
+export CARDANO_NETWORK=preview
+export BLOCKFROST_API_KEY=<project-id>
+export CARDANO_MNEMONIC='<24 words>'
+sbt "deploy <ContractName>"
+\`\`\`
+
+The contract is deployed as a reference script UTxO at the sender's own base
+address; the transaction hash is printed on success.
+
+## Pinned versions
+
+- Scalus: \`$SCALUS_VERSION\`
+- Scala:  \`$SCALA_VERSION\`
+- sbt:    \`$SBT_VERSION\`
+EOF
+}
+
+# ---- core -------------------------------------------------------------------
+
+eject_one() {
+    local name="$1" target_root="$2"
+    local src_dir="$EXAMPLES_ROOT/$name"
+    if [[ ! -d "$src_dir" ]]; then
+        echo "error: example '$name' not found at $src_dir" >&2
+        return 1
+    fi
+
+    local project_dir="$target_root/$name"
+    if [[ -e "$project_dir" ]]; then
+        echo "error: $project_dir already exists, refusing to overwrite" >&2
+        return 1
+    fi
+
+    mkdir -p "$project_dir/project"
+    mkdir -p "$project_dir/src/main/scala/scalus/examples/$name"
+
+    cp -R "$src_dir"/. "$project_dir/src/main/scala/scalus/examples/$name"/
+
+    gen_build_sbt "$name" "$src_dir" > "$project_dir/build.sbt"
+    gen_plugins_sbt               > "$project_dir/project/plugins.sbt"
+    gen_build_properties          > "$project_dir/project/build.properties"
+    gen_gitignore                 > "$project_dir/.gitignore"
+    gen_readme "$name"            > "$project_dir/README.md"
+
+    echo "  ejected $name -> $project_dir"
+}
+
+main() {
+    if [[ $# -eq 0 ]]; then usage; exit 1; fi
+
+    # Parse flags in any order; collect positional args.
+    local mode=""
+    local positional=()
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)    usage; exit 0 ;;
+            --list)       mode="list"; shift ;;
+            --all)        mode="all";  shift ;;
+            --only)       mode="only"; shift ;;
+            --scalus-version)
+                if [[ $# -lt 2 ]]; then
+                    echo "error: --scalus-version requires a value" >&2; exit 1
+                fi
+                SCALUS_VERSION="$2"; shift 2 ;;
+            --*)
+                echo "error: unknown option '$1'" >&2; usage; exit 1 ;;
+            *)
+                positional+=( "$1" ); shift ;;
+        esac
+    done
+
+    if [[ -d "$EXAMPLES_ROOT" ]]; then :; else
+        echo "error: examples root not found: $EXAMPLES_ROOT" >&2
+        exit 1
+    fi
+
+    local failures=0
+    case "$mode" in
+        list)
+            list_examples ;;
+        all)
+            if [[ ${#positional[@]} -ne 1 ]]; then
+                echo "error: --all takes exactly one argument: <target-dir>" >&2
+                exit 1
+            fi
+            local target="${positional[0]}"
+            mkdir -p "$target"
+            echo "ejecting all examples to $target (scalus $SCALUS_VERSION)"
+            while IFS= read -r name; do
+                eject_one "$name" "$target" || failures=$((failures + 1))
+            done < <(list_examples)
+            ;;
+        only)
+            if [[ ${#positional[@]} -lt 2 ]]; then
+                echo "error: --only requires at least one example name and a target dir" >&2
+                exit 1
+            fi
+            local target="${positional[${#positional[@]}-1]}"
+            local names=( "${positional[@]:0:${#positional[@]}-1}" )
+            mkdir -p "$target"
+            echo "ejecting ${#names[@]} example(s) to $target (scalus $SCALUS_VERSION)"
+            for name in "${names[@]}"; do
+                eject_one "$name" "$target" || failures=$((failures + 1))
+            done
+            ;;
+        "")
+            usage; exit 1 ;;
+    esac
+
+    if [[ $failures -gt 0 ]]; then
+        echo "done with $failures failure(s); see messages above" >&2
+    fi
+}
+
+main "$@"
