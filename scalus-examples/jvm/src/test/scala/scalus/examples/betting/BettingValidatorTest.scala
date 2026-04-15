@@ -89,7 +89,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 147541, steps = 44732278L)
-                            else ExUnits(memory = 136621, steps = 40_306493))
+                            else ExUnits(memory = 120444, steps = 38983173))
         )
 
     test("Verify that player2 can join an existing bet"):
@@ -166,7 +166,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 514504, steps = 155221920L)
-                            else ExUnits(memory = 304591, steps = 91_420104))
+                            else ExUnits(memory = 277348, steps = 95949579))
         )
 
     test("Verify that the oracle can announce winner and trigger payout"):
@@ -234,5 +234,5 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 389027, steps = 118672302L)
-                            else ExUnits(memory = 197794, steps = 60_974843))
+                            else ExUnits(memory = 177767, steps = 60615559))
         )

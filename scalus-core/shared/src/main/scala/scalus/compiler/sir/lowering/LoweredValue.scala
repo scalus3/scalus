@@ -71,11 +71,11 @@ trait LoweredValue {
 
     /** Upcast the value to the target type if needed.
       *
-      * Also reconciles the value's representation with any `uplcRepr` annotation on the
-      * target type. Even if structural unification succeeds (annotations are stripped by
-      * `SIRUnify`), the target may declare a representation hint that this value's actual
-      * representation doesn't satisfy — in that case, convert via `toRepresentation` so the
-      * returned value's type and repr stay consistent for downstream consumers.
+      * Also reconciles the value's representation with any `uplcRepr` annotation on the target
+      * type. Even if structural unification succeeds (annotations are stripped by `SIRUnify`), the
+      * target may declare a representation hint that this value's actual representation doesn't
+      * satisfy — in that case, convert via `toRepresentation` so the returned value's type and repr
+      * stay consistent for downstream consumers.
       */
     def maybeUpcast(targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
@@ -1126,10 +1126,10 @@ case class CaseIntegerLoweredValue(
   *
   * The consBranch must be a lambda that accepts head and tail: λhead.λtail.body
   *
-  * NOTE: This type is only correct for `SumBuiltinList` scrutinees (Plutus `Constant.List`).
-  * For native `SumUplcConstr` lists, Cek dispatches by constructor tag (Nil=0, Cons=1), which
-  * requires the opposite branch order. Intrinsic/match lowerings that may produce either kind
-  * should keep list matches at the `SumBuiltinList` boundary.
+  * NOTE: This type is only correct for `SumBuiltinList` scrutinees (Plutus `Constant.List`). For
+  * native `SumUplcConstr` lists, Cek dispatches by constructor tag (Nil=0, Cons=1), which requires
+  * the opposite branch order. Intrinsic/match lowerings that may produce either kind should keep
+  * list matches at the `SumBuiltinList` boundary.
   */
 case class CaseListLoweredValue(
     scrutinee: LoweredValue,

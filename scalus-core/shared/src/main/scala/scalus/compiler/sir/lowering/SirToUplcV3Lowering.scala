@@ -44,8 +44,24 @@ class SirToUplcV3Lowering(
             else representation
         }
         val retV = v1.toRepresentation(targetRepresentation, v1.pos)
-        // println(s"lowered  value: ${retV.pretty.render(100)}")
-        retV
+        // Wrap with any top-level helpers registered during lowering (e.g. SumUplcEq helpers
+        // cached by LoweringEq.generateSumUplcConstrEquals). Entries in `pendingTopLevelLetRecs`
+        // are appended by innermost-completing helpers first (a helper's `+=` runs AFTER any
+        // transitively-triggered sub-helpers have completed their own `+=`). So with `foldRight`,
+        // the first entry becomes outermost — this is intentional: outer helpers are the
+        // dependencies of later-added (inner) helpers, and UPLC `letrec` binds only the single
+        // var in its binder, so inner helpers can see their outer dependencies.
+        //
+        // NOTE: this ordering is sound ONLY for (self-)recursive sums. Mutually recursive sums
+        // (where helper A's rhs references helper B AND B's rhs references A) would require a
+        // multi-binding `letrec` — not currently generated. Callers that would produce mutual
+        // recursion should be detected at helper-construction time.
+        val wrapped = lctx.pendingTopLevelLetRecs.foldRight(retV) {
+            case ((eqFnVar, eqFnRhs), acc) =>
+                LetRecLoweredValue(eqFnVar, eqFnRhs, acc, eqFnVar.pos)
+        }
+        // println(s"lowered  value: ${wrapped.pretty.render(100)}")
+        wrapped
     }
 
     def lower(): Term = {

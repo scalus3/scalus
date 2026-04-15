@@ -174,9 +174,115 @@ object SumUplcConstrSirTypeGenerator {
 
     // ===================== Match =====================
 
-    /** Match on UplcConstr using Case builtin. Case(scrutinee, [branch0, branch1, ...]) — each
-      * branch is a nested lambda.
+    /** Generic N-variant Case dispatch on a SumUplcConstr scrutinee.
+      *
+      * Builds `Term.Case(scrutinee, [branch_0, branch_1, ...])` where each branch is a nested
+      * lambda binding the variant's fields and evaluating the per-variant body. Variant order
+      * matches the DataDecl constructor order (tag = position).
+      *
+      * The `perVariant` callback receives `(constrIdx, fieldVars)`. Each `fieldVar` is an
+      * `IdentifiableLoweredValue` with the variant's field type substituted with the sum's concrete
+      * type args, and the field repr from `scrutineeRepr.variants(constrIdx)`.
+      *
+      * All per-variant bodies must produce values of `outType` with `outRepr` representation — the
+      * caller is responsible for any normalization.
       */
+    def genMatchUplcConstrAllVariants(
+        scrutinee: LoweredValue,
+        scrutineeRepr: SumCaseClassRepresentation.SumUplcConstr,
+        sumType: SIRType,
+        outType: SIRType,
+        outRepr: LoweredValueRepresentation,
+        pos: SIRPosition,
+        perVariant: (Int, Seq[IdentifiableLoweredValue]) => LoweringContext ?=> LoweredValue
+    )(using lctx: LoweringContext): LoweredValue = {
+        val (decl, typeArgs) = sumType match
+            case SIRType.SumCaseClass(d, ta)                       => (d, ta)
+            case SIRType.Annotated(SIRType.SumCaseClass(d, ta), _) => (d, ta)
+            case other =>
+                throw LoweringException(
+                  s"genMatchUplcConstrAllVariants: expected SumCaseClass type, got ${other.show}",
+                  pos
+                )
+        val typeSubstByName: Map[String, SIRType] =
+            decl.typeParams.map(_.name).zip(typeArgs).toMap
+        val constrPos = AnnotationsDecl.empty.pos
+        val branches = decl.constructors.zipWithIndex.map { case (constrDecl, tagIdx) =>
+            val variantRepr = scrutineeRepr.variants.getOrElse(
+              tagIdx,
+              throw LoweringException(
+                s"genMatchUplcConstrAllVariants: missing variant tag $tagIdx in $scrutineeRepr",
+                pos
+              )
+            )
+            val fieldReprs = variantRepr.fieldReprs
+            val params = constrDecl.params
+            if params.length != fieldReprs.length then
+                throw LoweringException(
+                  s"genMatchUplcConstrAllVariants: variant tag $tagIdx has ${params.length} params but ${fieldReprs.length} field reprs",
+                  pos
+                )
+            // Substitute typeparams in field types
+            val fieldVars: Seq[VariableLoweredValue] =
+                params.zip(fieldReprs).map { case (param, repr) =>
+                    val rawType = param.tp match
+                        case tv: SIRType.TypeVar => typeSubstByName.getOrElse(tv.name, tv)
+                        case other               => other
+                    val fieldType = lctx.resolveTypeVarIfNeeded(rawType)
+                    val varId = lctx.uniqueVarName(s"v_${tagIdx}_${param.name}")
+                    new VariableLoweredValue(
+                      id = varId,
+                      name = varId,
+                      sir = SIR.Var(varId, fieldType, AnnotationsDecl(pos)),
+                      representation = repr
+                    )
+                }
+            val savedScope = lctx.scope
+            fieldVars.foreach(v => lctx.scope = lctx.scope.add(v))
+            val branchBody =
+                try perVariant(tagIdx, fieldVars)(using lctx)
+                finally lctx.scope = savedScope
+            new ComplexLoweredValue(fieldVars.toSet, branchBody) {
+                override def sirType: SIRType = outType
+                override def representation: LoweredValueRepresentation = outRepr
+                override def pos: SIRPosition = constrPos
+                override def termInternal(gctx: TermGenerationContext): Term = {
+                    val ngctx = fieldVars.foldLeft(gctx)((g, v) => g.addGeneratedVar(v.id))
+                    val innerTerm = branchBody.termWithNeededVars(ngctx)
+                    fieldVars.foldRight(innerTerm) { (v, body) =>
+                        Term.LamAbs(v.id, body, UplcAnnotation(constrPos))
+                    }
+                }
+                override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+                    val params = fieldVars
+                        .map(v => Doc.text(s"λ${v.id}."))
+                        .foldLeft(Doc.empty)(_ + _)
+                    params + branchBody.docRef(ctx)
+                }
+                override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
+            }
+        }
+        new ComplexLoweredValue(Set.empty, (scrutinee :: branches.toList)*) {
+            override def sirType: SIRType = outType
+            override def representation: LoweredValueRepresentation = outRepr
+            override def pos: SIRPosition = constrPos
+            override def termInternal(gctx: TermGenerationContext): Term =
+                Term.Case(
+                  scrutinee.termWithNeededVars(gctx),
+                  branches.map(_.termWithNeededVars(gctx)).toList,
+                  UplcAnnotation(constrPos)
+                )
+            override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+                val branchDocs = branches.zipWithIndex.map { case (b, i) =>
+                    Doc.line + Doc.text(s"$i ->") + (Doc.lineOrSpace + b.docRef(ctx)).nested(2)
+                }
+                ((Doc.text("case") + Doc.space + scrutinee.docRef(ctx) + Doc.space + Doc.text("of"))
+                    + branchDocs.foldLeft(Doc.empty)(_ + _.grouped)).aligned
+            }
+            override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
+        }
+    }
+
     /** Select a field from a UplcConstr-represented value. */
     def genSelectUplcConstr(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         LoweringContext

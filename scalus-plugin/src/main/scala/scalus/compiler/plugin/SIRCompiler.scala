@@ -1362,18 +1362,10 @@ final class SIRCompiler(
                         val tEnv =
                             SIRTypeEnv(v.srcPos, env.typeVars ++ typeParamsMap)
                         val vType0 = sirTypeInEnv(v.tpe, tEnv)
-                        // Wrap parameter type in Annotated if @UplcRepr is present
-                        val reprData = extractUplcReprAnnotation(v.symbol)
-                        val vType =
-                            if reprData.nonEmpty then
-                                SIRType.Annotated(
-                                  vType0,
-                                  AnnotationsDecl(
-                                    SIRPosition.fromSrcPos(v.srcPos),
-                                    data = reprData
-                                  )
-                                )
-                            else vType0
+                        // Wrap parameter type in Annotated if @UplcRepr is present.
+                        // For Fun/TypeLambda, annotation goes to the final return position,
+                        // matching method-level annotation handling.
+                        val vType = wrapTypeWithUplcRepr(vType0, v.symbol, v.srcPos)
                         val variableKey = VariableKey(v.name.show, Some(v.symbol.id))
                         val anns = AnnotationsDecl.fromSymIn(v.symbol, v.srcPos.sourcePos)
                         SIR.Var(variableKey.varName, vType, anns)

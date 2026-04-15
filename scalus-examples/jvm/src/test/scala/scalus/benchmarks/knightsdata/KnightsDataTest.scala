@@ -52,7 +52,7 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 if options.nativeListElements then ExUnits(memory = 204281467, steps = 52963867280L)
-                else ExUnits(memory = 144_425_136L, steps = 38_133_998_422L)
+                else ExUnits(memory = 122548696L, steps = 37288399232L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -154,7 +154,7 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 if Options.default.nativeListElements then
                     ExUnits(memory = 598376876, steps = 146019618948L)
-                else ExUnits(memory = 386_254_475L, steps = 95_882_751_677L)
+                else ExUnits(memory = 250956657L, steps = 91901166815L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -258,7 +258,7 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 if Options.default.nativeListElements then
                     ExUnits(memory = 1238044719, steps = 297766687086L)
-                else ExUnits(memory = 697_393_421L, steps = 170_380_722_448L)
+                else ExUnits(memory = 418223652L, steps = 164475206294L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>

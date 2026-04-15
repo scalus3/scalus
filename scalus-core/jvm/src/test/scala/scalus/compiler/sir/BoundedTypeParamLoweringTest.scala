@@ -11,8 +11,8 @@ import scalus.compiler.sir.lowering.{IntrinsicResolver, SirToUplcV3Lowering}
 
 /** Regression test exposing the bounded-type-parameter lowering chain.
   *
-  * Scala code under test (from the prelude
-  * `scalus.cardano.onchain.plutus.prelude.List[A]`, used transitively by `flatMap`):
+  * Scala code under test (from the prelude `scalus.cardano.onchain.plutus.prelude.List[A]`, used
+  * transitively by `flatMap`):
   *
   * {{{
   * extension [A](self: List[A])
@@ -39,34 +39,30 @@ import scalus.compiler.sir.lowering.{IntrinsicResolver, SirToUplcV3Lowering}
   *
   * ## Observations
   *
-  * 1. The chain `flatMap → ++ → appendedAll[B >: A] → prependedAll[B >: A]` touches two
-  *    bounded-type-parameter methods. `SIRType.substitute` produces, during lowering,
-  *    an intermediate `rhs.sirType` of
-  *    `List[A] -> (A -> List[B]) -> List[List[List[List[B]]]]` (4-deep) for the prelude's
-  *    `flatMap` binding.
-  * 2. At the SIR level, the binding's `b.tp` and `rhs.tp` are both correct
-  *    (`[A] =>> List[A] -> [B] =>> (A -> List[B]) -> List[B]`). The deep chain only
-  *    appears at *lowering time*, when the `rhs.sirType` of a `VariableLoweredValue` is
-  *    read back.
-  * 3. `Lowering.lowerLet:478` currently uses `b.tp` (declared) instead of
-  *    `rhs.sirType` in the `SIR.Var` it constructs. This masks the deep-chain
-  *    corruption — but leaves a type/repr consistency hole for let-bindings whose
-  *    declared type carries a `@UplcRepr` annotation that the RHS representation
-  *    doesn't satisfy.
+  *   1. The chain `flatMap → ++ → appendedAll[B >: A] → prependedAll[B >: A]` touches two
+  *      bounded-type-parameter methods. `SIRType.substitute` produces, during lowering, an
+  *      intermediate `rhs.sirType` of `List[A] -> (A -> List[B]) -> List[List[List[List[B]]]]`
+  *      (4-deep) for the prelude's `flatMap` binding.
+  *   2. At the SIR level, the binding's `b.tp` and `rhs.tp` are both correct (`[A] =>> List[A] ->
+  *      [B] =>> (A -> List[B]) -> List[B]`). The deep chain only appears at *lowering time*, when
+  *      the `rhs.sirType` of a `VariableLoweredValue` is read back.
+  *   3. `Lowering.lowerLet:478` currently uses `b.tp` (declared) instead of `rhs.sirType` in the
+  *      `SIR.Var` it constructs. This masks the deep-chain corruption — but leaves a type/repr
+  *      consistency hole for let-bindings whose declared type carries a `@UplcRepr` annotation that
+  *      the RHS representation doesn't satisfy.
   *
   * ## What this test does
   *
-  * Compiles the caller pattern above and captures every `SIR.Let` binding (letrec vs
-  * let, declared b.tp, rhs.tp, and RHS SIR). The assertion checks that no node in the
-  * compiled SIR carries a 4-deep `List[List[List[List[…]]]]` chain.
+  * Compiles the caller pattern above and captures every `SIR.Let` binding (letrec vs let, declared
+  * b.tp, rhs.tp, and RHS SIR). The assertion checks that no node in the compiled SIR carries a
+  * 4-deep `List[List[List[List[…]]]]` chain.
   *
-  * Currently the test **passes** (the SIR types are correct — the bug is masked during
-  * lowering by the `b.tp` path). It will **fail** once either:
+  * Currently the test **passes** (the SIR types are correct — the bug is masked during lowering by
+  * the `b.tp` path). It will **fail** once either:
   *   - `Lowering.lowerLet` is switched to `rhs.sirType` (consistency fix), or
   *   - `SIRTyper` produces a deep chain at compile time (regression).
   *
-  * At that point the dumped SIR output makes the cascade explicit, making the fix
-  * path obvious.
+  * At that point the dumped SIR output makes the cascade explicit, making the fix path obvious.
   */
 class BoundedTypeParamLoweringTest extends AnyFunSuite {
 

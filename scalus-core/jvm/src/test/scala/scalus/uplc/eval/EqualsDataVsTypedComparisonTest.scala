@@ -151,9 +151,11 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         val eqFieldsSize = eqFields.program.cborEncoded.length
         info(formatLine("equalsData", eqDataBudget, eqDataSize))
         info(formatLine("===", eqFieldsBudget, eqFieldsSize))
+        // After enabling intrinsic Eq dispatch globally, native field-by-field comparison
+        // makes === cheaper than equalsData even on fee for simple structured types.
         assert(eqFieldsBudget.steps < eqDataBudget.steps)
         assert(eqFieldsBudget.memory > eqDataBudget.memory)
-        assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+        assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
     }
 
     test("equalsData vs === for Address") {
@@ -171,9 +173,10 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         val eqFieldsSize = eqFields.program.cborEncoded.length
         info(formatLine("equalsData", eqDataBudget, eqDataSize))
         info(formatLine("===", eqFieldsBudget, eqFieldsSize))
+        // === is now cheaper than equalsData on fee thanks to intrinsic Eq dispatch.
         assert(eqFieldsBudget.steps < eqDataBudget.steps)
         assert(eqFieldsBudget.memory > eqDataBudget.memory)
-        assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+        assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
     }
 
     test("equalsData vs === for OutputDatum") {
@@ -187,10 +190,11 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         val eqFieldsSize = eqFields.program.cborEncoded.length
         info(formatLine("equalsData", eqDataBudget, eqDataSize))
         info(formatLine("===", eqFieldsBudget, eqFieldsSize))
-        // With V3 lowering, equalsData is cheaper for enum types
-        assert(eqDataBudget.steps < eqFieldsBudget.steps)
-        assert(eqDataBudget.memory < eqFieldsBudget.memory)
-        assert(eqDataBudget.fee(prices) < eqFieldsBudget.fee(prices))
+        // OutputDatum is an unannotated sum (no @UplcRepr), so the new intrinsic Eq routes
+        // it through generateDataEquals — same UPLC as equalsData. Equal cost both ways.
+        assert(eqDataBudget.steps == eqFieldsBudget.steps)
+        assert(eqDataBudget.memory == eqFieldsBudget.memory)
+        assert(eqDataBudget.fee(prices) == eqFieldsBudget.fee(prices))
     }
 
     test("equalsData vs === for Value") {
@@ -345,7 +349,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         val eqFields =
             PlutusV3.compile { (a: (TxOutRef, Address), b: (TxOutRef, Address)) => a === b }
         info(
-          "===.steps < equalsData.steps, ===.memory > equalsData.memory, equalsData.fee < ===.fee"
+          "===.steps < equalsData.steps, ===.memory > equalsData.memory, ===.fee < equalsData.fee"
         )
         forAll { (a: (TxOutRef, Address), b: (TxOutRef, Address)) =>
             val eqDataBudget =
@@ -354,7 +358,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
                 (eqFields.program $ a.toData $ b.toData).evaluateDebug.budget
             assert(eqFieldsBudget.steps < eqDataBudget.steps)
             assert(eqFieldsBudget.memory > eqDataBudget.memory)
-            assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+            assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
         }
     }
 
@@ -366,7 +370,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
                 a === b
         }
         info(
-          "===.steps < equalsData.steps, ===.memory > equalsData.memory, equalsData.fee < ===.fee"
+          "===.steps < equalsData.steps, ===.memory > equalsData.memory, ===.fee < equalsData.fee"
         )
         forAll { (a: (TxOutRef, (Address, Credential)), b: (TxOutRef, (Address, Credential))) =>
             val eqDataBudget =
@@ -375,7 +379,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
                 (eqFields.program $ a.toData $ b.toData).evaluateDebug.budget
             assert(eqFieldsBudget.steps < eqDataBudget.steps)
             assert(eqFieldsBudget.memory > eqDataBudget.memory)
-            assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+            assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
         }
     }
 
@@ -423,7 +427,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         val eqData = PlutusV3.compile { (d1: Data, d2: Data) => equalsData(d1, d2) }
         val eqFields = PlutusV3.compile { (a: TxOutRef, b: TxOutRef) => a === b }
         info(
-          "===.steps < equalsData.steps, ===.memory > equalsData.memory, equalsData.fee < ===.fee"
+          "===.steps < equalsData.steps, ===.memory > equalsData.memory, ===.fee < equalsData.fee"
         )
         forAll { (a: TxOutRef, b: TxOutRef) =>
             val eqDataBudget =
@@ -432,7 +436,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
                 (eqFields.program $ a.toData $ b.toData).evaluateDebug.budget
             assert(eqFieldsBudget.steps < eqDataBudget.steps)
             assert(eqFieldsBudget.memory > eqDataBudget.memory)
-            assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+            assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
         }
     }
 
@@ -441,7 +445,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         val eqData = PlutusV3.compile { (d1: Data, d2: Data) => equalsData(d1, d2) }
         val eqFields = PlutusV3.compile { (a: Address, b: Address) => a === b }
         info(
-          "===.steps < equalsData.steps, ===.memory > equalsData.memory, equalsData.fee < ===.fee"
+          "===.steps < equalsData.steps, ===.memory > equalsData.memory, ===.fee < equalsData.fee"
         )
         forAll { (a: Address, b: Address) =>
             val eqDataBudget =
@@ -450,7 +454,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
                 (eqFields.program $ a.toData $ b.toData).evaluateDebug.budget
             assert(eqFieldsBudget.steps < eqDataBudget.steps)
             assert(eqFieldsBudget.memory > eqDataBudget.memory)
-            assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+            assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
         }
     }
 
@@ -459,16 +463,16 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         val eqData = PlutusV3.compile { (d1: Data, d2: Data) => equalsData(d1, d2) }
         val eqFields = PlutusV3.compile { (a: OutputDatum, b: OutputDatum) => a === b }
         info(
-          "equalsData.steps < ===.steps, equalsData.memory < ===.memory, equalsData.fee < ===.fee (V3 lowering)"
+          "equalsData.steps == ===.steps, equalsData.memory == ===.memory (intrinsic Eq routes through equalsData)"
         )
         forAll { (a: OutputDatum, b: OutputDatum) =>
             val eqDataBudget =
                 (eqData.program $ a.toData $ b.toData).evaluateDebug.budget
             val eqFieldsBudget =
                 (eqFields.program $ a.toData $ b.toData).evaluateDebug.budget
-            assert(eqDataBudget.steps < eqFieldsBudget.steps)
-            assert(eqDataBudget.memory < eqFieldsBudget.memory)
-            assert(eqDataBudget.fee(prices) < eqFieldsBudget.fee(prices))
+            assert(eqDataBudget.steps == eqFieldsBudget.steps)
+            assert(eqDataBudget.memory == eqFieldsBudget.memory)
+            assert(eqDataBudget.fee(prices) == eqFieldsBudget.fee(prices))
         }
     }
 }

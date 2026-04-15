@@ -330,8 +330,16 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                   SumCaseClassRepresentation.SumPairBuiltinList(_, _),
                   SumCaseClassRepresentation.PackedSumDataList
                 ) =>
+                // PackedSumDataList is List-shaped Data, NOT Map-shaped — so go via
+                // SumBuiltinList(ProdDataConstr) → listData. The previous path through
+                // SumDataAssocMap (mapData) packed as Map Data, which is wrong AND looped
+                // with line 371's (SumDataAssocMap, _) catch-all that re-emits via
+                // SumPairBuiltinList.
+                val elemType = retrieveElementType(input.sirType, pos)
+                val dataElemRepr =
+                    lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 input
-                    .toRepresentation(SumCaseClassRepresentation.SumDataAssocMap, pos)
+                    .toRepresentation(SumCaseClassRepresentation.SumBuiltinList(dataElemRepr), pos)
                     .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
             case (
                   SumCaseClassRepresentation.SumPairBuiltinList(inKeyRepr, inValueRepr),
