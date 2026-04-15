@@ -1425,7 +1425,7 @@ class CekMachine(
             case VLamAbs(name, term, env) => dischargeCekValEnv(env, LamAbs(name, term))
             case VBuiltin(_, term, _)     => term()
             case VConstr(tag, args)       => Constr(tag, args.map(dischargeCekValue).toList)
-            case VList(elems) =>
+            case VList(elems)             =>
                 // Best-effort discharge: when every element discharges to a Constant, emit a
                 // Constant.List. If any element is non-constant (closure / partial), there is
                 // no faithful Constant.List representation, so fail explicitly rather than
