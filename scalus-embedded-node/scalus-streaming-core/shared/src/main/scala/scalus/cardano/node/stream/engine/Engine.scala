@@ -1,7 +1,7 @@
 package scalus.cardano.node.stream.engine
 
 import scalus.cardano.ledger.{CardanoInfo, ProtocolParams, TransactionHash, TransactionInput, TransactionOutput, Utxo, Utxos}
-import scalus.cardano.node.{BlockchainProvider, TransactionStatus, UtxoQuery, UtxoQueryError}
+import scalus.cardano.node.{BlockchainReader, TransactionStatus, UtxoQuery, UtxoQueryError}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip, UtxoEvent}
 
 import java.util.concurrent.LinkedBlockingQueue
@@ -26,13 +26,16 @@ import scala.util.Try
   * @param cardanoInfo
   *   static chain metadata and the initial protocol params
   * @param backup
-  *   optional historical-query backend; `None` ⇔ `BackupSource.NoBackup`
+  *   optional historical-query backend; `None` ⇔ `BackupSource.NoBackup`. Engine only calls
+  *   read-side methods on this field, so a plain [[BlockchainReader]] is sufficient — a
+  *   reader-only backup (e.g. `ImmutableEmulator.asReader`) is legal. The adapter's `submit`
+  *   path runtime-checks for `BlockchainProvider` to decide whether delegation is possible.
   * @param securityParam
   *   rollback-buffer depth; 2160 on mainnet
   */
 final class Engine(
     val cardanoInfo: CardanoInfo,
-    val backup: Option[BlockchainProvider],
+    val backup: Option[BlockchainReader],
     val securityParam: Int
 ) {
 

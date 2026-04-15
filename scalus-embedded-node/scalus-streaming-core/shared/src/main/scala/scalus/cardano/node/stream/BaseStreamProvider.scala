@@ -1,7 +1,7 @@
 package scalus.cardano.node.stream
 
 import scalus.cardano.ledger.{Block, CardanoInfo, ProtocolParams, Transaction, TransactionHash, TransactionInput, TransactionOutput, Utxos}
-import scalus.cardano.node.{SubmitError, TransactionStatus, UtxoQuery, UtxoQueryError, UtxoSource}
+import scalus.cardano.node.{BlockchainProvider, SubmitError, TransactionStatus, UtxoQuery, UtxoQueryError, UtxoSource}
 import scalus.cardano.node.stream.engine.{Engine, Mailbox}
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -152,12 +152,12 @@ abstract class BaseStreamProvider[F[_], C[_]](
     def submit(transaction: Transaction): F[Either[SubmitError, TransactionHash]] =
         liftFuture {
             engine.backup match
-                case Some(bp) =>
+                case Some(bp: BlockchainProvider) =>
                     bp.submit(transaction).flatMap {
                         case r @ Right(hash) => engine.notifySubmit(hash).map(_ => r)
                         case l @ Left(_)     => Future.successful(l)
                     }
-                case None =>
+                case _ =>
                     Future.successful(Left(noBackupSubmitError))
         }
 
@@ -170,8 +170,9 @@ abstract class BaseStreamProvider[F[_], C[_]](
             case Some(status) => Future.successful(status)
             case None =>
                 engine.backup match
-                    case Some(bp) => bp.pollForConfirmation(txHash, maxAttempts, delayMs)
-                    case None     => Future.successful(TransactionStatus.NotFound)
+                    case Some(bp: BlockchainProvider) =>
+                        bp.pollForConfirmation(txHash, maxAttempts, delayMs)
+                    case _ => Future.successful(TransactionStatus.NotFound)
         }
     }
 
@@ -181,7 +182,7 @@ abstract class BaseStreamProvider[F[_], C[_]](
         delayMs: Long
     ): F[Either[SubmitError, TransactionHash]] = liftFuture {
         engine.backup match
-            case Some(bp) =>
+            case Some(bp: BlockchainProvider) =>
                 bp.submit(transaction).flatMap {
                     case l @ Left(_) => Future.successful(l)
                     case Right(hash) =>
@@ -197,7 +198,7 @@ abstract class BaseStreamProvider[F[_], C[_]](
                             }
                         }
                 }
-            case None => Future.successful(Left(noBackupSubmitError))
+            case _ => Future.successful(Left(noBackupSubmitError))
     }
 
     private def noBackupSource(q: UtxoQuery): UtxoSource =
