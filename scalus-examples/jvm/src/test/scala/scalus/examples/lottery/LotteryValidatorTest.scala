@@ -48,7 +48,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           revealTx,
           lotteryUtxo._1,
           if Options.default.nativeListElements then ExUnits(memory = 225318, steps = 67971901L)
-          else ExUnits(memory = 140599, steps = 46656909)
+          else ExUnits(memory = 140899, steps = 46704909)
         )
     }
 
@@ -76,7 +76,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           revealTx,
           lotteryUtxo._1,
           if Options.default.nativeListElements then ExUnits(memory = 226884, steps = 68518665L)
-          else ExUnits(memory = 141200, steps = 46783782)
+          else ExUnits(memory = 141500, steps = 46831782)
         )
     }
 
@@ -104,7 +104,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           revealTx,
           lotteryUtxo._1,
           if Options.default.nativeListElements then ExUnits(memory = 225318, steps = 67971901L)
-          else ExUnits(memory = 140599, steps = 46656909)
+          else ExUnits(memory = 140899, steps = 46704909)
         )
     }
 
@@ -246,7 +246,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           p2RevealTx,
           lotteryUtxo2._1,
           if Options.default.nativeListElements then ExUnits(memory = 134440, steps = 39631849L)
-          else ExUnits(memory = 88026, steps = 27718004)
+          else ExUnits(memory = 88326, steps = 27766004)
         )
     }
 
@@ -294,7 +294,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           timeoutTx,
           lotteryUtxo2._1,
           if Options.default.nativeListElements then ExUnits(memory = 137471, steps = 41878199L)
-          else ExUnits(memory = 90997, steps = 28073732)
+          else ExUnits(memory = 91297, steps = 28121732)
         )
     }
 
@@ -383,7 +383,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           loseTx,
           lotteryUtxo2._1,
           if Options.default.nativeListElements then ExUnits(memory = 203761, steps = 59593572L)
-          else ExUnits(memory = 130274, steps = 40943237)
+          else ExUnits(memory = 130574, steps = 40991237)
         )
     }
 
@@ -429,7 +429,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           timeoutTx,
           lotteryUtxo2._1,
           if Options.default.nativeListElements then ExUnits(memory = 137239, steps = 41809712L)
-          else ExUnits(memory = 90997, steps = 28118908)
+          else ExUnits(memory = 91297, steps = 28166908)
         )
     }
 
@@ -541,7 +541,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           loseTx,
           lotteryUtxo2._1,
           if Options.default.nativeListElements then ExUnits(memory = 203529, steps = 59525085L)
-          else ExUnits(memory = 130274, steps = 40988413)
+          else ExUnits(memory = 130574, steps = 41036413)
         )
     }
 
@@ -712,7 +712,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           p1RevealTx,
           lotteryUtxo2._1,
           if Options.default.nativeListElements then ExUnits(memory = 132874, steps = 39085085L)
-          else ExUnits(memory = 87425, steps = 27591131)
+          else ExUnits(memory = 87725, steps = 27639131)
         )
     }
 }

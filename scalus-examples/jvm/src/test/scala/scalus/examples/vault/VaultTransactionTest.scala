@@ -141,7 +141,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 310289, steps = 91305889L)
-                            else ExUnits(memory = 190470, steps = 63256045))
+                            else ExUnits(memory = 190770, steps = 63304045))
         )
 
         provider.setSlot(currentSlot)
@@ -233,7 +233,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(
           result.budget == (if Options.default.nativeListElements then
                                 ExUnits(memory = 417850, steps = 120469126L)
-                            else ExUnits(memory = 214239, steps = 67489764))
+                            else ExUnits(memory = 214539, steps = 67537764))
         )
 
         assert(provider.submit(depositTx).await().isRight)
@@ -379,7 +379,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(
           withdrawResult.budget == (if Options.default.nativeListElements then
                                         ExUnits(memory = 310289, steps = 91305889L)
-                                    else ExUnits(memory = 190470, steps = 63256045))
+                                    else ExUnits(memory = 190770, steps = 63304045))
         )
 
         provider.setSlot(withdrawSlot)
@@ -430,7 +430,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(
           finalizeResult.budget == (if Options.default.nativeListElements then
                                         ExUnits(memory = 375706, steps = 105989806L)
-                                    else ExUnits(memory = 235294, steps = 69140332))
+                                    else ExUnits(memory = 235594, steps = 69188332))
         )
 
         provider.setSlot(finalizeSlot)

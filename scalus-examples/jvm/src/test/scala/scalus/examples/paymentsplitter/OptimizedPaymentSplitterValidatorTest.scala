@@ -26,34 +26,34 @@ class OptimizedPaymentSplitterValidatorTest
 
     private val expectedRewardBudgets: Map[String, ExUnits] = Map(
       "success when payments are correctly split for a single payee" -> ExUnits(
-        memory = 220877,
-        steps = 69843779
+        memory = 221177,
+        steps = 69891779
       ),
       "success when payments are correctly split between 2 payees" -> ExUnits(
-        memory = 303951,
-        steps = 97268541
+        memory = 304251,
+        steps = 97316541
       ),
       "success when payments are correctly split between 3 payees" -> ExUnits(
-        memory = 391723,
-        steps = 127028655
+        memory = 392023,
+        steps = 127076655
       ),
       "success when split equally and remainder compensates fee - o1" -> ExUnits(
-        memory = 391723,
-        steps = 127028655
+        memory = 392023,
+        steps = 127076655
       ),
       "success when split equally and remainder compensates fee - o2" -> ExUnits(
-        memory = 391723,
-        steps = 127028655
+        memory = 392023,
+        steps = 127076655
       ),
       "success when split equally and remainder compensates fee - o3" -> ExUnits(
-        memory = 391723,
-        steps = 127028655
+        memory = 392023,
+        steps = 127076655
       ),
-      "success between 5 payees" -> ExUnits(memory = 581361, steps = 193554939),
-      "success with multiple contract UTxOs" -> ExUnits(memory = 525311, steps = 173813855)
+      "success between 5 payees" -> ExUnits(memory = 581661, steps = 193602939),
+      "success with multiple contract UTxOs" -> ExUnits(memory = 525611, steps = 173861855)
     )
 
-    private val expectedSpendBudget: ExUnits = ExUnits(memory = 61556, steps = 19401766)
+    private val expectedSpendBudget: ExUnits = ExUnits(memory = 61856, steps = 19449766)
 
     // Run all shared test cases
     testCases.foreach { tc =>
@@ -65,8 +65,8 @@ class OptimizedPaymentSplitterValidatorTest
     test("Optimized: budget comparison with multiple UTxOs") {
         val tc = testCases.find(_.name.contains("multiple contract UTxOs")).get
         val (rewardBudget, spendBudget) = runTestCaseWithBudget(tc)
-        assert(rewardBudget == ExUnits(memory = 525311, steps = 173813855))
-        assert(spendBudget == ExUnits(memory = 61556, steps = 19401766))
+        assert(rewardBudget == ExUnits(memory = 525611, steps = 173861855))
+        assert(spendBudget == ExUnits(memory = 61856, steps = 19449766))
     }
 
     private def runTestCase(tc: PaymentSplitterTestCase): Unit = {
