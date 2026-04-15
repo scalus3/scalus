@@ -151,8 +151,11 @@ lazy val root: Project = project
       scalusUplcJitCompiler,
       scalusCardanoLedger.jvm,
       scalusCardanoLedger.js,
-      scalusCardanoStreaming.jvm,
-      scalusCardanoStreaming.js,
+      scalusStreamingCore.jvm,
+      scalusStreamingCore.js,
+      scalusStreamingFs2.jvm,
+      scalusStreamingFs2.js,
+      scalusStreamingOx,
       scalusTestkit.js,
       scalusTestkit.jvm,
       scalusExamples.js,
@@ -179,7 +182,9 @@ lazy val jvm: Project = project
       scalus.jvm,
       scalusUplcJitCompiler,
       scalusCardanoLedger.jvm,
-      scalusCardanoStreaming.jvm,
+      scalusStreamingCore.jvm,
+      scalusStreamingFs2.jvm,
+      scalusStreamingOx,
       scalusTestkit.jvm,
       scalusExamples.jvm,
       scalusUtxoCell.jvm,
@@ -198,7 +203,8 @@ lazy val js: Project = project
     .aggregate(
       scalus.js,
       scalusCardanoLedger.js,
-      scalusCardanoStreaming.js,
+      scalusStreamingCore.js,
+      scalusStreamingFs2.js,
       scalusTestkit.js,
       scalusExamples.js,
       scalusUtxoCell.js,
@@ -758,30 +764,53 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
 
-// Streaming BlockchainStreamProvider with rollback-aware event streams,
-// embedded chain-follower, and (future) N2C/N2N protocol clients plus tx
-// submission. Browser JS is not targeted — raw sockets are required.
-lazy val scalusCardanoStreaming = crossProject(JSPlatform, JVMPlatform)
-    .in(file("scalus-cardano-streaming"))
+// Embedded-node streaming stack: core engine + flavor adapters.
+// scalus-streaming-core holds the rollback-aware BlockchainStreamProvider
+// engine, ADTs, and chain-sync adapters. Flavor modules add a concrete
+// stream library (fs2 / ox) and the corresponding BlockchainStreamProvider
+// subclass. Browser JS is not targeted — raw sockets are required.
+lazy val scalusStreamingCore = crossProject(JSPlatform, JVMPlatform)
+    .in(file("scalus-embedded-node/scalus-streaming-core"))
     .dependsOn(scalusCardanoLedger)
     .disablePlugins(MimaPlugin)
     .settings(
-      name := "scalus-cardano-streaming",
+      name := "scalus-streaming-core",
       scalacOptions ++= commonScalacOptions,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
-      // Consumer-side stream libraries, used by reader examples/tests to
-      // exercise the producer-side ScalusAsyncStream API against real
-      // stream types. fs2 first; ox next (JVM-only, see jvmSettings);
-      // pekko later if needed.
-      libraryDependencies += "co.fs2" %%% "fs2-core" % "3.11.0" % "test",
       // No PluginDependency: this module has no onchain code, and the
       // macros it uses (UtxoQueryMacros) are plain scala.quoted macros.
       // Skipping the scalus compiler plugin keeps test compiles fast.
       publish / skip := false
     )
-    .jvmSettings(
-      libraryDependencies += "com.softwaremill.ox" %% "core" % "1.0.2" % "test"
+
+// fs2 flavor: consumer-side fs2.Stream adapter + Fs2BlockchainStreamProvider
+// + Fs2StreamingEmulator. Cross-built JVM+JS.
+lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
+    .in(file("scalus-embedded-node/scalus-streaming-fs2"))
+    .dependsOn(scalusStreamingCore % "compile->compile;test->test")
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-streaming-fs2",
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "co.fs2" %%% "fs2-core" % "3.11.0",
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      publish / skip := false
+    )
+
+// ox flavor: consumer-side ox adapter + OxBlockchainStreamProvider +
+// OxStreamingEmulator. JVM-only (ox itself is JVM-only).
+lazy val scalusStreamingOx = project
+    .in(file("scalus-embedded-node/scalus-streaming-ox"))
+    .dependsOn(scalusStreamingCore.jvm % "compile->compile;test->test")
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-streaming-ox",
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "com.softwaremill.ox" %% "core" % "1.0.2",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      publish / skip := false
     )
 
 // sbt plugin for blueprint generation
