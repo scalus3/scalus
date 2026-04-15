@@ -1,134 +1,210 @@
 package scalus.cardano.node.stream
 
-import scalus.cardano.infra.{ScalusAsyncSink, ScalusAsyncStream}
-import scalus.cardano.ledger.{Block, Transaction, TransactionInput, TransactionOutput}
+import scalus.cardano.ledger.{Block, CardanoInfo, ProtocolParams, Transaction, TransactionHash, TransactionInput, TransactionOutput, Utxos}
+import scalus.cardano.node.{SubmitError, TransactionStatus, UtxoQuery, UtxoQueryError, UtxoSource}
+import scalus.cardano.node.stream.engine.{Engine, Mailbox}
 
-import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
+import scala.concurrent.{ExecutionContext, Future}
 
-/** Per-subscription identifier. Opaque to keep the type system honest
-  * about the registry boundary.
+/** Common implementation glue for streaming providers across adapters. All subscription plumbing
+  * and snapshot-method fall-through lives here; concrete adapters only need to:
+  *
+  *   - provide a `MailboxSource[C]` given instance;
+  *   - implement [[liftFuture]] / [[pureF]];
+  *   - implement [[close]].
+  *
+  * Subscription flow:
+  *
+  *   1. Caller invokes `subscribeXxx(...)` — synchronous.
+  *   2. Adapter allocates the [[Mailbox]] with the appropriate semantics (delta/latest-value) and
+  *      an `onCancel` hook that asks the engine to unregister.
+  *   3. Mailbox is passed to the engine's async `registerXxx`; the engine stores it and (for UTxO
+  *      subs) kicks off seed-from-backup.
+  *   4. Adapter wraps the mailbox into its native stream via the `MailboxSource[C]` instance and
+  *      returns it.
   */
-opaque type SubId = Long
-
-object SubId {
-    private val counter = new AtomicLong(0L)
-    def next(): SubId = counter.incrementAndGet()
-}
-
-/** Common implementation glue for streaming providers across adapters.
-  *
-  * Holds per-event-kind subscriber registries and uses the
-  * [[ScalusAsyncStream]] instance for `C` to allocate per-subscription
-  * channels. Cancellation is wired through `ScalusAsyncStream.channel`'s
-  * `onCancel` hook so the registry shrinks automatically when consumers
-  * drop their streams.
-  *
-  * Adapters extend this and provide:
-  *
-  *   - a `ScalusAsyncStream[C]` `using` parameter (typically derived
-  *     from the runtime resources the adapter requires — a
-  *     `Dispatcher[IO]` for fs2, an `Ox` capability for ox);
-  *   - the snapshot-side `BlockchainProviderTF[F]` methods, typically
-  *     by composing with an existing `BlockchainProvider`.
-  *
-  * The base class exposes `protected` accessors to its registries so
-  * the engine (real or synthetic test source) can fan events out
-  * across active subscribers.
-  */
-abstract class BaseStreamProvider[F[_], C[_]](using val asyncStream: ScalusAsyncStream[C])
+abstract class BaseStreamProvider[F[_], C[_]](
+    val engine: Engine
+)(using val mailboxSource: MailboxSource[C])
     extends BlockchainStreamProviderTF[F, C] {
 
-    protected case class UtxoSub(
-        query: UtxoEventQuery,
-        opts: SubscriptionOptions,
-        sink: ScalusAsyncSink[UtxoEvent]
-    )
-    protected case class TxSub(
-        query: TransactionQuery,
-        opts: SubscriptionOptions,
-        sink: ScalusAsyncSink[TransactionEvent]
-    )
-    protected case class BlockSub(
-        query: BlockQuery,
-        opts: SubscriptionOptions,
-        sink: ScalusAsyncSink[BlockEvent]
-    )
+    /** Lightweight composition EC — callbacks do no heavy work. */
+    private given composer: ExecutionContext = ExecutionContext.parasitic
 
-    protected val utxoSubs = new AtomicReference[Map[SubId, UtxoSub]](Map.empty)
-    protected val txSubs = new AtomicReference[Map[SubId, TxSub]](Map.empty)
-    protected val blockSubs = new AtomicReference[Map[SubId, BlockSub]](Map.empty)
-    protected val tipSubs = new AtomicReference[Map[SubId, ScalusAsyncSink[ChainPoint]]](Map.empty)
+    protected def liftFuture[A](fa: => Future[A]): F[A]
+    protected def pureF[A](a: A): F[A]
+
+    final def cardanoInfo: CardanoInfo = engine.cardanoInfo
+
+    // ------------------------------------------------------------------
+    // Stream subscriptions
+    // ------------------------------------------------------------------
 
     final def subscribeUtxoQuery(
         query: UtxoEventQuery,
         opts: SubscriptionOptions
     ): C[UtxoEvent] = {
-        val id = SubId.next()
-        val (sink, stream) =
-            asyncStream.channel[UtxoEvent](opts.bufferPolicy, () => unregisterUtxo(id))
-        utxoSubs.updateAndGet(_ + (id -> UtxoSub(query, opts, sink)))
-        stream
+        val id = engine.nextSubscriptionId()
+        val maxSize = opts.bufferPolicy match
+            case DeltaBufferPolicy.Bounded(n) => n
+            case DeltaBufferPolicy.Unbounded  => Int.MaxValue
+        val mailbox = Mailbox.delta[UtxoEvent](
+          maxSize,
+          onCancel = () => { engine.unregisterUtxo(id); () }
+        )
+        engine.registerUtxoSubscription(id, query.query, opts.includeExistingUtxos, mailbox)
+        mailboxSource.fromMailbox(mailbox)
     }
 
     final def subscribeTransactionQuery(
         query: TransactionQuery,
         opts: SubscriptionOptions
     ): C[TransactionEvent] = {
-        val id = SubId.next()
-        val (sink, stream) =
-            asyncStream.channel[TransactionEvent](opts.bufferPolicy, () => unregisterTx(id))
-        txSubs.updateAndGet(_ + (id -> TxSub(query, opts, sink)))
-        stream
+        // Not wired in M2 — return an immediately-completed stream.
+        val mailbox = Mailbox.delta[TransactionEvent](Int.MaxValue)
+        mailbox.close()
+        mailboxSource.fromMailbox(mailbox)
     }
 
     final def subscribeBlockQuery(
         query: BlockQuery,
         opts: SubscriptionOptions
     ): C[BlockEvent] = {
-        val id = SubId.next()
-        val (sink, stream) =
-            asyncStream.channel[BlockEvent](opts.bufferPolicy, () => unregisterBlock(id))
-        blockSubs.updateAndGet(_ + (id -> BlockSub(query, opts, sink)))
-        stream
+        val mailbox = Mailbox.delta[BlockEvent](Int.MaxValue)
+        mailbox.close()
+        mailboxSource.fromMailbox(mailbox)
     }
 
-    final def subscribeTip(): C[ChainPoint] = {
-        val id = SubId.next()
-        val (sink, stream) =
-            asyncStream.channel[ChainPoint](BufferPolicy.default, () => unregisterTip(id))
-        tipSubs.updateAndGet(_ + (id -> sink))
-        stream
+    final def subscribeTip(): C[ChainTip] = {
+        val id = engine.nextSubscriptionId()
+        val mailbox = Mailbox.latestValue[ChainTip](
+          onCancel = () => { engine.unregisterTip(id); () }
+        )
+        engine.registerTipSubscription(id, mailbox)
+        mailboxSource.fromMailbox(mailbox)
     }
 
-    // Macro lowering for the inline convenience methods is not yet
-    // implemented (see UtxoEventQueryMacros). Adapters override if they
-    // want the convenience; otherwise callers use subscribeXxxQuery.
+    final def subscribeProtocolParams(): C[ProtocolParams] = {
+        val id = engine.nextSubscriptionId()
+        val mailbox = Mailbox.latestValue[ProtocolParams](
+          onCancel = () => { engine.unregisterParams(id); () }
+        )
+        engine.registerParamsSubscription(id, mailbox)
+        mailboxSource.fromMailbox(mailbox)
+    }
+
+    final def subscribeTransactionStatus(txHash: TransactionHash): C[TransactionStatus] = {
+        val id = engine.nextSubscriptionId()
+        val mailbox = Mailbox.latestValue[TransactionStatus](
+          onCancel = () => { engine.unregisterTxStatus(txHash, id); () }
+        )
+        engine.registerTxStatusSubscription(id, txHash, mailbox)
+        mailboxSource.fromMailbox(mailbox)
+    }
+
     inline def subscribeUtxo(
         inline f: (TransactionInput, TransactionOutput) => Boolean
     ): C[UtxoEvent] = ???
 
-    inline def subscribeTransaction(
-        inline f: Transaction => Boolean
-    ): C[TransactionEvent] = ???
+    inline def subscribeTransaction(inline f: Transaction => Boolean): C[TransactionEvent] = ???
 
-    inline def subscribeBlock(
-        inline f: Block => Boolean
-    ): C[BlockEvent] = ???
+    inline def subscribeBlock(inline f: Block => Boolean): C[BlockEvent] = ???
 
-    private def unregisterUtxo(id: SubId): Unit = { utxoSubs.updateAndGet(_ - id); () }
-    private def unregisterTx(id: SubId): Unit = { txSubs.updateAndGet(_ - id); () }
-    private def unregisterBlock(id: SubId): Unit = { blockSubs.updateAndGet(_ - id); () }
-    private def unregisterTip(id: SubId): Unit = { tipSubs.updateAndGet(_ - id); () }
+    // ------------------------------------------------------------------
+    // Snapshot (one-shot) methods. Engine first; backup on fall-through.
+    // ------------------------------------------------------------------
 
-    /** Complete every active subscription's sink. Adapters call this
-      * from their `close()` implementation. The returned futures are
-      * not awaited — callers that need ordering should compose them in
-      * their own effect type.
-      */
-    protected def closeAllSinks(): Unit = {
-        utxoSubs.getAndSet(Map.empty).values.foreach(_.sink.complete())
-        txSubs.getAndSet(Map.empty).values.foreach(_.sink.complete())
-        blockSubs.getAndSet(Map.empty).values.foreach(_.sink.complete())
-        tipSubs.getAndSet(Map.empty).values.foreach(_.complete())
+    final def currentSlot: F[scalus.cardano.ledger.SlotNo] = liftFuture {
+        engine.currentTip match
+            case Some(t) => Future.successful(t.slot)
+            case None =>
+                engine.backup match
+                    case Some(bp) => bp.currentSlot
+                    case None =>
+                        Future.failed(Engine.NoBackupConfiguredException("currentSlot"))
     }
+
+    final def fetchLatestParams: F[ProtocolParams] = liftFuture {
+        Future.successful(engine.latestParams)
+    }
+
+    final def findUtxos(query: UtxoQuery): F[Either[UtxoQueryError, Utxos]] = liftFuture {
+        engine.findUtxosLocal(query).flatMap {
+            case Some(utxos) => Future.successful(Right(utxos))
+            case None =>
+                engine.backup match
+                    case Some(bp) => bp.findUtxos(query)
+                    case None =>
+                        Future.successful(Left(UtxoQueryError.NotFound(noBackupSource(query))))
+        }
+    }
+
+    final def checkTransaction(txHash: TransactionHash): F[TransactionStatus] = liftFuture {
+        engine.txStatus(txHash).flatMap {
+            case Some(status) => Future.successful(status)
+            case None =>
+                engine.backup match
+                    case Some(bp) => bp.checkTransaction(txHash)
+                    case None     => Future.successful(TransactionStatus.NotFound)
+        }
+    }
+
+    final def submit(transaction: Transaction): F[Either[SubmitError, TransactionHash]] =
+        liftFuture {
+            engine.backup match
+                case Some(bp) =>
+                    bp.submit(transaction).flatMap {
+                        case r @ Right(hash) => engine.notifySubmit(hash).map(_ => r)
+                        case l @ Left(_)     => Future.successful(l)
+                    }
+                case None =>
+                    Future.successful(Left(noBackupSubmitError))
+        }
+
+    final def pollForConfirmation(
+        txHash: TransactionHash,
+        maxAttempts: Int,
+        delayMs: Long
+    ): F[TransactionStatus] = liftFuture {
+        engine.txStatus(txHash).flatMap {
+            case Some(status) => Future.successful(status)
+            case None =>
+                engine.backup match
+                    case Some(bp) => bp.pollForConfirmation(txHash, maxAttempts, delayMs)
+                    case None     => Future.successful(TransactionStatus.NotFound)
+        }
+    }
+
+    final def submitAndPoll(
+        transaction: Transaction,
+        maxAttempts: Int,
+        delayMs: Long
+    ): F[Either[SubmitError, TransactionHash]] = liftFuture {
+        engine.backup match
+            case Some(bp) =>
+                bp.submit(transaction).flatMap {
+                    case l @ Left(_) => Future.successful(l)
+                    case Right(hash) =>
+                        engine.notifySubmit(hash).flatMap { _ =>
+                            bp.pollForConfirmation(hash, maxAttempts, delayMs).map {
+                                case TransactionStatus.Confirmed => Right(hash)
+                                case other =>
+                                    Left(
+                                      scalus.cardano.node.NetworkSubmitError.ConnectionError(
+                                        s"tx $hash not confirmed, last status: $other"
+                                      )
+                                    )
+                            }
+                        }
+                }
+            case None => Future.successful(Left(noBackupSubmitError))
+    }
+
+    private def noBackupSource(q: UtxoQuery): UtxoSource =
+        q match
+            case UtxoQuery.Simple(source, _, _, _, _) => source
+            case UtxoQuery.Or(left, _, _, _, _)       => noBackupSource(left)
+
+    private def noBackupSubmitError: SubmitError =
+        scalus.cardano.node.NetworkSubmitError.ConnectionError("no backup source configured")
 }

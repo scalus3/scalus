@@ -5,9 +5,8 @@ import scalus.cardano.ledger.Utxo
 
 /** HOAS macro DSL for `UtxoEventQuery`.
   *
-  * Lets a subscriber declare both the UTxO predicate (which UTxOs to
-  * observe) and the event-kind predicate (which lifecycle events to
-  * receive) in a single lambda:
+  * Lets a subscriber declare both the UTxO predicate (which UTxOs to observe) and the event-kind
+  * predicate (which lifecycle events to receive) in a single lambda:
   *
   * {{{
   * import scalus.cardano.node.stream.UtxoEventQueryMacros.buildEventQuery
@@ -19,16 +18,14 @@ import scalus.cardano.ledger.Utxo
   *
   * Supported lambda shapes (planned, not yet implemented):
   *
-  *   - `(utxo-pred) && (kind-pred)` — top-level conjunction where each
-  *     side references only its own parameter
+  *   - `(utxo-pred) && (kind-pred)` — top-level conjunction where each side references only its own
+  *     parameter
   *   - `utxo-pred` alone — defaults `types = UtxoEventType.all`
-  *   - `kind-pred` alone — rejected at compile time (a query needs a
-  *     source)
+  *   - `kind-pred` alone — rejected at compile time (a query needs a source)
   *
-  * For the utxo predicate, the same patterns as
-  * `scalus.cardano.node.UtxoQueryMacros.buildQuery` are accepted:
-  * address equality, asset containment, datum-hash matches, and `&&` /
-  * `||` combinations of the above.
+  * For the utxo predicate, the same patterns as `scalus.cardano.node.UtxoQueryMacros.buildQuery`
+  * are accepted: address equality, asset containment, datum-hash matches, and `&&` / `||`
+  * combinations of the above.
   *
   * For the kind predicate, the supported shapes are:
   *
