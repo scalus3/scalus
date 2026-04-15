@@ -521,8 +521,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
     .dependsOn(scalus, scalusTestkit)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
-    // TODO: re-enable once ScalusBlueprintPlugin is published
-    // .enablePlugins(ScalusBlueprintPlugin)
+    .enablePlugins(ScalusBlueprintPlugin)
     .settings(
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
@@ -792,6 +791,8 @@ lazy val scalusCardanoLedgerIt = project
       publish / skip := true,
       Test / fork := true,
       Test / testOptions += Tests.Argument("-oF"),
+      // Forward SCALUS_TEST_ENV to forked test JVM
+      Test / envVars ++= sys.env.get("SCALUS_TEST_ENV").map("SCALUS_TEST_ENV" -> _).toMap,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion % "test",
       libraryDependencies += "com.bloxbean.cardano" % "yaci" % yaciVersion % "test",
