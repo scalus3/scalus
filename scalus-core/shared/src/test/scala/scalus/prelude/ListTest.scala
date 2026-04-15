@@ -898,11 +898,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           List.single((BigInt(1), BigInt(3))),
           Seq(
-            compilerOptions -> ExUnits(memory = 11116, steps = 2_822872),
-            compilerOptions -> ExUnits(
-              memory = 11116,
-              steps = 2822872
-            )
+            compilerOptions -> ExUnits(memory = 11116, steps = 2_822872)
           )
         )
     }
