@@ -13,9 +13,8 @@ import scala.concurrent.ExecutionContext
 /** fs2 specialisation: a [[Fs2BlockchainStreamProvider]] backed by an [[Emulator]].
   *
   * Tests can construct `new Fs2StreamingEmulator(emulator)` and subscribe through the usual
-  * `subscribeUtxoQuery` / `subscribeTransactionStatus` / etc. Submissions go through the
-  * emulator's ledger-validated `submitSync`, and each successful submit drives a one-tx
-  * block into the engine.
+  * `subscribeUtxoQuery` / `subscribeTransactionStatus` / etc. Submissions go through the emulator's
+  * ledger-validated `submitSync`, and each successful submit drives a one-tx block into the engine.
   */
 class Fs2StreamingEmulator(protected val emulator: Emulator)(using
     Dispatcher[IO],

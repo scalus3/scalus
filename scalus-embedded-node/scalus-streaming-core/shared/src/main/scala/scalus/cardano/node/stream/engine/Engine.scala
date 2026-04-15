@@ -27,9 +27,9 @@ import scala.util.Try
   *   static chain metadata and the initial protocol params
   * @param backup
   *   optional historical-query backend; `None` ⇔ `BackupSource.NoBackup`. Engine only calls
-  *   read-side methods on this field, so a plain [[BlockchainReader]] is sufficient — a
-  *   reader-only backup (e.g. `ImmutableEmulator.asReader`) is legal. The adapter's `submit`
-  *   path runtime-checks for `BlockchainProvider` to decide whether delegation is possible.
+  *   read-side methods on this field, so a plain [[BlockchainReader]] is sufficient — a reader-only
+  *   backup (e.g. `ImmutableEmulator.asReader`) is legal. The adapter's `submit` path
+  *   runtime-checks for `BlockchainProvider` to decide whether delegation is possible.
   * @param securityParam
   *   rollback-buffer depth; 2160 on mainnet
   */

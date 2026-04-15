@@ -6,8 +6,8 @@ import scalus.cardano.ledger.{CardanoInfo, Input, Output, TransactionException, 
 import scalus.cardano.ledger.rules.STS
 import scalus.cardano.node.{Emulator, UtxoQuery, UtxoSource}
 import scalus.cardano.node.stream.{StartFrom, SubscriptionOptions, UtxoEvent, UtxoEventQuery}
+import scalus.cardano.node.stream.engine.EngineTestFixtures.{addressA, addressB}
 import scalus.cardano.txbuilder.TxBuilder
-import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.builtin.ByteString
 import scalus.utils.await
 
@@ -23,7 +23,7 @@ class OxStreamingEmulatorTest extends AnyFunSuite {
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
     private def seed(amount: Long = 1000): Map[Input, Output] =
-        Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(amount)))
+        Map(Input(genesisHash, 0) -> Output(addressA, Value.ada(amount)))
 
     // See comment in `Fs2StreamingEmulatorTest` — validators off for happy-path tests.
     private def newEmulator(
@@ -36,10 +36,10 @@ class OxStreamingEmulatorTest extends AnyFunSuite {
           mutators = Emulator.defaultMutators
         )
 
-    private def payAliceToBob(emulator: Emulator, lovelace: Long) =
+    private def payAToB(emulator: Emulator, lovelace: Long) =
         TxBuilder(summon[CardanoInfo])
-            .payTo(Bob.address, Value.ada(lovelace))
-            .complete(emulator, Alice.address)
+            .payTo(addressB, Value.ada(lovelace))
+            .complete(emulator, addressA)
             .await()
             .transaction
 
@@ -48,15 +48,15 @@ class OxStreamingEmulatorTest extends AnyFunSuite {
             val emulator = newEmulator()
             val wrapper = new OxStreamingEmulator(emulator)
             try {
-                val query = UtxoEventQuery(UtxoQuery(UtxoSource.FromAddress(Bob.address)))
+                val query = UtxoEventQuery(UtxoQuery(UtxoSource.FromAddress(addressB)))
                 val opts = SubscriptionOptions(
                   startFrom = StartFrom.Tip,
                   includeExistingUtxos = false
                 )
-                // Register on the main thread (synchronous) before any submit so the engine
-                // worker processes registration before the onRollForward enqueued by submit.
+                // Subscribe on the main thread before any submit — see the ordering
+                // invariant documented on `BaseStreamProvider`.
                 val flow = wrapper.subscribeUtxoQuery(query, opts)
-                val tx = payAliceToBob(emulator, 10)
+                val tx = payAToB(emulator, 10)
                 val collected: Fork[Seq[UtxoEvent]] = fork(flow.take(1).runToList())
 
                 val result = wrapper.submit(tx)
@@ -74,7 +74,7 @@ class OxStreamingEmulatorTest extends AnyFunSuite {
             val emulator = newEmulator()
             val wrapper = new OxStreamingEmulator(emulator)
             try {
-                val query = UtxoEventQuery(UtxoQuery(UtxoSource.FromAddress(Alice.address)))
+                val query = UtxoEventQuery(UtxoQuery(UtxoSource.FromAddress(addressA)))
                 val opts = SubscriptionOptions(
                   startFrom = StartFrom.Tip,
                   includeExistingUtxos = true
@@ -89,7 +89,7 @@ class OxStreamingEmulatorTest extends AnyFunSuite {
     test("submit: ledger-rule violation (double-spend) is rejected, no event emitted") {
         supervised {
             val emulator = newEmulator()
-            val tx = payAliceToBob(emulator, 10)
+            val tx = payAToB(emulator, 10)
             assert(emulator.submitSync(tx).isRight)
 
             val wrapper = new OxStreamingEmulator(emulator)
@@ -113,7 +113,7 @@ class OxStreamingEmulatorTest extends AnyFunSuite {
         }
         supervised {
             val pristine = newEmulator()
-            val tx = payAliceToBob(pristine, 10)
+            val tx = payAToB(pristine, 10)
 
             val rejecting = newEmulator(validators = Set(RejectAll))
             val wrapper = new OxStreamingEmulator(rejecting)
@@ -129,7 +129,7 @@ class OxStreamingEmulatorTest extends AnyFunSuite {
             val emulator = newEmulator()
             val wrapper = new OxStreamingEmulator(emulator)
             try {
-                val tx = payAliceToBob(emulator, 10)
+                val tx = payAToB(emulator, 10)
                 val result = wrapper.submit(tx)
                 assert(result.isRight)
                 val tip = wrapper.engine.currentTip

@@ -12,8 +12,8 @@ import scala.concurrent.ExecutionContext
 /** ox specialisation: an [[OxBlockchainStreamProvider]] backed by an [[Emulator]].
   *
   * Direct-style wrapper: `submit` blocks until the emulator commits and the resulting
-  * `AppliedBlock` has been enqueued onto the engine's worker. See [[StreamingEmulatorOps]]
-  * for the ledger-validation invariant and tip-numbering semantics.
+  * `AppliedBlock` has been enqueued onto the engine's worker. See [[StreamingEmulatorOps]] for the
+  * ledger-validation invariant and tip-numbering semantics.
   */
 class OxStreamingEmulator(protected val emulator: Emulator)(using ExecutionContext)
     extends OxBlockchainStreamProvider(

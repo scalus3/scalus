@@ -22,6 +22,19 @@ import scala.concurrent.{ExecutionContext, Future}
   *      subs) kicks off seed-from-backup.
   *   4. Adapter wraps the mailbox into its native stream via the `MailboxSource[C]` instance and
   *      returns it.
+  *
+  * **Ordering invariant.** Each `subscribeXxx` enqueues the engine's `registerXxx` task
+  * synchronously on the worker queue (via `Engine.submit`) before returning. Any subsequent
+  * engine-bound call from the same caller thread (`applyBlock`, `submit`, `notifySubmit`, another
+  * `subscribeXxx`) enqueues its own task after the registration, so the worker processes them in
+  * FIFO order. Consequence: on the same thread, `subscribe(q)` immediately followed by `submit(tx)`
+  * is race-free — the block's event fan-out sees the subscription.
+  *
+  * **Cross-thread caveat.** If one thread calls `subscribeXxx` while another is already submitting,
+  * the two enqueue orders are not co-ordinated; the concurrent submit may observe the worker queue
+  * before the registration lands, dropping events for that subscriber until the registration is
+  * processed. Callers that need cross-thread ordering should synchronise via an external
+  * happens-before (e.g. await a signal from the subscribe thread before submitting).
   */
 abstract class BaseStreamProvider[F[_], C[_]](
     val engine: Engine

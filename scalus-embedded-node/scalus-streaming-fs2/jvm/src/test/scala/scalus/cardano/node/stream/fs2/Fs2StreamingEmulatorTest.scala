@@ -8,8 +8,8 @@ import scalus.cardano.ledger.{CardanoInfo, Input, Output, TransactionException, 
 import scalus.cardano.ledger.rules.STS
 import scalus.cardano.node.{Emulator, TransactionStatus, UtxoQuery, UtxoSource}
 import scalus.cardano.node.stream.{StartFrom, SubscriptionOptions, UtxoEvent, UtxoEventQuery}
+import scalus.cardano.node.stream.engine.EngineTestFixtures.{addressA, addressB}
 import scalus.cardano.txbuilder.TxBuilder
-import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.builtin.ByteString
 import scalus.utils.await
 
@@ -30,7 +30,7 @@ class Fs2StreamingEmulatorTest extends AnyFunSuite {
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
     private def seed(amount: Long = 1000): Map[Input, Output] =
-        Map(Input(genesisHash, 0) -> Output(Alice.address, Value.ada(amount)))
+        Map(Input(genesisHash, 0) -> Output(addressA, Value.ada(amount)))
 
     // For happy-path streaming tests we disable the default validator pipeline
     // (same pattern as `scalus-cardano-ledger`'s `EmulatorTest`): TxBuilder produces
@@ -60,23 +60,23 @@ class Fs2StreamingEmulatorTest extends AnyFunSuite {
             }
             .unsafeRunSync()
 
-    private def payAliceToBob(emulator: Emulator, lovelace: Long) =
+    private def payAToB(emulator: Emulator, lovelace: Long) =
         TxBuilder(summon[CardanoInfo])
-            .payTo(Bob.address, Value.ada(lovelace))
-            .complete(emulator, Alice.address)
+            .payTo(addressB, Value.ada(lovelace))
+            .complete(emulator, addressA)
             .await()
             .transaction
 
     test("submit: successful tx produces Created event at recipient") {
         val emulator = newEmulator()
         withStreaming(emulator) { (wrapper, _, _) ?=>
-            val query = UtxoEventQuery(UtxoQuery(UtxoSource.FromAddress(Bob.address)))
+            val query = UtxoEventQuery(UtxoQuery(UtxoSource.FromAddress(addressB)))
             val opts = SubscriptionOptions(
               startFrom = StartFrom.Tip,
               includeExistingUtxos = false
             )
             val collected = wrapper.subscribeUtxoQuery(query, opts).take(1).compile.toList
-            val tx = payAliceToBob(emulator, 10)
+            val tx = payAToB(emulator, 10)
 
             for
                 result <- wrapper.submit(tx)
@@ -91,7 +91,7 @@ class Fs2StreamingEmulatorTest extends AnyFunSuite {
     test("seed: includeExistingUtxos=true replays live UTxOs as Created at subscribe time") {
         val emulator = newEmulator()
         withStreaming(emulator) { (wrapper, _, _) ?=>
-            val query = UtxoEventQuery(UtxoQuery(UtxoSource.FromAddress(Alice.address)))
+            val query = UtxoEventQuery(UtxoQuery(UtxoSource.FromAddress(addressA)))
             val opts = SubscriptionOptions(
               startFrom = StartFrom.Tip,
               includeExistingUtxos = true
@@ -110,14 +110,13 @@ class Fs2StreamingEmulatorTest extends AnyFunSuite {
 
     test("submit: ledger-rule violation (double-spend) is rejected, no event emitted") {
         val emulator = newEmulator()
-        // Pre-submit a tx to consume Alice's only input.
-        val tx = payAliceToBob(emulator, 10)
+        // Pre-submit a tx to consume A's only input.
+        val tx = payAToB(emulator, 10)
         assert(emulator.submitSync(tx).isRight)
 
         withStreaming(emulator) { (wrapper, _, _) ?=>
             val preTip = wrapper.engine.currentTip
-            for
-                result <- wrapper.submit(tx)
+            for result <- wrapper.submit(tx)
             yield
                 assert(result.isLeft, s"double-spend should be rejected, got: $result")
                 assert(
@@ -136,7 +135,7 @@ class Fs2StreamingEmulatorTest extends AnyFunSuite {
         // Build the tx against a pristine emulator (no RejectAll), then submit through a
         // wrapper whose emulator has the validator set to RejectAll.
         val pristine = newEmulator()
-        val tx = payAliceToBob(pristine, 10)
+        val tx = payAToB(pristine, 10)
 
         val rejecting = newEmulator(validators = Set(RejectAll))
         withStreaming(rejecting) { (wrapper, _, _) ?=>
@@ -149,7 +148,7 @@ class Fs2StreamingEmulatorTest extends AnyFunSuite {
     test("subscribeTransactionStatus: latest-value reflects submit + block") {
         val emulator = newEmulator()
         withStreaming(emulator) { (wrapper, _, _) ?=>
-            val tx = payAliceToBob(emulator, 10)
+            val tx = payAToB(emulator, 10)
             val hash = tx.id
             val status = wrapper.subscribeTransactionStatus(hash).take(1).compile.toList
             for
@@ -170,9 +169,8 @@ class Fs2StreamingEmulatorTest extends AnyFunSuite {
     test("subscribeTip: successful submit advances the tip") {
         val emulator = newEmulator()
         withStreaming(emulator) { (wrapper, _, _) ?=>
-            val tx = payAliceToBob(emulator, 10)
-            for
-                _ <- wrapper.submit(tx)
+            val tx = payAToB(emulator, 10)
+            for _ <- wrapper.submit(tx)
             yield
                 val tip = wrapper.engine.currentTip
                 assert(tip.nonEmpty, "tip should be advanced after successful submit")
@@ -183,8 +181,7 @@ class Fs2StreamingEmulatorTest extends AnyFunSuite {
     test("newEmptyBlock: advances tip without any transaction events") {
         val emulator = newEmulator()
         withStreaming(emulator) { (wrapper, _, _) ?=>
-            for
-                _ <- wrapper.newEmptyBlock()
+            for _ <- wrapper.newEmptyBlock()
             yield
                 val tip = wrapper.engine.currentTip
                 assert(tip.nonEmpty, "tip should advance on newEmptyBlock")

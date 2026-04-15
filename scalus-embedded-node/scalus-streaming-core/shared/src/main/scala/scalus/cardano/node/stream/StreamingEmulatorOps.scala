@@ -10,24 +10,26 @@ import scala.concurrent.Future
   *
   * Turns emulator activity into `AppliedBlock` events fed into the streaming engine:
   *   - Overrides `submit` to run [[Emulator.submitSync]] (ledger-validated: the emulator's
-  *     `validators` + `mutators` pipeline runs before state is committed), and on success
-  *     hands the result to [[EngineDriver]] so the engine sees `notifySubmit` then
-  *     `onRollForward` in order.
+  *     `validators` + `mutators` pipeline runs before state is committed), and on success hands the
+  *     result to [[EngineDriver]] so the engine sees `notifySubmit` then `onRollForward` in order.
   *   - Exposes `newEmptyBlock()` so tests can advance the tip without a transaction.
   *
-  * **Correctness invariant.** An `AppliedBlock` is emitted only on `Right(hash)` from
-  * `submitSync`, i.e. only after all validators + mutators pass and the emulator commits
-  * the new state. Rejected transactions never surface as events.
+  * **Correctness invariant.** An `AppliedBlock` is emitted only on `Right(hash)` from `submitSync`,
+  * i.e. only after all validators + mutators pass and the emulator commits the new state. Rejected
+  * transactions never surface as events.
   *
-  * The engine-driving side of the work (block construction, counter, serialised calls on
-  * the engine worker) lives in [[EngineDriver]] so the deferred `ImmutableStreamingEmulator`
-  * can reuse the same driver from scenario-scoped code.
+  * The engine-driving side of the work (block construction, counter, serialised calls on the engine
+  * worker) lives in [[EngineDriver]] so the deferred `ImmutableStreamingEmulator` can reuse the
+  * same driver from scenario-scoped code.
   */
 trait StreamingEmulatorOps[F[_], C[_]] extends BaseStreamProvider[F, C] {
 
     protected def emulator: Emulator
 
-    protected lazy val driver: EngineDriver = new EngineDriver(engine)
+    // Constructor-time — `engine` is a `val` of `BaseStreamProvider` initialised before this
+    // trait's body runs. Keeping `val` (not `lazy`) so the driver lifecycle is deterministic
+    // and observable.
+    protected val driver: EngineDriver = new EngineDriver(engine)
 
     override def submit(
         transaction: Transaction
@@ -35,7 +37,8 @@ trait StreamingEmulatorOps[F[_], C[_]] extends BaseStreamProvider[F, C] {
         emulator.submitSync(transaction) match
             case Left(e) => Future.successful(Left(e))
             case Right(hash) =>
-                given scala.concurrent.ExecutionContext = scala.concurrent.ExecutionContext.parasitic
+                given scala.concurrent.ExecutionContext =
+                    scala.concurrent.ExecutionContext.parasitic
                 driver.applySubmit(transaction, hash).map(_ => Right(hash))
     }
 
