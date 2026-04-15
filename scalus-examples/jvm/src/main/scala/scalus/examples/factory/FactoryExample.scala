@@ -79,10 +79,9 @@ object FactoryContract extends Contract {
     lazy val compiled = PlutusV3.compile(FactoryExample.validate)
     lazy val blueprint = Blueprint.plutusV3[ProductDatum, FactoryAction](
       title = "Factory",
-      description =
-          "Factory pattern: a combined minting + spending validator. " +
-              "Create mints a one-shot product NFT via a seed UTxO and locks a product UTxO " +
-              "at the script address. Destroy / spend burn the NFT with the creator's signature.",
+      description = "Factory pattern: a combined minting + spending validator. " +
+          "Create mints a one-shot product NFT via a seed UTxO and locks a product UTxO " +
+          "at the script address. Destroy / spend burn the NFT with the creator's signature.",
       version = "1.0.0",
       license = Some("Apache-2.0"),
       compiled = compiled
