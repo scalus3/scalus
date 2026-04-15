@@ -49,25 +49,28 @@ Scala Source → SIR (via compiler plugin) → UPLC (via SIR compiler) → Plutu
 
 **Cross-platform modules (JVM/JS, some with Native):**
 
-| Module                         | Purpose                           | sbt Project                                       |
-|--------------------------------|-----------------------------------|---------------------------------------------------|
-| `scalus-core/`                 | Plutus VM, UPLC, standard library | `scalusJVM`, `scalusJS`, `scalusNative`           |
-| `scalus-cardano-ledger/`       | Transaction building, ledger      | `scalusCardanoLedgerJVM`, `scalusCardanoLedgerJS` |
-| `scalus-testkit/`              | Testing utilities                 | `scalusTestkitJVM`, `scalusTestkitJS`             |
-| `scalus-examples/`             | Smart contract examples           | `scalusExamplesJVM`, `scalusExamplesJS`           |
+| Module                                                 | Purpose                           | sbt Project                                       |
+|--------------------------------------------------------|-----------------------------------|---------------------------------------------------|
+| `scalus-core/`                                         | Plutus VM, UPLC, standard library | `scalusJVM`, `scalusJS`, `scalusNative`           |
+| `scalus-cardano-ledger/`                               | Transaction building, ledger      | `scalusCardanoLedgerJVM`, `scalusCardanoLedgerJS` |
+| `scalus-testkit/`                                      | Testing utilities                 | `scalusTestkitJVM`, `scalusTestkitJS`             |
+| `scalus-examples/`                                     | Smart contract examples           | `scalusExamplesJVM`, `scalusExamplesJS`           |
+| `scalus-embedded-node/scalus-streaming-core/`          | Streaming engine + ADTs (core)    | `scalusStreamingCoreJVM`, `scalusStreamingCoreJS` |
+| `scalus-embedded-node/scalus-streaming-fs2/`           | fs2 adapter + `Fs2StreamingEmulator` | `scalusStreamingFs2JVM`, `scalusStreamingFs2JS` |
 
 **JVM-only modules:**
 
-| Module                         | Purpose                           | sbt Project                         |
-|--------------------------------|-----------------------------------|-------------------------------------|
-| `scalus-plugin/`               | Scala 3 compiler plugin           | `scalusPlugin`                      |
-| `scalus-plugin-tests/`         | Plugin test suite                 | `scalusPluginTests`                 |
-| `scalus-uplc-jit-compiler/`    | Experimental UPLC JIT compiler    | `scalusUplcJitCompiler`             |
-| `scalus-design-patterns/`      | Design pattern examples           | `scalusDesignPatterns`              |
-| `bloxbean-cardano-client-lib/` | Bloxbean CCL integration          | `scalus-bloxbean-cardano-client-lib`|
-| `scalus-cardano-ledger-it/`    | Integration tests                 | `scalusCardanoLedgerIt`             |
-| `bench/`                       | JMH benchmarks                    | `bench`                             |
-| `scalus-docs/`                 | API documentation (Unidoc)        | `docs`                              |
+| Module                                         | Purpose                              | sbt Project                         |
+|------------------------------------------------|--------------------------------------|-------------------------------------|
+| `scalus-plugin/`                               | Scala 3 compiler plugin              | `scalusPlugin`                      |
+| `scalus-plugin-tests/`                         | Plugin test suite                    | `scalusPluginTests`                 |
+| `scalus-uplc-jit-compiler/`                    | Experimental UPLC JIT compiler       | `scalusUplcJitCompiler`             |
+| `scalus-design-patterns/`                      | Design pattern examples              | `scalusDesignPatterns`              |
+| `bloxbean-cardano-client-lib/`                 | Bloxbean CCL integration             | `scalus-bloxbean-cardano-client-lib`|
+| `scalus-cardano-ledger-it/`                    | Integration tests                    | `scalusCardanoLedgerIt`             |
+| `scalus-embedded-node/scalus-streaming-ox/`    | ox adapter + `OxStreamingEmulator`   | `scalusStreamingOx`                 |
+| `bench/`                                       | JMH benchmarks                       | `bench`                             |
+| `scalus-docs/`                                 | API documentation (Unidoc)           | `docs`                              |
 
 ### Key Source Locations
 

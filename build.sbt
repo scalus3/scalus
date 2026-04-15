@@ -788,7 +788,10 @@ lazy val scalusStreamingCore = crossProject(JSPlatform, JVMPlatform)
 // + Fs2StreamingEmulator. Cross-built JVM+JS.
 lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-embedded-node/scalus-streaming-fs2"))
-    .dependsOn(scalusStreamingCore % "compile->compile;test->test")
+    .dependsOn(
+      scalusStreamingCore % "compile->compile;test->test",
+      scalusCardanoLedger % "test->test"
+    )
     .disablePlugins(MimaPlugin)
     .settings(
       name := "scalus-streaming-fs2",
@@ -803,7 +806,10 @@ lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
 // OxStreamingEmulator. JVM-only (ox itself is JVM-only).
 lazy val scalusStreamingOx = project
     .in(file("scalus-embedded-node/scalus-streaming-ox"))
-    .dependsOn(scalusStreamingCore.jvm % "compile->compile;test->test")
+    .dependsOn(
+      scalusStreamingCore.jvm % "compile->compile;test->test",
+      scalusCardanoLedger.jvm % "test->test"
+    )
     .disablePlugins(MimaPlugin)
     .settings(
       name := "scalus-streaming-ox",
