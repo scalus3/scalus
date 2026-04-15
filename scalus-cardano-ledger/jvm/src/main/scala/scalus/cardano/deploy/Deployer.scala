@@ -1,6 +1,5 @@
 package scalus.cardano.deploy
 
-import scalus.cardano.address.Address
 import scalus.cardano.blueprint.Contract
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.MinCoinSizedTransactionOutput
@@ -30,9 +29,8 @@ object Deployer {
       * @param blockfrostApiKey
       *   Blockfrost API key
       * @param mnemonic
-      *   BIP-39 mnemonic for signing
-      * @param targetAddress
-      *   Bech32 address where the reference script UTXO will be created
+      *   BIP-39 mnemonic for signing; the reference-script UTXO is created at the sender's own base
+      *   address derived from this mnemonic
       * @return
       *   transaction hash hex string
       */
@@ -40,8 +38,7 @@ object Deployer {
         contractClassName: String,
         network: String,
         blockfrostApiKey: String,
-        mnemonic: String,
-        targetAddress: String
+        mnemonic: String
     ): String = {
         val cls = Class.forName(contractClassName)
         val contract = cls.getField("MODULE$").get(null).asInstanceOf[Contract]
@@ -75,14 +72,14 @@ object Deployer {
         val account = HdAccount.fromMnemonic(mnemonic)
         val senderAddress = account.baseAddress(provider.network)
 
-        val address = Address.fromBech32(targetAddress)
         val scriptRef = Some(ScriptRef(script))
-        val draftOutput = TransactionOutput.Babbage(address, Value.lovelace(0), None, scriptRef)
+        val draftOutput =
+            TransactionOutput.Babbage(senderAddress, Value.lovelace(0), None, scriptRef)
         val minCoin = MinCoinSizedTransactionOutput.ensureMinAda(
           Sized(draftOutput),
           provider.cardanoInfo.protocolParams
         )
-        val output = TransactionOutput.Babbage(address, Value(minCoin), None, scriptRef)
+        val output = TransactionOutput.Babbage(senderAddress, Value(minCoin), None, scriptRef)
 
         val tx = TxBuilder(provider.cardanoInfo)
             .output(output)
@@ -95,4 +92,5 @@ object Deployer {
             case Right(txHash) => txHash.toHex
             case Left(error)   => throw RuntimeException(s"Deploy failed: ${error.message}")
     }
+
 }

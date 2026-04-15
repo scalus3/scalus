@@ -435,7 +435,7 @@ object FactoryExample extends Validator {
 }
 ```
 
-See `scalus.examples.FactoryExample` for the complete implementation.
+See `scalus.examples.factory.FactoryExample` for the complete implementation.
 
 ## Indexing Patterns
 

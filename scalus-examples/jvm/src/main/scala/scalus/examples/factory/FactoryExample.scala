@@ -1,10 +1,10 @@
-package scalus.examples
+package scalus.examples.factory
 
 import scalus.*
 import scalus.uplc.builtin.Data
 import scalus.compiler.Options
+import scalus.cardano.blueprint.{Blueprint, Contract}
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.patterns.{Factory, FactoryAction, ProductDatum}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.uplc.PlutusV3
@@ -74,9 +74,17 @@ object FactoryExample extends Validator {
     }
 }
 
-private object FactoryCompilation {
-    private given compilerOptions: Options = Options.release
-    lazy val contract = PlutusV3.compile(FactoryExample.validate)
+object FactoryContract extends Contract {
+    private given Options = Options.release
+    lazy val compiled = PlutusV3.compile(FactoryExample.validate)
+    lazy val blueprint = Blueprint.plutusV3[ProductDatum, FactoryAction](
+      title = "Factory",
+      description =
+          "Factory pattern: a combined minting + spending validator. " +
+              "Create mints a one-shot product NFT via a seed UTxO and locks a product UTxO " +
+              "at the script address. Destroy / spend burn the NFT with the creator's signature.",
+      version = "1.0.0",
+      license = Some("Apache-2.0"),
+      compiled = compiled
+    )
 }
-
-lazy val FactoryExampleContract = FactoryCompilation.contract

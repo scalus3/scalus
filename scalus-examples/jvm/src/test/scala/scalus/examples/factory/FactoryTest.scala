@@ -1,4 +1,4 @@
-package scalus.patterns
+package scalus.examples.factory
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*

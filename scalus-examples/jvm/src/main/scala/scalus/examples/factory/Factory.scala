@@ -1,4 +1,4 @@
-package scalus.patterns
+package scalus.examples.factory
 
 import scalus.*
 import scalus.uplc.builtin.Builtins

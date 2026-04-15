@@ -9,8 +9,8 @@ import sbt.complete.DefaultParsers.*
   *
   * - `sbt blueprint` writes each contract's blueprint to
   *   `META-INF/scalus/blueprints/<ContractName>.json` in the classes directory.
-  * - `sbt "deploy <ContractName> --network preview --blockfrost-key <key> --mnemonic '<words>' --address <addr>"`
-  *   deploys a validator as a reference script UTXO.
+  * - `sbt "deploy <ContractName> --network preview --blockfrost-key <key> --mnemonic '<words>'"`
+  *   deploys a validator as a reference script UTXO at the sender's own base address.
   *
   * Environment variables can substitute CLI flags:
   *   - `CARDANO_NETWORK` for `--network` (default: "preview")
@@ -54,7 +54,7 @@ object ScalusBlueprintPlugin extends AutoPlugin {
         val log = streams.value.log
         val args = spaceDelimited("<args>").parsed
 
-        val (contractName, network, blockfrostKey, mnemonicStr, address) = parseDeployArgs(args)
+        val (contractName, network, blockfrostKey, mnemonicStr) = parseDeployArgs(args)
 
         val classNames = readManifestClassNames(classesDir)
         if (classNames.isEmpty) sys.error("No Contract implementations found. Run `compile` first.")
@@ -84,11 +84,10 @@ object ScalusBlueprintPlugin extends AutoPlugin {
                 classOf[String],
                 classOf[String],
                 classOf[String],
-                classOf[String],
                 classOf[String]
             )
             val txHash = deployMethod
-                .invoke(null, className, network, blockfrostKey, mnemonicStr, address)
+                .invoke(null, className, network, blockfrostKey, mnemonicStr)
                 .asInstanceOf[String]
             log.info(s"Deployed successfully! Transaction hash: $txHash")
         } catch {
@@ -174,12 +173,11 @@ object ScalusBlueprintPlugin extends AutoPlugin {
             )
     }
 
-    private def parseDeployArgs(args: Seq[String]): (String, String, String, String, String) = {
+    private def parseDeployArgs(args: Seq[String]): (String, String, String, String) = {
         var contractName: Option[String] = None
         var network: Option[String] = None
         var blockfrostKey: Option[String] = None
         var mnemonic: Option[String] = None
-        var address: Option[String] = None
 
         val iter = args.iterator
         while (iter.hasNext) {
@@ -193,9 +191,6 @@ object ScalusBlueprintPlugin extends AutoPlugin {
                 case "--mnemonic" =>
                     if (!iter.hasNext) sys.error("--mnemonic requires a value")
                     mnemonic = Some(iter.next())
-                case "--address" =>
-                    if (!iter.hasNext) sys.error("--address requires a value")
-                    address = Some(iter.next())
                 case name if contractName.isEmpty =>
                     contractName = Some(name)
                 case other =>
@@ -213,8 +208,7 @@ object ScalusBlueprintPlugin extends AutoPlugin {
               .getOrElse(sys.error("--blockfrost-key or BLOCKFROST_API_KEY env var is required")),
           mnemonic
               .orElse(sys.env.get("CARDANO_MNEMONIC"))
-              .getOrElse(sys.error("--mnemonic or CARDANO_MNEMONIC env var is required")),
-          address.getOrElse(sys.error("--address is required"))
+              .getOrElse(sys.error("--mnemonic or CARDANO_MNEMONIC env var is required"))
         )
     }
 }
