@@ -49,7 +49,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(PairIntDataList, pos)
                     .toRepresentation(PackedSumDataList, pos)
-            case (DataConstr, _: SumUplcConstr) =>
+            case (DataConstr, SumUplcConstr(variants)) =>
                 // DataConstr → SumUplcConstr: go through PairIntDataList
                 input
                     .toRepresentation(PairIntDataList, pos)
@@ -552,6 +552,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     case Some(parent) => findConstructors(parent, pos)
             case SIRType.SumCaseClass(decl, _) =>
                 decl.constructors
+            case SIRType.Annotated(tp, _) => findConstructors(tp, pos)
             case SIRType.TypeLambda(_, t) => findConstructors(t, pos)
             case SIRType.TypeProxy(ref) =>
                 findConstructors(ref, pos)

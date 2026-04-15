@@ -44,11 +44,27 @@ trait SirTypeUplcGenerator {
     /** Generate constructor for this type. Always called on DataDecl.tp
       *
       * @param constr - constructor, which we should generate
-      * @param targetType - type of the generated value, which should be a subtype of constr.tp
       */
     def genConstr(constr: SIR.Constr)(using
         LoweringContext
     ): LoweredValue
+
+    /** Generate constructor with pre-lowered arguments.
+      *
+      * Used when the caller has already lowered arguments (e.g., to inspect their repr
+      * for Transparent TypeVar cascade). Default implementation ignores loweredArgs and
+      * falls back to genConstr (which re-lowers args). Generators that support pre-lowered
+      * args should override this.
+      *
+      * @param constr - constructor SIR node
+      * @param loweredArgs - already-lowered constructor arguments
+      * @param optTargetType - optional target type (e.g., for Nil typing)
+      */
+    def genConstrFromLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType] = None
+    )(using LoweringContext): LoweredValue = genConstr(constr)
 
     def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         LoweringContext
@@ -62,6 +78,17 @@ trait SirTypeUplcGenerator {
         LoweringContext
     ): LoweredValue
 
+    /** Check if any lowered argument has Transparent TypeVar representation. When true, the
+      * constructor should cascade to UplcConstr representation because Transparent values can't be
+      * serialized to Data.
+      */
+    protected def hasTransparentTypeVarArgs(loweredArgs: scala.List[LoweredValue]): Boolean =
+        loweredArgs.exists { arg =>
+            arg.representation match
+                case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
+                case _                                                      => false
+        }
+
 }
 
 object SirTypeUplcGenerator {
@@ -72,12 +99,109 @@ object SirTypeUplcGenerator {
             case SIR.Const(scalus.uplc.Constant.String(spec), _, _) => spec
         }
 
-    /** Resolves the encoded UplcRepresentation string to the appropriate generator. */
+    /** Resolve a field's representation from its @UplcRepr annotation.
+      *
+      * Returns None if no annotation, otherwise resolves the annotation to a concrete
+      * LoweredValueRepresentation based on the field's type.
+      */
+    def resolveFieldRepr(param: TypeBinding, paramType: SIRType)(using
+        lctx: LoweringContext
+    ): Option[LoweredValueRepresentation] = {
+        param.annotations.data.get("uplcRepr").map { reprSir =>
+            resolveReprAnnotation(reprSir, paramType)
+        }
+    }
+
+    /** Resolve a @UplcRepr annotation SIR value to a concrete LoweredValueRepresentation.
+      *
+      * Handles:
+      *   - String constants (e.g., "UplcConstr", "Data") — type-level repr tags
+      *   - SIR.Constr with args (e.g., SumBuiltinList(UplcConstr)) — parameterized reprs
+      */
+    def resolveReprAnnotation(reprSir: SIR, fieldType: SIRType)(using
+        lctx: LoweringContext
+    ): LoweredValueRepresentation = {
+        reprSir match
+            case SIR.Const(scalus.uplc.Constant.String(name), _, _) =>
+                resolveReprName(name, fieldType)
+            case SIR.Constr(name, _, args, _, _) =>
+                val shortName = name.split("\\$?\\.").last
+                shortName match
+                    case "SumBuiltinList" if args.size == 1 =>
+                        val elemType = SumCaseClassRepresentation.SumBuiltinList
+                            .retrieveListElementType(fieldType)
+                            .getOrElse(SIRType.Data.tp)
+                        val elemRepr = resolveReprAnnotation(args.head, elemType)
+                        SumCaseClassRepresentation.SumBuiltinList(elemRepr)
+                    case "ProdBuiltinPair" if args.size == 2 =>
+                        val (fstType, sndType) =
+                            ProductCaseClassRepresentation.ProdBuiltinPair
+                                .extractPairComponentTypes(fieldType)
+                        val fstRepr = resolveReprAnnotation(args(0), fstType)
+                        val sndRepr = resolveReprAnnotation(args(1), sndType)
+                        ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
+                    case _ =>
+                        throw LoweringException(
+                          s"Unsupported parameterized @UplcRepr annotation: $name",
+                          SIRPosition.empty
+                        )
+            case _ =>
+                throw LoweringException(
+                  s"Cannot interpret @UplcRepr annotation: $reprSir",
+                  SIRPosition.empty
+                )
+    }
+
+    /** Resolve a @UplcRepr annotation SIR value to the appropriate SirTypeUplcGenerator. */
+    private def resolveGeneratorFromAnnotation(reprSir: SIR, tp: SIRType, debug: Boolean)(using
+        lctx: LoweringContext
+    ): SirTypeUplcGenerator = {
+        reprSir match
+            case SIR.Const(scalus.uplc.Constant.String(name), _, _) =>
+                name match
+                    case "UplcConstr" =>
+                        if SIRType.isSum(tp) then SumCaseUplcConstrSirTypeGenerator
+                        else ProductCaseUplcConstrSirTypeGenerator
+                    case "Data" => SIRTypeUplcDataGenerator
+                    case _      => lctx.typeGenerator(tp)
+            case _ =>
+                // Parameterized annotations (SumBuiltinList etc.) — fall back to inner type
+                lctx.typeGenerator(tp)
+    }
+
+    /** Resolve a type-level repr name to a concrete LoweredValueRepresentation for a given type. */
+    private def resolveReprName(name: String, fieldType: SIRType)(using
+        lctx: LoweringContext
+    ): LoweredValueRepresentation = {
+        name match
+            case "UplcConstr" =>
+                // Use UplcConstr generator's defaultRepresentation for this type
+                if SIRType.isSum(fieldType) then
+                    SumCaseUplcConstrSirTypeGenerator.defaultRepresentation(fieldType)
+                else ProductCaseUplcConstrSirTypeGenerator.defaultRepresentation(fieldType)
+            case "Data" =>
+                lctx.typeGenerator(fieldType).defaultDataRepresentation(fieldType)
+            case "DataData" =>
+                SumCaseClassRepresentation.DataData
+            case "DataConstr" =>
+                SumCaseClassRepresentation.DataConstr
+            case "Constant" =>
+                PrimitiveRepresentation.Constant
+            case _ =>
+                // Fallback: use the type's own generator
+                lctx.typeGenerator(fieldType).defaultRepresentation(fieldType)
+    }
+
+    /** Resolves the encoded UplcRepresentation string to the appropriate generator.
+      * @param isSum
+      *   true when resolving for a SumCaseClass type, false for a CaseClass (product) type
+      */
     private def resolveUplcRepresentation(
         encoded: String,
         constrDecl: ConstrDecl,
         typeArgs: List[SIRType],
-        debug: Boolean
+        debug: Boolean,
+        isSum: Boolean = false
     )(using lctx: LoweringContext): SirTypeUplcGenerator =
         encoded match {
             case "ProductCase" => ProductCaseSirTypeGenerator
@@ -97,6 +221,9 @@ object SirTypeUplcGenerator {
                 )
                 val innerGenerator = SirTypeUplcGenerator(paramType, debug)
                 ProductCaseOneElementSirTypeGenerator(innerGenerator)
+            case "UplcConstr" =>
+                if isSum then SumCaseUplcConstrSirTypeGenerator
+                else ProductCaseUplcConstrSirTypeGenerator
             case other =>
                 throw IllegalArgumentException(s"Unknown UplcRepresentation: $other")
         }
@@ -123,7 +250,13 @@ object SirTypeUplcGenerator {
                         // Use the first constructor if available
                         decl.constructors.headOption match {
                             case Some(constr) =>
-                                resolveUplcRepresentation(encoded, constr, typeArgs, debug)
+                                resolveUplcRepresentation(
+                                  encoded,
+                                  constr,
+                                  typeArgs,
+                                  debug,
+                                  isSum = true
+                                )
                             case None =>
                                 throw IllegalArgumentException(
                                   s"Sum type ${decl.name} has no constructors but has @UplcRepr annotation"
@@ -139,12 +272,14 @@ object SirTypeUplcGenerator {
                             else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
                             if !containsFun(tp, trace) then {
-                                if isPair(typeArgs.head)
-                                then SumPairBuiltinListSirTypeGenerator
-                                else
-                                    new SumBuiltinListSirTypeGenerator(
-                                      elementReprFor(typeArgs.head)
-                                    )
+                                val elemRepr = elementReprFor(typeArgs.head)
+                                elemRepr match
+                                    case _: ProductCaseClassRepresentation.ProdUplcConstr |
+                                        _: SumCaseClassRepresentation.SumUplcConstr =>
+                                        SumCaseUplcConstrSirTypeGenerator
+                                    case _ if isPair(typeArgs.head) =>
+                                        SumPairBuiltinListSirTypeGenerator
+                                    case _ => new SumBuiltinListSirTypeGenerator(elemRepr)
                             } else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == SIRType.BuiltinList.name then
                             if isPair(typeArgs.head) then SumPairBuiltinListSirTypeGenerator
@@ -198,6 +333,12 @@ object SirTypeUplcGenerator {
                 BLS12_381_MLResultSirTypeGenerator
             case SIRType.BuiltinValue =>
                 BuiltinValueSirTypeGenerator
+            case SIRType.Annotated(tp, anns) =>
+                anns.data.get("uplcRepr") match
+                    case Some(reprSir) =>
+                        resolveGeneratorFromAnnotation(reprSir, tp, debug)
+                    case None =>
+                        SirTypeUplcGenerator(tp, debug)
             case _ =>
                 // TODO: implement
                 ???
@@ -326,6 +467,8 @@ object SirTypeUplcGenerator {
                     typeArgs.exists(ta => containsFun(ta, trace)) || containsFun(constrDecl, trace)
                 case SIRType.TypeProxy(ref) =>
                     containsFun(ref, trace)
+                case SIRType.Annotated(tp1, _) =>
+                    containsFun(tp1, trace)
                 case _ => false
     }
 

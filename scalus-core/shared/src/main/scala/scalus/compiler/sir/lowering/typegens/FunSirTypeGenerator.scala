@@ -144,11 +144,13 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
                 collect(body).map { case (bTypeVars, input, output) =>
                     (typeVars.toSet ++ bTypeVars, input, output)
                 }
-            case proxy: SIRType.TypeProxy => None
+            case SIRType.Annotated(tp1, _) => collect(tp1)
+            case SIRType.TypeProxy(ref) =>
+                if ref == null then None
+                else collect(ref)
             case tv: SIRType.TypeVar =>
                 Some(Set.empty, SIRType.FreeUnificator, SIRType.FreeUnificator)
-            case SIRType.TypeProxy(ref) => collect(ref)
-            case _                      => None
+            case _ => None
         }
     }
 

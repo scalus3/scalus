@@ -120,6 +120,10 @@ object NativeListReprRules {
     val findRule: ReprRule = (outTp, _, lctx) =>
         lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
 
+    /** contains: List[A] → A → Eq[A] → Boolean */
+    val containsRule: ReprRule = (outTp, _, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
     /** unboxedNil: creates empty list with native element repr */
     val unboxedNilRule: ReprRule = (outTp, _, lctx) =>
         lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
@@ -139,6 +143,57 @@ object NativeListReprRules {
       "foldLeft" -> foldLeftRule,
       "foldRight" -> foldRightRule,
       "find" -> findRule
+    )
+}
+
+/** Repr rules for UplcConstr list intrinsics (IntrinsicsUplcConstrList).
+  *
+  * Lists with SumUplcConstr representation use Constr(0, [h, t]) / Constr(1, []) instead of builtin
+  * lists. Operations use Case-based pattern matching. No repr rules for contains — the intrinsic
+  * body handles representation conversion internally via toDefaultTypeVarRepr.
+  */
+object UplcConstrListReprRules {
+    import ListReprRules.{headRule, isEmptyRule, tailRule}
+
+    /** For operations returning a scalar type (not a list). */
+    val scalarRule: ReprRule = (outTp, _, lctx) =>
+        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+
+    /** For operations returning the same list type as the input. Walks curried Fun types,
+      * preserving inRepr in the final return position.
+      */
+    private def sameListReturnRepr(
+        outTp: SIRType,
+        inRepr: LoweredValueRepresentation,
+        lctx: LoweringContext
+    ): LoweredValueRepresentation =
+        outTp match
+            case SIRType.Fun(argTp, retTp) =>
+                val argRepr =
+                    lctx.typeGenerator(argTp).defaultRepresentation(argTp)(using lctx)
+                val retRepr = sameListReturnRepr(retTp, inRepr, lctx)
+                LambdaRepresentation(outTp, InOutRepresentationPair(argRepr, retRepr))
+            case _ => inRepr
+
+    val sameListRule: ReprRule = (outTp, inRepr, lctx) => sameListReturnRepr(outTp, inRepr, lctx)
+
+    val rules: Map[String, ReprRule] = Map(
+      "isEmpty" -> isEmptyRule,
+      "head" -> headRule,
+      "tail" -> tailRule,
+      // map: no repr rule — body's own repr (SumUplcConstr with Transparent TypeVars)
+      // flows through; reprFun resolves TypeVars at the call site
+      "filter" -> sameListRule,
+      // foldLeft, foldRight, find: no repr rule — body's Transparent TypeVar repr
+      // flows through; reprFun resolves at call site
+      // contains omitted — equalsRepr handles comparison in intrinsic body
+      "length" -> scalarRule,
+      "reverse" -> sameListRule,
+      "append" -> sameListRule,
+      "drop" -> sameListRule,
+      "prepended" -> sameListRule,
+      "dropRight" -> sameListRule,
+      "init" -> sameListRule
     )
 }
 

@@ -283,11 +283,36 @@ class MachineError(msg: String) extends RuntimeException(msg)
 class StackTraceMachineError(
     msg: String,
     val env: CekValEnv,
-    val sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+    val sourcePos: ScalusSourcePos = ScalusSourcePos.empty,
+    val sourceTrace: Seq[ScalusSourcePos] = Seq.empty
 ) extends MachineError(
-      if sourcePos.isEmpty then msg else s"$msg at ${sourcePos.show}"
+      (if sourcePos.isEmpty then msg else s"$msg at ${sourcePos.show}") +
+          StackTraceMachineError.formatTrace(sourceTrace)
     ) {
     def getCekStack: Array[String] = env.view.reverse.map(_._1).toArray
+}
+
+object StackTraceMachineError {
+    def formatTrace(trace: Seq[ScalusSourcePos]): String = {
+        if trace.isEmpty then ""
+        else
+            val sb = new StringBuilder
+            sb.append("\n  Source trace (last ")
+            sb.append(trace.size)
+            sb.append(" positions, oldest first):\n")
+            var prev: ScalusSourcePos = ScalusSourcePos.empty
+            var repeatCount = 0
+            trace.foreach { pos =>
+                if pos == prev then repeatCount += 1
+                else
+                    if repeatCount > 0 then sb.append(s"    ... repeated $repeatCount times\n")
+                    repeatCount = 0
+                    prev = pos
+                    sb.append(s"    ${pos.show}\n")
+            }
+            if repeatCount > 0 then sb.append(s"    ... repeated $repeatCount times\n")
+            sb.toString
+    }
 }
 
 class NonPolymorphicInstantiationMachineError(
@@ -299,8 +324,9 @@ class NonPolymorphicInstantiationMachineError(
 class NonFunctionalApplicationMachineError(
     arg: CekValue,
     env: CekValEnv,
-    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
-) extends StackTraceMachineError(s"Non-functional application: $arg", env, sourcePos)
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty,
+    sourceTrace: Seq[ScalusSourcePos] = Seq.empty
+) extends StackTraceMachineError(s"Non-functional application: $arg", env, sourcePos, sourceTrace)
 
 class OpenTermEvaluatedMachineError(
     name: NamedDeBruijn,
@@ -332,8 +358,9 @@ class UnknownBuiltin(
 
 class EvaluationFailure(
     env: CekValEnv,
-    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
-) extends StackTraceMachineError("Error evaluated", env, sourcePos)
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty,
+    sourceTrace: Seq[ScalusSourcePos] = Seq.empty
+) extends StackTraceMachineError("Error evaluated", env, sourcePos, sourceTrace)
 
 class MissingCaseBranch(
     val tag: Word64,
@@ -347,11 +374,13 @@ class MissingCaseBranch(
 class NonConstrScrutinized(
     val value: CekValue,
     env: CekValEnv,
-    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty,
+    sourceTrace: Seq[ScalusSourcePos] = Seq.empty
 ) extends StackTraceMachineError(
       s"A non-constructor value was scrutinized in a case expression: $value",
       env,
-      sourcePos
+      sourcePos,
+      sourceTrace
     )
 
 /** Base class for case-on-builtin errors (PlutusV4+) */
@@ -441,11 +470,13 @@ class BuiltinError(
     val term: Term,
     val cause: Throwable,
     env: CekValEnv,
-    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty,
+    sourceTrace: Seq[ScalusSourcePos] = Seq.empty
 ) extends StackTraceMachineError(
       s"Builtin error: $builtin $term, caused by $cause",
       env,
-      sourcePos
+      sourcePos,
+      sourceTrace
     )
 
 class OutOfExBudgetError(
@@ -464,12 +495,19 @@ enum CekValue {
     case VBuiltin(bn: DefaultFun, term: () => Term, runtime: BuiltinRuntime)
     case VConstr(tag: Word64, args: Seq[CekValue])
 
+    /** A list of arbitrary CekValues. Analogous to VConstr for constructors. Used for lists with
+      * non-constant elements (e.g., native Constr values). Created by MkCons/Nil on
+      * BuiltinValue-typed lists.
+      */
+    case VList(elems: scala.List[CekValue])
+
     override def toString: String = this match
         case VCon(const)            => s"VCon($const)"
         case VDelay(term, _)        => s"VDelay($term)"
         case VLamAbs(name, term, _) => s"VLamAbs($name, $term)"
         case VBuiltin(bn, _, _)     => s"VBuiltin($bn)"
         case VConstr(tag, args)     => s"VConstr($tag, ${args.mkString(", ")})"
+        case VList(elems)           => s"VList(${elems.mkString(", ")})"
 
     def asUnit: Unit = this match {
         case VCon(Constant.Unit) => ()
@@ -817,6 +855,32 @@ class CekMachine(
     private var value: CekValue | Null = null
     private var term: Term | Null = null
 
+    // Ring buffer for source position trace — last N positions for error diagnostics
+    private val traceBufferSize = 64
+    private val traceBuffer = new Array[ScalusSourcePos](traceBufferSize)
+    private var traceIndex = 0
+    private var traceCount = 0L
+
+    private inline def recordSourcePos(pos: ScalusSourcePos): Unit =
+        if profiling && !pos.isEmpty then
+            traceBuffer(traceIndex) = pos
+            traceIndex = (traceIndex + 1) % traceBufferSize
+            traceCount += 1
+
+    /** Returns the last N source positions leading to the current point, oldest first. */
+    def getSourceTrace: Seq[ScalusSourcePos] = {
+        val n = math.min(traceCount, traceBufferSize).toInt
+        if n == 0 then Seq.empty
+        else
+            val result = new Array[ScalusSourcePos](n)
+            val start = (traceIndex - n + traceBufferSize) % traceBufferSize
+            var i = 0
+            while i < n do
+                result(i) = traceBuffer((start + i) % traceBufferSize)
+                i += 1
+            result.toSeq
+    }
+
     /** Returns the source position of the last term being computed, or empty if unavailable. */
     private def lastSourcePos: ScalusSourcePos =
         val t = this.term
@@ -827,6 +891,12 @@ class CekMachine(
         private val byLocation = HashMap[(String, Int), Array[Long]]()
         // Use ordinal-indexed array for builtins — no toString per step
         private val byFunction = new Array[Array[Long]](DefaultFun.values.length)
+        // Per-location per-builtin: (file, line, builtinOrdinal) → [mem, cpu, count]
+        private val byLocationFunction = HashMap[(String, Int, Int), Array[Long]]()
+        // Transition counts: (fromFile, fromLine, toFile, toLine) → count
+        private val transitions = HashMap[(String, Int, String, Int), Long]()
+        private var prevFile: String = ""
+        private var prevLine: Int = 0
 
         def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
             wrapped.spendBudget(cat, budget, env)
@@ -834,11 +904,22 @@ class CekMachine(
             val steps = budget.steps
             val pos = lastSourcePos
             if !pos.isEmpty then
-                val key = (pos.file, pos.startLine + 1)
+                val file = pos.file
+                val line = pos.startLine + 1
+                val key = (file, line)
                 val arr = byLocation.getOrElseUpdate(key, new Array[Long](3))
                 arr(0) += mem
                 arr(1) += steps
                 arr(2) += 1
+                // Track transitions between source locations
+                if prevFile.nonEmpty && ((file ne prevFile) || line != prevLine) then
+                    val tkey = (prevFile, prevLine, file, line)
+                    transitions.updateWith(tkey) {
+                        case Some(c) => Some(c + 1)
+                        case None    => Some(1)
+                    }
+                prevFile = file
+                prevLine = line
             cat match
                 case ExBudgetCategory.BuiltinApp(bi) =>
                     val idx = bi.ordinal
@@ -849,6 +930,17 @@ class CekMachine(
                     arr(0) += mem
                     arr(1) += steps
                     arr(2) += 1
+                    // Track which builtins are called from which source locations.
+                    // Use last known position as fallback for generated code without annotations.
+                    val lfFile = if !pos.isEmpty then pos.file else prevFile
+                    val lfLine =
+                        if !pos.isEmpty then pos.startLine + 1 else prevLine
+                    if lfFile.nonEmpty then
+                        val lfKey = (lfFile, lfLine, idx)
+                        val lfArr = byLocationFunction.getOrElseUpdate(lfKey, new Array[Long](3))
+                        lfArr(0) += mem
+                        lfArr(1) += steps
+                        lfArr(2) += 1
                 case _ => ()
         }
 
@@ -874,7 +966,34 @@ class CekMachine(
                 buf.toSeq.sortBy(e => (-e.memory, -e.cpu))
             }
 
-            ProfilingData(locations, functions, wrapped.getSpentBudget)
+            val builtinsByLocation = byLocationFunction.iterator
+                .map { case ((file, line, biIdx), arr) =>
+                    LocationFunctionProfile(
+                      file,
+                      line,
+                      builtinValues(biIdx).toString,
+                      arr(0),
+                      arr(1),
+                      arr(2)
+                    )
+                }
+                .toSeq
+                .sortBy(e => (-e.memory, -e.cpu))
+
+            val transitionSeq = transitions.iterator
+                .map { case ((fromFile, fromLine, toFile, toLine), count) =>
+                    SourceTransition(fromFile, fromLine, toFile, toLine, count)
+                }
+                .toSeq
+                .sortBy(-_.count)
+
+            ProfilingData(
+              locations,
+              functions,
+              builtinsByLocation,
+              transitionSeq,
+              wrapped.getSpentBudget
+            )
         }
     }
 
@@ -926,6 +1045,7 @@ class CekMachine(
     }
 
     private final def computeCek(ctx: Context, env: CekValEnv, term: Term): CekState = {
+        recordSourcePos(term.sourcePos)
         val costs = params.machineCosts
         term match
             case Var(name, _) =>
@@ -953,7 +1073,7 @@ class CekMachine(
                     val meaning = getBuiltinRuntime(bn)
                     Return(ctx, env, VBuiltin(bn, () => term, meaning))
                 catch case _: Exception => throw new UnknownBuiltin(bn, env, term.sourcePos)
-            case Error(_) => throw new EvaluationFailure(env, term.sourcePos)
+            case Error(_) => throw new EvaluationFailure(env, term.sourcePos, getSourceTrace)
             case Constr(tag, args, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Constr), costs.constrCost, env)
                 args match
@@ -1147,8 +1267,15 @@ class CekMachine(
                                   FrameAwaitFunValue(rightVal, ctx)
                                 )
                                 Compute(newCtx, env, cases(0))
-                            case _ => throw new NonConstrScrutinized(value, env, lastSourcePos)
-                    case _ => throw new NonConstrScrutinized(value, env, lastSourcePos)
+                            case _ =>
+                                throw new NonConstrScrutinized(
+                                  value,
+                                  env,
+                                  lastSourcePos,
+                                  getSourceTrace
+                                )
+                    case _ =>
+                        throw new NonConstrScrutinized(value, env, lastSourcePos, getSourceTrace)
     }
 
     private def transferArgStack(args: ArgStack, ctx: Context): Context = {
@@ -1191,7 +1318,12 @@ class CekMachine(
                           lastSourcePos
                         )
             case _ =>
-                throw new NonFunctionalApplicationMachineError(fun, env, lastSourcePos)
+                throw new NonFunctionalApplicationMachineError(
+                  fun,
+                  env,
+                  lastSourcePos,
+                  getSourceTrace
+                )
     }
 
     /** `force` a term and proceed.
@@ -1241,7 +1373,14 @@ class CekMachine(
                     runtime.apply(logger)
                 } catch
                     case NonFatal(e) =>
-                        throw new BuiltinError(builtinName, term(), e, env, lastSourcePos)
+                        throw new BuiltinError(
+                          builtinName,
+                          term(),
+                          e,
+                          env,
+                          lastSourcePos,
+                          getSourceTrace
+                        )
             case _ => VBuiltin(builtinName, term, runtime)
     }
 
@@ -1286,6 +1425,20 @@ class CekMachine(
             case VLamAbs(name, term, env) => dischargeCekValEnv(env, LamAbs(name, term))
             case VBuiltin(_, term, _)     => term()
             case VConstr(tag, args)       => Constr(tag, args.map(dischargeCekValue).toList)
+            case VList(elems)             =>
+                // Best-effort discharge: when every element discharges to a Constant, emit a
+                // Constant.List. If any element is non-constant (closure / partial), there is
+                // no faithful Constant.List representation, so fail explicitly rather than
+                // silently substituting `Bool(false)` (which can produce ill-typed terms and
+                // mask bugs).
+                val discharged = elems.map(dischargeCekValue)
+                val constants = discharged.collect { case Term.Const(c, _) => c }
+                if constants.length != discharged.length then
+                    throw new IllegalStateException(
+                      s"VList contains non-constant elements; cannot discharge to a Constant.List " +
+                          s"(${discharged.length} elements, ${constants.length} are constants)"
+                    )
+                Term.Const(Constant.List(DefaultUni.BuiltinValue, constants))
     }
 
     private def spendBudget(

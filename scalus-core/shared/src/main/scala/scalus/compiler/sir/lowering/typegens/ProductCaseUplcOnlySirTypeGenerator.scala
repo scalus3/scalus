@@ -86,8 +86,13 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
 
-        val fieldType = lctx.resolveTypeVarIfNeeded(constrDecl.params(fieldIndex).tp)
+        val rawFieldType = lctx.resolveTypeVarIfNeeded(constrDecl.params(fieldIndex).tp)
         val fieldRepr = puc.fieldReprs(fieldIndex)
+        val fieldParam = constrDecl.params(fieldIndex)
+        val fieldType =
+            if fieldParam.annotations.data.contains("uplcRepr") then
+                SIRType.Annotated(rawFieldType, fieldParam.annotations)
+            else rawFieldType
 
         // Case(scrutinee, [λf0.λf1...λfN. fi]) — extract field i
         val fieldNames = constrDecl.params.indices.map(i => lctx.uniqueVarName(s"_sel_f$i"))

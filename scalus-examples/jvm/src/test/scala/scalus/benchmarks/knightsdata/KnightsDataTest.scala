@@ -1,0 +1,462 @@
+package scalus.benchmarks.knightsdata
+
+import scalus.compiler.Options
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.uplc.builtin.Builtins.{multiplyInteger, remainderInteger}
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.{compile, Options}
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.testing.kit.ScalusTest
+import scalus.uplc.eval.{ProfileFormatter, Result}
+
+class KnightsDataTest extends AnyFunSuite, ScalusTest:
+    import KnightsDataTest.{*, given}
+    import scalus.uplc.eval.PlutusVM
+
+    // Use vanRossemPV VM to evaluate code compiled with protocol version 11 features (case on booleans)
+    override protected def plutusVM: PlutusVM =
+        PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
+
+    given Options = Options(
+      targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
+      targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
+      generateErrorTraces = true,
+      optimizeUplc = true,
+      debug = false
+    )
+
+    val printComparison = true
+    val profilingEnabled = true
+
+    extension (term: scalus.uplc.Term)
+        private def evalWithOptionalProfile(using PlutusVM): Result =
+            if profilingEnabled then
+                val result = term.evaluateProfile
+                result.profile.foreach(p => info(ProfileFormatter.toText(p)))
+                result
+            else term.evaluateDebug
+
+    test("100_4x4") {
+        val sir = compile {
+            val result = runKnights(100, 4)
+            val expected: Solution = List.empty
+            require(result === expected)
+        }
+        // val lw = sir.toLoweredValue()
+        // println(s"Lowered value: ${lw.pretty.render(100)}")
+        val result = sir.toUplcOptimized(false).evalWithOptionalProfile
+
+        val options = summon[Options]
+        val scalusBudget =
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
+                if options.nativeListElements then ExUnits(memory = 204281467, steps = 52963867280L)
+                else ExUnits(memory = 122548696L, steps = 37288399232L)
+            else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
+            then ExUnits(memory = 324_452274L, steps = 92346_941030L)
+            else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
+            then ExUnits(memory = 247_807177L, steps = 44783_358238L)
+            else {
+                // actually we don't know, need recheck
+                ExUnits(memory = 247_807177L, steps = 44783_358238L)
+            }
+
+        assert(result.isSuccess)
+        assert(result.budget == scalusBudget)
+
+        compareBudgetWithReferenceValue(
+          testName = "KnightsDataTest.100_4x4",
+          scalusBudget = scalusBudget,
+          refBudget = ExUnits(memory = 160_204421L, steps = 54958_831939L),
+          isPrintComparison = printComparison
+        )
+    }
+
+    test("100_6x6") {
+        val result = compile {
+            val result = runKnights(100, 6)
+
+            val expected: Solution = List(
+              (
+                0,
+                ChessSet(
+                  size = 6,
+                  moveNumber = 36,
+                  start = Option.Some((1, 1)),
+                  visited = List(
+                        // format: off
+                        (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 6), (4, 5), (6, 6), (5, 4),
+                        (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
+                        (6, 5), (4, 4), (5, 2), (6, 4), (5, 6), (3, 5), (1, 6), (2, 4), (1, 2),
+                        (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
+                        // format: on
+                      )
+                )
+              ),
+              (
+                0,
+                ChessSet(
+                  size = 6,
+                  moveNumber = 36,
+                  start = Option.Some((1, 1)),
+                  visited = List(
+                        // format: off
+                        (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 2), (4, 1), (6, 2), (5, 4),
+                        (6, 6), (4, 5), (2, 6), (1, 4), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
+                        (6, 5), (4, 4), (5, 2), (6, 4), (5, 6), (3, 5), (1, 6), (2, 4), (1, 2),
+                        (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
+                        // format: on
+                      )
+                )
+              ),
+              (
+                0,
+                ChessSet(
+                  size = 6,
+                  moveNumber = 36,
+                  start = Option.Some((1, 1)),
+                  visited = List(
+                        // format: off
+                        (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 2), (1, 4), (2, 6), (4, 5),
+                        (6, 6), (5, 4), (6, 2), (4, 1), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
+                        (6, 5), (4, 4), (5, 2), (6, 4), (5, 6), (3, 5), (1, 6), (2, 4), (1, 2),
+                        (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
+                        // format: on
+                      )
+                )
+              ),
+              (
+                0,
+                ChessSet(
+                  size = 6,
+                  moveNumber = 36,
+                  start = Option.Some((1, 1)),
+                  visited = List(
+                        // format: off
+                        (3, 2), (5, 3), (6, 1), (4, 2), (3, 4), (2, 6), (1, 4), (2, 2), (4, 1),
+                        (6, 2), (5, 4), (6, 6), (4, 5), (3, 3), (2, 1), (1, 3), (2, 5), (4, 6),
+                        (6, 5), (4, 4), (5, 2), (6, 4), (5, 6), (3, 5), (1, 6), (2, 4), (1, 2),
+                        (3, 1), (4, 3), (5, 1), (6, 3), (5, 5), (3, 6), (1, 5), (2, 3), (1, 1)
+                        // format: on
+                      )
+                )
+              ),
+            )
+
+            require(result === expected)
+        }
+            .toUplcOptimized(false)
+            .evalWithOptionalProfile
+
+        val options = summon[Options]
+        val scalusBudget =
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
+                if Options.default.nativeListElements then
+                    ExUnits(memory = 598376876, steps = 146019618948L)
+                else ExUnits(memory = 250956657L, steps = 91901166815L)
+            else
+                options.targetLoweringBackend match
+                    case TargetLoweringBackend.SirToUplcV3Lowering =>
+                        ExUnits(memory = 822_015659L, steps = 228266_926079L)
+                    case TargetLoweringBackend.SumOfProductsLowering =>
+                        ExUnits(memory = 645_799142L, steps = 115775_218834L)
+                    case _ =>
+                        throw new IllegalStateException("Unsupported target lowering backend")
+        if !result.isSuccess then println(s"Result:  $result")
+        assert(result.isSuccess)
+        assert(result.budget == scalusBudget)
+
+        compareBudgetWithReferenceValue(
+          testName = "KnightsDataTest.100_6x6",
+          scalusBudget = scalusBudget,
+          refBudget = ExUnits(memory = 292_216349L, steps = 131954_064320L),
+          isPrintComparison = printComparison
+        )
+    }
+
+    test("100_8x8") {
+        val result = compile {
+            val result = runKnights(100, 8)
+
+            import scalus.cardano.onchain.plutus.prelude.List.*
+            val expected: Solution = Cons(
+              (
+                0,
+                ChessSet(
+                  size = 8,
+                  moveNumber = 64,
+                  start = Option.Some((1, 1)),
+                  visited = List(
+                        // format: off
+                        (3, 2), (4, 4), (5, 6), (6, 4), (8, 5), (7, 7), (6, 5), (8, 4), (7, 2),
+                        (5, 3), (3, 4), (4, 6), (5, 8), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
+                        (4, 7), (5, 5), (6, 3), (5, 1), (4, 3), (3, 5), (5, 4), (7, 3), (8, 1),
+                        (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 5), (1, 3), (2, 1), (4, 2),
+                        (6, 1), (8, 2), (7, 4), (8, 6), (7, 8), (5, 7), (3, 8), (1, 7), (3, 6),
+                        (2, 8), (1, 6), (2, 4), (1, 2), (3, 1), (5, 2), (7, 1), (8, 3), (7, 5),
+                        (8, 7), (6, 8), (7, 6), (8, 8), (6, 7), (4, 8), (2, 7), (1, 5), (2, 3),
+                        (1, 1)
+                        // format: on
+                      )
+                )
+              ),
+              Cons(
+                (
+                  0,
+                  ChessSet(
+                    size = 8,
+                    moveNumber = 64,
+                    start = Option.Some((1, 1)),
+                    visited = List(
+                          // format: off
+                          (3, 2), (4, 4), (5, 6), (7, 7), (8, 5), (6, 4), (7, 2), (8, 4), (6, 5),
+                          (5, 3), (3, 4), (4, 6), (5, 8), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
+                          (4, 7), (5, 5), (6, 3), (5, 1), (4, 3), (3, 5), (5, 4), (7, 3), (8, 1),
+                          (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 5), (1, 3), (2, 1), (4, 2),
+                          (6, 1), (8, 2), (7, 4), (8, 6), (7, 8), (5, 7), (3, 8), (1, 7), (3, 6),
+                          (2, 8), (1, 6), (2, 4), (1, 2), (3, 1), (5, 2), (7, 1), (8, 3), (7, 5),
+                          (8, 7), (6, 8), (7, 6), (8, 8), (6, 7), (4, 8), (2, 7), (1, 5), (2, 3),
+                          (1, 1)
+                          // format: on
+                        )
+                  )
+                ),
+                Cons(
+                  (
+                    0,
+                    ChessSet(
+                      size = 8,
+                      moveNumber = 64,
+                      start = Option.Some((1, 1)),
+                      visited = List(
+                            // format: off
+                            (3, 2), (4, 4), (6, 5), (8, 4), (7, 2), (5, 3), (3, 4), (4, 6), (5, 8),
+                            (7, 7), (5, 6), (6, 4), (8, 5), (6, 6), (4, 5), (3, 7), (1, 8), (2, 6),
+                            (4, 7), (5, 5), (6, 3), (5, 1), (4, 3), (3, 5), (5, 4), (7, 3), (8, 1),
+                            (6, 2), (4, 1), (2, 2), (1, 4), (3, 3), (2, 5), (1, 3), (2, 1), (4, 2),
+                            (6, 1), (8, 2), (7, 4), (8, 6), (7, 8), (5, 7), (3, 8), (1, 7), (3, 6),
+                            (2, 8), (1, 6), (2, 4), (1, 2), (3, 1), (5, 2), (7, 1), (8, 3), (7, 5),
+                            (8, 7), (6, 8), (7, 6), (8, 8), (6, 7), (4, 8), (2, 7), (1, 5), (2, 3),
+                            (1, 1),
+                            // format: on
+                          )
+                    )
+                  ),
+                  Nil
+                )
+              )
+            )
+
+            require(result === expected)
+        }
+            .toUplcOptimized(false)
+            .evalWithOptionalProfile
+
+        val options = summon[Options]
+        val scalusBudget =
+            if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
+                if Options.default.nativeListElements then
+                    ExUnits(memory = 1238044719, steps = 297766687086L)
+                else ExUnits(memory = 418223652L, steps = 164475206294L)
+            else
+                options.targetLoweringBackend match {
+                    case TargetLoweringBackend.SirToUplcV3Lowering =>
+                        ExUnits(memory = 1645_356753L, steps = 452914_801705L)
+                    case TargetLoweringBackend.SumOfProductsLowering =>
+                        ExUnits(memory = 1315_097779L, steps = 235822_700067L)
+                    case TargetLoweringBackend.ScottEncodingLowering =>
+                        ExUnits(memory = 1315_097779L, steps = 235822_700067L)
+                }
+        assert(result.isSuccess)
+        assert(result.budget == scalusBudget)
+
+        compareBudgetWithReferenceValue(
+          testName = "KnightsDataTest.100_8x8",
+          scalusBudget = scalusBudget,
+          refBudget = ExUnits(memory = 540_217437L, steps = 270266_226527L),
+        )
+    }
+
+end KnightsDataTest
+
+@Compile
+object KnightsDataTest:
+    enum Direction:
+        case UL, UR, DL, DR, LU, LD, RU, RD
+
+    val directions: List[Direction] = {
+        import Direction.*
+        List.Cons(
+          UL,
+          List.Cons(
+            UR,
+            List.Cons(
+              DL,
+              List.Cons(DR, List.Cons(LU, List.Cons(LD, List.Cons(RU, List.Cons(RD, List.Nil)))))
+            )
+          )
+        )
+    }
+
+    type Tile = (BigInt, BigInt)
+
+    extension (self: Tile)
+        def move(direction: Direction): Tile =
+            val (x, y) = self
+            import Direction.*
+            direction match
+                case UL => (x - 1, y - 2)
+                case UR => (x + 1, y - 2)
+                case DL => (x - 1, y + 2)
+                case DR => (x + 1, y + 2)
+                case LU => (x - 2, y - 1)
+                case LD => (x - 2, y + 1)
+                case RU => (x + 2, y - 1)
+                case RD => (x + 2, y + 1)
+
+    end extension
+
+    type Solution = List[(BigInt, ChessSet)]
+
+    case class ChessSet(
+        size: BigInt,
+        moveNumber: BigInt,
+        start: Option[Tile],
+        visited: List[Tile]
+    )
+
+    def createBoard(size: BigInt, initSquare: Tile): ChessSet =
+        ChessSet(
+          size = size,
+          moveNumber = BigInt(1),
+          start = Option.Some(initSquare),
+          visited = List.single(initSquare)
+        )
+
+    def startTour(tile: Tile, size: BigInt): ChessSet =
+        require(remainderInteger(size, BigInt(2)) === BigInt(0))
+        createBoard(size, tile)
+
+    given Eq[ChessSet] = Eq.derived
+
+    given Ord[ChessSet] = (lhs: ChessSet, rhs: ChessSet) => lhs.visited <=> rhs.visited
+
+    extension (self: ChessSet)
+        def addPiece(tile: Tile): ChessSet =
+            ChessSet(
+              size = self.size,
+              moveNumber = self.moveNumber + 1,
+              start = self.start,
+              visited = self.visited.prepended(tile)
+            )
+
+        def firstPiece: Tile = self.start.get
+        def lastPiece: Tile = self.visited.head
+
+        def deleteFirst: ChessSet =
+            extension [A](self: List[A])
+                def secondLast: Option[A] =
+                    self.reverse match
+                        case List.Nil => fail()
+                        case List.Cons(_, tail) =>
+                            tail match
+                                case List.Nil            => Option.None
+                                case List.Cons(value, _) => Option.Some(value)
+
+            end extension
+
+            val newVisited = self.visited.init
+
+            ChessSet(
+              size = self.size,
+              moveNumber = self.moveNumber - 1,
+              start = self.visited.secondLast,
+              visited = newVisited
+            )
+
+        def isSquareFree(tile: Tile): Boolean = !self.visited.contains(tile)
+
+        def canMoveTo(tile: Tile): Boolean =
+            val (x, y) = tile
+            val size = self.size
+            x >= 1 && x <= size && y >= 1 && y <= size && isSquareFree(tile)
+
+        def canMove(direction: Direction): Boolean = canMoveTo(lastPiece.move(direction))
+        def moveKnight(direction: Direction): ChessSet = addPiece(lastPiece.move(direction))
+        def possibleMoves: List[Direction] = directions.filter(canMove)
+        def allDescend: List[ChessSet] = possibleMoves.map(moveKnight)
+
+        def descAndNo: Solution = allDescend.map { item =>
+            (item.deleteFirst.possibleMoves.length, item)
+        }
+
+        def singleDescend: List[ChessSet] =
+            descAndNo.filterMap { item =>
+                val (moves, board) = item
+                if moves === BigInt(1) then Option.Some(board) else Option.empty
+            }
+
+        def isDeadEnd: Boolean = possibleMoves.isEmpty
+        def canJumpFirst: Boolean = deleteFirst.canMoveTo(firstPiece)
+
+        def descendants: List[ChessSet] = {
+            if canJumpFirst && addPiece(firstPiece).isDeadEnd then List.empty
+            else
+                val singles = singleDescend
+                singles match
+                    case List.Nil              => descAndNo.quicksort.map { _._2 }
+                    case List.Cons(head, tail) => if tail.isEmpty then singles else List.empty
+        }
+
+        def isTourFinished: Boolean =
+            self.moveNumber === multiplyInteger(self.size, self.size) && canJumpFirst
+
+    end extension
+
+    opaque type Queue[A] = List[A]
+
+    def emptyQueue[A]: Queue[A] = List.empty[A]
+
+    extension [A](self: Queue[A])
+        def toList: List[A] = self
+        def isEmpty: Boolean = List.isEmpty(self)
+        def appendFront(item: A): Queue[A] = List.prepended(self)(item)
+        def appendAllFront(list: List[A]): Queue[A] = list ++ self
+        def removeFront: Queue[A] = List.tail(self)
+        def head: A = List.head(self)
+
+    end extension
+
+    def isDone(item: (BigInt, ChessSet)): Boolean = item._2.isTourFinished
+
+    def grow(item: (BigInt, ChessSet)): List[(BigInt, ChessSet)] =
+        val (x, board) = item
+        board.descendants.map { (x + 1, _) }
+
+    def makeStarts(size: BigInt): List[(BigInt, ChessSet)] =
+        val it = List.range(1, size)
+        val l = it.flatMap { x => it.map { y => startTour((x, y), size) } }
+        val length = l.length
+        require(length == size * size)
+        List.fill(1 - length, length).zip(l)
+
+    def root(size: BigInt): Queue[(BigInt, ChessSet)] =
+        emptyQueue[(BigInt, ChessSet)].appendAllFront(makeStarts(size))
+
+    def depthSearch[A](
+        depth: BigInt,
+        queue: Queue[A],
+        grow: A => List[A],
+        done: A => Boolean
+    ): Queue[A] = {
+        if depth === BigInt(0) || queue.isEmpty then emptyQueue[A]
+        else if done(queue.head) then
+            depthSearch(depth - 1, queue.removeFront, grow, done).appendFront(queue.head)
+        else depthSearch(depth - 1, queue.removeFront.appendAllFront(grow(queue.head)), grow, done)
+    }
+
+    def runKnights(depth: BigInt, boardSize: BigInt): Solution =
+        depthSearch(depth, root(boardSize), grow, isDone).toList
+
+end KnightsDataTest

@@ -198,7 +198,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokensV3
         val flatSize = Program.plutusV1(appliedValidator).flatEncoded.length
         val expectedSize1 =
-            if options.nativeListElements then 1290 else 1221
+            if options.nativeListElements then 1290 else 1174
         assert(flatSize == expectedSize1)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
 
@@ -217,7 +217,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV2(appliedValidator).flatEncoded.length
         val expectedSize2 =
-            if summon[scalus.compiler.Options].nativeListElements then 1237 else 1223
+            if summon[scalus.compiler.Options].nativeListElements then 1237 else 1176
         assert(flatSize == expectedSize2)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV2)
     }

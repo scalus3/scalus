@@ -21,14 +21,19 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             case Some(_, constrDecl, _) =>
                 if constrDecl.name == SIRType.BuiltinPair.name
                 then {
-                    // don't change: builtin functions rely on this
+                    // ProdBuiltinPair now carries explicit fstRepr/sndRepr, so use the
+                    // components' natural `defaultRepresentation` (Transparent stays Transparent
+                    // for passthrough; concrete types get their own default). Previously forced
+                    // Data on both components, which silently coerced Transparent TypeVars into
+                    // the Data-centric Fixed fallback and leaked `TypeVarRepresentation(Fixed)`
+                    // into enclosing structures.
                     val (fstType, sndType) =
                         ProductCaseClassRepresentation.ProdBuiltinPair
                             .extractPairComponentTypes(tp)
                     val fstRepr =
-                        loweringContext.typeGenerator(fstType).defaultDataRepresentation(fstType)
+                        loweringContext.typeGenerator(fstType).defaultRepresentation(fstType)
                     val sndRepr =
-                        loweringContext.typeGenerator(sndType).defaultDataRepresentation(sndType)
+                        loweringContext.typeGenerator(sndType).defaultRepresentation(sndType)
                     ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
                 } else if constrDecl.name == SIRType.Tuple2.name
                 then { // here we can change and see tests.
@@ -86,11 +91,52 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             case (ProdDataList, PairIntDataList) =>
                 toRepresentation(input, ProdDataConstr, pos).toRepresentation(PairIntDataList, pos)
             case (ProdDataList, puc: ProdUplcConstr) =>
-                throw LoweringException(
-                  s"Conversion from ProdDataList to ProdUplcConstr($puc) is not yet implemented. " +
-                      "Requires unpacking the list and rebuilding Term.Constr with per-field conversions.",
-                  pos
-                )
+                // ProdDataList → ProdUplcConstr: extract each field via headList/tailList,
+                // convert from Data to native repr, build Term.Constr(tag, [fields])
+                val constrDecl = retrieveConstrDecl(input.sirType, pos)
+                val dataListRepr =
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
+                val inputIdv = input match
+                    case idv: IdentifiableLoweredValue => idv
+                    case other =>
+                        lvNewLazyIdVar(
+                          lctx.uniqueVarName("dl_to_uc"),
+                          input.sirType,
+                          ProdDataList,
+                          other,
+                          pos
+                        )
+                var currentList: LoweredValue = inputIdv
+                val fields = constrDecl.params.zip(puc.fieldReprs).map { (param, fieldRepr) =>
+                    val tp = lctx.resolveTypeVarIfNeeded(param.tp)
+                    val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                    val head = lvBuiltinApply(SIRBuiltins.headList, currentList, tp, dataRepr, pos)
+                    currentList = lvBuiltinApply(
+                      SIRBuiltins.tailList,
+                      currentList,
+                      SIRType.List(SIRType.Data.tp),
+                      dataListRepr,
+                      pos
+                    )
+                    head.toRepresentation(fieldRepr, pos)
+                }
+                val inPos = pos
+                val result = new ComplexLoweredValue(Set.empty, fields*) {
+                    override def sirType = input.sirType
+                    override def representation = puc
+                    override def pos = inPos
+                    override def termInternal(gctx: TermGenerationContext) =
+                        Term.Constr(
+                          scalus.cardano.ledger.Word64(puc.tag.toLong),
+                          fields.map(_.termWithNeededVars(gctx)).toList,
+                          UplcAnnotation(inPos)
+                        )
+                    override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
+                        Doc.text("DataList→UplcConstr")
+                    override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
+                }
+                if inputIdv ne input then ScopeBracketsLoweredValue(Set(inputIdv), result)
+                else result
             case (ProdDataList, outRep @ ProductCaseClassRepresentation.OneElementWrapper(_)) =>
                 lvBuiltinApply(SIRBuiltins.headList, input, input.sirType, outRep, pos)
             case (
@@ -455,34 +501,64 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         val targetTypeGenerator = lctx.typeGenerator(targetType)
         targetTypeGenerator.defaultRepresentation(targetType) match {
             case targetListRepr @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
-                if !elemRepr.isDataCentric then
-                    throw LoweringException(
-                      s"upcastOne to SumBuiltinList with non-data-centric element repr ${elemRepr} is not yet supported",
-                      pos
-                    )
-                // we are constr or nil
-                val constrDecl = SIRType
-                    .retrieveConstrDecl(input.sirType)
-                    .getOrElse(
-                      throw LoweringException(
-                        s"can't retrieve constrDecl from value with Prod representation: ${input.sirType}, input=${input}",
-                        pos
-                      )
-                    )
-                if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" || constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
-                then
-                    val inputR = input.toRepresentation(ProdDataList, pos)
-                    new TypeRepresentationProxyLoweredValue(
-                      inputR,
-                      targetType,
-                      targetListRepr,
-                      pos
-                    )
-                else
-                    throw LoweringException(
-                      s"Unkonow constructor name for data-list: ${constrDecl.name}",
-                      pos
-                    )
+                // If input is already UplcConstr (e.g., Cons built with UplcConstr tail),
+                // upcast to SumUplcConstr — don't downgrade to SumBuiltinList
+                input.representation match
+                    case puc: ProductCaseClassRepresentation.ProdUplcConstr =>
+                        val targetSum =
+                            typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
+                        if puc.isCompatibleOn(input.sirType, targetSum, pos) then
+                            new TypeRepresentationProxyLoweredValue(
+                              input,
+                              targetType,
+                              targetSum,
+                              pos
+                            )
+                        else
+                            // Incompatible field reprs — fall back through Data:
+                            // ProdUplcConstr → ProdDataConstr → SumUplcConstr.
+                            // Per-field conversion in place would be cheaper but is not yet
+                            // wired; the Data round-trip is correct and matches the pre-
+                            // UplcConstr behavior.
+                            val asDataConstr = input.toRepresentation(
+                              ProductCaseClassRepresentation.ProdDataConstr,
+                              pos
+                            )
+                            new TypeRepresentationProxyLoweredValue(
+                              asDataConstr,
+                              targetType,
+                              targetSum,
+                              pos
+                            )
+                    case _ =>
+                        if !elemRepr.isDataCentric then
+                            throw LoweringException(
+                              s"upcastOne to SumBuiltinList with non-data-centric element repr ${elemRepr} is not yet supported",
+                              pos
+                            )
+                        // we are constr or nil
+                        val constrDecl = SIRType
+                            .retrieveConstrDecl(input.sirType)
+                            .getOrElse(
+                              throw LoweringException(
+                                s"can't retrieve constrDecl from value with Prod representation: ${input.sirType}, input=${input}",
+                                pos
+                              )
+                            )
+                        if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" || constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
+                        then
+                            val inputR = input.toRepresentation(ProdDataList, pos)
+                            new TypeRepresentationProxyLoweredValue(
+                              inputR,
+                              targetType,
+                              targetListRepr,
+                              pos
+                            )
+                        else
+                            throw LoweringException(
+                              s"Unkonow constructor name for data-list: ${constrDecl.name}",
+                              pos
+                            )
             case targetUplcConstr: SumCaseClassRepresentation.SumUplcConstr =>
                 // Target is SumUplcConstr — keep native Constr representation
                 new TypeRepresentationProxyLoweredValue(
@@ -492,18 +568,32 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
             case other =>
-                // all other types should be convertible to data-constr
-                val asDataConstr = input.toRepresentation(
-                  ProductCaseClassRepresentation.ProdDataConstr,
-                  pos
-                )
-                val retval = new TypeRepresentationProxyLoweredValue(
-                  asDataConstr,
-                  targetType,
-                  SumCaseClassRepresentation.DataConstr,
-                  pos
-                )
-                retval
+                // Check if input has UplcConstr repr with non-Data-convertible fields
+                // (e.g., Transparent TypeVar). In that case, cascade to SumUplcConstr.
+                input.representation match
+                    case puc: ProductCaseClassRepresentation.ProdUplcConstr
+                        if puc.fieldReprs.exists {
+                            case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
+                            case _                                                      => false
+                        } =>
+                        new TypeRepresentationProxyLoweredValue(
+                          input,
+                          targetType,
+                          input.representation,
+                          pos
+                        )
+                    case _ =>
+                        // all other types should be convertible to data-constr
+                        val asDataConstr = input.toRepresentation(
+                          ProductCaseClassRepresentation.ProdDataConstr,
+                          pos
+                        )
+                        new TypeRepresentationProxyLoweredValue(
+                          asDataConstr,
+                          targetType,
+                          SumCaseClassRepresentation.DataConstr,
+                          pos
+                        )
         }
     }
 
@@ -511,29 +601,31 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         val loweredArgs = constr.args.map(arg => lctx.lower(arg))
-        val argTypeGens = loweredArgs.map(_.sirType).map(lctx.typeGenerator)
-        val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
-            typeGen.canBeConvertedToData(arg.sirType)
-        }
-        if !canBeConvertedToData then {
-            val notSupportedData = loweredArgs.zip(argTypeGens).filterNot { case (arg, typeGen) =>
+        genConstrFromLoweredImpl(constr, loweredArgs)
+    }
+
+    override def genConstrFromLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue =
+        genConstrFromLoweredImpl(constr, loweredArgs)
+
+    private def genConstrFromLoweredImpl(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue]
+    )(using lctx: LoweringContext): LoweredValue = {
+        // Cascade to UplcConstr when any argument has Transparent TypeVar repr
+        // (can't be serialized to Data)
+        if hasTransparentTypeVarArgs(loweredArgs) then
+            genConstrUplcConstrFromLowered(constr, loweredArgs)
+        else
+            val argTypeGens = loweredArgs.map(_.sirType).map(lctx.typeGenerator)
+            val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
                 typeGen.canBeConvertedToData(arg.sirType)
             }
-            val firstNotSupported = notSupportedData.head._1
-            throw LoweringException(
-              s"Sorry, data representation is not supported for ${firstNotSupported.sirType.show}",
-              firstNotSupported.pos
-            )
-            genConstrUplcConstr(constr)
-        } else
-            // check majority
-            val nDataCentric = loweredArgs.count(_.representation.isDataCentric)
-            if nDataCentric >= loweredArgs.size / 2 then
-                genConstrDataConstr(constr, loweredArgs, argTypeGens)
-            else
-                // also check data becoud genContrUplcConstr is not implemented yet
-                genConstrDataConstr(constr, loweredArgs, argTypeGens)
-                // genConstrUplcConstr(constr, loweredArgs, argTypeGens)
+            if !canBeConvertedToData then genConstrUplcConstrFromLowered(constr, loweredArgs)
+            else genConstrDataConstr(constr, loweredArgs, argTypeGens)
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
@@ -961,20 +1053,52 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
     def genConstrUplcConstr(constr: SIR.Constr)(using
         lctx: LoweringContext
+    ): LoweredValue =
+        genConstrUplcConstrFromLowered(constr, constr.args.map(arg => lctx.lower(arg)))
+
+    def genConstrUplcConstrFromLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue]
+    )(using
+        lctx: LoweringContext
     ): LoweredValue = {
         val constrIndex = retrieveConstrIndex(constr.tp, constr.anns.pos)
         val constrDecl = retrieveConstrDecl(constr.tp, constr.anns.pos)
-        val loweredArgs = constr.args.map(arg => lctx.lower(arg))
 
-        // Adopt lambda fields: compute canonical LambdaRepresentation from the
-        // declared field type (with TypeVars) and toRepresentation to wrap.
-        // FunSirTypeGenerator.toRepresentation handles LambdaRepr → LambdaRepr wrapping.
-        // Non-function fields stay as-is.
+        // Adopt fields: convert each argument to the target field representation.
+        // For function fields: canonical LambdaRepresentation.
+        // For fields with @UplcRepr annotation: the annotated representation.
+        // For other fields: keep as-is (use actual argument repr).
         val adoptedArgs = loweredArgs.zip(constrDecl.params).map { (arg, param) =>
             if SIRType.isPolyFunOrFun(param.tp) then
                 val canonicalRepr = FunSirTypeGenerator.defaultRepresentation(param.tp)
                 arg.toRepresentation(canonicalRepr, constr.anns.pos)
-            else arg
+            else
+                val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
+                SirTypeUplcGenerator.resolveFieldRepr(param, paramType) match
+                    case Some(targetRepr) =>
+                        // Diagnostic guards: a Sum-typed value with a Product (UplcConstr) repr
+                        // is a representation/type mismatch that previously caused subtle
+                        // runtime failures. Gated on debug to avoid crashing release builds —
+                        // if it triggers in release the downstream conversion will still fail
+                        // with a clearer LoweringException.
+                        if lctx.debug && SIRType.isSum(arg.sirType) && arg.representation
+                                .isInstanceOf[ProductCaseClassRepresentation.ProdUplcConstr]
+                        then
+                            throw LoweringException(
+                              s"GUARD BEFORE upcast: field=${param.name} arg Sum type ${arg.sirType.show} with ProdUplcConstr repr ${arg.representation}",
+                              constr.anns.pos
+                            )
+                        val upcasted = arg.maybeUpcast(paramType, constr.anns.pos)
+                        if lctx.debug && SIRType.isSum(upcasted.sirType) && upcasted.representation
+                                .isInstanceOf[ProductCaseClassRepresentation.ProdUplcConstr]
+                        then
+                            throw LoweringException(
+                              s"GUARD AFTER upcast: field=${param.name} upcasted Sum type ${upcasted.sirType.show} with ProdUplcConstr repr ${upcasted.representation}. Before: type=${arg.sirType.show} repr=${arg.representation}",
+                              constr.anns.pos
+                            )
+                        upcasted.toRepresentation(targetRepr, constr.anns.pos)
+                    case None => arg
         }
         val fieldReprs = adoptedArgs.map(_.representation).toList
         val repr = ProdUplcConstr(constrIndex, fieldReprs)
@@ -1028,6 +1152,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                             )
                         }
                         retval
+            case SIRType.Annotated(underlying, _) =>
+                retrieveConstrIndex(underlying, pos)
             case SIRType.TypeLambda(params, body) =>
                 retrieveConstrIndex(body, pos)
             case SIRType.TypeProxy(ref) =>

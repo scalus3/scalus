@@ -1,13 +1,17 @@
 package scalus.compiler.sir.lowering
 
+import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
+import scalus.uplc.{Term, UplcAnnotation}
+import scalus.compiler.sir.lowering.typegens.SumUplcConstrSirTypeGenerator
 
 object ScalusRuntime {
 
     val ARRAY_TO_LIST_NAME = "$arrayToList"
     val MAP_LIST_NAME = "$mapList"
+    val BUILTIN_LIST_TO_UPLC_CONSTR_NAME = "$builtinListToUplcConstr"
 
     /** Add to context scope lazy val with runtime functions.
       * @param lctx
@@ -89,8 +93,11 @@ object ScalusRuntime {
         outType: SIRType,
         outRepresentation: LoweredValueRepresentation
     )(using lctx: LoweringContext): LoweredValue = {
-        if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
-            // For PlutusV4: use Case on list with head/tail as lambda parameters
+        val useCase = lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV
+        if useCase then {
+            // PV>=11: use Term.Case (caseList semantics) for both SumUplcConstr and SumBuiltinList.
+            // Term.Case dispatches directly on Constant.List scrutinees (see Cek.scala:1144),
+            // avoiding the Delay+Force+ChooseList overhead of the PV<11 path.
             val headValId = lctx.uniqueVarName("headVal")
             val headVal = new VariableLoweredValue(
               id = headValId,
@@ -545,6 +552,256 @@ object ScalusRuntime {
           AnnotationsDecl.empty.pos
         )
         outerDef
+    }
+
+    /** Convert a builtin list (SumBuiltinList repr) to a UplcConstr chain: Cons(h,t) = Constr(0,
+      * [h, t]), Nil = Constr(1, []).
+      *
+      * @param input
+      *   the builtin list value
+      * @param outSum
+      *   the target SumUplcConstr representation
+      * @param listType
+      *   the SIR type of the list (e.g., List[Point])
+      * @param pos
+      *   source position
+      */
+    def builtinListToUplcConstr(
+        input: LoweredValue,
+        outSum: SumCaseClassRepresentation.SumUplcConstr,
+        listType: SIRType,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        val elemType = SumCaseClassRepresentation.SumBuiltinList
+            .retrieveListElementType(listType)
+            .getOrElse {
+                throw new LoweringException(
+                  s"Can't retrieve element type from list type ${listType.show} for builtinListToUplcConstr",
+                  pos
+                )
+            }
+        val inListRepr = input.representation match
+            case s: SumCaseClassRepresentation => s
+            case other =>
+                throw LoweringException(
+                  s"builtinListToUplcConstr: expected SumCaseClassRepresentation, got $other for ${listType.show}",
+                  pos
+                )
+        val inElemRepr = input.representation match
+            case SumCaseClassRepresentation.SumBuiltinList(er) => er
+            case other =>
+                throw LoweringException(
+                  s"builtinListToUplcConstr: expected SumBuiltinList input repr, got $other for ${listType.show}",
+                  pos
+                )
+        // Get element repr from the Cons variant (tag 1 for List: Nil=0, Cons=1)
+        // Find the Cons variant (has fields). If no variant has fields (placeholder), skip element conversion.
+        val outConsVariant = outSum.variants.values.find(_.fieldReprs.nonEmpty)
+        val outElemRepr = outConsVariant match
+            case Some(v) => v.fieldReprs.head
+            case None    => inElemRepr // placeholder — skip element conversion
+        val inListType = SIRType.BuiltinList(SIRType.Data.tp)
+        val goType = inListType ->: listType
+        val goRepr = LambdaRepresentation(
+          goType,
+          InOutRepresentationPair(inListRepr, outSum)
+        )
+        // Nil = Constr(0, []) — tag 0 (first constructor in List enum)
+        val constrPos = AnnotationsDecl.empty.pos // avoid capturing outer `pos` in closure
+        val nilVal = new ComplexLoweredValue(Set.empty) {
+            override def sirType: SIRType = listType
+            override def representation: LoweredValueRepresentation = outSum
+            override def pos: SIRPosition = constrPos
+            override def termInternal(gctx: TermGenerationContext): Term =
+                Term.Constr(
+                  scalus.cardano.ledger.Word64(0L),
+                  scala.List.empty,
+                  UplcAnnotation(constrPos)
+                )
+            override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
+                Doc.text("Constr(0)")
+            override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
+        }
+        val result = lvLetRec(
+          BUILTIN_LIST_TO_UPLC_CONSTR_NAME,
+          goType,
+          goRepr,
+          go =>
+              lvLamAbs(
+                "lst",
+                inListType,
+                inListRepr,
+                lst =>
+                    lvMatchList(
+                      lst,
+                      nilVal,
+                      (head, tail) => {
+                          // Convert element repr if needed
+                          val convertedHead =
+                              if inElemRepr == outElemRepr then head
+                              else head.toRepresentation(outElemRepr, pos)
+                          val recCall = lvApplyDirect(
+                            go,
+                            tail,
+                            listType,
+                            outSum,
+                            pos
+                          )
+                          // Cons = Constr(1, [convertedHead, recCall]) — tag 1 (second constructor)
+                          new ComplexLoweredValue(
+                            Set.empty,
+                            convertedHead,
+                            recCall
+                          ) {
+                              override def sirType: SIRType = listType
+                              override def representation: LoweredValueRepresentation = outSum
+                              override def pos: SIRPosition = AnnotationsDecl.empty.pos
+                              override def termInternal(gctx: TermGenerationContext): Term =
+                                  Term.Constr(
+                                    scalus.cardano.ledger.Word64(1L),
+                                    scala.List(
+                                      convertedHead.termWithNeededVars(gctx),
+                                      recCall.termWithNeededVars(gctx)
+                                    ),
+                                    UplcAnnotation(AnnotationsDecl.empty.pos)
+                                  )
+                              override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
+                                  Doc.text(
+                                    s"Constr(1, ${convertedHead.docRef(ctx)}, ${recCall.docRef(ctx)})"
+                                  )
+                              override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc =
+                                  docDef(ctx)
+                          }
+                      },
+                      inListType,
+                      elemType,
+                      inListRepr,
+                      inElemRepr,
+                      listType,
+                      outSum
+                    ),
+                pos
+              ),
+          go =>
+              lvApplyDirect(
+                go,
+                input,
+                listType,
+                outSum,
+                pos
+              ),
+          pos
+        )
+        lctx.zCombinatorNeeded = true
+        result
+    }
+
+    /** Convert a UplcConstr list (Constr chain) to a builtin list (SumBuiltinList).
+      *
+      * Iterates the Constr chain using Case-based matching, converts each element to the target
+      * element repr, and builds a builtin list with mkCons. Reverse of builtinListToUplcConstr.
+      */
+    def uplcConstrToBuiltinList(
+        input: LoweredValue,
+        outListRepr: SumCaseClassRepresentation.SumBuiltinList,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        val listType = input.sirType
+        val elemType = SumCaseClassRepresentation.SumBuiltinList
+            .retrieveListElementType(listType)
+            .getOrElse(SIRType.Data.tp)
+        val outElemRepr = outListRepr.elementRepr
+        // Resolve target element repr: TypeVarRepresentation(Fixed) → defaultTypeVarRepresentation
+        val resolvedOutElemRepr = outElemRepr match
+            case tvr: TypeVarRepresentation if !tvr.isBuiltin =>
+                lctx.typeGenerator(elemType).defaultTypeVarReperesentation(elemType)
+            case tvr: TypeVarRepresentation if tvr.isBuiltin =>
+                lctx.typeGenerator(elemType).defaultRepresentation(elemType)
+            case other => other
+        val resolvedOutListRepr = SumCaseClassRepresentation.SumBuiltinList(resolvedOutElemRepr)
+        if elemType.isInstanceOf[SIRType.TypeVar] then
+            throw LoweringException(
+              s"uplcConstrToBuiltinList: cannot convert with TypeVar element ${elemType.show}. " +
+                  s"This conversion requires concrete element type for Data encoding. " +
+                  s"Stack: ${Thread.currentThread().getStackTrace.take(20).mkString("\n  ")}",
+              pos
+            )
+        val inSumRepr = input.representation.asInstanceOf[SumCaseClassRepresentation.SumUplcConstr]
+        // Get element repr from the Cons variant (has fields)
+        val inElemRepr = inSumRepr.variants.values
+            .find(_.fieldReprs.nonEmpty)
+            .map(_.fieldReprs.head)
+            .getOrElse(resolvedOutElemRepr)
+        val goType = listType ->: listType
+        val goRepr = LambdaRepresentation(
+          goType,
+          InOutRepresentationPair(inSumRepr, resolvedOutListRepr)
+        )
+        // Nil for the output builtin list
+        val outNil = ConstantLoweredValue(
+          SIR.Const(
+            scalus.uplc.Constant.List(resolvedOutElemRepr.defaultUni(elemType), scala.List.empty),
+            listType,
+            AnnotationsDecl(pos)
+          ),
+          resolvedOutListRepr
+        )
+        // Build go function: case lst of Nil → [] | Cons(h, t) → mkCons(convert(h), go(t))
+        val result = lvLetRec(
+          "$uplcConstrToBuiltinList",
+          goType,
+          goRepr,
+          go =>
+              lvLamAbs(
+                "lst",
+                listType,
+                inSumRepr,
+                lst => {
+                    // Use Case-based matching on the UplcConstr list
+                    SumUplcConstrSirTypeGenerator.genMatchUplcConstrDirect(
+                      lst,
+                      inSumRepr,
+                      listType,
+                      listType,
+                      resolvedOutListRepr,
+                      pos,
+                      nilBody = outNil,
+                      consBody = (head, tail) => {
+                          val convertedHead =
+                              if inElemRepr == resolvedOutElemRepr then head
+                              else head.toRepresentation(resolvedOutElemRepr, pos)
+                          val recCall = lvApplyDirect(
+                            go,
+                            tail,
+                            listType,
+                            resolvedOutListRepr,
+                            pos
+                          )
+                          lvBuiltinApply2(
+                            SIRBuiltins.mkCons,
+                            convertedHead,
+                            recCall,
+                            listType,
+                            resolvedOutListRepr,
+                            pos
+                          )
+                      }
+                    )
+                },
+                pos
+              ),
+          go =>
+              lvApplyDirect(
+                go,
+                input,
+                listType,
+                resolvedOutListRepr,
+                pos
+              ),
+          pos
+        )
+        lctx.zCombinatorNeeded = true
+        result
     }
 
 }

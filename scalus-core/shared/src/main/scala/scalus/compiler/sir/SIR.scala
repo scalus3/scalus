@@ -23,7 +23,11 @@ case class Binding(name: String, tp: SIRType, value: SIR) {
 
 }
 
-case class TypeBinding(name: String, tp: SIRType) {
+case class TypeBinding(
+    name: String,
+    tp: SIRType,
+    annotations: AnnotationsDecl = AnnotationsDecl.emptyModule
+) {
     override def toString: String = s"TypeBinding(\"$name\" : ${tp.show})"
 }
 
@@ -253,6 +257,43 @@ sealed trait AnnotatedSIR extends SIR {
 }
 
 object SIR:
+
+    /** Transform all TypeVars in a SIR tree using the given function. Applies SIRType.mapTypeVars
+      * to all types within the SIR node.
+      */
+    def mapTypeVars(sir: SIR, f: SIRType.TypeVar => SIRType.TypeVar): SIR = {
+        def mt(tp: SIRType): SIRType = SIRType.mapTypeVars(tp, f)
+        def goA(s: AnnotatedSIR): AnnotatedSIR = s match
+            case Const(const, tp, anns)           => Const(const, mt(tp), anns)
+            case v: Var                           => Var(v.name, mt(v.tp), v.anns)
+            case ExternalVar(mod, name, tp, anns) => ExternalVar(mod, name, mt(tp), anns)
+            case Let(bindings, body, flags, anns) =>
+                Let(
+                  bindings.map(b => Binding(b.name, mt(b.tp), go(b.value))),
+                  go(body),
+                  flags,
+                  anns
+                )
+            case LamAbs(param, body, tps, anns) =>
+                LamAbs(Var(param.name, mt(param.tp), param.anns), go(body), tps.map(f), anns)
+            case Apply(fun, arg, tp, anns) => Apply(goA(fun), goA(arg), mt(tp), anns)
+            case Constr(name, data, args, tp, anns) =>
+                Constr(name, data, args.map(go), mt(tp), anns)
+            case Match(scr, cases, tp, anns) =>
+                Match(goA(scr), cases.map(c => Case(c.pattern, go(c.body), c.anns)), mt(tp), anns)
+            case IfThenElse(c, t, e, tp, anns) => IfThenElse(goA(c), goA(t), goA(e), mt(tp), anns)
+            case And(l, r, anns)               => And(goA(l), goA(r), anns)
+            case Or(l, r, anns)                => Or(goA(l), goA(r), anns)
+            case Not(t, anns)                  => Not(goA(t), anns)
+            case Select(scr, field, tp, anns)  => Select(go(scr), field, mt(tp), anns)
+            case Cast(t, tp, anns)             => Cast(goA(t), mt(tp), anns)
+            case e: Error                      => e
+            case b: Builtin                    => Builtin(b.bn, mt(b.tp), b.anns)
+        def go(s: SIR): SIR = s match
+            case a: AnnotatedSIR  => goA(a)
+            case Decl(data, body) => Decl(data, go(body))
+        go(sir)
+    }
 
     //  Module A:
     //   case class AClass(x:Int, y: String)

@@ -61,17 +61,42 @@ object Lowering {
                         // constructor produces UplcConstr (not DataConstr).
                         // parent type check for UplcConstr dispatch
                         val parentTypeGen = resolvedType match
-                            case SIRType.CaseClass(_, _, Some(parent)) =>
+                            case SIRType.CaseClass(cd, _, Some(parent)) =>
                                 val parentGen = lctx.typeGenerator(parent)
                                 val parentRepr = parentGen.defaultRepresentation(parent)
                                 parentRepr match
-                                    case _: SumCaseClassRepresentation.SumUplcConstr =>
+                                    case suc: SumCaseClassRepresentation.SumUplcConstr =>
                                         Some(parentGen)
                                     case _ => None
                             case _ => None
                         parentTypeGen match
                             case Some(gen) => (gen, constr)
-                            case None      => (lctx.typeGenerator(resolvedType), constr)
+                            case None      =>
+                                // Repr propagation: for List.Cons, if the tail argument
+                                // has SumUplcConstr repr, produce UplcConstr instead of
+                                // builtin list. This handles inline-expanded prepended().
+                                // Always cache lowered tail to avoid O(N²) re-lowering.
+                                val reprPropGen = resolvedType match
+                                    case SIRType.CaseClass(cd, _, Some(_))
+                                        if cd.name.endsWith(
+                                          "List$.Cons"
+                                        ) && constr.args.length >= 2 =>
+                                        val tailSir = constr.args.last
+                                        val loweredTail =
+                                            Option(lctx.precomputedValues.get(tailSir))
+                                                .getOrElse {
+                                                    val lt = lowerSIR(tailSir)
+                                                    lctx.precomputedValues.put(tailSir, lt)
+                                                    lt
+                                                }
+                                        loweredTail.representation match
+                                            case _: SumCaseClassRepresentation.SumUplcConstr =>
+                                                Some(typegens.SumCaseUplcConstrSirTypeGenerator)
+                                            case _ => None
+                                    case _ => None
+                                reprPropGen match
+                                    case Some(gen) => (gen, constr)
+                                    case None      => (lctx.typeGenerator(resolvedType), constr)
                 typeGenerator.genConstr(effectiveConstr)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
@@ -80,9 +105,15 @@ object Lowering {
                           s"  scrutinee.tp = ${scrutinee.tp.show}\n"
                     )
                 val loweredScrutinee = lowerSIR(scrutinee)
-                val retval = lctx
-                    .typeGenerator(loweredScrutinee.sirType)
-                    .genMatch(sirMatch, loweredScrutinee, optTargetType)
+                // Use representation-aware dispatch: if scrutinee has SumUplcConstr repr,
+                // use Case-based genMatch instead of the default type generator's match.
+                val retval = loweredScrutinee.representation match
+                    case _: SumCaseClassRepresentation.SumUplcConstr =>
+                        typegens.SumUplcConstrSirTypeGenerator
+                            .genMatchUplcConstr(sirMatch, loweredScrutinee, optTargetType)
+                    case _ =>
+                        lctx.typeGenerator(loweredScrutinee.sirType)
+                            .genMatch(sirMatch, loweredScrutinee, optTargetType)
                 if lctx.debug then
                     lctx.log(
                       s"Lowered match: ${sir.pretty.render(100)}\n" +
@@ -99,10 +130,13 @@ object Lowering {
                                 lctx.tryResolveTypeVar(tv) match
                                     case Some(resolvedType) =>
                                         val gen = lctx.typeGenerator(resolvedType)
-                                        val representation =
-                                            if tv.isBuiltin then
-                                                gen.defaultRepresentation(resolvedType)
-                                            else gen.defaultTypeVarReperesentation(resolvedType)
+                                        val representation = value.representation match
+                                            case tvr: TypeVarRepresentation if tvr.isBuiltin =>
+                                                tvr
+                                            case _: TypeVarRepresentation =>
+                                                gen.defaultTypeVarReperesentation(resolvedType)
+                                            case concrete =>
+                                                concrete
                                         TypeRepresentationProxyLoweredValue(
                                           value,
                                           resolvedType,
@@ -110,12 +144,19 @@ object Lowering {
                                           anns.pos
                                         )
                                     case None =>
-                                        // TODO!!!: find, how this can be possible and insert checks there
-                                        //  [throw]
-                                        val gen = lctx.typeGenerator(tp)
-                                        val repr =
-                                            if tv.isBuiltin then gen.defaultRepresentation(tp)
-                                            else gen.defaultTypeVarReperesentation(tp)
+                                        // Preserve concrete repr from scope binding
+                                        // (e.g., variables bound in UplcConstr match context
+                                        // have ProdUplcConstr repr from variant fields).
+                                        // For TypeVar reprs, use defaultTypeVarReperesentation —
+                                        // the actual repr is resolved at call site via reprFun.
+                                        val repr = value.representation match
+                                            case tvr: TypeVarRepresentation if tvr.isBuiltin =>
+                                                tvr
+                                            case _: TypeVarRepresentation =>
+                                                val gen = lctx.typeGenerator(tp)
+                                                gen.defaultTypeVarReperesentation(tp)
+                                            case concrete =>
+                                                concrete
                                         TypeRepresentationProxyLoweredValue(
                                           value,
                                           tp,
@@ -130,7 +171,22 @@ object Lowering {
                           s"Variable $name not found in the scope at ${anns.pos.file}:${anns.pos.startLine}",
                           anns.pos
                         )
-            case ev @ SIR.ExternalVar(moduleName, name, tp, _) =>
+            case ev0 @ SIR.ExternalVar(moduleName, name, tp0, _) =>
+                // If this ExternalVar targets a module dispatched by the intrinsic resolver,
+                // rewrite its type's TypeVars to `Transparent`. The Scala plugin defaults to
+                // `Fixed`; without this rewrite, `Fixed` leaks into enclosing intrinsic-body
+                // substitutions and corrupts output representation inference. The provider's
+                // body already runs with Transparent TypeVars (per `defaultIntrinsicModules`
+                // post-processing) and wraps HO arguments with `toDefaultTypeVarRepr` where
+                // the arg expects Data-encoded values.
+                val tp =
+                    if IntrinsicResolver.isIntrinsicDispatchedModule(moduleName) then
+                        SIRType.mapTypeVars(
+                          tp0,
+                          _.copy(kind = SIRType.TypeVarKind.Transparent)
+                        )
+                    else tp0
+                val ev = if tp eq tp0 then ev0 else ev0.copy(tp = tp)
                 // SIRLinker made usual variable from names.
                 if lctx.debug then
                     lctx.log(
@@ -205,7 +261,16 @@ object Lowering {
                                   lctx.log(
                                     s"[Lambda body upcast] Upcasting body from ${loweredBody.sirType.show} to ${targetType.show}, representation: ${loweredBody.representation}"
                                   )
-                              val result = loweredBody.maybeUpcast(targetType, anns.pos)
+                              val upcasted = loweredBody.maybeUpcast(targetType, anns.pos)
+                              // If return type has @UplcRepr annotation, convert body to annotated repr
+                              val result = targetType match
+                                  case SIRType.Annotated(_, retAnns)
+                                      if retAnns.data.contains("uplcRepr") =>
+                                      val targetGen =
+                                          summon[LoweringContext].typeGenerator(targetType)
+                                      val targetRepr = targetGen.defaultRepresentation(targetType)
+                                      upcasted.toRepresentation(targetRepr, anns.pos)
+                                  case _ => upcasted
                               if lctx.debug then
                                   lctx.log(
                                     s"[Lambda body upcast] After upcast: ${result.sirType.show}, representation: ${result.representation}"
@@ -398,7 +463,7 @@ object Lowering {
                 if !flags.isRec then
                     val bindingValues = bindings.map { b =>
                         var prevDebug = lctx.debug
-                        val loweredRhs = lowerSIR(b.value)
+                        val loweredRhs = lowerSIR(b.value, Some(b.tp))
                         if lctx.debug then
                             lctx.log(
                               s"[LET binding] ${b.name}: lowered RHS type ${loweredRhs.sirType.show}, repr ${loweredRhs.representation}, target type ${b.tp.show}"
@@ -431,7 +496,7 @@ object Lowering {
                         case List(Binding(name, tp, rhs)) =>
                             lctx.zCombinatorNeeded = true
                             val rhsRepr =
-                                SirTypeUplcGenerator(rhs.tp).defaultRepresentation(tp)
+                                lctx.typeGenerator(rhs.tp).defaultRepresentation(tp)
                             val newVar = VariableLoweredValue(
                               id = lctx.uniqueVarName(name),
                               name = name,
@@ -470,11 +535,19 @@ object Lowering {
         else if isPairListConversion(app) then lowerPairListConversion(app)
         else if isTypeProxyApp(app) then lowerTypeProxy(app)
         else if isTypeProxyReprApp(app) then lowerTypeProxyRepr(app)
+        else if isToDefaultTypeVarReprApp(app) then lowerToDefaultTypeVarRepr(app)
+        else if LoweringEq.isEqualsReprApp(app) then LoweringEq.lowerEqualsRepr(app)
+        // Enabled globally: generateEqualsForRepr falls back to generateDataEquals (== equalsData)
+        // for non-UplcConstr types, so semantically matches the Eq.derived expansion.
+        else if LoweringEq.isEqIntrinsicApp(app) then
+            LoweringEq.lowerEqIntrinsic(app, a => lowerNormalApp(a, optTargetType))
         else lowerNormalApp(app, optTargetType)
     }
 
     private val TypeProxyName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxy"
     private val TypeProxyReprName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxyRepr"
+    private val ToDefaultTypeVarReprName =
+        "scalus.compiler.intrinsics.IntrinsicHelpers$.toDefaultTypeVarRepr"
 
     private def isTypeProxyApp(app: SIR.Apply): Boolean = app.f match
         case SIR.ExternalVar(_, name, _, _) => name == TypeProxyName
@@ -482,6 +555,10 @@ object Lowering {
 
     private def isTypeProxyReprApp(app: SIR.Apply): Boolean = app.f match
         case SIR.ExternalVar(_, name, _, _) => name == TypeProxyReprName
+        case _                              => false
+
+    private def isToDefaultTypeVarReprApp(app: SIR.Apply): Boolean = app.f match
+        case SIR.ExternalVar(_, name, _, _) => name == ToDefaultTypeVarReprName
         case _                              => false
 
     /** Type-only cast — changes SIR type, keeps representation from the lowered argument. */
@@ -522,6 +599,30 @@ object Lowering {
           repr,
           app.anns.pos
         )
+    }
+
+    /** Convert a value to its defaultTypeVarRepresentation. Used in intrinsic bodies to convert
+      * native-repr values for pre-compiled HO functions.
+      */
+    private def lowerToDefaultTypeVarRepr(
+        app: SIR.Apply
+    )(using lctx: LoweringContext): LoweredValue = {
+        val loweredArg = lowerSIR(app.arg)
+        val tp = app.tp
+        val gen = lctx.typeGenerator(tp)
+        val targetRepr = gen.defaultTypeVarReperesentation(tp)
+        // Force the conversion into a named variable so it's included in UPLC output.
+        // Without this, DependendVariableLoweredValue may not emit conversion code.
+        val converted = loweredArg.toRepresentation(targetRepr, app.anns.pos)
+        if converted eq loweredArg then converted
+        else
+            LoweredValue.Builder.lvNewLazyIdVar(
+              lctx.uniqueVarName("_tvRepr"),
+              tp,
+              targetRepr,
+              converted,
+              app.anns.pos
+            )
     }
 
     /** Interpret a SIR expression produced by the plugin for a `ReprTag` value.
@@ -599,7 +700,7 @@ object Lowering {
             case "SumBuiltinList(Constant)" =>
                 SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant)
             case _ =>
-                throw LoweringException(s"typeProxyRepr: unknown ReprTag '$name'", pos)
+                throw LoweringException(s"unknown ReprTag '$name'", pos)
     }
 
     private def lowerNormalApp(app: SIR.Apply, @unused optTargetType: Option[SIRType])(using
@@ -1017,6 +1118,49 @@ object Lowering {
             Constant.Data(scalus.uplc.builtin.Data.List(PList.from(List(aData, bData))))
         case other =>
             throw new RuntimeException(s"Cannot convert constant $other to Data")
+    }
+
+    /** Check if a repr conversion is needed between source and target.
+      *
+      * Only triggers for actual representation family changes (e.g., SumBuiltinList ↔
+      * SumUplcConstr, ProdDataConstr ↔ ProdUplcConstr), not for structural differences in
+      * LambdaRepresentation or SumReprProxy identity.
+      */
+    def needsReprConversion(
+        src: LoweredValueRepresentation,
+        tgt: LoweredValueRepresentation,
+        typeShow: => String,
+        pos: SIRPosition
+    ): Boolean = {
+        import SumCaseClassRepresentation.*
+        import ProductCaseClassRepresentation.*
+        (src, tgt) match
+            // TypeVar rules: Transparent is already native, Fixed is already Data.
+            // Only error on Transparent→Fixed (unknown toData).
+            // All other TypeVar combinations: no conversion.
+            case (
+                  TypeVarRepresentation(SIRType.TypeVarKind.Transparent),
+                  TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
+                ) =>
+                throw LoweringException(
+                  s"Cannot convert Transparent TypeVar to Fixed: unknown toData for type ${typeShow}",
+                  pos
+                )
+            case (_: TypeVarRepresentation, _) | (_, _: TypeVarRepresentation) => false
+            // Sum list family changes
+            case (_: SumBuiltinList, _: SumUplcConstr)  => true
+            case (_: SumUplcConstr, _: SumBuiltinList)  => true
+            case (PackedSumDataList, _: SumUplcConstr)  => true
+            case (_: SumUplcConstr, PackedSumDataList)  => true
+            case (DataConstr, _: SumUplcConstr)         => true
+            case (_: SumUplcConstr, DataConstr)         => true
+            case (PackedSumDataList, _: SumBuiltinList) => true
+            case (_: SumBuiltinList, PackedSumDataList) => true
+            // Product family changes
+            case (ProdDataConstr, _: ProdUplcConstr) => true
+            case (_: ProdUplcConstr, ProdDataConstr) => true
+            // Everything else: no conversion
+            case _ => false
     }
 
 }

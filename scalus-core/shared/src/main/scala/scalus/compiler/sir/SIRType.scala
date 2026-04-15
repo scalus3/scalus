@@ -491,6 +491,15 @@ object SIRType {
         override def showDebug: String = show
     }
 
+    /** Type wrapper carrying annotations (e.g., @UplcRepr on function parameters). Transparent in
+      * most contexts — unwrap like TypeProxy. The annotation is meaningful when computing
+      * representations.
+      */
+    case class Annotated(tp: SIRType, annotations: AnnotationsDecl) extends SIRType {
+        override def show: String = s"@[${annotations.data.keys.mkString(",")}] ${tp.show}"
+        override def showDebug: String = s"Annotated(${tp.showDebug}, ${annotations.data})"
+    }
+
     object List {
 
         lazy val dataDecl: DataDecl = {
@@ -798,6 +807,7 @@ object SIRType {
             tp match {
                 case SIRType.Fun(_, _)           => true
                 case SIRType.TypeLambda(_, body) => isPolyFunOrFun(body, trace)
+                case SIRType.Annotated(tp1, _)   => isPolyFunOrFun(tp1, trace)
                 case SIRType.TypeProxy(ref) =>
                     if ref == null then false
                     else isPolyFunOrFun(ref, trace)
@@ -817,6 +827,8 @@ object SIRType {
                     Some((acc, in, out))
                 case SIRType.TypeLambda(params, body) =>
                     collect(body, acc ++ params)
+                case SIRType.Annotated(tp1, _) =>
+                    collect(tp1, acc)
                 case SIRType.TypeProxy(ref) =>
                     collect(ref, acc)
                 case _ =>
@@ -833,6 +845,7 @@ object SIRType {
         tp match {
             case SIRType.SumCaseClass(_, _)  => true
             case SIRType.TypeLambda(_, body) => isSum(body)
+            case SIRType.Annotated(tp1, _)   => isSum(tp1)
             case SIRType.TypeProxy(ref) =>
                 if ref == null then false
                 else isSum(ref)
@@ -850,6 +863,7 @@ object SIRType {
             tp match {
                 case cc: SumCaseClass                 => Some((acc, cc))
                 case SIRType.TypeLambda(params, body) => go(body, acc ++ params)
+                case SIRType.Annotated(tp1, _)        => go(tp1, acc)
                 case SIRType.TypeProxy(ref) =>
                     if ref == null then None
                     else go(ref, acc)
@@ -866,6 +880,7 @@ object SIRType {
         tp match {
             case SIRType.CaseClass(_, _, _)  => true
             case SIRType.TypeLambda(_, body) => isProd(body)
+            case SIRType.Annotated(tp1, _)   => isProd(tp1)
             case SIRType.TypeProxy(ref) =>
                 if ref == null then false
                 else isProd(ref)
@@ -887,6 +902,7 @@ object SIRType {
             tp match {
                 case cc: CaseClass                    => Some((acc, cc))
                 case SIRType.TypeLambda(params, body) => go(body, acc ++ params)
+                case SIRType.Annotated(tp1, _)        => go(tp1, acc)
                 case SIRType.TypeProxy(ref) =>
                     if ref == null then None
                     else go(ref, acc)
@@ -918,6 +934,7 @@ object SIRType {
             tp match
                 case SIRType.Fun(SIRType.Unit, _) => true
                 case SIRType.TypeLambda(_, body)  => isPolyFunOrFunUnit(body, trace)
+                case SIRType.Annotated(tp1, _)    => isPolyFunOrFunUnit(tp1, trace)
                 case SIRType.TypeProxy(ref) =>
                     if ref == null then false
                     else isPolyFunOrFunUnit(ref, trace)
@@ -941,6 +958,8 @@ object SIRType {
                     else
                         val env = params.zip(args).toMap
                         substitute(body, env, Map.empty)
+                case Annotated(tp, _) =>
+                    typeApply(tp, args)
                 case TypeProxy(ref) =>
                     typeApply(ref, args)
                 case _ =>
@@ -1106,6 +1125,67 @@ object SIRType {
 
     }
 
+    /** Trip-wire helper: returns true if `tp` contains anywhere a `List[List[…List[X]…]]` chain of
+      * at least `depth` nested List applications. Walks through Fun, TypeLambda, CaseClass,
+      * SumCaseClass arguments, and TypeProxy. Used by diagnostic assertions that catch runaway type
+      * wrapping.
+      */
+    def hasDeepListChain(tp: SIRType, depth: Int): Boolean = {
+        def isList(t: SIRType): Boolean = t match
+            case SumCaseClass(decl, _) =>
+                decl.name == "scalus.cardano.onchain.plutus.prelude.List" ||
+                decl.name == "scalus.uplc.List" || decl.name == BuiltinList.name
+            case _ => false
+        def listElem(t: SIRType): Option[SIRType] = t match
+            case SumCaseClass(_, args) if isList(t) => args.headOption
+            case _                                  => None
+        val seen = new java.util.IdentityHashMap[SIRType, SIRType]()
+        def walk(t: SIRType): Boolean =
+            if seen.containsKey(t) then false
+            else {
+                val _ = seen.put(t, t)
+                def chainLen(x: SIRType, acc: Int): Int = x match
+                    case TypeLambda(_, body)           => chainLen(body, acc)
+                    case TypeProxy(ref) if ref != null => chainLen(ref, acc)
+                    case _ =>
+                        listElem(x) match
+                            case Some(e) => chainLen(e, acc + 1)
+                            case None    => acc
+                if chainLen(t, 0) >= depth then return true
+                t match
+                    case Fun(a, b)                     => walk(a) || walk(b)
+                    case TypeLambda(_, body)           => walk(body)
+                    case CaseClass(_, tArgs, p)        => tArgs.exists(walk) || p.exists(walk)
+                    case SumCaseClass(_, tArgs)        => tArgs.exists(walk)
+                    case TypeProxy(ref) if ref != null => walk(ref)
+                    case _                             => false
+            }
+        walk(tp)
+    }
+
+    /** Transform all TypeVars in a type using the given function. Uses IdentityHashMap to prevent
+      * infinite recursion on TypeProxy cycles.
+      */
+    def mapTypeVars(tp: SIRType, f: TypeVar => TypeVar): SIRType = {
+        val visited = new java.util.IdentityHashMap[TypeProxy, TypeProxy]()
+        def go(t: SIRType): SIRType = t match
+            case tv: TypeVar              => f(tv)
+            case TypeLambda(params, body) => TypeLambda(params.map(f), go(body))
+            case CaseClass(cd, tArgs, parent) =>
+                CaseClass(cd, tArgs.map(go), parent.map(go))
+            case SumCaseClass(decl, tArgs) => SumCaseClass(decl, tArgs.map(go))
+            case Fun(in, out)              => Fun(go(in), go(out))
+            case tp: TypeProxy =>
+                if visited.containsKey(tp) then visited.get(tp)
+                else
+                    val newProxy = new TypeProxy(null)
+                    visited.put(tp, newProxy)
+                    if tp.ref != null then newProxy.ref = go(tp.ref)
+                    newProxy
+            case other => other
+        go(tp)
+    }
+
     def substitute(
         rType: SIRType,
         env: Map[SIRType.TypeVar, SIRType],
@@ -1130,6 +1210,8 @@ object SIRType {
                 SumCaseClass(decl, typeArgs.map(substitute(_, env, proxyEnv)))
             case Fun(in, out) =>
                 Fun(substitute(in, env, proxyEnv), substitute(out, env, proxyEnv))
+            case Annotated(tp, anns) =>
+                Annotated(substitute(tp, env, proxyEnv), anns)
             case tp: TypeProxy =>
                 proxyEnv.get(tp) match
                     case Some(t) => t
@@ -1233,7 +1315,8 @@ object SIRType {
     @scala.annotation.tailrec
     def retrieveDataDecl(tp: SIRType): Either[String, DataDecl] = {
         tp match {
-            case tp: SumCaseClass => Right(tp.decl)
+            case tp: SumCaseClass  => Right(tp.decl)
+            case Annotated(tp1, _) => retrieveDataDecl(tp1)
             case TypeProxy(ref) =>
                 if ref == null then Left("TypeProxy is not resolved")
                 else retrieveDataDecl(ref)
@@ -1245,7 +1328,8 @@ object SIRType {
     @scala.annotation.tailrec
     def retrieveConstrDecl(tp: SIRType): Either[String, ConstrDecl] = {
         tp match {
-            case tp: CaseClass => Right(tp.constrDecl)
+            case tp: CaseClass     => Right(tp.constrDecl)
+            case Annotated(tp1, _) => retrieveConstrDecl(tp1)
             case TypeProxy(ref) =>
                 if ref == null then Left("TypeProxy is not resolved")
                 else retrieveConstrDecl(ref)
@@ -1264,6 +1348,7 @@ object SIRType {
                     typeArgs
                   )
                 )
+            case Annotated(tp1, _) => collectProd(tp1)
             case TypeProxy(ref) =>
                 if ref == null then None
                 else collectProd(ref)
@@ -1280,6 +1365,7 @@ object SIRType {
     def prodParent(tp: SIRType): Option[SIRType] = {
         tp match {
             case CaseClass(_, _, Some(parent)) => Some(parent)
+            case Annotated(tp1, _)             => prodParent(tp1)
             case TypeProxy(ref) =>
                 if ref == null then None
                 else prodParent(ref)
@@ -1292,6 +1378,7 @@ object SIRType {
         tp match {
             case SumCaseClass(decl, typeArgs) =>
                 Some((scala.List.empty, decl, typeArgs))
+            case Annotated(tp1, _) => collectSum(tp1)
             case TypeProxy(ref) =>
                 if ref == null then None
                 else collectSum(ref)
@@ -1443,6 +1530,8 @@ object SIRType {
                     case SumCaseClass(dataDecl, typeArgs) =>
                         typeArgs.foreach(accept)
                         proxySet.put(tp, tp)
+                    case Annotated(tp1, _) =>
+                        accept(tp1)
                     case proxy: TypeProxy =>
                         Option(proxySet.get(proxy.ref)) match {
                             case Some(visited) =>
@@ -1602,7 +1691,8 @@ object SIRType {
                         typeArgs.foreach { arg =>
                             stack.push(arg)
                         }
-                    case _ =>
+                    case Annotated(tp1, _) => advance(tp1)
+                    case _                 =>
                 }
         }
 
@@ -1659,7 +1749,8 @@ object SIRType {
                         typeArgs.foreach { arg =>
                             stack.push((arg, unshadowedSet))
                         }
-                    case other =>
+                    case Annotated(tp1, _) => advance(tp1, unshadowedSet)
+                    case other             =>
         }
 
         stack.push((tp, ungrounded))

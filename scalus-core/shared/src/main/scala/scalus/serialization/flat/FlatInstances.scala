@@ -475,6 +475,7 @@ object FlatInstances:
         val tagTypeProxy: Byte = 0x0c
         // val tagTypeError: Byte = 0x0d -- free.
         val tagTypeNothing: Byte = 0x0e
+        val tagAnnotated: Byte = 0x0d
         val tagNonCaseModule: Byte = 0x0f
         val tagBls12_381_G1_Element: Byte = 0x10
         val tagBls12_381_G2_Element: Byte = 0x11
@@ -518,6 +519,9 @@ object FlatInstances:
                 case a: SIRType.TypeNonCaseModule =>
                     tagWidth + SIRTypeNonCaseModuleFlat.bitSizeHC(a, hashConsed)
                 case SIRType.TypeNothing => tagWidth
+                case SIRType.Annotated(tp, anns) =>
+                    tagWidth + bitSizeHC(tp, hashConsed) +
+                        AnnotationsDeclFlat.bitSizeHC(anns, hashConsed)
             if !mute then
                 println(s"SIRTypeHashConsedFlat.bisSizeHC end ${a.hashCode()} $a =${retval}")
             retval
@@ -573,6 +577,10 @@ object FlatInstances:
                     encode.encode.bits(tagWidth, tagBls12_381_MlResult)
                 case SIRType.BuiltinValue =>
                     encode.encode.bits(tagWidth, tagBuiltinValue)
+                case SIRType.Annotated(tp, anns) =>
+                    encode.encode.bits(tagWidth, tagAnnotated)
+                    encodeHC(tp, encode)
+                    AnnotationsDeclFlat.encodeHC(anns, encode)
                 // if !mute then
                 //    //val endPos = encode.encode.bitPosition()
                 //    //println(s"SIRTypeHashConsedFlat.encode ${a.hashCode()} $a,  size=${endPos-startPos}")
@@ -615,6 +623,15 @@ object FlatInstances:
                 case `tagTypeProxy` =>
                     SIRTypeTypeProxyFlat.decodeHC(decode)
                 case `tagTypeNothing` => SIRTypeHashConsedRef.fromData(SIRType.TypeNothing)
+                case `tagAnnotated` =>
+                    val tp = decodeHC(decode)
+                    val anns = AnnotationsDeclFlat.decodeHC(decode)
+                    SIRTypeHashConsedRef.deferred((hs, level, parents) =>
+                        SIRType.Annotated(
+                          tp.finValue(hs, level, parents),
+                          anns.finValue(hs, level, parents)
+                        )
+                    )
                 case `tagNonCaseModule` =>
                     SIRTypeNonCaseModuleFlat.decodeHC(decode)
                 case `tagBls12_381_G1_Element` =>
@@ -638,18 +655,21 @@ object FlatInstances:
         override def bitSizeHC(a: TypeBinding, hashCons: HashConsed.State): Int =
             val nameSize = summon[Flat[String]].bitSize(a.name)
             val tpSize = SIRTypeHashConsedFlat.bitSizeHC(a.tp, hashCons)
-            nameSize + tpSize
+            val annsSize = AnnotationsDeclFlat.bitSizeHC(a.annotations, hashCons)
+            nameSize + tpSize + annsSize
 
         override def encodeHC(a: TypeBinding, encode: HashConsedEncoderState): Unit = {
             summon[Flat[String]].encode(a.name, encode.encode)
             SIRTypeHashConsedFlat.encodeHC(a.tp, encode)
+            AnnotationsDeclFlat.encodeHC(a.annotations, encode)
         }
 
         override def decodeHC(decode: HashConsedDecoderState): HashConsedRef[TypeBinding] = {
             val name = summon[Flat[String]].decode(decode.decode)
             val tp = SIRTypeHashConsedFlat.decodeHC(decode)
+            val annotations = AnnotationsDeclFlat.decodeHC(decode)
             HashConsedRef.deferred((hs, l, p) =>
-                try TypeBinding(name, tp.finValue(hs, l, p))
+                try TypeBinding(name, tp.finValue(hs, l, p), annotations.finValue(hs, l, p))
                 catch
                     case NonFatal(ex) =>
                         println(s"Can;t decopde TypeBinging $name")

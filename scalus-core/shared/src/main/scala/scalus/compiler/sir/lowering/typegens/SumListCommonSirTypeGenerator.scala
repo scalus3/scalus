@@ -134,6 +134,9 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         outputRepresentation: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
+        if input.representation == outputRepresentation then return input
+        if input.representation.isCompatibleOn(input.sirType, outputRepresentation, pos) then
+            return RepresentationProxyLoweredValue(input, outputRepresentation, pos)
         (input.representation, outputRepresentation) match
             // === SumBuiltinList identity ===
             case (
@@ -327,8 +330,16 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                   SumCaseClassRepresentation.SumPairBuiltinList(_, _),
                   SumCaseClassRepresentation.PackedSumDataList
                 ) =>
+                // PackedSumDataList is List-shaped Data, NOT Map-shaped — so go via
+                // SumBuiltinList(ProdDataConstr) → listData. The previous path through
+                // SumDataAssocMap (mapData) packed as Map Data, which is wrong AND looped
+                // with line 371's (SumDataAssocMap, _) catch-all that re-emits via
+                // SumPairBuiltinList.
+                val elemType = retrieveElementType(input.sirType, pos)
+                val dataElemRepr =
+                    lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 input
-                    .toRepresentation(SumCaseClassRepresentation.SumDataAssocMap, pos)
+                    .toRepresentation(SumCaseClassRepresentation.SumBuiltinList(dataElemRepr), pos)
                     .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
             case (
                   SumCaseClassRepresentation.SumPairBuiltinList(inKeyRepr, inValueRepr),
@@ -372,12 +383,63 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(pairRepr, pos)
                     .toRepresentation(outputRepresentation, pos)
-            // === DataConstr → list repr: go through PackedSumDataList ===
+            // === DataConstr → SumUplcConstr: unListData → builtinListToUplcConstr ===
+            case (
+                  SumCaseClassRepresentation.DataConstr,
+                  outSum: SumCaseClassRepresentation.SumUplcConstr
+                ) =>
+                val elemType = retrieveElementType(input.sirType, pos)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
+                val asBuiltinList = lvBuiltinApply(
+                  SIRBuiltins.unListData,
+                  input,
+                  input.sirType,
+                  dataListRepr,
+                  pos
+                )
+                ScalusRuntime.builtinListToUplcConstr(asBuiltinList, outSum, input.sirType, pos)
+            // === DataConstr → PackedSumDataList: direct via listData ===
+            case (
+                  SumCaseClassRepresentation.DataConstr,
+                  SumCaseClassRepresentation.PackedSumDataList
+                ) =>
+                val elemType = retrieveElementType(input.sirType, pos)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
+                val asDataList = lvBuiltinApply(
+                  SIRBuiltins.unListData,
+                  input,
+                  input.sirType,
+                  dataListRepr,
+                  pos
+                )
+                if dataListRepr == outputRepresentation then asDataList
+                else asDataList.toRepresentation(outputRepresentation, pos)
+            // === DataConstr → other list repr: go through PackedSumDataList ===
             case (SumCaseClassRepresentation.DataConstr, _) =>
                 input
                     .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
                     .toRepresentation(outputRepresentation, pos)
             // === PairIntDataList → list repr: go through DataConstr → PackedSumDataList ===
+            case (
+                  SumCaseClassRepresentation.PairIntDataList,
+                  SumCaseClassRepresentation.SumBuiltinList(elementRepr)
+                ) =>
+                // TODO: rewrie without going through DataConstr, by directly converting the (tag, fieldList) pair to a builtin list of the right element repr.
+                val tag = lvBuiltinApply(
+                  SIRBuiltins.fstPair,
+                  input,
+                  SIRType.Integer,
+                  PrimitiveRepresentation.Constant,
+                  pos
+                )
+                // If tag == 0, it's a Nil, otherwise it's a Cons with one element (the fieldList).
+                throw LoweringException(
+                  s"PairIntDataList → SumBuiltinList($elementRepr) for ${input.sirType.show}: " +
+                      "DataConstr should not exist for List types.",
+                  pos
+                )
             case (SumCaseClassRepresentation.PairIntDataList, _) =>
                 // PairIntDataList is (tag, fieldList) from unConstrData.
                 // For lists, reconstruct DataConstr, then go through PackedSumDataList.
@@ -423,6 +485,17 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                       pos
                     )
                     r0.toRepresentation(outputRepresentation, pos)
+            // SumReprProxy: unwrap and delegate
+            case (_: SumCaseClassRepresentation.SumReprProxy, _) =>
+                SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+            case (_, _: SumCaseClassRepresentation.SumReprProxy) =>
+                SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+            // SumUplcConstr → anything: delegate to SumUplcConstrSirTypeGenerator
+            case (_: SumCaseClassRepresentation.SumUplcConstr, _) =>
+                SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+            // anything → SumUplcConstr: delegate to SumUplcConstrSirTypeGenerator
+            case (_, _: SumCaseClassRepresentation.SumUplcConstr) =>
+                SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
             case _ =>
                 throw LoweringException(
                   s"Unexpected representation conversion for ${input.sirType.show} from ${input.representation} to ${outputRepresentation}",
@@ -480,6 +553,9 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
                 upcastOne(alignedInput, effectiveTargetType, pos)
+            case _: ProductCaseClassRepresentation.ProdUplcConstr =>
+                // UplcConstr product → delegate to SumCaseUplcConstr upcast
+                SumCaseUplcConstrSirTypeGenerator.upcastOne(input, targetType, pos)
             case _ =>
                 throw LoweringException(
                   s"Unexpected representation ${input.representation.show} for List upcast from ${input.sirType.show} to ${targetType.show}",
@@ -504,10 +580,21 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 val elementType = retrieveElementType(constr.tp, constr.anns.pos)
                 val headElementUpcasted = head
                     .maybeUpcast(elementType, constr.anns.pos)
+                // Propagate element repr from tail if it has a specific list repr,
+                // otherwise use the default. This ensures Cons(elem, nativeList)
+                // produces a native list instead of falling back to Data.
+                val (effectiveElemRepr, effectiveListRepr) = tail.representation match
+                    case SumCaseClassRepresentation.SumBuiltinList(tailElemRepr) =>
+                        (tailElemRepr, tail.representation)
+                    case _ =>
+                        (
+                          defaultElementRepresentation(elementType, constr.anns.pos),
+                          defaultListRepresentation(constr.tp, constr.anns.pos)
+                        )
                 val headElementRepr =
                     try
                         headElementUpcasted.toRepresentation(
-                          defaultElementRepresentation(elementType, constr.anns.pos),
+                          effectiveElemRepr,
                           constr.anns.pos
                         )
                     catch
@@ -517,11 +604,11 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                             )
                             println(s"elementType: ${elementType.show}")
                             println(
-                              s"defaultElementRepresentation: ${defaultElementRepresentation(elementType, constr.anns.pos).show}"
+                              s"effectiveElemRepr: ${effectiveElemRepr.show}"
                             )
                             throw ex
                 // special case when tail is Nil, than have type List[Nothing]
-                val listRepr = defaultListRepresentation(constr.tp, constr.anns.pos)
+                val listRepr = effectiveListRepr
                 val fixedTail =
                     if isNilType(tail.sirType) then fixNilInConstr(tail, constr.tp, listRepr)
                     else tail
@@ -581,6 +668,12 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
     ): LoweredValue = {
+        // If scrutinee has UplcConstr repr, delegate to UplcConstr select handler
+        loweredScrutinee.representation match
+            case _: SumCaseClassRepresentation.SumUplcConstr |
+                _: SumCaseClassRepresentation.SumReprProxy =>
+                return SumUplcConstrSirTypeGenerator.genSelectUplcConstr(sel, loweredScrutinee)
+            case _ =>
         val (scrutineeReady, listRepr, elemRepr) = loweredScrutinee.representation match
             case sbl @ SumCaseClassRepresentation.SumBuiltinList(er) =>
                 (loweredScrutinee, sbl, er)
@@ -698,6 +791,16 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
     )(using
         lctx: LoweringContext
     ): LoweredValue = {
+        // If scrutinee has UplcConstr repr, delegate to UplcConstr match handler
+        loweredScrutinee.representation match
+            case _: SumCaseClassRepresentation.SumUplcConstr |
+                _: SumCaseClassRepresentation.SumReprProxy =>
+                return SumUplcConstrSirTypeGenerator.genMatchUplcConstr(
+                  matchData,
+                  loweredScrutinee,
+                  optTargetType
+                )
+            case _ =>
         // Nil, Cons
         import SumListCommonSirTypeGenerator.*
         var optNilCase: Option[SIR.Case] = None

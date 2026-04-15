@@ -1,35 +1,36 @@
 package scalus.compiler.intrinsics
 
-import scalus.compiler.sir.lowering.*
+/** @deprecated Use [[scalus.compiler.UplcRepresentation]] instead. */
+@deprecated("Use scalus.compiler.UplcRepresentation instead", "0.16.0")
+type ReprTag = scalus.compiler.UplcRepresentation
 
-/** Lightweight mirror of `LoweredValueRepresentation` for use in `@Compile` intrinsic code.
-  *
-  * `LoweredValueRepresentation` cannot be used directly in `@Compile` code because its sealed trait
-  * hierarchy involves types like `IndexedSeq` that the Scalus compiler plugin cannot compile to
-  * SIR. This enum uses `EnumCase` flags so the plugin recognizes its cases as constructors and
-  * produces `SIR.Constr` nodes. The lowering interprets these via `interpretReprSIR` to reconstruct
-  * the actual `LoweredValueRepresentation`.
-  */
-enum ReprTag {
-    case DataData, Constant, PackedData, DataConstr, PackedSumDataList
-    case SumBuiltinList(elemRepr: ReprTag)
-    case ProdBuiltinPair(fstRepr: ReprTag, sndRepr: ReprTag)
-}
+/** @deprecated Use [[scalus.compiler.UplcRepresentation]] instead. */
+@deprecated("Use scalus.compiler.UplcRepresentation instead", "0.16.0")
+val ReprTag = scalus.compiler.UplcRepresentation
 
 object ReprTagConvert {
 
-    /** Convert a `ReprTag` to the actual `LoweredValueRepresentation`. */
-    def toLoweredValueRepresentation(tag: ReprTag): LoweredValueRepresentation = tag match
-        case ReprTag.ProdBuiltinPair(fstTag, sndTag) =>
-            ProductCaseClassRepresentation.ProdBuiltinPair(
-              toLoweredValueRepresentation(fstTag),
-              toLoweredValueRepresentation(sndTag)
-            )
-        case ReprTag.SumBuiltinList(elemTag) =>
-            SumCaseClassRepresentation.SumBuiltinList(toLoweredValueRepresentation(elemTag))
-        case ReprTag.DataData          => SumCaseClassRepresentation.DataData
-        case ReprTag.Constant          => PrimitiveRepresentation.Constant
-        case ReprTag.PackedData        => PrimitiveRepresentation.PackedData
-        case ReprTag.DataConstr        => SumCaseClassRepresentation.DataConstr
-        case ReprTag.PackedSumDataList => SumCaseClassRepresentation.PackedSumDataList
+    import scalus.compiler.UplcRepresentation
+    import scalus.compiler.sir.lowering.*
+
+    /** Convert a `UplcRepresentation` to the actual `LoweredValueRepresentation`. */
+    def toLoweredValueRepresentation(tag: UplcRepresentation): LoweredValueRepresentation =
+        tag match
+            case UplcRepresentation.ProdBuiltinPair(fstTag, sndTag) =>
+                ProductCaseClassRepresentation.ProdBuiltinPair(
+                  toLoweredValueRepresentation(fstTag),
+                  toLoweredValueRepresentation(sndTag)
+                )
+            case UplcRepresentation.SumBuiltinList(elemTag) =>
+                SumCaseClassRepresentation.SumBuiltinList(toLoweredValueRepresentation(elemTag))
+            case UplcRepresentation.DataData   => SumCaseClassRepresentation.DataData
+            case UplcRepresentation.Constant   => PrimitiveRepresentation.Constant
+            case UplcRepresentation.PackedData => PrimitiveRepresentation.PackedData
+            case UplcRepresentation.DataConstr => SumCaseClassRepresentation.DataConstr
+            case UplcRepresentation.PackedSumDataList =>
+                SumCaseClassRepresentation.PackedSumDataList
+            case _ =>
+                throw IllegalArgumentException(
+                  s"Cannot convert type-level UplcRepresentation.$tag to LoweredValueRepresentation"
+                )
 }

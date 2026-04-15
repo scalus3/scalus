@@ -243,7 +243,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6496, steps = 1_300021)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5696, steps = 1_172021)
           )
         )
 
@@ -263,7 +263,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(4), Cons(BigInt(6), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 20408, steps = 4_946969)
+                .copy(nativeListElements = false) -> ExUnits(memory = 19608, steps = 4_818969)
           )
         )
     }
@@ -323,7 +323,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           true,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6096, steps = 1_236021)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3601, steps = 1567364)
           )
         )
 
@@ -333,7 +333,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           true,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13054, steps = 3_073_505)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3601, steps = 1703759)
           )
         )
 
@@ -343,7 +343,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           true,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 26970, steps = 6_748_473)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3601, steps = 1976549)
           )
         )
 
@@ -422,7 +422,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 8164, steps = 1_439027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 7564, steps = 1_343027)
           )
         )
 
@@ -432,7 +432,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 22818, steps = 4_907_569)
+                .copy(nativeListElements = false) -> ExUnits(memory = 22218, steps = 4_811_569)
           )
         )
 
@@ -442,7 +442,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 125943, steps = 30_092_900)
+                .copy(nativeListElements = false) -> ExUnits(memory = 123543, steps = 29_708_900)
           )
         )
     }
@@ -537,7 +537,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         assertEval(!Cons(BigInt(1), Cons(BigInt(2), Nil)).isDefinedAt(-1))
     }
 
-    test("get") {
+    test("get - property") {
         forAll(bigIntListAndIndexGen) { (list: List[BigInt], index: BigInt) =>
             val scalusResult = list.get(index)
             val scalaResult = list.asScala.lift(index.toInt)
@@ -545,7 +545,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalaResult.asScalus === scalusResult)
             assert(scalusResult.asScala == scalaResult)
         }
+    }
 
+    test("get - empty list, idx 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(0),
           List.empty[BigInt],
@@ -555,6 +557,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5866, steps = 1_192366)
           )
         )
+    }
+
+    test("get - single element, idx 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(0),
           List.single(1),
@@ -564,6 +569,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8164, steps = 1_850_411)
           )
         )
+    }
+
+    test("get - single element, idx 1 (out of bounds)") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(1),
           List.single(1),
@@ -573,6 +581,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 10034, steps = 2_292_613)
           )
         )
+    }
+
+    test("get - single element, idx -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(-1),
           List.single(1),
@@ -582,6 +593,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 3534, steps = 691372)
           )
         )
+    }
+
+    test("get - two-element list, idx 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(0),
           Cons(1, Cons(2, Nil)),
@@ -591,6 +605,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8164, steps = 1_850_411)
           )
         )
+    }
+
+    test("get - two-element list, idx 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(1),
           Cons(1, Cons(2, Nil)),
@@ -600,6 +617,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 12332, steps = 2_950_658)
           )
         )
+    }
+
+    test("get - two-element list, idx 2 (out of bounds)") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(2),
           Cons(1, Cons(2, Nil)),
@@ -609,6 +629,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 14202, steps = 3_392_860)
           )
         )
+    }
+
+    test("get - two-element list, idx -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.get(-1),
           Cons(1, Cons(2, Nil)),
@@ -735,7 +758,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, List[BigInt]],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11460, steps = 2_176890)
+                .copy(nativeListElements = false) -> ExUnits(memory = 11360, steps = 2_160890)
           )
         )
 
@@ -745,7 +768,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), List.single(BigInt(1))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 42807, steps = 10_386_156)
+                .copy(nativeListElements = false) -> ExUnits(memory = 43007, steps = 10_418_156)
           )
         )
 
@@ -758,7 +781,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
               Cons((BigInt(1), List.single(BigInt(1))), Nil)
             )
           ),
-          ExUnits(memory = 85546, steps = 21_720_896)
+          ExUnits(memory = 85446, steps = 21_704_896)
         )
 
     }
@@ -782,7 +805,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, List[BigInt]],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11660, steps = 2_208890)
+                .copy(nativeListElements = false) -> ExUnits(memory = 11560, steps = 2_192890)
           )
         )
 
@@ -792,7 +815,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), List.single(BigInt(1))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 43839, steps = 10_561_455)
+                .copy(nativeListElements = false) -> ExUnits(memory = 44271, steps = 10_646_199)
           )
         )
 
@@ -805,7 +828,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
               Cons((BigInt(1), List.single(BigInt(1))), Nil)
             )
           ),
-          ExUnits(memory = 87410, steps = 22_039_494)
+          ExUnits(memory = 87774, steps = 22_128_982)
         )
     }
 
@@ -828,7 +851,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7064, steps = 1_263027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6964, steps = 1_247027)
           )
         )
 
@@ -838,7 +861,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 22175, steps = 5_194_423)
+                .copy(nativeListElements = false) -> ExUnits(memory = 22607, steps = 5_279_167)
           )
         )
 
@@ -848,18 +871,20 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.unsafeFromList(
             Cons((BigInt(0), BigInt(6)), Cons((BigInt(1), BigInt(4)), Nil))
           ),
-          ExUnits(memory = 136804, steps = 36_701_843)
+          ExUnits(memory = 137032, steps = 36_800_819)
         )
     }
 
-    test("zip") {
+    test("zip - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1.zip(list2)
             val scalaResult = list1.asScala.zip(list2.asScala)
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("zip - empty zip empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(List.empty[BigInt]),
           List.empty[BigInt],
@@ -869,7 +894,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 4764, steps = 895027)
           )
         )
+    }
 
+    test("zip - single zip empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(List.empty[BigInt]),
           List.single(1),
@@ -879,7 +906,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5496, steps = 1_140021)
           )
         )
+    }
 
+    test("zip - empty zip single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => List.empty[BigInt].zip(list),
           List.single(1),
@@ -889,7 +918,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 4764, steps = 895027)
           )
         )
+    }
 
+    test("zip - single zip single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(List.single(BigInt(2))),
           List.single(1),
@@ -899,7 +930,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 10384, steps = 2_577878)
           )
         )
+    }
 
+    test("zip - two zip two") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(Cons(BigInt(3), Cons(BigInt(4), Nil))),
           Cons(1, Cons(2, Nil)),
@@ -909,7 +942,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 16004, steps = 4_260729)
           )
         )
+    }
 
+    test("zip - two zip single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.zip(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
@@ -918,8 +953,8 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             compilerOptions
                 .copy(nativeListElements = false) -> ExUnits(memory = 11116, steps = 2_822872),
             compilerOptions.copy(nativeListElements = true) -> ExUnits(
-              memory = 15976,
-              steps = 4_071_183
+              memory = 10684,
+              steps = 2_736_721
             )
           )
         )
@@ -1003,14 +1038,16 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("prependedAll") {
+    test("prependedAll - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1.prependedAll(list2)
             val scalaResult = list1.asScala.prependedAll(list2.asScala)
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("prependedAll - empty prepend empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.prependedAll(List.empty[BigInt]),
           List.empty[BigInt],
@@ -1020,7 +1057,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5966, steps = 1_239125)
           )
         )
+    }
 
+    test("prependedAll - empty prepend single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.prependedAll(List.single(BigInt(1))),
           List.empty[BigInt],
@@ -1030,7 +1069,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5966, steps = 1_239_125)
           )
         )
+    }
 
+    test("prependedAll - single prepend empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.prependedAll(List.empty[BigInt]),
           List.single(1),
@@ -1040,7 +1081,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 6998, steps = 1_532_119)
           )
         )
+    }
 
+    test("prependedAll - single prepend single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.prependedAll(List.single(BigInt(1))),
           List.single(2),
@@ -1050,7 +1093,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 9826, steps = 2_334_288)
           )
         )
+    }
 
+    test("prependedAll - two prepend single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.prependedAll(List.single(BigInt(1))),
           Cons(2, Cons(3, Nil)),
@@ -1062,14 +1107,16 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("++:") {
+    test("++: - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1 ++: list2
             val scalaResult = list1.asScala ++: list2.asScala
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("++: - empty ++: empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => List.empty[BigInt] ++: list,
           List.empty[BigInt],
@@ -1079,7 +1126,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5966, steps = 1_239_125)
           )
         )
+    }
 
+    test("++: - empty ++: single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => List.empty[BigInt] ++: list,
           List.single(1),
@@ -1089,7 +1138,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 6998, steps = 1_532_119)
           )
         )
+    }
 
+    test("++: - single ++: empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list ++: List.empty[BigInt],
           List.single(1),
@@ -1099,7 +1150,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 2733, steps = 518082)
           )
         )
+    }
 
+    test("++: - single ++: single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list ++: List.single(BigInt(2)),
           List.single(1),
@@ -1109,7 +1162,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 7293, steps = 1_725_245)
           )
         )
+    }
 
+    test("++: - two ++: single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list ++: List.single(BigInt(3)),
           Cons(1, Cons(2, Nil)),
@@ -1199,14 +1254,16 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("appendedAll") {
+    test("appendedAll - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1.appendedAll(list2)
             val scalaResult = list1.asScala.appendedAll(list2.asScala)
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("appendedAll - empty append empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.appendedAll(List.empty[BigInt]),
           List.empty[BigInt],
@@ -1216,7 +1273,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5366, steps = 1_084564)
           )
         )
+    }
 
+    test("appendedAll - empty append single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.appendedAll(List.single(BigInt(1))),
           List.empty[BigInt],
@@ -1226,7 +1285,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 6598, steps = 1_409_558)
           )
         )
+    }
 
+    test("appendedAll - single append empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.appendedAll(List.empty[BigInt]),
           List.single(1),
@@ -1236,7 +1297,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5366, steps = 1_084_564)
           )
         )
+    }
 
+    test("appendedAll - single append single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.appendedAll(List.single(BigInt(2))),
           List.single(1),
@@ -1246,7 +1309,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 9726, steps = 2_259_727)
           )
         )
+    }
 
+    test("appendedAll - two append single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.appendedAll(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
@@ -1258,14 +1323,16 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test(":++") {
+    test(":++ - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1 :++ list2
             val scalaResult = list1.asScala :++ list2.asScala
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test(":++ - empty :++ empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list :++ List.empty[BigInt],
           List.empty[BigInt],
@@ -1275,7 +1342,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5366, steps = 1_084_564)
           )
         )
+    }
 
+    test(":++ - empty :++ single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => List.empty[BigInt] :++ list,
           List.single(1),
@@ -1285,7 +1354,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 6298, steps = 1_361_558)
           )
         )
+    }
 
+    test(":++ - single :++ empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list :++ List.empty[BigInt],
           List.single(1),
@@ -1295,7 +1366,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5366, steps = 1_084_564)
           )
         )
+    }
 
+    test(":++ - single :++ single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list :++ List.single(BigInt(2)),
           List.single(1),
@@ -1305,7 +1378,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 9726, steps = 2_259_727)
           )
         )
+    }
 
+    test(":++ - two :++ single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list :++ List.single(BigInt(3)),
           Cons(1, Cons(2, Nil)),
@@ -1317,14 +1392,16 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("concat") {
+    test("concat - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1.concat(list2)
             val scalaResult = list1.asScala.concat(list2.asScala)
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("concat - empty concat empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.concat(List.empty[BigInt]),
           List.empty[BigInt],
@@ -1334,7 +1411,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5366, steps = 1_084_564)
           )
         )
+    }
 
+    test("concat - empty concat single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.concat(List.single(BigInt(1))),
           List.empty[BigInt],
@@ -1344,7 +1423,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 6598, steps = 1_409_558)
           )
         )
+    }
 
+    test("concat - single concat empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.concat(List.empty[BigInt]),
           List.single(1),
@@ -1354,7 +1435,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5366, steps = 1_084_564)
           )
         )
+    }
 
+    test("concat - single concat single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.concat(List.single(BigInt(2))),
           List.single(1),
@@ -1364,7 +1447,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 9726, steps = 2_259_727)
           )
         )
+    }
 
+    test("concat - two concat single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.concat(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
@@ -1376,14 +1461,16 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("++") {
+    test("++ - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1 ++ list2
             val scalaResult = list1.asScala ++ list2.asScala
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("++ - empty ++ empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list ++ List.empty[BigInt],
           List.empty[BigInt],
@@ -1393,7 +1480,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5366, steps = 1_084_564)
           )
         )
+    }
 
+    test("++ - empty ++ single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => List.empty[BigInt] ++ list,
           List.single(1),
@@ -1403,7 +1492,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 6298, steps = 1_361_558)
           )
         )
+    }
 
+    test("++ - single ++ empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list ++ List.empty[BigInt],
           List.single(1),
@@ -1413,7 +1504,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5366, steps = 1_084_564)
           )
         )
+    }
 
+    test("++ - single ++ single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list ++ List.single(BigInt(2)),
           List.single(1),
@@ -1423,7 +1516,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 9726, steps = 2_259_727)
           )
         )
+    }
 
+    test("++ - two ++ single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list ++ List.single(BigInt(3)),
           Cons(1, Cons(2, Nil)),
@@ -1474,14 +1569,16 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("flatMap") {
+    test("flatMap - property") {
         check { (list: List[BigInt], value: BigInt) =>
             val scalusResult = list.flatMap(x => List.single(x + value))
             val scalaResult = list.asScala.flatMap(x => scala.List(x + value))
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("flatMap - empty list, single mapper") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.flatMap(x => List.single(x + 1)),
           List.empty[BigInt],
@@ -1491,7 +1588,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 6696, steps = 1_224960)
           )
         )
+    }
 
+    test("flatMap - single, single mapper") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.flatMap(x => List.single(x + 1)),
           List.single(1),
@@ -1501,7 +1600,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 16088, steps = 3_474696)
           )
         )
+    }
 
+    test("flatMap - two, single mapper") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.flatMap(x => List.single(x + 1)),
           Cons(1, Cons(2, Nil)),
@@ -1511,24 +1612,28 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 29340, steps = 6_819595)
           )
         )
+    }
 
+    test("flatMap - two, empty mapper") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.flatMap(_ => Nil),
           Cons(1, Cons(2, Nil)),
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 23348, steps = 5_026694)
+                .copy(nativeListElements = false) -> ExUnits(memory = 23948, steps = 5_122694)
           )
         )
+    }
 
+    test("flatMap - two, two-element mapper") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.flatMap(x => Cons(x + 10, Cons(x + 100, Nil))),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(11), Cons(BigInt(101), Cons(BigInt(12), Cons(BigInt(102), Nil)))),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 34300, steps = 8_319502)
+                .copy(nativeListElements = false) -> ExUnits(memory = 34900, steps = 8_415502)
           )
         )
     }
@@ -1547,7 +1652,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4696, steps = 904960)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4496, steps = 872960)
           )
         )
 
@@ -1557,7 +1662,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11190, steps = 2_412_635)
+                .copy(nativeListElements = false) -> ExUnits(memory = 11490, steps = 2_460_635)
           )
         )
 
@@ -1567,7 +1672,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(2), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18216, steps = 4_072_672)
+                .copy(nativeListElements = false) -> ExUnits(memory = 19016, steps = 4_200_672)
           )
         )
     }
@@ -1586,7 +1691,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5796, steps = 1_080_960)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5596, steps = 1_048_960)
           )
         )
 
@@ -1596,7 +1701,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13023, steps = 2_849_046)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13323, steps = 2_897_046)
           )
         )
 
@@ -1606,7 +1711,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(1), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 19818, steps = 4_480_770)
+                .copy(nativeListElements = false) -> ExUnits(memory = 20618, steps = 4_608_770)
           )
         )
     }
@@ -1637,7 +1742,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15056, steps = 3_315_500)
+                .copy(nativeListElements = false) -> ExUnits(memory = 15356, steps = 3_363_500)
           )
         )
 
@@ -1647,7 +1752,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(3), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 26210, steps = 6_330_564)
+                .copy(nativeListElements = false) -> ExUnits(memory = 26810, steps = 6_426_564)
           )
         )
 
@@ -1667,7 +1772,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5664, steps = 1_039_027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4864, steps = 911027)
           )
         )
 
@@ -1677,7 +1782,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 10594, steps = 2_246917)
+                .copy(nativeListElements = false) -> ExUnits(memory = 9994, steps = 2_150917)
           )
         )
 
@@ -1687,7 +1792,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Some(BigInt(2)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13356, steps = 3_065813)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12956, steps = 3_001813)
           )
         )
     }
@@ -1706,7 +1811,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5164, steps = 959027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4564, steps = 863027)
           )
         )
 
@@ -1716,7 +1821,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13762, steps = 3_189_880)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13162, steps = 3_093_880)
           )
         )
 
@@ -1726,7 +1831,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Some(BigInt(3)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 20594, steps = 5_129_096)
+                .copy(nativeListElements = false) -> ExUnits(memory = 19994, steps = 5_033_096)
           )
         )
     }
@@ -1745,7 +1850,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4496, steps = 867771)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3896, steps = 771771)
           )
         )
 
@@ -1755,7 +1860,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 11590, steps = 2_427_573)
+                .copy(nativeListElements = false) -> ExUnits(memory = 10990, steps = 2_331_573)
           )
         )
 
@@ -1765,7 +1870,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(3),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18684, steps = 3_987_375)
+                .copy(nativeListElements = false) -> ExUnits(memory = 18084, steps = 3_891_375)
           )
         )
     }
@@ -1784,7 +1889,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4496, steps = 867771)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3896, steps = 771771)
           )
         )
 
@@ -1794,7 +1899,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 10390, steps = 2_235_573)
+                .copy(nativeListElements = false) -> ExUnits(memory = 9790, steps = 2_139_573)
           )
         )
 
@@ -1804,7 +1909,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           BigInt(3),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 16284, steps = 3_603_375)
+                .copy(nativeListElements = false) -> ExUnits(memory = 15684, steps = 3_507_375)
           )
         )
     }
@@ -1839,62 +1944,76 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         assertEval(!Cons(BigInt(1), Cons(BigInt(2), Nil)).forall(_ > 2))
     }
 
-    test("count") {
+    test("count - property") {
         check { (list: List[BigInt], value: BigInt) =>
             val scalusResult = list.count(_ > value)
             val scalaResult = BigInt(list.asScala.count(_ > value))
 
             scalusResult === scalaResult
         }
+    }
 
+    test("count - empty list") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.count(_ > 1),
           List.empty[BigInt],
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4696, steps = 899771)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4496, steps = 867771)
           )
         )
+    }
+
+    test("count - single, _ > 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.count(_ > 0),
           List.single(1),
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12492, steps = 2_692_912)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12792, steps = 2_740_912)
           )
         )
+    }
+
+    test("count - single, _ > 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.count(_ > 1),
           List.single(1),
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12090, steps = 2_527_704)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12390, steps = 2_575_704)
           )
         )
+    }
+
+    test("count - two, _ > 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.count(_ > 1),
           Cons(1, Cons(2, Nil)),
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 19886, steps = 4_320_845)
+                .copy(nativeListElements = false) -> ExUnits(memory = 20686, steps = 4_448_845)
           )
         )
+    }
+
+    test("count - two, _ > 2") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.count(_ > 2),
           Cons(1, Cons(2, Nil)),
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 19484, steps = 4_155_637)
+                .copy(nativeListElements = false) -> ExUnits(memory = 20284, steps = 4_283_637)
           )
         )
     }
 
-    test("indexOfOption") {
+    test("indexOfOption - property") {
         check { (list: List[BigInt], value: BigInt) =>
             val scalusResult = list.indexOfOption(value)
             val scalaResult = list.asScala.indexOf(value) match {
@@ -1904,109 +2023,133 @@ class ListTest extends AnyFunSuite with EvalTestKit {
 
             scalusResult === scalaResult
         }
+    }
 
+    test("indexOfOption - empty list") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOfOption(BigInt(1)),
           List.empty[BigInt],
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 3664, steps = 719027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3864, steps = 751027)
           )
         )
+    }
+
+    test("indexOfOption - single, found") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOfOption(BigInt(1)),
           List.single(1),
           Some(BigInt(0)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7458, steps = 1_657_859)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6594, steps = 2470581)
           )
         )
+    }
+
+    test("indexOfOption - single, not found") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOfOption(BigInt(2)),
           List.single(1),
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 9428, steps = 2_183_912)
+                .copy(nativeListElements = false) -> ExUnits(memory = 8564, steps = 2996634)
           )
         )
+    }
+
+    test("indexOfOption - two, found at 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOfOption(BigInt(2)),
           Cons(1, Cons(2, Nil)),
           Some(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13222, steps = 3_122_744)
+                .copy(nativeListElements = false) -> ExUnits(memory = 11294, steps = 4716188)
           )
         )
+    }
+
+    test("indexOfOption - two, not found") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOfOption(BigInt(3)),
           Cons(1, Cons(2, Nil)),
           None,
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15192, steps = 3_648_797)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13264, steps = 5242241)
           )
         )
     }
 
-    test("indexOf") {
+    test("indexOf - property") {
         check { (list: List[BigInt], value: BigInt) =>
             val scalusResult = list.indexOf(value)
             val scalaResult = BigInt(list.asScala.indexOf(value))
 
             scalusResult === scalaResult
         }
+    }
 
+    test("indexOf - empty list") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOf(BigInt(1)),
           List.empty[BigInt],
           BigInt(-1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 8062, steps = 1_722636)
+                .copy(nativeListElements = false) -> ExUnits(memory = 8262, steps = 1_754636)
           )
         )
+    }
 
+    test("indexOf - single, found") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOf(BigInt(1)),
           List.single(1),
           BigInt(0),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12020, steps = 2_902_610)
+                .copy(nativeListElements = false) -> ExUnits(memory = 11156, steps = 3715332)
           )
         )
+    }
 
+    test("indexOf - single, not found") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOf(BigInt(2)),
           List.single(1),
           BigInt(-1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13526, steps = 3_139_521)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12662, steps = 3952243)
           )
         )
+    }
 
+    test("indexOf - two, found at 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOf(BigInt(2)),
           Cons(1, Cons(2, Nil)),
           BigInt(1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 17484, steps = 4_319_495)
+                .copy(nativeListElements = false) -> ExUnits(memory = 15556, steps = 5912939)
           )
         )
+    }
 
+    test("indexOf - two, not found") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.indexOf(BigInt(3)),
           Cons(1, Cons(2, Nil)),
           BigInt(-1),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18990, steps = 4_556406)
+                .copy(nativeListElements = false) -> ExUnits(memory = 17062, steps = 6149850)
           )
         )
     }
@@ -2254,7 +2397,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("drop") {
+    test("drop - property") {
         forAll(bigIntListAndIndexGen) { (list: List[BigInt], number: BigInt) =>
             val scalusResult = list.drop(number)
             val scalaResult = list.asScala.drop(number.toInt)
@@ -2262,7 +2405,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalaResult.asScalus === scalusResult)
             assert(scalusResult.asScala == scalaResult)
         }
+    }
 
+    test("drop - empty drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(1),
           List.empty[BigInt],
@@ -2272,7 +2417,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 4666, steps = 998913)
           )
         )
+    }
 
+    test("drop - single drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(1),
           List.single(1),
@@ -2282,7 +2429,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8102, steps = 1_845_670)
           )
         )
+    }
 
+    test("drop - two drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(1),
           Cons(1, Cons(2, Nil)),
@@ -2292,7 +2441,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8102, steps = 1_845_670)
           )
         )
+    }
 
+    test("drop - two drop 2") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(2),
           Cons(1, Cons(2, Nil)),
@@ -2302,7 +2453,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 12470, steps = 2_969_421)
           )
         )
+    }
 
+    test("drop - two drop 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(0),
           Cons(1, Cons(2, Nil)),
@@ -2312,7 +2465,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 3734, steps = 721919)
           )
         )
+    }
 
+    test("drop - two drop -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.drop(-1),
           Cons(1, Cons(2, Nil)),
@@ -2324,7 +2479,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("dropRight") {
+    test("dropRight - property") {
         forAll(bigIntListAndIndexGen) { (list: List[BigInt], number: BigInt) =>
             val scalusResult = list.dropRight(number)
             val scalaResult = list.asScala.dropRight(number.toInt)
@@ -2332,7 +2487,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalaResult.asScalus === scalusResult)
             assert(scalusResult.asScala == scalaResult)
         }
+    }
 
+    test("dropRight - empty drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropRight(1),
           List.empty[BigInt],
@@ -2342,7 +2499,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 11122, steps = 2_448750)
           )
         )
+    }
 
+    test("dropRight - single drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropRight(1),
           List.single(1),
@@ -2352,7 +2511,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 20706, steps = 5_144_972)
           )
         )
+    }
 
+    test("dropRight - two drop 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropRight(1),
           Cons(1, Cons(2, Nil)),
@@ -2362,7 +2523,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 30752, steps = 7_983_240)
           )
         )
+    }
 
+    test("dropRight - two drop 2") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropRight(2),
           Cons(1, Cons(2, Nil)),
@@ -2372,7 +2535,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 30290, steps = 7_841_194)
           )
         )
+    }
 
+    test("dropRight - two drop 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropRight(0),
           Cons(1, Cons(2, Nil)),
@@ -2382,7 +2547,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5434, steps = 993919)
           )
         )
+    }
 
+    test("dropRight - two drop -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropRight(-1),
           Cons(1, Cons(2, Nil)),
@@ -2394,66 +2561,76 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("dropWhile") {
+    test("dropWhile - property") {
         check { (list: List[BigInt], value: BigInt) =>
             val scalusResult = list.dropWhile(_ < value)
             val scalaResult = list.asScala.dropWhile(_ < value)
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("dropWhile - empty list") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropWhile(_ < 1),
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4064, steps = 783027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3464, steps = 687027)
           )
         )
+    }
 
+    test("dropWhile - single, _ < 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropWhile(_ < 1),
           List.single(1),
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6430, steps = 1_376_260)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5530, steps = 1_232_260)
           )
         )
+    }
 
+    test("dropWhile - two, _ < 3") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropWhile(_ < 3),
           Cons(1, Cons(2, Nil)),
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15524, steps = 3_454_807)
+                .copy(nativeListElements = false) -> ExUnits(memory = 14324, steps = 3_262_807)
           )
         )
+    }
 
+    test("dropWhile - two, _ < 2") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropWhile(_ < 2),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(2), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12160, steps = 2_712_150)
+                .copy(nativeListElements = false) -> ExUnits(memory = 10960, steps = 2_520_150)
           )
         )
+    }
 
+    test("dropWhile - two, _ < 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.dropWhile(_ < 1),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6430, steps = 1_376_260)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5530, steps = 1_232_260)
           )
         )
     }
 
-    test("deleteFirst") {
+    test("deleteFirst - property") {
         check { (list: List[BigInt], value: BigInt) =>
             val scalusResult = list.deleteFirst(value)
             val scalaList = list.asScala
@@ -2464,69 +2641,81 @@ class ListTest extends AnyFunSuite with EvalTestKit {
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("deleteFirst - empty list") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.deleteFirst(BigInt(1)),
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4864, steps = 911027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 5064, steps = 943027)
           )
         )
+    }
 
+    test("deleteFirst - single, found") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.deleteFirst(BigInt(1)),
           List.single(1),
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7494, steps = 1_645_710)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6630, steps = 2458432)
           )
         )
+    }
 
+    test("deleteFirst - two, head match") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.deleteFirst(BigInt(1)),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(2), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7494, steps = 1_645_710)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6630, steps = 2458432)
           )
         )
+    }
 
+    test("deleteFirst - two, no match") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.deleteFirst(BigInt(3)),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15716, steps = 3_821_405)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13788, steps = 5414849)
           )
         )
+    }
 
+    test("deleteFirst - two, tail match") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.deleteFirst(BigInt(2)),
           Cons(1, Cons(2, Nil)),
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 12920, steps = 3_100899)
+                .copy(nativeListElements = false) -> ExUnits(memory = 10992, steps = 4694343)
           )
         )
+    }
 
+    test("deleteFirst - two duplicates, head only") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.deleteFirst(BigInt(1)),
           Cons(1, Cons(1, Nil)),
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7494, steps = 1_645_710)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6630, steps = 2458432)
           )
         )
     }
 
-    test("take") {
+    test("take - property") {
         forAll(bigIntListAndIndexGen) { (list: List[BigInt], number: BigInt) =>
             val scalusResult = list.take(number)
             val scalaResult = list.asScala.take(number.toInt)
@@ -2534,7 +2723,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalaResult.asScalus === scalusResult)
             assert(scalusResult.asScala == scalaResult)
         }
+    }
 
+    test("take - empty take 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.take(1),
           List.empty[BigInt],
@@ -2544,7 +2735,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 4666, steps = 998913)
           )
         )
+    }
 
+    test("take - single take 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.take(1),
           List.single(1),
@@ -2554,7 +2747,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8966, steps = 2_129_182)
           )
         )
+    }
 
+    test("take - two take 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.take(1),
           Cons(1, Cons(2, Nil)),
@@ -2564,7 +2759,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8966, steps = 2_129_182)
           )
         )
+    }
 
+    test("take - two take 3") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.take(3),
           Cons(1, Cons(2, Nil)),
@@ -2574,7 +2771,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 15130, steps = 3_813_439)
           )
         )
+    }
 
+    test("take - two take 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.take(0),
           Cons(1, Cons(2, Nil)),
@@ -2584,7 +2783,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 3734, steps = 721919)
           )
         )
+    }
 
+    test("take - two take -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.take(-1),
           Cons(1, Cons(2, Nil)),
@@ -2596,7 +2797,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("takeRight") {
+    test("takeRight - property") {
         forAll(bigIntListAndIndexGen) { (list: List[BigInt], number: BigInt) =>
             val scalusResult = list.takeRight(number)
             val scalaResult = list.asScala.takeRight(number.toInt)
@@ -2604,7 +2805,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
             assert(scalaResult.asScalus === scalusResult)
             assert(scalusResult.asScala == scalaResult)
         }
+    }
 
+    test("takeRight - empty take 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeRight(1),
           List.empty[BigInt],
@@ -2614,7 +2817,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 8094, steps = 1_802576)
           )
         )
+    }
 
+    test("takeRight - single take 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeRight(1),
           List.single(1),
@@ -2624,7 +2829,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 18706, steps = 4_856642)
           )
         )
+    }
 
+    test("takeRight - two take 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeRight(1),
           Cons(1, Cons(2, Nil)),
@@ -2634,7 +2841,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 25996, steps = 6_768_623)
           )
         )
+    }
 
+    test("takeRight - two take 3") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeRight(3),
           Cons(1, Cons(2, Nil)),
@@ -2644,7 +2853,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 29318, steps = 7_910_708)
           )
         )
+    }
 
+    test("takeRight - two take 0") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeRight(0),
           Cons(1, Cons(2, Nil)),
@@ -2654,7 +2865,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 5434, steps = 993919)
           )
         )
+    }
 
+    test("takeRight - two take -1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeRight(-1),
           Cons(1, Cons(2, Nil)),
@@ -2666,73 +2879,85 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
-    test("takeWhile") {
+    test("takeWhile - property") {
         check { (list: List[BigInt], value: BigInt) =>
             val scalusResult = list.takeWhile(_ < value)
             val scalaResult = list.asScala.takeWhile(_ < value)
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("takeWhile - empty list") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeWhile(_ < 1),
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5464, steps = 1_007027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 4864, steps = 911027)
           )
         )
+    }
 
+    test("takeWhile - single, _ < 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeWhile(_ < 1),
           List.single(1),
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7630, steps = 1_568_260)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6730, steps = 1_424_260)
           )
         )
+    }
 
+    test("takeWhile - two, _ < 3") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeWhile(_ < 3),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 17652, steps = 4_085_831)
+                .copy(nativeListElements = false) -> ExUnits(memory = 16452, steps = 3_893_831)
           )
         )
+    }
 
+    test("takeWhile - two, _ < 2") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeWhile(_ < 2),
           Cons(1, Cons(2, Nil)),
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13724, steps = 3_107662)
+                .copy(nativeListElements = false) -> ExUnits(memory = 12524, steps = 2_915662)
           )
         )
+    }
 
+    test("takeWhile - two, _ < 1") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.takeWhile(_ < 1),
           Cons(1, Cons(2, Nil)),
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7630, steps = 1_568_260)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6730, steps = 1_424_260)
           )
         )
     }
 
-    test("distinct") {
+    test("distinct - property") {
         check { (list: List[BigInt]) =>
             val scalusResult = list.distinct
             val scalaResult = list.asScala.distinct
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("distinct - empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.distinct,
           List.empty[BigInt],
@@ -2742,7 +2967,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 9760, steps = 1_863887)
           )
         )
+    }
 
+    test("distinct - single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.distinct,
           List.single(1),
@@ -2752,103 +2979,121 @@ class ListTest extends AnyFunSuite with EvalTestKit {
                 .copy(nativeListElements = false) -> ExUnits(memory = 26044, steps = 5_831752)
           )
         )
+    }
 
+    test("distinct - two unique") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.distinct,
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 48390, steps = 11_211294)
+                .copy(nativeListElements = false) -> ExUnits(memory = 47026, steps = 11944016)
           )
         )
+    }
 
+    test("distinct - two duplicates") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.distinct,
           Cons(1, Cons(1, Nil)),
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 39798, steps = 9_327984)
+                .copy(nativeListElements = false) -> ExUnits(memory = 38434, steps = 10060706)
           )
         )
+    }
 
+    test("distinct - three with one duplicate") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.distinct,
           Cons(1, Cons(2, Cons(1, Nil))),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 68206, steps = 16_119203)
+                .copy(nativeListElements = false) -> ExUnits(memory = 64114, steps = 18317369)
           )
         )
     }
 
-    test("diff") {
+    test("diff - property") {
         check { (list1: List[BigInt], list2: List[BigInt]) =>
             val scalusResult = list1.diff(list2)
             val scalaResult = list1.asScala.diff(list2.asScala)
 
             scalaResult.asScalus === scalusResult && scalusResult.asScala == scalaResult
         }
+    }
 
+    test("diff - empty diff empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.diff(List.empty[BigInt]),
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6665, steps = 1_216515)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6065, steps = 1_120515)
           )
         )
+    }
 
+    test("diff - single diff empty") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.diff(List.empty[BigInt]),
           List.single(1),
           List.single(BigInt(1)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 7397, steps = 1_461509)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6797, steps = 1_365509)
           )
         )
+    }
 
+    test("diff - empty diff single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.diff(List.single(BigInt(1))),
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6665, steps = 1_216515)
+                .copy(nativeListElements = false) -> ExUnits(memory = 6065, steps = 1_120515)
           )
         )
+    }
 
+    test("diff - single diff matching single") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.diff(List.single(BigInt(1))),
           List.single(1),
           List.empty[BigInt],
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 16256, steps = 3_620481)
+                .copy(nativeListElements = false) -> ExUnits(memory = 14292, steps = 4257203)
           )
         )
+    }
 
+    test("diff - two diff matching tail") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.diff(List.single(BigInt(2))),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Nil),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 22514, steps = 5_336664)
+                .copy(nativeListElements = false) -> ExUnits(memory = 19186, steps = 6706108)
           )
         )
+    }
 
+    test("diff - two diff non-matching") {
         assertEvalWithBudgets(
           (list: List[BigInt]) => list.diff(List.single(BigInt(3))),
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 25110, steps = 6_025170)
+                .copy(nativeListElements = false) -> ExUnits(memory = 21782, steps = 7394614)
           )
         )
     }
@@ -2948,7 +3193,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 4064, steps = 783027)
+                .copy(nativeListElements = false) -> ExUnits(memory = 3464, steps = 687027)
           )
         )
 
@@ -2958,7 +3203,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 8892, steps = 1_853_578)
+                .copy(nativeListElements = false) -> ExUnits(memory = 8292, steps = 1_757_578)
           )
         )
 
@@ -2968,7 +3213,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           (),
           Seq(
             compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 13720, steps = 2_924_129)
+                .copy(nativeListElements = false) -> ExUnits(memory = 13120, steps = 2_828_129)
           )
         )
     }

@@ -873,3 +873,60 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         assert(evaluated == 0.asTerm)
 
     }
+
+    test("field-level @UplcRepr annotation is extracted into TypeBinding") {
+        import scalus.compiler.sir.SIRType
+        val sir = compile {
+            FieldAnnotationTestDefs.MyRecord(BigInt(1), hex"cafe")
+        }
+        val constrDecl = SIRType
+            .retrieveConstrDecl(sir.tp)
+            .getOrElse(fail(s"No ConstrDecl in type ${sir.tp.show}"))
+        val specialField = constrDecl.params.find(_.name == "special")
+        assert(
+          specialField.isDefined,
+          s"field 'special' not found in params: ${constrDecl.params.map(_.name)}"
+        )
+        val fieldAnns = specialField.get.annotations
+        assert(
+          fieldAnns.data.contains("uplcRepr"),
+          s"Expected uplcRepr in field annotations, got: ${fieldAnns.data.keys}"
+        )
+        val reprValue = fieldAnns.data("uplcRepr") match
+            case SIR.Const(scalus.uplc.Constant.String(s), _, _) => s
+            case other => fail(s"Expected Constant.String, got $other")
+        assert(reprValue == "Data", s"Expected 'Data', got '$reprValue'")
+    }
+
+    test("field-level @UplcRepr with parameterized SumBuiltinList") {
+        import scalus.compiler.sir.SIRType
+        val sir = compile {
+            FieldAnnotationTestDefs.WithNativeList(
+              BigInt(1),
+              scalus.cardano.onchain.plutus.prelude.List.empty
+            )
+        }
+        val constrDecl = SIRType
+            .retrieveConstrDecl(sir.tp)
+            .getOrElse(fail(s"No ConstrDecl in type ${sir.tp.show}"))
+        val itemsField = constrDecl.params.find(_.name == "items")
+        assert(
+          itemsField.isDefined,
+          s"field 'items' not found in params: ${constrDecl.params.map(_.name)}"
+        )
+        val fieldAnns = itemsField.get.annotations
+        assert(
+          fieldAnns.data.contains("uplcRepr"),
+          s"Expected uplcRepr in field annotations, got: ${fieldAnns.data.keys}"
+        )
+        val reprSir = fieldAnns.data("uplcRepr")
+        // Should be SIR.Constr for SumBuiltinList with UplcConstr arg
+        reprSir match
+            case SIR.Constr(name, _, args, _, _) =>
+                assert(name.contains("SumBuiltinList"), s"Expected SumBuiltinList, got $name")
+                assert(args.size == 1, s"Expected 1 arg, got ${args.size}")
+            case SIR.Const(scalus.uplc.Constant.String(s), _, _) =>
+                fail(s"Expected SIR.Constr for parameterized repr, got string '$s'")
+            case other =>
+                fail(s"Expected SIR.Constr, got ${other.getClass.getSimpleName}")
+    }

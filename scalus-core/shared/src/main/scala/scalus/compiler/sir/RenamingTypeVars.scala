@@ -253,6 +253,7 @@ object RenamingTypeVars {
                       typeVars.map(tv => ctx.renames.getOrElse(tv, tv)),
                       newBody
                     )
+            case SIRType.Annotated(tp, anns)     => SIRType.Annotated(inType(tp, ctx), anns)
             case SIRType.FreeUnificator          => SIRType.FreeUnificator
             case SIRType.TypeNothing             => SIRType.TypeNothing
             case SIRType.TypeNonCaseModule(name) => SIRType.TypeNonCaseModule(name)
@@ -322,7 +323,9 @@ object RenamingTypeVars {
                     )
                     val renamed = ConstrDecl(
                       constrDecl.name,
-                      constrDecl.params.map(b => TypeBinding(b.name, inType(b.tp, locaCtx))),
+                      constrDecl.params.map(b =>
+                          TypeBinding(b.name, inType(b.tp, locaCtx), b.annotations)
+                      ),
                       renamedTypeParams,
                       constrDecl.parentTypeArgs
                           .map(pt => inType(pt, locaCtx)),

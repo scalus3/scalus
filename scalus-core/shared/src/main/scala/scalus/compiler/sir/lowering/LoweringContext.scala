@@ -16,7 +16,7 @@ class LoweringContext(
     val targetLanguage: Language = Language.PlutusV3,
     val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     val generateErrorTraces: Boolean = false,
-    val uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
+    var uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
         given LoweringContext = lctx
         SirTypeUplcGenerator(tp, lctx.debugLevel > 30)
     },
@@ -49,6 +49,28 @@ class LoweringContext(
       */
     val precomputedValues: IdentityHashMap[SIR, LoweredValue] = new IdentityHashMap()
 
+    /** Cache for top-level recursive helpers (e.g. per-type `sumEq` functions emitted by
+      * [[LoweringEq.generateSumUplcConstrEquals]]). Keyed by a stable type-fingerprint string. Each
+      * entry is the recursive `IdentifiableLoweredValue` that subsequent uses can reference; the
+      * corresponding rhs is registered in [[pendingTopLevelLetRecs]] and emitted as a let-rec
+      * wrapping the lowered SIR root.
+      */
+    val cachedTopLevelHelpers
+        : scala.collection.mutable.LinkedHashMap[String, IdentifiableLoweredValue] =
+        scala.collection.mutable.LinkedHashMap.empty
+
+    /** Pending top-level let-rec bindings collected during lowering. After [[Lowering.lowerSIR]]
+      * returns the lowered SIR root, the lowering driver wraps it with a chain of let-recs for each
+      * entry. Entries are appended by innermost-completing helpers first (helper `+=`s AFTER any
+      * transitively-triggered sub-helpers have completed their own `+=`), so with `foldRight`
+      * wrapping, the first entry becomes outermost — inner helpers can see their outer
+      * dependencies. NOT sound for mutually recursive sums; detect and reject those at
+      * helper-construction time.
+      */
+    val pendingTopLevelLetRecs: scala.collection.mutable.ArrayBuffer[
+      (IdentifiableLoweredValue, LoweredValue)
+    ] = scala.collection.mutable.ArrayBuffer.empty
+
     /** Find a binding in a provider module by module name and method name. */
     def findProviderBinding(providerModuleName: String, methodName: String): Option[Binding] = {
         val fullBindingName = s"$providerModuleName.$methodName"
@@ -77,11 +99,32 @@ class LoweringContext(
       * — checks support modules and lowers the binding lazily (only when first referenced).
       */
     def resolveSupportBinding(name: String): Option[LoweredValue] = {
-        val binding = supportModules.values
-            .flatMap(_.defs)
-            .find(_.name == name)
-        binding.map { b =>
-            given LoweringContext = this
+        val bindingWithModule = supportModules.collectFirst {
+            case (moduleName, module) if module.defs.exists(_.name == name) =>
+                (module.defs.find(_.name == name).get, moduleName)
+        }
+        bindingWithModule.map { (b, moduleName) =>
+            // UplcConstrListOperations needs a policy where List[TypeVar(Transparent)]
+            // resolves to SumUplcConstr instead of SumBuiltinList
+            val effectiveLctx =
+                if moduleName == "scalus.compiler.intrinsics.UplcConstrListOperations$" then
+                    new LoweringContext(
+                      scope = this.scope,
+                      targetLanguage = this.targetLanguage,
+                      targetProtocolVersion = this.targetProtocolVersion,
+                      generateErrorTraces = this.generateErrorTraces,
+                      uplcGeneratorPolicy = IntrinsicResolver.uplcConstrListPolicy,
+                      typeUnifyEnv = this.typeUnifyEnv,
+                      debug = this.debug,
+                      debugLevel = this.debugLevel,
+                      nestingLevel = this.nestingLevel,
+                      enclosingLambdaParams = this.enclosingLambdaParams,
+                      intrinsicModules = this.intrinsicModules,
+                      supportModules = this.supportModules,
+                      nativeListElements = this.nativeListElements,
+                    )
+                else this
+            given LoweringContext = effectiveLctx
             val lowered = Lowering.lowerSIR(b.value)
             val varVal = LoweredValue.Builder.lvNewLazyNamedVar(
               b.name,

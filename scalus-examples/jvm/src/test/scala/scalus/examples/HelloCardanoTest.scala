@@ -29,7 +29,7 @@ class HelloCardanoTest extends AnyFunSuite with ScalusTest {
         )
 
         // Using HelloCardanoContract.compiled.withErrorTraces (Options.release with generateErrorTraces=true)
-        val scalusBudget = ExUnits(memory = 26938, steps = 8_818875)
+        val scalusBudget = ExUnits(memory = 25574, steps = 9657321)
 
         val applied = contract.program $ context.toData
         val result = applied.evaluateDebug

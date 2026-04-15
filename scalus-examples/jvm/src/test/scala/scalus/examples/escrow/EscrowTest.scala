@@ -111,7 +111,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
 
         assertResult(
           if Options.default.nativeListElements then ExUnits(memory = 394639, steps = 113_710691)
-          else ExUnits(memory = 286827, steps = 83_353146)
+          else ExUnits(memory = 242959, steps = 80494342)
         ):
             depositTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(depositTx).await()
@@ -184,7 +184,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
 
         assertResult(
           if Options.default.nativeListElements then ExUnits(memory = 361965, steps = 104_491984)
-          else ExUnits(memory = 265173, steps = 76_554338)
+          else ExUnits(memory = 221040, steps = 72308038)
         ):
             payTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(payTx).await()
@@ -270,7 +270,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
 
         assertResult(
           if Options.default.nativeListElements then ExUnits(memory = 398874, steps = 115_223308)
-          else ExUnits(memory = 291803, steps = 84_094464)
+          else ExUnits(memory = 234222, steps = 78031260)
         ):
             refundTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(refundTx).await()

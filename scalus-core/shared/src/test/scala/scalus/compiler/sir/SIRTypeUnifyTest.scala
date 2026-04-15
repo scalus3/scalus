@@ -402,4 +402,66 @@ class SIRTypeUnifyTest extends AnyFunSuite {
         assert(result.isSuccess, s"Expected success, got $result")
     }
 
+    test("Annotated type unifies with unwrapped type (left)") {
+        val listInt = SIRType.List(SIRType.Integer)
+        val annotated = SIRType.Annotated(
+          listInt,
+          AnnotationsDecl(
+            SIRPosition.empty,
+            data = Map(
+              "uplcRepr" -> SIR.Const(
+                scalus.uplc.Constant.String("UplcConstr"),
+                SIRType.String,
+                AnnotationsDecl.emptyModule
+              )
+            )
+          )
+        )
+        val result = SIRUnify.topLevelUnifyType(annotated, listInt, SIRUnify.Env.empty)
+        assert(result.isSuccess, s"Annotated(List[Int]) should unify with List[Int], got $result")
+    }
+
+    test("Annotated type unifies with unwrapped type (right)") {
+        val listInt = SIRType.List(SIRType.Integer)
+        val annotated = SIRType.Annotated(
+          listInt,
+          AnnotationsDecl(
+            SIRPosition.empty,
+            data = Map(
+              "uplcRepr" -> SIR.Const(
+                scalus.uplc.Constant.String("UplcConstr"),
+                SIRType.String,
+                AnnotationsDecl.emptyModule
+              )
+            )
+          )
+        )
+        val result = SIRUnify.topLevelUnifyType(listInt, annotated, SIRUnify.Env.empty)
+        assert(result.isSuccess, s"List[Int] should unify with Annotated(List[Int]), got $result")
+    }
+
+    test("Annotated type unifies with TypeVar") {
+        val tA = SIRType.TypeVar("A", Some(200L), SIRType.TypeVarKind.Fixed)
+        val listInt = SIRType.List(SIRType.Integer)
+        val annotated = SIRType.Annotated(
+          listInt,
+          AnnotationsDecl(
+            SIRPosition.empty,
+            data = Map(
+              "uplcRepr" -> SIR.Const(
+                scalus.uplc.Constant.String("UplcConstr"),
+                SIRType.String,
+                AnnotationsDecl.emptyModule
+              )
+            )
+          )
+        )
+        val result = SIRUnify.topLevelUnifyType(tA, annotated, SIRUnify.Env.empty)
+        assert(result.isSuccess, s"TypeVar should unify with Annotated type, got $result")
+        result match
+            case SIRUnify.UnificationSuccess(env, _) =>
+                assert(env.filledTypes.get(tA).contains(listInt))
+            case _ => fail("Expected success")
+    }
+
 }
