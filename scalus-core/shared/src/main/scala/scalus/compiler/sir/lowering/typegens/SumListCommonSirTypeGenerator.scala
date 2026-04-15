@@ -437,8 +437,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 // If tag == 0, it's a Nil, otherwise it's a Cons with one element (the fieldList).
                 throw LoweringException(
                   s"PairIntDataList → SumBuiltinList($elementRepr) for ${input.sirType.show}: " +
-                      s"DataConstr should not exist for List types. " +
-                      s"Stack: ${Thread.currentThread().getStackTrace.take(40).mkString("\n  ")}",
+                      "DataConstr should not exist for List types.",
                   pos
                 )
             case (SumCaseClassRepresentation.PairIntDataList, _) =>

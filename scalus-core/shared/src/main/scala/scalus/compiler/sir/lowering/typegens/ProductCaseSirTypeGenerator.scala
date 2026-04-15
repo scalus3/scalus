@@ -515,8 +515,21 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                               pos
                             )
                         else
-                            // Incompatible field reprs — need per-field conversion
-                            ???
+                            // Incompatible field reprs — fall back through Data:
+                            // ProdUplcConstr → ProdDataConstr → SumUplcConstr.
+                            // Per-field conversion in place would be cheaper but is not yet
+                            // wired; the Data round-trip is correct and matches the pre-
+                            // UplcConstr behavior.
+                            val asDataConstr = input.toRepresentation(
+                              ProductCaseClassRepresentation.ProdDataConstr,
+                              pos
+                            )
+                            new TypeRepresentationProxyLoweredValue(
+                              asDataConstr,
+                              targetType,
+                              targetSum,
+                              pos
+                            )
                     case _ =>
                         if !elemRepr.isDataCentric then
                             throw LoweringException(
@@ -1064,7 +1077,12 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
                 SirTypeUplcGenerator.resolveFieldRepr(param, paramType) match
                     case Some(targetRepr) =>
-                        if SIRType.isSum(arg.sirType) && arg.representation
+                        // Diagnostic guards: a Sum-typed value with a Product (UplcConstr) repr
+                        // is a representation/type mismatch that previously caused subtle
+                        // runtime failures. Gated on debug to avoid crashing release builds —
+                        // if it triggers in release the downstream conversion will still fail
+                        // with a clearer LoweringException.
+                        if lctx.debug && SIRType.isSum(arg.sirType) && arg.representation
                                 .isInstanceOf[ProductCaseClassRepresentation.ProdUplcConstr]
                         then
                             throw LoweringException(
@@ -1072,7 +1090,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                               constr.anns.pos
                             )
                         val upcasted = arg.maybeUpcast(paramType, constr.anns.pos)
-                        if SIRType.isSum(upcasted.sirType) && upcasted.representation
+                        if lctx.debug && SIRType.isSum(upcasted.sirType) && upcasted.representation
                                 .isInstanceOf[ProductCaseClassRepresentation.ProdUplcConstr]
                         then
                             throw LoweringException(

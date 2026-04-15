@@ -1426,16 +1426,19 @@ class CekMachine(
             case VBuiltin(_, term, _)     => term()
             case VConstr(tag, args)       => Constr(tag, args.map(dischargeCekValue).toList)
             case VList(elems) =>
+                // Best-effort discharge: when every element discharges to a Constant, emit a
+                // Constant.List. If any element is non-constant (closure / partial), there is
+                // no faithful Constant.List representation, so fail explicitly rather than
+                // silently substituting `Bool(false)` (which can produce ill-typed terms and
+                // mask bugs).
                 val discharged = elems.map(dischargeCekValue)
-                Term.Const(
-                  Constant.List(
-                    DefaultUni.BuiltinValue,
-                    discharged.map {
-                        case Term.Const(c, _) => c
-                        case other => Constant.Bool(false) // placeholder for non-constant terms
-                    }
-                  )
-                )
+                val constants = discharged.collect { case Term.Const(c, _) => c }
+                if constants.length != discharged.length then
+                    throw new IllegalStateException(
+                      s"VList contains non-constant elements; cannot discharge to a Constant.List " +
+                          s"(${discharged.length} elements, ${constants.length} are constants)"
+                    )
+                Term.Const(Constant.List(DefaultUni.BuiltinValue, constants))
     }
 
     private def spendBudget(

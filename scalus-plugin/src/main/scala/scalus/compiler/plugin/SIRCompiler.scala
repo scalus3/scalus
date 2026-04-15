@@ -3304,7 +3304,6 @@ final class SIRCompiler(
             // toDefaultTypeVarRepr[A](x) — convert to defaultTypeVarRepresentation
             case Apply(TypeApply(f, targs), List(arg))
                 if f.symbol == toDefaultTypeVarReprMethod && targs.size == 1 =>
-                println(s"PLUGIN: intercepted toDefaultTypeVarRepr")
                 compileToDefaultTypeVarRepr(env, targs, arg, tree)
             // Generic Apply
             case a @ Apply(pf @ TypeApply(f, targs), args) =>

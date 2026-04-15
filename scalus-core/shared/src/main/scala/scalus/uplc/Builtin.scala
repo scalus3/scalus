@@ -583,19 +583,13 @@ class CardanoBuiltins(
     /*
     unConstrData : [ data ] -> pair(integer, list(data))
      */
-    private var _unConstrDataCount = 0
     val UnConstrData: BuiltinRuntime =
         mkMeaning(
           DefaultUni.Data ->: DefaultUni.Pair(Integer, DefaultUni.List(DefaultUni.Data)),
           (_: Logger, args: Seq[CekValue]) =>
-              _unConstrDataCount += 1
               args(0) match
                   case VCon(Constant.Data(Data.Constr(i, ls))) =>
                       VCon(Constant.Pair(asConstant(i), asConstant(ls.toScalaList)))
-                  case v @ VConstr(tag, fields) =>
-                      throw new RuntimeException(
-                        s"UnConstrData #${_unConstrDataCount} received VConstr($tag, ${fields.mkString(",")})."
-                      )
                   case _ => throw new DeserializationError(DefaultFun.UnConstrData, args(0))
           ,
           builtinCostModel.unConstrData
