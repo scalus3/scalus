@@ -27,11 +27,6 @@ class LoweringContext(
     var enclosingLambdaParams: List[IdentifiableLoweredValue] = List.empty,
     val intrinsicModules: Map[String, Module] = Map.empty,
     val supportModules: Map[String, Module] = Map.empty,
-    /** When true, List[BigInt] etc. use native UPLC element storage (SumBuiltinList(Constant)).
-      * When false (default), all lists use Data element storage
-      * (SumBuiltinList(DataData/PackedData)).
-      */
-    val nativeListElements: Boolean = false,
 ) {
 
     private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]
@@ -121,7 +116,6 @@ class LoweringContext(
                       enclosingLambdaParams = this.enclosingLambdaParams,
                       intrinsicModules = this.intrinsicModules,
                       supportModules = this.supportModules,
-                      nativeListElements = this.nativeListElements,
                     )
                 else this
             given LoweringContext = effectiveLctx

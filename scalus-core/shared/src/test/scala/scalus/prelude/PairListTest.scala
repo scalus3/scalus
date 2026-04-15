@@ -14,8 +14,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairList.single(BigInt(1), BigInt(2)),
           (BigInt(1), BigInt(2)),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5324, steps = 1_469478)
+            compilerOptions -> ExUnits(memory = 5324, steps = 1_469478)
           )
         )
     }
@@ -26,8 +25,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairCons((BigInt(1), BigInt(2)), PairCons((BigInt(3), BigInt(4)), PairNil)),
           PairCons((BigInt(3), BigInt(4)), PairNil),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 2296, steps = 575380)
+            compilerOptions -> ExUnits(memory = 2296, steps = 575380)
           )
         )
     }
@@ -38,8 +36,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairList.empty[BigInt, BigInt],
           true,
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 1664, steps = 397717)
+            compilerOptions -> ExUnits(memory = 1664, steps = 397717)
           )
         )
         assertEvalWithBudgets(
@@ -47,8 +44,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
           PairList.single(BigInt(1), BigInt(2)),
           false,
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 1664, steps = 397717)
+            compilerOptions -> ExUnits(memory = 1664, steps = 397717)
           )
         )
     }

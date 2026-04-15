@@ -45,9 +45,11 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
 
     protected given Options = compilerOptions
 
-    /** Compiler options with nativeListElements enabled. */
+    /** Alias retained for compatibility; same as `compilerOptions` since the `nativeListElements`
+      * flag was removed in favor of per-type `@UplcRepr` annotations.
+      */
     protected lazy val nativeOpts: Options =
-        compilerOptions.copy(nativeListElements = true)
+        compilerOptions
 
     /** Default PlutusVM - can be overridden by subclasses */
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
@@ -187,8 +189,7 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
     /** Assert that code evaluates to expected value under multiple compiler option configurations.
       *
       * Compiles the code once, then re-lowers with each `Options` and asserts the corresponding
-      * budget. Useful for testing the same code under different lowering configurations (e.g.,
-      * `nativeListElements` enabled/disabled).
+      * budget. Useful for testing the same code under different lowering configurations.
       *
       * @param budgets
       *   list of (Options, ExUnits) pairs to test

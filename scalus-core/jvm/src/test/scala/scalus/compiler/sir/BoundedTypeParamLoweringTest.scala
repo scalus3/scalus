@@ -121,8 +121,7 @@ class BoundedTypeParamLoweringTest extends AnyFunSuite {
           compiled,
           generateErrorTraces = true,
           intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
-          supportModules = IntrinsicResolver.defaultSupportModules,
-          nativeListElements = false
+          supportModules = IntrinsicResolver.defaultSupportModules
         )
         lowering.lower()
     }
@@ -176,8 +175,7 @@ class BoundedTypeParamLoweringTest extends AnyFunSuite {
           compiled,
           generateErrorTraces = true,
           intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
-          supportModules = IntrinsicResolver.defaultSupportModules,
-          nativeListElements = false
+          supportModules = IntrinsicResolver.defaultSupportModules
         )
         lowering.lower()
     }

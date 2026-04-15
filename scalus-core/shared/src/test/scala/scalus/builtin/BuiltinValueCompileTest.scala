@@ -484,8 +484,7 @@ class BuiltinValueCompileTest extends AnyFunSuite {
             }
         }
         given opts: scalus.compiler.Options = scalus.compiler.Options(
-          targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
-          nativeListElements = false
+          targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering
         )
         val uplc = sir.toUplc()
         // Build the list as UPLC terms - list elements are in Data representation

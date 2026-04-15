@@ -16,8 +16,7 @@ class SirToUplcV3Lowering(
     targetLanguage: Language = Language.PlutusV3,
     targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     intrinsicModules: Map[String, Module] = Map.empty,
-    supportModules: Map[String, Module] = Map.empty,
-    nativeListElements: Boolean = false
+    supportModules: Map[String, Module] = Map.empty
 ) {
 
     private var _lastLoweredValue: Option[LoweredValue] = None
@@ -108,8 +107,7 @@ class SirToUplcV3Lowering(
           generateErrorTraces = generateErrorTraces,
           debug = debug,
           intrinsicModules = intrinsicModules,
-          supportModules = supportModules,
-          nativeListElements = nativeListElements
+          supportModules = supportModules
         )
         ScalusRuntime.initContext(retval)
         retval
@@ -134,7 +132,6 @@ object SirToUplcV3Lowering {
           targetLanguage = options.targetLanguage,
           targetProtocolVersion = options.targetProtocolVersion,
           intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
-          supportModules = IntrinsicResolver.defaultSupportModules,
-          nativeListElements = options.nativeListElements
+          supportModules = IntrinsicResolver.defaultSupportModules
         )
 }

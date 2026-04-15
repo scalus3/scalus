@@ -1139,69 +1139,6 @@ case class LambdaRepresentation(
                         case tvr: TypeVarRepresentation if !tvr.isBuiltin =>
                             lctx.typeGenerator(argumentType)
                                 .defaultTypeVarReperesentation(argumentType)
-                        case SumCaseClassRepresentation.SumBuiltinList(innerRepr)
-                            if lctx.nativeListElements
-                                && SumCaseClassRepresentation.SumBuiltinList
-                                    .retrieveListElementType(argumentType)
-                                    .isDefined =>
-                            val declaredElemType =
-                                SumCaseClassRepresentation.SumBuiltinList
-                                    .retrieveListElementType(declaredParamType)
-                                    .getOrElse(SIRType.FreeUnificator)
-                            val argElemType =
-                                SumCaseClassRepresentation.SumBuiltinList
-                                    .retrieveListElementType(argumentType)
-                                    .get
-                            val resolvedElemRepr = resolve(declaredElemType, argElemType, innerRepr)
-                            resolvedElemRepr match
-                                case _: ProductCaseClassRepresentation.ProdUplcConstr |
-                                    _: SumCaseClassRepresentation.SumUplcConstr =>
-                                    // UplcConstr element → whole list is SumUplcConstr
-                                    lctx.typeGenerator(argumentType)
-                                        .defaultRepresentation(argumentType)
-                                case _ =>
-                                    SumCaseClassRepresentation.SumBuiltinList(resolvedElemRepr)
-                        case SumCaseClassRepresentation.SumPairBuiltinList(keyRepr, valRepr)
-                            if lctx.nativeListElements
-                                && SumCaseClassRepresentation.SumBuiltinList
-                                    .retrieveListElementType(argumentType)
-                                    .exists(
-                                      ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2
-                                    ) =>
-                            val declaredElemType =
-                                SumCaseClassRepresentation.SumBuiltinList
-                                    .retrieveListElementType(declaredParamType)
-                                    .getOrElse(SIRType.FreeUnificator)
-                            val argElemType =
-                                SumCaseClassRepresentation.SumBuiltinList
-                                    .retrieveListElementType(argumentType)
-                                    .get
-                            val resolvedElem = resolve(
-                              declaredElemType,
-                              argElemType,
-                              ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valRepr)
-                            )
-                            resolvedElem match
-                                case ProductCaseClassRepresentation.ProdBuiltinPair(rk, rv) =>
-                                    SumCaseClassRepresentation.SumPairBuiltinList(rk, rv)
-                                case _ =>
-                                    SumCaseClassRepresentation.SumPairBuiltinList
-                                        .fromElementType(argElemType, pos)
-                        case ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
-                            if lctx.nativeListElements
-                                && ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(
-                                  argumentType
-                                ) =>
-                            val (declFst, declSnd) =
-                                ProductCaseClassRepresentation.ProdBuiltinPair
-                                    .extractPairComponentTypes(declaredParamType)
-                            val (argFst, argSnd) =
-                                ProductCaseClassRepresentation.ProdBuiltinPair
-                                    .extractPairComponentTypes(argumentType)
-                            ProductCaseClassRepresentation.ProdBuiltinPair(
-                              resolve(declFst, argFst, fstRepr),
-                              resolve(declSnd, argSnd, sndRepr)
-                            )
                         case suc: SumCaseClassRepresentation.SumUplcConstr =>
                             // Canonical repr is SumUplcConstr — rebuild for concrete type.
                             // Delegate to the type generator's defaultRepresentation, which for
@@ -1379,7 +1316,7 @@ object PrimitiveRepresentation {
   *   - Transparent: builtin UPLC type variable, can be freely used in any representation
   *   - Fixed: Scala type variable with native representation
   *   - Fixed: Scala type variable that flows into list element position, uses Data representation
-  *     when nativeListElements = false
+  *     (explicit per-element representation requires an `@UplcRepr` annotation).
   */
 case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValueRepresentation {
 
