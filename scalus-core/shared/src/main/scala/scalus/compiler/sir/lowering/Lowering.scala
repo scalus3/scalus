@@ -536,6 +536,7 @@ object Lowering {
         else if isTypeProxyApp(app) then lowerTypeProxy(app)
         else if isTypeProxyReprApp(app) then lowerTypeProxyRepr(app)
         else if isToDefaultTypeVarReprApp(app) then lowerToDefaultTypeVarRepr(app)
+        else if isUnboxedNilApp(app) then lowerUnboxedNil(app, optTargetType)
         else if LoweringEq.isEqualsReprApp(app) then LoweringEq.lowerEqualsRepr(app)
         // Enabled globally: generateEqualsForRepr falls back to generateDataEquals (== equalsData)
         // for non-UplcConstr types, so semantically matches the Eq.derived expansion.
@@ -548,6 +549,8 @@ object Lowering {
     private val TypeProxyReprName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxyRepr"
     private val ToDefaultTypeVarReprName =
         "scalus.compiler.intrinsics.IntrinsicHelpers$.toDefaultTypeVarRepr"
+    private val UnboxedNilName =
+        "scalus.cardano.onchain.plutus.prelude.List$.unboxedNil"
 
     private def isTypeProxyApp(app: SIR.Apply): Boolean = app.f match
         case SIR.ExternalVar(_, name, _, _) => name == TypeProxyName
@@ -560,6 +563,65 @@ object Lowering {
     private def isToDefaultTypeVarReprApp(app: SIR.Apply): Boolean = app.f match
         case SIR.ExternalVar(_, name, _, _) => name == ToDefaultTypeVarReprName
         case _                              => false
+
+    private def isUnboxedNilApp(app: SIR.Apply): Boolean = app.f match
+        case SIR.ExternalVar(_, name, _, _) => name == UnboxedNilName
+        case SIR.Var(name, _, _)            => name == UnboxedNilName
+        case _                              => false
+
+    /** Direct lowering of `List.unboxedNil[A]()`. The plugin's SIR for a `def f[A]: T` is
+      * polymorphic and typed as `List[Nothing]` inside the body (accurate for Scala's covariant
+      * List, but not what UPLC needs — UPLC list constants are typed). Intercepting at the call
+      * site lets us read the concrete `List[A]` from `app.tp` and build the right `Constant.List`
+      * directly, so the API actually delivers on its "unboxed" promise.
+      */
+    private def lowerUnboxedNil(
+        app: SIR.Apply,
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
+        import SumCaseClassRepresentation.SumBuiltinList
+        val pos = app.anns.pos
+        // Prefer app.tp (Scala-plugin-instantiated result type); fall back to optTargetType.
+        // `retrieveListElementType` unwraps Annotated / TypeLambda / TypeProxy.
+        val (listType, elemType) =
+            SumBuiltinList.retrieveListElementType(app.tp).map(app.tp -> _) match
+                case Some(r) => r
+                case None =>
+                    optTargetType
+                        .flatMap(t => SumBuiltinList.retrieveListElementType(t).map(t -> _))
+                        .getOrElse(
+                          throw LoweringException(
+                            s"lowerUnboxedNil: expected a concrete List[A] target; got app.tp=${app.tp.show}",
+                            pos
+                          )
+                        )
+        val elemRepr =
+            typegens.SirTypeUplcGenerator(elemType).defaultRepresentation(elemType)
+        elemRepr match
+            case _: SumCaseClassRepresentation.SumUplcConstr |
+                _: ProductCaseClassRepresentation.ProdUplcConstr =>
+                // Constr-encoded element → re-enter the normal Nil path, which the
+                // SumCaseUplcConstr generator handles via its genConstr. The Nil-special-case
+                // at the top of lowerSIR swaps in `listType` via `optTargetType`.
+                val nilConstr = SIR.Constr(
+                  SIRType.List.NilConstr.name,
+                  SIRType.List.dataDecl,
+                  scala.Nil,
+                  SIRType.List.Nil,
+                  app.anns
+                )
+                lowerSIR(nilConstr, Some(listType))
+            case _ if typegens.SirTypeUplcGenerator.isPrimitiveElementType(elemType) =>
+                lvTypedNil(
+                  pos,
+                  elemType,
+                  listType,
+                  SumBuiltinList(PrimitiveRepresentation.Constant)
+                )
+            case _ =>
+                // Data-element fallback — same result as `List.empty[A]`.
+                lvDataNil(pos, listType, SumBuiltinList(SumCaseClassRepresentation.DataData))
+    }
 
     /** Type-only cast — changes SIR type, keeps representation from the lowered argument. */
     private def lowerTypeProxy(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
