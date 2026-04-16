@@ -158,6 +158,7 @@ object UplcConstrListReprRules {
         lctx: LoweringContext
     ): LoweredValueRepresentation =
         outTp match
+            case SIRType.TypeLambda(_, body) => sameListReturnRepr(body, inRepr, lctx)
             case SIRType.Fun(argTp, retTp) =>
                 val argRepr =
                     lctx.typeGenerator(argTp).defaultRepresentation(argTp)(using lctx)
@@ -166,6 +167,24 @@ object UplcConstrListReprRules {
             case _ => inRepr
 
     val sameListRule: ReprRule = (outTp, inRepr, lctx) => sameListReturnRepr(outTp, inRepr, lctx)
+
+    /** For append-like operations: the second arg is also a list of the same type, so use inRepr
+      * for the arg (instead of defaultRepresentation on the original Fixed TypeVar type).
+      */
+    private def appendListReturnRepr(
+        outTp: SIRType,
+        inRepr: LoweredValueRepresentation,
+        lctx: LoweringContext
+    ): LoweredValueRepresentation =
+        outTp match
+            case SIRType.TypeLambda(_, body) => appendListReturnRepr(body, inRepr, lctx)
+            case SIRType.Fun(_, retTp) =>
+                val retRepr = sameListReturnRepr(retTp, inRepr, lctx)
+                LambdaRepresentation(outTp, InOutRepresentationPair(inRepr, retRepr))
+            case _ => inRepr
+
+    val appendListRule: ReprRule = (outTp, inRepr, lctx) =>
+        appendListReturnRepr(outTp, inRepr, lctx)
 
     val rules: Map[String, ReprRule] = Map(
       "isEmpty" -> isEmptyRule,
@@ -179,7 +198,8 @@ object UplcConstrListReprRules {
       // contains omitted — equalsRepr handles comparison in intrinsic body
       "length" -> scalarRule,
       "reverse" -> sameListRule,
-      "append" -> sameListRule,
+      "append" -> appendListRule,
+      "appendedAll" -> appendListRule,
       "drop" -> sameListRule,
       "prepended" -> sameListRule,
       "dropRight" -> sameListRule,

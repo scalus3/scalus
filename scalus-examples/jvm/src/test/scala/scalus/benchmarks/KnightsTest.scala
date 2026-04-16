@@ -68,12 +68,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // After @UplcRepr(UplcConstr) annotation on KnightsTest Queue pipeline,
-                // every depthSearch call converts the UplcConstr queue to SumBuiltinList(Data)
-                // because the callee's lambda signature uses the type's default (Data) repr.
+                // appendedAll intrinsic added: eliminates Data conversion in appendAllFront.
                 // Pre-annotation baseline: mem=142_291_986, steps=30_322_212_276.
-                // TODO: honor param-level @UplcRepr annotations at lambda-binding lowering.
-                ExUnits(memory = 179036806L, steps = 39324883120L)
+                ExUnits(memory = 136862522L, steps = 28815197025L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -174,9 +171,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
+                // appendedAll intrinsic added: eliminates Data conversion in appendAllFront.
                 // Pre-annotation baseline: mem=447_798_345, steps=96_701_055_855.
-                // See 4x4 note above — @UplcRepr lambda-param regression pending.
-                ExUnits(memory = 958214209L, steps = 221154075116L)
+                ExUnits(memory = 515251353L, steps = 112661465813L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -278,9 +275,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
+                // appendedAll intrinsic added: eliminates Data conversion in appendAllFront.
                 // Pre-annotation baseline: mem=856_547_657, steps=186_040_711_969.
-                // See 4x4 note above — @UplcRepr lambda-param regression pending.
-                ExUnits(memory = 2502319610L, steps = 586101874604L)
+                ExUnits(memory = 976937038L, steps = 214824654054L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>

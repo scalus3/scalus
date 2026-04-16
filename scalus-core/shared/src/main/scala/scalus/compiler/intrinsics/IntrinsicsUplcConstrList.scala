@@ -78,6 +78,9 @@ object IntrinsicsUplcConstrList {
     def append[A](self: List[A], other: List[A]): List[A] =
         UplcConstrListOperations.append(self, other)
 
+    def appendedAll[A](self: List[A], other: List[A]): List[A] =
+        UplcConstrListOperations.append(self, other)
+
     def drop[A](self: List[A], n: BigInt): List[A] =
         UplcConstrListOperations.drop(self, n)
 
