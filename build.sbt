@@ -15,7 +15,7 @@ val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
 val cardanoClientLibVersion = "0.7.1"
-val yaciVersion = "0.4.0"
+val yaciVersion = "0.4.1"
 val yaciCardanoTestVersion = "0.1.0"
 val nobleCurvesVersion = "1.9.7"
 val scalatestVersion = "3.2.20"
@@ -353,7 +353,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / testOptions += Tests.Argument("-oF"),
       Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark"),
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test,
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
@@ -476,8 +476,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion,
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.1",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.1",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.2",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.2",
       // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
       Compile / sourceGenerators += Def.task {
           val baseDir =
@@ -505,7 +505,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
-      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.21",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.22",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test
     )
     .jsSettings(
@@ -569,7 +569,7 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.1",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.2",
       publish / skip := true
     )
     .jvmSettings(Test / fork := true)
@@ -691,7 +691,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.21",
+      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.22",
       inConfig(Test)(PluginDependency),
       publish / skip := false
     )
@@ -801,7 +801,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.83" % "test",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
