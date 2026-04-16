@@ -495,8 +495,17 @@ object Lowering {
                     bindings match
                         case List(Binding(name, tp, rhs)) =>
                             lctx.zCombinatorNeeded = true
+                            // Use `rhs.tp` instead of the binding's declared `tp`: for
+                            // a recursive LamAbs, `rhs.tp = Fun(param.tp, term.tp)` preserves
+                            // per-param `@UplcRepr` annotations (via LamAbs.param.tp), whereas
+                            // `tp` (selfTypeFromDef) only carries return-position annotations.
+                            // Using `tp` here would compute the self-reference repr from an
+                            // unannotated type, then `loweredRhs.toRepresentation(rhsRepr)`
+                            // below would down-convert the correctly-annotated lambda to it,
+                            // forcing spurious Data<->UplcConstr conversions at every
+                            // recursive call site.
                             val rhsRepr =
-                                lctx.typeGenerator(rhs.tp).defaultRepresentation(tp)
+                                lctx.typeGenerator(rhs.tp).defaultRepresentation(rhs.tp)
                             val newVar = VariableLoweredValue(
                               id = lctx.uniqueVarName(name),
                               name = name,

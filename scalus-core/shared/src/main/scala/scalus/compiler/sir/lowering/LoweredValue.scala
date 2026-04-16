@@ -61,7 +61,10 @@ trait LoweredValue {
     def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        lctx.typeGenerator(sirType).toRepresentation(this, representation, pos)
+        if representation == this.representation then this
+        else if this.representation.isCompatibleOn(sirType, representation, pos) then
+            RepresentationProxyLoweredValue(this, representation, pos)
+        else lctx.typeGenerator(sirType).toRepresentation(this, representation, pos)
     }
 
     def upcastOne(targetType: SIRType, pos: SIRPosition)(using
@@ -2159,9 +2162,14 @@ object LoweredValue {
                         )
 
                     }
-                    val resRepresentation = resRepr.getOrElse(
-                      lctx.typeGenerator(resType).defaultRepresentation(resType)
-                    )
+                    // Prefer `applied.representation` — which carries annotation-derived
+                    // per-param reprs from `fRepresentationPair.outRepr` — over
+                    // `defaultRepresentation(resType)`, which is computed from the declared
+                    // Scala type and may lack per-param `@UplcRepr` annotations. The default
+                    // otherwise inserts eager alignment conversions at every partial
+                    // application — the root cause of KnightsTest's 34k whole-queue
+                    // conversions in the annotated depthSearch loop.
+                    val resRepresentation = resRepr.getOrElse(applied.representation)
                     val retval = alignTypeArgumentsAndRepresentations(
                       applied,
                       resType,

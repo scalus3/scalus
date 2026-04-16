@@ -422,20 +422,36 @@ object CommonSubexpressionElimination {
     private val partialBuiltinVarPrefixes: Set[String] =
         shapePartialBuiltins.map(fn => s"__$fn")
 
-    /** Whether a term references any shape-partial builtin in an evaluated position. Detects both
-      * direct `Builtin(fn)` references and variable references created by
-      * [[ForcedBuiltinsExtractor]] (e.g., `__HeadList`). Does not recurse into LamAbs or Delay
-      * bodies (those are deferred).
+    /** Whether a term references any shape-partial builtin in an evaluated position.
+      *
+      * Detects three cases:
+      *   - Direct `Builtin(fn)` references for shape-partial builtins.
+      *   - Variable references created by [[ForcedBuiltinsExtractor]] (e.g., `__HeadList`).
+      *   - Applications `Apply(Var(name), arg)` where `name` is a user-defined helper (i.e., not a
+      *     pure-builtin-extractor name and not a `__cse_` wrapper). Such helpers may internally
+      *     reference partial builtins — e.g., a `List.head` helper transitively invokes
+      *     `__HeadList`. Without tracing through the helper's body we cannot prove it total, so we
+      *     conservatively assume it is partial when crossing a conditional boundary. This is only
+      *     consulted inside `unsafeCaseCrossing` checks; it does not disable CSE in non-conditional
+      *     contexts.
+      *
+      * Does not recurse into LamAbs or Delay bodies (those are deferred, so the builtin there
+      * doesn't fire at the extraction point).
       */
     private[transform] def referencesPartialBuiltin(t: Term): Boolean = t match
         case Builtin(fn, _) => shapePartialBuiltins.contains(fn)
         case Var(NamedDeBruijn(name, _), _) =>
             partialBuiltinVarPrefixes.exists(name.startsWith)
-        case _: Const | _: Error  => false
-        case _: LamAbs | _: Delay => false
-        case Apply(f, arg, _)     => referencesPartialBuiltin(f) || referencesPartialBuiltin(arg)
-        case Force(inner, _)      => referencesPartialBuiltin(inner)
-        case Constr(_, args, _)   => args.exists(referencesPartialBuiltin)
+        case _: Const | _: Error                                                     => false
+        case _: LamAbs | _: Delay                                                    => false
+        case Apply(Var(NamedDeBruijn(name, _), _), arg, _) if !name.startsWith("__") =>
+            // User-defined helper — may transitively call a partial builtin in its body.
+            // Be conservative: treat the application as potentially partial, irrespective
+            // of what the argument contains.
+            true
+        case Apply(f, arg, _)   => referencesPartialBuiltin(f) || referencesPartialBuiltin(arg)
+        case Force(inner, _)    => referencesPartialBuiltin(inner)
+        case Constr(_, args, _) => args.exists(referencesPartialBuiltin)
         case Case(arg, cases, _) =>
             referencesPartialBuiltin(arg) || cases.exists(referencesPartialBuiltin)
 
