@@ -17,7 +17,6 @@ case class Options(
     cceEnabled: Boolean = false,
     debugLevel: Int = SIRDefaultOptions.debugLevel,
     debug: Boolean = false,
-    nativeListElements: Boolean = false,
     /** When true, wraps the compiled UPLC program in `[(lam _ body) (con string "S")]` so offchain
       * tooling can identify the script as Scalus-generated. Adds ~6 bytes to the serialized script.
       * Enabling or disabling this changes the script hash, so do not toggle for an already-deployed

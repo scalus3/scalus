@@ -30,8 +30,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           BigInt(0).absolute,
           BigInt(0),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 1802, steps = 391986)
+            compilerOptions -> ExUnits(memory = 1802, steps = 391986)
           )
         )
 
@@ -40,8 +39,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           BigInt(5).absolute,
           BigInt(5),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 1802, steps = 391986)
+            compilerOptions -> ExUnits(memory = 1802, steps = 391986)
           )
         )
 
@@ -50,8 +48,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           BigInt(-7).absolute,
           BigInt(7),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 2204, steps = 557194)
+            compilerOptions -> ExUnits(memory = 2204, steps = 557194)
           )
         )
 
@@ -65,16 +62,14 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           min(BigInt(1), BigInt(2)),
           BigInt(1),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 439986)
+            compilerOptions -> ExUnits(memory = 2102, steps = 439986)
           )
         )
         assertEvalWithBudgets(
           min(BigInt(-1), BigInt(-5)),
           BigInt(-5),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 439986)
+            compilerOptions -> ExUnits(memory = 2102, steps = 439986)
           )
         )
 
@@ -88,16 +83,14 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           max(BigInt(1), BigInt(2)),
           BigInt(2),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 439986)
+            compilerOptions -> ExUnits(memory = 2102, steps = 439986)
           )
         )
         assertEvalWithBudgets(
           max(BigInt(-1), BigInt(-5)),
           BigInt(-1),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 439986)
+            compilerOptions -> ExUnits(memory = 2102, steps = 439986)
           )
         )
 
@@ -138,24 +131,21 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           gcd(BigInt(0), BigInt(0)),
           BigInt(0),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1208368)
+            compilerOptions -> ExUnits(memory = 6104, steps = 1208368)
           )
         )
         assertEvalWithBudgets(
           gcd(BigInt(12), BigInt(18)),
           BigInt(6),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15713, steps = 3525304)
+            compilerOptions -> ExUnits(memory = 15713, steps = 3525304)
           )
         )
         assertEvalWithBudgets(
           gcd(BigInt(-12), BigInt(18)),
           BigInt(6),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 15713, steps = 3525304)
+            compilerOptions -> ExUnits(memory = 15713, steps = 3525304)
           )
         )
 
@@ -170,24 +160,21 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           BigInt(0).sqRoot,
           BigInt(0),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1199872)
+            compilerOptions -> ExUnits(memory = 6104, steps = 1199872)
           )
         )
         assertEvalWithBudgets(
           BigInt(1).sqRoot,
           BigInt(1),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1199872)
+            compilerOptions -> ExUnits(memory = 6104, steps = 1199872)
           )
         )
         assertEvalWithBudgets(
           BigInt(17).sqRoot,
           BigInt(4),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 35665, steps = 12811018)
+            compilerOptions -> ExUnits(memory = 35665, steps = 12811018)
           )
         )
         assertEvalFailsWithMessage[RequirementError]("sqrt: negative radicand")(BigInt(-1).sqRoot)
@@ -198,24 +185,21 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           sqrt(BigInt("1000000000000")), // 10^12
           BigInt("1000000"),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 37969, steps = 13421696)
+            compilerOptions -> ExUnits(memory = 37969, steps = 13421696)
           )
         )
         assertEvalWithBudgets(
           sqrt(BigInt("1000000000000000000000000000000")), // 10^30
           BigInt("1000000000000000"),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 42676, steps = 14820672)
+            compilerOptions -> ExUnits(memory = 42676, steps = 14820672)
           )
         )
         assertEvalWithBudgets(
           sqrt(BigInt("1000000000000000000000000000000000000000000000000000000000000")), // 10^60
           BigInt("1000000000000000000000000000000"),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 55213, steps = 18370167)
+            compilerOptions -> ExUnits(memory = 55213, steps = 18370167)
           )
         )
 
@@ -224,56 +208,49 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           pow(BigInt(0), BigInt(0)),
           BigInt(1),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1209821)
+            compilerOptions -> ExUnits(memory = 6104, steps = 1209821)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(2), BigInt(0)),
           BigInt(1),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 6104, steps = 1209821)
+            compilerOptions -> ExUnits(memory = 6104, steps = 1209821)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(2), BigInt(3)),
           BigInt(8),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18928, steps = 4865297)
+            compilerOptions -> ExUnits(memory = 18928, steps = 4865297)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(-2), BigInt(3)),
           BigInt(-8),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18928, steps = 4865297)
+            compilerOptions -> ExUnits(memory = 18928, steps = 4865297)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(7), BigInt(2)),
           BigInt(49),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18124, steps = 4545136)
+            compilerOptions -> ExUnits(memory = 18124, steps = 4545136)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(513), BigInt(3)),
           BigInt(135005697),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 18928, steps = 4865297)
+            compilerOptions -> ExUnits(memory = 18928, steps = 4865297)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(2), BigInt(42)),
           BigInt("4398046511104"),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 42164, steps = 11215766)
+            compilerOptions -> ExUnits(memory = 42164, steps = 11215766)
           )
         )
 
@@ -282,48 +259,42 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           exp2(BigInt(-2)),
           BigInt(0),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 2102, steps = 441439)
+            compilerOptions -> ExUnits(memory = 2102, steps = 441439)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(0)),
           BigInt(1),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5309, steps = 3758628)
+            compilerOptions -> ExUnits(memory = 5309, steps = 3758628)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(1)),
           BigInt(2),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5309, steps = 3758628)
+            compilerOptions -> ExUnits(memory = 5309, steps = 3758628)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(4)),
           BigInt(16),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5309, steps = 3758628)
+            compilerOptions -> ExUnits(memory = 5309, steps = 3758628)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(42)),
           BigInt("4398046511104"),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5309, steps = 3758628)
+            compilerOptions -> ExUnits(memory = 5309, steps = 3758628)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(256)),
           BigInt("115792089237316195423570985008687907853269984665640564039457584007913129639936"),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5319, steps = 3939663)
+            compilerOptions -> ExUnits(memory = 5319, steps = 3939663)
           )
         )
 
@@ -374,47 +345,41 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           log(BigInt(10), base = BigInt(2)),
           BigInt(3),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 16619, steps = 3944756)
+            compilerOptions -> ExUnits(memory = 16619, steps = 3944756)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(42), base = BigInt(2)),
           BigInt(5),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 23829, steps = 5805710)
+            compilerOptions -> ExUnits(memory = 23829, steps = 5805710)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(42), base = BigInt(3)),
           BigInt(3),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 16619, steps = 3944756)
+            compilerOptions -> ExUnits(memory = 16619, steps = 3944756)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(5), base = BigInt(0)),
           BigInt(0),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 2702, steps = 535986)
+            compilerOptions -> ExUnits(memory = 2702, steps = 535986)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(4), base = BigInt(4)),
           BigInt(1),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 9409, steps = 2083802)
+            compilerOptions -> ExUnits(memory = 9409, steps = 2083802)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(4), base = BigInt(42)),
           BigInt(0),
           Seq(
-            compilerOptions
-                .copy(nativeListElements = false) -> ExUnits(memory = 5804, steps = 1153325)
+            compilerOptions -> ExUnits(memory = 5804, steps = 1153325)
           )
         )

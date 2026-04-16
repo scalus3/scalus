@@ -55,9 +55,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         val joinResult = assertSuccess(provider, joinTx, pricebetUtxo._1)
         assert(
-          joinResult.budget == (if Options.default.nativeListElements then
-                                    ExUnits(memory = 283109, steps = 83600763L)
-                                else ExUnits(memory = 167169, steps = 56931509))
+          joinResult.budget == (ExUnits(memory = 167169, steps = 56931509))
         )
     }
 
@@ -133,9 +131,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(beforeSlot)
         val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
         assert(
-          winResult.budget == (if Options.default.nativeListElements then
-                                   ExUnits(memory = 138020, steps = 45445020L)
-                               else ExUnits(memory = 111338, steps = 38469603))
+          winResult.budget == (ExUnits(memory = 111338, steps = 38469603))
         )
     }
 
@@ -196,9 +192,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(afterDeadlineSlot)
         val timeoutResult = assertSuccess(provider, timeoutTx, pricebetUtxo._1)
         assert(
-          timeoutResult.budget == (if Options.default.nativeListElements then
-                                       ExUnits(memory = 82541, steps = 25822388L)
-                                   else ExUnits(memory = 59239, steps = 20422879))
+          timeoutResult.budget == (ExUnits(memory = 59239, steps = 20422879))
         )
     }
 
@@ -242,9 +236,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(updateSlot)
         val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
         assert(
-          updateResult.budget == (if Options.default.nativeListElements then
-                                      ExUnits(memory = 127289, steps = 40543315L)
-                                  else ExUnits(memory = 86385, steps = 32321806))
+          updateResult.budget == (ExUnits(memory = 86385, steps = 32321806))
         )
     }
 

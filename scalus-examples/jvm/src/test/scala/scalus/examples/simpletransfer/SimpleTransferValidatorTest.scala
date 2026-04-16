@@ -41,9 +41,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (if Options.default.nativeListElements then
-                             ExUnits(memory = 415439, steps = 117747227L)
-                         else ExUnits(memory = 207398, steps = 66207117))
+          res.budget == (ExUnits(memory = 207398, steps = 66207117))
         )
     }
 
@@ -92,9 +90,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (if Options.default.nativeListElements then
-                             ExUnits(memory = 641073, steps = 181757908L)
-                         else ExUnits(memory = 362074, steps = 111702264))
+          res.budget == (ExUnits(memory = 362074, steps = 111702264))
         )
     }
 
@@ -124,9 +120,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (if Options.default.nativeListElements then
-                             ExUnits(memory = 247724, steps = 70274193L)
-                         else ExUnits(memory = 117998, steps = 39202644))
+          res.budget == (ExUnits(memory = 117998, steps = 39202644))
         )
     }
 

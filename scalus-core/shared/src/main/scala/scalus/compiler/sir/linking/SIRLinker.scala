@@ -42,7 +42,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
         mutable.LinkedHashMap.empty
     private val globalDataDecls: mutable.LinkedHashMap[String, DataDecl] =
         mutable.LinkedHashMap.empty
-    private val moduleDefsCache: mutable.Map[String, mutable.LinkedHashMap[String, SIR]] =
+    private val moduleDefsCache: mutable.Map[String, mutable.LinkedHashMap[String, Binding]] =
         mutable.LinkedHashMap.empty.withDefaultValue(mutable.LinkedHashMap.empty)
 
     private val debugLevel: Int = if options.debugLevel != 0 then options.debugLevel else 0
@@ -192,23 +192,32 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
         case other => other
 
     private def findAndLinkDefinition(
-        defs: collection.Map[String, SIR],
+        defs: collection.Map[String, Binding],
         fullName: String,
         tp: SIRType,
         srcPos: SIRPosition
     ): Boolean = {
         val found = defs.get(fullName)
-        for sir <- found do
+        for binding <- found do
             globalDefs.update(fullName, LinkingDefState.Linking)
-            val nSir = traverseAndLink(sir, srcPos)
-            // Preserve declared type if it contains annotations (e.g., @UplcRepr on return type).
-            // Only checks Fun/TypeLambda nesting — no cycle risk from SumCaseClass/CaseClass.
+            val nSir = traverseAndLink(binding.value, srcPos)
+            // Preserve declared type. Priority:
+            //   1. Call-site type if it carries @UplcRepr annotations — those reflect the
+            //      specific representation the caller asked for.
+            //   2. The module's plugin-computed `Binding.tp` — this is the method's declared
+            //      signature. Prefer it over `nSir.tp` because the body's `tp` can diverge
+            //      when the body is a `Constr` whose type got wrapped by `prependTypeLambda`
+            //      (e.g. for `def f[A]: T = Nothing-typed-body`, where `body.tp` ends up as
+            //      `∀A. T[Nothing]` but the binding's declared tp is the correct `∀A. T[A]`).
+            //   3. Otherwise fall through to `nSir.tp` at use site via `getOrElse` at line 77.
             def funContainsAnnotated(tp: SIRType): Boolean = tp match
                 case _: SIRType.Annotated => true
                 case SIRType.Fun(in, out) => funContainsAnnotated(in) || funContainsAnnotated(out)
                 case SIRType.TypeLambda(_, body) => funContainsAnnotated(body)
                 case _                           => false
-            val declTp = if funContainsAnnotated(tp) then Some(tp) else None
+            val declTp =
+                if funContainsAnnotated(tp) then Some(tp)
+                else Some(binding.tp)
             // TODO: research.  removing 'remove' triggers fail of  scalus.CompilerPluginTest. 'compile fieldAsData macro'
             globalDefs.remove(fullName)
             globalDefs.update(
@@ -247,7 +256,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
     private def retrieveModule(
         moduleName: String,
         srcPos: SIRPosition
-    ): Either[String, mutable.LinkedHashMap[String, SIR]] = {
+    ): Either[String, mutable.LinkedHashMap[String, Binding]] = {
         moduleDefsCache.get(moduleName) match
             case Some(defs) => Right(defs)
             case None =>
@@ -255,7 +264,7 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
                     case Some(module) =>
                         validateSIRVersion(module, moduleName, srcPos)
                         val defsMap = mutable.LinkedHashMap.from(
-                          module.defs.map(d => d.name -> d.value)
+                          module.defs.map(d => d.name -> d)
                         )
                         moduleDefsCache.put(moduleName, defsMap)
                         Right(defsMap)

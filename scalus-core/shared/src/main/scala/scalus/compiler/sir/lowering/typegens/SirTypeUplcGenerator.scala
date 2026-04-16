@@ -440,9 +440,9 @@ object SirTypeUplcGenerator {
                 case SIRType.TypeProxy(ref) if ref != null => elementReprFor(ref)
                 case _ =>
                     val gen = SirTypeUplcGenerator(elemType)
-                    if lctx.nativeListElements || !gen.canBeConvertedToData(elemType) then
-                        gen.defaultRepresentation(elemType)
-                    else gen.defaultDataRepresentation(elemType)
+                    if gen.canBeConvertedToData(elemType) then
+                        gen.defaultDataRepresentation(elemType)
+                    else gen.defaultRepresentation(elemType)
 
     def isPair(tp: SIRType): Boolean =
         SIRType.retrieveConstrDecl(tp) match {

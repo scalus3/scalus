@@ -68,13 +68,12 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                if options.nativeListElements then ExUnits(memory = 204281467, steps = 52963867280L)
                 // After @UplcRepr(UplcConstr) annotation on KnightsTest Queue pipeline,
                 // every depthSearch call converts the UplcConstr queue to SumBuiltinList(Data)
                 // because the callee's lambda signature uses the type's default (Data) repr.
                 // Pre-annotation baseline: mem=142_291_986, steps=30_322_212_276.
                 // TODO: honor param-level @UplcRepr annotations at lambda-binding lowering.
-                else ExUnits(memory = 477356635L, steps = 111356003952L)
+                ExUnits(memory = 477356635L, steps = 111356003952L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -175,11 +174,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                if Options.default.nativeListElements then
-                    ExUnits(memory = 598376876, steps = 146019618948L)
                 // Pre-annotation baseline: mem=447_798_345, steps=96_701_055_855.
                 // See 4x4 note above — @UplcRepr lambda-param regression pending.
-                else ExUnits(memory = 2759692478L, steps = 657469130277L)
+                ExUnits(memory = 2759692478L, steps = 657469130277L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -281,11 +278,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                if Options.default.nativeListElements then
-                    ExUnits(memory = 1238044719, steps = 297766687086L)
                 // Pre-annotation baseline: mem=856_547_657, steps=186_040_711_969.
                 // See 4x4 note above — @UplcRepr lambda-param regression pending.
-                else ExUnits(memory = 6978798279L, steps = 1669910420581L)
+                ExUnits(memory = 6978798279L, steps = 1669910420581L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>

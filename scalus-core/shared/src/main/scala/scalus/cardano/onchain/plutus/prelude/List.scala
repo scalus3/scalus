@@ -27,11 +27,12 @@ object List {
       */
     inline def empty[A]: List[A] = List.Nil
 
-    /** Creates an empty list with unboxed element representation.
+    /** Creates an empty list that opts `A` into its native UPLC element representation.
       *
-      * When `nativeListElements=true`, elements are stored in their native UPLC representation
-      * (Integer, ByteString, Data.Constr, etc.) instead of being boxed as Data. This avoids
-      * iData/unIData wrapping overhead.
+      * For primitive/pair elements (`BigInt`, `ByteString`, `BuiltinPair`, …) this avoids
+      * `iData`/`unIData` wrapping: the list is a `list<integer>`/`list<bytestring>`/… constant
+      * rather than a `list<data>`. For case-class elements annotated `@UplcRepr(UplcConstr)` —
+      * which aren't representable as UPLC constants — it falls back to a Constr-encoded list.
       *
       * Requires A to be a concrete type — fails at lowering time if A is a TypeVar, because the
       * element representation can't be determined for unknown types.
@@ -39,7 +40,7 @@ object List {
       * @tparam A
       *   Must be a concrete type (BigInt, ByteString, a case class, etc.)
       * @return
-      *   An empty list with unboxed element representation.
+      *   An empty list with the native element representation for `A`.
       */
     def unboxedNil[A]: List[A] = List.Nil
 

@@ -124,17 +124,7 @@ object NativeListReprRules {
     val containsRule: ReprRule = (outTp, _, lctx) =>
         lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
 
-    /** unboxedNil: creates empty list with native element repr */
-    val unboxedNilRule: ReprRule = (outTp, _, lctx) =>
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
-
-    /** Factory rules — for methods with no list argument (WildcardRepr). */
-    val factoryRules: Map[String, ReprRule] = Map(
-      "unboxedNil" -> unboxedNilRule
-    )
-
     val rules: Map[String, ReprRule] = Map(
-      "unboxedNil" -> unboxedNilRule,
       "isEmpty" -> isEmptyRule,
       "head" -> headRule,
       "tail" -> tailRule,
