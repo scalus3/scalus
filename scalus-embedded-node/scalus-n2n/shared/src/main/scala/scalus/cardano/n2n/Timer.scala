@@ -31,7 +31,9 @@ trait Timer {
       *
       * Implementations run `action` on a short-lived daemon-style thread or their platform
       * equivalent; callers are expected to keep the action small (e.g. `source.cancel()`).
-      * Exceptions thrown by the action are caught and discarded.
+      * Exceptions thrown by the action must be logged by the implementation (never silently eaten)
+      * so that a buggy scheduled action is debuggable via the log channel. See
+      * [[scalus.cardano.n2n.jvm.JvmTimer]] for the production policy.
       */
     def schedule(delay: FiniteDuration)(action: => Unit): Cancellable
 }
