@@ -605,7 +605,7 @@ object Lowering {
                           )
                         )
         val elemRepr =
-            typegens.SirTypeUplcGenerator(elemType).defaultRepresentation(elemType)
+            lctx.typeGenerator(elemType).defaultRepresentation(elemType)
         elemRepr match
             case _: SumCaseClassRepresentation.SumUplcConstr |
                 _: ProductCaseClassRepresentation.ProdUplcConstr =>
