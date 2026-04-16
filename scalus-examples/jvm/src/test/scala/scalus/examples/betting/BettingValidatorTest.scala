@@ -87,7 +87,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for initial minting")
         assert(
-          result.budget == (ExUnits(memory = 120744, steps = 39031173))
+          result.budget == (ExUnits(memory = 117444L, steps = 38503173L))
         )
 
     test("Verify that player2 can join an existing bet"):
@@ -162,7 +162,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for player2 joining spending")
         assert(
-          result.budget == (ExUnits(memory = 277648, steps = 95997579))
+          result.budget == (ExUnits(memory = 269284L, steps = 94647213L))
         )
 
     test("Verify that the oracle can announce winner and trigger payout"):
@@ -228,5 +228,5 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for announce winner spending")
         assert(
-          result.budget == (ExUnits(memory = 178067, steps = 60663559))
+          result.budget == (ExUnits(memory = 173903L, steps = 59985193L))
         )

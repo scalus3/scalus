@@ -28,19 +28,19 @@ class NaivePaymentSplitterValidatorTest
 
     private val expectedBudgets: Map[String, ExUnits] = Map(
       "success when payments are correctly split for a single payee" ->
-          (ExUnits(memory = 274117, steps = 87821430)),
+          (ExUnits(memory = 258885L, steps = 85391687L)),
       "success when payments are correctly split between 2 payees" ->
-          (ExUnits(memory = 435067, steps = 140928489)),
+          (ExUnits(memory = 411035L, steps = 137104186L)),
       "success when payments are correctly split between 3 payees" ->
-          (ExUnits(memory = 622959, steps = 205331495)),
+          (ExUnits(memory = 589527L, steps = 200016632L)),
       "success when split equally and remainder compensates fee - o1" ->
-          (ExUnits(memory = 622959, steps = 205331495)),
+          (ExUnits(memory = 589527L, steps = 200016632L)),
       "success when split equally and remainder compensates fee - o2" ->
-          (ExUnits(memory = 622959, steps = 205331495)),
+          (ExUnits(memory = 589527L, steps = 200016632L)),
       "success when split equally and remainder compensates fee - o3" ->
-          (ExUnits(memory = 622959, steps = 205331495)),
-      "success between 5 payees" -> (ExUnits(memory = 1089769, steps = 372135576)),
-      "success with multiple contract UTxOs" -> (ExUnits(memory = 765171, steps = 255990347))
+          (ExUnits(memory = 589527L, steps = 200016632L)),
+      "success between 5 payees" -> (ExUnits(memory = 1035737L, steps = 363551593L)),
+      "success with multiple contract UTxOs" -> (ExUnits(memory = 720675L, steps = 248893118L))
     )
 
     // Run all shared test cases

@@ -25,32 +25,14 @@ class OptimizedPaymentSplitterValidatorTest
     private val scriptHash = contract.script.scriptHash
 
     private val expectedRewardBudgets: Map[String, ExUnits] = Map(
-      "success when payments are correctly split for a single payee" -> ExUnits(
-        memory = 221177,
-        steps = 69891779
-      ),
-      "success when payments are correctly split between 2 payees" -> ExUnits(
-        memory = 304251,
-        steps = 97316541
-      ),
-      "success when payments are correctly split between 3 payees" -> ExUnits(
-        memory = 392023,
-        steps = 127076655
-      ),
-      "success when split equally and remainder compensates fee - o1" -> ExUnits(
-        memory = 392023,
-        steps = 127076655
-      ),
-      "success when split equally and remainder compensates fee - o2" -> ExUnits(
-        memory = 392023,
-        steps = 127076655
-      ),
-      "success when split equally and remainder compensates fee - o3" -> ExUnits(
-        memory = 392023,
-        steps = 127076655
-      ),
-      "success between 5 payees" -> ExUnits(memory = 581661, steps = 193602939),
-      "success with multiple contract UTxOs" -> ExUnits(memory = 525611, steps = 173861855)
+      "success when payments are correctly split for a single payee" -> ExUnits(memory = 210713L, steps = 68205413L),
+      "success when payments are correctly split between 2 payees" -> ExUnits(memory = 287355L, steps = 94594992L),
+      "success when payments are correctly split between 3 payees" -> ExUnits(memory = 368095L, steps = 123223923L),
+      "success when split equally and remainder compensates fee - o1" -> ExUnits(memory = 368095L, steps = 123223923L),
+      "success when split equally and remainder compensates fee - o2" -> ExUnits(memory = 368095L, steps = 123223923L),
+      "success when split equally and remainder compensates fee - o3" -> ExUnits(memory = 368095L, steps = 123223923L),
+      "success between 5 payees" -> ExUnits(memory = 541869L, steps = 187199841L),
+      "success with multiple contract UTxOs" -> ExUnits(memory = 491819L, steps = 168418757L)
     )
 
     private val expectedSpendBudget: ExUnits = ExUnits(memory = 61856, steps = 19449766)
@@ -65,7 +47,7 @@ class OptimizedPaymentSplitterValidatorTest
     test("Optimized: budget comparison with multiple UTxOs") {
         val tc = testCases.find(_.name.contains("multiple contract UTxOs")).get
         val (rewardBudget, spendBudget) = runTestCaseWithBudget(tc)
-        assert(rewardBudget == ExUnits(memory = 525611, steps = 173861855))
+        assert(rewardBudget == ExUnits(memory = 491819L, steps = 168418757L))
         assert(spendBudget == ExUnits(memory = 61856, steps = 19449766))
     }
 

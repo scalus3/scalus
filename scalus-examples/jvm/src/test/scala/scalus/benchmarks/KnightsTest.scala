@@ -73,7 +73,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                 // because the callee's lambda signature uses the type's default (Data) repr.
                 // Pre-annotation baseline: mem=142_291_986, steps=30_322_212_276.
                 // TODO: honor param-level @UplcRepr annotations at lambda-binding lowering.
-                ExUnits(memory = 477356635L, steps = 111356003952L)
+                ExUnits(memory = 179036806L, steps = 39324883120L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -176,7 +176,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 // Pre-annotation baseline: mem=447_798_345, steps=96_701_055_855.
                 // See 4x4 note above — @UplcRepr lambda-param regression pending.
-                ExUnits(memory = 2759692478L, steps = 657469130277L)
+                ExUnits(memory = 958214209L, steps = 221154075116L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -280,7 +280,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 // Pre-annotation baseline: mem=856_547_657, steps=186_040_711_969.
                 // See 4x4 note above — @UplcRepr lambda-param regression pending.
-                ExUnits(memory = 6978798279L, steps = 1669910420581L)
+                ExUnits(memory = 2502319610L, steps = 586101874604L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
