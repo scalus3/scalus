@@ -57,6 +57,7 @@ Scala Source → SIR (via compiler plugin) → UPLC (via SIR compiler) → Plutu
 | `scalus-examples/`                                     | Smart contract examples           | `scalusExamplesJVM`, `scalusExamplesJS`           |
 | `scalus-embedded-node/scalus-streaming-core/`          | Streaming engine + ADTs (core)    | `scalusStreamingCoreJVM`, `scalusStreamingCoreJS` |
 | `scalus-embedded-node/scalus-streaming-fs2/`           | fs2 adapter + `Fs2StreamingEmulator` | `scalusStreamingFs2JVM`, `scalusStreamingFs2JS` |
+| `scalus-embedded-node/scalus-n2n/`                     | Ouroboros N2N transport (mux, handshake, keep-alive) | `scalusN2nJVM`, `scalusN2nJS` |
 
 **JVM-only modules:**
 
@@ -69,6 +70,7 @@ Scala Source → SIR (via compiler plugin) → UPLC (via SIR compiler) → Plutu
 | `bloxbean-cardano-client-lib/`                 | Bloxbean CCL integration             | `scalus-bloxbean-cardano-client-lib`|
 | `scalus-cardano-ledger-it/`                    | Integration tests                    | `scalusCardanoLedgerIt`             |
 | `scalus-embedded-node/scalus-streaming-ox/`    | ox adapter + `OxStreamingEmulator`   | `scalusStreamingOx`                 |
+| `scalus-embedded-node/scalus-n2n-it/`          | N2N transport IT (yaci + preview)    | `scalusN2nIt`                       |
 | `bench/`                                       | JMH benchmarks                       | `bench`                             |
 | `scalus-docs/`                                 | API documentation (Unidoc)           | `docs`                              |
 
