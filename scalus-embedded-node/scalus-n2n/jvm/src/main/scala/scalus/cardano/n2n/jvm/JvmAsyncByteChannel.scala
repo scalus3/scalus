@@ -7,12 +7,13 @@ import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.{AsynchronousSocketChannel, CompletionHandler}
 import scala.concurrent.{ExecutionContext, Future, Promise}
+import scala.util.control.NonFatal
 
-/** JVM [[AsyncByteChannel]] over NIO2 `AsynchronousSocketChannel`. Holds a single reusable
-  * direct [[ByteBuffer]] for inbound refill — callers get `ByteString`s carved out of that
-  * buffer so we avoid allocating a fresh Java array per OS-level chunk. The refill buffer is
-  * safe under the single-reader contract: only the `readExactly` code path touches it, and
-  * that path is serialised by caller discipline.
+/** JVM [[AsyncByteChannel]] over NIO2 `AsynchronousSocketChannel`. Holds a single reusable direct
+  * [[ByteBuffer]] for inbound refill — callers get `ByteString`s carved out of that buffer so we
+  * avoid allocating a fresh Java array per OS-level chunk. The refill buffer is safe under the
+  * single-reader contract: only the `readExactly` code path touches it, and that path is serialised
+  * by caller discipline.
   *
   * Constructed via [[JvmAsyncByteChannel.connect]] for live TCP connections or
   * [[JvmAsyncByteChannel.fromChannel]] for server-side accepts / tests.
@@ -47,7 +48,8 @@ final class JvmAsyncByteChannel private (
         filled: Int,
         cancel: CancelToken
     ): Future[Option[ByteString]] = {
-        if cancel.isCancelled then Future.failed(CancelledException(s"after $filled/${out.length} bytes"))
+        if cancel.isCancelled then
+            Future.failed(CancelledException(s"after $filled/${out.length} bytes"))
         else if filled == out.length then Future.successful(Some(ByteString.unsafeFromArray(out)))
         else if refill.hasRemaining then {
             val take = math.min(out.length - filled, refill.remaining())
@@ -56,7 +58,8 @@ final class JvmAsyncByteChannel private (
         } else
             refillFromSocket(cancel).flatMap {
                 case 0 if filled == 0 => Future.successful(None)
-                case 0 => Future.failed(new AsyncByteChannel.UnexpectedEofException(out.length, filled))
+                case 0 =>
+                    Future.failed(new AsyncByteChannel.UnexpectedEofException(out.length, filled))
                 case _ => readLoop(out, filled, cancel)
             }
     }
@@ -111,10 +114,15 @@ final class JvmAsyncByteChannel private (
     def close(): Future[Unit] = {
         if !closedFlag then {
             closedFlag = true
-            try ch.close()
-            catch { case _: Throwable => () }
-        }
-        Future.unit
+            try {
+                ch.close()
+                Future.unit
+            } catch {
+                // Failure propagates on the returned Future — the caller who invoked
+                // close() is the observer.
+                case NonFatal(t) => Future.failed(t)
+            }
+        } else Future.unit
     }
 
     private def closedExc(): AsyncByteChannel.ChannelClosedException =
@@ -123,8 +131,8 @@ final class JvmAsyncByteChannel private (
 
 object JvmAsyncByteChannel {
 
-    /** Default refill-buffer size: 64 KiB. Sized to amortise NIO syscall overhead for a mux
-      * reading 8-byte headers interleaved with multi-KiB SDU payloads.
+    /** Default refill-buffer size: 64 KiB. Sized to amortise NIO syscall overhead for a mux reading
+      * 8-byte headers interleaved with multi-KiB SDU payloads.
       */
     val DefaultRefillSize: Int = 64 * 1024
 
@@ -144,8 +152,9 @@ object JvmAsyncByteChannel {
           completionHandler[Void](
             onSuccess = _ => p.success(new JvmAsyncByteChannel(ch, refillSize)),
             onFailure = t => {
+                // Attach any cleanup failure as suppressed so the caller sees both.
                 try ch.close()
-                catch { case _: Throwable => () }
+                catch { case NonFatal(cleanup) => t.addSuppressed(cleanup) }
                 p.failure(t)
             }
           )
@@ -153,9 +162,9 @@ object JvmAsyncByteChannel {
         p.future
     }
 
-    /** Shared adapter from the NIO `CompletionHandler` contract to callback functions —
-      * eliminates the anonymous-class boilerplate that otherwise repeats at every `ch.read`,
-      * `ch.write`, and `ch.connect` call site.
+    /** Shared adapter from the NIO `CompletionHandler` contract to callback functions — eliminates
+      * the anonymous-class boilerplate that otherwise repeats at every `ch.read`, `ch.write`, and
+      * `ch.connect` call site.
       */
     private[jvm] def completionHandler[T](
         onSuccess: T => Unit,
@@ -166,8 +175,8 @@ object JvmAsyncByteChannel {
             def failed(t: Throwable, a: Null): Unit = onFailure(t)
         }
 
-    /** Wrap an already-connected `AsynchronousSocketChannel`. Used by server-side accepts and
-      * by test fixtures that supply their own channel.
+    /** Wrap an already-connected `AsynchronousSocketChannel`. Used by server-side accepts and by
+      * test fixtures that supply their own channel.
       */
     def fromChannel(
         ch: AsynchronousSocketChannel,

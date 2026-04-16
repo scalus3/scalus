@@ -2,9 +2,9 @@ package scalus.cardano.n2n
 
 import scalus.uplc.builtin.ByteString
 
-/** Ouroboros mux SDU wire format — 8-byte header + 0..[[Sdu.MaxPayloadSize]] byte payload.
-  * One SDU carries one chunk of one mini-protocol in one direction; multi-byte fields are
-  * big-endian, matching ouroboros-network's `network-mux/src/Network/Mux/Types.hs`.
+/** Ouroboros mux SDU wire format — 8-byte header + 0..[[Sdu.MaxPayloadSize]] byte payload. One SDU
+  * carries one chunk of one mini-protocol in one direction; multi-byte fields are big-endian,
+  * matching ouroboros-network's `network-mux/src/Network/Mux/Types.hs`.
   *
   * Layout:
   * {{{
@@ -41,8 +41,8 @@ object Sdu {
         length: Int
     ) {
 
-        /** The [[MiniProtocolId]] if the wire number is one we recognise. `None` means the
-          * mux treats this SDU as fatally unexpected.
+        /** The [[MiniProtocolId]] if the wire number is one we recognise. `None` means the mux
+          * treats this SDU as fatally unexpected.
           */
         def protocol: Option[MiniProtocolId] = MiniProtocolId.fromWire(protocolWire)
     }
@@ -78,8 +78,8 @@ object Sdu {
     def encodeHeader(header: Header): Array[Byte] =
         encodeHeader(header.timestamp, header.protocolWire, header.direction, header.length)
 
-    /** Parse an 8-byte header from a [[ByteString]]. The input MUST be exactly 8 bytes — the
-      * mux guarantees that by issuing `readExactly(8)` for every header.
+    /** Parse an 8-byte header from a [[ByteString]]. The input MUST be exactly 8 bytes — the mux
+      * guarantees that by issuing `readExactly(8)` for every header.
       */
     def parseHeader(bytes: ByteString): Header = parseHeader(bytes.bytes)
 
@@ -89,7 +89,8 @@ object Sdu {
         val timestamp = getU32BE(arr, 0)
         val protoField = getU16BE(arr, 4)
         val direction =
-            if (protoField & DirectionBitMask) != 0 then Direction.Responder else Direction.Initiator
+            if (protoField & DirectionBitMask) != 0 then Direction.Responder
+            else Direction.Initiator
         val protocolWire = protoField & ProtocolBitsMask
         val length = getU16BE(arr, 6)
         Header(timestamp, protocolWire, direction, length)

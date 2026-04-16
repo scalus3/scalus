@@ -56,12 +56,23 @@ object Mailbox {
 
     /** Build a FIFO delta mailbox. `maxSize = Int.MaxValue` means unbounded; any finite value
       * applies fail-on-overflow semantics.
+      *
+      * Failures (explicit [[Mailbox.fail]] or bounded-buffer overflow in [[Mailbox.offer]]) are
+      * delivered to the consumer via [[Mailbox.pull]]'s failed Future — that is the only exception
+      * channel. The mailbox is a pure transport; observers who want to react without pulling should
+      * register pull-side handling themselves.
       */
-    def delta[A](maxSize: Int = Int.MaxValue, onCancel: () => Unit = () => ()): Mailbox[A] =
+    def delta[A](
+        maxSize: Int = Int.MaxValue,
+        onCancel: () => Unit = () => ()
+    ): Mailbox[A] =
         new DeltaMailbox[A](maxSize, onCancel)
 
-    /** Build a size-1 latest-value mailbox. */
-    def latestValue[A](onCancel: () => Unit = () => ()): Mailbox[A] =
+    /** Build a size-1 latest-value mailbox. Same pull-as-exception-channel semantics as [[delta]].
+      */
+    def latestValue[A](
+        onCancel: () => Unit = () => ()
+    ): Mailbox[A] =
         new LatestValueMailbox[A](onCancel)
 }
 
@@ -92,9 +103,9 @@ final class DeltaMailbox[A] private[engine] (
         } else {
             val exc = new ScalusBufferOverflowException()
             terminal = Some(Left(exc))
-            // Leave the buffer intact so already-queued events can
-            // still drain to the consumer; the overflow surfaces as
-            // a failed pull after the buffer is exhausted.
+            // Leave the buffer intact so already-queued events can still drain to the
+            // consumer; the overflow surfaces as a failed pull after the buffer is
+            // exhausted.
         }
     }
 

@@ -7,7 +7,8 @@ import scalus.uplc.builtin.ByteString
 
 class SduSuite extends AnyFunSuite with ScalaCheckPropertyChecks {
 
-    private val validProtocolWire: Gen[Int] = Gen.oneOf(MiniProtocolId.values.toIndexedSeq.map(_.wire))
+    private val validProtocolWire: Gen[Int] =
+        Gen.oneOf(MiniProtocolId.values.toIndexedSeq.map(_.wire))
     private val anyProtocolWire: Gen[Int] = Gen.choose(0, 0x7fff)
     private val anyDirection: Gen[Direction] = Gen.oneOf(Direction.Initiator, Direction.Responder)
     private val anyLength: Gen[Int] = Gen.choose(0, 0xffff)
@@ -40,8 +41,14 @@ class SduSuite extends AnyFunSuite with ScalaCheckPropertyChecks {
         val init = Sdu.encodeHeader(0, MiniProtocolId.Handshake, Direction.Initiator, 0)
         val resp = Sdu.encodeHeader(0, MiniProtocolId.Handshake, Direction.Responder, 0)
         // Protocol-id = 0, direction bit is high bit of byte offset 4.
-        assert((init(4) & 0x80) == 0, s"initiator high bit should be clear, got ${init(4).toInt & 0xff}")
-        assert((resp(4) & 0x80) != 0, s"responder high bit should be set, got ${resp(4).toInt & 0xff}")
+        assert(
+          (init(4) & 0x80) == 0,
+          s"initiator high bit should be clear, got ${init(4).toInt & 0xff}"
+        )
+        assert(
+          (resp(4) & 0x80) != 0,
+          s"responder high bit should be set, got ${resp(4).toInt & 0xff}"
+        )
     }
 
     test("golden vector — Handshake (0) / Initiator / length 0, timestamp 0") {
@@ -65,9 +72,10 @@ class SduSuite extends AnyFunSuite with ScalaCheckPropertyChecks {
         // timestamp 0xFFFFFFFF
         // direction Initiator, protocol 2 = 0x0002 → [00 02]
         // length 12288 = 0x3000 → [30 00]
-        val expected = Array[Byte](0xff.toByte, 0xff.toByte, 0xff.toByte, 0xff.toByte,
-          0x00, 0x02, 0x30, 0x00)
-        val bytes = Sdu.encodeHeader(0xffffffff, MiniProtocolId.ChainSync, Direction.Initiator, 12288)
+        val expected =
+            Array[Byte](0xff.toByte, 0xff.toByte, 0xff.toByte, 0xff.toByte, 0x00, 0x02, 0x30, 0x00)
+        val bytes =
+            Sdu.encodeHeader(0xffffffff, MiniProtocolId.ChainSync, Direction.Initiator, 12288)
         assert(bytes sameElements expected, s"got ${bytes.map("%02x".format(_)).mkString(" ")}")
     }
 
@@ -85,7 +93,8 @@ class SduSuite extends AnyFunSuite with ScalaCheckPropertyChecks {
     }
 
     test("Header#protocol resolves known wire numbers and returns None for unknown") {
-        val known = Sdu.parseHeader(Sdu.encodeHeader(0, MiniProtocolId.BlockFetch, Direction.Initiator, 0))
+        val known =
+            Sdu.parseHeader(Sdu.encodeHeader(0, MiniProtocolId.BlockFetch, Direction.Initiator, 0))
         assert(known.protocol.contains(MiniProtocolId.BlockFetch))
 
         // Protocol wire 42 is unassigned.

@@ -3,10 +3,10 @@ package scalus.cardano.n2n
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
-/** Test-only [[Timer]] with virtual wall-clock. Actions scheduled via [[schedule]] do not run
-  * until the test advances time via [[advance]]. Fire order on a single `advance` call is FIFO
-  * by `fireAt` deadline; ties broken by scheduling order. Cancelling a scheduled action removes
-  * it from the pending list.
+/** Test-only [[Timer]] with virtual wall-clock. Actions scheduled via [[schedule]] do not run until
+  * the test advances time via [[advance]]. Fire order on a single `advance` call is FIFO by
+  * `fireAt` deadline; ties broken by scheduling order. Cancelling a scheduled action removes it
+  * from the pending list.
   *
   * Used throughout handshake / keep-alive / mux tests to deterministically exercise timeouts
   * without real wall-clock waits.
@@ -32,8 +32,10 @@ final class FakeTimer extends Timer {
             }
     }
 
-    /** Advance virtual time by `duration` and fire every action whose deadline is now `<=` the
-      * new wall-clock. Actions are fired in deadline order (ties broken by scheduling order).
+    /** Advance virtual time by `duration` and fire every action whose deadline is now `<=` the new
+      * wall-clock. Actions are fired in deadline order (ties broken by scheduling order). Actions
+      * throwing exceptions propagate to the caller — tests that want to assert on the failure
+      * should `intercept` around the `advance` call.
       */
     def advance(duration: FiniteDuration): Unit = {
         val toFire = lock.synchronized {
@@ -45,8 +47,7 @@ final class FakeTimer extends Timer {
         }
         var i = 0
         while i < toFire.length do {
-            try toFire(i).action()
-            catch { case _: Throwable => () }
+            toFire(i).action()
             i += 1
         }
     }

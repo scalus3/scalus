@@ -2,8 +2,8 @@ package scalus.cardano.n2n
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** Small tests for the two supporting primitives that go alongside `Sdu`: [[Direction]]
-  * and [[MonotonicClock]].
+/** Small tests for the two supporting primitives that go alongside `Sdu`: [[Direction]] and
+  * [[MonotonicClock]].
   */
 class DirectionAndClockSuite extends AnyFunSuite {
 

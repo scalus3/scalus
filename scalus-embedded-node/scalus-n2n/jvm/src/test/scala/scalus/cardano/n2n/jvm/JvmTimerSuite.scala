@@ -47,8 +47,12 @@ class JvmTimerSuite extends AnyFunSuite {
     test("exception in action does not break subsequent scheduling") {
         val timer = new JvmTimer()
         try {
-            val _ = timer.schedule(10.millis) { throw new RuntimeException("boom") }
-            Thread.sleep(30)
+            val firstRan = new CountDownLatch(1)
+            val _ = timer.schedule(10.millis) {
+                firstRan.countDown()
+                throw new RuntimeException("boom")
+            }
+            assert(firstRan.await(2, TimeUnit.SECONDS), "first action did not run")
             val latch = new CountDownLatch(1)
             val _ = timer.schedule(10.millis)(latch.countDown())
             assert(latch.await(2, TimeUnit.SECONDS), "second action did not fire")

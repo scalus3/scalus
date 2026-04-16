@@ -49,14 +49,27 @@ class CancelTokenSuite extends AnyFunSuite {
         assert(count.get == 1)
     }
 
-    test("listener exception does not prevent other listeners from firing") {
+    test(
+      "listener exceptions are logged and swallowed; all listeners still run; cancel() never throws"
+    ) {
         val src = CancelSource()
-        val order = new java.util.concurrent.ConcurrentLinkedQueue[Int]
-        src.token.onCancel(() => order.add(1))
-        src.token.onCancel(() => throw new RuntimeException("nope"))
-        src.token.onCancel(() => order.add(3))
+        val fired = new AtomicInteger(0)
+        src.token.onCancel(() => fired.incrementAndGet())
+        src.token.onCancel(() => throw new RuntimeException("listener bug A"))
+        src.token.onCancel(() => fired.incrementAndGet())
+        src.token.onCancel(() => throw new RuntimeException("listener bug B"))
+        src.token.onCancel(() => fired.incrementAndGet())
+        src.cancel() // must not throw
+        // All three well-behaved listeners ran even though two of the five threw.
+        assert(fired.get == 3)
+    }
+
+    test("already-fired onCancel: listener exception is logged but does not surprise the caller") {
+        val src = CancelSource()
         src.cancel()
-        assert(order.asScala.toList == List(1, 3))
+        src.token.onCancel(() => throw new RuntimeException("synchronous listener bug"))
+        // No assertion on throw — the caller shouldn't see the exception; it lives in the log.
+        succeed
     }
 
     test("linkedTo: parent.cancel triggers child.cancel with same cause") {
@@ -125,35 +138,39 @@ class CancelTokenSuite extends AnyFunSuite {
         assert(fired.get == 0)
     }
 
-    test("threadsafety: concurrent onCancel registrations race cancel — every listener fires exactly once") {
+    test(
+      "threadsafety: concurrent onCancel registrations race cancel — every listener fires exactly once"
+    ) {
         val src = CancelSource()
         val count = new AtomicInteger(0)
-        val latch = new CountDownLatch(1)
-        val exec = Executors.newFixedThreadPool(8)
+        val startGate = new CountDownLatch(1)
         val n = 500
+        // Cancel fires after this many registrations have completed — guarantees half the
+        // registrations hit the slow (pre-fire) path, the other half hit the fast
+        // (already-fired) path. No Thread.sleep — the barrier is explicit.
+        val halfRegistered = new CountDownLatch(n / 2)
+        val exec = Executors.newFixedThreadPool(8)
         try {
-            // Register listeners on 8 threads while a 9th thread fires cancel mid-flight.
             (1 to n).foreach { _ =>
                 exec.submit(new Runnable {
                     def run(): Unit = {
-                        latch.await()
+                        startGate.await()
                         src.token.onCancel(() => count.incrementAndGet())
+                        halfRegistered.countDown()
                     }
                 })
             }
             exec.submit(new Runnable {
                 def run(): Unit = {
-                    latch.await()
-                    // Give registrations a moment to start, then cancel mid-race.
-                    Thread.sleep(1)
+                    startGate.await()
+                    halfRegistered.await() // deterministic: half have registered
                     src.cancel()
                 }
             })
-            latch.countDown()
+            startGate.countDown()
             exec.shutdown()
             assert(exec.awaitTermination(10, TimeUnit.SECONDS))
-            // All n listeners fire exactly once — the ones registered before cancel via the
-            // slow path, the ones after via the fast path.
+            // All n listeners fire exactly once — some via slow path, some via fast path.
             assert(count.get == n)
         } finally {
             exec.shutdownNow()

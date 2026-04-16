@@ -1,14 +1,16 @@
 package scalus.cardano.n2n
 
-/** Thrown into `Future`s that were aborted via a [[CancelToken]]. The `reason` describes the
-  * cancel site (e.g. `"pre-read"`, `"keep-alive beat timeout"`).
+import scala.util.control.NonFatal
+
+/** Thrown into `Future`s that were aborted via a [[CancelToken]]. The `reason` describes the cancel
+  * site (e.g. `"pre-read"`, `"keep-alive beat timeout"`).
   */
 final class CancelledException(reason: String, cause: Throwable = null)
     extends RuntimeException(reason, cause)
 
-/** Observable side of a cancellation. Consumers receive one of these and can inspect it or
-  * register cleanup actions; they cannot trigger cancellation themselves — the
-  * [[CancelSource.cancel]] capability stays with the scope owner.
+/** Observable side of a cancellation. Consumers receive one of these and can inspect it or register
+  * cleanup actions; they cannot trigger cancellation themselves — the [[CancelSource.cancel]]
+  * capability stays with the scope owner.
   *
   * See `docs/local/claude/indexer/n2n-transport.md` § *Cancellation* for the scope-hierarchy
   * contract.
@@ -23,17 +25,18 @@ trait CancelToken {
 
     /** Register a callback. Fires exactly once — immediately and synchronously on the caller's
       * thread if the token is already cancelled, otherwise on the first [[CancelSource.cancel]].
-      * Exceptions thrown by the callback are caught and discarded so one listener's failure does
-      * not prevent the rest from firing.
+      *
+      * Listener exception policy: every thrown exception is logged via the source's configured
+      * logger and the cancel propagation continues — all listeners run, [[CancelSource.cancel]]
+      * never throws because of a buggy callback, and the log captures the full cause. This means a
+      * bug in one listener is debuggable (it's in the log) without breaking cascading cleanup
+      * elsewhere.
       *
       * The returned [[Cancellable]] deregisters the listener from the source's listener list.
-      * This matters for long-lived tokens with many short-lived linked children: without
-      * deregistration, the parent's listener list would grow unboundedly with stale closures
-      * referencing already-cancelled children. [[CancelSource.linkedTo]] uses this path to
-      * clean up after itself on child cancel.
-      *
-      * If the token is already cancelled when `onCancel` is called, the listener fires
-      * synchronously and the returned handle is a no-op.
+      * Matters for long-lived tokens with many short-lived linked children: without deregistration,
+      * the parent's listener list would grow unboundedly with stale closures referencing
+      * already-cancelled children. [[CancelSource.linkedTo]] uses this to clean up after itself on
+      * child cancel.
       */
     def onCancel(action: () => Unit): Cancellable
 }
@@ -72,8 +75,12 @@ object CancelSource {
     /** Reason used on linked children when the parent fires and did not store a cause. */
     val ParentCancelledReason: String = "parent cancelled"
 
-    /** Fresh, unlinked source. */
-    def apply(): CancelSource = new CancelSourceImpl
+    private val defaultLogger: scribe.Logger = scribe.Logger[CancelSource]
+
+    /** Fresh, unlinked source. `logger` is used to record listener exceptions alongside propagation
+      * — see [[CancelToken.onCancel]]'s listener contract.
+      */
+    def apply(logger: scribe.Logger = defaultLogger): CancelSource = new CancelSourceImpl(logger)
 
     /** Linked source: cancelling `parent` cancels this one too (and carries the parent's cause
       * through). Cancelling this source does NOT cancel the parent — scope isolation is
@@ -82,12 +89,12 @@ object CancelSource {
       * If `parent` is already cancelled, the returned source is cancelled immediately with the
       * parent's cause.
       *
-      * The link is symmetric about cleanup: on child cancel (for any reason), the child
-      * deregisters from the parent's listener list so a long-lived parent doesn't accumulate
-      * stale closures from short-lived children.
+      * The link is symmetric about cleanup: on child cancel (for any reason), the child deregisters
+      * from the parent's listener list so a long-lived parent doesn't accumulate stale closures
+      * from short-lived children.
       */
-    def linkedTo(parent: CancelToken): CancelSource = {
-        val child = new CancelSourceImpl
+    def linkedTo(parent: CancelToken, logger: scribe.Logger = defaultLogger): CancelSource = {
+        val child = new CancelSourceImpl(logger)
         val parentHandle = parent.onCancel { () =>
             child.cancel(parent.cause.getOrElse(CancelledException(ParentCancelledReason)))
         }
@@ -100,8 +107,13 @@ object CancelSource {
 
 /** Single shared impl for both unlinked and linked sources — linking is done by the companion's
   * factory, which registers an `onCancel` listener on the parent.
+  *
+  * Listener exception policy: each listener runs under a `try`; any thrown exception is logged via
+  * `logger` (so it's debuggable) and then swallowed so cancel propagation continues and `cancel()`
+  * itself never throws because of a buggy callback. Information is preserved via the log stream,
+  * not via the return / throw channel.
   */
-private final class CancelSourceImpl extends CancelSource {
+private final class CancelSourceImpl(logger: scribe.Logger) extends CancelSource {
     private val lock = new AnyRef
 
     @volatile private var fired: Boolean = false
@@ -116,9 +128,8 @@ private final class CancelSourceImpl extends CancelSource {
         def cause: Option[Throwable] = storedCause
 
         def onCancel(action: () => Unit): Cancellable = {
-            // Fast path: already fired — run synchronously without taking the lock.
             if fired then {
-                runSafely(action)
+                runFastPath(action)
                 Cancellable.noop
             } else {
                 val runNow = lock.synchronized {
@@ -129,7 +140,7 @@ private final class CancelSourceImpl extends CancelSource {
                     }
                 }
                 if runNow then {
-                    runSafely(action)
+                    runFastPath(action)
                     Cancellable.noop
                 } else deregisterHandle(action)
             }
@@ -149,8 +160,22 @@ private final class CancelSourceImpl extends CancelSource {
         }
         var i = 0
         while i < toFire.length do {
-            runSafely(toFire(i))
+            try toFire(i)()
+            catch {
+                case NonFatal(t) => logger.error("onCancel listener threw", t)
+            }
             i += 1
+        }
+    }
+
+    /** Run a listener registered on an already-fired source. Log + swallow: the calling code is
+      * just registering, and a buggy callback must not surprise them.
+      */
+    private def runFastPath(action: () => Unit): Unit = {
+        try action()
+        catch {
+            case NonFatal(t) =>
+                logger.error("onCancel listener threw (already-fired fast path)", t)
         }
     }
 
@@ -163,11 +188,6 @@ private final class CancelSourceImpl extends CancelSource {
             val idx = listeners.indexWhere(_ eq action)
             if idx >= 0 then listeners.remove(idx)
         }
-    }
-
-    private def runSafely(action: () => Unit): Unit = {
-        try action()
-        catch { case _: Throwable => () } // isolate listeners
     }
 
     /** Test-only introspection — current number of registered listeners. Returns 0 after cancel. */

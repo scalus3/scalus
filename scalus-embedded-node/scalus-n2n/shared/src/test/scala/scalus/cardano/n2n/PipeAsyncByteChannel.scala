@@ -5,13 +5,13 @@ import scalus.uplc.builtin.ByteString
 import scala.collection.mutable.ArrayDeque
 import scala.concurrent.{Future, Promise}
 
-/** Test-only [[AsyncByteChannel]] loopback pair. Bytes written to endpoint A surface as reads
-  * on endpoint B and vice versa, without going through a socket. Used across the shared test
-  * tree to drive mux / handshake / keep-alive state-machine tests deterministically.
+/** Test-only [[AsyncByteChannel]] loopback pair. Bytes written to endpoint A surface as reads on
+  * endpoint B and vice versa, without going through a socket. Used across the shared test tree to
+  * drive mux / handshake / keep-alive state-machine tests deterministically.
   *
   * Implementation: two single-producer / single-consumer pipes, one per direction. Each pipe
-  * buffers bytes in an `ArrayDeque[Array[Byte]]` plus an offset into the head chunk; at most
-  * one reader may be pending at a time (the single-reader contract of [[AsyncByteChannel]]).
+  * buffers bytes in an `ArrayDeque[Array[Byte]]` plus an offset into the head chunk; at most one
+  * reader may be pending at a time (the single-reader contract of [[AsyncByteChannel]]).
   */
 object PipeAsyncByteChannel {
 

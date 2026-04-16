@@ -4,9 +4,9 @@ package scalus.cardano.n2n
   * header's protocol field. The enum variants correspond 1:1 to the wire numbers defined in
   * ouroboros-network's `network-mux` / `cardano-diffusion` protocol tables.
   *
-  * M4 implements [[Handshake]] and [[KeepAlive]] end-to-end. The other variants exist so the
-  * mux can recognise and route frames for them even before their state machines land — makes
-  * wire-level debugging easier and lets M5+ plug in without an enum change.
+  * M4 implements [[Handshake]] and [[KeepAlive]] end-to-end. The other variants exist so the mux
+  * can recognise and route frames for them even before their state machines land — makes wire-level
+  * debugging easier and lets M5+ plug in without an enum change.
   */
 enum MiniProtocolId(val wire: Int) {
     case Handshake extends MiniProtocolId(0)

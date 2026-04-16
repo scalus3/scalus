@@ -10,9 +10,9 @@ import scala.concurrent.Await
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 
-/** Contract tests for [[AsyncByteChannel]], exercised against [[PipeAsyncByteChannel]]. The
-  * same contract is checked against [[scalus.cardano.n2n.jvm.JvmAsyncByteChannel]] over
-  * loopback TCP in a JVM-only suite.
+/** Contract tests for [[AsyncByteChannel]], exercised against [[PipeAsyncByteChannel]]. The same
+  * contract is checked against [[scalus.cardano.n2n.jvm.JvmAsyncByteChannel]] over loopback TCP in
+  * a JVM-only suite.
   */
 class AsyncByteChannelPipeSuite extends AnyFunSuite with ScalaFutures {
 

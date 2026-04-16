@@ -833,6 +833,7 @@ lazy val scalusN2n = crossProject(JSPlatform, JVMPlatform)
     .settings(
       name := "scalus-n2n",
       scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.1",
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       publish / skip := false

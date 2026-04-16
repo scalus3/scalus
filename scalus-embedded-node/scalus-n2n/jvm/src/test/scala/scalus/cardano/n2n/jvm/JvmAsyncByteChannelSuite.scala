@@ -14,8 +14,8 @@ import scala.concurrent.duration.DurationInt
 import scala.concurrent.{Await, Promise}
 
 /** Real-socket smoke tests over loopback TCP. Covers the NIO2-specific paths of
-  * [[JvmAsyncByteChannel]] — completion-handler wiring, direct-ByteBuffer refill, partial
-  * writes — which the pure-Scala pipe tests cannot exercise.
+  * [[JvmAsyncByteChannel]] — completion-handler wiring, direct-ByteBuffer refill, partial writes —
+  * which the pure-Scala pipe tests cannot exercise.
   */
 class JvmAsyncByteChannelSuite extends AnyFunSuite with ScalaFutures {
 
@@ -24,11 +24,12 @@ class JvmAsyncByteChannelSuite extends AnyFunSuite with ScalaFutures {
 
     private def bytes(s: String): ByteString = ByteString.fromArray(s.getBytes("UTF-8"))
 
-    /** Opens a listener on 127.0.0.1:0 and yields `(clientChannel, serverSideChannel)` once
-      * the accept completes. Both channels are ready to read/write.
+    /** Opens a listener on 127.0.0.1:0 and yields `(clientChannel, serverSideChannel)` once the
+      * accept completes. Both channels are ready to read/write.
       */
     private def loopbackPair(): (JvmAsyncByteChannel, JvmAsyncByteChannel) = {
-        val server = AsynchronousServerSocketChannel.open().bind(new InetSocketAddress("127.0.0.1", 0))
+        val server =
+            AsynchronousServerSocketChannel.open().bind(new InetSocketAddress("127.0.0.1", 0))
         val port = server.getLocalAddress.asInstanceOf[InetSocketAddress].getPort
         val acceptPromise = Promise[AsynchronousSocketChannel]()
         server.accept(

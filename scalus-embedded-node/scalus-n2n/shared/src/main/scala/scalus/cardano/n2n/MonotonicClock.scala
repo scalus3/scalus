@@ -1,7 +1,7 @@
 package scalus.cardano.n2n
 
-/** Microsecond monotonic clock — source of the timestamp field on outgoing mux SDUs. Injectable
-  * so unit tests can assert on deterministic timestamp values without wall-clock waits.
+/** Microsecond monotonic clock — source of the timestamp field on outgoing mux SDUs. Injectable so
+  * unit tests can assert on deterministic timestamp values without wall-clock waits.
   *
   * Only the low 32 bits of [[nowMicros]] reach the wire (matching ouroboros-network's
   * `RemoteClockModel`); higher bits are harmless but unused.

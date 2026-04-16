@@ -3,8 +3,8 @@ package scalus.cardano.n2n
 import scala.concurrent.duration.FiniteDuration
 
 /** Handle to cancel a scheduled timer action or deregister a [[CancelToken.onCancel]] listener.
-  * Idempotent — if the action has already run (or the listener already fired), calling
-  * [[cancel]] is a no-op.
+  * Idempotent — if the action has already run (or the listener already fired), calling [[cancel]]
+  * is a no-op.
   */
 trait Cancellable {
     def cancel(): Unit
@@ -12,9 +12,8 @@ trait Cancellable {
 
 object Cancellable {
 
-    /** Pre-allocated no-op handle. Returned by [[CancelToken.onCancel]] when the token is
-      * already cancelled at registration time (nothing to deregister) and by
-      * [[CancelToken.never]].
+    /** Pre-allocated no-op handle. Returned by [[CancelToken.onCancel]] when the token is already
+      * cancelled at registration time (nothing to deregister) and by [[CancelToken.never]].
       */
     val noop: Cancellable = () => ()
 }
