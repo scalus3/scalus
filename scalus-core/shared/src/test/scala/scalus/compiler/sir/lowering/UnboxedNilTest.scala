@@ -3,7 +3,7 @@ package scalus.compiler.sir.lowering
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.MajorProtocolVersion
-import scalus.cardano.onchain.plutus.prelude.{List as PList}
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.compiler.{Compile, Options}
 import scalus.uplc.{Constant, DefaultUni, PlutusV3, Term}
 import scalus.uplc.builtin.ByteString
@@ -15,15 +15,15 @@ import scalus.uplc.eval.PlutusVM
   */
 @Compile
 object UnboxedNilFixtures {
-    def bigIntUnboxedNil: PList[BigInt]         = PList.unboxedNil[BigInt]
+    def bigIntUnboxedNil: PList[BigInt] = PList.unboxedNil[BigInt]
     def byteStringUnboxedNil: PList[ByteString] = PList.unboxedNil[ByteString]
-    def bigIntEmpty: PList[BigInt]              = PList.empty[BigInt]
+    def bigIntEmpty: PList[BigInt] = PList.empty[BigInt]
 }
 
 /** Verifies `List.unboxedNil[A]` opts `A` into its native UPLC element representation —
   * `unboxedNil[BigInt]` lowers to `list<integer>` and `unboxedNil[ByteString]` to
-  * `list<bytestring>`, distinct from the Data-preferred `list<data>` that `List.empty[A]`
-  * produces. UPLC has no covariance, so this distinction matters at the constant level.
+  * `list<bytestring>`, distinct from the Data-preferred `list<data>` that `List.empty[A]` produces.
+  * UPLC has no covariance, so this distinction matters at the constant level.
   */
 class UnboxedNilTest extends AnyFunSuite {
 
@@ -37,14 +37,14 @@ class UnboxedNilTest extends AnyFunSuite {
     private def listElemTypes(term: Term): Seq[DefaultUni] = {
         val buf = scala.collection.mutable.ArrayBuffer.empty[DefaultUni]
         def go(t: Term): Unit = t match
-            case Term.Const(Constant.List(elemType, _), _) => buf += elemType
-            case Term.Const(_, _)                          => ()
-            case Term.Apply(f, a, _)                       => go(f); go(a)
-            case Term.LamAbs(_, body, _)                   => go(body)
-            case Term.Force(x, _)                          => go(x)
-            case Term.Delay(x, _)                          => go(x)
-            case Term.Constr(_, args, _)                   => args.foreach(go)
-            case Term.Case(scr, cases, _)                  => go(scr); cases.foreach(go)
+            case Term.Const(Constant.List(elemType, _), _)           => buf += elemType
+            case Term.Const(_, _)                                    => ()
+            case Term.Apply(f, a, _)                                 => go(f); go(a)
+            case Term.LamAbs(_, body, _)                             => go(body)
+            case Term.Force(x, _)                                    => go(x)
+            case Term.Delay(x, _)                                    => go(x)
+            case Term.Constr(_, args, _)                             => args.foreach(go)
+            case Term.Case(scr, cases, _)                            => go(scr); cases.foreach(go)
             case Term.Var(_, _) | Term.Builtin(_, _) | Term.Error(_) => ()
         go(term)
         buf.toSeq
