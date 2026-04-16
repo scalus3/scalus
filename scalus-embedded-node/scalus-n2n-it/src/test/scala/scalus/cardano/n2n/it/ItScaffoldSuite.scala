@@ -2,9 +2,8 @@ package scalus.cardano.n2n.it
 
 import org.scalatest.funsuite.AnyFunSuite
 
-/** Sanity check that the scalus-n2n-it project compiles and scalatest can invoke a test in
-  * `sbt it`. Real yaci-devkit and preview-relay suites land in Phase 9; delete this once
-  * they do.
+/** Placeholder suite until Phase 9 lands the real yaci-devkit and preview-relay N2N integration
+  * tests. Keeps `sbt it` clean-exiting while earlier phases are in flight.
   */
 class ItScaffoldSuite extends AnyFunSuite {
 
