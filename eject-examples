@@ -77,6 +77,15 @@ detect_extra_deps() {
     fi
 }
 
+gen_snapshot_resolver() {
+    if [[ "$SCALUS_VERSION" == *SNAPSHOT* ]]; then
+        cat <<'BLOCK'
+// TODO: switch to a released version and remove this resolver
+resolvers += "Sonatype Central Snapshots" at "https://central.sonatype.com/repository/maven-snapshots/"
+BLOCK
+    fi
+}
+
 gen_build_sbt() {
     local name="$1" src_dir="$2"
     local extras
@@ -93,6 +102,7 @@ ThisBuild / scalaVersion := "$SCALA_VERSION"
 ThisBuild / organization := "org.example"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 
+$(gen_snapshot_resolver)
 val scalusVersion = "$SCALUS_VERSION"
 
 lazy val root = (project in file("."))
@@ -111,6 +121,7 @@ EOF
 
 gen_plugins_sbt() {
     cat <<EOF
+$(gen_snapshot_resolver)
 addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "$SCALUS_VERSION")
 EOF
 }
