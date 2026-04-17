@@ -1,7 +1,6 @@
 package scalus.cardano.n2n.it
 
-import org.scalatest.concurrent.{Eventually, ScalaFutures}
-import org.scalatest.exceptions.TestCanceledException
+import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
 import scalus.cardano.n2n.{ClientConfig, NetworkMagic}
@@ -16,7 +15,7 @@ import scala.concurrent.duration.DurationInt
   * Two tests only. Everything else is covered by [[YaciN2nHandshakeSuite]] and
   * [[YaciN2nKeepAliveSuite]] against the local yaci container.
   */
-class PreviewRelaySmokeSuite extends AnyFunSuite with ScalaFutures with Eventually {
+class PreviewRelaySmokeSuite extends AnyFunSuite with ScalaFutures {
 
     implicit override val patienceConfig: PatienceConfig =
         PatienceConfig(timeout = Span(120, Seconds), interval = Span(500, Millis))
@@ -25,11 +24,7 @@ class PreviewRelaySmokeSuite extends AnyFunSuite with ScalaFutures with Eventual
     private val relayPort = 3001
 
     private def requireEnabled(): Unit =
-        if !sys.env.get("SCALUS_N2N_PREVIEW_IT").contains("1") then
-            throw new TestCanceledException(
-              "SCALUS_N2N_PREVIEW_IT=1 not set; skipping preview-relay smoke",
-              0
-            )
+        assume(sys.env.get("SCALUS_N2N_PREVIEW_IT").contains("1"), "SCALUS_N2N_PREVIEW_IT=1 not set")
 
     test("handshake against preview relay negotiates a supported version") {
         requireEnabled()
@@ -57,7 +52,8 @@ class PreviewRelaySmokeSuite extends AnyFunSuite with ScalaFutures with Eventual
             .futureValue
 
         try {
-            // Two beats at 20s interval — wait ~45s to ensure both completed.
+            // Two beats at 20s interval — wait ~45s to ensure both completed. Short sleeps +
+            // rootToken check give early-exit if the connection dies mid-wait.
             val deadline = System.nanoTime() + 45.seconds.toNanos
             while System.nanoTime() < deadline && !conn.rootToken.isCancelled do
                 Thread.sleep(500)

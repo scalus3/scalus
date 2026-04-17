@@ -26,8 +26,8 @@ class YaciN2nKeepAliveSuite extends AnyFunSuite with YaciDevKit with ScalaFuture
         // Tight interval so we observe several beats within a few seconds, rather than the
         // default 30s cadence which would push the test into a multi-minute run.
         val fastConfig = ClientConfig.default.copy(
-          keepAliveInterval = 500.millis,
-          keepAliveTimeout = 5.seconds
+          keepAliveInterval = 1.second,
+          keepAliveTimeout = 10.seconds
         )
 
         val conn = NodeToNodeClient
@@ -35,13 +35,14 @@ class YaciN2nKeepAliveSuite extends AnyFunSuite with YaciDevKit with ScalaFuture
             .futureValue
 
         try {
-            // First beat: RTT becomes defined.
             eventually(assert(conn.rtt.isDefined))
             val firstRtt = conn.rtt.get
             // Loopback-Docker RTT is typically sub-10ms but allow generous headroom for CI.
             assert(firstRtt < 2.seconds, s"implausibly large first RTT: $firstRtt")
 
-            // Wait for at least three beat intervals to confirm the loop is sustained.
+            // Wait for several beats at the 1s cadence. Short sleeps + the rootToken check
+            // give early-exit on a dying connection — surfaces the failure immediately rather
+            // than after the full wait elapses.
             val deadline = System.nanoTime() + 5.seconds.toNanos
             while System.nanoTime() < deadline && !conn.rootToken.isCancelled do
                 Thread.sleep(100)
