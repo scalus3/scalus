@@ -8,7 +8,7 @@ import scalus.cardano.node.stream.engine.Mailbox
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.mutable
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 import scala.util.control.NonFatal
 
 /** Connection-fatal wire-protocol violation: peer sent an SDU whose routing is unambiguously wrong
@@ -89,6 +89,7 @@ final class Multiplexer(
 
     private val routeLock = new AnyRef
     private val routes = mutable.Map.empty[(MiniProtocolId, Direction), Route]
+    private val handles = mutable.Map.empty[MiniProtocolId, MiniProtocolBytes]
 
     // Write queue: each send chains onto `writeTail` so that `channel.write` is serialised
     // FIFO. `recoverWith` on the tail absorbs failure so one failed write doesn't break the
@@ -105,12 +106,17 @@ final class Multiplexer(
     // --------------------------------------------------------------------------------------
 
     /** Get (or create) the handle for a mini-protocol. Calls for the same protocol return the same
-      * handle — idempotent. The returned handle's `cancelScope` is linked to the connection root.
+      * handle — idempotent by object identity.
       */
     def channel(proto: MiniProtocolId): MiniProtocolBytes = routeLock.synchronized {
-        val inboundKey = (proto, Direction.Responder)
-        val route = routes.getOrElseUpdate(inboundKey, makeRoute(proto, Direction.Responder))
-        new Handle(proto, route)
+        handles.getOrElseUpdate(
+          proto, {
+              val inboundKey = (proto, Direction.Responder)
+              val route =
+                  routes.getOrElseUpdate(inboundKey, makeRoute(proto, Direction.Responder))
+              new Handle(proto, route)
+          }
+        )
     }
 
     /** Await reader-loop completion. Completes normally on clean EOF or on root cancel. */
@@ -363,14 +369,39 @@ final class Multiplexer(
     }
 
     private final class Handle(proto: MiniProtocolId, route: Route) extends MiniProtocolBytes {
-        def cancelScope: CancelToken = route.source.token
 
-        def receive(cancel: CancelToken = cancelScope): Future[Option[ByteString]] = {
-            if cancel.isCancelled then Future.failed(CancelledException("pre-receive"))
-            else route.mailbox.pull()
+        def receive(cancel: CancelToken = CancelToken.never): Future[Option[ByteString]] = {
+            if route.source.token.isCancelled then
+                Future.failed(CancelledException("pre-receive (route)"))
+            else if cancel.isCancelled then
+                Future.failed(cancel.cause.getOrElse(CancelledException("pre-receive")))
+            else {
+                // Mid-wait honour: we speculatively start the mailbox pull and race it with the
+                // cancel token. If cancel fires first, the Promise fails immediately; if the
+                // mailbox completes first, we deregister the cancel listener to avoid leaking
+                // it. Caveat: bytes arriving after cancel are still consumed by the pull (and
+                // discarded with no consumer). See trait doc for the M5+ revisit note.
+                val p = Promise[Option[ByteString]]()
+                val pull = route.mailbox.pull()
+                val cancelHandle = cancel.onCancel { () =>
+                    val _ = p.tryFailure(
+                      cancel.cause.getOrElse(CancelledException("mid-receive"))
+                    )
+                }
+                pull.onComplete { r =>
+                    cancelHandle.cancel()
+                    val _ = p.tryComplete(r)
+                }
+                p.future
+            }
         }
 
-        def send(message: ByteString, cancel: CancelToken = cancelScope): Future[Unit] =
-            sendChunks(proto, Direction.Initiator, message, cancel)
+        def send(message: ByteString, cancel: CancelToken = CancelToken.never): Future[Unit] =
+            sendChunks(
+              proto,
+              Direction.Initiator,
+              message,
+              CancelToken.or(route.source.token, cancel)
+            )
     }
 }

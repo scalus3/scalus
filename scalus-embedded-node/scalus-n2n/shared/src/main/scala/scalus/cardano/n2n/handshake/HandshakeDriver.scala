@@ -13,7 +13,8 @@ import scala.util.control.NonFatal
   */
 final case class NegotiatedVersion(version: Int, data: NodeToNodeVersionData)
 
-/** Initiator-side driver for the N2N handshake mini-protocol (id 0).
+/** Initiator-side driver for the N2N handshake mini-protocol (id 0). One-shot: call [[run]] once
+  * per connection, receive a `Future[NegotiatedVersion]`, discard.
   *
   * Flow: propose → await → one of:
   *   - [[MsgAcceptVersion]] → [[NegotiatedVersion]]
@@ -22,52 +23,67 @@ final case class NegotiatedVersion(version: Int, data: NodeToNodeVersionData)
   *     `query = false`, so receiving a query reply is a protocol violation)
   *   - [[MsgProposeVersions]] → fails with [[HandshakeError.UnexpectedMessage]] (we're initiator;
   *     the peer shouldn't propose back)
-  *   - timeout → fails with [[HandshakeError.HandshakeTimeoutException]]
+  *   - timeout → fails with [[HandshakeError.Timeout]]
   *   - decode error → fails with [[HandshakeError.DecodeError]]
   *
-  * Timeout policy: a 30-second deadline (default) is scheduled on the supplied [[CancelScope]]'s
-  * timer. If the deadline fires first, a linked `timeoutSource` is cancelled, which propagates into
-  * [[MiniProtocolBytes.receive]] as a `CancelledException`; the driver translates that into
-  * `HandshakeTimeoutException`. If the reply arrives first, the scheduler handle is cancelled so
-  * the timer doesn't keep a reference alive.
+  * Timeout policy: a 30-second deadline (default) is scheduled via the supplied [[CancelScope]]'s
+  * timer. On expiry the timer cancels [[CancelScope.source]] with a [[HandshakeError.Timeout]] as
+  * the cause; every in-flight operation on the stream observes `cancelScope` and fails. If the
+  * reply arrives first, the scheduled handle is cancelled so the timer doesn't fire.
   *
-  * Scope isolation: the timeout cancel does NOT fire the supplied scope itself — only the
-  * per-handshake linked source. A caller wrapping the driver in a larger `connectionRoot` scope can
-  * decide (typically in M8's `NodeToNodeClient`) whether handshake timeout is connection-fatal.
+  * Scope isolation: the handshake's `cancelScope` is typically a linked child of the connection
+  * root, so firing it does NOT take down the root. The caller composing this driver into
+  * [[NodeToNodeClient]] decides whether handshake timeout escalates further.
   *
   * See `docs/local/claude/indexer/n2n-transport.md` § *Handshake* for the wire format and error
   * model.
   */
-final class HandshakeDriver(
-    logger: scribe.Logger = scribe.Logger[HandshakeDriver]
-) {
+object HandshakeDriver {
+
+    /** Default logger used when the caller doesn't pass one — one lookup per module, not per
+      * `run()` invocation.
+      */
+    private val defaultLogger: scribe.Logger = scribe.Logger("scalus.cardano.n2n.handshake")
 
     def run(
         handle: MiniProtocolBytes,
         magic: NetworkMagic,
-        scope: CancelScope,
-        timeout: FiniteDuration = 30.seconds
+        cancelScope: CancelScope,
+        timeout: FiniteDuration = 30.seconds,
+        logger: scribe.Logger = defaultLogger
     )(using ExecutionContext): Future[NegotiatedVersion] = {
         val table = defaultProposal(magic)
-        val stream = new CborMessageStream[HandshakeMessage](MiniProtocolId.Handshake, handle)
+        val stream = new CborMessageStream[HandshakeMessage](
+          MiniProtocolId.Handshake,
+          handle,
+          cancelScope = cancelScope.token
+        )
 
-        val deadline = scope.linked()
-        val scheduled =
-            scope.schedule(timeout, deadline, new HandshakeError.HandshakeTimeoutException)
+        val scheduled = cancelScope.schedule(
+          timeout,
+          cancelScope.source,
+          new HandshakeError.Timeout
+        )
 
-        val sent = stream.send(MsgProposeVersions(table), scope.token)
-        val exchange = sent.flatMap { _ => stream.receive(deadline.token) }
+        val exchange = stream.send(MsgProposeVersions(table)).flatMap { _ => stream.receive() }
 
         exchange
             .transform { result =>
-                // Always cancel the timer on exchange completion — success AND failure — so we
-                // don't leak a scheduled fire into the timer's pending queue.
+                // Cancel the timer on completion (success or failure) so no stray scheduled
+                // fire lingers in the timer's pending queue.
                 scheduled.cancel()
-                result.map(interpret(table, _))
+                result.map(interpret(table, _, logger))
             }
             .recoverWith {
-                case _: CancelledException if deadline.token.isCancelled =>
-                    Future.failed(new HandshakeError.HandshakeTimeoutException)
+                case e: CancelledException if cancelScope.token.isCancelled =>
+                    // Our scope fired — re-raise whatever cause is stored (the timer sets
+                    // HandshakeError.Timeout; outer callers may set their own).
+                    Future.failed(cancelScope.token.cause.getOrElse(e))
+                case e: CancelledException =>
+                    // CancelledException not attributable to our scope (e.g. the mux's route
+                    // cancelled independently). Propagate as-is; don't falsely synthesise a
+                    // HandshakeError.Timeout.
+                    Future.failed(e)
                 case fde: FrameDecodeException =>
                     Future.failed(new HandshakeError.DecodeError(fde.getMessage, fde))
                 case NonFatal(t) =>
@@ -97,7 +113,8 @@ final class HandshakeDriver(
 
     private def interpret(
         proposed: VersionTable,
-        received: Option[HandshakeMessage]
+        received: Option[HandshakeMessage],
+        logger: scribe.Logger
     ): NegotiatedVersion = received match {
         case None =>
             throw new HandshakeError.DecodeError("EOF before handshake reply", cause = null)
@@ -114,9 +131,7 @@ final class HandshakeDriver(
                 case RefuseReason.Refused(version, message) =>
                     throw new HandshakeError.Refused(version, message)
             }
-        case Some(MsgQueryReply(_)) =>
-            throw new HandshakeError.UnexpectedMessage("MsgQueryReply")
-        case Some(MsgProposeVersions(_)) =>
-            throw new HandshakeError.UnexpectedMessage("MsgProposeVersions")
+        case Some(m @ (MsgQueryReply(_) | MsgProposeVersions(_))) =>
+            throw new HandshakeError.UnexpectedMessage(m)
     }
 }

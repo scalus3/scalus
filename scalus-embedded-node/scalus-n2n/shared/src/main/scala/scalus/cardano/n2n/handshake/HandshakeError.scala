@@ -33,9 +33,11 @@ object HandshakeError {
     /** The 30s handshake deadline expired before a reply arrived. Fired via the `handshakeScope`
       * timer; does NOT itself cancel the connection root.
       */
-    final class HandshakeTimeoutException extends HandshakeError("handshake timed out")
+    final class Timeout extends HandshakeError("handshake timed out")
 
-    /** Peer sent a message we don't expect in the initiator flow (e.g. `MsgProposeVersions`). */
-    final class UnexpectedMessage(val received: String)
-        extends HandshakeError(s"unexpected handshake message: $received")
+    /** Peer sent a message we don't expect in the initiator flow (e.g. `MsgProposeVersions`). The
+      * full message is retained — inspect `received` for the offending payload when debugging.
+      */
+    final class UnexpectedMessage(val received: HandshakeMessage)
+        extends HandshakeError(s"unexpected handshake message from peer: $received")
 }

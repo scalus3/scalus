@@ -11,29 +11,29 @@ import scala.concurrent.Future
   * mini-protocol message into one or more SDUs before handing them to the outbound write queue.
   *
   * The handle has no `close` — tearing a protocol down is a capability of the mux's internal
-  * [[RoutingOps]], not of the consumer. Consumers observe termination via [[cancelScope]]: when the
-  * protocol-level `CancelSource` fires, [[receive]] / [[send]] calls carrying [[cancelScope]] as
-  * cancel complete with `CancelledException` and the owning state machine's own scope fires in
-  * turn.
+  * [[RoutingOps]], not of the consumer. End-of-stream surfaces as `receive()` returning `None`;
+  * transport failures surface as a failed `Future` from either method.
+  *
+  * Cancellation: each method takes an optional [[CancelToken]] that is honoured both at entry and
+  * mid-wait. When `cancel` fires while a `receive` is pending, the returned `Future` fails with the
+  * token's stored cause (or `CancelledException` if none). Callers typically pass their driver's
+  * scope token here; per-request deadlines use a linked source.
   *
   * See `docs/local/claude/indexer/n2n-transport.md` § *CBOR framing across SDUs*.
   */
 trait MiniProtocolBytes {
 
-    /** Protocol-level cancel scope — observer view. Cancelled when the mux tears this protocol
-      * down, the connection root cancels, or the owning state machine triggers its own source.
-      */
-    def cancelScope: CancelToken
-
     /** Next inbound chunk. `None` signals end-of-stream — peer's MsgDone for this route has been
-      * observed OR the connection is gone. Default `cancel` is [[cancelScope]]; state machines may
-      * pass a narrower linked token for per-call cancellation (e.g. request timeout).
+      * observed OR the connection is gone. A firing `cancel` fails the returned future mid-wait
+      * with `CancelledException`. Late-arriving bytes are consumed but discarded (no consumer) —
+      * fine for M4, revisit for M5+ if chain-sync retries on the same connection.
       */
-    def receive(cancel: CancelToken = cancelScope): Future[Option[ByteString]]
+    def receive(cancel: CancelToken = CancelToken.never): Future[Option[ByteString]]
 
     /** Send a whole mini-protocol message. The mux splits payloads larger than
       * [[Sdu.MaxPayloadSize]] across multiple SDUs internally — callers pass the logical message as
-      * one `ByteString`.
+      * one `ByteString`. The `cancel` token aborts an in-flight write (honoured by the underlying
+      * [[AsyncByteChannel]]).
       */
-    def send(message: ByteString, cancel: CancelToken = cancelScope): Future[Unit]
+    def send(message: ByteString, cancel: CancelToken = CancelToken.never): Future[Unit]
 }

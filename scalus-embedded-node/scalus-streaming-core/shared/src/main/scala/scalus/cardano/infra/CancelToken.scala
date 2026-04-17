@@ -8,20 +8,45 @@ import scala.util.control.NonFatal
 final class CancelledException(reason: String, cause: Throwable = null)
     extends RuntimeException(reason, cause)
 
-/** Observable side of a cancellation. Consumers receive one of these and can inspect it or register
-  * cleanup actions; they cannot trigger cancellation themselves — the [[CancelSource.cancel]]
-  * capability stays with the scope owner.
+/** Point-in-time cancellation *probe*. Callers that only need to check "has this been cancelled?"
+  * at specific points in their code accept a [[CancelCheck]]. Compared to [[CancelToken]], this is
+  * a strictly read-only capability — no listener registration and therefore no bookkeeping cost for
+  * either side.
   *
-  * See `docs/local/claude/indexer/n2n-transport.md` § *Cancellation* for the scope-hierarchy
-  * contract.
+  * API authors SHOULD accept the weakest type they actually honour. An entry guard that only does
+  * `if cancel.isCancelled then ...` should take `CancelCheck`; an operation that aborts a pending
+  * `Future` mid-wait via a registered listener should take [[CancelToken]]. Matching the type to
+  * the capability makes the API honest: readers know "will this be observed mid-wait?" by looking
+  * at the signature.
+  *
+  * Every [[CancelToken]] is also a [[CancelCheck]] — pass a token where a check is expected; Scala
+  * handles the promotion automatically.
   */
-trait CancelToken {
+trait CancelCheck {
 
     /** `true` once the owning source has been cancelled. */
     def isCancelled: Boolean
 
     /** If cancelled, the `Throwable` stored on the source at cancel time — otherwise `None`. */
     def cause: Option[Throwable]
+}
+
+object CancelCheck {
+
+    /** Check that is never cancelled — useful for unit tests and non-cancellable call sites. */
+    val never: CancelCheck = CancelToken.never
+}
+
+/** Full observable cancellation signal. Extends [[CancelCheck]] with [[onCancel]] for listener
+  * registration — the mechanism implementations use to abort in-flight `Future`s mid-wait.
+  * Consumers receive one of these and can inspect it or register cleanup actions; they cannot
+  * trigger cancellation themselves — the [[CancelSource.cancel]] capability stays with the scope
+  * owner.
+  *
+  * See `docs/local/claude/indexer/n2n-transport.md` § *Cancellation* for the scope-hierarchy
+  * contract.
+  */
+trait CancelToken extends CancelCheck {
 
     /** Register a callback. Fires exactly once — immediately and synchronously on the caller's
       * thread if the token is already cancelled, otherwise on the first [[CancelSource.cancel]].
@@ -48,6 +73,25 @@ object CancelToken {
         def isCancelled: Boolean = false
         def cause: Option[Throwable] = None
         def onCancel(action: () => Unit): Cancellable = Cancellable.noop
+    }
+
+    /** Returns a token that reports cancelled if either `a` or `b` is cancelled, and whose
+      * `onCancel` listener fires at most once (even if both inputs later cancel).
+      *
+      * Used to compose two independent cancel sources — e.g. a route-level cancel (mux-owned) with
+      * a per-call cancel (caller-supplied) — into a single token that downstream transport
+      * (`AsyncByteChannel.write`) can observe.
+      */
+    def or(a: CancelToken, b: CancelToken): CancelToken = new CancelToken {
+        def isCancelled: Boolean = a.isCancelled || b.isCancelled
+        def cause: Option[Throwable] = a.cause.orElse(b.cause)
+        def onCancel(action: () => Unit): Cancellable = {
+            val fired = new java.util.concurrent.atomic.AtomicBoolean(false)
+            val once: () => Unit = () => if fired.compareAndSet(false, true) then action()
+            val h1 = a.onCancel(once)
+            val h2 = b.onCancel(once)
+            () => { h1.cancel(); h2.cancel() }
+        }
     }
 }
 

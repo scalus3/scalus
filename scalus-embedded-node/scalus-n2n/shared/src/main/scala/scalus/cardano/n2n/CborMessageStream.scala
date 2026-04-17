@@ -39,18 +39,19 @@ final class FrameDecodeException(protocol: MiniProtocolId, message: String, caus
   * machines are single-consumer by construction. [[send]] is safe to call from any thread because
   * it delegates to [[MiniProtocolBytes.send]], which serialises through the mux write queue.
   *
+  * @param cancelScope
+  *   the stream's lifetime token. [[receive]] and [[send]] both forward it to the underlying
+  *   handle, which honours it at entry and mid-wait. Drivers typically pass their state-machine
+  *   scope token here so every operation on the stream observes the state-machine's lifetime.
+  *
   * See `docs/local/claude/indexer/n2n-transport.md` § *CBOR framing across SDUs*.
   */
 final class CborMessageStream[M](
     protocol: MiniProtocolId,
     handle: MiniProtocolBytes,
+    val cancelScope: CancelToken,
     initialCapacity: Int = 512
 )(using encoder: Encoder[M], decoder: Decoder[M], ec: ExecutionContext) {
-
-    /** Protocol-level cancel scope — identical to the underlying handle's cancel scope, re-exposed
-      * so state machines don't need to keep the raw handle around.
-      */
-    def cancelScope: CancelToken = handle.cancelScope
 
     // Accumulator for bytes that arrived but haven't yet been decoded into a message. `storage` is
     // the backing array (grows geometrically on demand) and `size` is the logical length of
@@ -69,15 +70,15 @@ final class CborMessageStream[M](
       *   - `Future.failed(FrameDecodeException)` on malformed CBOR.
       *   - `Future.failed(CancelledException)` on scope cancel.
       */
-    def receive(cancel: CancelToken = cancelScope): Future[Option[M]] = tryDecodeOrPull(cancel)
+    def receive(): Future[Option[M]] = tryDecodeOrPull()
 
     /** Encode and send one message. Delegates to the underlying handle; the mux splits the encoded
       * bytes across SDUs if they exceed [[Sdu.MaxPayloadSize]].
       */
-    def send(message: M, cancel: CancelToken = cancelScope): Future[Unit] =
-        handle.send(Cbor.encodeToByteString(message), cancel)
+    def send(message: M): Future[Unit] =
+        handle.send(Cbor.encodeToByteString(message), cancelScope)
 
-    private def tryDecodeOrPull(cancel: CancelToken): Future[Option[M]] = {
+    private def tryDecodeOrPull(): Future[Option[M]] = {
         if size > 0 then
             tryDecode() match {
                 case DecodeOutcome.Decoded(m) => return Future.successful(Some(m))
@@ -86,7 +87,7 @@ final class CborMessageStream[M](
                     return Future.failed(new FrameDecodeException(protocol, t))
             }
         // Buffer doesn't yet hold a full message (or is empty) — pull another chunk and retry.
-        handle.receive(cancel).flatMap {
+        handle.receive(cancelScope).flatMap {
             case None =>
                 if size == 0 then Future.successful(None)
                 else
@@ -99,7 +100,7 @@ final class CborMessageStream[M](
                     )
             case Some(chunk) =>
                 appendChunk(chunk)
-                tryDecodeOrPull(cancel)
+                tryDecodeOrPull()
         }
     }
 
