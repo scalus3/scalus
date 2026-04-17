@@ -44,7 +44,7 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
         def scope: CancelToken = source.token
 
         def receive(cancel: CancelToken = scope): Future[Option[ByteString]] = lock.synchronized {
-            if cancel.isCancelled then Future.failed(CancelledException("test"))
+            if cancel.isCancelled then Future.failed(CancelledException(TestReason))
             else if chunks.nonEmpty then Future.successful(chunks.removeHead())
             else {
                 val p = Promise[Option[ByteString]]()
@@ -55,24 +55,20 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
 
         def send(message: ByteString, cancel: CancelToken = scope): Future[Unit] = Future.unit
 
-        def push(chunk: ByteString): Unit = lock.synchronized {
-            pending match {
-                case Some(p) =>
-                    pending = None
-                    p.success(Some(chunk))
-                case None => chunks.append(Some(chunk))
-            }
-        }
+        def push(chunk: ByteString): Unit = offer(Some(chunk))
+        def eof(): Unit = offer(None)
 
-        def eof(): Unit = lock.synchronized {
+        private def offer(value: Option[ByteString]): Unit = lock.synchronized {
             pending match {
                 case Some(p) =>
                     pending = None
-                    p.success(None)
-                case None => chunks.append(None)
+                    p.success(value)
+                case None => chunks.append(value)
             }
         }
     }
+
+    private val TestReason = "CborMessageStreamSuite cancel"
 
     private def encodePing(p: Ping): Array[Byte] = Cborer.encode(p).toByteArray
 

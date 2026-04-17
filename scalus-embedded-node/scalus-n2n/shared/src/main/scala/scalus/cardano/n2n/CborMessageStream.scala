@@ -1,15 +1,20 @@
 package scalus.cardano.n2n
 
 import io.bullet.borer.{Borer, Cbor as Cborer, Decoder, Encoder}
+import scalus.serialization.cbor.Cbor
 import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.{ExecutionContext, Future}
 
-/** Connection-fatal CBOR framing error on a mini-protocol stream. Wraps the underlying borer error
-  * so the multiplexer's root-cancel path carries a typed, mini-protocol-scoped cause.
+/** Connection-fatal CBOR framing error on a mini-protocol stream. Carries the protocol on which the
+  * failure occurred so the multiplexer's root-cancel path has enough context; the wrapped cause is
+  * either a borer error (malformed bytes) or `null` (partial message at EOF — see message).
   */
-final class FrameDecodeException(protocol: MiniProtocolId, cause: Throwable)
-    extends RuntimeException(s"CBOR decode failure on $protocol", cause)
+final class FrameDecodeException(protocol: MiniProtocolId, message: String, cause: Throwable)
+    extends RuntimeException(s"CBOR framing failure on $protocol: $message", cause) {
+    def this(protocol: MiniProtocolId, cause: Throwable) =
+        this(protocol, "decode error", cause)
+}
 
 /** CBOR-aware view of a [[MiniProtocolBytes]] stream. SDU boundaries do not align with CBOR message
   * boundaries: a single message can span multiple SDUs, or multiple messages can arrive in one SDU.
@@ -18,8 +23,9 @@ final class FrameDecodeException(protocol: MiniProtocolId, cause: Throwable)
   * came from.
   *
   * Decode policy:
-  *   - Borer's `Cbor.decode(bytes).to[M].valueAndBytesConsumed` is invoked on the accumulated
-  *     buffer.
+  *   - `Cbor.decode(view).withPrefixOnly.to[M].valueAndInputEither` is invoked on the accumulated
+  *     buffer. `withPrefixOnly` allows trailing bytes (pipelined messages) to remain after a
+  *     successful decode.
   *   - Success → commit the consumed prefix, return the value. Leftover bytes stay in the buffer
   *     for the next call.
   *   - [[Borer.Error.UnexpectedEndOfInput]] → the buffer holds a complete prefix but not a complete
@@ -67,10 +73,8 @@ final class CborMessageStream[M](
     /** Encode and send one message. Delegates to the underlying handle; the mux splits the encoded
       * bytes across SDUs if they exceed [[Sdu.MaxPayloadSize]].
       */
-    def send(message: M, cancel: CancelToken = scope): Future[Unit] = {
-        val encoded = Cborer.encode(message).toByteArray
-        handle.send(ByteString.unsafeFromArray(encoded), cancel)
-    }
+    def send(message: M, cancel: CancelToken = scope): Future[Unit] =
+        handle.send(Cbor.encodeToByteString(message), cancel)
 
     private def tryDecodeOrPull(cancel: CancelToken): Future[Option[M]] = {
         if size > 0 then
@@ -88,10 +92,8 @@ final class CborMessageStream[M](
                     Future.failed(
                       new FrameDecodeException(
                         protocol,
-                        new Borer.Error.UnexpectedEndOfInput(
-                          null,
-                          s"partial CBOR message at EOF ($size bytes buffered)"
-                        )
+                        s"partial CBOR message at EOF ($size bytes buffered)",
+                        null
                       )
                     )
             case Some(chunk) =>
@@ -134,7 +136,7 @@ final class CborMessageStream[M](
 
     private def ensureCapacity(needed: Int): Unit = {
         if needed > storage.length then {
-            var newCap = math.max(storage.length * 2, initialCapacity)
+            var newCap = storage.length * 2
             while newCap < needed do newCap *= 2
             val grown = new Array[Byte](newCap)
             System.arraycopy(storage, 0, grown, 0, size)
