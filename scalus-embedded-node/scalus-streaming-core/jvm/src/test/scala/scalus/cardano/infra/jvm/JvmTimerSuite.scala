@@ -1,7 +1,7 @@
-package scalus.cardano.n2n.jvm
+package scalus.cardano.infra.jvm
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.n2n.CancelSource
+import scalus.cardano.infra.CancelSource
 
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{CountDownLatch, TimeUnit}

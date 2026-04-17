@@ -2,6 +2,7 @@ package scalus.cardano.n2n
 
 import cps.*
 import cps.monads.FutureAsyncMonad
+import scalus.cardano.infra.{CancelSource, CancelToken, Cancellable, CancelledException}
 import scalus.cardano.node.stream.DeltaBufferPolicy
 import scalus.cardano.node.stream.engine.Mailbox
 import scalus.uplc.builtin.ByteString
@@ -104,7 +105,7 @@ final class Multiplexer(
     // --------------------------------------------------------------------------------------
 
     /** Get (or create) the handle for a mini-protocol. Calls for the same protocol return the same
-      * handle — idempotent. The returned handle's `scope` is linked to the connection root.
+      * handle — idempotent. The returned handle's `cancelScope` is linked to the connection root.
       */
     def channel(proto: MiniProtocolId): MiniProtocolBytes = routeLock.synchronized {
         val inboundKey = (proto, Direction.Responder)
@@ -362,14 +363,14 @@ final class Multiplexer(
     }
 
     private final class Handle(proto: MiniProtocolId, route: Route) extends MiniProtocolBytes {
-        def scope: CancelToken = route.source.token
+        def cancelScope: CancelToken = route.source.token
 
-        def receive(cancel: CancelToken = scope): Future[Option[ByteString]] = {
+        def receive(cancel: CancelToken = cancelScope): Future[Option[ByteString]] = {
             if cancel.isCancelled then Future.failed(CancelledException("pre-receive"))
             else route.mailbox.pull()
         }
 
-        def send(message: ByteString, cancel: CancelToken = scope): Future[Unit] =
+        def send(message: ByteString, cancel: CancelToken = cancelScope): Future[Unit] =
             sendChunks(proto, Direction.Initiator, message, cancel)
     }
 }

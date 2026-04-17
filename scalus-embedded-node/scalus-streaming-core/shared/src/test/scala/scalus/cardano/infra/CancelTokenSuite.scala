@@ -1,4 +1,4 @@
-package scalus.cardano.n2n
+package scalus.cardano.infra
 
 import org.scalatest.funsuite.AnyFunSuite
 

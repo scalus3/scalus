@@ -1,5 +1,6 @@
 package scalus.cardano.n2n
 
+import scalus.cardano.infra.CancelToken
 import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.Future
@@ -18,20 +19,20 @@ import scala.concurrent.Future
   */
 trait MiniProtocolBytes {
 
-    /** Protocol-level cancel scope. Cancelled when the mux tears this protocol down, the connection
-      * root cancels, or the owning state machine triggers its own source.
+    /** Protocol-level cancel scope — observer view. Cancelled when the mux tears this protocol
+      * down, the connection root cancels, or the owning state machine triggers its own source.
       */
-    def scope: CancelToken
+    def cancelScope: CancelToken
 
     /** Next inbound chunk. `None` signals end-of-stream — peer's MsgDone for this route has been
-      * observed OR the connection is gone. Default `cancel` is [[scope]]; state machines may pass a
-      * narrower linked token for per-call cancellation (e.g. request timeout).
+      * observed OR the connection is gone. Default `cancel` is [[cancelScope]]; state machines may
+      * pass a narrower linked token for per-call cancellation (e.g. request timeout).
       */
-    def receive(cancel: CancelToken = scope): Future[Option[ByteString]]
+    def receive(cancel: CancelToken = cancelScope): Future[Option[ByteString]]
 
     /** Send a whole mini-protocol message. The mux splits payloads larger than
       * [[Sdu.MaxPayloadSize]] across multiple SDUs internally — callers pass the logical message as
       * one `ByteString`.
       */
-    def send(message: ByteString, cancel: CancelToken = scope): Future[Unit]
+    def send(message: ByteString, cancel: CancelToken = cancelScope): Future[Unit]
 }

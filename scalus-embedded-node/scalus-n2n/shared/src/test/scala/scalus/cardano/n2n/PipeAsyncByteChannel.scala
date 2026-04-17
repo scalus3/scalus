@@ -1,5 +1,6 @@
 package scalus.cardano.n2n
 
+import scalus.cardano.infra.{CancelToken, Cancellable, CancelledException}
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.mutable.ArrayDeque

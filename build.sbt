@@ -828,7 +828,7 @@ lazy val scalusStreamingOx = project
 // primitive.
 lazy val scalusN2n = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-embedded-node/scalus-n2n"))
-    .dependsOn(scalusStreamingCore)
+    .dependsOn(scalusStreamingCore % "compile->compile;test->test")
     .disablePlugins(MimaPlugin)
     .settings(
       name := "scalus-n2n",

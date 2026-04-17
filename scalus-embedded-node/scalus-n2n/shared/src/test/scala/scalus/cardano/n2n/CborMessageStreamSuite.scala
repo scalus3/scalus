@@ -4,6 +4,7 @@ import io.bullet.borer.{Cbor as Cborer, Decoder, Encoder}
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
+import scalus.cardano.infra.{CancelSource, CancelToken, CancelledException}
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.mutable
@@ -41,19 +42,20 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
         private var pending: Option[Promise[Option[ByteString]]] = None
         private val source = CancelSource()
 
-        def scope: CancelToken = source.token
+        def cancelScope: CancelToken = source.token
 
-        def receive(cancel: CancelToken = scope): Future[Option[ByteString]] = lock.synchronized {
-            if cancel.isCancelled then Future.failed(CancelledException(TestReason))
-            else if chunks.nonEmpty then Future.successful(chunks.removeHead())
-            else {
-                val p = Promise[Option[ByteString]]()
-                pending = Some(p)
-                p.future
+        def receive(cancel: CancelToken = cancelScope): Future[Option[ByteString]] =
+            lock.synchronized {
+                if cancel.isCancelled then Future.failed(CancelledException(TestReason))
+                else if chunks.nonEmpty then Future.successful(chunks.removeHead())
+                else {
+                    val p = Promise[Option[ByteString]]()
+                    pending = Some(p)
+                    p.future
+                }
             }
-        }
 
-        def send(message: ByteString, cancel: CancelToken = scope): Future[Unit] = Future.unit
+        def send(message: ByteString, cancel: CancelToken = cancelScope): Future[Unit] = Future.unit
 
         def push(chunk: ByteString): Unit = offer(Some(chunk))
         def eof(): Unit = offer(None)
@@ -130,10 +132,10 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
     test("send encodes via borer and delegates to handle") {
         val sent = new java.util.concurrent.atomic.AtomicReference[Option[ByteString]](None)
         val handle = new MiniProtocolBytes {
-            def scope: CancelToken = CancelToken.never
-            def receive(cancel: CancelToken = scope): Future[Option[ByteString]] =
+            def cancelScope: CancelToken = CancelToken.never
+            def receive(cancel: CancelToken = cancelScope): Future[Option[ByteString]] =
                 Future.failed(new UnsupportedOperationException)
-            def send(message: ByteString, cancel: CancelToken = scope): Future[Unit] = {
+            def send(message: ByteString, cancel: CancelToken = cancelScope): Future[Unit] = {
                 val _ = sent.getAndSet(Some(message))
                 Future.unit
             }

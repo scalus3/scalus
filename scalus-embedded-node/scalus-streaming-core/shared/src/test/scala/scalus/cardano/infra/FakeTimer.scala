@@ -1,4 +1,4 @@
-package scalus.cardano.n2n
+package scalus.cardano.infra
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.duration.{Duration, FiniteDuration}

@@ -4,6 +4,7 @@ import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
+import scalus.cardano.infra.{CancelSource, CancelToken}
 import scalus.cardano.node.stream.DeltaBufferPolicy
 import scalus.uplc.builtin.ByteString
 
@@ -48,18 +49,18 @@ class MultiplexerSuite extends AnyFunSuite with ScalaFutures with Eventually {
         Await.result(peerEnd.write(ByteString.unsafeFromArray(frame), CancelToken.never), 1.second)
     }
 
-    test("channel() is idempotent — same handle scope for repeated calls on a protocol") {
+    test("channel() is idempotent — same handle cancelScope for repeated calls on a protocol") {
         val (mux, _, _) = muxOnPipe()
         val a = mux.channel(MiniProtocolId.Handshake)
         val b = mux.channel(MiniProtocolId.Handshake)
-        assert(a.scope eq b.scope)
+        assert(a.cancelScope eq b.cancelScope)
     }
 
     test("inbound frame is delivered to the matching protocol's receive()") {
         val (mux, peer, _) = muxOnPipe()
         val hs = mux.channel(MiniProtocolId.Handshake)
         peerSend(peer, MiniProtocolId.Handshake, bytes("hello"))
-        val got = hs.receive(hs.scope).futureValue
+        val got = hs.receive(hs.cancelScope).futureValue
         assert(got.exists(_.bytes sameElements bytes("hello").bytes))
     }
 
@@ -67,7 +68,7 @@ class MultiplexerSuite extends AnyFunSuite with ScalaFutures with Eventually {
         val (mux, peer, _) = muxOnPipe(MuxConfig(sduMaxPayload = 100))
         val hs = mux.channel(MiniProtocolId.Handshake)
         val payload = Array.tabulate[Byte](350)(i => (i & 0xff).toByte)
-        hs.send(ByteString.unsafeFromArray(payload), hs.scope).futureValue
+        hs.send(ByteString.unsafeFromArray(payload), hs.cancelScope).futureValue
 
         val collected = new scala.collection.mutable.ArrayBuffer[Byte]
         for _ <- 0 until 4 do {
@@ -107,8 +108,8 @@ class MultiplexerSuite extends AnyFunSuite with ScalaFutures with Eventually {
         val hs = mux.channel(MiniProtocolId.Handshake)
         val ka = mux.channel(MiniProtocolId.KeepAlive)
 
-        val pendingHs = hs.receive(hs.scope)
-        val pendingKa = ka.receive(ka.scope)
+        val pendingHs = hs.receive(hs.cancelScope)
+        val pendingKa = ka.receive(ka.cancelScope)
         root.cancel(new RuntimeException("user close"))
 
         val hsEx = recoverToExceptionIf[RuntimeException](pendingHs).futureValue
@@ -117,19 +118,19 @@ class MultiplexerSuite extends AnyFunSuite with ScalaFutures with Eventually {
         assert(kaEx.getMessage == "user close")
     }
 
-    test("scope isolation: finishClose on one protocol leaves root + siblings alive") {
+    test("cancelScope isolation: finishClose on one protocol leaves root + siblings alive") {
         val (mux, peer, root) = muxOnPipe()
         val hs = mux.channel(MiniProtocolId.Handshake)
         val ka = mux.channel(MiniProtocolId.KeepAlive)
 
         mux.finishClose(MiniProtocolId.Handshake, Direction.Responder)
 
-        assert(hs.scope.isCancelled)
-        assert(!ka.scope.isCancelled)
+        assert(hs.cancelScope.isCancelled)
+        assert(!ka.cancelScope.isCancelled)
         assert(!root.token.isCancelled)
 
         peerSend(peer, MiniProtocolId.KeepAlive, bytes("alive"))
-        val got = ka.receive(ka.scope).futureValue
+        val got = ka.receive(ka.cancelScope).futureValue
         assert(got.exists(_.bytes sameElements bytes("alive").bytes))
     }
 
@@ -147,7 +148,7 @@ class MultiplexerSuite extends AnyFunSuite with ScalaFutures with Eventually {
         var sawOverflow = false
         var pulls = 0
         while !sawOverflow && pulls < 80 do {
-            try Await.result(hs.receive(hs.scope), 2.seconds)
+            try Await.result(hs.receive(hs.cancelScope), 2.seconds)
             catch {
                 case _: scalus.cardano.infra.ScalusBufferOverflowException => sawOverflow = true
             }
@@ -172,12 +173,12 @@ class MultiplexerSuite extends AnyFunSuite with ScalaFutures with Eventually {
         // frames ahead of it have already been routed (and silently discarded due to Draining).
         peerSend(peer, MiniProtocolId.KeepAlive, bytes("barrier"))
 
-        val marker = ka.receive(ka.scope).futureValue
+        val marker = ka.receive(ka.cancelScope).futureValue
         assert(marker.exists(_.bytes sameElements bytes("barrier").bytes))
         assert(!root.token.isCancelled, "draining frames must not fire root")
 
         mux.finishClose(MiniProtocolId.Handshake, Direction.Responder)
-        assert(hs.scope.isCancelled)
+        assert(hs.cancelScope.isCancelled)
 
         // Next frame on Closed route fires root.
         peerSend(peer, MiniProtocolId.Handshake, bytes("late"))

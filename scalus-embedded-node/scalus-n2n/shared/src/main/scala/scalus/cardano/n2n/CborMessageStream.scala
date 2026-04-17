@@ -1,6 +1,7 @@
 package scalus.cardano.n2n
 
 import io.bullet.borer.{Borer, Cbor as Cborer, Decoder, Encoder}
+import scalus.cardano.infra.CancelToken
 import scalus.serialization.cbor.Cbor
 import scalus.uplc.builtin.ByteString
 
@@ -46,10 +47,10 @@ final class CborMessageStream[M](
     initialCapacity: Int = 512
 )(using encoder: Encoder[M], decoder: Decoder[M], ec: ExecutionContext) {
 
-    /** Protocol-level cancel scope — identical to the underlying handle's scope, re-exposed so
-      * state machines don't need to keep the raw handle around.
+    /** Protocol-level cancel scope — identical to the underlying handle's cancel scope, re-exposed
+      * so state machines don't need to keep the raw handle around.
       */
-    def scope: CancelToken = handle.scope
+    def cancelScope: CancelToken = handle.cancelScope
 
     // Accumulator for bytes that arrived but haven't yet been decoded into a message. `storage` is
     // the backing array (grows geometrically on demand) and `size` is the logical length of
@@ -68,12 +69,12 @@ final class CborMessageStream[M](
       *   - `Future.failed(FrameDecodeException)` on malformed CBOR.
       *   - `Future.failed(CancelledException)` on scope cancel.
       */
-    def receive(cancel: CancelToken = scope): Future[Option[M]] = tryDecodeOrPull(cancel)
+    def receive(cancel: CancelToken = cancelScope): Future[Option[M]] = tryDecodeOrPull(cancel)
 
     /** Encode and send one message. Delegates to the underlying handle; the mux splits the encoded
       * bytes across SDUs if they exceed [[Sdu.MaxPayloadSize]].
       */
-    def send(message: M, cancel: CancelToken = scope): Future[Unit] =
+    def send(message: M, cancel: CancelToken = cancelScope): Future[Unit] =
         handle.send(Cbor.encodeToByteString(message), cancel)
 
     private def tryDecodeOrPull(cancel: CancelToken): Future[Option[M]] = {

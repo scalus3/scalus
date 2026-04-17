@@ -4,6 +4,7 @@ import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
+import scalus.cardano.infra.{CancelSource, CancelToken, CancelledException}
 import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.Await

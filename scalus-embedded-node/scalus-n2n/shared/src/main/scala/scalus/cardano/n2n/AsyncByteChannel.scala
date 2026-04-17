@@ -1,5 +1,6 @@
 package scalus.cardano.n2n
 
+import scalus.cardano.infra.CancelToken
 import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.Future

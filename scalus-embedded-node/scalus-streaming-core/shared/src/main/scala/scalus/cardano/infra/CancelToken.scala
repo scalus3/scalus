@@ -1,4 +1,4 @@
-package scalus.cardano.n2n
+package scalus.cardano.infra
 
 import scala.util.control.NonFatal
 
@@ -191,5 +191,5 @@ private final class CancelSourceImpl(logger: scribe.Logger) extends CancelSource
     }
 
     /** Test-only introspection — current number of registered listeners. Returns 0 after cancel. */
-    private[n2n] def listenerCount: Int = lock.synchronized(listeners.size)
+    private[infra] def listenerCount: Int = lock.synchronized(listeners.size)
 }

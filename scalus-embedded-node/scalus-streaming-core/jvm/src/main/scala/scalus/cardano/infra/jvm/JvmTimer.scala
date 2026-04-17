@@ -1,6 +1,6 @@
-package scalus.cardano.n2n.jvm
+package scalus.cardano.infra.jvm
 
-import scalus.cardano.n2n.{Cancellable, Timer}
+import scalus.cardano.infra.{Cancellable, Timer}
 
 import java.util.concurrent.{Executors, ScheduledExecutorService, ScheduledFuture, TimeUnit}
 import scala.concurrent.duration.FiniteDuration
