@@ -903,8 +903,8 @@ lazy val scalusCardanoLedgerIt = project
 lazy val scalusN2nIt = project
     .in(file("scalus-embedded-node/scalus-n2n-it"))
     .dependsOn(
-      scalusN2n.jvm % "compile->compile;test->test"
-      // scalusTestkit.jvm added in Phase 9 when YaciDevKit mixin is consumed
+      scalusN2n.jvm % "compile->compile;test->test",
+      scalusTestkit.jvm % "test->compile"
     )
     .settings(
       name := "scalus-n2n-it",
