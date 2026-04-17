@@ -194,10 +194,12 @@
           };
         ci =
           let
-            jdk = pkgs.openjdk11;
+            # JDK 25 matches the dev shell. Must be ≥ 21 for ox (uses Loom virtual threads)
+            # and ≥ 22 for the `--enable-native-access` flag used by blst-java.
+            jdk = pkgs.openjdk25;
             sbt = pkgs.sbt.override { jre = jdk; };
 
-            # Common JVM options for CI environment (Java 11 - more conservative settings)
+            # Common JVM options for CI environment
             ciCommonJvmOpts = [
               # Memory settings - fixed heap to avoid OOM on 16GB GitHub Actions runners.
               # MaxRAMPercentage=75% gives ~12GB heap, leaving too little for Node.js
@@ -206,10 +208,13 @@
               "-Xmx7g" # Max heap: 7GB (leaves ~9GB for Node.js, Nix, OS on 16GB runner)
               "-Xss64m" # Stack size for deep recursive calls in compiler
 
-              # Garbage Collection - G1GC for Java 11 stability
+              # Enable native access for BLST JNI library (required for Java 22+)
+              "--enable-native-access=ALL-UNNAMED"
+
+              # Garbage Collection
               "-XX:+UseG1GC" # Use G1 Garbage Collector (stable, good for large heaps)
 
-              # Memory optimizations (Java 11 compatible)
+              # Memory optimizations
               "-XX:+UseStringDeduplication" # Deduplicate identical strings to save memory
 
               # Code cache settings - enabled for better JIT performance
@@ -221,6 +226,9 @@
 
               # Memory efficiency
               "-XX:+UseCompressedOops" # Use 32-bit pointers on 64-bit JVM (saves memory)
+
+              # Java preview features (used by scalus-core)
+              "--enable-preview"
             ];
 
             # CI SBT-specific options (prioritize build speed for single-run builds)
@@ -268,7 +276,8 @@
           };
         ci-secp =
           let
-            jdk = pkgs.openjdk11;
+            # JDK 25 — see `ci` shell for why (ox, blst-java, --enable-preview).
+            jdk = pkgs.openjdk25;
             sbt = pkgs.sbt.override { jre = jdk; };
           in
           pkgs.mkShell {
