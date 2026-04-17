@@ -18,10 +18,10 @@ object Cancellable {
     val noop: Cancellable = () => ()
 }
 
-/** Platform-neutral scheduled-action primitive. M4 uses this exclusively to schedule
-  * `CancelSource.cancel(...)` at timeout deadlines; it is NOT a general-purpose executor.
+/** Platform-neutral scheduled-action primitive, used to schedule `CancelSource.cancel(...)` at
+  * timeout deadlines. It is NOT a general-purpose executor.
   *
-  * Implementations: [[scalus.cardano.n2n.jvm.JvmTimer]] (production JVM, backed by
+  * Implementations: [[scalus.cardano.infra.jvm.JvmTimer]] (production JVM, backed by
   * `ScheduledExecutorService`), `FakeTimer` (test-only, virtual-time via `advance`).
   */
 trait Timer {
@@ -33,7 +33,7 @@ trait Timer {
       * equivalent; callers are expected to keep the action small (e.g. `source.cancel()`).
       * Exceptions thrown by the action must be logged by the implementation (never silently eaten)
       * so that a buggy scheduled action is debuggable via the log channel. See
-      * [[scalus.cardano.n2n.jvm.JvmTimer]] for the production policy.
+      * [[scalus.cardano.infra.jvm.JvmTimer]] for the production policy.
       */
     def schedule(delay: FiniteDuration)(action: => Unit): Cancellable
 }

@@ -11,9 +11,10 @@ import scala.concurrent.Future
   * mini-protocol message into one or more SDUs before handing them to the outbound write queue.
   *
   * The handle has no `close` — tearing a protocol down is a capability of the mux's internal
-  * [[RoutingOps]], not of the consumer. Consumers observe termination via [[scope]]: when the
-  * protocol-level `CancelSource` fires, [[receive]] / [[send]] calls carrying [[scope]] as cancel
-  * complete with [[CancelledException]] and the owning state machine's own scope fires in turn.
+  * [[RoutingOps]], not of the consumer. Consumers observe termination via [[cancelScope]]: when the
+  * protocol-level `CancelSource` fires, [[receive]] / [[send]] calls carrying [[cancelScope]] as
+  * cancel complete with `CancelledException` and the owning state machine's own scope fires in
+  * turn.
   *
   * See `docs/local/claude/indexer/n2n-transport.md` § *CBOR framing across SDUs*.
   */
