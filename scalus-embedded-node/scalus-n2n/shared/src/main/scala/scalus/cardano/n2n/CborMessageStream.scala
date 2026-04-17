@@ -35,21 +35,21 @@ final class FrameDecodeException(protocol: MiniProtocolId, message: String, caus
   *     returned `Future` so the caller (typically a state machine driver) can escalate via
   *     [[RoutingOps.escalateRoot]].
   *
+  * Cancellation: stateless. Each [[receive]] and [[send]] takes an optional `cancel: CancelToken`
+  * that is forwarded to the underlying handle, which honours it at entry and mid-wait. Callers pass
+  * their driver's scope (for stream-lifetime operations) or a narrower linked source (for per-call
+  * deadlines). Default is [[CancelToken.never]] — explicit cancel is required for any cancellation
+  * semantics.
+  *
   * Thread-safety: callers must not issue overlapping [[receive]] calls on the same stream — state
   * machines are single-consumer by construction. [[send]] is safe to call from any thread because
   * it delegates to [[MiniProtocolBytes.send]], which serialises through the mux write queue.
-  *
-  * @param cancelScope
-  *   the stream's lifetime token. [[receive]] and [[send]] both forward it to the underlying
-  *   handle, which honours it at entry and mid-wait. Drivers typically pass their state-machine
-  *   scope token here so every operation on the stream observes the state-machine's lifetime.
   *
   * See `docs/local/claude/indexer/n2n-transport.md` § *CBOR framing across SDUs*.
   */
 final class CborMessageStream[M](
     protocol: MiniProtocolId,
     handle: MiniProtocolBytes,
-    val cancelScope: CancelToken,
     initialCapacity: Int = 512
 )(using encoder: Encoder[M], decoder: Decoder[M], ec: ExecutionContext) {
 
@@ -68,17 +68,19 @@ final class CborMessageStream[M](
       *     available. If any bytes remain buffered at EOF the future fails with
       *     [[FrameDecodeException]] (partial message mid-stream is a framing error).
       *   - `Future.failed(FrameDecodeException)` on malformed CBOR.
-      *   - `Future.failed(CancelledException)` on scope cancel.
+      *   - `Future.failed(CancelledException)` on `cancel` firing.
       */
-    def receive(): Future[Option[M]] = tryDecodeOrPull()
+    def receive(cancel: CancelToken = CancelToken.never): Future[Option[M]] = tryDecodeOrPull(
+      cancel
+    )
 
     /** Encode and send one message. Delegates to the underlying handle; the mux splits the encoded
       * bytes across SDUs if they exceed [[Sdu.MaxPayloadSize]].
       */
-    def send(message: M): Future[Unit] =
-        handle.send(Cbor.encodeToByteString(message), cancelScope)
+    def send(message: M, cancel: CancelToken = CancelToken.never): Future[Unit] =
+        handle.send(Cbor.encodeToByteString(message), cancel)
 
-    private def tryDecodeOrPull(): Future[Option[M]] = {
+    private def tryDecodeOrPull(cancel: CancelToken): Future[Option[M]] = {
         if size > 0 then
             tryDecode() match {
                 case DecodeOutcome.Decoded(m) => return Future.successful(Some(m))
@@ -86,8 +88,7 @@ final class CborMessageStream[M](
                 case DecodeOutcome.Fatal(t) =>
                     return Future.failed(new FrameDecodeException(protocol, t))
             }
-        // Buffer doesn't yet hold a full message (or is empty) — pull another chunk and retry.
-        handle.receive(cancelScope).flatMap {
+        handle.receive(cancel).flatMap {
             case None =>
                 if size == 0 then Future.successful(None)
                 else
@@ -100,7 +101,7 @@ final class CborMessageStream[M](
                     )
             case Some(chunk) =>
                 appendChunk(chunk)
-                tryDecodeOrPull()
+                tryDecodeOrPull(cancel)
         }
     }
 

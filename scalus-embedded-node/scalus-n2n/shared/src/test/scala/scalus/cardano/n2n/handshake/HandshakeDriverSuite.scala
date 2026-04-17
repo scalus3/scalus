@@ -4,7 +4,7 @@ import io.bullet.borer.Cbor
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
-import scalus.cardano.infra.{CancelScope, CancelSource, CancelToken, FakeTimer}
+import scalus.cardano.infra.{CancelSource, CancelToken, FakeTimer}
 import scalus.cardano.n2n.handshake.HandshakeMessage.*
 import scalus.cardano.n2n.{MiniProtocolBytes, NetworkMagic}
 import scalus.uplc.builtin.ByteString
@@ -84,9 +84,9 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     /** Standard fixture: fresh FakeTimer + CancelScope + ScriptedBytes peer whose cancelScope is
       * the scope's token. Tests that need finer control over the timer build the trio inline.
       */
-    private def newFixture(): (ScriptedBytes, CancelScope, FakeTimer) = {
+    private def newFixture(): (ScriptedBytes, CancelSource, FakeTimer) = {
         val timer = new FakeTimer()
-        val scope = new CancelScope(CancelSource(), timer)
+        val scope = CancelSource()
         (new ScriptedBytes, scope, timer)
     }
 
@@ -97,8 +97,8 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     // --------------------------------------------------------------------------------------
 
     test("driver sends MsgProposeVersions with v14 + v16 and returns on MsgAcceptVersion") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
 
         // Peer accepts at v16.
         val acceptedData = NodeToNodeVersionData.V16(
@@ -136,8 +136,8 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     // --------------------------------------------------------------------------------------
 
     test("MsgRefuse/VersionMismatch surfaces as HandshakeError.VersionMismatch") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
         peer.stage(MsgRefuse(RefuseReason.VersionMismatch(List(11, 12, 13))))
 
         val ex = f.failed.futureValue
@@ -148,8 +148,8 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     }
 
     test("MsgRefuse/Refused surfaces as HandshakeError.Refused") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
         peer.stage(MsgRefuse(RefuseReason.Refused(16, "magic mismatch")))
 
         val ex = f.failed.futureValue
@@ -160,8 +160,8 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     }
 
     test("MsgRefuse/HandshakeDecodeError maps to Refused with 'peer decode error' prefix") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
         peer.stage(MsgRefuse(RefuseReason.HandshakeDecodeError(14, "bad cbor")))
 
         val ex = f.failed.futureValue
@@ -176,8 +176,8 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     // --------------------------------------------------------------------------------------
 
     test("MsgQueryReply in initiator flow surfaces UnexpectedMessage with the payload") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
         val reply = MsgQueryReply(
           VersionTable(VersionNumber.V14 -> NodeToNodeVersionData.V14(magic, true, 0, false))
         )
@@ -188,8 +188,8 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     }
 
     test("MsgProposeVersions back from peer surfaces UnexpectedMessage with the payload") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
         val reply = MsgProposeVersions(
           VersionTable(VersionNumber.V16 -> NodeToNodeVersionData.V16(magic, true, 0, false, false))
         )
@@ -200,8 +200,8 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     }
 
     test("EOF before reply surfaces as DecodeError") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
         peer.stageEof()
 
         val ex = f.failed.futureValue
@@ -209,8 +209,8 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     }
 
     test("garbage bytes surface as DecodeError") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
         // 0xFF alone isn't decodable as a top-level item; pad to two bytes to push past
         // insufficient-input.
         peer.stageRawBytes(ByteString.unsafeFromArray(Array[Byte](0xff.toByte, 0x00.toByte)))
@@ -227,9 +227,9 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
       "timeout fires HandshakeError.Timeout and marks cancelScope with that cause"
     ) {
         val timer = new FakeTimer()
-        val scope = new CancelScope(CancelSource(), timer)
+        val scope = CancelSource()
         val peer = new ScriptedBytes
-        val f = HandshakeDriver.run(peer, magic, scope, timeout = 30.seconds)
+        val f = HandshakeDriver.run(peer, magic, scope, timer, timeout = 30.seconds)
 
         // No reply staged — driver is awaiting. Advance past deadline.
         timer.advance(29.seconds)
@@ -248,9 +248,9 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
 
     test("early success cancels the scheduled timeout (no stray pending entries)") {
         val timer = new FakeTimer()
-        val scope = new CancelScope(CancelSource(), timer)
+        val scope = CancelSource()
         val peer = new ScriptedBytes
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
 
         peer.stage(
           MsgAcceptVersion(
@@ -263,11 +263,11 @@ class HandshakeDriverSuite extends AnyFunSuite with ScalaFutures {
     }
 
     test("outer scope cancel before reply propagates the outer cause") {
-        val (peer, scope, _) = newFixture()
-        val f = HandshakeDriver.run(peer, magic, scope)
+        val (peer, scope, timer) = newFixture()
+        val f = HandshakeDriver.run(peer, magic, scope, timer)
 
         val outerCause = new RuntimeException("outer cancel")
-        scope.source.cancel(outerCause)
+        scope.cancel(outerCause)
         val ex = f.failed.futureValue
         // The outer cancel flows through the linked deadline token and back up as the
         // stored cause — the driver does not classify upstream cancels as timeouts.

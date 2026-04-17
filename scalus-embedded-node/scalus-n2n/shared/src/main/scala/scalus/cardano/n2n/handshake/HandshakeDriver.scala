@@ -1,6 +1,6 @@
 package scalus.cardano.n2n.handshake
 
-import scalus.cardano.infra.{CancelScope, CancelledException}
+import scalus.cardano.infra.{CancelSource, CancelledException, Timer}
 import scalus.cardano.n2n.handshake.HandshakeMessage.*
 import scalus.cardano.n2n.{CborMessageStream, FrameDecodeException, MiniProtocolBytes, MiniProtocolId, NetworkMagic}
 
@@ -26,14 +26,14 @@ final case class NegotiatedVersion(version: Int, data: NodeToNodeVersionData)
   *   - timeout → fails with [[HandshakeError.Timeout]]
   *   - decode error → fails with [[HandshakeError.DecodeError]]
   *
-  * Timeout policy: a 30-second deadline (default) is scheduled via the supplied [[CancelScope]]'s
-  * timer. On expiry the timer cancels [[CancelScope.source]] with a [[HandshakeError.Timeout]] as
-  * the cause; every in-flight operation on the stream observes `cancelScope` and fails. If the
-  * reply arrives first, the scheduled handle is cancelled so the timer doesn't fire.
+  * Timeout policy: a 30-second deadline (default) is scheduled on the supplied `timer`. On expiry
+  * the timer cancels `cancelScope` with a [[HandshakeError.Timeout]] as the cause; every in-flight
+  * operation on the stream observes `cancelScope.token` and fails. If the reply arrives first, the
+  * scheduled handle is cancelled so the timer doesn't fire.
   *
-  * Scope isolation: the handshake's `cancelScope` is typically a linked child of the connection
-  * root, so firing it does NOT take down the root. The caller composing this driver into
-  * [[NodeToNodeClient]] decides whether handshake timeout escalates further.
+  * Scope isolation: `cancelScope` is typically a linked child of the connection root, so firing it
+  * does NOT take down the root. The caller composing this driver into [[NodeToNodeClient]] decides
+  * whether handshake timeout escalates further.
   *
   * See `docs/local/claude/indexer/n2n-transport.md` § *Handshake* for the wire format and error
   * model.
@@ -48,24 +48,21 @@ object HandshakeDriver {
     def run(
         handle: MiniProtocolBytes,
         magic: NetworkMagic,
-        cancelScope: CancelScope,
+        cancelScope: CancelSource,
+        timer: Timer,
         timeout: FiniteDuration = 30.seconds,
         logger: scribe.Logger = defaultLogger
     )(using ExecutionContext): Future[NegotiatedVersion] = {
         val table = defaultProposal(magic)
-        val stream = new CborMessageStream[HandshakeMessage](
-          MiniProtocolId.Handshake,
-          handle,
-          cancelScope = cancelScope.token
-        )
+        val stream = new CborMessageStream[HandshakeMessage](MiniProtocolId.Handshake, handle)
 
-        val scheduled = cancelScope.schedule(
-          timeout,
-          cancelScope.source,
-          new HandshakeError.Timeout
-        )
+        val scheduled = timer.schedule(timeout) {
+            cancelScope.cancel(new HandshakeError.Timeout)
+        }
 
-        val exchange = stream.send(MsgProposeVersions(table)).flatMap { _ => stream.receive() }
+        val exchange = stream
+            .send(MsgProposeVersions(table), cancelScope.token)
+            .flatMap(_ => stream.receive(cancelScope.token))
 
         exchange
             .transform { result =>

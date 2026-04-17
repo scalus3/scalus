@@ -1,6 +1,7 @@
 package scalus.cardano.infra
 
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 /** Handle to cancel a scheduled timer action or deregister a [[CancelToken.onCancel]] listener.
   * Idempotent — if the action has already run (or the listener already fired), calling [[cancel]]
@@ -36,4 +37,30 @@ trait Timer {
       * [[scalus.cardano.infra.jvm.JvmTimer]] for the production policy.
       */
     def schedule(delay: FiniteDuration)(action: => Unit): Cancellable
+
+    /** Sleep for `duration`, or fail the returned future early if `cancel` fires. The default
+      * implementation is a thin wrapper over [[schedule]] — it works against any `Timer`
+      * (production or `FakeTimer` in tests). `cancel` is honoured both pre-call (immediate fail)
+      * and mid-wait (scheduled firing is aborted, future fails with the cancel cause). Listener is
+      * deregistered on completion to avoid leaking on long-lived cancel sources.
+      */
+    def sleep(
+        duration: FiniteDuration,
+        cancel: CancelToken = CancelToken.never
+    )(using ExecutionContext): Future[Unit] = {
+        val p = Promise[Unit]()
+        if cancel.isCancelled then
+            p.tryFailure(cancel.cause.getOrElse(new CancelledException("pre-sleep")))
+        else {
+            val scheduled = schedule(duration) { val _ = p.trySuccess(()) }
+            val listener = cancel.onCancel { () =>
+                scheduled.cancel()
+                val _ = p.tryFailure(
+                  cancel.cause.getOrElse(new CancelledException("sleep cancelled"))
+                )
+            }
+            p.future.onComplete(_ => listener.cancel())
+        }
+        p.future
+    }
 }

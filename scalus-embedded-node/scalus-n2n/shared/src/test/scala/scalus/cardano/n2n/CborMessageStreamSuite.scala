@@ -73,14 +73,14 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
 
     test("decodes a message delivered in a single chunk") {
         val q = new QueueBytes
-        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q, CancelToken.never)
+        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q)
         q.push(ByteString.unsafeFromArray(encodePing(Ping(1, "hello"))))
         assert(stream.receive().futureValue.contains(Ping(1, "hello")))
     }
 
     test("decodes a message split across every byte boundary — single byte at a time") {
         val q = new QueueBytes
-        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q, CancelToken.never)
+        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q)
         val encoded = encodePing(Ping(42, "boundary-test-string"))
         val fut = stream.receive()
         // Feed one byte per push — all but the last produce NeedMore internally.
@@ -90,7 +90,7 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
 
     test("two messages concatenated in one chunk are decoded in order without re-pulling") {
         val q = new QueueBytes
-        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q, CancelToken.never)
+        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q)
         val bytes = encodePing(Ping(1, "a")) ++ encodePing(Ping(2, "b"))
         q.push(ByteString.unsafeFromArray(bytes))
         assert(stream.receive().futureValue.contains(Ping(1, "a")))
@@ -100,14 +100,14 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
 
     test("clean EOF with empty buffer yields None") {
         val q = new QueueBytes
-        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q, CancelToken.never)
+        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q)
         q.eof()
         assert(stream.receive().futureValue.isEmpty)
     }
 
     test("EOF mid-message surfaces FrameDecodeException") {
         val q = new QueueBytes
-        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q, CancelToken.never)
+        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q)
         val encoded = encodePing(Ping(1, "truncated"))
         q.push(ByteString.unsafeFromArray(encoded.take(encoded.length - 2)))
         q.eof()
@@ -117,7 +117,7 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
 
     test("malformed CBOR surfaces FrameDecodeException without further pulls") {
         val q = new QueueBytes
-        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q, CancelToken.never)
+        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, q)
         // 0xFF is `stop` code — invalid as a top-level item; borer reports it as malformed.
         // Push at least two bytes so we're past the "need more input" boundary and into
         // genuine decode failure.
@@ -136,8 +136,7 @@ class CborMessageStreamSuite extends AnyFunSuite with ScalaFutures {
                 Future.unit
             }
         }
-        val stream =
-            new CborMessageStream[Ping](MiniProtocolId.Handshake, handle, CancelToken.never)
+        val stream = new CborMessageStream[Ping](MiniProtocolId.Handshake, handle)
         stream.send(Ping(7, "send-me")).futureValue
         val bytes = sent.get.get.bytes
         val decoded = Cborer.decode(bytes).to[Ping].value

@@ -57,6 +57,14 @@ final class FakeTimer extends Timer {
 
     /** Count of currently-pending (non-cancelled, non-fired) entries. */
     def pendingCount: Int = lock.synchronized(pending.size)
+
+    /** Sorted `fireAt` deadlines of currently-pending entries. Useful when tests need to
+      * distinguish *which* pending entry has been scheduled (e.g. a beat-timeout at `t+20s` vs an
+      * inter-beat sleep at `t+30s`) — polling by count alone can match either race window.
+      */
+    def pendingFireAts: List[FiniteDuration] = lock.synchronized {
+        pending.view.map(_.fireAt).toList.sorted
+    }
 }
 
 object FakeTimer {
