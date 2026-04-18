@@ -91,13 +91,30 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
             case (_: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
                 SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
             case (inTvr: TypeVarRepresentation, outRepr) =>
-                if inTvr.isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
-                else
-                    val r0 = RepresentationProxyLoweredValue(input, DataConstr, pos)
-                    toRepresentation(r0, representation, pos)
+                import SIRType.TypeVarKind.*
+                inTvr.kind match
+                    case Transparent =>
+                        RepresentationProxyLoweredValue(input, representation, pos)
+                    case Unwrapped =>
+                        // Source bytes are in defaultRepresentation form. Relabel as that
+                        // underlying repr, then convert.
+                        val sourceUnderlying = defaultRepresentation(input.sirType)
+                        val r0 = RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
+                        toRepresentation(r0, representation, pos)
+                    case Fixed =>
+                        val r0 = RepresentationProxyLoweredValue(input, DataConstr, pos)
+                        toRepresentation(r0, representation, pos)
             case (inRepr, outTvr: TypeVarRepresentation) =>
-                if outTvr.isBuiltin then input
-                else toRepresentation(input, DataConstr, pos)
+                import SIRType.TypeVarKind.*
+                outTvr.kind match
+                    case Transparent => input
+                    case Unwrapped   =>
+                        // Convert input to defaultRepresentation form, then relabel as Unwrapped.
+                        val targetUnderlying = defaultRepresentation(input.sirType)
+                        val converted = input.toRepresentation(targetUnderlying, pos)
+                        new RepresentationProxyLoweredValue(converted, outTvr, pos)
+                    case Fixed =>
+                        toRepresentation(input, DataConstr, pos)
             case (_, _) =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $representation",

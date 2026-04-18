@@ -78,15 +78,15 @@ trait SirTypeUplcGenerator {
         LoweringContext
     ): LoweredValue
 
-    /** Check if any lowered argument has Transparent TypeVar representation. When true, the
-      * constructor should cascade to UplcConstr representation because Transparent values can't be
-      * serialized to Data.
+    /** Check if any lowered argument has a passthrough TypeVar representation (Transparent or
+      * Unwrapped). When true, the constructor should cascade to UplcConstr representation because
+      * such values can't be serialized to Data.
       */
     protected def hasTransparentTypeVarArgs(loweredArgs: scala.List[LoweredValue]): Boolean =
         loweredArgs.exists { arg =>
             arg.representation match
-                case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
-                case _                                                      => false
+                case tvr: TypeVarRepresentation => tvr.isBuiltin
+                case _                          => false
         }
 
 }
@@ -209,7 +209,7 @@ object SirTypeUplcGenerator {
             case "SumDataList" =>
                 new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData)
             case "SumPairDataList"       => SumPairBuiltinListSirTypeGenerator
-            case "Map"                   => MapSirTypeGenerator
+            case "PackedDataMap"         => MapSirTypeGenerator
             case "Data"                  => SIRTypeUplcDataGenerator
             case "BuiltinArray"          => BuiltinArraySirTypeGenerator
             case "ProductCaseOneElement" =>

@@ -1339,10 +1339,13 @@ final class SIRCompiler(
             val params = dd.paramss.flatten.collect { case vd: ValDef => vd }
             val typeParams = dd.paramss.flatten.collect { case td: TypeDef => td }
             val sirTypeParams = typeParams.map { td =>
+                val kind = typer
+                    .extractTypeVarKindFromUplcRepr(td.symbol)
+                    .getOrElse(SIRType.TypeVarKind.Fixed)
                 SIRType.TypeVar(
                   td.symbol.name.show,
                   Some(td.symbol.hashCode),
-                  SIRType.TypeVarKind.Fixed
+                  kind
                 )
             }
             val typeParamsMap =

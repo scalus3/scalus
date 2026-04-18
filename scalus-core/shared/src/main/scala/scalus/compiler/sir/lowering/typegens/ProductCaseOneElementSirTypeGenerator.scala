@@ -77,41 +77,49 @@ case class ProductCaseOneElementSirTypeGenerator(
                   ProductCaseClassRepresentation.OneElementWrapper(argRepr),
                   tvr: TypeVarRepresentation
                 ) =>
-                if tvr.isBuiltin then input
-                else
-                    val argValue = argLoweredValue(input)
-                    if argRepr.isCompatibleOn(argValue.sirType, tvr, pos) then
-                        new RepresentationProxyLoweredValue(input, tvr, pos)
-                    else
-                        val newArg = argGenerator.toRepresentation(argValue, representation, pos)
-                        val inPos = pos
+                import SIRType.TypeVarKind.*
+                tvr.kind match
+                    case Transparent =>
+                        // Wildcard target — relabel as Transparent.
+                        input
+                    case Unwrapped | Fixed =>
+                        // Underlying form: Unwrapped → defaultRepresentation,
+                        //                  Fixed     → defaultTypeVarReperesentation.
+                        val targetUnderlying = tvr.kind match
+                            case Unwrapped => argGenerator.defaultRepresentation(input.sirType)
+                            case Fixed => argGenerator.defaultTypeVarReperesentation(input.sirType)
+                            case Transparent => argRepr // unreachable
+                        val argValue = argLoweredValue(input)
+                        val convertedArg =
+                            argGenerator.toRepresentation(argValue, targetUnderlying, pos)
                         new TypeRepresentationProxyLoweredValue(
-                          newArg,
+                          convertedArg,
                           input.sirType,
                           tvr,
-                          inPos
+                          pos
                         )
             case (
                   tvr: TypeVarRepresentation,
                   outRepr @ ProductCaseClassRepresentation.OneElementWrapper(argRepr)
                 ) =>
-                if tvr.isBuiltin then
-                    new RepresentationProxyLoweredValue(input, representation, pos)
-                else
-                    val argValue = argLoweredValue(input)
-                    if argRepr.isCompatibleOn(argValue.sirType, argValue.representation, pos) then
+                import SIRType.TypeVarKind.*
+                tvr.kind match
+                    case Transparent =>
+                        // Wildcard source — relabel as the wrapper.
                         new RepresentationProxyLoweredValue(input, representation, pos)
-                    else
-                        // we need to convert the argument to the new representation
-                        val newArg = argGenerator.toRepresentation(argValue, argRepr, pos)
-                        val inPos = pos
-                        val retval = new TypeRepresentationProxyLoweredValue(
-                          newArg,
+                    case Unwrapped | Fixed =>
+                        // Source bytes are in the source's underlying form. Extract the
+                        // inner arg (argLoweredValue handles TypeVar input via the
+                        // appropriate default repr), convert to outRepr's argRepr if
+                        // needed, and wrap.
+                        val argValue = argLoweredValue(input)
+                        val convertedArg = argGenerator.toRepresentation(argValue, argRepr, pos)
+                        new TypeRepresentationProxyLoweredValue(
+                          convertedArg,
                           input.sirType,
                           outRepr,
-                          inPos
+                          pos
                         )
-                        retval
             case (_, _) =>
                 ProductCaseSirTypeGenerator.toRepresentation(input, representation, pos)
 
@@ -277,8 +285,12 @@ case class ProductCaseOneElementSirTypeGenerator(
                       case ProductCaseClassRepresentation.OneElementWrapper(argRepr) =>
                           argRepr
                       case tvr: TypeVarRepresentation =>
-                          if tvr.isBuiltin then argGenerator.defaultRepresentation(argType)
-                          else argGenerator.defaultTypeVarReperesentation(argType)
+                          import SIRType.TypeVarKind.*
+                          tvr.kind match
+                              case Transparent | Unwrapped =>
+                                  argGenerator.defaultRepresentation(argType)
+                              case Fixed =>
+                                  argGenerator.defaultTypeVarReperesentation(argType)
                       case _ =>
                           throw LoweringException(
                             s"Expected OneElementWrapper representation, got ${input.representation}",

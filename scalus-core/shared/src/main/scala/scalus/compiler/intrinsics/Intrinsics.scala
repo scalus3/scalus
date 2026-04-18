@@ -37,6 +37,22 @@ object IntrinsicHelpers {
           "toDefaultTypeVarRepr: should be eliminated by the Scalus compiler plugin"
         )
 
+    /** Convert a value from its TypeVar representation to the concrete type's native
+      * representation.
+      *
+      * Reverse of `toDefaultTypeVarRepr`. Used in intrinsic HOF wrappers (map, filter, filterMap,
+      * etc.) to convert list elements from their UplcConstr-list TypeVar(Transparent) repr to the
+      * concrete type's native repr (e.g. ProdUplcConstr) before passing them to user-provided
+      * lambdas that were compiled against the concrete type. At lowering time the concrete type A
+      * is known, so the lowering calls `gen.defaultRepresentation(tp)` and inserts any needed
+      * conversion. For TypeVar(Transparent) elements whose native repr already matches the target
+      * (the common case), this is a zero-cost relabel with no UPLC emitted.
+      */
+    def fromDefaultTypeVarRepr[A](x: A): A =
+        throw new RuntimeException(
+          "fromDefaultTypeVarRepr: should be eliminated by the Scalus compiler plugin"
+        )
+
     /** Representation-aware structural equality.
       *
       * Marker function intercepted at lowering time. The lowerer knows the concrete type and

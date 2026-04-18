@@ -572,6 +572,10 @@ object ScalusRuntime {
         listType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
+        if lctx.warnListConversions then
+            System.err.println(
+              s"[warnListConversions] SumBuiltinList→SumUplcConstr at ${pos.show}: ${listType.show}"
+            )
         val elemType = SumCaseClassRepresentation.SumBuiltinList
             .retrieveListElementType(listType)
             .getOrElse {
@@ -666,9 +670,11 @@ object ScalusRuntime {
                                     UplcAnnotation(AnnotationsDecl.empty.pos)
                                   )
                               override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
-                                  Doc.text(
-                                    s"Constr(1, ${convertedHead.docRef(ctx)}, ${recCall.docRef(ctx)})"
-                                  )
+                                  Doc.text("Constr(1, ") +
+                                      convertedHead.docRef(ctx) +
+                                      Doc.text(", ") +
+                                      recCall.docRef(ctx) +
+                                      Doc.text(")")
                               override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc =
                                   docDef(ctx)
                           }
@@ -706,6 +712,10 @@ object ScalusRuntime {
         outListRepr: SumCaseClassRepresentation.SumBuiltinList,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
+        if lctx.warnListConversions then
+            System.err.println(
+              s"[warnListConversions] SumUplcConstr→SumBuiltinList at ${pos.show}: ${input.sirType.show}"
+            )
         val listType = input.sirType
         val elemType = SumCaseClassRepresentation.SumBuiltinList
             .retrieveListElementType(listType)

@@ -2,14 +2,18 @@ package scalus.compiler.intrinsics
 
 import scalus.Compile
 import scalus.cardano.onchain.plutus.prelude.{fail, List, Option}
-import scalus.compiler.intrinsics.IntrinsicHelpers.*
+import scalus.compiler.intrinsics.IntrinsicHelpers.{equalsRepr, fromDefaultTypeVarRepr, toDefaultTypeVarRepr}
+import scalus.compiler.UplcRepr
+import scalus.compiler.UplcRepresentation.TypeVar
+import scalus.compiler.UplcRepresentation.TypeVarKind.Transparent
 
 /** UplcConstr list intrinsics — thin delegation to UplcConstrListOperations.
   *
-  * The IntrinsicResolver dispatches to these when the list has SumUplcConstr representation. Simple
-  * methods (isEmpty, head, tail) are implemented inline since they're single pattern matches.
-  * Complex recursive methods delegate to UplcConstrListOperations (support module with Transparent
-  * TypeVars).
+  * The IntrinsicResolver dispatches to these when the list has SumUplcConstr representation. Type
+  * parameters are annotated `@UplcRepr(TypeVar(Transparent))`: the inliner substitutes the caller's
+  * concrete representation at the inlining site. Simple methods (isEmpty, head, tail) are
+  * implemented inline since they're single pattern matches. Complex recursive methods delegate to
+  * `UplcConstrListOperations` (a non-inlined support module whose type params are `Unwrapped`).
   *
   * For contains: Eq has known semantics (structural equality), so we use equalsData directly
   * instead of calling the Eq function. Elements are converted to Data via toDefaultTypeVarRepr,
@@ -18,37 +22,72 @@ import scalus.compiler.intrinsics.IntrinsicHelpers.*
 @Compile
 object IntrinsicsUplcConstrList {
 
-    def isEmpty[A](self: List[A]): Boolean = self match
+    def isEmpty[@UplcRepr(TypeVar(Transparent)) A](self: List[A]): Boolean = self match
         case List.Cons(_, _) => false
         case List.Nil        => true
 
-    def head[A](self: List[A]): A = self match
+    def head[@UplcRepr(TypeVar(Transparent)) A](self: List[A]): A = self match
         case List.Cons(h, _) => h
         case List.Nil        => fail()
 
-    def tail[A](self: List[A]): List[A] = self match
+    def tail[@UplcRepr(TypeVar(Transparent)) A](self: List[A]): List[A] = self match
         case List.Cons(_, t) => t
         case List.Nil        => fail()
 
-    def map[A, B](self: List[A], mapper: A => B): List[B] =
-        UplcConstrListOperations.map(self, mapper)
+    def map[
+        @UplcRepr(TypeVar(Transparent)) A,
+        @UplcRepr(TypeVar(Transparent)) B
+    ](self: List[A], mapper: A => B): List[B] =
+        UplcConstrListOperations.map(self, (item: A) => mapper(fromDefaultTypeVarRepr(item)))
 
-    def filter[A](self: List[A], predicate: A => Boolean): List[A] =
-        UplcConstrListOperations.filter(self, predicate)
+    def filter[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        predicate: A => Boolean
+    ): List[A] =
+        UplcConstrListOperations.filter(
+          self,
+          (item: A) => predicate(fromDefaultTypeVarRepr(item))
+        )
 
-    def foldLeft[A, B](self: List[A], init: B, combiner: (B, A) => B): B =
-        UplcConstrListOperations.foldLeft(self, init, combiner)
+    def foldLeft[
+        @UplcRepr(TypeVar(Transparent)) A,
+        @UplcRepr(TypeVar(Transparent)) B
+    ](self: List[A], init: B, combiner: (B, A) => B): B =
+        UplcConstrListOperations.foldLeft(
+          self,
+          init,
+          (acc: B, item: A) => combiner(acc, fromDefaultTypeVarRepr(item))
+        )
 
-    def foldRight[A, B](self: List[A], init: B, combiner: (A, B) => B): B =
-        UplcConstrListOperations.foldRight(self, init, combiner)
+    def foldRight[
+        @UplcRepr(TypeVar(Transparent)) A,
+        @UplcRepr(TypeVar(Transparent)) B
+    ](self: List[A], init: B, combiner: (A, B) => B): B =
+        UplcConstrListOperations.foldRight(
+          self,
+          init,
+          (item: A, acc: B) => combiner(fromDefaultTypeVarRepr(item), acc)
+        )
 
-    def find[A](self: List[A], predicate: A => Boolean): Option[A] =
-        UplcConstrListOperations.find(self, predicate)
+    def find[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        predicate: A => Boolean
+    ): Option[A] =
+        UplcConstrListOperations.find(
+          self,
+          (item: A) => predicate(fromDefaultTypeVarRepr(item))
+        )
 
-    def filterMap[A, B](self: List[A], predicate: A => Option[B]): List[B] =
-        UplcConstrListOperations.filterMap(self, predicate)
+    def filterMap[
+        @UplcRepr(TypeVar(Transparent)) A,
+        @UplcRepr(TypeVar(Transparent)) B
+    ](self: List[A], predicate: A => Option[B]): List[B] =
+        UplcConstrListOperations.filterMap(
+          self,
+          (item: A) => predicate(fromDefaultTypeVarRepr(item))
+        )
 
-    def quicksort[A](
+    def quicksort[@UplcRepr(TypeVar(Transparent)) A](
         self: List[A],
         ord: (A, A) => scalus.cardano.onchain.plutus.prelude.Order
     ): List[A] =
@@ -62,35 +101,51 @@ object IntrinsicsUplcConstrList {
           (a: A, b: A) => ord(toDefaultTypeVarRepr(a), toDefaultTypeVarRepr(b))
         )
 
-    def contains[A](self: List[A], elem: A, eq: (A, A) => Boolean): Boolean =
+    def contains[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        elem: A,
+        eq: (A, A) => Boolean
+    ): Boolean =
         UplcConstrListOperations.contains(
           self,
           elem,
           (a: A, b: A) => equalsRepr(a, b)
         )
 
-    def length[A](self: List[A]): BigInt =
+    def length[@UplcRepr(TypeVar(Transparent)) A](self: List[A]): BigInt =
         UplcConstrListOperations.length(self)
 
-    def reverse[A](self: List[A]): List[A] =
+    def reverse[@UplcRepr(TypeVar(Transparent)) A](self: List[A]): List[A] =
         UplcConstrListOperations.reverse(self)
 
-    def append[A](self: List[A], other: List[A]): List[A] =
+    def append[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        other: List[A]
+    ): List[A] =
         UplcConstrListOperations.append(self, other)
 
-    def appendedAll[A](self: List[A], other: List[A]): List[A] =
+    def appendedAll[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        other: List[A]
+    ): List[A] =
         UplcConstrListOperations.append(self, other)
 
-    def drop[A](self: List[A], n: BigInt): List[A] =
+    def drop[@UplcRepr(TypeVar(Transparent)) A](self: List[A], n: BigInt): List[A] =
         UplcConstrListOperations.drop(self, n)
 
-    def prepended[A](self: List[A], elem: A): List[A] =
+    def prepended[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        elem: A
+    ): List[A] =
         UplcConstrListOperations.prepended(self, elem)
 
-    def dropRight[A](self: List[A], n: BigInt): List[A] =
+    def dropRight[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        n: BigInt
+    ): List[A] =
         UplcConstrListOperations.dropRight(self, n)
 
-    def init[A](self: List[A]): List[A] =
+    def init[@UplcRepr(TypeVar(Transparent)) A](self: List[A]): List[A] =
         UplcConstrListOperations.init(self)
 
 }

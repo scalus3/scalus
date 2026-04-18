@@ -124,4 +124,24 @@ class UplcConstrQueueTest extends AnyFunSuite {
                 fail(s"depthSearch failed: $ex")
             case other => fail(s"Unexpected: $other")
     }
+
+    test("filterMap accessing field - bug reproduction") {
+        val sir = compile {
+            // Bug: Item constructed in map, then field accessed in filterMap
+            // The Item in the list has TypeVarRepresentation(Fixed) for value field,
+            // but lambda parameter in filterMap gets Constant representation
+            val items = List.range(1, 4).map { x => Item(x, x * 2) }
+            val filtered = items.filterMap { item =>
+                if item.value === BigInt(2) then Option.Some(item.extra) else Option.None
+            }
+            filtered.length
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
+                assert(v == 1, s"Expected 1, got $v")
+            case Result.Failure(ex, _, _, _) =>
+                fail(s"filterMap field access failed: $ex")
+            case other => fail(s"Unexpected: $other")
+    }
 }

@@ -88,6 +88,29 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
         val rawFieldType = lctx.resolveTypeVarIfNeeded(constrDecl.params(fieldIndex).tp)
         val fieldRepr = puc.fieldReprs(fieldIndex)
+
+        // Debug output for line 427-428
+        if pos.startLine >= 425 && pos.startLine <= 430 && sel.field == "depth" then
+            println(
+              s"[DEBUG ProductCaseUplcOnlySirTypeGenerator.genSelect] field=${sel.field}, fieldIndex=$fieldIndex"
+            )
+            println(s"  puc = $puc")
+            println(s"  puc.fieldReprs = ${puc.fieldReprs}")
+            println(s"  fieldRepr = $fieldRepr")
+            println(s"  Is fieldRepr Constant? ${fieldRepr == PrimitiveRepresentation.Constant}")
+            println(
+              s"  Is fieldRepr DataConstr? ${fieldRepr == SumCaseClassRepresentation.DataConstr}"
+            )
+            println(
+              s"  Is fieldRepr PackedData? ${fieldRepr == ProductCaseClassRepresentation.PackedDataList}"
+            )
+            println(s"  fieldRepr.getClass = ${fieldRepr.getClass.getName}")
+            println(s"  rawFieldType = $rawFieldType")
+            println(s"  loweredScrutinee.representation = ${loweredScrutinee.representation}")
+            println(s"  loweredScrutinee.show = ${loweredScrutinee.show}")
+            println(s"[DEBUG] Scrutinee LoweredValue at line 427:")
+            println(s"  LoweredValue.show = ${loweredScrutinee.show}")
+            println(s"  LoweredValue.representation = ${loweredScrutinee.representation}")
         val fieldParam = constrDecl.params(fieldIndex)
         val fieldType =
             if fieldParam.annotations.data.contains("uplcRepr") then

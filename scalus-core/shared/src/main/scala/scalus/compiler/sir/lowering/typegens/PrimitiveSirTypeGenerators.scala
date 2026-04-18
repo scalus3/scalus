@@ -32,6 +32,7 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
         import SIRType.TypeVarKind.*
         tvr.kind match
             case Transparent => true
+            case Unwrapped   => true // concrete default for primitives = Constant (native)
             case Fixed       => false
 
     def toRepresentation(
@@ -63,15 +64,27 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
                 if isNativeTypeVar(tvr) then dataToUplcValue(input, pos)
                 else input
             case (inTvr: TypeVarRepresentation, outTvr: TypeVarRepresentation) =>
-                if outTvr.isBuiltin then input
-                else if inTvr.isBuiltin then {
-                    // impossible, but let it will be here
-                    RepresentationProxyLoweredValue(
-                      uplcToDataValue(input, pos),
-                      outputRepresentation,
-                      pos
-                    )
-                } else input
+                import SIRType.TypeVarKind.*
+                (inTvr.kind, outTvr.kind) match
+                    case (Transparent, Transparent) => input
+                    case (Unwrapped, Unwrapped)     => input
+                    case (Fixed, Fixed)             => input
+                    case (Unwrapped, Fixed)         =>
+                        // Native concrete-default → Data-wrapped
+                        uplcToDataValue(input, pos)
+                    case (Fixed, Unwrapped) =>
+                        // Data-wrapped → native concrete-default
+                        dataToUplcValue(input, pos)
+                    // TODO: Transparent ↔ non-Transparent should throw — Transparent means
+                    // "unknown, substitute at inline"; it must not cross a repr-change
+                    // boundary. For now: print and pass through so we can enumerate real
+                    // occurrences, then tighten to `throw LoweringException(...)`.
+                    case (_, _) =>
+                        println(
+                          s"[TODO PrimitiveSirTypeGenerator] Transparent↔non-Transparent repr change at $pos: " +
+                              s"${inTvr.kind} → ${outTvr.kind}, tp=${input.sirType.show}"
+                        )
+                        input
             case (_, _) =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $outputRepresentation",

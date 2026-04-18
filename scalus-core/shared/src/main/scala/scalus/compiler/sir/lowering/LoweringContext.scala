@@ -16,11 +16,20 @@ class LoweringContext(
     val targetLanguage: Language = Language.PlutusV3,
     val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     val generateErrorTraces: Boolean = false,
+    val warnListConversions: Boolean = false,
     var uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
         given LoweringContext = lctx
         SirTypeUplcGenerator(tp, lctx.debugLevel > 30)
     },
     var typeUnifyEnv: SIRUnify.Env = SIRUnify.Env.empty,
+    /** Parallel to `typeUnifyEnv.filledTypes`, but tracks the concrete UPLC representation for each
+      * abstract TypeVar at its call site. Populated from actual argument representations at
+      * intrinsic resolution time (see `IntrinsicResolver.bindElementTypeVars`). Queried by
+      * `TypeVarSirTypeGenerator.toRepresentation` and `makeResolvedProxy` so conversions of
+      * TypeVar-typed values use the caller's real representation instead of the abstract default.
+      * Same save/restore discipline as `typeUnifyEnv`.
+      */
+    var typeVarReprEnv: Map[SIRType.TypeVar, LoweredValueRepresentation] = Map.empty,
     var debug: Boolean = false,
     var debugLevel: Int = 0,
     var nestingLevel: Int = 0,
@@ -43,6 +52,22 @@ class LoweringContext(
       * substituted argument without recomputing it.
       */
     val precomputedValues: IdentityHashMap[SIR, LoweredValue] = new IdentityHashMap()
+
+    /** Annotation-keyed cache of pre-lowered values. Indexed by Int.
+      *
+      * Used by intrinsic resolution as an alternative to identity-based `precomputedValues`: the
+      * resolver substitutes references to lambda parameters with `SIR.Var(name, type, anns +
+      * "argCache" → Const(Integer(idx)))`. `lowerSIR` checks the annotation and returns
+      * `argCache(idx)` directly. Survives `substituteVarAndTypes` walking that creates fresh
+      * SIR.Var instances (annotations are preserved in the copy).
+      */
+    val argCache: MutableMap[Int, LoweredValue] = MutableMap.empty
+    private var argCacheNextId: Int = 0
+    def newArgCacheKey(): Int = {
+        val id = argCacheNextId
+        argCacheNextId += 1
+        id
+    }
 
     /** Cache for top-level recursive helpers (e.g. per-type `sumEq` functions emitted by
       * [[LoweringEq.generateSumUplcConstrEquals]]). Keyed by a stable type-fingerprint string. Each
@@ -108,6 +133,7 @@ class LoweringContext(
                       targetLanguage = this.targetLanguage,
                       targetProtocolVersion = this.targetProtocolVersion,
                       generateErrorTraces = this.generateErrorTraces,
+                      warnListConversions = this.warnListConversions,
                       uplcGeneratorPolicy = IntrinsicResolver.uplcConstrListPolicy,
                       typeUnifyEnv = this.typeUnifyEnv,
                       debug = this.debug,

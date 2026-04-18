@@ -119,24 +119,40 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
                 ) =>
                 input
 
-            // TypeVar handling
+            // TypeVar handling — three distinct kinds, each with its own conversion path
             case (_, tv: TypeVarRepresentation) =>
-                if tv.isBuiltin then
-                    val r0 = input.toRepresentation(arrayRepr(input.sirType), pos)
-                    RepresentationProxyLoweredValue(r0, tv, pos)
-                else
-                    val typeVarRepr = defaultTypeVarReperesentation(input.sirType)
-                    val r1 = input.toRepresentation(typeVarRepr, pos)
-                    new RepresentationProxyLoweredValue(r1, tv, pos)
+                import SIRType.TypeVarKind.*
+                tv.kind match
+                    case Transparent =>
+                        // Wildcard target — convert to array form first, then relabel
+                        val r0 = input.toRepresentation(arrayRepr(input.sirType), pos)
+                        RepresentationProxyLoweredValue(r0, tv, pos)
+                    case Unwrapped =>
+                        // Concrete-default form — convert to defaultRepresentation, then relabel
+                        val targetRepr = defaultRepresentation(input.sirType)
+                        val r0 = input.toRepresentation(targetRepr, pos)
+                        RepresentationProxyLoweredValue(r0, tv, pos)
+                    case Fixed =>
+                        // Data-wrapped form — convert to defaultTypeVarReperesentation, then relabel
+                        val typeVarRepr = defaultTypeVarReperesentation(input.sirType)
+                        val r1 = input.toRepresentation(typeVarRepr, pos)
+                        new RepresentationProxyLoweredValue(r1, tv, pos)
 
             case (tv: TypeVarRepresentation, _) =>
-                if tv.isBuiltin then
-                    val r0 = RepresentationProxyLoweredValue(input, arrayRepr(input.sirType), pos)
-                    r0.toRepresentation(outputRepresentation, pos)
-                else
-                    val typeVarRepr = defaultTypeVarReperesentation(input.sirType)
-                    val r0 = RepresentationProxyLoweredValue(input, typeVarRepr, pos)
-                    r0.toRepresentation(outputRepresentation, pos)
+                import SIRType.TypeVarKind.*
+                tv.kind match
+                    case Transparent =>
+                        val r0 =
+                            RepresentationProxyLoweredValue(input, arrayRepr(input.sirType), pos)
+                        r0.toRepresentation(outputRepresentation, pos)
+                    case Unwrapped =>
+                        val sourceConcrete = defaultRepresentation(input.sirType)
+                        val r0 = RepresentationProxyLoweredValue(input, sourceConcrete, pos)
+                        r0.toRepresentation(outputRepresentation, pos)
+                    case Fixed =>
+                        val typeVarRepr = defaultTypeVarReperesentation(input.sirType)
+                        val r0 = RepresentationProxyLoweredValue(input, typeVarRepr, pos)
+                        r0.toRepresentation(outputRepresentation, pos)
 
             case _ =>
                 throw LoweringException(

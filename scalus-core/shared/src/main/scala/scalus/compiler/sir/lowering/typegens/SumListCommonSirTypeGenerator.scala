@@ -18,8 +18,8 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
     ): Boolean =
         import SIRType.TypeVarKind.*
         tvr.kind match
-            case Transparent => true
-            case Fixed       => false
+            case Transparent | Unwrapped => true
+            case Fixed                   => false
 
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext
@@ -201,18 +201,39 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(outputRepresentation, pos)
             case (
                   SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant),
-                  tv @ TypeVarRepresentation(_)
+                  tv @ TypeVarRepresentation(kind)
                 ) =>
-                input
-                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
-                    .toRepresentation(tv, pos)
+                import SIRType.TypeVarKind.*
+                kind match
+                    case Transparent =>
+                        // Wildcard target — relabel.
+                        new RepresentationProxyLoweredValue(input, tv, pos)
+                    case Unwrapped =>
+                        // Target Unwrapped wants bytes in defaultRepresentation form. For a
+                        // list of native primitives, source IS the default — pure relabel.
+                        new RepresentationProxyLoweredValue(input, tv, pos)
+                    case Fixed =>
+                        // Target Fixed wants Data-encoded bytes — convert via PackedSumDataList.
+                        input
+                            .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
+                            .toRepresentation(tv, pos)
             case (
-                  tv @ TypeVarRepresentation(_),
+                  tv @ TypeVarRepresentation(kind),
                   SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant)
                 ) =>
-                input
-                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
-                    .toRepresentation(outputRepresentation, pos)
+                import SIRType.TypeVarKind.*
+                kind match
+                    case Transparent =>
+                        // Wildcard source — relabel as native list.
+                        new RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+                    case Unwrapped =>
+                        // Source bytes already in defaultRepresentation form (= target).
+                        new RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+                    case Fixed =>
+                        // Source is Data-encoded — convert via PackedSumDataList.
+                        input
+                            .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
+                            .toRepresentation(outputRepresentation, pos)
             // === SumBuiltinList → PackedSumDataList (via listData) ===
             case (
                   SumCaseClassRepresentation.SumBuiltinList(_),
@@ -468,23 +489,42 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
             case (_, tv: TypeVarRepresentation) =>
-                if tv.isBuiltin || isNativeTypeVar(tv) then input
-                else {
-                    val inputAsData =
-                        input.toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
-                    new RepresentationProxyLoweredValue(inputAsData, tv, pos)
-                }
+                import SIRType.TypeVarKind.*
+                tv.kind match
+                    case Transparent =>
+                        // Wildcard target — relabel.
+                        new RepresentationProxyLoweredValue(input, tv, pos)
+                    case Unwrapped =>
+                        // Convert input to defaultRepresentation form, then relabel.
+                        val targetUnderlying = defaultRepresentation(input.sirType)
+                        val converted = input.toRepresentation(targetUnderlying, pos)
+                        new RepresentationProxyLoweredValue(converted, tv, pos)
+                    case Fixed =>
+                        val inputAsData = input.toRepresentation(
+                          SumCaseClassRepresentation.PackedSumDataList,
+                          pos
+                        )
+                        new RepresentationProxyLoweredValue(inputAsData, tv, pos)
             case (tv: TypeVarRepresentation, _) =>
-                if tv.isBuiltin || isNativeTypeVar(tv) then
-                    RepresentationProxyLoweredValue(input, outputRepresentation, pos)
-                else if input.representation == outputRepresentation then input
-                else
-                    val r0 = RepresentationProxyLoweredValue(
-                      input,
-                      SumCaseClassRepresentation.PackedSumDataList,
-                      pos
-                    )
-                    r0.toRepresentation(outputRepresentation, pos)
+                import SIRType.TypeVarKind.*
+                tv.kind match
+                    case Transparent =>
+                        new RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+                    case Unwrapped =>
+                        // Source bytes are in defaultRepresentation form. Relabel as that
+                        // underlying repr, then convert.
+                        val sourceUnderlying = defaultRepresentation(input.sirType)
+                        val r0 = new RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
+                        r0.toRepresentation(outputRepresentation, pos)
+                    case Fixed =>
+                        if input.representation == outputRepresentation then input
+                        else
+                            val r0 = new RepresentationProxyLoweredValue(
+                              input,
+                              SumCaseClassRepresentation.PackedSumDataList,
+                              pos
+                            )
+                            r0.toRepresentation(outputRepresentation, pos)
             // SumReprProxy: unwrap and delegate
             case (_: SumCaseClassRepresentation.SumReprProxy, _) =>
                 SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)

@@ -183,8 +183,14 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
                         Some(outType1),
                         Some(outRepr1)
                       )
-                      // Upcast result from B1 to B2 (covariant position)
-                      result.maybeUpcast(outType2, pos)
+                      // Upcast result from B1 to B2 (covariant position). Also align the
+                      // representation: maybeUpcast only fixes the SIR type via structural
+                      // unification — for `Integer → FreeUnificator` that succeeds trivially,
+                      // leaving the repr as `Constant` even though the wrapper declares
+                      // `outRepr2 = TypeVarRepresentation(Fixed)`. Without this alignment, the
+                      // top-level coercion later sees a `Constant`-repr value with
+                      // FreeUnificator sirType and throws in TypeVarSirTypeGenerator.
+                      result.maybeUpcast(outType2, pos).toRepresentation(outRepr2, pos)
                   ,
                   pos
                 )

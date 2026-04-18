@@ -32,6 +32,48 @@ class SIRTyper(using Context) {
     private val uplcReprAnnotation = Symbols.requiredClass("scalus.compiler.UplcRepr")
     private val uplcRepresentationClass =
         Symbols.requiredClass("scalus.compiler.UplcRepresentation")
+    private val uplcRepresentationTypeVarKindClass =
+        Symbols.requiredClass("scalus.compiler.UplcRepresentation.TypeVarKind")
+
+    /** Extract a `TypeVarKind` from `@UplcRepr(TypeVar(kind))` on a symbol. Returns `None` if the
+      * annotation is absent or its argument isn't a `TypeVar(...)` shape. Used by
+      * [[SIRCompiler.compileDefDef]] to stamp the correct kind on a method's `SIRType.TypeVar`.
+      */
+    def extractTypeVarKindFromUplcRepr(sym: Symbol): Option[SIRType.TypeVarKind] = {
+        sym.getAnnotation(uplcReprAnnotation).flatMap { annot =>
+            annot.argument(0).flatMap {
+                case Typed(inner, _) => unwrapKindArg(inner)
+                case other           => unwrapKindArg(other)
+            }
+        }
+    }
+
+    /** Looks for `UplcRepresentation.TypeVar(<KindTermRef>)` and decodes the kind term. */
+    private def unwrapKindArg(tree: Tree): Option[SIRType.TypeVarKind] = tree match {
+        case Apply(fun, List(kindTree)) if isTypeVarApply(fun) =>
+            decodeTypeVarKindRef(kindTree)
+        case _ => None
+    }
+
+    private def isTypeVarApply(tree: Tree): Boolean = {
+        val symName = tree.symbol.name.show
+        symName == "TypeVar" || symName == "apply"
+    }
+
+    private def decodeTypeVarKindRef(tree: Tree): Option[SIRType.TypeVarKind] = {
+        val termSym = tree match {
+            case Typed(inner, _) => inner.symbol
+            case other           => other.symbol
+        }
+        if !termSym.exists then None
+        else
+            termSym.name.show match {
+                case "Transparent" => Some(SIRType.TypeVarKind.Transparent)
+                case "Unwrapped"   => Some(SIRType.TypeVarKind.Unwrapped)
+                case "Fixed"       => Some(SIRType.TypeVarKind.Fixed)
+                case _             => None
+            }
+    }
 
     /** Extracts the UplcRepr annotation from a symbol and encodes it as a map entry. */
     private def extractUplcReprAnnotation(sym: Symbol): Map[String, SIR] = {

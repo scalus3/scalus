@@ -16,7 +16,25 @@ enum UplcRepresentation {
     case SumBuiltinList(elemRepr: UplcRepresentation)
     case ProdBuiltinPair(fstRepr: UplcRepresentation, sndRepr: UplcRepresentation)
     // Type-level representations (used in @UplcRepr annotations on types/fields)
-    case ProductCase, SumCase, Map, Data, BuiltinArray, ProductCaseOneElement
+    case ProductCase, SumCase, PackedDataMap, Data, BuiltinArray, ProductCaseOneElement
     case SumPairDataList
     case UplcConstr
+
+    /** TypeVar representation marker for `@UplcRepr(TypeVar(kind))` on type parameters.
+      *
+      * The plugin reads the annotation and stamps the corresponding `SIRType.TypeVarKind` on the
+      * emitted `SIRType.TypeVar` instead of the default `Fixed`.
+      */
+    case TypeVar(kind: UplcRepresentation.TypeVarKind)
+}
+
+object UplcRepresentation {
+
+    /** Mirror of `scalus.compiler.sir.SIRType.TypeVarKind` for the surface
+      * `@UplcRepr(TypeVar(...))` annotation. Kept distinct so user-code references don't pull in
+      * `SIRType` (which lives in the lowering layer).
+      */
+    enum TypeVarKind {
+        case Transparent, Unwrapped, Fixed
+    }
 }

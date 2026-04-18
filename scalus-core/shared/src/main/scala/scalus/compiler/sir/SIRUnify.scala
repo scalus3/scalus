@@ -478,16 +478,15 @@ object SIRUnify {
                                     .updated(v1, v1EqTypes + v2)
                                     .updated(v2, v2EqTypes + v1)
                                 UnificationSuccess(env.copy(eqTypes = nEqTypes), v1)
-            // Transparent TypeVars are UPLC-level passthrough, so the repr hint carried by
-            // an Annotated wrapper must survive unification (downstream generators look up
-            // the filled-in type's repr). Fixed TypeVars are always Data-encoded — the
-            // annotation is meaningless and is stripped below so structural matching works.
-            case (a @ SIRType.Annotated(_, _), v: SIRType.TypeVar)
-                if v.kind == SIRType.TypeVarKind.Transparent =>
+            // Transparent and Unwrapped TypeVars are UPLC-level passthrough, so the repr
+            // hint carried by an Annotated wrapper must survive unification (downstream
+            // generators look up the filled-in type's repr). Fixed TypeVars are always
+            // Data-encoded — the annotation is meaningless and is stripped below so
+            // structural matching works.
+            case (a @ SIRType.Annotated(_, _), v: SIRType.TypeVar) if v.isBuiltin =>
                 val nEnv = env.copy(filledTypes = env.filledTypes.updated(v, a))
                 checkEqType(nEnv, v, a)
-            case (v: SIRType.TypeVar, a @ SIRType.Annotated(_, _))
-                if v.kind == SIRType.TypeVarKind.Transparent =>
+            case (v: SIRType.TypeVar, a @ SIRType.Annotated(_, _)) if v.isBuiltin =>
                 val nEnv = env.copy(filledTypes = env.filledTypes.updated(v, a))
                 checkEqType(nEnv, v, a)
             // Unwrap Annotated before TypeVar — annotations are representation hints,

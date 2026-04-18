@@ -28,17 +28,16 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation = {
-        // Requesting the Data representation of a Transparent TypeVar is a bug: Transparent means
-        // "passthrough — use whatever the caller uses", not Data-encoded. Returning
-        // TypeVarRepresentation(Fixed) silently labels a passthrough value as Data, which
-        // downstream code takes as permission to call Data-only builtins on what may be a
-        // native Constr. Make the call site fail fast so we can route it through a
-        // Transparent-safe path.
+        // Requesting the Data representation of a Transparent or Unwrapped TypeVar is a bug:
+        // both mean "no Data wrapping". Returning TypeVarRepresentation(Fixed) silently labels
+        // a passthrough value as Data, which downstream code takes as permission to call
+        // Data-only builtins on what may be a native Constr. Fail fast so the call site can
+        // route through a passthrough-safe path or resolve the TypeVar to a concrete type first.
         tp match
-            case tv: SIRType.TypeVar if tv.kind == SIRType.TypeVarKind.Transparent =>
+            case tv: SIRType.TypeVar if tv.isBuiltin =>
                 throw LoweringException(
-                  s"defaultDataRepresentation requested on Transparent TypeVar ${tv.name}" +
-                      s"(${tv.optId.getOrElse("-")}). Transparent TypeVars must not be coerced " +
+                  s"defaultDataRepresentation requested on ${tv.kind} TypeVar ${tv.name}" +
+                      s"(${tv.optId.getOrElse("-")}). Passthrough TypeVars must not be coerced " +
                       s"to Data repr — the caller should stay in the TypeVar's native passthrough " +
                       s"repr or resolve the TypeVar to a concrete type first.",
                   SIRPosition.empty
@@ -50,12 +49,12 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultTypeVarReperesentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation =
-        // For a Transparent TypeVar, the "default TypeVar repr" is Transparent itself — the value
-        // passes through in whatever native form its enclosing scope uses. Only Fixed kinds fall
-        // back to the Data-equivalent Fixed repr.
+        // For a passthrough TypeVar (Transparent or Unwrapped), the "default TypeVar repr" is
+        // the same kind itself — the value passes through in whatever native form its enclosing
+        // scope uses. Only Fixed kinds fall back to the Data-equivalent Fixed repr.
         tp match
-            case tv: SIRType.TypeVar if tv.kind == SIRType.TypeVarKind.Transparent =>
-                TypeVarRepresentation(SIRType.TypeVarKind.Transparent)
+            case tv: SIRType.TypeVar if tv.isBuiltin =>
+                TypeVarRepresentation(tv.kind)
             case _ => defaultDataRepresentation(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
@@ -82,191 +81,216 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         representation: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        // to packed data or lambda
-        if input.representation == representation then input
-        else {
-            makeResolvedProxy(input, pos)
-                .map(x => lctx.typeGenerator(x.sirType).toRepresentation(x, representation, pos))
-                .getOrElse {
-                    // Detect Transparent → Fixed conversion: this is invalid because
-                    // Transparent values are native and can't be serialized to Data.
-                    (input.representation, representation) match
-                        case (
-                              TypeVarRepresentation(SIRType.TypeVarKind.Transparent),
-                              TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
-                            ) =>
-                            throw LoweringException(
-                              s"Cannot convert Transparent TypeVar to Fixed (Data) representation. " +
-                                  s"Type: ${input.sirType.show}. " +
-                                  s"This happens when @UplcRepr(UplcConstr) native values are used in a Data-expecting context.",
-                              pos
-                            )
-                        case _ =>
-                    representation match
-                        case tvr: TypeVarRepresentation =>
-                            if tvr.isBuiltin then input
-                            else new RepresentationProxyLoweredValue(input, representation, pos)
-                        case sumRepr: SumCaseClassRepresentation =>
-                            sumRepr match {
-                                case SumCaseClassRepresentation.DataConstr |
-                                    SumCaseClassRepresentation.DataData =>
-                                    new RepresentationProxyLoweredValue(input, representation, pos)
-                                case _: SumCaseClassRepresentation.SumUplcConstr |
-                                    SumCaseClassRepresentation.PairIntDataList =>
-                                    val r1 =
-                                        input.toRepresentation(
-                                          SumCaseClassRepresentation.DataConstr,
-                                          pos
-                                        )
-                                    SumCaseSirTypeGenerator.toRepresentation(
-                                      r1,
+        if input.representation == representation then return input
+
+        // First try to resolve TypeVar via filledTypes — if concrete, dispatch to that
+        // type's generator which knows the actual shape.
+        val resolvedOpt = makeResolvedProxy(input, pos)
+        if resolvedOpt.isDefined then
+            val resolved = resolvedOpt.get
+            return lctx
+                .typeGenerator(resolved.sirType)
+                .toRepresentation(resolved, representation, pos)
+
+        // Source is an unresolved TypeVar. Dispatch by its kind.
+        val srcKind = input.representation match
+            case TypeVarRepresentation(k) => k
+            case other =>
+                throw LoweringException(
+                  s"TypeVarSirTypeGenerator: expected TypeVarRepresentation for input " +
+                      s"of TypeVar-typed value, got $other",
+                  pos
+                )
+
+        import SIRType.TypeVarKind.*
+        srcKind match
+            case Transparent =>
+                // Wildcard source — bytes are unknown.
+                representation match
+                    case TypeVarRepresentation(Unwrapped) =>
+                        // Unwrapped requires bytes in defaultRepresentation form. We can
+                        // only honor that if the sirType is concrete enough to compute
+                        // defaultRepresentation. For an unresolved TypeVar sirType: error.
+                        input.sirType match
+                            case _: SIRType.TypeVar =>
+                                throw LoweringException(
+                                  s"TypeVarSirTypeGenerator: cannot convert Transparent TypeVar " +
+                                      s"to Unwrapped on an unresolved TypeVar sirType — " +
+                                      s"Unwrapped needs concrete-default form, but type is unknown. " +
+                                      s"Type: ${input.sirType.show}",
+                                  pos
+                                )
+                            case concrete =>
+                                // sirType is concrete — convert via the type generator and
+                                // relabel as Unwrapped.
+                                val targetRepr =
+                                    lctx.typeGenerator(concrete).defaultRepresentation(concrete)
+                                val converted = input.toRepresentation(targetRepr, pos)
+                                if converted.representation == representation then converted
+                                else
+                                    new RepresentationProxyLoweredValue(
+                                      converted,
                                       representation,
                                       pos
                                     )
-                                case SumCaseClassRepresentation.PackedSumDataList =>
-                                    new RepresentationProxyLoweredValue(input, representation, pos)
-                                case sbl @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
-                                    val r1 = input.toRepresentation(
-                                      SumCaseClassRepresentation.PackedSumDataList,
+                    case _ =>
+                        new RepresentationProxyLoweredValue(input, representation, pos)
+
+            case Unwrapped =>
+                // Bytes are in concrete-default form. Without knowing the concrete type
+                // we can only relabel to another Unwrapped TypeVar repr. Transparent is
+                // NOT interchangeable (semantics differ).
+                representation match
+                    case TypeVarRepresentation(Unwrapped) =>
+                        new RepresentationProxyLoweredValue(input, representation, pos)
+                    case TypeVarRepresentation(Transparent) =>
+                        throw LoweringException(
+                          s"TypeVarSirTypeGenerator: cannot convert Unwrapped TypeVar to " +
+                              s"Transparent — kinds have distinct semantics " +
+                              s"(Unwrapped = concrete-default form; Transparent = unknown). " +
+                              s"Type: ${input.sirType.show}",
+                          pos
+                        )
+                    case _ =>
+                        throw LoweringException(
+                          s"TypeVarSirTypeGenerator: cannot convert Unwrapped TypeVar to " +
+                              s"$representation without resolving the concrete type. " +
+                              s"Type: ${input.sirType.show}",
+                          pos
+                        )
+
+            case Fixed =>
+                // Bytes are in the TypeVar default (Data-wrapped) form.
+                representation match
+                    case TypeVarRepresentation(Fixed) | TypeVarRepresentation(Transparent) =>
+                        new RepresentationProxyLoweredValue(input, representation, pos)
+                    case TypeVarRepresentation(Unwrapped) =>
+                        // Look up the caller's concrete repr for this TypeVar. If present,
+                        // route through the concrete repr's Fixed→concrete conversion and
+                        // relabel as Unwrapped (Unwrapped means "bytes are in concrete-default
+                        // form", which is what we just produced).
+                        val tvOpt = input.sirType match
+                            case t: SIRType.TypeVar => Some(t)
+                            case _                  => None
+                        val reprOpt = tvOpt.flatMap(lctx.typeVarReprEnv.get)
+                        reprOpt match
+                            case Some(concreteRepr) =>
+                                val converted = input.toRepresentation(concreteRepr, pos)
+                                if converted.representation == representation then converted
+                                else
+                                    new RepresentationProxyLoweredValue(
+                                      converted,
+                                      representation,
                                       pos
                                     )
-                                    new SumBuiltinListSirTypeGenerator(elemRepr)
-                                        .toRepresentation(r1, representation, pos)
-                                case SumCaseClassRepresentation.SumDataAssocMap =>
-                                    RepresentationProxyLoweredValue(input, representation, pos)
-                                case spl @ SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
-                                    input
-                                        .toRepresentation(
-                                          SumCaseClassRepresentation.SumDataAssocMap,
-                                          pos
-                                        )
-                                        .toRepresentation(
-                                          spl,
-                                          pos
-                                        )
-                            }
-                        case prodRepr: ProductCaseClassRepresentation =>
-                            prodRepr match {
-                                case ProductCaseClassRepresentation.ProdDataConstr =>
-                                    new RepresentationProxyLoweredValue(input, representation, pos)
-                                case ProductCaseClassRepresentation.PackedDataList |
-                                    ProductCaseClassRepresentation.ProdDataList |
-                                    _: ProductCaseClassRepresentation.ProdUplcConstr |
-                                    ProductCaseClassRepresentation.PairIntDataList =>
-                                    // Delegating to ProductCaseSirTypeGenerator requires the
-                                    // input to have a concrete product sirType so its internal
-                                    // `input.toRepresentation` calls dispatch to ProductCase
-                                    // instead of looping back here via sirType=TypeVar.
-                                    // For unresolved TypeVars we cannot infer the field shape,
-                                    // so fail fast with a clear error instead of infinite
-                                    // recursion through TypeVarSirTypeGenerator.
-                                    input.sirType match
-                                        case tv: SIRType.TypeVar =>
-                                            input.representation match
-                                                case TypeVarRepresentation(
-                                                      SIRType.TypeVarKind.Transparent
-                                                    ) =>
-                                                    // Input is a passthrough TypeVar. The runtime
-                                                    // value has the correct native shape; relabel.
-                                                    new RepresentationProxyLoweredValue(
-                                                      input,
-                                                      representation,
-                                                      pos
-                                                    )
-                                                case _ =>
-                                                    throw LoweringException(
-                                                      s"Cannot convert unresolved TypeVar to $representation: " +
-                                                          s"type resolution required. " +
-                                                          s"TypeVar: ${tv.showDebug} (repr=${input.representation})",
-                                                      pos
-                                                    )
-                                        case _ =>
-                                            val r1 = input.toRepresentation(
-                                              ProductCaseClassRepresentation.ProdDataConstr,
-                                              pos
-                                            )
-                                            ProductCaseSirTypeGenerator.toRepresentation(
-                                              r1,
-                                              representation,
-                                              pos
-                                            )
-                                case PackedDataMap =>
-                                    new RepresentationProxyLoweredValue(input, representation, pos)
-                                case pbp: ProductCaseClassRepresentation.ProdBuiltinPair =>
-                                    input
-                                        .toRepresentation(ProdDataConstr, pos)
-                                        .toRepresentation(
-                                          pbp,
-                                          pos
-                                        )
-                                case ProductCaseClassRepresentation.OneElementWrapper(repr) =>
-                                    SIRType.retrieveConstrDecl(input.sirType) match
-                                        case Left(message) =>
-                                            throw LoweringException(
-                                              message,
-                                              pos
-                                            )
-                                        case Right(constrDecl) =>
-                                            if constrDecl.params.length != 1 then {
-                                                throw LoweringException(
-                                                  s"TypeVarSirTypeGenerator can't convert ${input.sirType.show} to $representation",
-                                                  pos
-                                                )
-                                            }
-                                            val tp1 = constrDecl.params.head.tp
-                                            val inrepr = lctx
-                                                .typeGenerator(tp1)
-                                                .defaultTypeVarReperesentation(tp1)
-                                            val r1 = input.toRepresentation(inrepr, pos)
-                                            new RepresentationProxyLoweredValue(
-                                              r1,
-                                              representation,
-                                              pos
-                                            )
-                                // BuiltinArray representations
-                                case _: ProductCaseClassRepresentation.ProdBuiltinArray =>
-                                    // Convert to PackedArrayAsList for Data compatibility
-                                    val r1 = input.toRepresentation(
-                                      ProductCaseClassRepresentation.PackedArrayAsList,
-                                      pos
-                                    )
-                                    new RepresentationProxyLoweredValue(r1, representation, pos)
-                                case ProductCaseClassRepresentation.PackedArrayAsList =>
-                                    // Already Data-compatible
-                                    new RepresentationProxyLoweredValue(input, representation, pos)
-                            }
-                        case PrimitiveRepresentation.PackedData =>
-                            new RepresentationProxyLoweredValue(input, representation, pos)
-                        case PrimitiveRepresentation.Constant =>
-                            val r1 = input.toRepresentation(
-                              PrimitiveRepresentation.PackedData,
-                              pos
-                            )
-                            input.sirType match {
-                                case p: SIRType.Primitive =>
-                                    lctx.typeGenerator(p)
-                                        .toRepresentation(
-                                          r1,
-                                          PrimitiveRepresentation.Constant,
-                                          pos
-                                        )
-                                case _ =>
-                                    throw LoweringException(
-                                      s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
-                                      pos
-                                    )
-                            }
-                        case ErrorRepresentation =>
-                            TypeNothingSirTypeGenerator.toRepresentation(input, representation, pos)
-                        case LambdaRepresentation(inRepr, outRepr) =>
-                            RepresentationProxyLoweredValue(input, representation, pos)
-                        case _ =>
+                            case None =>
+                                val tvStr = tvOpt
+                                    .map(t => s"${t.name}#${t.optId.getOrElse("-")}")
+                                    .getOrElse(input.sirType.show)
+                                val envVals = lctx.typeVarReprEnv
+                                    .map { case (k, v) =>
+                                        s"${k.name}#${k.optId.getOrElse("-")}->$v"
+                                    }
+                                    .mkString(",")
+                                throw LoweringException(
+                                  s"TypeVarSirTypeGenerator: cannot convert Fixed (Data) TypeVar to " +
+                                      s"Unwrapped without resolving the concrete type. " +
+                                      s"Type: ${input.sirType.show}, TypeVar: $tvStr\n" +
+                                      s"typeVarReprEnv: {$envVals}",
+                                  pos
+                                )
+                    case _ =>
+                        convertAbstractFixedToTarget(input, representation, pos)
+    }
+
+    /** Dispatch a Fixed-source TypeVar value to a non-TypeVar target representation.
+      *
+      * Suspected DEAD CODE: TypeVarSirTypeGenerator is only invoked when `input.sirType` is a
+      * TypeVar; in that case the only sensible targets are other TypeVar reprs (handled inline by
+      * the caller). Concrete reprs as targets here would mean we have a Fixed-labeled value with
+      * TypeVar sirType but the consumer expects a concrete shape — a path that should never trigger
+      * if upstream resolution is correct.
+      *
+      * Kept temporarily with a print so we can enumerate any real call sites; convert to
+      * `throw LoweringException` once we confirm none exist.
+      */
+    private def convertAbstractFixedToTarget(
+        input: LoweredValue,
+        representation: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        println(
+          s"[TODO TypeVarSirTypeGenerator] convertAbstractFixedToTarget invoked at $pos: " +
+              s"sirType=${input.sirType.show} target=$representation"
+        )
+        representation match
+            case PrimitiveRepresentation.PackedData | SumCaseClassRepresentation.DataData |
+                SumCaseClassRepresentation.DataConstr |
+                SumCaseClassRepresentation.PackedSumDataList |
+                ProductCaseClassRepresentation.ProdDataConstr |
+                ProductCaseClassRepresentation.PackedDataList |
+                ProductCaseClassRepresentation.ProdDataList |
+                ProductCaseClassRepresentation.PairIntDataList |
+                ProductCaseClassRepresentation.PackedDataMap |
+                ProductCaseClassRepresentation.PackedArrayAsList |
+                SumCaseClassRepresentation.SumDataAssocMap =>
+                new RepresentationProxyLoweredValue(input, representation, pos)
+            case _: ProductCaseClassRepresentation.ProdUplcConstr |
+                _: SumCaseClassRepresentation.SumUplcConstr =>
+                new RepresentationProxyLoweredValue(input, representation, pos)
+            case sbl @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
+                val r1 = input.toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
+                new SumBuiltinListSirTypeGenerator(elemRepr)
+                    .toRepresentation(r1, representation, pos)
+            case spl @ SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
+                input
+                    .toRepresentation(SumCaseClassRepresentation.SumDataAssocMap, pos)
+                    .toRepresentation(spl, pos)
+            case pbp: ProductCaseClassRepresentation.ProdBuiltinPair =>
+                input
+                    .toRepresentation(ProductCaseClassRepresentation.ProdDataConstr, pos)
+                    .toRepresentation(pbp, pos)
+            case _: ProductCaseClassRepresentation.ProdBuiltinArray =>
+                val r1 = input.toRepresentation(
+                  ProductCaseClassRepresentation.PackedArrayAsList,
+                  pos
+                )
+                new RepresentationProxyLoweredValue(r1, representation, pos)
+            case ProductCaseClassRepresentation.OneElementWrapper(_) =>
+                SIRType.retrieveConstrDecl(input.sirType) match
+                    case Left(message) =>
+                        throw LoweringException(message, pos)
+                    case Right(constrDecl) =>
+                        if constrDecl.params.length != 1 then
                             throw LoweringException(
-                              s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
+                              s"TypeVarSirTypeGenerator can't convert ${input.sirType.show} to $representation",
                               pos
                             )
-                }
-        }
+                        val tp1 = constrDecl.params.head.tp
+                        val inrepr =
+                            lctx.typeGenerator(tp1).defaultTypeVarReperesentation(tp1)
+                        val r1 = input.toRepresentation(inrepr, pos)
+                        new RepresentationProxyLoweredValue(r1, representation, pos)
+            case PrimitiveRepresentation.Constant =>
+                val r1 = input.toRepresentation(PrimitiveRepresentation.PackedData, pos)
+                input.sirType match
+                    case p: SIRType.Primitive =>
+                        lctx.typeGenerator(p)
+                            .toRepresentation(r1, PrimitiveRepresentation.Constant, pos)
+                    case _ =>
+                        throw LoweringException(
+                          s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
+                          pos
+                        )
+            case ErrorRepresentation =>
+                TypeNothingSirTypeGenerator.toRepresentation(input, representation, pos)
+            case _: LambdaRepresentation =>
+                new RepresentationProxyLoweredValue(input, representation, pos)
+            case _ =>
+                throw LoweringException(
+                  s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
+                  pos
+                )
     }
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using

@@ -7,7 +7,7 @@ import scalus.uplc.builtin.Data.fromData
 import scalus.uplc.builtin.{Data, FromData, ToData}
 import scala.annotation.tailrec
 
-@UplcRepr(UplcRepresentation.Map)
+@UplcRepr(UplcRepresentation.PackedDataMap)
 case class AssocMap[A, B](toList: List[(A, B)])
 
 @Compile

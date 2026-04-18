@@ -24,7 +24,8 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
       targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
       generateErrorTraces = true,
       optimizeUplc = true,
-      debug = false
+      debug = false,
+      warnListConversions = true
     )
 
     val printComparison = true
@@ -68,9 +69,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // appendedAll intrinsic added: eliminates Data conversion in appendAllFront.
+                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants.
                 // Pre-annotation baseline: mem=142_291_986, steps=30_322_212_276.
-                ExUnits(memory = 136862522L, steps = 28815197025L)
+                ExUnits(memory = 132604338L, steps = 27739205305L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -171,9 +172,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // appendedAll intrinsic added: eliminates Data conversion in appendAllFront.
+                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants.
                 // Pre-annotation baseline: mem=447_798_345, steps=96_701_055_855.
-                ExUnits(memory = 515251353L, steps = 112661465813L)
+                ExUnits(memory = 489511817L, steps = 106385611087L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -275,9 +276,9 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // appendedAll intrinsic added: eliminates Data conversion in appendAllFront.
+                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants.
                 // Pre-annotation baseline: mem=856_547_657, steps=186_040_711_969.
-                ExUnits(memory = 976937038L, steps = 214824654054L)
+                ExUnits(memory = 918624382L, steps = 200664151432L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -415,6 +416,7 @@ object KnightsTest:
         def canMove(direction: Direction): Boolean = canMoveTo(lastPiece.move(direction))
         def moveKnight(direction: Direction): ChessSet = addPiece(lastPiece.move(direction))
         def possibleMoves: List[Direction] = directions.filter(canMove)
+        @UplcRepr(UplcRepresentation.UplcConstr)
         def allDescend: List[ChessSet] = possibleMoves.map(moveKnight)
 
         def descAndNo: Solution = allDescend.map { item =>
@@ -429,6 +431,7 @@ object KnightsTest:
         def isDeadEnd: Boolean = possibleMoves.isEmpty
         def canJumpFirst: Boolean = deleteFirst.canMoveTo(firstPiece)
 
+        @UplcRepr(UplcRepresentation.UplcConstr)
         def descendants: List[ChessSet] = {
             if canJumpFirst && addPiece(firstPiece).isDeadEnd then List.empty
             else

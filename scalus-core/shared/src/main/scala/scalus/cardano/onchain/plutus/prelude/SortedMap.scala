@@ -13,7 +13,7 @@ import scala.annotation.tailrec
   * @tparam B
   *   the type of values
   */
-@UplcRepr(UplcRepresentation.Map)
+@UplcRepr(UplcRepresentation.PackedDataMap)
 case class SortedMap[A, B] private (toList: List[(A, B)])
 
 @Compile

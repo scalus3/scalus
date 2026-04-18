@@ -22,7 +22,12 @@ case class Options(
       * Enabling or disabling this changes the script hash, so do not toggle for an already-deployed
       * contract.
       */
-    addScalusTag: Boolean = false
+    addScalusTag: Boolean = false,
+    /** When true, prints a warning (with source position) each time a whole-list representation
+      * conversion is emitted between UplcConstr and SumBuiltinList. Useful for diagnosing
+      * unexpected Data↔UplcConstr conversions during optimization work.
+      */
+    warnListConversions: Boolean = false
 ) {
 
     /** Returns a copy with `addScalusTag` set to `enable`. */

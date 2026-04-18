@@ -289,10 +289,20 @@ object SIRType {
       */
     enum TypeVarKind {
 
-        /** Type variable from a builtin UPLC function (e.g., headList, chooseList). Can use any
-          * representation — the value passes through without conversion.
+        /** Unknown representation. The inliner substitutes the caller's concrete repr at the
+          * inlining site. Used by public-facing intrinsic dispatcher signatures
+          * (`IntrinsicsUplcConstrList`, `IntrinsicsNativeList`, etc.) and by builtin UPLC functions
+          * (e.g., headList, chooseList).
           */
         case Transparent
+
+        /** Value travels in the concrete type's default representation; no wrapping is ever
+          * applied. The repr is looked up via `lctx.typeUnifyEnv.filledTypes` at every
+          * representation-picking site. Used by internal implementation modules
+          * (`UplcConstrListOperations`, `NativeListOperations`, etc.) whose bodies are polymorphic
+          * but never Data-wrap their type-param values.
+          */
+        case Unwrapped
 
         /** Type variable with a fixed representation determined by the lowering context. The
           * representation is chosen based on the concrete type when known, or defaults to Data when
@@ -310,15 +320,23 @@ object SIRType {
 
     /** Type variable have two forms: when id is not set, that means that for each instantiation of
       * type-lambda, a new set of type-variables with fresh id-s are created. when id is set, that
-      * means that computations are situated in the process of instantiation of some type-lambda,
+      * means that computations are situated in the process of instantiation of some type-lambda.
+      *
+      * Equality (`equals`/`hashCode`) deliberately ignores `kind` — substitution and unification
+      * key on identity `(name, optId)`, while `kind` is semantic metadata about the representation
+      * policy. A Transparent and an Unwrapped TypeVar with the same `(name, optId)` are the SAME
+      * variable from substitution's point of view, differing only in how lowering picks its runtime
+      * representation.
+      *
+      * Not a `case class` because the auto-generated equals/hashCode include every field; custom
+      * apply/unapply/copy are provided for source-level compatibility.
+      *
       * @param name
-      * @param id
-      * @param kind - controls representation during lowering.
-      *             Transparent: builtin UPLC type variable, can use any representation.
-      *             Fixed: Scala type variable with native representation.
-      *             Fixed: Scala type variable that must use Data representation.
+      * @param optId
+      * @param kind
+      *   controls representation during lowering. See [[TypeVarKind]].
       */
-    case class TypeVar(name: String, optId: Option[Long] = None, kind: TypeVarKind)
+    class TypeVar(val name: String, val optId: Option[Long], val kind: TypeVarKind)
         extends SIRType {
 
         override def show: String = name
@@ -327,9 +345,37 @@ object SIRType {
 
         def :=>>(body: SIRType): TypeLambda = TypeLambda(scala.List(this), body)
 
-        /** Backward-compatible check: true if this type variable is from a builtin UPLC function */
+        /** Backward-compatible check: true only for Transparent ("unknown — will be substituted at
+          * inline time"). Unwrapped, like Fixed, is a CONCRETE target form (concrete type's default
+          * repr); it requires conversion at boundaries, not passthrough relabeling.
+          */
         inline def isBuiltin: Boolean = kind == TypeVarKind.Transparent
 
+        def copy(
+            name: String = this.name,
+            optId: Option[Long] = this.optId,
+            kind: TypeVarKind = this.kind
+        ): TypeVar = new TypeVar(name, optId, kind)
+
+        override def equals(other: Any): Boolean = other match
+            case that: TypeVar => this.name == that.name && this.optId == that.optId
+            case _             => false
+
+        override def hashCode(): Int = name.## * 31 + optId.##
+
+        override def toString: String = s"TypeVar($name,$optId,$kind)"
+    }
+
+    object TypeVar {
+        def apply(
+            name: String,
+            optId: Option[Long] = None,
+            kind: TypeVarKind = TypeVarKind.Fixed
+        ): TypeVar = new TypeVar(name, optId, kind)
+
+        /** Destructures to `(name, optId, kind)` for pattern matching. */
+        def unapply(tv: TypeVar): (String, Option[Long], TypeVarKind) =
+            (tv.name, tv.optId, tv.kind)
     }
 
     trait TypeVarGenerationContext {

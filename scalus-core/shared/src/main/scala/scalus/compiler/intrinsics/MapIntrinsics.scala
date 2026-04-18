@@ -2,6 +2,7 @@ package scalus.compiler.intrinsics
 
 import scalus.Compile
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, SortedMap}
+import scalus.compiler.UplcRepresentation
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.compiler.sir.SIRType
 import scalus.compiler.sir.lowering.*
@@ -17,7 +18,7 @@ object SortedMapIntrinsics {
 
     /** Factory: singleton — builtins only, no scope dependencies */
     def singleton[K, V](key: K, value: V): SortedMap[K, V] =
-        typeProxy[SortedMap[K, V]](
+        typeProxyRepr[SortedMap[K, V]](
           mapData(
             mkCons(
               mkPairData(
@@ -26,12 +27,13 @@ object SortedMapIntrinsics {
               ),
               mkNilPairData()
             )
-          )
+          ),
+          UplcRepresentation.PackedDataMap
         )
 
     /** Zero-arg: empty — directly produces mapData(mkNilPairData()) */
     def empty[K, V]: SortedMap[K, V] =
-        typeProxy[SortedMap[K, V]](mapData(mkNilPairData()))
+        typeProxyRepr[SortedMap[K, V]](mapData(mkNilPairData()), UplcRepresentation.PackedDataMap)
 }
 
 @Compile
@@ -39,7 +41,7 @@ object AssocMapIntrinsics {
 
     /** Factory: singleton — builtins only, no scope dependencies */
     def singleton[K, V](key: K, value: V): AssocMap[K, V] =
-        typeProxy[AssocMap[K, V]](
+        typeProxyRepr[AssocMap[K, V]](
           mapData(
             mkCons(
               mkPairData(
@@ -48,12 +50,13 @@ object AssocMapIntrinsics {
               ),
               mkNilPairData()
             )
-          )
+          ),
+          UplcRepresentation.PackedDataMap
         )
 
     /** Zero-arg: empty — directly produces mapData(mkNilPairData()) */
     def empty[K, V]: AssocMap[K, V] =
-        typeProxy[AssocMap[K, V]](mapData(mkNilPairData()))
+        typeProxyRepr[AssocMap[K, V]](mapData(mkNilPairData()), UplcRepresentation.PackedDataMap)
 }
 
 // ---------------------------------------------------------------------------

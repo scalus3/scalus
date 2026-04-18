@@ -313,8 +313,67 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(ProdDataList, pos)
                     .toRepresentation(PairIntDataList, pos)
-            case (_: ProdUplcConstr, _: ProdUplcConstr) =>
-                input
+            case (inPuc: ProdUplcConstr, outPuc: ProdUplcConstr) =>
+                // TODO: stucturall isComatible.  In general we have ProdUplcConstrSirTypeGeneratoe, check code dulication
+                if inPuc == outPuc then input
+                else {
+                    // Different field reprs — destructure via Case, convert each field
+                    // individually, and rebuild Constr. Without this, ProdUplcConstr→ProdUplcConstr
+                    // was a silent no-op even when fields needed UnIData/IData conversions
+                    // (e.g. mapping `[Fixed, …]` to `[Constant, …]` for default-repr consumers).
+                    val constrDecl = retrieveConstrDecl(input.sirType, pos)
+                    val fieldNames =
+                        constrDecl.params.indices.map(i => lctx.uniqueVarName(s"_uc_conv_f$i"))
+                    val fieldTypes =
+                        constrDecl.params.map(p => lctx.resolveTypeVarIfNeeded(p.tp))
+                    val fieldVars =
+                        fieldNames.zip(fieldTypes).zip(inPuc.fieldReprs).map {
+                            case ((name, tp), repr) =>
+                                new VariableLoweredValue(
+                                  id = name,
+                                  name = name,
+                                  sir = SIR.Var(name, tp, AnnotationsDecl(pos)),
+                                  representation = repr
+                                )
+                        }
+                    val convertedFields =
+                        fieldVars.zip(outPuc.fieldReprs).zip(fieldTypes).map {
+                            case ((fv, targetRepr), _) => fv.toRepresentation(targetRepr, pos)
+                        }
+                    val inPos = pos
+                    new ComplexLoweredValue(
+                      fieldVars.toSet,
+                      (input +: convertedFields)*
+                    ) {
+                        override def sirType = input.sirType
+                        override def representation: LoweredValueRepresentation = outPuc
+                        override def pos = inPos
+                        override def termInternal(gctx: TermGenerationContext) = {
+                            val innerCtx =
+                                gctx.copy(generatedVars = gctx.generatedVars ++ fieldVars.map(_.id))
+                            val body = Term.Constr(
+                              scalus.cardano.ledger.Word64(outPuc.tag.toLong),
+                              convertedFields.map(_.termWithNeededVars(innerCtx)).toList,
+                              UplcAnnotation(inPos)
+                            )
+                            val branch = fieldVars.foldRight(body: Term) { (fv, inner) =>
+                                Term.LamAbs(fv.id, inner, UplcAnnotation(inPos))
+                            }
+                            val errorBranches =
+                                scala.List.fill(inPuc.tag)(Term.Error(UplcAnnotation(inPos)))
+                            Term.Case(
+                              input.termWithNeededVars(gctx),
+                              errorBranches :+ branch,
+                              UplcAnnotation(inPos)
+                            )
+                        }
+                        override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
+                            Doc.text("UplcConstr→UplcConstr(") + input.docRef(ctx) +
+                                Doc.text(")")
+                        override def docRef(ctx: LoweredValue.PrettyPrintingContext) =
+                            docDef(ctx)
+                    }
+                }
             case (
                   ProductCaseClassRepresentation.OneElementWrapper(internalInputRep),
                   _
@@ -460,14 +519,23 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   _: ProductCaseClassRepresentation.ProdBuiltinPair,
                   tvr: TypeVarRepresentation
                 ) =>
-                if tvr.isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
-                else
-                    val typeVarRepr = lctx
-                        .typeGenerator(input.sirType)
-                        .defaultTypeVarReperesentation(input.sirType)
-                    input
-                        .toRepresentation(typeVarRepr, pos)
-                        .toRepresentation(representation, pos)
+                import SIRType.TypeVarKind.*
+                tvr.kind match
+                    case Transparent =>
+                        RepresentationProxyLoweredValue(input, representation, pos)
+                    case Unwrapped =>
+                        // Underlying form for Unwrapped target = defaultRepresentation
+                        val targetUnderlying = defaultRepresentation(input.sirType)
+                        input
+                            .toRepresentation(targetUnderlying, pos)
+                            .toRepresentation(representation, pos)
+                    case Fixed =>
+                        val typeVarRepr = lctx
+                            .typeGenerator(input.sirType)
+                            .defaultTypeVarReperesentation(input.sirType)
+                        input
+                            .toRepresentation(typeVarRepr, pos)
+                            .toRepresentation(representation, pos)
             case (_: ProductCaseClassRepresentation.ProdBuiltinPair, _) =>
                 input
                     .toRepresentation(ProdDataList, pos)
@@ -478,15 +546,38 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 ) =>
                 RepresentationProxyLoweredValue(input, representation, pos)
             case (tvr: TypeVarRepresentation, _) =>
-                if tvr.isBuiltin then RepresentationProxyLoweredValue(input, representation, pos)
-                else {
-                    val inputDataConstr =
-                        input.toRepresentation(ProductCaseClassRepresentation.ProdDataConstr, pos)
-                    val output = inputDataConstr.toRepresentation(representation, pos)
-                    output
-                }
+                import SIRType.TypeVarKind.*
+                tvr.kind match
+                    case Transparent =>
+                        RepresentationProxyLoweredValue(input, representation, pos)
+                    case Unwrapped =>
+                        // Source bytes are in defaultRepresentation form for input.sirType.
+                        val sourceUnderlying = defaultRepresentation(input.sirType)
+                        new RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
+                            .toRepresentation(representation, pos)
+                    case Fixed =>
+                        val inputDataConstr =
+                            input.toRepresentation(
+                              ProductCaseClassRepresentation.ProdDataConstr,
+                              pos
+                            )
+                        val output = inputDataConstr.toRepresentation(representation, pos)
+                        output
             case (_, tvr: TypeVarRepresentation) =>
-                if tvr.isBuiltin then input else toRepresentation(input, ProdDataConstr, pos)
+                import SIRType.TypeVarKind.*
+                tvr.kind match
+                    case Transparent => input
+                    case Unwrapped   =>
+                        // Need bytes in the type's actual defaultRepresentation form before
+                        // relabeling. Dispatch via the type's own generator (e.g. for a
+                        // @UplcRepr(UplcConstr) Point, the default is ProdUplcConstr, NOT
+                        // this generator's Data-backed ProdDataList).
+                        val targetUnderlying = lctx
+                            .typeGenerator(input.sirType)
+                            .defaultRepresentation(input.sirType)
+                        val converted = input.toRepresentation(targetUnderlying, pos)
+                        new RepresentationProxyLoweredValue(converted, tvr, pos)
+                    case Fixed => toRepresentation(input, ProdDataConstr, pos)
             case _ =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $representation",
@@ -569,12 +660,13 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
             case other =>
                 // Check if input has UplcConstr repr with non-Data-convertible fields
-                // (e.g., Transparent TypeVar). In that case, cascade to SumUplcConstr.
+                // (e.g., passthrough TypeVar — Transparent or Unwrapped). In that case,
+                // cascade to SumUplcConstr.
                 input.representation match
                     case puc: ProductCaseClassRepresentation.ProdUplcConstr
                         if puc.fieldReprs.exists {
-                            case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
-                            case _                                                      => false
+                            case tvr: TypeVarRepresentation => tvr.isBuiltin
+                            case _                          => false
                         } =>
                         new TypeRepresentationProxyLoweredValue(
                           input,
@@ -1103,8 +1195,14 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         val fieldReprs = adoptedArgs.map(_.representation).toList
         val repr = ProdUplcConstr(constrIndex, fieldReprs)
 
+        // Debug: print final fieldReprs for SolutionEntry
+        if constrDecl.name.contains("SolutionEntry") then
+            println(s"[DEBUG genConstrUplcConstr] Built ${constrDecl.name} at ${constr.anns.pos}")
+            println(s"  fieldReprs = $fieldReprs")
+            println(s"  repr = $repr")
+
         // Build Term.Constr(tag, [t1, t2, ...])
-        new ComplexLoweredValue(Set.empty, adoptedArgs*) {
+        val loweredValue = new ComplexLoweredValue(Set.empty, adoptedArgs*) {
             override def sirType: SIRType = constr.tp
             override def representation: LoweredValueRepresentation = repr
             override def pos: SIRPosition = constr.anns.pos
@@ -1126,6 +1224,14 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
             override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
         }
+
+        // Debug: print the constructed LoweredValue for SolutionEntry
+        if constrDecl.name.contains("SolutionEntry") then
+            println(s"[DEBUG genConstrUplcConstr] LoweredValue created:")
+            println(s"  loweredValue.show = ${loweredValue.show}")
+            println(s"  loweredValue.representation = ${loweredValue.representation}")
+
+        loweredValue
     }
 
     def retrieveConstrIndex(tp: SIRType, pos: SIRPosition): Int = {
