@@ -1,6 +1,7 @@
 package scalus.cardano.node
 
 import scalus.uplc.DebugScript
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS, State}
 import scalus.cardano.ledger.*
@@ -22,15 +23,37 @@ class Emulator(
     initialContext: Context = Context.testMainnet(),
     val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
     val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
-    initialCertState: CertState = CertState.empty
+    initialCertState: CertState = CertState.empty,
+    initialDatums: Map[DataHash, Data] = Map.empty
 ) extends EmulatorBase {
     private val stateRef =
         new AtomicReference[State](State(initialUtxos, certState = initialCertState))
     private val contextRef = new AtomicReference[Context](initialContext)
+    private val datumsRef = new AtomicReference[Map[DataHash, Data]](initialDatums)
+    private val appliedTxsRef = new AtomicReference[Set[TransactionHash]](Set.empty)
 
     def utxos: Utxos = stateRef.get().utxos
     def certState: CertState = stateRef.get().certState
     protected def currentContext: Context = contextRef.get()
+    def datums: Map[DataHash, Data] = datumsRef.get()
+    def appliedTxs: Set[TransactionHash] = appliedTxsRef.get()
+
+    @tailrec
+    private def recordApplied(tx: Transaction): Unit = {
+        val cur = appliedTxsRef.get()
+        if !appliedTxsRef.compareAndSet(cur, cur + tx.id) then recordApplied(tx)
+        else {
+            val extracted = EmulatorBase.extractDatums(tx)
+            if extracted.nonEmpty then {
+                val curDatums = datumsRef.get()
+                if !datumsRef.compareAndSet(curDatums, curDatums ++ extracted) then {
+                    // retry just the datums merge
+                    var d = datumsRef.get()
+                    while !datumsRef.compareAndSet(d, d ++ extracted) do d = datumsRef.get()
+                }
+            }
+        }
+    }
 
     @tailrec
     final def submitSync(
@@ -41,7 +64,9 @@ class Emulator(
 
         processTransaction(ctx, currentState, transaction) match {
             case Right(newState) =>
-                if stateRef.compareAndSet(currentState, newState) then Right(transaction.id)
+                if stateRef.compareAndSet(currentState, newState) then
+                    recordApplied(transaction)
+                    Right(transaction.id)
                 else submitSync(transaction)
             case Left(t: TransactionException) =>
                 Left(SubmitError.fromException(t))
@@ -59,7 +84,9 @@ class Emulator(
 
         processTransaction(ctxWithDebug, currentState, transaction) match {
             case Right(newState) =>
-                if stateRef.compareAndSet(currentState, newState) then Right(transaction.id)
+                if stateRef.compareAndSet(currentState, newState) then
+                    recordApplied(transaction)
+                    Right(transaction.id)
                 else submitSync(transaction, debugScripts)
             case Left(t: TransactionException) =>
                 Left(SubmitError.fromException(t))
@@ -82,7 +109,8 @@ class Emulator(
       initialContext = this.contextRef.get(),
       validators = this.validators,
       mutators = this.mutators,
-      initialCertState = this.stateRef.get().certState
+      initialCertState = this.stateRef.get().certState,
+      initialDatums = this.datumsRef.get()
     )
 }
 
@@ -107,6 +135,19 @@ object Emulator {
           initialUtxos = EmulatorBase.createInitialUtxos(addresses, initialValue),
           initialContext = Context.testMainnet(),
           mutators = defaultMutators
+        )
+    }
+
+    def withState(
+        initState: EmulatorInitialState,
+        context: Context = Context.testMainnet()
+    ): Emulator = {
+        val (certState, datums) = EmulatorBase.buildInitialState(initState, context)
+        Emulator(
+          initialUtxos = initState.utxos,
+          initialContext = context,
+          initialCertState = certState,
+          initialDatums = datums
         )
     }
 

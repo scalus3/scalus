@@ -560,6 +560,12 @@ class BlockfrostProvider(
           cardanoInfo.slotConfig.instantToSlot(java.time.Instant.now()).toLong
         )
 
+    override def getDatum(datumHash: DataHash): Future[Option[Data]] =
+        fetchJsonOpt(s"/scripts/datum/${datumHash.toHex}/cbor").map {
+            case Some(json) => Some(Data.fromCbor(ByteString.fromHex(json("cbor").str).bytes))
+            case None       => None
+        }
+
     def fetchLatestParams: Future[ProtocolParams] =
         fetchProtocolParamsFromUrl(s"$baseUrl/epochs/latest/parameters")
 

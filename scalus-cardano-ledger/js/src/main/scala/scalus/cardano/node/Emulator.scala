@@ -1,6 +1,7 @@
 package scalus.cardano.node
 
 import scalus.uplc.DebugScript
+import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS, State}
 import scalus.cardano.ledger.*
@@ -19,20 +20,31 @@ class Emulator(
     initialContext: Context = Context.testMainnet(),
     val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
     val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
-    initialCertState: CertState = CertState.empty
+    initialCertState: CertState = CertState.empty,
+    initialDatums: Map[DataHash, Data] = Map.empty
 ) extends EmulatorBase {
     // JavaScript is single-threaded, so simple vars are safe
     private var state: State = State(initialUtxos, certState = initialCertState)
     private var context: Context = initialContext
+    private var _datums: Map[DataHash, Data] = initialDatums
+    private var _appliedTxs: Set[TransactionHash] = Set.empty
 
     def utxos: Utxos = state.utxos
     def certState: CertState = state.certState
     def currentContext: Context = context
+    def datums: Map[DataHash, Data] = _datums
+    def appliedTxs: Set[TransactionHash] = _appliedTxs
+
+    private def recordApplied(tx: Transaction): Unit = {
+        _appliedTxs = _appliedTxs + tx.id
+        _datums = _datums ++ EmulatorBase.extractDatums(tx)
+    }
 
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
         processTransaction(context, state, transaction) match {
             case Right(newState) =>
                 state = newState
+                recordApplied(transaction)
                 Right(transaction.id)
             case Left(t: TransactionException) =>
                 Left(SubmitError.fromException(t))
@@ -47,6 +59,7 @@ class Emulator(
         processTransaction(ctxWithDebug, state, transaction) match {
             case Right(newState) =>
                 state = newState
+                recordApplied(transaction)
                 Right(transaction.id)
             case Left(t: TransactionException) =>
                 Left(SubmitError.fromException(t))
@@ -66,7 +79,8 @@ class Emulator(
       initialContext = this.context,
       validators = this.validators,
       mutators = this.mutators,
-      initialCertState = this.state.certState
+      initialCertState = this.state.certState,
+      initialDatums = this._datums
     )
 }
 
@@ -91,6 +105,19 @@ object Emulator {
           initialUtxos = EmulatorBase.createInitialUtxos(addresses, initialValue),
           initialContext = Context.testMainnet(),
           mutators = defaultMutators
+        )
+    }
+
+    def withState(
+        initState: EmulatorInitialState,
+        context: Context = Context.testMainnet()
+    ): Emulator = {
+        val (certState, datums) = EmulatorBase.buildInitialState(initState, context)
+        Emulator(
+          initialUtxos = initState.utxos,
+          initialContext = context,
+          initialCertState = certState,
+          initialDatums = datums
         )
     }
 

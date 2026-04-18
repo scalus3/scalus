@@ -346,6 +346,11 @@ object Scenario {
             override def currentSlot: Scenario[SlotNo] =
                 Scenario.now
 
+            override def getDatum(
+                datumHash: DataHash
+            ): Scenario[Option[scalus.uplc.builtin.Data]] =
+                scenarioLogicMonad.pure(None)
+
             override def checkTransaction(
                 txHash: TransactionHash
             ): Scenario[TransactionStatus] =

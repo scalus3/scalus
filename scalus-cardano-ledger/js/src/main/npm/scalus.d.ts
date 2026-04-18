@@ -101,6 +101,66 @@ export interface SubmitResult {
   logs?: string[];
 }
 
+/** Delegation info returned by getDelegation. */
+export interface DelegationInfo {
+  /** Pool key hash bytes, or null if not delegated. */
+  poolId: Uint8Array | null;
+  /** Reward balance in lovelace. */
+  rewards: bigint;
+}
+
+/** Stake registration entry for EmulatorInitialState. */
+export interface StakeRegistration {
+  /** Credential type: "key" for pub key hash, "script" for script hash. */
+  credentialType: "key" | "script";
+  /** Hex-encoded 28-byte credential hash. */
+  credentialHash: string;
+  /** Initial reward balance in lovelace. */
+  rewards: bigint;
+  /** Hex-encoded 28-byte pool key hash to delegate to (optional). */
+  delegatedTo?: string;
+}
+
+/** Pool registration entry for EmulatorInitialState. */
+export interface PoolRegistration {
+  /** CBOR-encoded PoolRegistration certificate. */
+  params: Uint8Array;
+}
+
+/** DRep registration entry for EmulatorInitialState. */
+export interface DRepRegistration {
+  /** Credential type: "key" for pub key hash, "script" for script hash. */
+  credentialType: "key" | "script";
+  /** Hex-encoded 28-byte credential hash. */
+  credentialHash: string;
+  /** Deposit in lovelace. */
+  deposit: bigint;
+  /** CBOR-encoded anchor (optional). */
+  anchor?: Uint8Array;
+}
+
+/** Datum entry for EmulatorInitialState. */
+export interface DatumEntry {
+  /** Hex-encoded 32-byte datum hash. */
+  hash: string;
+  /** Hex-encoded CBOR-encoded datum. */
+  datum: string;
+}
+
+/** Initial state for Emulator.withState. */
+export interface EmulatorInitialState {
+  /** CBOR-encoded UTxO map. */
+  utxos: Uint8Array;
+  /** Pre-registered stake credentials with rewards and optional delegation. */
+  stakeRegistrations?: StakeRegistration[];
+  /** Pre-registered stake pools. */
+  poolRegistrations?: PoolRegistration[];
+  /** Pre-registered DReps. */
+  drepRegistrations?: DRepRegistration[];
+  /** Pre-seeded datum store. */
+  datums?: DatumEntry[];
+}
+
 /** Cardano emulator for testing transactions. */
 export class Emulator {
   /**
@@ -137,10 +197,44 @@ export class Emulator {
   getAllUtxos(): Uint8Array[];
 
   /**
+   * Get the reward balance for a script-based stake credential.
+   * @param scriptHashHex Hex-encoded script hash.
+   * @returns Reward amount in lovelace, or null if not registered.
+   */
+  getStakeReward(scriptHashHex: string): bigint | null;
+
+  /**
    * Set the current slot.
    * @param slot The slot number.
    */
   setSlot(slot: number): void;
+
+  /**
+   * Advance the current slot by n slots.
+   * @param n Number of slots to advance.
+   */
+  tick(n: number): void;
+
+  /**
+   * Check whether a transaction has been accepted.
+   * @param txHashBytes 32-byte transaction hash.
+   * @returns True if the transaction has been submitted and accepted.
+   */
+  hasTx(txHashBytes: Uint8Array): boolean;
+
+  /**
+   * Get delegation info for a stake credential.
+   * @param stakeCredentialCbor CBOR-encoded stake credential.
+   * @returns Delegation info with poolId and rewards.
+   */
+  getDelegation(stakeCredentialCbor: Uint8Array): DelegationInfo;
+
+  /**
+   * Look up a datum by its hash.
+   * @param datumHashBytes 32-byte datum hash.
+   * @returns CBOR-encoded datum, or null if unknown.
+   */
+  getDatum(datumHashBytes: Uint8Array): Uint8Array | null;
 
   /**
    * Create a snapshot of the current emulator state.
@@ -159,5 +253,16 @@ export class Emulator {
     addressesBech32: string[],
     slotConfig: SlotConfig,
     lovelacePerAddress?: bigint
+  ): Emulator;
+
+  /**
+   * Create an emulator with full initial ledger state.
+   * @param state Initial state including UTxOs, stake/pool/DRep registrations, and datums.
+   * @param slotConfig Slot configuration.
+   * @returns A new Emulator seeded with the given state.
+   */
+  static withState(
+    state: EmulatorInitialState,
+    slotConfig: SlotConfig
   ): Emulator;
 }

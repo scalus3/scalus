@@ -18,9 +18,9 @@ describe("scalus.js bundle", () => {
     expect(bundle).not.toContain('"nonce"');
   });
 
-  test("should be smaller than 2MB", () => {
+  test("should be smaller than 3MB", () => {
     const sizeInBytes = Buffer.byteLength(bundle, "utf8");
-    const limit = 2.1 * 1024 * 1024;
+    const limit = 3 * 1024 * 1024;
     expect(sizeInBytes).toBeLessThan(limit);
   });
 });

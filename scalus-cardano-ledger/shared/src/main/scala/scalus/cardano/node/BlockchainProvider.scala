@@ -2,6 +2,7 @@ package scalus.cardano.node
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
+import scalus.uplc.builtin.Data
 
 import scala.concurrent.Future
 
@@ -31,6 +32,9 @@ trait BlockchainReaderTF[F[_]] {
     /** Returns the current slot number.
       */
     def currentSlot: F[SlotNo]
+
+    /** Look up a datum by its hash. Returns `None` if unknown. */
+    def getDatum(datumHash: DataHash): F[Option[Data]]
 
     /** Check the status of a transaction on the blockchain.
       *
@@ -172,6 +176,8 @@ trait BlockchainReader extends BlockchainReaderTF[Future] {
     /** Returns the current slot number.
       */
     def currentSlot: Future[SlotNo]
+
+    def getDatum(datumHash: DataHash): Future[Option[Data]]
 
     /** Find UTxOs using a type-safe query.
       *

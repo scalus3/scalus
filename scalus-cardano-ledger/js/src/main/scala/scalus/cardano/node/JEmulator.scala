@@ -2,7 +2,7 @@ package scalus.cardano.node
 
 import io.bullet.borer.Cbor
 import scalus.uplc.DebugScript
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, UtxoEnv}
 import scalus.cardano.ledger.*
@@ -31,7 +31,7 @@ class JEmulator(
     initialStakeRewards: js.Dictionary[String] = js.Dictionary()
 ) extends js.Object {
 
-    private val emulator: Emulator = {
+    private var emulator: Emulator = {
         val utxos: Utxos = Cbor.decode(initialUtxosCbor.toArray.map(_.toByte)).to[Utxos].value
         val env =
             if slotConfig == SlotConfig.mainnet then UtxoEnv.testMainnet()
@@ -190,30 +190,178 @@ class JEmulator(
         emulator.setSlot(slot.toLong)
     }
 
+    /** Advance the current slot by `n` slots. */
+    def tick(n: Double): Unit = emulator.tick(n.toLong)
+
+    /** True once the tx with the given hash has been accepted. */
+    def hasTx(txHashBytes: Uint8Array): Boolean = {
+        val hash = TransactionHash.fromByteString(
+          ByteString.unsafeFromArray(txHashBytes.toArray.map(_.toByte))
+        )
+        emulator.hasTx(hash)
+    }
+
+    /** Delegation + reward balance for a stake credential (CBOR-encoded). */
+    def getDelegation(stakeCredentialCbor: Uint8Array): js.Dynamic = {
+        val bytes = stakeCredentialCbor.toArray.map(_.toByte)
+        val cred = Cbor.decode(bytes).to[Credential].value
+        val info = emulator.getDelegation(cred)
+        val pool = info.poolId match
+            case Some(pk) =>
+                new Uint8Array(byteArray2Int8Array(pk.bytes).buffer): Uint8Array | Null
+            case None => null
+        js.Dynamic.literal(
+          poolId = pool,
+          rewards = js.BigInt(info.rewards.value.toString)
+        )
+    }
+
+    /** Look up a datum by hash. Returns `null` if unknown, else CBOR bytes. */
+    def getDatum(datumHashBytes: Uint8Array): Uint8Array | Null = {
+        val hash = DataHash.fromByteString(
+          ByteString.unsafeFromArray(datumHashBytes.toArray.map(_.toByte))
+        )
+        emulator.datums.get(hash) match
+            case Some(data) =>
+                val bytes = Cbor.encode(data).toByteArray
+                new Uint8Array(byteArray2Int8Array(bytes).buffer)
+            case None => null
+    }
+
     def snapshot(): JEmulator = {
         val snapshotEmulator = emulator.snapshot()
-        val cbor = Cbor.encode(snapshotEmulator.utxos).toByteArray
-        new JEmulator(
-          new Uint8Array(byteArray2Int8Array(cbor).buffer),
+        val emptyUtxosCbor = Cbor.encode(Map.empty: Utxos).toByteArray
+        val wrapper = new JEmulator(
+          new Uint8Array(byteArray2Int8Array(emptyUtxosCbor).buffer),
           emulator.currentContext.slotConfig,
           initialStakeRewards
         )
+        JEmulator.replaceEmulator(wrapper, snapshotEmulator)
+        wrapper
     }
+}
+
+/** JS-shape of [[EmulatorInitialState]]. */
+trait JEmulatorInitialState extends js.Object {
+    val utxos: Uint8Array
+    val stakeRegistrations: js.UndefOr[js.Array[JStakeRegistration]] = js.undefined
+    val poolRegistrations: js.UndefOr[js.Array[JPoolRegistration]] = js.undefined
+    val drepRegistrations: js.UndefOr[js.Array[JDRepRegistration]] = js.undefined
+    val datums: js.UndefOr[js.Array[JDatumEntry]] = js.undefined
+}
+
+trait JStakeRegistration extends js.Object {
+
+    /** "key" or "script" */
+    val credentialType: String
+
+    /** Hex-encoded 28-byte credential hash */
+    val credentialHash: String
+    val rewards: js.BigInt
+
+    /** Hex-encoded 28-byte pool key hash (optional) */
+    val delegatedTo: js.UndefOr[String] = js.undefined
+}
+
+trait JPoolRegistration extends js.Object {
+
+    /** CBOR-encoded PoolRegistration certificate */
+    val params: Uint8Array
+}
+
+trait JDRepRegistration extends js.Object {
+
+    /** "key" or "script" */
+    val credentialType: String
+
+    /** Hex-encoded 28-byte credential hash */
+    val credentialHash: String
+    val deposit: js.BigInt
+
+    /** CBOR-encoded anchor (optional) */
+    val anchor: js.UndefOr[Uint8Array] = js.undefined
+}
+
+trait JDatumEntry extends js.Object {
+
+    /** Hex-encoded 32-byte datum hash */
+    val hash: String
+
+    /** Hex-encoded CBOR-encoded datum */
+    val datum: String
 }
 
 object JEmulator {
 
-    /** Create an emulator with funded addresses.
-      *
-      * @param addressesBech32
-      *   Array of addresses in bech32 format
-      * @param slotConfig
-      *   Slot configuration
-      * @param lovelacePerAddress
-      *   Amount of lovelace per address (default: 10,000 ADA)
-      * @return
-      *   A new JEmulator with funded addresses
-      */
+    private def decodeCbor[T: io.bullet.borer.Decoder](bytes: Uint8Array): T =
+        Cbor.decode(bytes.toArray.map(_.toByte)).to[T].value
+
+    private def replaceEmulator(wrapper: JEmulator, e: Emulator): Unit =
+        wrapper.emulator = e
+
+    private def parseCredential(credType: String, credHash: String): Credential =
+        credType match
+            case "key"    => Credential.KeyHash(AddrKeyHash.fromHex(credHash))
+            case "script" => Credential.ScriptHash(ScriptHash.fromHex(credHash))
+            case other =>
+                throw new IllegalArgumentException(
+                  s"credentialType must be \"key\" or \"script\", got: \"$other\""
+                )
+
+    /** Seeded constructor: accepts initial ledger state with JSON-friendly fields. */
+    @JSExportStatic
+    def withState(state: JEmulatorInitialState, slotConfig: SlotConfig): JEmulator = {
+        val utxos = decodeCbor[Utxos](state.utxos)
+        val stakeRegs = state.stakeRegistrations.toOption.toSeq.flatten.map { s =>
+            EmulatorStakeRegistration(
+              credential = parseCredential(s.credentialType, s.credentialHash),
+              rewards = Coin(s.rewards.toString.toLong),
+              delegatedTo = s.delegatedTo.toOption.map { hex =>
+                  PoolKeyHash.fromHex(hex)
+              }
+            )
+        }
+        val poolRegs = state.poolRegistrations.toOption.toSeq.flatten.map { p =>
+            val params = decodeCbor[Certificate](p.params) match
+                case pr: Certificate.PoolRegistration => pr
+                case other =>
+                    throw new IllegalArgumentException(
+                      s"Expected PoolRegistration certificate, got: $other"
+                    )
+            EmulatorPoolRegistration(params)
+        }
+        val drepRegs = state.drepRegistrations.toOption.toSeq.flatten.map { d =>
+            EmulatorDRepRegistration(
+              credential = parseCredential(d.credentialType, d.credentialHash),
+              deposit = Coin(d.deposit.toString.toLong),
+              anchor = d.anchor.toOption.map(decodeCbor[Anchor])
+            )
+        }
+        val datumEntries = state.datums.toOption.toSeq.flatten.map { e =>
+            DataHash.fromHex(e.hash) -> Data.fromCbor(ByteString.fromHex(e.datum).bytes)
+        }.toMap
+        val initState = EmulatorInitialState(
+          utxos = utxos,
+          stakeRegistrations = stakeRegs,
+          poolRegistrations = poolRegs,
+          drepRegistrations = drepRegs,
+          datums = datumEntries
+        )
+        val env =
+            if slotConfig == SlotConfig.mainnet then UtxoEnv.testMainnet()
+            else UtxoEnv.default
+        val context = new Context(env = env, slotConfig = slotConfig)
+        val scalaEmulator = Emulator.withState(initState, context)
+
+        val emptyUtxosCbor = Cbor.encode(Map.empty: Utxos).toByteArray
+        val wrapper = new JEmulator(
+          new Uint8Array(byteArray2Int8Array(emptyUtxosCbor).buffer),
+          slotConfig
+        )
+        replaceEmulator(wrapper, scalaEmulator)
+        wrapper
+    }
+
     @JSExportStatic
     def withAddresses(
         addressesBech32: js.Array[String],

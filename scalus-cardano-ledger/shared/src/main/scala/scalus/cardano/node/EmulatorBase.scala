@@ -1,7 +1,7 @@
 package scalus.cardano.node
 
 import scalus.uplc.DebugScript
-import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State}
 import scalus.cardano.ledger.*
@@ -25,11 +25,28 @@ trait EmulatorBase extends BlockchainProvider {
     def utxos: Utxos
     def certState: CertState
     protected def currentContext: Context
+    def datums: Map[DataHash, Data]
+    def appliedTxs: Set[TransactionHash]
 
     // Abstract - platform-specific state modification
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash]
     def setSlot(slot: SlotNo): Unit
     def snapshot(): Emulator
+
+    def tick(n: Long): Unit = setSlot(currentContext.env.slot + n)
+
+    def hasTx(txHash: TransactionHash): Boolean = appliedTxs.contains(txHash)
+
+    def getDelegation(credential: Credential): DelegationInfo = {
+        val st = certState.dstate
+        DelegationInfo(
+          poolId = st.stakePools.get(credential),
+          rewards = st.rewards.getOrElse(credential, Coin.zero)
+        )
+    }
+
+    def getDatum(datumHash: DataHash): Future[Option[Data]] =
+        Future.successful(datums.get(datumHash))
 
     override def cardanoInfo: CardanoInfo = {
         val ctx = currentContext
@@ -79,6 +96,30 @@ trait EmulatorBase extends BlockchainProvider {
         STS.Mutator.transit(validators, mutators, context, state, transaction)
     }
 }
+
+case class DelegationInfo(poolId: Option[PoolKeyHash], rewards: Coin)
+
+case class EmulatorStakeRegistration(
+    credential: Credential,
+    rewards: Coin = Coin.zero,
+    delegatedTo: Option[PoolKeyHash] = None
+)
+
+case class EmulatorPoolRegistration(params: Certificate.PoolRegistration)
+
+case class EmulatorDRepRegistration(
+    credential: Credential,
+    deposit: Coin,
+    anchor: Option[Anchor] = None
+)
+
+case class EmulatorInitialState(
+    utxos: Utxos = Map.empty,
+    stakeRegistrations: Seq[EmulatorStakeRegistration] = Seq.empty,
+    poolRegistrations: Seq[EmulatorPoolRegistration] = Seq.empty,
+    drepRegistrations: Seq[EmulatorDRepRegistration] = Seq.empty,
+    datums: Map[DataHash, Data] = Map.empty
+)
 
 object EmulatorBase {
 
@@ -147,6 +188,57 @@ object EmulatorBase {
         addresses.zipWithIndex.map { case (address, index) =>
             Input(genesisHash, index) -> Output(address, initialValue)
         }.toMap
+    }
+
+    def extractDatums(transaction: Transaction): Map[DataHash, Data] = {
+        val fromWitness = transaction.witnessSet.plutusData.value.toMap.map {
+            case (hash, keptData) => hash -> keptData.value
+        }
+        val fromInline = transaction.body.value.outputs.iterator.flatMap { out =>
+            out.value.datumOption match
+                case Some(DatumOption.Inline(d)) =>
+                    Some(DataHash.fromByteString(d.dataHash) -> d)
+                case _ => None
+        }.toMap
+        fromWitness ++ fromInline
+    }
+
+    def buildInitialState(
+        initState: EmulatorInitialState,
+        context: Context
+    ): (CertState, Map[DataHash, Data]) = {
+        val deposit = Coin(context.env.params.stakeAddressDeposit)
+        val poolDeposit = Coin(context.env.params.stakePoolDeposit)
+
+        val dstate = DelegationState(
+          deposits = initState.stakeRegistrations.map(s => s.credential -> deposit).toMap,
+          rewards = initState.stakeRegistrations.map(s => s.credential -> s.rewards).toMap,
+          stakePools =
+              initState.stakeRegistrations.flatMap(s => s.delegatedTo.map(s.credential -> _)).toMap
+        )
+
+        val pstate = PoolsState(
+          stakePools = initState.poolRegistrations.map { p =>
+              PoolKeyHash.fromByteString(p.params.operator) -> p.params
+          }.toMap,
+          deposits = initState.poolRegistrations.map { p =>
+              PoolKeyHash.fromByteString(p.params.operator) -> poolDeposit
+          }.toMap
+        )
+
+        val vstate = VotingState(
+          dreps = initState.drepRegistrations.map { d =>
+              d.credential -> DRepState(
+                expiry = 0L,
+                anchor = d.anchor,
+                deposit = d.deposit,
+                delegates = Set.empty
+              )
+          }.toMap
+        )
+
+        val certState = CertState(dstate = dstate, pstate = pstate, vstate = vstate)
+        (certState, initState.datums)
     }
 
     /** Builds a [[scalus.cardano.ledger.CertState]] with the given stake credentials

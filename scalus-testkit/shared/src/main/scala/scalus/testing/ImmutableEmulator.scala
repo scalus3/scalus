@@ -4,6 +4,7 @@ import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator, STS, State, UtxoEnv}
 import scalus.cardano.node.*
+import scalus.uplc.builtin.Data
 
 import scala.concurrent.{ExecutionContext, Future}
 
@@ -76,6 +77,8 @@ case class ImmutableEmulator(
             Future.successful(ImmutableEmulator.this.findUtxos(query))
         override def currentSlot: Future[SlotNo] =
             Future.successful(env.slot)
+        def getDatum(datumHash: DataHash): Future[Option[Data]] =
+            Future.successful(None)
     }
 
     /** Create a [[scalus.cardano.node.BlockchainProvider]] snapshot.
@@ -101,6 +104,8 @@ case class ImmutableEmulator(
             Future.successful(ImmutableEmulator.this.findUtxos(query))
         override def currentSlot: Future[SlotNo] =
             Future.successful(env.slot)
+        def getDatum(datumHash: DataHash): Future[Option[Data]] =
+            Future.successful(None)
     }
 
     /** Convert to a mutable [[scalus.cardano.node.Emulator]]. */
