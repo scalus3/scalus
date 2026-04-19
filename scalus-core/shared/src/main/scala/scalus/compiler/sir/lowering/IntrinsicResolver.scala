@@ -93,9 +93,12 @@ object IntrinsicResolver {
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
       * intrinsic modules, these are NOT used for provider substitution.
       *
-      * `UplcConstrListOperations` carries per-typeparam `@UplcRepr(TypeVar(Unwrapped))` so its
-      * TypeVars come through with author-written kinds. `NativeListOperations` is still on the
-      * legacy blanket-Transparent path until Phase 4 migrates it.
+      * `UplcConstrListOperations` and `UplcConstrOptionOperations` carry per-typeparam
+      * `@UplcRepr(TypeVar(Transparent))` so their TypeVars come through with author-written
+      * kinds, matching the dispatcher annotations and avoiding the abstract-A `Transparent →
+      * Unwrapped` boundary at standalone-lowered support-op call sites.
+      * `NativeListOperations` is still on the legacy blanket-Transparent path until Phase 4
+      * migrates it.
       */
     lazy val defaultSupportModules: Map[String, Module] = {
         val modules = scalus.compiler.compiledModules(

@@ -47,12 +47,17 @@ class KnightsTestMinimal extends AnyFunSuite:
     }
 
     ignore("minimal - SolutionEntry with .length field") {
+        // Previously failed at compile time with Transparent→Unwrapped throw in
+        // sumUplcConstrToSumUplcConstr:892. After flipping UplcConstrListOperations.reverse
+        // to @UplcRepr(TypeVar(Transparent)), compilation succeeds but the test now fails at
+        // runtime with ConstrData applied to a VLamAbs (partial MkCons chain) — a separate,
+        // pre-existing bug in how `.length` on `List[Direction]` (non-@UplcRepr element type,
+        // default SumBuiltinList(Fixed)) composes inside a dispatcher-wrapped map lambda when
+        // its result feeds a SolutionEntry constructor. See project_length_field_runtime_bug.md.
         val sir = compile {
-            // Bug: depth comes from .length (returns TypeVarRepresentation)
             val board = startTour(Tile(1, 1), BigInt(4))
             @UplcRepr(UplcRepresentation.UplcConstr)
             val baseList: List[ChessSet] = List.Cons(board, List.Nil)
-            // Use .length to get depth - this might have TypeVarRepresentation
             val entries = baseList.map { item =>
                 SolutionEntry(item.deleteFirst.possibleMoves.length, item)
             }

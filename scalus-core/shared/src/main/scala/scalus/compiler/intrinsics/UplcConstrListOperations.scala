@@ -5,13 +5,18 @@ import scalus.cardano.onchain.plutus.prelude.{fail, List, Option}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.compiler.UplcRepr
 import scalus.compiler.UplcRepresentation.TypeVar
-import scalus.compiler.UplcRepresentation.TypeVarKind.Unwrapped
+import scalus.compiler.UplcRepresentation.TypeVarKind.{Transparent, Unwrapped}
 
 /** UplcConstr list operations — recursive implementations with local go functions.
   *
   * Type parameters are annotated `@UplcRepr(TypeVar(Unwrapped))`: values flow through in their
   * concrete type's default representation; no Data wrapping is ever applied. The dispatcher
-  * `IntrinsicsUplcConstrList` uses `Transparent` and converts at the boundary.
+  * `IntrinsicsUplcConstrList` uses `Transparent` and converts at the boundary — this conversion
+  * is load-bearing: at the dispatcher → support op call it materializes the concrete-A conversion
+  * (A is concrete in the inlined dispatcher body), which propagates field reprs correctly into
+  * the support op body's Cons constructions and lets the outer caller read back the result in
+  * the expected shape. Replacing Unwrapped with Transparent here turns that conversion into a
+  * no-op relabel and breaks downstream consumers (see UplcConstrTest dropRight/init).
   *
   * Uses local `go` functions (compiled as letrec) instead of module-level recursion to avoid
   * infinite support module binding resolution.
@@ -118,7 +123,7 @@ object UplcConstrListOperations {
         go(self, BigInt(0))
     }
 
-    def reverse[@UplcRepr(TypeVar(Unwrapped)) A](self: List[A]): List[A] = {
+    def reverse[@UplcRepr(TypeVar(Transparent)) A](self: List[A]): List[A] = {
         def go(lst: List[A], acc: List[A]): List[A] = lst match
             case List.Cons(h, t) => go(t, List.Cons(h, acc))
             case List.Nil        => acc
