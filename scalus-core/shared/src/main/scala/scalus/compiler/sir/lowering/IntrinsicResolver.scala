@@ -32,6 +32,7 @@ object IntrinsicResolver {
     private val PairListModule = "scalus.cardano.onchain.plutus.prelude.PairList$"
     private val SortedMapModule = "scalus.cardano.onchain.plutus.prelude.SortedMap$"
     private val AssocMapModule = "scalus.cardano.onchain.plutus.prelude.AssocMap$"
+    private val OptionModule = "scalus.cardano.onchain.plutus.prelude.Option$"
 
     private val ListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
     private val ListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
@@ -43,6 +44,8 @@ object IntrinsicResolver {
 
     private val SortedMapIntrinsicsModule = "scalus.compiler.intrinsics.SortedMapIntrinsics$"
     private val AssocMapIntrinsicsModule = "scalus.compiler.intrinsics.AssocMapIntrinsics$"
+
+    private val UplcConstrOptionOps = "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption$"
 
     /** Default intrinsic modules, loaded at compile time by the plugin. The plugin intercepts
       * `compiledModules(...)` and replaces it with `SIRLinker.readModules(...)` that accesses the
@@ -57,16 +60,18 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.SortedMapIntrinsics",
           "scalus.compiler.intrinsics.AssocMapIntrinsics",
           "scalus.compiler.intrinsics.IntrinsicsNativeList",
-          "scalus.compiler.intrinsics.IntrinsicsUplcConstrList"
+          "scalus.compiler.intrinsics.IntrinsicsUplcConstrList",
+          "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption"
         )
-        // Post-process IntrinsicsNativeList and IntrinsicsUplcConstrList: make TypeVars
-        // Transparent so that native values pass through without implicit Data conversion at
-        // boundaries. The dispatcher modules' annotations (added in Phase 3 for
+        // Post-process IntrinsicsNativeList, IntrinsicsUplcConstrList, and IntrinsicsUplcConstrOption:
+        // make TypeVars Transparent so that native values pass through without implicit Data
+        // conversion at boundaries. The dispatcher modules' annotations (added in Phase 3 for
         // documentation/intent) are equivalent to Transparent here, so this stamping is
         // idempotent for them. HO function arguments (like Eq in contains) are explicitly
         // wrapped with toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
         modules.map { (name, module) =>
-            if name == NativeListOps || name == UplcConstrListOps then
+            if name == NativeListOps || name == UplcConstrListOps || name == UplcConstrOptionOps
+            then
                 val transparentDefs = module.defs.map { binding =>
                     val newValue =
                         SIR.mapTypeVars(
@@ -95,7 +100,8 @@ object IntrinsicResolver {
     lazy val defaultSupportModules: Map[String, Module] = {
         val modules = scalus.compiler.compiledModules(
           "scalus.compiler.intrinsics.NativeListOperations",
-          "scalus.compiler.intrinsics.UplcConstrListOperations"
+          "scalus.compiler.intrinsics.UplcConstrListOperations",
+          "scalus.compiler.intrinsics.UplcConstrOptionOperations"
         )
         // Skip stamping for modules whose type parameters carry @UplcRepr annotations.
         // For HO methods that take pre-compiled functions (like contains with Eq), the
@@ -124,6 +130,7 @@ object IntrinsicResolver {
     private val BuiltinListRepr = "BuiltinList"
     private val NativeBuiltinListRepr = "NativeBuiltinList"
     private val UplcConstrListRepr = "UplcConstrList"
+    private val UplcConstrOptionRepr = "UplcConstrOption"
     private val PairListRepr = "PairList"
     private val WildcardRepr = "_"
 
@@ -138,7 +145,7 @@ object IntrinsicResolver {
         Map[String, scalus.compiler.intrinsics.ArgReprConvertRule]
     )
 
-    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules, UplcConstrListReprRules}
+    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules, UplcConstrListReprRules, UplcConstrOptionReprRules}
 
     private val NoArgConvert: Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] = Map.empty
 
@@ -165,6 +172,12 @@ object IntrinsicResolver {
         (NativeBuiltinListRepr, 0, NativeListOps, NativeListReprRules.rules, NoArgConvert),
         (BuiltinListRepr, 0, ListOps, ListReprRules.listRules, NoArgConvert),
         (BuiltinListRepr, 11, ListOpsV11, ListReprRules.listRules, NoArgConvert)
+      ),
+      OptionModule -> List(
+        // UplcConstrListRepr == "SumUplcConstr is the source repr name" — shared by any
+        // SumUplcConstr (not List-specific). Option-specific dispatch works because the
+        // registry key (moduleName=Option$) scopes the lookup.
+        (UplcConstrListRepr, 0, UplcConstrOptionOps, UplcConstrOptionReprRules.rules, NoArgConvert)
       ),
       PairListModule -> List(
         (PairListRepr, 0, PairListOps, ListReprRules.pairListRules, NoArgConvert),
@@ -275,10 +288,6 @@ object IntrinsicResolver {
                             if depth != argSirs.length then None
                             else {
                                 val rewrittenArgs = argSirs.map(rewriteIntrinsicExtVarTypeVars)
-                                // Lower the remaining args (first is already lowered).
-                                // With annotation-based argCache, eager lowering is safe — each
-                                // substituted reference resolves via the same cache key.
-                                val tailLowered = rewrittenArgs.tail.map(s => Lowering.lowerSIR(s))
                                 // Apply argConvertRule to the FIRST arg only (matches single-arg
                                 // dispatch semantics).
                                 val firstEffective =
@@ -292,19 +301,8 @@ object IntrinsicResolver {
                                                     )
                                                 case None => firstLoweredOnly
                                         case None => firstLoweredOnly
-                                val effectiveLowered = firstEffective :: tailLowered
                                 val allocatedKeys =
                                     scala.collection.mutable.ListBuffer.empty[Int]
-                                val substituted = rewrittenArgs
-                                    .zip(effectiveLowered)
-                                    .foldLeft(
-                                      binding.value
-                                    ) { case (body, (argSir, loweredArg)) =>
-                                        val (nextBody, key) =
-                                            substituteSelf(body, argSir, loweredArg)
-                                        allocatedKeys += key
-                                        nextBody
-                                    }
                                 val lowered =
                                     val savedPolicy = lctx.uplcGeneratorPolicy
                                     val savedFilledTypes = lctx.typeUnifyEnv.filledTypes
@@ -319,7 +317,26 @@ object IntrinsicResolver {
                                           firstEffective,
                                           lctx
                                         )
-                                    try Lowering.lowerSIR(substituted, Some(appType))
+                                    try
+                                        // Lower tail args UNDER the policy swap — the user's
+                                        // lambda's internal sum-type constructors (e.g.
+                                        // `Option.Some(...)`) must use the native-Constr
+                                        // generator, not the default DataConstr, so its output
+                                        // aligns with the operation body's expected native form.
+                                        val tailLowered =
+                                            rewrittenArgs.tail.map(s => Lowering.lowerSIR(s))
+                                        val effectiveLowered = firstEffective :: tailLowered
+                                        val substituted = rewrittenArgs
+                                            .zip(effectiveLowered)
+                                            .foldLeft(
+                                              binding.value
+                                            ) { case (body, (argSir, loweredArg)) =>
+                                                val (nextBody, key) =
+                                                    substituteSelf(body, argSir, loweredArg)
+                                                allocatedKeys += key
+                                                nextBody
+                                            }
+                                        Lowering.lowerSIR(substituted, Some(appType))
                                     finally
                                         lctx.uplcGeneratorPolicy = savedPolicy
                                         val merged =
@@ -891,18 +908,25 @@ object IntrinsicResolver {
     }
 
     /** UplcConstr list policy: for List types with Transparent TypeVar elements, use SumUplcConstr
-      * representation (Case/Constr) instead of SumBuiltinList.
+      * representation (Case/Constr) instead of SumBuiltinList. Also routes Option to SumUplcConstr
+      * in this context — inside `UplcConstrListOperations` / `UplcConstrOptionOperations` support
+      * bodies, Option must be native Constr so pattern-matching preserves the element repr.
       */
     val uplcConstrListPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
         given LoweringContext = lctx
-        def isListType(t: SIRType): Boolean = t match
-            case SIRType.SumCaseClass(decl, _)
-                if decl.name == "scalus.cardano.onchain.plutus.prelude.List" =>
-                true
-            case SIRType.TypeLambda(_, body) => isListType(body)
-            case SIRType.TypeProxy(ref)      => isListType(ref)
+        def hasDeclName(t: SIRType, name: String, seen: Set[SIRType.TypeProxy]): Boolean = t match
+            case SIRType.SumCaseClass(decl, _) => decl.name == name
+            case SIRType.TypeLambda(_, body)   => hasDeclName(body, name, seen)
+            case p: SIRType.TypeProxy =>
+                if seen.contains(p) || p.ref == null then false
+                else hasDeclName(p.ref, name, seen + p)
+            case SIRType.Annotated(inner, _) => hasDeclName(inner, name, seen)
             case _                           => false
-        if isListType(tp) then SumCaseUplcConstrSirTypeGenerator
+        def isListType(t: SIRType): Boolean =
+            hasDeclName(t, "scalus.cardano.onchain.plutus.prelude.List", Set.empty)
+        def isOptionType(t: SIRType): Boolean =
+            hasDeclName(t, "scalus.cardano.onchain.plutus.prelude.Option", Set.empty)
+        if isListType(tp) || isOptionType(tp) then SumCaseUplcConstrSirTypeGenerator
         else SirTypeUplcGenerator(tp, lctx.debugLevel > 30)
     }
 }

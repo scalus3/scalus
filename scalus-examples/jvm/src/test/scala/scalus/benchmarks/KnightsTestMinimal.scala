@@ -23,7 +23,7 @@ class KnightsTestMinimal extends AnyFunSuite:
       debug = false
     )
 
-    ignore("minimal - SolutionEntry field access in filterMap") {
+    test("minimal - SolutionEntry field access in filterMap") {
         val sir = compile {
             // Minimal reproduction of the bug
             val board = startTour(Tile(1, 1), BigInt(4))
@@ -85,18 +85,15 @@ class KnightsTestMinimal extends AnyFunSuite:
             case other => fail(s"Unexpected: $other")
     }
 
-    ignore("micro - SolutionEntry with .length directly") {
-        // Even smaller: build SolutionEntry(somelist.length, board) directly,
-        // skip map/filterMap. Inspect the lowered constructor.
+    test("micro - SolutionEntry with .length directly") {
+        // Regression test: build SolutionEntry(somelist.length, board) directly,
+        // skip map/filterMap. Previously crashed on TypeVar Fixed leak; fixed by
+        // 7c94de57c (repr propagation through TypeVar / FreeUnificator widenings).
         val sir = compile {
             val board = startTour(Tile(1, 1), BigInt(4))
             val entry = SolutionEntry(board.possibleMoves.length, board)
             entry.depth
         }
-        val lowered: LoweredValue = sir.toLoweredValue(using summon[Options])()
-        println(s"[MICRO] lowered.representation = ${lowered.representation}")
-        println(s"[MICRO] lowered.show =")
-        println(lowered.show)
         val result = sir.toUplc().evaluateDebug
         result match
             case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>

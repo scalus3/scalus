@@ -124,10 +124,13 @@ class LoweringContext(
                 (module.defs.find(_.name == name).get, moduleName)
         }
         bindingWithModule.map { (b, moduleName) =>
-            // UplcConstrListOperations needs a policy where List[TypeVar(Transparent)]
-            // resolves to SumUplcConstr instead of SumBuiltinList
+            // UplcConstrListOperations and UplcConstrOptionOperations need the same policy —
+            // they operate on native-Constr lists/options and expect SumUplcConstr throughout
+            // their bodies rather than the default SumBuiltinList / DataConstr.
             val effectiveLctx =
-                if moduleName == "scalus.compiler.intrinsics.UplcConstrListOperations$" then
+                if moduleName == "scalus.compiler.intrinsics.UplcConstrListOperations$"
+                    || moduleName == "scalus.compiler.intrinsics.UplcConstrOptionOperations$"
+                then
                     new LoweringContext(
                       scope = this.scope,
                       targetLanguage = this.targetLanguage,
