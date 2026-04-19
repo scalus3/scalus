@@ -46,47 +46,41 @@ class KnightsTestMinimal extends AnyFunSuite:
             case other => fail(s"Unexpected: $other")
     }
 
-    ignore("minimal - SolutionEntry with .length field") {
-        // Previously failed at compile time with Transparent→Unwrapped throw in
-        // sumUplcConstrToSumUplcConstr:892. After flipping UplcConstrListOperations.reverse
-        // to @UplcRepr(TypeVar(Transparent)), compilation succeeds but the test now fails at
-        // runtime with ConstrData applied to a VLamAbs (partial MkCons chain) — a separate,
-        // pre-existing bug in how `.length` on `List[Direction]` (non-@UplcRepr element type,
-        // default SumBuiltinList(Fixed)) composes inside a dispatcher-wrapped map lambda when
-        // its result feeds a SolutionEntry constructor. See project_length_field_runtime_bug.md.
+    ignore("optionGetDataConstr - item.firstPiece.x inside map crashes at runtime") {
+        // Minimal reproducer for the Option[Tile].get-inside-map bug.
+        // See project_length_field_runtime_bug.md for full investigation.
         val sir = compile {
             val board = startTour(Tile(1, 1), BigInt(4))
             @UplcRepr(UplcRepresentation.UplcConstr)
             val baseList: List[ChessSet] = List.Cons(board, List.Nil)
-            val entries = baseList.map { item =>
-                SolutionEntry(item.deleteFirst.possibleMoves.length, item)
-            }
-            val filtered = entries.filterMap { item =>
-                if item.depth === BigInt(1) then Option.Some(item.board) else Option.None
-            }
-            filtered.length
+            val entries: List[BigInt] = baseList.map { item => item.firstPiece.x }
+            entries.head
         }
-
-        // Print the lowered SIR value to a file for offline inspection
-        val lowered: LoweredValue = sir.toLoweredValue(using summon[Options])()
-        val pw = new java.io.PrintWriter("/tmp/knights_min_failing.txt")
-        try {
-            pw.println("=== lowered.representation ===")
-            pw.println(lowered.representation)
-            pw.println("=== lowered.show ===")
-            pw.println(lowered.show)
-        } finally pw.close()
-
         val result = sir.toUplc().evaluateDebug
         result match
             case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
-                info(s"Result: $v")
-                assert(v >= 0, s"Expected non-negative, got $v")
-            case Result.Failure(ex, _, _, _) =>
-                val pw2 = new java.io.PrintWriter("/tmp/knights_min_failing_err.txt")
-                try pw2.println(s"Bug with .length: $ex")
-                finally pw2.close()
-                fail(s"Bug with .length: $ex")
+                assert(v == 1, s"Expected 1, got $v")
+            case Result.Failure(ex, _, _, _) => fail(s"Runtime bug: $ex")
+            case other => fail(s"Unexpected: $other")
+    }
+
+    ignore("optionGetDataConstr - item.start.get.x inside map returns wrong value") {
+        // Silent-corruption sibling of the above. Direct `.start.get.x` access (no
+        // extension method) doesn't crash but returns 0 instead of 1. Same root
+        // cause: Option[Tile].get where Option is DataConstr-repr'd and Tile is
+        // ProdUplcConstr-repr'd, called inside a map lambda.
+        val sir = compile {
+            val board = startTour(Tile(1, 1), BigInt(4))
+            @UplcRepr(UplcRepresentation.UplcConstr)
+            val baseList: List[ChessSet] = List.Cons(board, List.Nil)
+            val entries: List[BigInt] = baseList.map { item => item.start.get.x }
+            entries.head
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
+                assert(v == 1, s"Expected 1, got $v (silent corruption)")
+            case Result.Failure(ex, _, _, _) => fail(s"Bug: $ex")
             case other => fail(s"Unexpected: $other")
     }
 
