@@ -85,7 +85,18 @@ object Fs2BlockchainStreamProvider {
             )
             engine = new Engine(config.cardanoInfo, backup, Engine.DefaultSecurityParam)
             handle = ChainApplier.spawn(conn, engine, startFrom = StartFrom.Tip)
-            _ = conn.closed.onComplete(_ => engine.closeAllSubscribers())
+            _ = handle.done.onComplete {
+                case scala.util.Failure(t) =>
+                    // Surface the typed cause to subscribers so their stream fails with the
+                    // real error instead of a silent EOS. Aligns with the design doc's error
+                    // model ("consumers observe the stored cause of the root cancel").
+                    engine.failAllSubscribers(t)
+                case _ => ()
+            }
+            _ = conn.closed.onComplete {
+                case scala.util.Failure(t) => engine.failAllSubscribers(t)
+                case _                     => engine.closeAllSubscribers()
+            }
         } yield {
             val preClose: () => Future[Unit] = () =>
                 handle.cancel().flatMap(_ => conn.close())

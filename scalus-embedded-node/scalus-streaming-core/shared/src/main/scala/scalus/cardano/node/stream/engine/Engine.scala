@@ -324,6 +324,24 @@ final class Engine(
         byKey.clear()
     }
 
+    /** Fail every subscriber with `cause` and clear the registries. Used by the chain-sync
+      * wiring path when the applier's `done` future completes with an error (decode failure,
+      * NoIntersection, unsupported era, transport-level teardown, …). Sends the cause via
+      * `Mailbox.fail` so stream adapters surface it on their output — distinguishing a real
+      * failure from a graceful close the way [[closeAllSubscribers]] does.
+      */
+    def failAllSubscribers(cause: Throwable): Future[Unit] = submit {
+        utxoSubs.values.foreach(_.mailbox.fail(cause))
+        tipSubs.values.foreach(_.fail(cause))
+        paramsSubs.values.foreach(_.fail(cause))
+        txStatusSubs.values.foreach(_.values.foreach(_.fail(cause)))
+        utxoSubs.clear()
+        tipSubs.clear()
+        paramsSubs.clear()
+        txStatusSubs.clear()
+        byKey.clear()
+    }
+
     // ------------------------------------------------------------------
     // Test-only surface — raw fan-out bypassing the full pipeline, for
     // isolation tests of the adapter/stream plumbing.

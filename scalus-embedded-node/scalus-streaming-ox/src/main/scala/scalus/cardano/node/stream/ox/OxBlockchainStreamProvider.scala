@@ -85,9 +85,19 @@ object OxBlockchainStreamProvider {
         val handle: ChainApplierHandle =
             ChainApplier.spawn(conn, engine, startFrom = StartFrom.Tip)
 
+        // Surface applier-loop failures (decode error, NoIntersection, etc.) to subscribers
+        // with the typed cause rather than a silent EOS.
+        handle.done.onComplete {
+            case scala.util.Failure(t) => engine.failAllSubscribers(t)
+            case _                     => ()
+        }
         // If the connection goes away independently (peer EOF, keep-alive timeout, socket
-        // error), collapse the engine's subscribers so user streams see the failure.
-        conn.closed.onComplete(_ => engine.closeAllSubscribers())
+        // error), collapse the engine's subscribers — with the cause on failure, or graceful
+        // close on clean shutdown.
+        conn.closed.onComplete {
+            case scala.util.Failure(t) => engine.failAllSubscribers(t)
+            case _                     => engine.closeAllSubscribers()
+        }
 
         val preClose: () => Future[Unit] = () => {
             // Cancel applier first so the sync loop unwinds before we close the socket.

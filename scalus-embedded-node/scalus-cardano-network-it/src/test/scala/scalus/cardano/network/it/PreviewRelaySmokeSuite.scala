@@ -1,10 +1,18 @@
 package scalus.cardano.network.it
 
+import cats.effect.IO
+import cats.effect.std.Dispatcher
+import cats.effect.unsafe.implicits.global as catsRuntime
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
+import scalus.cardano.ledger.CardanoInfo
 import scalus.cardano.network.{ClientConfig, NetworkMagic, NodeToNodeClient}
+import scalus.cardano.node.stream.fs2.Fs2BlockchainStreamProvider
+import scalus.cardano.node.stream.{BackupSource, ChainSyncSource, StreamProviderConfig}
 
+import java.util.concurrent.atomic.AtomicLong
+import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
 
@@ -63,5 +71,36 @@ class PreviewRelaySmokeSuite extends AnyFunSuite with ScalaFutures {
             )
             assert(conn.rtt.isDefined, "no RTT observed — keep-alive never completed a beat")
         } finally conn.close().futureValue
+    }
+
+    test("chain-sync: tip advances via Fs2BlockchainStreamProvider against preview relay") {
+        requireEnabled()
+        given ExecutionContext = ExecutionContext.global
+
+        val config = StreamProviderConfig(
+          cardanoInfo = CardanoInfo.preview,
+          chainSync = ChainSyncSource.N2N(relayHost, relayPort, NetworkMagic.Preview.value),
+          backup = BackupSource.NoBackup
+        )
+
+        val tipCount = new AtomicLong(0L)
+
+        Dispatcher.parallel[IO].use { d =>
+            given Dispatcher[IO] = d
+            for {
+                provider <- Fs2BlockchainStreamProvider.create(config)
+                _ <- provider
+                    .subscribeTip()
+                    .evalMap(_ => IO { tipCount.incrementAndGet(); () })
+                    // Preview blocks every ~20s; allow 60s to see at least two.
+                    .interruptAfter(60.seconds)
+                    .compile
+                    .drain
+                _ <- provider.close()
+            } yield assert(
+              tipCount.get >= 1L,
+              s"expected at least one tip in 60s, got ${tipCount.get}"
+            )
+        }.unsafeRunSync()
     }
 }

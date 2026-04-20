@@ -911,6 +911,8 @@ lazy val scalusCardanoNetworkIt = project
     .in(file("scalus-embedded-node/scalus-cardano-network-it"))
     .dependsOn(
       scalusCardanoNetwork.jvm % "compile->compile;test->test",
+      scalusStreamingFs2.jvm % "test->compile",
+      scalusStreamingOx % "test->compile",
       scalusTestkit.jvm % "test->compile"
     )
     .settings(
