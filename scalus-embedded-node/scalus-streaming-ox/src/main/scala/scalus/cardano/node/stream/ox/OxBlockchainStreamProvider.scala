@@ -2,8 +2,9 @@ package scalus.cardano.node.stream.ox
 
 import ox.flow.Flow
 import scalus.cardano.ledger.CardanoInfo
+import scalus.cardano.network.{ChainApplier, ChainApplierHandle, ClientConfig, NetworkMagic, NodeToNodeClient, NodeToNodeConnection}
 import scalus.cardano.node.{BlockchainProvider, BlockfrostProvider}
-import scalus.cardano.node.stream.{BackupSource, BlockfrostNetwork, ChainSyncSource, StreamProviderConfig, UnsupportedSourceException}
+import scalus.cardano.node.stream.{BackupSource, BlockfrostNetwork, ChainSyncSource, StartFrom, StreamProviderConfig, UnsupportedSourceException}
 import scalus.cardano.node.stream.BaseStreamProvider
 import scalus.cardano.node.stream.engine.Engine
 
@@ -16,8 +17,15 @@ import scala.concurrent.{Await, ExecutionContext, Future}
   *
   * `Id[A] = A`, so `liftFuture` blocks on the future. That matches ox's direct-style story: the
   * caller owns a virtual thread already, so blocking is cheap and ergonomic.
+  *
+  * `preClose` runs before the engine's subscribers are shut down — used by the N2N wiring path
+  * to cancel the [[ChainApplier]] and close the underlying [[NodeToNodeConnection]] so the sync
+  * loop unwinds cleanly before subscribers fail.
   */
-class OxBlockchainStreamProvider(engine: Engine)(using ExecutionContext)
+class OxBlockchainStreamProvider(
+    engine: Engine,
+    preClose: () => Future[Unit] = () => Future.unit
+)(using ExecutionContext)
     extends BaseStreamProvider[Id, Flow](engine) {
 
     protected def liftFuture[A](fa: => Future[A]): Id[A] =
@@ -25,7 +33,10 @@ class OxBlockchainStreamProvider(engine: Engine)(using ExecutionContext)
 
     protected def pureF[A](a: A): Id[A] = a
 
-    def close(): Id[Unit] = liftFuture(engine.closeAllSubscribers())
+    def close(): Id[Unit] = {
+        liftFuture(preClose())
+        liftFuture(engine.closeAllSubscribers())
+    }
 }
 
 object OxBlockchainStreamProvider {
@@ -43,16 +54,49 @@ object OxBlockchainStreamProvider {
         config: StreamProviderConfig
     )(using ExecutionContext): OxBlockchainStreamProvider = {
         config.chainSync match
-            case ChainSyncSource.Synthetic => ()
-            case ChainSyncSource.N2N(_, _) =>
-                throw UnsupportedSourceException("ChainSyncSource.N2N is not wired until M4/M5")
+            case ChainSyncSource.Synthetic =>
+                val backup = buildBackup(config.backup)
+                new OxBlockchainStreamProvider(
+                  new Engine(config.cardanoInfo, backup, Engine.DefaultSecurityParam)
+                )
+            case n: ChainSyncSource.N2N =>
+                connectN2N(config, n)
             case ChainSyncSource.N2C(_) =>
                 throw UnsupportedSourceException("ChainSyncSource.N2C is not wired until M7")
+    }
 
+    /** Open an N2N connection to `n.host:n.port`, spawn a [[ChainApplier]] driving the engine
+      * from it, and return a provider whose `close()` tears down the applier + connection +
+      * engine subscribers in that order.
+      *
+      * Blocks on connection establishment (handshake + keep-alive start). Failures there
+      * propagate as the original `Future`'s cause via `Await.result`.
+      */
+    private def connectN2N(
+        config: StreamProviderConfig,
+        n: ChainSyncSource.N2N
+    )(using ExecutionContext): OxBlockchainStreamProvider = {
         val backup = buildBackup(config.backup)
-        new OxBlockchainStreamProvider(
-          new Engine(config.cardanoInfo, backup, Engine.DefaultSecurityParam)
+        val engine = new Engine(config.cardanoInfo, backup, Engine.DefaultSecurityParam)
+        val conn: NodeToNodeConnection = Await.result(
+          NodeToNodeClient.connect(n.host, n.port, NetworkMagic(n.networkMagic), ClientConfig.default),
+          Duration.Inf
         )
+        val handle: ChainApplierHandle =
+            ChainApplier.spawn(conn, engine, startFrom = StartFrom.Tip)
+
+        // If the connection goes away independently (peer EOF, keep-alive timeout, socket
+        // error), collapse the engine's subscribers so user streams see the failure.
+        conn.closed.onComplete(_ => engine.closeAllSubscribers())
+
+        val preClose: () => Future[Unit] = () => {
+            // Cancel applier first so the sync loop unwinds before we close the socket.
+            for {
+                _ <- handle.cancel()
+                _ <- conn.close()
+            } yield ()
+        }
+        new OxBlockchainStreamProvider(engine, preClose)
     }
 
     /** Test-only synthetic helper — no backup, no chain-sync. */

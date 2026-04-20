@@ -6,7 +6,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
 import scalus.cardano.infra.jvm.JvmTimer
 import scalus.cardano.network.handshake.HandshakeError
-import scalus.cardano.network.{ClientConfig, NetworkMagic}
+import scalus.cardano.network.{ClientConfig, NetworkMagic, NodeToNodeClient}
 import scalus.cardano.network.infra.MiniProtocolId
 
 import scala.concurrent.ExecutionContext.Implicits.global

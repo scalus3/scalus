@@ -3,8 +3,7 @@ package scalus.cardano.network.it
 import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
-import scalus.cardano.network.{ClientConfig, NetworkMagic}
-import scalus.cardano.network.jvm.NodeToNodeClient
+import scalus.cardano.network.{ClientConfig, NetworkMagic, NodeToNodeClient}
 import scalus.testing.yaci.YaciDevKit
 
 import scala.concurrent.ExecutionContext.Implicits.global

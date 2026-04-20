@@ -26,8 +26,19 @@ object ChainSyncSource {
     /** No protocol — events are pushed in by tests or the emulator. */
     case object Synthetic extends ChainSyncSource
 
-    /** Connect to a public relay over N2N (TCP). Not wired until M4/M5. */
-    case class N2N(host: String, port: Int) extends ChainSyncSource
+    /** Connect to a public relay over Ouroboros Node-to-Node (TCP).
+      *
+      * @param networkMagic
+      *   32-bit Cardano network identifier, sent in the handshake. Mainnet = 764824073, Preview
+      *   = 2, Preprod = 1, yaci-devkit default = 42. A plain `Long` (not the opaque
+      *   `scalus.cardano.network.NetworkMagic`) to keep this ADT free of a dependency on the
+      *   cardano-network module. The JVM provider wraps it into `NetworkMagic` at the boundary.
+      *
+      * Wiring for this variant is JVM-only — the JS build of `Fs2BlockchainStreamProvider`
+      * still raises `UnsupportedSourceException` because `NodeToNodeClient` requires raw TCP
+      * which Scala.js doesn't provide out of the box.
+      */
+    case class N2N(host: String, port: Int, networkMagic: Long) extends ChainSyncSource
 
     /** Connect to a local cardano-node over N2C (Unix socket). Not wired until M7. String path
       * (rather than `java.nio.file.Path`) keeps this case class JS-compatible.
