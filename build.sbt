@@ -830,7 +830,10 @@ lazy val scalusStreamingOx = project
 // for the Mailbox primitive.
 lazy val scalusCardanoNetwork = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-embedded-node/scalus-cardano-network"))
-    .dependsOn(scalusStreamingCore % "compile->compile;test->test")
+    .dependsOn(
+      scalusStreamingCore % "compile->compile;test->test",
+      scalusCardanoLedger % "compile->compile;test->test"
+    )
     .disablePlugins(MimaPlugin)
     .settings(
       name := "scalus-cardano-network",
