@@ -43,8 +43,15 @@ class BlockFetchMessageSuite extends AnyFunSuite {
         roundTrip(MsgNoBlocks)
     }
 
-    test("round-trip MsgBlock — Conway era") {
-        val blockBytes = ByteString.fromArray(Array[Byte](0x84.toByte, 0x01, 0x02, 0x03))
+    test("round-trip MsgBlock — tag24([era, block]) wire format") {
+        // BlockFetch's MsgBlock is `[4, tag24([era_u16, blockCbor])]` — era is *inside* the
+        // tag24 wrapper, unlike ChainSync headers which put era outside. Cross-ref: pallas's
+        // `BlockWrapper<T> = (u16, T)` used by `MultiEraBlock::decode_conway` et al.
+        //
+        // The inner `blockCbor` is parsed as a full CBOR item (the decoder slices its raw
+        // bytes), so the fixture must be valid CBOR — pick an empty-array `[0x80]` so the
+        // test exercises the envelope codec without dragging in a real block fixture.
+        val blockBytes = ByteString.fromArray(Array[Byte](0x80.toByte))
         roundTrip(MsgBlock(era = 6, blockBytes))
     }
 

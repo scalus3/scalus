@@ -86,7 +86,9 @@ class BlockFetchDriverSuite extends AnyFunSuite with ScalaFutures {
     test("fetchOne sends MsgRequestRange and returns block on happy path") {
         val (peer, driver) = newDriver()
         val point = pt(100L, 1)
-        val blockBytes = ByteString.fromArray(Array[Byte](0x84.toByte, 0x01, 0x02, 0x03))
+        // Valid CBOR (empty array) — MsgBlock codec now slices the block sub-value from the
+        // inner [era, block] tag24 wrapper, so arbitrary byte sequences are no longer legal.
+        val blockBytes = ByteString.fromArray(Array[Byte](0x80.toByte))
 
         val f = driver.fetchOne(point)
         peer.stage(MsgStartBatch)
@@ -136,9 +138,9 @@ class BlockFetchDriverSuite extends AnyFunSuite with ScalaFutures {
         val (peer, driver) = newDriver()
         val f = driver.fetchOne(pt(1L, 1))
         peer.stage(MsgStartBatch)
-        peer.stage(MsgBlock(6, ByteString.fromArray(Array[Byte](1))))
+        peer.stage(MsgBlock(era = 6, ByteString.fromArray(Array[Byte](0x01)) /* CBOR int 1 */))
         // Peer wrongly sends a second block instead of BatchDone.
-        peer.stage(MsgBlock(6, ByteString.fromArray(Array[Byte](2))))
+        peer.stage(MsgBlock(era = 6, ByteString.fromArray(Array[Byte](0x02)) /* CBOR int 2 */))
 
         val err = f.failed.futureValue
         err match {
@@ -179,13 +181,13 @@ class BlockFetchDriverSuite extends AnyFunSuite with ScalaFutures {
         val (peer, driver) = newDriver()
         val p1 = pt(100L, 1)
         val p2 = pt(200L, 2)
-        val b1 = ByteString.fromArray(Array[Byte](1))
-        val b2 = ByteString.fromArray(Array[Byte](2))
+        val b1 = ByteString.fromArray(Array[Byte](0x01)) /* CBOR int 1 */
+        val b2 = ByteString.fromArray(Array[Byte](0x02)) /* CBOR int 2 */
 
         // First fetch
         val f1 = driver.fetchOne(p1)
         peer.stage(MsgStartBatch)
-        peer.stage(MsgBlock(6, b1))
+        peer.stage(MsgBlock(era = 6, b1))
         peer.stage(MsgBatchDone)
         val r1 = f1.futureValue
         assert(r1.map(_.blockBytes) == Right(b1))
@@ -193,7 +195,7 @@ class BlockFetchDriverSuite extends AnyFunSuite with ScalaFutures {
         // Second fetch on the same driver
         val f2 = driver.fetchOne(p2)
         peer.stage(MsgStartBatch)
-        peer.stage(MsgBlock(6, b2))
+        peer.stage(MsgBlock(era = 6, b2))
         peer.stage(MsgBatchDone)
         val r2 = f2.futureValue
         assert(r2.map(_.blockBytes) == Right(b2))

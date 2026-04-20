@@ -10,9 +10,10 @@ import scalus.uplc.builtin.ByteString
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
-/** One block delivered by the peer, still in the wire-level envelope: `era` is the HardFork era
-  * tag, `blockBytes` is the era-specific block CBOR. The applier decodes via
-  * [[scalus.cardano.network.BlockEnvelope.decodeBlock]].
+/** One block delivered by the peer. `era` is the HardFork era tag carried by the inner tag24
+  * payload of `MsgBlock` (`[era_u16, block_cbor]`); `blockBytes` is the era-specific block CBOR
+  * already unwrapped. Applier is expected to cross-check `era` against the era of the ChainSync
+  * header that triggered the fetch and invoke [[scalus.cardano.network.BlockEnvelope.decodeBlock]].
   */
 final case class FetchedBlock(era: Int, blockBytes: ByteString)
 

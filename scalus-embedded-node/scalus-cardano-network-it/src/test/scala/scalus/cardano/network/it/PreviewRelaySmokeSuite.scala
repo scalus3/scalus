@@ -2,7 +2,7 @@ package scalus.cardano.network.it
 
 import cats.effect.IO
 import cats.effect.std.Dispatcher
-import cats.effect.unsafe.implicits.global as catsRuntime
+import cats.effect.unsafe.implicits.global
 import org.scalatest.concurrent.ScalaFutures
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
@@ -11,7 +11,7 @@ import scalus.cardano.network.{ClientConfig, NetworkMagic, NodeToNodeClient}
 import scalus.cardano.node.stream.fs2.Fs2BlockchainStreamProvider
 import scalus.cardano.node.stream.{BackupSource, ChainSyncSource, StreamProviderConfig}
 
-import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.atomic.{AtomicLong, AtomicReference}
 import scala.concurrent.ExecutionContext
 import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.DurationInt
@@ -83,24 +83,59 @@ class PreviewRelaySmokeSuite extends AnyFunSuite with ScalaFutures {
           backup = BackupSource.NoBackup
         )
 
+        // Preview blocks every ~20s on average. Four minutes is enough for a handful of tips
+        // with generous headroom for relay jitter. Per the design doc Tier 5 spec we assert
+        // monotonic advancement (each tip.slot >= previous) across ≥ 3 tips to catch a provider
+        // that delivers a single stale tip and then stalls.
         val tipCount = new AtomicLong(0L)
+        val firstSlot = new AtomicLong(-1L)
+        val lastSlot = new AtomicLong(-1L)
+        val monotonic = new AtomicReference[Boolean](true)
 
         Dispatcher.parallel[IO].use { d =>
             given Dispatcher[IO] = d
             for {
                 provider <- Fs2BlockchainStreamProvider.create(config)
-                _ <- provider
+                streamOutcome <- provider
                     .subscribeTip()
-                    .evalMap(_ => IO { tipCount.incrementAndGet(); () })
-                    // Preview blocks every ~20s; allow 60s to see at least two.
-                    .interruptAfter(60.seconds)
+                    .evalMap { tip =>
+                        IO {
+                            val slot = tip.point.slot
+                            val n = tipCount.incrementAndGet()
+                            if n == 1L then firstSlot.set(slot)
+                            val prev = lastSlot.getAndSet(slot)
+                            if prev >= 0L && slot < prev then monotonic.set(false)
+                        }
+                    }
+                    .interruptAfter(4.minutes)
                     .compile
                     .drain
+                    .attempt
                 _ <- provider.close()
-            } yield assert(
-              tipCount.get >= 1L,
-              s"expected at least one tip in 60s, got ${tipCount.get}"
-            )
+            } yield {
+                streamOutcome match {
+                    case Left(t) =>
+                        fail(
+                          s"tip stream terminated with error: ${t.getClass.getSimpleName}: ${t.getMessage} " +
+                              s"(tipCount=${tipCount.get}, firstSlot=${firstSlot.get}, lastSlot=${lastSlot.get})",
+                          t
+                        )
+                    case Right(_) => ()
+                }
+                assert(
+                  tipCount.get >= 3L,
+                  s"expected ≥ 3 tips in 4 minutes, got ${tipCount.get} (firstSlot=${firstSlot.get}, lastSlot=${lastSlot.get})"
+                )
+                assert(firstSlot.get > 0L, s"first slot should be concrete, got ${firstSlot.get}")
+                assert(
+                  lastSlot.get > firstSlot.get,
+                  s"slot should advance: firstSlot=${firstSlot.get}, lastSlot=${lastSlot.get}"
+                )
+                assert(
+                  monotonic.get,
+                  s"slot must be non-decreasing across tips; firstSlot=${firstSlot.get}, lastSlot=${lastSlot.get}"
+                )
+            }
         }.unsafeRunSync()
     }
 }

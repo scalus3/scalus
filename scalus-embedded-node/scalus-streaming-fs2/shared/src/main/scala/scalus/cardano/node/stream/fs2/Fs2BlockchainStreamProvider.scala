@@ -86,10 +86,15 @@ object Fs2BlockchainStreamProvider {
             engine = new Engine(config.cardanoInfo, backup, Engine.DefaultSecurityParam)
             handle = ChainApplier.spawn(conn, engine, startFrom = StartFrom.Tip)
             _ = handle.done.onComplete {
+                case scala.util.Failure(_: scalus.cardano.infra.CancelledException) =>
+                    // User-initiated shutdown via provider.close → handle.cancel fires a
+                    // CancelledException. That's a graceful stop request; leave subscribers
+                    // for the conn.closed path below which calls closeAllSubscribers cleanly.
+                    ()
                 case scala.util.Failure(t) =>
+                    // Genuine applier failure (decode error, NoIntersection, unsupported era).
                     // Surface the typed cause to subscribers so their stream fails with the
-                    // real error instead of a silent EOS. Aligns with the design doc's error
-                    // model ("consumers observe the stored cause of the root cancel").
+                    // real error instead of a silent EOS.
                     engine.failAllSubscribers(t)
                 case _ => ()
             }

@@ -2,16 +2,8 @@ package scalus.cardano.network
 
 import cps.*
 import cps.monads.FutureAsyncMonad
-import io.bullet.borer.{Cbor, Decoder}
 import scalus.cardano.infra.{CancelSource, CancelledException}
-import scalus.cardano.ledger.{
-    Block,
-    BlockHash,
-    BlockHeader,
-    BlockHeaderBody,
-    KeepRaw,
-    OriginalCborByteArray
-}
+import scalus.cardano.ledger.{Block, BlockHash, BlockHeader, KeepRaw, OriginalCborByteArray}
 import scalus.cardano.network.blockfetch.{BlockFetchDriver, FetchedBlock}
 import scalus.cardano.network.chainsync.{
     ChainSyncDriver,
@@ -101,9 +93,22 @@ private final class ChainApplier(
                 case Some(ChainSyncEvent.Forward(era, headerBytes, tip)) =>
                     await(processForward(era, headerBytes, tip))
                 case Some(ChainSyncEvent.Backward(to, _tip)) =>
-                    val point = Point.toChainPoint(to)
-                    logger.debug(s"RollBackward to $point")
-                    await(engine.onRollBackward(point))
+                    // ouroboros-network convention: the FIRST response after a successful
+                    // `MsgFindIntersect` is always `MsgRollBackward(intersectPoint, tip)` —
+                    // the peer is acknowledging our resume point, not signalling a real
+                    // rewind. If the engine has no tip yet we have nothing to unwind from
+                    // anyway, so treat it as a no-op. This also handles any pre-first-forward
+                    // rollbacks gracefully.
+                    if engine.currentTip.isEmpty then
+                        logger.info(
+                          s"ignoring initial RollBackward to ${Point.toChainPoint(to)} " +
+                              s"(engine has no tip yet; protocol confirmation of intersect)"
+                        )
+                    else {
+                        val point = Point.toChainPoint(to)
+                        logger.debug(s"RollBackward to $point")
+                        await(engine.onRollBackward(point))
+                    }
             }
         }
     }
@@ -132,6 +137,14 @@ private final class ChainApplier(
                       s"assuming chain-sync/block-fetch rollback race, continuing"
                 )
             case Right(FetchedBlock(blockEra, blockBytes)) =>
+                // Era on the wire appears twice — ChainSync's Forward header has a u8 tag, and
+                // BlockFetch's MsgBlock inner payload has a u16 tag. They should agree for a
+                // well-behaved peer; we warn but still proceed with the block-fetch era since
+                // that's the one wrapping the block bytes we're about to decode.
+                if blockEra != era then
+                    logger.warn(
+                      s"era mismatch: ChainSync header era=$era but BlockFetch block era=$blockEra at $chainPoint"
+                    )
                 val blockRaw = BlockEnvelope.decodeBlock(Era.fromWire(blockEra), blockBytes) match {
                     case Left(err) => throw err
                     case Right(b)  => b
@@ -188,47 +201,24 @@ object ChainApplier {
 
     /** Construct the [[ChainPoint]] for a freshly-received header.
       *
-      * The peer's Point-hash convention (see ouroboros-consensus's
-      * `hashAnnotated bheaderBody` for Shelley+) is `Blake2b_256(original CBOR bytes of the
-      * HeaderBody sub-field)`. We get that by re-decoding the header bytes through a local
-      * struct that captures `KeepRaw[BlockHeaderBody]`; `KeepRaw`'s borer-derived decoder
-      * slices the original-CBOR-byte-array to the inner sub-field's range.
+      * The peer's Point-hash convention is `Blake2b_256(original CBOR bytes of the full
+      * `Header = [header_body, body_signature]` wire value)`. Cross-referenced against pallas
+      * (`OriginalHash for KeepRaw<'_, babbage::Header>` in `pallas-traverse/src/hashes.rs`),
+      * which hashes `self.raw_cbor()` on the whole `Header` — not just the body.
       *
-      * The returned `ChainPoint.blockHash` matches what the peer sends in `MsgRollBackward`,
-      * which is what the engine's rollback buffer compares against (structural equality on
-      * `ChainPoint`). A mismatch here silently broke rollback handling, so the double-decode
-      * is worth the perf hit (~one extra parse per block).
+      * An earlier draft hashed just the HeaderBody sub-field, following a
+      * literal-reading of Haskell's `hashAnnotated bheaderBody`. That is what
+      * ouroboros-consensus internally names `HashHeader`, but the point identifier delivered
+      * on the wire by real peers (yaci, preview-relay) is the full-header hash — BlockFetch
+      * consistently returned `MsgNoBlocks` for every header until we switched.
+      *
+      * The returned `ChainPoint.blockHash` is therefore what the peer echoes in
+      * `MsgRollBackward` and what BlockFetch's `MsgRequestRange` needs to resolve a header to
+      * its body.
       */
     private[network] def pointOf(headerBytes: ByteString, header: BlockHeader): ChainPoint = {
-        val bodyRaw = headerBodyRaw(headerBytes)
-        val hash = BlockHash.fromByteString(platform.blake2b_256(bodyRaw))
+        val hash = BlockHash.fromByteString(platform.blake2b_256(headerBytes))
         ChainPoint(header.slot, hash)
-    }
-
-    private def headerBodyRaw(headerBytes: ByteString): ByteString = {
-        given OriginalCborByteArray = OriginalCborByteArray(headerBytes.bytes)
-        val fields = Cbor.decode(headerBytes.bytes).to[HeaderFields].value
-        ByteString.unsafeFromArray(fields.headerBody.raw)
-    }
-
-    /** Internal helper for extracting the original CBOR byte range of the HeaderBody field
-      * inside an encoded [[BlockHeader]] = `[HeaderBody, bodySignature]`. Used only for
-      * computing the peer-compatible block hash.
-      */
-    private final case class HeaderFields(
-        headerBody: KeepRaw[BlockHeaderBody],
-        bodySignature: ByteString
-    )
-
-    private object HeaderFields {
-        given (using OriginalCborByteArray): Decoder[HeaderFields] = Decoder { r =>
-            val arrLen = r.readArrayHeader().toInt
-            if arrLen != 2 then
-                r.validationFailure(s"BlockHeader: expected array of 2, got $arrLen")
-            val body = r.read[KeepRaw[BlockHeaderBody]]()
-            val sig = ByteString.fromArray(r.readByteArray())
-            HeaderFields(body, sig)
-        }
     }
 
     /** Project a decoded block into the engine's [[AppliedBlock]] shape.

@@ -86,8 +86,11 @@ object OxBlockchainStreamProvider {
             ChainApplier.spawn(conn, engine, startFrom = StartFrom.Tip)
 
         // Surface applier-loop failures (decode error, NoIntersection, etc.) to subscribers
-        // with the typed cause rather than a silent EOS.
+        // with the typed cause rather than a silent EOS. User-initiated close() cancels the
+        // applier with a `CancelledException`; that's a graceful stop and should not be
+        // surfaced as a failure — the later `conn.closed` hook calls closeAllSubscribers.
         handle.done.onComplete {
+            case scala.util.Failure(_: scalus.cardano.infra.CancelledException) => ()
             case scala.util.Failure(t) => engine.failAllSubscribers(t)
             case _                     => ()
         }

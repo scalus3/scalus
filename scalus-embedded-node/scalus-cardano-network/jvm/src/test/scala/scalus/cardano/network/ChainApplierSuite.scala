@@ -219,6 +219,18 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
     // Tests
     // --------------------------------------------------------------------------------------
 
+    test("MsgBlock codec round-trips a real Conway block") {
+        // Regression guard for the codec rewrite that moved era inside the tag24 wrapper.
+        // A broken inner-wrapper slice would silently produce a different decoded blockBytes
+        // and break the applier's decodeBlock step downstream.
+        import io.bullet.borer.Cbor
+        import scalus.cardano.network.blockfetch.BlockFetchMessage
+        val original = BlockFetchMessage.MsgBlock(fixture1.era, fixture1.blockBytes)
+        val encoded = Cbor.encode(original: BlockFetchMessage).toByteArray
+        val decoded = Cbor.decode(encoded).to[BlockFetchMessage].value
+        assert(decoded == original, s"round-trip mismatch: got $decoded")
+    }
+
     test("happy path: intersect at Origin + 2 forwards → engine tip advances") {
         val chainSync = new ScriptedBytes
         val blockFetch = new ScriptedBytes
@@ -233,10 +245,10 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
         chainSync.stageChainSync(MsgRollForward(era = fixture2.era, fixture2.headerBytes, dummyTip))
 
         blockFetch.stageBlockFetch(MsgStartBatch)
-        blockFetch.stageBlockFetch(MsgBlock(era = fixture1.era, fixture1.blockBytes))
+        blockFetch.stageBlockFetch(MsgBlock(fixture1.era, fixture1.blockBytes))
         blockFetch.stageBlockFetch(MsgBatchDone)
         blockFetch.stageBlockFetch(MsgStartBatch)
-        blockFetch.stageBlockFetch(MsgBlock(era = fixture2.era, fixture2.blockBytes))
+        blockFetch.stageBlockFetch(MsgBlock(fixture2.era, fixture2.blockBytes))
         blockFetch.stageBlockFetch(MsgBatchDone)
 
         val handle = ChainApplier.spawn(conn, engine, StartFrom.Origin)
@@ -274,10 +286,10 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
         )
 
         blockFetch.stageBlockFetch(MsgStartBatch)
-        blockFetch.stageBlockFetch(MsgBlock(era = fixture1.era, fixture1.blockBytes))
+        blockFetch.stageBlockFetch(MsgBlock(fixture1.era, fixture1.blockBytes))
         blockFetch.stageBlockFetch(MsgBatchDone)
         blockFetch.stageBlockFetch(MsgStartBatch)
-        blockFetch.stageBlockFetch(MsgBlock(era = fixture2.era, fixture2.blockBytes))
+        blockFetch.stageBlockFetch(MsgBlock(fixture2.era, fixture2.blockBytes))
         blockFetch.stageBlockFetch(MsgBatchDone)
 
         val handle = ChainApplier.spawn(conn, engine, StartFrom.Origin)
@@ -309,7 +321,7 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
         blockFetch.stageBlockFetch(MsgNoBlocks)
         // Second fetch succeeds normally.
         blockFetch.stageBlockFetch(MsgStartBatch)
-        blockFetch.stageBlockFetch(MsgBlock(era = fixture2.era, fixture2.blockBytes))
+        blockFetch.stageBlockFetch(MsgBlock(fixture2.era, fixture2.blockBytes))
         blockFetch.stageBlockFetch(MsgBatchDone)
 
         val handle = ChainApplier.spawn(conn, engine, StartFrom.Origin)
@@ -340,6 +352,48 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
         handle.cancel().futureValue
         assert(handle.done.isCompleted)
         engine.shutdown().futureValue
+    }
+
+    test("initial RollBackward to non-Origin intersect (pre-forward) is ignored") {
+        // Real ouroboros-network peers send `MsgRollBackward(intersectPoint, tip)` as the
+        // first response to `MsgRequestNext` after a successful `MsgFindIntersect` at a
+        // non-Origin point — it's a protocol-level confirmation of the resume position, not
+        // a rewind of any actually-applied blocks. The applier must accept it without
+        // asking the engine to roll back (which would fail with ResyncRequiredException
+        // because the rollback buffer is empty).
+        val chainSync = new ScriptedBytes
+        val blockFetch = new ScriptedBytes
+        val conn = new StubConnection(chainSync, blockFetch)
+        val engine = newEngine()
+
+        val p1 = ChainApplier.pointOf(fixture1.headerBytes, fixture1.header)
+        val intersectPoint = Point.BlockPoint(p1.slot, p1.blockHash)
+
+        chainSync.stageChainSync(MsgIntersectFound(intersectPoint, dummyTip))
+        // Peer's first response after intersect: rollback to the intersect point itself.
+        chainSync.stageChainSync(MsgRollBackward(intersectPoint, dummyTip))
+        // Then a real forward — the applier should process this normally.
+        chainSync.stageChainSync(MsgRollForward(era = fixture1.era, fixture1.headerBytes, dummyTip))
+
+        blockFetch.stageBlockFetch(MsgStartBatch)
+        blockFetch.stageBlockFetch(MsgBlock(fixture1.era, fixture1.blockBytes))
+        blockFetch.stageBlockFetch(MsgBatchDone)
+
+        val handle = ChainApplier.spawn(conn, engine, StartFrom.At(Point.toChainPoint(intersectPoint)))
+
+        try {
+            eventually {
+                // If the rollback had been applied, `done` would fail with ResyncRequiredException.
+                handle.done.value.foreach {
+                    case scala.util.Failure(t) => fail(s"applier done failed unexpectedly: $t", t)
+                    case _                     => ()
+                }
+                assert(engine.currentTip.map(_.point).contains(p1))
+            }
+        } finally {
+            handle.cancel().futureValue
+            engine.shutdown().futureValue
+        }
     }
 
     test("peer MsgDone completes done normally") {
