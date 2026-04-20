@@ -156,8 +156,8 @@ lazy val root: Project = project
       scalusStreamingFs2.jvm,
       scalusStreamingFs2.js,
       scalusStreamingOx,
-      scalusN2n.jvm,
-      scalusN2n.js,
+      scalusCardanoNetwork.jvm,
+      scalusCardanoNetwork.js,
       scalusTestkit.js,
       scalusTestkit.jvm,
       scalusExamples.js,
@@ -187,7 +187,7 @@ lazy val jvm: Project = project
       scalusStreamingCore.jvm,
       scalusStreamingFs2.jvm,
       scalusStreamingOx,
-      scalusN2n.jvm,
+      scalusCardanoNetwork.jvm,
       scalusTestkit.jvm,
       scalusExamples.jvm,
       scalusUtxoCell.jvm,
@@ -208,7 +208,7 @@ lazy val js: Project = project
       scalusCardanoLedger.js,
       scalusStreamingCore.js,
       scalusStreamingFs2.js,
-      scalusN2n.js,
+      scalusCardanoNetwork.js,
       scalusTestkit.js,
       scalusExamples.js,
       scalusUtxoCell.js,
@@ -821,17 +821,19 @@ lazy val scalusStreamingOx = project
       publish / skip := false
     )
 
-// Ouroboros-network Node-to-Node (N2N) transport: mini-protocol multiplexer,
-// handshake (v14/v16), keep-alive. Shared cancellation/timer primitives,
-// async byte channel trait. JVM impl on NIO2 AsynchronousSocketChannel;
-// JS impl deferred. Depends on scalus-streaming-core for the Mailbox
-// primitive.
-lazy val scalusN2n = crossProject(JSPlatform, JVMPlatform)
-    .in(file("scalus-embedded-node/scalus-n2n"))
+// Ouroboros Cardano network protocols: Node-to-Node (N2N) transport —
+// mini-protocol multiplexer, handshake (v14/v16), keep-alive. Shared
+// cancellation/timer primitives, async byte channel trait. JVM impl on
+// NIO2 AsynchronousSocketChannel; JS impl deferred. Host for future
+// chain-sync / block-fetch / tx-submission2 state machines (M5+) and
+// Node-to-Client (N2C) variants (M8). Depends on scalus-streaming-core
+// for the Mailbox primitive.
+lazy val scalusCardanoNetwork = crossProject(JSPlatform, JVMPlatform)
+    .in(file("scalus-embedded-node/scalus-cardano-network"))
     .dependsOn(scalusStreamingCore % "compile->compile;test->test")
     .disablePlugins(MimaPlugin)
     .settings(
-      name := "scalus-n2n",
+      name := "scalus-cardano-network",
       scalacOptions ++= commonScalacOptions,
       libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.1",
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
@@ -896,18 +898,18 @@ lazy val scalusCardanoLedgerIt = project
       inConfig(Test)(PluginDependency)
     )
 
-// N2N transport integration tests — spins up yaci-devkit via testcontainers
+// Cardano network integration tests — spins up yaci-devkit via testcontainers
 // and exercises the real SDU multiplexer, handshake, and keep-alive over a
 // real TCP connection. Preview-relay smoke tests live here too, gated by
 // SCALUS_N2N_PREVIEW_IT=1.
-lazy val scalusN2nIt = project
-    .in(file("scalus-embedded-node/scalus-n2n-it"))
+lazy val scalusCardanoNetworkIt = project
+    .in(file("scalus-embedded-node/scalus-cardano-network-it"))
     .dependsOn(
-      scalusN2n.jvm % "compile->compile;test->test",
+      scalusCardanoNetwork.jvm % "compile->compile;test->test",
       scalusTestkit.jvm % "test->compile"
     )
     .settings(
-      name := "scalus-n2n-it",
+      name := "scalus-cardano-network-it",
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
       Test / fork := true,
@@ -952,23 +954,23 @@ addCommandAlias(
 )
 addCommandAlias(
   "quick",
-  "scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusN2nIt/Test/compile;jvm/testQuick"
+  "scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusCardanoNetworkIt/Test/compile;jvm/testQuick"
 )
 addCommandAlias(
   "cleanpile",
-  "clean;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusN2nIt/Test/compile"
+  "clean;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusCardanoNetworkIt/Test/compile"
 )
 addCommandAlias(
   "precommit",
-  "clean;docs/clean;scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusN2nIt/Test/compile;jvm/test"
+  "clean;docs/clean;scalafmtAll;scalafmtSbt;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusCardanoNetworkIt/Test/compile;jvm/test"
 )
 addCommandAlias(
   "ci",
-  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;Test/compile;scalusCardanoLedgerIt/Test/compile;scalusN2nIt/Test/compile;Test/nativeLink;test;mima"
+  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;Test/compile;scalusCardanoLedgerIt/Test/compile;scalusCardanoNetworkIt/Test/compile;Test/nativeLink;test;mima"
 )
 addCommandAlias(
   "ci-jvm",
-  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusN2nIt/Test/compile;jvm/test;mima"
+  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;scalusCardanoNetworkIt/Test/compile;jvm/test;mima"
 )
 addCommandAlias(
   "ci-js",
@@ -993,7 +995,7 @@ addCommandAlias(
 )
 addCommandAlias(
   "it",
-  "clean;scalusCardanoLedgerIt/clean;scalusCardanoLedgerIt/Test/compile;scalusCardanoLedgerIt/test;scalusN2nIt/clean;scalusN2nIt/Test/compile;scalusN2nIt/test"
+  "clean;scalusCardanoLedgerIt/clean;scalusCardanoLedgerIt/Test/compile;scalusCardanoLedgerIt/test;scalusCardanoNetworkIt/clean;scalusCardanoNetworkIt/Test/compile;scalusCardanoNetworkIt/test"
 )
 
 // =============================================================================

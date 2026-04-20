@@ -47,7 +47,7 @@ object JvmTimer {
 
     private def defaultExecutor(): ScheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor { r =>
-            val t = new Thread(r, "scalus-n2n-timer")
+            val t = new Thread(r, "scalus-cardano-network-timer")
             t.setDaemon(true)
             t
         }
