@@ -1,4 +1,4 @@
-package scalus.cardano.network
+package scalus.cardano.network.infra
 
 /** Ouroboros Node-to-Node mini-protocol identifiers, carried in the low 15 bits of the mux SDU
   * header's protocol field. The enum variants correspond 1:1 to the wire numbers defined in

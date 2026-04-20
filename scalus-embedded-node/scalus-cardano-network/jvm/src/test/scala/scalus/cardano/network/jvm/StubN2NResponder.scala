@@ -2,6 +2,7 @@ package scalus.cardano.network.jvm
 
 import io.bullet.borer.Cbor
 import scalus.cardano.network.*
+import scalus.cardano.network.infra.*
 import scalus.cardano.network.handshake.{HandshakeMessage, NodeToNodeVersionData, RefuseReason}
 import scalus.cardano.network.handshake.HandshakeMessage.*
 import scalus.cardano.network.keepalive.KeepAliveMessage

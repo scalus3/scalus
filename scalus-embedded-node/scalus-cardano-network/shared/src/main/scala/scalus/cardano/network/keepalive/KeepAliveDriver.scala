@@ -4,7 +4,7 @@ import cps.*
 import cps.monads.FutureAsyncMonad
 import scalus.cardano.infra.{CancelSource, CancelToken, CancelledException, Timer}
 import scalus.cardano.network.keepalive.KeepAliveMessage.*
-import scalus.cardano.network.{CborMessageStream, MiniProtocolBytes, MiniProtocolId, MonotonicClock}
+import scalus.cardano.network.infra.{CborMessageStream, MiniProtocolBytes, MiniProtocolId, MonotonicClock}
 
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference

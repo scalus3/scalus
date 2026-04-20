@@ -1,7 +1,7 @@
 package scalus.cardano.network.jvm
 
 import scalus.cardano.infra.{CancelToken, CancelledException}
-import scalus.cardano.network.AsyncByteChannel
+import scalus.cardano.network.infra.AsyncByteChannel
 import scalus.uplc.builtin.ByteString
 
 import java.net.InetSocketAddress

@@ -1,5 +1,6 @@
 package scalus.cardano.network
 
+import scalus.cardano.network.infra.Sdu
 import scalus.cardano.node.stream.DeltaBufferPolicy
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}

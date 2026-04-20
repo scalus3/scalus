@@ -3,7 +3,8 @@ package scalus.cardano.network.blockfetch
 import scalus.cardano.infra.CancelToken
 import scalus.cardano.network.blockfetch.BlockFetchMessage.*
 import scalus.cardano.network.chainsync.Point
-import scalus.cardano.network.{CborMessageStream, ChainSyncError, MiniProtocolBytes, MiniProtocolId}
+import scalus.cardano.network.ChainSyncError
+import scalus.cardano.network.infra.{CborMessageStream, MiniProtocolBytes, MiniProtocolId}
 import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -129,7 +130,7 @@ final class BlockFetchDriver(
         ChainSyncError.Decode(s"$where: peer EOF", cause = null)
 
     private def wrapIfDecode(t: Throwable, where: String): Throwable = t match {
-        case fde: scalus.cardano.network.FrameDecodeException =>
+        case fde: scalus.cardano.network.infra.FrameDecodeException =>
             ChainSyncError.Decode(where, fde)
         case other => other
     }

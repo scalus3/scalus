@@ -19,6 +19,7 @@ import scalus.cardano.network.chainsync.{
     IntersectSeeker,
     Point
 }
+import scalus.cardano.network.infra.MiniProtocolId
 import scalus.cardano.node.stream.engine.{AppliedBlock, AppliedTransaction, Engine}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip, StartFrom}
 import scalus.uplc.builtin.{platform, ByteString}
@@ -51,11 +52,11 @@ import scala.concurrent.{ExecutionContext, Future}
   *
   * See `docs/local/claude/indexer/cardano-network-chainsync.md` § *Chain applier*.
   */
-final class ChainApplier(
+private final class ChainApplier(
     conn: NodeToNodeConnection,
     engine: Engine,
     cancelToken: scalus.cardano.infra.CancelToken,
-    logger: scribe.Logger = ChainApplier.defaultLogger
+    logger: scribe.Logger
 )(using ExecutionContext) {
 
     private val chainSync = new ChainSyncDriver(
@@ -71,10 +72,10 @@ final class ChainApplier(
 
     /** Drive the sync loop until a failure, a peer `MsgDone`, or the applier scope cancels.
       *
-      * On loop exit (normal or error) sends `MsgDone` / `MsgClientDone` best-effort to both
-      * drivers so the peer can tear down the routes gracefully. If `cancelToken` has already
-      * fired, these no-op internally (pending sends immediately fail and the drivers' `close`
-      * recovers silently).
+      * Every driver call is threaded through a single sequential `async[Future]` chain, which
+      * satisfies the drivers' single-consumer contract. On loop exit (normal or error) sends
+      * `MsgDone` / `MsgClientDone` best-effort so the peer can tear down the routes gracefully;
+      * if `cancelToken` already fired these no-op internally.
       */
     def run(startFrom: StartFrom): Future[Unit] = async[Future] {
         try {

@@ -12,6 +12,7 @@ import scalus.cardano.network.chainsync.ChainSyncMessage
 import scalus.cardano.network.chainsync.ChainSyncMessage.{MsgIntersectFound, MsgRollBackward, MsgRollForward}
 import scalus.cardano.network.chainsync.{Point, Tip}
 import scalus.cardano.network.handshake.{NegotiatedVersion, NodeToNodeVersionData}
+import scalus.cardano.network.infra.{AsyncByteChannel, MiniProtocolBytes, MiniProtocolId}
 import scalus.cardano.node.stream.engine.Engine
 import scalus.cardano.node.stream.{ChainPoint, ChainTip, StartFrom}
 import scalus.uplc.builtin.ByteString

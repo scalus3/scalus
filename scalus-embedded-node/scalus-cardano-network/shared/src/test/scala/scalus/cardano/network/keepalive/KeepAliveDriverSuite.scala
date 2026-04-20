@@ -5,7 +5,7 @@ import org.scalatest.concurrent.{Eventually, ScalaFutures}
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
 import scalus.cardano.infra.{CancelSource, CancelToken, FakeTimer}
-import scalus.cardano.network.MiniProtocolBytes
+import scalus.cardano.network.infra.MiniProtocolBytes
 import scalus.cardano.network.keepalive.KeepAliveMessage.*
 import scalus.uplc.builtin.ByteString
 

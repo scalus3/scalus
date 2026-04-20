@@ -3,6 +3,7 @@ package scalus.cardano.network.jvm
 import scalus.cardano.infra.jvm.JvmTimer
 import scalus.cardano.infra.{CancelSource, CancelToken, CancelledException, Timer}
 import scalus.cardano.network.*
+import scalus.cardano.network.infra.*
 import scalus.cardano.network.handshake.{HandshakeDriver, NegotiatedVersion}
 import scalus.cardano.network.keepalive.KeepAliveDriver
 

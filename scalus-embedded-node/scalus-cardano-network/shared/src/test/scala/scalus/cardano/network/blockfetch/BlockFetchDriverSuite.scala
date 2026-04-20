@@ -8,7 +8,8 @@ import scalus.cardano.infra.{CancelSource, CancelToken}
 import scalus.cardano.ledger.BlockHash
 import scalus.cardano.network.blockfetch.BlockFetchMessage.*
 import scalus.cardano.network.chainsync.Point
-import scalus.cardano.network.{ChainSyncError, MiniProtocolBytes}
+import scalus.cardano.network.ChainSyncError
+import scalus.cardano.network.infra.MiniProtocolBytes
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.mutable

@@ -2,6 +2,7 @@ package scalus.cardano.network
 
 import scalus.cardano.infra.CancelToken
 import scalus.cardano.network.handshake.NegotiatedVersion
+import scalus.cardano.network.infra.{MiniProtocolBytes, MiniProtocolId}
 
 import scala.concurrent.Future
 import scala.concurrent.duration.FiniteDuration

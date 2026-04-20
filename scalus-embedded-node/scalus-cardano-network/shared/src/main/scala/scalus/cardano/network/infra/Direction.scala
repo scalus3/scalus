@@ -1,4 +1,4 @@
-package scalus.cardano.network
+package scalus.cardano.network.infra
 
 /** Direction bit on the mux SDU header. `Initiator` frames flow from the peer that originally
   * opened the mini-protocol (we, as the client); `Responder` frames flow the other way. The bit is

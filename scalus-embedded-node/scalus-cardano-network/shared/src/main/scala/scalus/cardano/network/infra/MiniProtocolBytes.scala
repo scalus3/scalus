@@ -1,4 +1,4 @@
-package scalus.cardano.network
+package scalus.cardano.network.infra
 
 import scalus.cardano.infra.CancelToken
 import scalus.uplc.builtin.ByteString

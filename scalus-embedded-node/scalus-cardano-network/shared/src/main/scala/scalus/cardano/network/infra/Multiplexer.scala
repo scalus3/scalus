@@ -1,4 +1,4 @@
-package scalus.cardano.network
+package scalus.cardano.network.infra
 
 import cps.*
 import cps.monads.FutureAsyncMonad

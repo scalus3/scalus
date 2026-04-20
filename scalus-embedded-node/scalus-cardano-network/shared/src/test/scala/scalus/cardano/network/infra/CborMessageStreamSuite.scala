@@ -1,4 +1,4 @@
-package scalus.cardano.network
+package scalus.cardano.network.infra
 
 import io.bullet.borer.{Cbor as Cborer, Decoder, Encoder}
 import org.scalatest.concurrent.ScalaFutures

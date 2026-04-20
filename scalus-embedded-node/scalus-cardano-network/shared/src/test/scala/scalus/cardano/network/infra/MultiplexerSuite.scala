@@ -1,4 +1,4 @@
-package scalus.cardano.network
+package scalus.cardano.network.infra
 
 import org.scalatest.RecoverMethods.recoverToExceptionIf
 import org.scalatest.concurrent.{Eventually, ScalaFutures}

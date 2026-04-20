@@ -1,4 +1,4 @@
-package scalus.cardano.network
+package scalus.cardano.network.infra
 
 /** Microsecond monotonic clock — source of the timestamp field on outgoing mux SDUs. Injectable so
   * unit tests can assert on deterministic timestamp values without wall-clock waits.

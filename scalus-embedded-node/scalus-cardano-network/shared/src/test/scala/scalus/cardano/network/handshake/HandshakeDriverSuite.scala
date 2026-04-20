@@ -6,7 +6,8 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
 import scalus.cardano.infra.{CancelSource, CancelToken, FakeTimer}
 import scalus.cardano.network.handshake.HandshakeMessage.*
-import scalus.cardano.network.{MiniProtocolBytes, NetworkMagic}
+import scalus.cardano.network.NetworkMagic
+import scalus.cardano.network.infra.MiniProtocolBytes
 import scalus.uplc.builtin.ByteString
 
 import scala.collection.mutable

@@ -6,7 +6,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.time.{Millis, Seconds, Span}
 import scalus.cardano.infra.{CancelSource, CancelToken}
 import scalus.cardano.ledger.BlockHash
-import scalus.cardano.network.MiniProtocolBytes
+import scalus.cardano.network.infra.MiniProtocolBytes
 import scalus.cardano.network.chainsync.ChainSyncMessage.*
 import scalus.cardano.node.stream.{ChainPoint, StartFrom}
 import scalus.uplc.builtin.ByteString

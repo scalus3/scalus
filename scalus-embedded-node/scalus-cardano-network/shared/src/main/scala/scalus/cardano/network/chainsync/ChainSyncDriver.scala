@@ -2,7 +2,8 @@ package scalus.cardano.network.chainsync
 
 import scalus.cardano.infra.CancelToken
 import scalus.cardano.network.chainsync.ChainSyncMessage.*
-import scalus.cardano.network.{CborMessageStream, ChainSyncError, MiniProtocolBytes, MiniProtocolId}
+import scalus.cardano.network.ChainSyncError
+import scalus.cardano.network.infra.{CborMessageStream, MiniProtocolBytes, MiniProtocolId}
 import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.{ExecutionContext, Future}
@@ -152,7 +153,7 @@ final class ChainSyncDriver(
       * wrap in our typed `ChainSyncError.Decode` so callers pattern-match one hierarchy.
       */
     private def wrapIfDecode(t: Throwable, where: String): Throwable = t match {
-        case fde: scalus.cardano.network.FrameDecodeException =>
+        case fde: scalus.cardano.network.infra.FrameDecodeException =>
             ChainSyncError.Decode(where, fde)
         case other => other
     }

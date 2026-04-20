@@ -2,7 +2,8 @@ package scalus.cardano.network.handshake
 
 import scalus.cardano.infra.{CancelSource, CancelledException, Timer}
 import scalus.cardano.network.handshake.HandshakeMessage.*
-import scalus.cardano.network.{CborMessageStream, FrameDecodeException, MiniProtocolBytes, MiniProtocolId, NetworkMagic}
+import scalus.cardano.network.NetworkMagic
+import scalus.cardano.network.infra.{CborMessageStream, FrameDecodeException, MiniProtocolBytes, MiniProtocolId}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.concurrent.{ExecutionContext, Future}

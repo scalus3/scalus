@@ -1,4 +1,4 @@
-package scalus.cardano.network
+package scalus.cardano.network.infra
 
 import io.bullet.borer.{Borer, Cbor as Cborer, Decoder, Encoder}
 import scalus.cardano.infra.CancelToken
