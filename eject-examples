@@ -58,6 +58,28 @@ list_examples() {
         -exec basename {} \; | sort
 }
 
+# Maps source directory names to kebab-case output names
+# (matching the Cardano Foundation convention).
+kebab_name() {
+    local name="$1"
+    case "$name" in
+        amm)                    echo "constant-product-amm" ;;
+        anonymousdata)          echo "anonymous-data" ;;
+        atomictransactions)     echo "atomic-transaction" ;;
+        bilinearAccumulator)    echo "bilinear-accumulator" ;;
+        buidlerfest)            echo "buidlerfest" ;;
+        crowdfunding)           echo "crowdfund" ;;
+        decentralizedidentity)  echo "decentralized-identity" ;;
+        editablenft)            echo "editable-nft" ;;
+        linkedlist)             echo "linked-list" ;;
+        paymentsplitter)        echo "payment-splitter" ;;
+        simpletransfer)         echo "simple-transfer" ;;
+        simplewallet)           echo "simple-wallet" ;;
+        upgradeableproxy)       echo "upgradable-proxy" ;;
+        *)                      echo "$name" ;;
+    esac
+}
+
 # ---- generators -------------------------------------------------------------
 
 detect_extra_deps() {
@@ -208,7 +230,9 @@ eject_one() {
         return 1
     fi
 
-    local project_dir="$target_root/$name"
+    local out_name
+    out_name="$(kebab_name "$name")"
+    local project_dir="$target_root/$out_name"
     if [[ -e "$project_dir" ]]; then
         echo "error: $project_dir already exists, refusing to overwrite" >&2
         return 1
@@ -219,11 +243,11 @@ eject_one() {
 
     cp -R "$src_dir"/. "$project_dir/src/main/scala/scalus/examples/$name"/
 
-    gen_build_sbt "$name" "$src_dir" > "$project_dir/build.sbt"
+    gen_build_sbt "$out_name" "$src_dir" > "$project_dir/build.sbt"
     gen_plugins_sbt               > "$project_dir/project/plugins.sbt"
     gen_build_properties          > "$project_dir/project/build.properties"
     gen_gitignore                 > "$project_dir/.gitignore"
-    gen_readme "$name"            > "$project_dir/README.md"
+    gen_readme "$out_name"        > "$project_dir/README.md"
 
     echo "  ejected $name -> $project_dir"
 }
@@ -260,7 +284,9 @@ main() {
     local failures=0
     case "$mode" in
         list)
-            list_examples ;;
+            while IFS= read -r name; do
+                printf "%-25s -> %s\n" "$name" "$(kebab_name "$name")"
+            done < <(list_examples) ;;
         all)
             if [[ ${#positional[@]} -ne 1 ]]; then
                 echo "error: --all takes exactly one argument: <target-dir>" >&2
