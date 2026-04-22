@@ -57,6 +57,11 @@ object MithrilWasmRuntime {
     /** Instantiate the pinned blob against `imports`. Unresolved names get a
       * [[unimplementedImport]] stub so a call into them raises with the wasm-bindgen name, which
       * is how we discover the actual host-function demand set for a given code path.
+      *
+      * Lookup is **hash-insensitive** in the wasm-bindgen sense: the 16-hex signature hash that
+      * wasm-bindgen appends to every import (e.g. `__wbg_Error_52673b7de5a0ca89`) is stripped
+      * before matching, so handlers registered under the short semantic name
+      * (`__wbg_Error_`) survive pin bumps that only rotate the hash.
       */
     def instantiate(
         imports: Map[String, WasmFunctionHandle]
@@ -73,12 +78,13 @@ object MithrilWasmRuntime {
                 .map(_.asInstanceOf[FunctionImport])
                 .toSeq
 
+        def resolve(name: String): Option[WasmFunctionHandle] =
+            imports.get(name).orElse(imports.get(stripHash(name)))
+
         val hostFunctions: Array[HostFunction] = fnImports.map { imp =>
             val fnType: FunctionType = module.typeSection().getType(imp.typeIndex())
-            val handle: WasmFunctionHandle = imports.getOrElse(
-              imp.name(),
-              unimplementedImport(imp.name())
-            )
+            val handle: WasmFunctionHandle =
+                resolve(imp.name()).getOrElse(unimplementedImport(imp.name()))
             new HostFunction(imp.module(), imp.name(), fnType, handle)
         }.toArray
 
@@ -88,10 +94,22 @@ object MithrilWasmRuntime {
 
         val report = InstantiationReport(
           totalImports = fnImports.size,
-          resolvedByCaller = fnImports.count(i => imports.contains(i.name())),
-          stubbed = fnImports.size - fnImports.count(i => imports.contains(i.name()))
+          resolvedByCaller = fnImports.count(i => resolve(i.name()).isDefined),
+          stubbed = fnImports.size - fnImports.count(i => resolve(i.name()).isDefined)
         )
         (new MithrilWasmRuntime(instance), report)
+    }
+
+    /** wasm-bindgen appends `_[0-9a-f]{16}` to every import for global uniqueness. The hash is
+      * a hash of the binding's Rust signature and changes on ABI bumps; the prefix is stable.
+      * Stripping the hash gives the semantic short name we register handlers against.
+      */
+    private[mithril] def stripHash(name: String): String = {
+        val HashSuffix = "_[0-9a-f]{16}$".r
+        HashSuffix.findFirstIn(name) match {
+            case Some(m) => name.dropRight(m.length) + "_"
+            case None    => name
+        }
     }
 
     final case class InstantiationReport(

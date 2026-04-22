@@ -52,29 +52,36 @@ final class WbindgenAbi {
     def readString(instance: Instance, ptr: Int, len: Int): String =
         new String(instance.memory().readBytes(ptr, len), StandardCharsets.UTF_8)
 
-    /** Build the default host-import map. Returns imports keyed by wasm-bindgen name. */
+    /** Build the default host-import map. Keys are wasm-bindgen **short names** (the prefix up
+      * to and including the trailing underscore before the 16-hex signature hash). The runtime
+      * strips the hash before lookup, so these bindings survive pin bumps that only rotate
+      * signature hashes.
+      */
     def defaultImports: Map[String, WasmFunctionHandle] = Map(
       // Predicates: (externref-handle: i32) -> i32 { 0 | 1 }
-      "__wbg___wbindgen_is_undefined_f6b95eab589e0269" -> isUndefined,
-      "__wbg___wbindgen_is_object_ce774f3490692386" -> isObject,
-      "__wbg___wbindgen_is_string_704ef9c8fc131030" -> isString,
-      "__wbg___wbindgen_is_function_8d400b8b1af978cd" -> isFunction,
-      "__wbg___wbindgen_is_bigint_0e1a2e3f55cfae27" -> isBigint,
-      // Boolean extractor: (externref) -> i32 { 0 | 1 | -1 (not-a-bool) }
-      "__wbg___wbindgen_boolean_get_dea25b33882b895b" -> booleanGet,
+      "__wbg___wbindgen_is_undefined_" -> isUndefined,
+      "__wbg___wbindgen_is_object_" -> isObject,
+      "__wbg___wbindgen_is_string_" -> isString,
+      "__wbg___wbindgen_is_function_" -> isFunction,
+      "__wbg___wbindgen_is_bigint_" -> isBigint,
+      // Boolean extractor: (externref) -> i32 { 0 | 1 | 2 (not-a-bool) }
+      "__wbg___wbindgen_boolean_get_" -> booleanGet,
       // Equality predicates: (a: i32, b: i32) -> i32
-      "__wbg___wbindgen_jsval_eq_b6101cc9cef1fe36" -> jsvalEq,
-      "__wbg___wbindgen_jsval_loose_eq_766057600fdd1b0d" -> jsvalLooseEq,
-      "__wbg___wbindgen_in_0d3e1e8f0c669317" -> jsvalIn,
+      "__wbg___wbindgen_jsval_eq_" -> jsvalEq,
+      "__wbg___wbindgen_jsval_loose_eq_" -> jsvalLooseEq,
+      "__wbg___wbindgen_in_" -> jsvalIn,
       // Value extractors writing to a caller-provided pointer:
-      "__wbg___wbindgen_string_get_a2a31e16edf96e42" -> stringGet,
-      "__wbg___wbindgen_number_get_9619185a74197f95" -> numberGet,
-      "__wbg___wbindgen_bigint_get_as_i64_6e32f5e6aff02e1d" -> bigintGetAsI64,
+      "__wbg___wbindgen_string_get_" -> stringGet,
+      "__wbg___wbindgen_number_get_" -> numberGet,
+      "__wbg___wbindgen_bigint_get_as_i64_" -> bigintGetAsI64,
       // Debug / error reporting:
-      "__wbg___wbindgen_debug_string_adfb662ae34724b6" -> debugString,
-      "__wbg___wbindgen_throw_dd24417ed36fc46e" -> wbindgenThrow,
+      "__wbg___wbindgen_debug_string_" -> debugString,
+      "__wbg___wbindgen_throw_" -> wbindgenThrow,
       // Closure cleanup — no-op under JVM GC.
-      "__wbg__wbg_cb_unref_87dfb5aaa0cbcea7" -> noop1
+      "__wbg__wbg_cb_unref_" -> noop1,
+      // JS built-in constructors / helpers.
+      "__wbg_Error_" -> newError,
+      "__wbg_Number_" -> newNumber
     )
 
     // ------------------------------------------------------------------
@@ -262,6 +269,46 @@ final class WbindgenAbi {
       */
     private val noop1: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
+    }
+
+    // ------------------------------------------------------------------
+    // JS built-in constructors. Each returns a fresh externref handle wrapping a JVM object
+    // that stands in for the JS value, so later `__wbindgen_*_get` calls can extract it.
+    // ------------------------------------------------------------------
+
+    /** `(ptr, len) -> externref` — `Error(stringFromWasm(ptr, len))`. We wrap into a plain
+      * `RuntimeException`; the Mithril client treats Errors as first-class opaque values so
+      * only reference identity and `.message` are exercised.
+      */
+    private val newError: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val ptr = args(0).toInt
+            val len = args(1).toInt
+            val msg = readString(instance, ptr, len)
+            Array(alloc(new RuntimeException(msg)).toLong)
+        }
+    }
+
+    /** `(externref) -> externref` — `Number(arg)`. Coerces a JS value to its numeric form:
+      * numbers pass through, strings parse as doubles, booleans become 0/1, null becomes 0,
+      * anything else that can't coerce becomes NaN (java.lang.Double.NaN).
+      */
+    private val newNumber: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val v = get(args(0).toInt)
+            val n: java.lang.Double = v match {
+                case null                    => java.lang.Double.valueOf(0.0)
+                case WbindgenAbi.Undefined   => java.lang.Double.valueOf(Double.NaN)
+                case n: java.lang.Number     => java.lang.Double.valueOf(n.doubleValue)
+                case s: String =>
+                    try java.lang.Double.valueOf(s)
+                    catch { case _: NumberFormatException => java.lang.Double.valueOf(Double.NaN) }
+                case java.lang.Boolean.TRUE  => java.lang.Double.valueOf(1.0)
+                case java.lang.Boolean.FALSE => java.lang.Double.valueOf(0.0)
+                case _                       => java.lang.Double.valueOf(Double.NaN)
+            }
+            Array(alloc(n).toLong)
+        }
     }
 }
 
