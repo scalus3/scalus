@@ -1,6 +1,7 @@
 package scalus.cardano.node.stream.engine.snapshot.mithril
 
 import com.dylibso.chicory.runtime.{Instance, WasmFunctionHandle}
+import scalus.cardano.ledger.Word64
 
 import java.nio.charset.StandardCharsets
 import scala.collection.mutable
@@ -500,36 +501,27 @@ final class WbindgenAbi {
         }
     }
 
+    /** `__wbg_set_*` — polymorphic over Array.set (ref, i32, ref), Map.set / Reflect.set
+      * (ref, ref, ref). The middle arg is either an index or a key handle depending on
+      * container type; we resolve that locally.
+      */
     private val setIndexed: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val container = get(args(0).toInt)
-            args.length match {
-                case 3 =>
-                    // Both (ref, i32, ref) [Array.set] and (ref, ref, ref) [Map.set / Reflect.set]
-                    // reach this path — the middle arg is either an index or a key handle. We
-                    // store the WASM-level int as an externref index; for Map/Object cases it's
-                    // a handle into our table, and we treat String values as keys.
-                    container match {
-                        case a: JsArray =>
-                            val idx = args(1).toInt
-                            val v = get(args(2).toInt)
-                            while a.items.size <= idx do a.items.append(null)
-                            a.items(idx) = v
-                        case m: JsMap =>
-                            m.entries(get(args(1).toInt)) = get(args(2).toInt)
-                        case o: JsObject =>
-                            get(args(1).toInt) match {
-                                case k: String => o.entries(k) = get(args(2).toInt)
-                                case _         => ()
-                            }
-                        case _: JsUint8Array => ()
-                        case _               => ()
-                    }
-                case _ => ()
-            }
-            if args.length == 3 then Array.emptyLongArray
-            else Array(alloc(WbindgenAbi.Undefined).toLong)
+            if args.length == 3 then {
+                (get(args(0).toInt), get(args(1).toInt), get(args(2).toInt)) match {
+                    case (a: JsArray, _, v)           => arraySet(a, args(1).toInt, v)
+                    case (m: JsMap, k, v)             => m.entries(k) = v
+                    case (o: JsObject, k: String, v)  => o.entries(k) = v
+                    case _                            => ()
+                }
+                Array.emptyLongArray
+            } else Array(alloc(WbindgenAbi.Undefined).toLong)
         }
+    }
+
+    private def arraySet(a: JsArray, idx: Int, v: AnyRef | Null): Unit = {
+        while a.items.size <= idx do a.items.append(null)
+        a.items(idx) = v
     }
 
     private val hasKey: WasmFunctionHandle = new WasmFunctionHandle {
@@ -667,38 +659,22 @@ final class WbindgenAbi {
     // Constructors.
     // ------------------------------------------------------------------
 
-    /** Zero-arg ctors, keyed by hash via [[pinnedImports]]: `new Date()`, `new Object()`,
-      * `new Array()`, `new Headers()`, `new AbortController()`, `new Map()`.
+    /** Zero-arg ctors, keyed by hash via [[pinnedImports]]. Each produces a fresh synthetic host
+      * value; the factory evaluates its by-name argument per call so mutable containers aren't
+      * shared across ctor invocations.
       */
-    private val newDate: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(alloc(new java.util.Date()).toLong)
-    }
+    private def zeroArgCtor(value: => AnyRef): WasmFunctionHandle =
+        new WasmFunctionHandle {
+            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+                Array(alloc(value).toLong)
+        }
 
-    private val newObject: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(alloc(JsObject(mutable.LinkedHashMap.empty)).toLong)
-    }
-
-    private val newArray: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(alloc(JsArray(mutable.ArrayBuffer.empty)).toLong)
-    }
-
-    private val newHeaders: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(alloc(JsHeaders(mutable.LinkedHashMap.empty)).toLong)
-    }
-
-    private val newAbortController: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(alloc(new JsAbortController()).toLong)
-    }
-
-    private val newMap: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(alloc(JsMap(mutable.LinkedHashMap.empty)).toLong)
-    }
+    private val newDate = zeroArgCtor(new java.util.Date())
+    private val newObject = zeroArgCtor(JsObject(mutable.LinkedHashMap.empty))
+    private val newArray = zeroArgCtor(JsArray(mutable.ArrayBuffer.empty))
+    private val newHeaders = zeroArgCtor(JsHeaders(mutable.LinkedHashMap.empty))
+    private val newAbortController = zeroArgCtor(new JsAbortController())
+    private val newMap = zeroArgCtor(JsMap(mutable.LinkedHashMap.empty))
 
     /** `new Uint8Array(buffer)` — 1-arg ctor building a view over the whole buffer. */
     private val newUint8ArrayFromBuffer: WasmFunctionHandle = new WasmFunctionHandle {
@@ -806,50 +782,40 @@ final class WbindgenAbi {
     }
 
     private val castU64ToBigInt: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val bi = java.math.BigInteger.valueOf(args(0).toLong).and(WbindgenAbi.U64Mask)
-            Array(alloc(bi).toLong)
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(Word64(args(0).toLong).toBigInteger).toLong)
+    }
+
+    /** Closure-cast factory: `(fnPtrA: u32, fnPtrB: u32) -> Externref` that wraps the two
+      * pointers into a [[JsClosure]] targeting the named invoke/destroy exports. Each pinned
+      * `__wbindgen_cast_*` hash corresponds to one Rust closure shape (fixed arity + export
+      * pair); the factory lets us register both variants with one line each.
+      */
+    private def closureCast(
+        arity: Int,
+        invokeExport: String,
+        destroyExport: String
+    ): WasmFunctionHandle =
+        new WasmFunctionHandle {
+            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+                Array(
+                  alloc(
+                    JsClosure(args(0).toInt, args(1).toInt, invokeExport, destroyExport, arity)
+                  ).toLong
+                )
         }
-    }
 
-    /** Closure cast: `(fnPtrA: u32, fnPtrB: u32) -> Externref` that wraps the pair into a JS
-      * function invoking `wasm_bindgen__convert__closures_____invoke__hc0a74f7bb86030d0`
-      * with `(fnPtrA, fnPtrB, arg)` when called with one argument. Destructor is
-      * `wasm_bindgen__closure__destroy__h99811cac73495ece`.
-      */
-    private val castOneArgClosure: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(
-              alloc(
-                JsClosure(
-                  args(0).toInt,
-                  args(1).toInt,
-                  invokeExport = "wasm_bindgen__convert__closures_____invoke__hc0a74f7bb86030d0",
-                  destroyExport = "wasm_bindgen__closure__destroy__h99811cac73495ece",
-                  arity = 1
-                )
-              ).toLong
-            )
-    }
+    private val castOneArgClosure: WasmFunctionHandle = closureCast(
+      arity = 1,
+      invokeExport = "wasm_bindgen__convert__closures_____invoke__hc0a74f7bb86030d0",
+      destroyExport = "wasm_bindgen__closure__destroy__h99811cac73495ece"
+    )
 
-    /** Closure cast: zero-arg variant, invoke export
-      * `wasm_bindgen__convert__closures_____invoke__h6b7e05d46d107c93`, destroy export
-      * `wasm_bindgen__closure__destroy__hea47394e049eff9b`.
-      */
-    private val castZeroArgClosure: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(
-              alloc(
-                JsClosure(
-                  args(0).toInt,
-                  args(1).toInt,
-                  invokeExport = "wasm_bindgen__convert__closures_____invoke__h6b7e05d46d107c93",
-                  destroyExport = "wasm_bindgen__closure__destroy__hea47394e049eff9b",
-                  arity = 0
-                )
-              ).toLong
-            )
-    }
+    private val castZeroArgClosure: WasmFunctionHandle = closureCast(
+      arity = 0,
+      invokeExport = "wasm_bindgen__convert__closures_____invoke__h6b7e05d46d107c93",
+      destroyExport = "wasm_bindgen__closure__destroy__hea47394e049eff9b"
+    )
 
     /** `new Promise(executor)` — the executor closure invokes
       * `wasm_bindgen__convert__closures_____invoke__h2da143d4463a5f08(a, b, resolve, reject)`
@@ -1303,10 +1269,6 @@ object WbindgenAbi {
       * enough for Mithril's in-client feedback loop to stay internally consistent.
       */
     final case class JsBroadcastChannel(name: String)
-
-    /** Mask for converting a signed long to an unsigned 64-bit BigInt. */
-    val U64Mask: java.math.BigInteger =
-        new java.math.BigInteger(1, Array[Byte](-1, -1, -1, -1, -1, -1, -1, -1))
 
     /** Render a JVM value as JSON. Used by `JSON.stringify` bridge. For our synthetic host types
       * we emit something sensible; for unknown refs we fall back to `String.valueOf`.
