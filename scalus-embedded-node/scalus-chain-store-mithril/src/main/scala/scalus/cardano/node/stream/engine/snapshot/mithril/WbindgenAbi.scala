@@ -1245,6 +1245,13 @@ object WbindgenAbi {
         var executor: Option[JsClosure] = None
         val continuations: mutable.ArrayBuffer[(Option[JsClosure], Option[JsClosure])] =
             mutable.ArrayBuffer.empty
+
+        /** Scala-side settlement callbacks that fire when this promise transitions from pending
+          * to either fulfilled or rejected. Used by [[MithrilAsyncRuntime]] to thread
+          * `.then(...)` continuations and upstream-promise forwarding.
+          */
+        val pendingSettlers: mutable.ArrayBuffer[(AnyRef | Null, AnyRef | Null) => Unit] =
+            mutable.ArrayBuffer.empty
     }
 
     object JsPromise {

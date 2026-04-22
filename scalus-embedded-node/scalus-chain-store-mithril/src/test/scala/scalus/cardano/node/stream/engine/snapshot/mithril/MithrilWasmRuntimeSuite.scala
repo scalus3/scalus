@@ -147,6 +147,47 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         }
     }
 
+    // Currently fails inside Chicory's CALL_INDIRECT → LOCAL_SET with an operand-stack underflow
+    // when the Promise executor closure is re-entered. Likely root cause: our JVM-side abi
+    // handle space and the WASM module's `__wbindgen_externrefs` table are disjoint, so the
+    // resolve/reject closure handles we allocate on the JVM side are being passed into WASM as
+    // externrefs that don't correspond to live entries in the module's own table. Next session
+    // will wire alloc → `__externref_table_alloc` so both sides agree on slot indices. See
+    // MithrilAsyncRuntime.scala header for the runtime design.
+    ignore("async runtime: list_mithril_certificates reaches fetch without tripping closure stubs") {
+        import scala.concurrent.Await
+        import scala.concurrent.duration.*
+        val abi = new WbindgenAbi
+        val asyncRt = new MithrilAsyncRuntime(abi)
+        val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports
+        val (rt, _) = MithrilWasmRuntime.instantiate(imports)
+        asyncRt.attach(rt.instance)
+
+        val futureResult = asyncRt.submit { _ =>
+            val (aggPtr, aggLen) =
+                rt.passString("https://aggregator.testing-preview.api.mithril.network/aggregator")
+            val (keyPtr, keyLen) = rt.passString(
+              "5b3132372c37332c3132342c3136312c362c3133372c3133312c3231332c3230372c3131372c3139382c38352c3137362c3139392c3136322c3234312c36382c3132332c3131392c3134352c31332c3233322c3234332c34392c3232392c322c3234392c3230352c3230352c33392c3233352c34345d"
+            )
+            val clientPtr = rt
+                .exportFn("mithrilclient_new")
+                .apply(aggPtr.toLong, aggLen.toLong, keyPtr.toLong, keyLen.toLong, 1L)(0)
+            val listExport =
+                Option(rt.instance.`export`("mithrilclient_list_mithril_certificates")).get
+            scala.util.Try(listExport.apply(clientPtr))
+        }
+        val outcome = Await.result(futureResult, 10.seconds)
+        outcome match {
+            case scala.util.Success(r) =>
+                info(s"list_mithril_certificates returned: ${r.toSeq}")
+            case scala.util.Failure(t) =>
+                info(s"list_mithril_certificates FAILED: ${t.getClass.getName}: ${t.getMessage}")
+                val sw = new java.io.StringWriter()
+                t.printStackTrace(new java.io.PrintWriter(sw))
+                info(sw.toString.linesIterator.take(15).mkString("\n"))
+        }
+    }
+
     test("driver: attempt list_mithril_certificates — surfaces next missing host import") {
         val (rt, _) = MithrilWasmRuntime.instantiate(defaultImports)
         val (aggPtr, aggLen) =
