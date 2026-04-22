@@ -823,6 +823,21 @@ lazy val scalusStreamingOx = project
       publish / skip := false
     )
 
+// RocksDB-backed ChainStore (M9.P2). JVM-only because rocksdbjni is a
+// native library. Split into its own module so the core streaming JAR
+// stays native-dep-free for users who don't need durable block history.
+lazy val scalusChainStoreRocksdb = project
+    .in(file("scalus-embedded-node/scalus-chain-store-rocksdb"))
+    .dependsOn(scalusStreamingCore.jvm % "compile->compile;test->test")
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-chain-store-rocksdb",
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "org.rocksdb" % "rocksdbjni" % "9.7.3",
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      publish / skip := false
+    )
+
 // Ouroboros Cardano network protocols: Node-to-Node (N2N) transport —
 // mini-protocol multiplexer, handshake (v14/v16), keep-alive. Shared
 // cancellation/timer primitives, async byte channel trait. JVM impl on

@@ -101,7 +101,8 @@ object Fs2BlockchainStreamProvider {
                     backup,
                     Engine.DefaultSecurityParam,
                     persistence,
-                    fallbackReplaySources
+                    fallbackReplaySources,
+                    config.chainStore
                   )
                 )
             case Some(state) =>
@@ -113,7 +114,8 @@ object Fs2BlockchainStreamProvider {
                       backup,
                       Engine.DefaultSecurityParam,
                       persistence,
-                      fallbackReplaySources
+                      fallbackReplaySources,
+                      config.chainStore
                     )
                   )
                 )
@@ -134,6 +136,7 @@ object Fs2BlockchainStreamProvider {
             snap <- engine.takeSnapshot(config.appId, networkMagicFor(config))
             _ <- persistence.compact(snap)
             _ <- persistence.close()
+            _ = config.chainStore.foreach(_.close())
         } yield ()
 
     /** Best-effort network-magic lookup. Only N2N carries the value on the source; Synthetic and

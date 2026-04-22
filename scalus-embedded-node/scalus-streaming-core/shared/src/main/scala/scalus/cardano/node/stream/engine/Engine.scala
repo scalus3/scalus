@@ -40,7 +40,8 @@ final class Engine(
     val backup: Option[BlockchainReader],
     val securityParam: Int,
     val persistence: EnginePersistenceStore = EnginePersistenceStore.noop,
-    val fallbackReplaySources: List[replay.ReplaySource] = Nil
+    val fallbackReplaySources: List[replay.ReplaySource] = Nil,
+    val chainStore: Option[ChainStore] = None
 ) {
 
     import Engine.UtxoSubscription
@@ -288,6 +289,21 @@ final class Engine(
         persistence.appendSync(
           JournalRecord.Forward(block.tip, block.transactionIds, persistedDeltas)
         )
+
+        // ChainStore (M9) — the durable block-history sink. Populated from the live path so
+        // M7 checkpoint replay past the rollback-buffer horizon can serve from disk instead of
+        // opening a fresh N2N connection. Backend failures (disk full, corruption) are logged
+        // but do NOT fail the live fan-out — subscribers already saw this block.
+        chainStore.foreach { store =>
+            try store.appendBlock(block)
+            catch {
+                case NonFatal(t) =>
+                    logger.warn(
+                      s"ChainStore.appendBlock failed at ${block.point}; store and engine tip now diverge",
+                      t
+                    )
+            }
+        }
     }
 
     def onRollBackward(to: ChainPoint): Future[Unit] = submit {
@@ -305,6 +321,16 @@ final class Engine(
                         txStatusSubs.get(h).foreach(_.values.foreach(_.offer(newStatus)))
                     }
                     persistence.appendSync(JournalRecord.Backward(to))
+                    chainStore.foreach { store =>
+                        try store.rollbackTo(to)
+                        catch {
+                            case NonFatal(t) =>
+                                logger.warn(
+                                  s"ChainStore.rollbackTo($to) failed; store and engine tip now diverge",
+                                  t
+                                )
+                        }
+                    }
                 }
 
             case RollbackBuffer.RollbackOutcome.PastHorizon(_) =>
@@ -853,10 +879,17 @@ object Engine {
         backup: Option[BlockchainReader],
         securityParam: Int,
         persistence: EnginePersistenceStore,
-        fallbackReplaySources: List[replay.ReplaySource] = Nil
+        fallbackReplaySources: List[replay.ReplaySource] = Nil,
+        chainStore: Option[ChainStore] = None
     )(using scala.concurrent.ExecutionContext): Future[Engine] = {
-        val engine =
-            new Engine(cardanoInfo, backup, securityParam, persistence, fallbackReplaySources)
+        val engine = new Engine(
+          cardanoInfo,
+          backup,
+          securityParam,
+          persistence,
+          fallbackReplaySources,
+          chainStore
+        )
         engine.restoreInto(state).map(_ => engine)
     }
 

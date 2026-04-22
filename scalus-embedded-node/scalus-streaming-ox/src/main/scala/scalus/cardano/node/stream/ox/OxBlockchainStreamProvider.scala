@@ -93,7 +93,8 @@ object OxBlockchainStreamProvider {
                   backup,
                   Engine.DefaultSecurityParam,
                   persistence,
-                  fallbackReplaySources
+                  fallbackReplaySources,
+                  config.chainStore
                 )
             case Some(state) =>
                 Await.result(
@@ -103,7 +104,8 @@ object OxBlockchainStreamProvider {
                     backup,
                     Engine.DefaultSecurityParam,
                     persistence,
-                    fallbackReplaySources
+                    fallbackReplaySources,
+                    config.chainStore
                   ),
                   Duration.Inf
                 )
@@ -120,6 +122,7 @@ object OxBlockchainStreamProvider {
             snap <- engine.takeSnapshot(config.appId, networkMagicFor(config))
             _ <- persistence.compact(snap)
             _ <- persistence.close()
+            _ = config.chainStore.foreach(_.close())
         } yield ()
 
     private def networkMagicFor(config: StreamProviderConfig): Long = config.chainSync match {
