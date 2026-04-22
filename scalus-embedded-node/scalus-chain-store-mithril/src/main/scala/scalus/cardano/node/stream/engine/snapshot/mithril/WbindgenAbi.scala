@@ -61,7 +61,20 @@ final class WbindgenAbi {
       "__wbg___wbindgen_is_function_8d400b8b1af978cd" -> isFunction,
       "__wbg___wbindgen_is_bigint_0e1a2e3f55cfae27" -> isBigint,
       // Boolean extractor: (externref) -> i32 { 0 | 1 | -1 (not-a-bool) }
-      "__wbg___wbindgen_boolean_get_dea25b33882b895b" -> booleanGet
+      "__wbg___wbindgen_boolean_get_dea25b33882b895b" -> booleanGet,
+      // Equality predicates: (a: i32, b: i32) -> i32
+      "__wbg___wbindgen_jsval_eq_b6101cc9cef1fe36" -> jsvalEq,
+      "__wbg___wbindgen_jsval_loose_eq_766057600fdd1b0d" -> jsvalLooseEq,
+      "__wbg___wbindgen_in_0d3e1e8f0c669317" -> jsvalIn,
+      // Value extractors writing to a caller-provided pointer:
+      "__wbg___wbindgen_string_get_a2a31e16edf96e42" -> stringGet,
+      "__wbg___wbindgen_number_get_9619185a74197f95" -> numberGet,
+      "__wbg___wbindgen_bigint_get_as_i64_6e32f5e6aff02e1d" -> bigintGetAsI64,
+      // Debug / error reporting:
+      "__wbg___wbindgen_debug_string_adfb662ae34724b6" -> debugString,
+      "__wbg___wbindgen_throw_dd24417ed36fc46e" -> wbindgenThrow,
+      // Closure cleanup — no-op under JVM GC.
+      "__wbg__wbg_cb_unref_87dfb5aaa0cbcea7" -> noop1
     )
 
     // ------------------------------------------------------------------
@@ -108,6 +121,147 @@ final class WbindgenAbi {
                 else 2 // wasm-bindgen convention: 2 == "not a boolean"
             Array(result.toLong)
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Equality predicates.
+    // ------------------------------------------------------------------
+
+    private val jsvalEq: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val a = get(args(0).toInt)
+            val b = get(args(1).toInt)
+            // JS `===`: strict equality. For our purposes reference equality for objects, value
+            // equality for strings / numbers / booleans.
+            val eq =
+                if a == null && b == null then true
+                else if a == null || b == null then false
+                else if (a.isInstanceOf[String] || a.isInstanceOf[java.lang.Number] ||
+                        a.isInstanceOf[java.lang.Boolean]) && a.getClass == b.getClass
+                then a == b
+                else a eq b
+            Array(if eq then 1L else 0L)
+        }
+    }
+
+    private val jsvalLooseEq: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val a = get(args(0).toInt)
+            val b = get(args(1).toInt)
+            // JS `==`: loose equality. Scala's `==` already coerces between compatible types
+            // (e.g., java.lang.Boolean vs. scala.Boolean); null / undefined are loosely equal.
+            val nullOrUndef = (x: AnyRef | Null) => x == null || x == WbindgenAbi.Undefined
+            val eq =
+                if nullOrUndef(a) && nullOrUndef(b) then true
+                else if a == null || b == null then false
+                else a == b
+            Array(if eq then 1L else 0L)
+        }
+    }
+
+    private val jsvalIn: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            // JS `prop in obj`. We don't model JS objects with property bags yet; conservatively
+            // return 0. Code paths that rely on real `in` behaviour will need richer host
+            // objects — flagged when a driver test hits it.
+            Array(0L)
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Value extractors — each writes a (ptr, len) or f64 or i64 to a caller-supplied ret_ptr in
+    // WASM memory. The layout matches wasm-bindgen's `take*FromWasm0` / `pass*ToWasm0`.
+    // ------------------------------------------------------------------
+
+    private val stringGet: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val handle = args(0).toInt
+            val retPtr = args(1).toInt
+            get(handle) match {
+                case s: String =>
+                    val utf8 = s.getBytes(StandardCharsets.UTF_8)
+                    val malloc = instance.`export`("__wbindgen_malloc")
+                    val ptr = malloc.apply(utf8.length.toLong, 1L)(0).toInt
+                    instance.memory().write(ptr, utf8)
+                    instance.memory().writeI32(retPtr, ptr)
+                    instance.memory().writeI32(retPtr + 4, utf8.length)
+                case _ =>
+                    instance.memory().writeI32(retPtr, 0)
+                    instance.memory().writeI32(retPtr + 4, 0)
+            }
+            Array.emptyLongArray
+        }
+    }
+
+    private val numberGet: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val handle = args(0).toInt
+            val retPtr = args(1).toInt
+            get(handle) match {
+                case n: java.lang.Number =>
+                    instance.memory().writeI32(retPtr, 0) // wasm-bindgen: is-valid flag
+                    instance
+                        .memory()
+                        .writeLong(retPtr + 8, java.lang.Double.doubleToLongBits(n.doubleValue))
+                case _ =>
+                    instance.memory().writeI32(retPtr, 1) // 1 == NaN / not-a-number
+            }
+            Array.emptyLongArray
+        }
+    }
+
+    private val bigintGetAsI64: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val handle = args(0).toInt
+            val retPtr = args(1).toInt
+            get(handle) match {
+                case b: java.math.BigInteger =>
+                    instance.memory().writeI32(retPtr, 0)
+                    instance.memory().writeLong(retPtr + 8, b.longValue)
+                case _ =>
+                    instance.memory().writeI32(retPtr, 1)
+            }
+            Array.emptyLongArray
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Debug / throw.
+    // ------------------------------------------------------------------
+
+    private val debugString: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val handle = args(0).toInt
+            val retPtr = args(1).toInt
+            val s = String.valueOf(get(handle))
+            val utf8 = s.getBytes(StandardCharsets.UTF_8)
+            val malloc = instance.`export`("__wbindgen_malloc")
+            val ptr = malloc.apply(utf8.length.toLong, 1L)(0).toInt
+            instance.memory().write(ptr, utf8)
+            instance.memory().writeI32(retPtr, ptr)
+            instance.memory().writeI32(retPtr + 4, utf8.length)
+            Array.emptyLongArray
+        }
+    }
+
+    private val wbindgenThrow: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val ptr = args(0).toInt
+            val len = args(1).toInt
+            val msg = readString(instance, ptr, len)
+            throw new RuntimeException(s"wasm-bindgen threw: $msg")
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // No-op utilities.
+    // ------------------------------------------------------------------
+
+    /** One-argument no-op host function. Used for closure-cleanup hooks that the JVM GC handles
+      * implicitly — we acknowledge the call and move on.
+      */
+    private val noop1: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
     }
 }
 
