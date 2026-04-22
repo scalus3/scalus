@@ -81,7 +81,11 @@ final class WbindgenAbi {
       "__wbg__wbg_cb_unref_" -> noop1,
       // JS built-in constructors / helpers.
       "__wbg_Error_" -> newError,
-      "__wbg_Number_" -> newNumber
+      "__wbg_Number_" -> newNumber,
+      // Runtime init — JS builds a WASM-level table and pre-populates
+      // slots 0..3 with [undefined, null, true, false]. Our JVM externref table already owns
+      // slots 0..3; no WASM-level table to grow on this side, so this is a no-op.
+      "__wbindgen_init_externref_table" -> noop0
     )
 
     // ------------------------------------------------------------------
@@ -256,6 +260,7 @@ final class WbindgenAbi {
             val ptr = args(0).toInt
             val len = args(1).toInt
             val msg = readString(instance, ptr, len)
+            WbindgenAbi.logger.warn(s"wasm-bindgen threw: $msg")
             throw new RuntimeException(s"wasm-bindgen threw: $msg")
         }
     }
@@ -268,6 +273,11 @@ final class WbindgenAbi {
       * implicitly — we acknowledge the call and move on.
       */
     private val noop1: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
+    }
+
+    /** Zero-arg no-op — same shape as `noop1` but for imports with no params. */
+    private val noop0: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
     }
 
@@ -289,9 +299,13 @@ final class WbindgenAbi {
         }
     }
 
-    /** `(externref) -> externref` — `Number(arg)`. Coerces a JS value to its numeric form:
-      * numbers pass through, strings parse as doubles, booleans become 0/1, null becomes 0,
-      * anything else that can't coerce becomes NaN (java.lang.Double.NaN).
+    /** `(externref) -> externref` — matches JS `Number(arg)` coercion exactly:
+      *   - `null` → `0`
+      *   - `undefined` → `NaN`
+      *   - numbers pass through
+      *   - empty string → `0`, whitespace-only → `0`, otherwise parseFloat semantics
+      *   - `true` → `1`, `false` → `0`
+      *   - anything else → `NaN`
       */
     private val newNumber: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -301,8 +315,13 @@ final class WbindgenAbi {
                 case WbindgenAbi.Undefined   => java.lang.Double.valueOf(Double.NaN)
                 case n: java.lang.Number     => java.lang.Double.valueOf(n.doubleValue)
                 case s: String =>
-                    try java.lang.Double.valueOf(s)
-                    catch { case _: NumberFormatException => java.lang.Double.valueOf(Double.NaN) }
+                    val trimmed = s.trim
+                    if trimmed.isEmpty then java.lang.Double.valueOf(0.0)
+                    else
+                        try java.lang.Double.valueOf(trimmed)
+                        catch
+                            case _: NumberFormatException =>
+                                java.lang.Double.valueOf(Double.NaN)
                 case java.lang.Boolean.TRUE  => java.lang.Double.valueOf(1.0)
                 case java.lang.Boolean.FALSE => java.lang.Double.valueOf(0.0)
                 case _                       => java.lang.Double.valueOf(Double.NaN)
@@ -313,6 +332,9 @@ final class WbindgenAbi {
 }
 
 object WbindgenAbi {
+
+    private val logger: scribe.Logger =
+        scribe.Logger("scalus.cardano.node.stream.engine.snapshot.mithril.WbindgenAbi")
 
     /** Sentinel that stands in for JavaScript's `undefined` in the externref table. The
       * reference is compared by identity, so any unique object would do; we pick a dedicated

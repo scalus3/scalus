@@ -92,6 +92,20 @@ object MithrilWasmRuntime {
         store.addFunction(hostFunctions*)
         val instance = store.instantiate("mithril", module)
 
+        // wasm-pack --target nodejs emits `__wbindgen_start` as an export (not as the module's
+        // start section) that the JS glue calls right after instantiation — it initialises
+        // Rust's runtime, registers the panic hook, and primes lazy statics. If we skip it,
+        // the first real call trips on uninitialised runtime state and panics with an
+        // uninformative TrapException.
+        val startFn = instance.`export`("__wbindgen_start")
+        if startFn != null then
+            try startFn.apply()
+            catch {
+                case t: Throwable =>
+                    logger.error(s"__wbindgen_start failed: ${t.getMessage}", t)
+                    throw t
+            }
+
         val report = InstantiationReport(
           totalImports = fnImports.size,
           resolvedByCaller = fnImports.count(i => resolve(i.name()).isDefined),
@@ -135,10 +149,18 @@ object MithrilWasmRuntime {
       */
     private def unimplementedImport(name: String): WasmFunctionHandle =
         new WasmFunctionHandle {
-            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-                throw new UnsupportedOperationException(
-                  s"Mithril WASM called host import '$name' which is not yet implemented — " +
-                      "see scalus-chain-store-mithril M10b.P2."
-                )
+            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+                val argStr =
+                    if args == null || args.length == 0 then "()"
+                    else args.map(_.toLong).mkString("(", ", ", ")")
+                val msg =
+                    s"Mithril WASM called unimplemented host import '$name'$argStr — " +
+                        "see scalus-chain-store-mithril M10b.P2."
+                logger.warn(msg)
+                throw new UnsupportedOperationException(msg)
+            }
         }
+
+    private val logger: scribe.Logger =
+        scribe.Logger("scalus.cardano.node.stream.engine.snapshot.mithril.MithrilWasmRuntime")
 }
