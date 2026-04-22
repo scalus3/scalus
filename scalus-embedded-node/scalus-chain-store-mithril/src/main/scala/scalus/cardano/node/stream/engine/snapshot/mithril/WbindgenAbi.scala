@@ -44,6 +44,11 @@ final class WbindgenAbi {
       */
     private val localStorageData: mutable.LinkedHashMap[String, String] = mutable.LinkedHashMap.empty
 
+    /** Cached `__wbindgen_malloc` export — looked up lazily the first time a handler needs to
+      * copy a host string back into WASM memory. One lookup per WASM instance, not per call.
+      */
+    @volatile private var cachedMalloc: com.dylibso.chicory.runtime.ExportFunction = null
+
     /** Allocate a new externref slot holding `obj`. */
     def alloc(obj: AnyRef | Null): Int = {
         table.append(obj)
@@ -425,13 +430,20 @@ final class WbindgenAbi {
     }
 
     /** All four `static_accessor_*` imports resolve to the same globalThis handle. */
-    private val staticGlobal: WasmFunctionHandle = new WasmFunctionHandle {
-        private var cached: Int = -1
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            if cached < 0 then cached = alloc(JsGlobal)
-            Array(cached.toLong)
+    private val staticGlobal: WasmFunctionHandle = singletonHandle(JsGlobal)
+
+    /** Builds a zero-arg WASM import that always returns the same externref handle — the handle
+      * is allocated lazily on first call (we can't alloc during field init without ordering
+      * worries, and these are rarely invoked before real work).
+      */
+    private def singletonHandle(singleton: AnyRef): WasmFunctionHandle =
+        new WasmFunctionHandle {
+            @volatile private var cached: Int = -1
+            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+                if cached < 0 then cached = alloc(singleton)
+                Array(cached.toLong)
+            }
         }
-    }
 
     // ------------------------------------------------------------------
     // Polymorphic reflection.
@@ -507,15 +519,11 @@ final class WbindgenAbi {
                                 case k: String => o.entries(k) = get(args(2).toInt)
                                 case _         => ()
                             }
-                        case u: JsUint8Array =>
-                            // Typed-array element set: rarely used from Rust directly; stub.
-                            ()
-                        case _ => ()
+                        case _: JsUint8Array => ()
+                        case _               => ()
                     }
                 case _ => ()
             }
-            // Some variants return a boolean/ref; safest is to push undefined so call sites that
-            // ignore the result work, and call sites that expect true/false get Undefined -> 0.
             if args.length == 3 then Array.emptyLongArray
             else Array(alloc(WbindgenAbi.Undefined).toLong)
         }
@@ -523,15 +531,10 @@ final class WbindgenAbi {
 
     private val hasKey: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val container = get(args(0).toInt)
-            val key = get(args(1).toInt)
-            val present = container match {
-                case m: JsMap    => m.entries.contains(key)
-                case o: JsObject => key match {
-                        case k: String => o.entries.contains(k)
-                        case _         => false
-                    }
-                case _ => false
+            val present = (get(args(0).toInt), get(args(1).toInt)) match {
+                case (m: JsMap, k)               => m.entries.contains(k)
+                case (o: JsObject, k: String)    => o.entries.contains(k)
+                case _                           => false
             }
             Array(if present then 1L else 0L)
         }
@@ -564,13 +567,7 @@ final class WbindgenAbi {
         }
     }
 
-    private val iteratorSymbol: WasmFunctionHandle = new WasmFunctionHandle {
-        private var cached: Int = -1
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            if cached < 0 then cached = alloc(JsIteratorSymbol)
-            Array(cached.toLong)
-        }
-    }
+    private val iteratorSymbol: WasmFunctionHandle = singletonHandle(JsIteratorSymbol)
 
     private val entriesFn: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -788,16 +785,12 @@ final class WbindgenAbi {
         }
     }
 
+    /** Accept the task; drop it. A real executor will come with the async bridge. Both the
+      * `void`-returning and `externref`-returning signature variants are in the module; be
+      * permissive and let WASM ignore the (non-existent) result for the externref variant.
+      */
     private val queueMicrotaskHandler: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            // Accept the task; drop it on the floor for now. A future commit will wire this to
-            // a real executor. Arity 1 variant returns a promise-like; arity 0 returns nothing.
-            if args.length > 0 then {
-                // no-op: the callback is a closure handle we can't invoke yet.
-            }
-            // Signature variants both exist (ret void vs ret externref); be permissive.
-            Array.emptyLongArray
-        }
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
     }
 
     private val setTimeoutHandler: WasmFunctionHandle = new WasmFunctionHandle {
@@ -886,25 +879,10 @@ final class WbindgenAbi {
         }
     }
 
-    private val requestSetCache: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            get(args(0).toInt) match {
-                case r: JsRequest => r.cache = args(1).toInt
-                case _            => ()
-            }
-            Array.emptyLongArray
-        }
-    }
+    private val requestSetCache: WasmFunctionHandle = requestSetIntField((r, v) => r.cache = v)
 
-    private val requestSetCredentials: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            get(args(0).toInt) match {
-                case r: JsRequest => r.credentials = args(1).toInt
-                case _            => ()
-            }
-            Array.emptyLongArray
-        }
-    }
+    private val requestSetCredentials: WasmFunctionHandle =
+        requestSetIntField((r, v) => r.credentials = v)
 
     private val requestSetHeaders: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -933,15 +911,23 @@ final class WbindgenAbi {
         }
     }
 
-    private val requestSetMode: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            get(args(0).toInt) match {
-                case r: JsRequest => r.mode = args(1).toInt
-                case _            => ()
+    private val requestSetMode: WasmFunctionHandle = requestSetIntField((r, v) => r.mode = v)
+
+    /** Factory for `__wbg_set_{mode,cache,credentials}_*` — all have signature
+      * `(request, i32) -> ()` and just stash the int on the [[JsRequest]] for the fetch bridge
+      * to consult later. The int semantics come from `web_sys::RequestMode` etc. — they're
+      * opaque to us until a real fetch is wired.
+      */
+    private def requestSetIntField(setter: (JsRequest, Int) => Unit): WasmFunctionHandle =
+        new WasmFunctionHandle {
+            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+                get(args(0).toInt) match {
+                    case r: JsRequest => setter(r, args(1).toInt)
+                    case _            => ()
+                }
+                Array.emptyLongArray
             }
-            Array.emptyLongArray
         }
-    }
 
     private val requestSetSignal: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -1000,13 +986,7 @@ final class WbindgenAbi {
     // localStorage (in-memory stand-in).
     // ------------------------------------------------------------------
 
-    private val localStorageGet: WasmFunctionHandle = new WasmFunctionHandle {
-        private var cached: Int = -1
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            if cached < 0 then cached = alloc(JsLocalStorage)
-            Array(cached.toLong)
-        }
-    }
+    private val localStorageGet: WasmFunctionHandle = singletonHandle(JsLocalStorage)
 
     /** `__wbg_getItem_(ret_ptr, storage_handle, key_ptr, key_len)` — writes value or (0,0) to retPtr. */
     private val localStorageGetItem: WasmFunctionHandle = new WasmFunctionHandle {
@@ -1065,11 +1045,15 @@ final class WbindgenAbi {
     /** Write a (ptr, len) pair for a newly-malloced UTF-8 copy of `s` at `retPtr`. */
     private def writeStringRet(instance: Instance, retPtr: Int, s: String): Unit = {
         val utf8 = s.getBytes(StandardCharsets.UTF_8)
-        val malloc = instance.`export`("__wbindgen_malloc")
-        val ptr = malloc.apply(utf8.length.toLong, 1L)(0).toInt
+        val ptr = malloc(instance).apply(utf8.length.toLong, 1L)(0).toInt
         instance.memory().write(ptr, utf8)
         instance.memory().writeI32(retPtr, ptr)
         instance.memory().writeI32(retPtr + 4, utf8.length)
+    }
+
+    private def malloc(instance: Instance): com.dylibso.chicory.runtime.ExportFunction = {
+        if cachedMalloc == null then cachedMalloc = instance.`export`("__wbindgen_malloc")
+        cachedMalloc
     }
 }
 

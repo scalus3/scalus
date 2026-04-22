@@ -118,13 +118,13 @@ object MithrilWasmRuntime {
       * a hash of the binding's Rust signature and changes on ABI bumps; the prefix is stable.
       * Stripping the hash gives the semantic short name we register handlers against.
       */
-    private[mithril] def stripHash(name: String): String = {
-        val HashSuffix = "_[0-9a-f]{16}$".r
+    private[mithril] def stripHash(name: String): String =
         HashSuffix.findFirstIn(name) match {
             case Some(m) => name.dropRight(m.length) + "_"
             case None    => name
         }
-    }
+
+    private val HashSuffix = "_[0-9a-f]{16}$".r
 
     final case class InstantiationReport(
         totalImports: Int,
