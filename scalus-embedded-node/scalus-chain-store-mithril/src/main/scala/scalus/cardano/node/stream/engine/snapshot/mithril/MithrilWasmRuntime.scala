@@ -17,7 +17,32 @@ import scala.jdk.CollectionConverters.*
   * [[unimplementedImport]], which throws with a concrete name — so driving the module
   * incrementally reveals exactly which imports any given code path hits.
   */
-final class MithrilWasmRuntime private (val instance: Instance)
+final class MithrilWasmRuntime private (val instance: Instance) {
+
+    /** Export lookup that throws if the name isn't present — nicer than the raw nullable. */
+    def exportFn(name: String): com.dylibso.chicory.runtime.ExportFunction = {
+        val fn = instance.`export`(name)
+        if fn == null then throw new NoSuchElementException(s"WASM export '$name' not found")
+        fn
+    }
+
+    /** wasm-bindgen string-passing: allocate WASM memory, write UTF-8 bytes, return `(ptr, len)`.
+      * The `1` alignment argument matches the JS glue (see `passStringToWasm0`).
+      */
+    def passString(s: String): (Int, Int) = {
+        val bytes = s.getBytes(java.nio.charset.StandardCharsets.UTF_8)
+        val malloc = exportFn("__wbindgen_malloc")
+        val ptr = malloc.apply(bytes.length.toLong, 1L)(0).toInt
+        instance.memory().write(ptr, bytes)
+        (ptr, bytes.length)
+    }
+
+    /** Read a UTF-8 string of `len` bytes starting at `ptr` from WASM memory. */
+    def readString(ptr: Int, len: Int): String = {
+        val bytes = instance.memory().readBytes(ptr, len)
+        new String(bytes, java.nio.charset.StandardCharsets.UTF_8)
+    }
+}
 
 object MithrilWasmRuntime {
 

@@ -24,4 +24,19 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
                 Option(exports.function("__wbg_mithrilclient_free")).isDefined
         assert(hasCtor, "expected mithrilclient_* exports to be reachable")
     }
+
+    test("driver: attempt mithrilclient_new, surfacing the first unimplemented host import") {
+        val abi = new WbindgenAbi
+        val (rt, report) = MithrilWasmRuntime.instantiate(abi.defaultImports)
+        info(s"abi-bridged: resolved=${report.resolvedByCaller}, stubbed=${report.stubbed}")
+
+        val (aggPtr, aggLen) = rt.passString("https://aggregator.example.test")
+        val (keyPtr, keyLen) = rt.passString("genesis_vk_placeholder")
+
+        val caught = scala.util.Try(
+          rt.exportFn("mithrilclient_new")
+              .apply(aggPtr.toLong, aggLen.toLong, keyPtr.toLong, keyLen.toLong, 0L)
+        )
+        info(s"mithrilclient_new outcome: $caught")
+    }
 }
