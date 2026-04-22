@@ -61,6 +61,7 @@ object OxBlockchainStreamProvider {
         config.chainSync match
             case ChainSyncSource.Synthetic =>
                 val backup = buildBackup(config.backup)
+                bootstrapIfNeeded(config, persistence)
                 val engine =
                     buildEngine(config, backup, persistence, config.fallbackReplaySources)
                 new OxBlockchainStreamProvider(
@@ -71,6 +72,26 @@ object OxBlockchainStreamProvider {
                 connectN2N(config, n, persistence)
             case ChainSyncSource.N2C(_) =>
                 throw UnsupportedSourceException("ChainSyncSource.N2C is not wired until M7")
+    }
+
+    /** Synchronous snapshot bootstrap — direct-style. */
+    private def bootstrapIfNeeded(
+        config: StreamProviderConfig,
+        persistence: EnginePersistenceStore
+    )(using ExecutionContext): Unit = config.bootstrap.foreach { source =>
+        val warmTip =
+            Await.result(persistence.load(), Duration.Inf).flatMap(_.snapshot.flatMap(_.tip))
+        if warmTip.isEmpty then {
+            val store = config.chainStore.getOrElse(
+              throw scalus.cardano.node.stream.engine.snapshot.SnapshotError
+                  .SnapshotConfigError("bootstrap requires chainStore")
+            )
+            val _ = Await.result(
+              new scalus.cardano.node.stream.engine.snapshot.ChainStoreRestorer(store)
+                  .restore(source),
+              Duration.Inf
+            )
+        }
     }
 
     private def resolvePersistence(
@@ -143,6 +164,7 @@ object OxBlockchainStreamProvider {
         persistence: EnginePersistenceStore
     )(using ExecutionContext): OxBlockchainStreamProvider = {
         val backup = buildBackup(config.backup)
+        bootstrapIfNeeded(config, persistence)
         val fallbacks = config.fallbackReplaySources :+ buildPeerReplaySource(n)
         val engine = buildEngine(config, backup, persistence, fallbacks)
         val conn: NodeToNodeConnection = Await.result(

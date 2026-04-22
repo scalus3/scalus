@@ -823,6 +823,21 @@ lazy val scalusStreamingOx = project
       publish / skip := false
     )
 
+// Mithril-verified snapshot restore for ChainStore (M10.P4 stub; real
+// impl lands with M10b parser + M10c verifier). JVM-only because the
+// eventual cardano-node DB parser + Mithril crypto verifier depend on
+// native BLS12-381 and JVM-specific tar/zstd libraries.
+lazy val scalusChainStoreMithril = project
+    .in(file("scalus-embedded-node/scalus-chain-store-mithril"))
+    .dependsOn(scalusStreamingCore.jvm % "compile->compile;test->test")
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-chain-store-mithril",
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      publish / skip := false
+    )
+
 // RocksDB-backed ChainStore (M9.P2). JVM-only because rocksdbjni is a
 // native library. Split into its own module so the core streaming JAR
 // stays native-dep-free for users who don't need durable block history.

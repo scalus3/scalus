@@ -1,5 +1,7 @@
 package scalus.cardano.node.stream.engine
 
+import scalus.cardano.ledger.{TransactionInput, TransactionOutput, Utxos}
+import scalus.cardano.node.UtxoQuery
 import scalus.cardano.node.stream.{ChainPoint, ChainTip}
 import scalus.cardano.node.stream.engine.replay.ReplayError
 
@@ -58,6 +60,36 @@ trait ChainStore {
       * `close()` from its `preClose` teardown hook, after the chain-sync loop has stopped.
       */
     def close(): Unit
+}
+
+/** Optional mixin for [[ChainStore]] backends that also maintain a queryable UTxO set — the thing
+  * [[scalus.cardano.node.stream.StorageProfile.Heavy]] depends on.
+  *
+  * Not every ChainStore needs this. A block-history-only store (M7 replay via a file archive, a
+  * minimal SQL dump) legitimately doesn't, and the engine falls through to the configured backup as
+  * before. A store that does implement this trait must keep the UTxO set consistent with the block
+  * history across `appendBlock` / `rollbackTo` — the engine treats the two as co-authoritative for
+  * Heavy mode.
+  */
+trait ChainStoreUtxoSet { self: ChainStore =>
+
+    /** Query UTxOs matching `q` from the local store. `None` means "not answerable locally" — the
+      * caller (usually [[Engine.findUtxosLocal]]) falls through to the configured backup.
+      * `Some(utxos)` is authoritative, even if empty.
+      */
+    def findUtxosFromStore(q: UtxoQuery): Option[Utxos]
+
+    /** Bulk-replace the UTxO set with `utxos`, anchoring it at `tip`. Consumed by M10's
+      * `ChainStoreRestorer` when the store bootstraps from a snapshot; also available to apps that
+      * manage their own restore pipeline.
+      *
+      * Implementations must apply this atomically — either the whole new UTxO set lands or the
+      * store is unchanged. A crash mid-restore must leave the store discardable-and-re-runnable.
+      */
+    def restoreUtxoSet(
+        tip: ChainTip,
+        utxos: Iterator[(TransactionInput, TransactionOutput)]
+    ): Unit
 }
 
 object ChainStore {

@@ -37,9 +37,14 @@ case class StreamProviderConfig(
     backup: BackupSource,
     storage: StorageProfile = StorageProfile.Light,
     enginePersistence: EnginePersistenceStore | Null = null,
-    chainStore: Option[ChainStore] = None
+    chainStore: Option[ChainStore] = None,
+    bootstrap: Option[SnapshotSource] = None
 ) {
     require(appId.nonEmpty, "StreamProviderConfig.appId must be non-empty")
+    require(
+      bootstrap.isEmpty || chainStore.isDefined,
+      "StreamProviderConfig.bootstrap requires a chainStore to restore into"
+    )
 
     /** Replay sources derived from this config, in the order the engine should try them after the
       * rollback buffer. Today that's just the optional `chainStore`; Phase 2b will add a peer

@@ -51,21 +51,51 @@ object Fs2BlockchainStreamProvider {
         val persistence = resolvePersistence(config)
         config.chainSync match
             case ChainSyncSource.Synthetic =>
-                buildBackup(config.backup).flatMap { backup =>
-                    buildEngine(config, backup, persistence, config.fallbackReplaySources).map {
-                        engine =>
-                            new Fs2BlockchainStreamProvider(
-                              engine,
-                              persistenceTeardown(persistence, engine, config)
-                            )
-                    }
-                }
+                for {
+                    backup <- buildBackup(config.backup)
+                    _ <- bootstrapIfNeeded(config, persistence)
+                    engine <- buildEngine(config, backup, persistence, config.fallbackReplaySources)
+                } yield new Fs2BlockchainStreamProvider(
+                  engine,
+                  persistenceTeardown(persistence, engine, config)
+                )
             case n: ChainSyncSource.N2N =>
                 connectN2N(config, n, persistence)
             case ChainSyncSource.N2C(_) =>
                 IO.raiseError(
                   UnsupportedSourceException("ChainSyncSource.N2C is not wired until M7")
                 )
+    }
+
+    /** Run the snapshot-bootstrap path when the config has a source AND the engine has no warm
+      * restart tip. Warm-restart wins on disagreement (see
+      * `docs/local/claude/indexer/snapshot-bootstrap-m10.md` § *Interaction with existing
+      * milestones*).
+      */
+    private def bootstrapIfNeeded(
+        config: StreamProviderConfig,
+        persistence: EnginePersistenceStore
+    )(using ExecutionContext): IO[Unit] = config.bootstrap match {
+        case None => IO.unit
+        case Some(source) =>
+            IO.fromFuture(IO(persistence.load())).flatMap { persisted =>
+                val warmTip = persisted.flatMap(_.snapshot.flatMap(_.tip))
+                if warmTip.isDefined then IO.unit
+                else {
+                    val store = config.chainStore.getOrElse(
+                      // StreamProviderConfig's require guard already prevents this; we keep a
+                      // defence in depth for future-refactor safety.
+                      throw scalus.cardano.node.stream.engine.snapshot.SnapshotError
+                          .SnapshotConfigError("bootstrap requires chainStore")
+                    )
+                    IO.fromFuture(
+                      IO(
+                        new scalus.cardano.node.stream.engine.snapshot.ChainStoreRestorer(store)
+                            .restore(source)
+                      )
+                    ).void
+                }
+            }
     }
 
     /** Resolve `config.enginePersistence`: an explicit value wins; `null` falls back to a
@@ -162,6 +192,7 @@ object Fs2BlockchainStreamProvider {
     )(using Dispatcher[IO], ExecutionContext): IO[Fs2BlockchainStreamProvider] =
         for {
             backup <- buildBackup(config.backup)
+            _ <- bootstrapIfNeeded(config, persistence)
             fallbacks = config.fallbackReplaySources :+ buildPeerReplaySource(n)
             engine <- buildEngine(config, backup, persistence, fallbacks)
             conn <- IO.fromFuture(

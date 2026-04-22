@@ -144,7 +144,14 @@ final class Engine(
                 }
             }
             Some(union.toMap)
-        } else None
+        } else {
+            // No active bucket covers this query. If the ChainStore maintains a UTxO set
+            // ([[ChainStoreUtxoSet]] mixin), consult it before falling through to the backup.
+            chainStore match {
+                case Some(store: ChainStoreUtxoSet) => store.findUtxosFromStore(query)
+                case _                              => None
+            }
+        }
     }
 
     // ------------------------------------------------------------------
