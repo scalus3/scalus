@@ -20,9 +20,10 @@ object SnapshotSource {
       */
     case class File(path: Path) extends SnapshotSource
 
-    /** HTTP(S) download. `expectedSha256` is optional — when provided, the restorer refuses a
-      * snapshot whose body hash doesn't match, so third-party mirrors can serve the snapshot
-      * without the consumer having to trust the transport.
+    /** HTTP(S) download. `expectedSha256`, when set, is compared against a SHA-256 computed over
+      * the entire downloaded byte stream before the restorer trusts its content — lets third-party
+      * mirrors serve the snapshot without the consumer trusting the transport. `None` relies on the
+      * snapshot's internal footer hash alone (body integrity only, not header tampering).
       */
     case class Url(url: String, expectedSha256: Option[ByteString] = None) extends SnapshotSource
 

@@ -82,10 +82,8 @@ object OxBlockchainStreamProvider {
         val warmTip =
             Await.result(persistence.load(), Duration.Inf).flatMap(_.snapshot.flatMap(_.tip))
         if warmTip.isEmpty then {
-            val store = config.chainStore.getOrElse(
-              throw scalus.cardano.node.stream.engine.snapshot.SnapshotError
-                  .SnapshotConfigError("bootstrap requires chainStore")
-            )
+            // StreamProviderConfig's `require` enforces `bootstrap ⇒ chainStore.isDefined`.
+            val store = config.chainStore.get
             val _ = Await.result(
               new scalus.cardano.node.stream.engine.snapshot.ChainStoreRestorer(store)
                   .restore(source),

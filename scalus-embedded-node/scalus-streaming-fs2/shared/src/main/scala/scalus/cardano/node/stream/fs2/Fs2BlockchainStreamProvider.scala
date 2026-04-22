@@ -82,12 +82,9 @@ object Fs2BlockchainStreamProvider {
                 val warmTip = persisted.flatMap(_.snapshot.flatMap(_.tip))
                 if warmTip.isDefined then IO.unit
                 else {
-                    val store = config.chainStore.getOrElse(
-                      // StreamProviderConfig's require guard already prevents this; we keep a
-                      // defence in depth for future-refactor safety.
-                      throw scalus.cardano.node.stream.engine.snapshot.SnapshotError
-                          .SnapshotConfigError("bootstrap requires chainStore")
-                    )
+                    // StreamProviderConfig's `require` enforces `bootstrap ⇒ chainStore.isDefined`,
+                    // so the .get is safe: a malformed config can't reach this point.
+                    val store = config.chainStore.get
                     IO.fromFuture(
                       IO(
                         new scalus.cardano.node.stream.engine.snapshot.ChainStoreRestorer(store)

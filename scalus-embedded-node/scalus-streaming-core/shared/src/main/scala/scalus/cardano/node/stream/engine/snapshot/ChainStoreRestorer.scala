@@ -3,10 +3,11 @@ package scalus.cardano.node.stream.engine.snapshot
 import scalus.cardano.ledger.{TransactionInput, TransactionOutput}
 import scalus.cardano.node.stream.{ChainTip, SnapshotSource, UnsupportedSourceException}
 import scalus.cardano.node.stream.engine.{ChainStore, ChainStoreUtxoSet}
+import scalus.uplc.builtin.ByteString
 
-import java.io.InputStream
+import java.io.{BufferedInputStream, InputStream}
 import java.nio.file.Files
-import scala.collection.mutable
+import java.security.{DigestInputStream, MessageDigest}
 import scala.concurrent.{ExecutionContext, Future}
 
 import ChainStoreSnapshot.{Header, Record}
@@ -29,61 +30,111 @@ final class ChainStoreRestorer(store: ChainStore) {
       * [[SnapshotError]] on corruption / unsupported sources / I/O failure.
       */
     def restore(source: SnapshotSource)(using ExecutionContext): Future[ChainTip] =
-        Future(acquireStream(source)).map { in =>
-            try runRestore(in)
-            finally in.close()
+        Future(acquireStream(source)).map { case (in, expectedSha256) =>
+            // Wrap with DigestInputStream so Url's expectedSha256 can be cross-checked after
+            // the reader has drained the body.
+            val digest = MessageDigest.getInstance("SHA-256")
+            val wrapped = new DigestInputStream(new BufferedInputStream(in), digest)
+            try {
+                val tip = runRestore(wrapped)
+                expectedSha256.foreach { expected =>
+                    val got = digest.digest()
+                    if !java.util.Arrays.equals(got, expected.bytes) then
+                        throw SnapshotError.SnapshotCorrupted(
+                          "url sha256 mismatch: downloaded snapshot does not match " +
+                              "expectedSha256"
+                        )
+                }
+                tip
+            } finally wrapped.close()
         }
 
     // ------------------------------------------------------------------
     // Internal helpers.
     // ------------------------------------------------------------------
 
-    private def acquireStream(source: SnapshotSource): InputStream = source match {
-        case SnapshotSource.File(path)               => Files.newInputStream(path)
-        case SnapshotSource.Url(url, expectedSha256) =>
-            // Streaming HTTP: let java.net handle redirects and chunked transfer; the restorer
-            // then computes its own running hash. The `expectedSha256` cross-check happens
-            // inside `runRestore` — by then the body sha256 is fully computed.
-            val conn = new java.net.URI(url).toURL.openConnection()
-            conn.setConnectTimeout(30_000)
-            conn.setReadTimeout(60_000)
-            // Wrap the stream so the caller can enforce the sha256 check after iteration. We do
-            // the check via the reader's footer validation plus an outer cross-check below.
-            val _ = expectedSha256 // used inside runRestore via contextual capture
-            conn.getInputStream
-        case _: SnapshotSource.Mithril =>
-            throw UnsupportedSourceException(
-              "SnapshotSource.Mithril is a stub in M10 — the JVM Mithril verifier lands with M10b; " +
-                  "see indexer-node.md milestone 10b"
-            )
-    }
+    /** Return (stream, optional expected sha256 to verify after reading). */
+    private def acquireStream(source: SnapshotSource): (InputStream, Option[ByteString]) =
+        source match {
+            case SnapshotSource.File(path) =>
+                (Files.newInputStream(path), None)
+            case SnapshotSource.Url(url, expectedSha256) =>
+                val conn = new java.net.URI(url).toURL.openConnection()
+                conn.setConnectTimeout(30_000)
+                conn.setReadTimeout(60_000)
+                (conn.getInputStream, expectedSha256)
+            case _: SnapshotSource.Mithril =>
+                throw UnsupportedSourceException(
+                  "SnapshotSource.Mithril is a stub in M10 — parser lands with M10b, verifier " +
+                      "with M10c; see docs/local/claude/indexer/indexer-node.md"
+                )
+        }
 
+    /** Drive the reader: stream blocks into `appendBlock`, stream UTxO entries into
+      * `restoreUtxoSet` via an iterator adapter so neither the reader's blocks nor its UTxOs ever
+      * accumulate in JVM heap beyond the current record.
+      */
     private def runRestore(in: InputStream): ChainTip = {
         val reader = SnapshotReader(in)
         val header = reader.readHeader()
         val tip = header.tip
+        val recordIt = reader.records().buffered
 
-        // We stream blocks through appendBlock and buffer UTxO entries into an iterator for
-        // restoreUtxoSet. Streaming UTxOs directly requires a single restoreUtxoSet call that
-        // drains the snapshot reader lazily — doable, but more intricate. For a first cut,
-        // collect a bounded intermediate list so the restore is correct and testable; a
-        // chunked-streaming version is a follow-up if profiles show it matters.
-        val utxoBuf = mutable.ArrayBuffer.empty[(TransactionInput, TransactionOutput)]
+        // Phase 1: consume every block record at the front of the record stream. The writer is
+        // conventionally "blocks then UTxOs", but the reader tolerates interleaved by iterating
+        // greedily while the head is a block.
         var blocksSeen = 0L
-        var utxosSeen = 0L
-
-        reader.records().foreach {
-            case Record.BlockRecord(block) =>
-                store.appendBlock(block)
-                blocksSeen += 1
-            case Record.UtxoEntry(input, output) =>
-                utxoBuf += (input -> output)
-                utxosSeen += 1
+        while recordIt.hasNext && recordIt.head.isInstanceOf[Record.BlockRecord] do {
+            recordIt.next() match {
+                case Record.BlockRecord(b) =>
+                    store.appendBlock(b)
+                    blocksSeen += 1
+                case _ => // impossible; checked via isInstanceOf
+            }
         }
+
+        // Phase 2: the remainder is UTxO entries. Stream them into the store in one call so the
+        // backend can pipeline writes in batches without an intermediate full-heap materialisation.
+        // The counter is a var captured by the anonymous iterator — kept here rather than on a
+        // local class so the `utxoIt` expression inlines.
+        var utxosSeen: Long = 0L
+        val utxoIt: Iterator[(TransactionInput, TransactionOutput)] =
+            new Iterator[(TransactionInput, TransactionOutput)] {
+                def hasNext: Boolean = recordIt.hasNext
+                def next(): (TransactionInput, TransactionOutput) = recordIt.next() match {
+                    case Record.UtxoEntry(i, o) =>
+                        utxosSeen += 1
+                        (i, o)
+                    case other =>
+                        throw SnapshotError.SnapshotCorrupted(
+                          s"unexpected record type in UTxO body region: $other"
+                        )
+                }
+            }
+
+        if header.hasUtxoSet then {
+            utxoSet match {
+                case Some(u) =>
+                    u.restoreUtxoSet(tip, utxoIt)
+                case None =>
+                    throw SnapshotError.SnapshotConfigError(
+                      "snapshot advertises a UTxO set (contentFlags) but the configured " +
+                          "ChainStore does not implement ChainStoreUtxoSet"
+                    )
+            }
+        } else {
+            // Header doesn't promise a UTxO set; drain any entries defensively so the reader can
+            // read and validate the footer. A non-UTxO-advertising snapshot with stray entries
+            // is malformed — fail before `finish()`.
+            while utxoIt.hasNext do
+                throw SnapshotError.SnapshotCorrupted(
+                  "snapshot header has UtxoSet flag clear but body contains UtxoEntry records"
+                )
+        }
+
         reader.finish()
 
-        // Cross-check against the header's advisory counts. A mismatch means either the
-        // snapshot is corrupt or its writer lied; either way, refuse to trust it.
+        // Cross-check the header's advisory counts against observations.
         if header.blockCount != blocksSeen then
             throw SnapshotError.SnapshotCorrupted(
               s"header blockCount=${header.blockCount} but observed $blocksSeen blocks"
@@ -93,25 +144,11 @@ final class ChainStoreRestorer(store: ChainStore) {
               s"header utxoCount=${header.utxoCount} but observed $utxosSeen utxos"
             )
 
-        if utxoBuf.nonEmpty then {
-            utxoSet match {
-                case Some(u) => u.restoreUtxoSet(tip, utxoBuf.iterator)
-                case None =>
-                    throw SnapshotError.SnapshotConfigError(
-                      s"snapshot carries $utxosSeen UTxO entries but the configured ChainStore " +
-                          "does not implement ChainStoreUtxoSet"
-                    )
-            }
-        }
-
         tip
     }
 }
 
 object ChainStoreRestorer {
 
-    /** Factory with a sanity-check: a `bootstrap` source configured against a store that cannot
-      * restore the snapshot's full content fails loud at construction time.
-      */
     def apply(store: ChainStore): ChainStoreRestorer = new ChainStoreRestorer(store)
 }

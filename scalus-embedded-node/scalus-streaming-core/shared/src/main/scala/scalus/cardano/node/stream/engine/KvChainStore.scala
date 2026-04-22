@@ -48,9 +48,8 @@ final class KvChainStore(kv: KvStore) extends ChainStore with ChainStoreUtxoSet 
     }
 
     def appendBlock(block: AppliedBlock): Unit = {
-        val blockBytes = ByteString.unsafeFromArray(Cbor.encode(block).toByteArray)
         val writes = mutable.ArrayBuffer.empty[KvStore.Write]
-        writes += KvStore.Put(blockKey(block.point), blockBytes)
+        writes += KvStore.Put(blockKey(block.point), encodeCborBs(block))
         writes += KvStore.Put(
           indexKey(block.point.slot),
           ByteString.unsafeFromArray(block.point.blockHash.bytes)
@@ -77,9 +76,8 @@ final class KvChainStore(kv: KvStore) extends ChainStore with ChainStoreUtxoSet 
             }
             tx.outputs.iterator.zipWithIndex.foreach { (output, idx) =>
                 val input = TransactionInput(tx.id, idx)
-                val outBytes = ByteString.unsafeFromArray(Cbor.encode(output).toByteArray)
                 addedBuffer += (input -> output)
-                writes += KvStore.Put(utxoKey(input), outBytes)
+                writes += KvStore.Put(utxoKey(input), encodeCborBs(output))
                 utxoKeysOf(input, output).foreach { k =>
                     writes += KvStore.Put(utxoByKeyKey(k, input), UtxoByKeySentinel)
                 }
@@ -87,8 +85,7 @@ final class KvChainStore(kv: KvStore) extends ChainStore with ChainStoreUtxoSet 
         }
 
         val reverseDelta = ReverseDelta(addedBuffer.toVector, removedBuffer.toVector)
-        val deltaBytes = ByteString.unsafeFromArray(Cbor.encode(reverseDelta).toByteArray)
-        writes += KvStore.Put(deltaKey(block.point), deltaBytes)
+        writes += KvStore.Put(deltaKey(block.point), encodeCborBs(reverseDelta))
 
         kv.batch(writes.toSeq)
     }
@@ -96,13 +93,13 @@ final class KvChainStore(kv: KvStore) extends ChainStore with ChainStoreUtxoSet 
     def rollbackTo(to: ChainPoint): Unit = {
         // Delete every block / index / delta entry whose slot is strictly greater than `to.slot`.
         val staleBlockKeys =
-            kv.rangeScan(blocksPrefix(to.slot + 1), blocksPrefix(Long.MaxValue)).map(_._1).toList
+            kv.rangeScan(blocksPrefix(to.slot + 1), keyspaceEnd(BlocksPrefix)).map(_._1).toList
         val staleIndexKeys =
-            kv.rangeScan(indexKey(to.slot + 1), indexKey(Long.MaxValue)).map(_._1).toList
+            kv.rangeScan(indexKey(to.slot + 1), keyspaceEnd(IndexPrefix)).map(_._1).toList
 
         // Pull every reverse-delta whose slot > to.slot and invert them into UTxO writes.
         val staleDeltas =
-            kv.rangeScan(deltaPrefix(to.slot + 1), deltaPrefix(Long.MaxValue)).toList
+            kv.rangeScan(deltaPrefix(to.slot + 1), keyspaceEnd(DeltaPrefix)).toList
         val writes = mutable.ArrayBuffer.empty[KvStore.Write]
 
         // Invert deltas in reverse order (newest block first) so that adjacent same-input
@@ -118,8 +115,7 @@ final class KvChainStore(kv: KvStore) extends ChainStore with ChainStoreUtxoSet 
             }
             // Re-add previously-spent outputs: restore them to utxo + utxo-by-key.
             rev.removed.foreach { (input, output) =>
-                val outBytes = ByteString.unsafeFromArray(Cbor.encode(output).toByteArray)
-                writes += KvStore.Put(utxoKey(input), outBytes)
+                writes += KvStore.Put(utxoKey(input), encodeCborBs(output))
                 utxoKeysOf(input, output).foreach { k =>
                     writes += KvStore.Put(utxoByKeyKey(k, input), UtxoByKeySentinel)
                 }
@@ -195,37 +191,49 @@ final class KvChainStore(kv: KvStore) extends ChainStore with ChainStoreUtxoSet 
         tip: ChainTip,
         utxos: Iterator[(TransactionInput, TransactionOutput)]
     ): Unit = {
-        // Clear the existing UTxO + index keyspaces, then stream the new set in batches.
-        val oldPrimary = kv
-            .rangeScan(Array(UtxoPrefix).asBs, Array((UtxoPrefix + 1).toByte).asBs)
-            .map(_._1)
-            .toList
-        val oldIndex = kv
-            .rangeScan(
-              Array(UtxoByKeyPrefix).asBs,
-              Array((UtxoByKeyPrefix + 1).toByte).asBs
-            )
-            .map(_._1)
-            .toList
-        val clears: Seq[KvStore.Write] =
-            oldPrimary.map(KvStore.Delete.apply) ++ oldIndex.map(KvStore.Delete.apply)
+        // The restore has three bounded-memory phases. Each writes in batches of at most
+        // RestoreBatchSize entries so the JVM heap never holds more than that many Writes at
+        // once — important on mainnet-scale restores where the UTxO set has ~10M entries. The
+        // operation is not atomic as a whole (see ChainStore's scaladoc) but individual batches
+        // are; the tip is written LAST so a crash mid-restore leaves the store observably empty
+        // (no tip) rather than in a half-populated corrupt state.
+        //
+        //   Phase 1 — stream-delete every existing `utxo` + `utxo-by-key` entry.
+        //   Phase 2 — stream-write every new entry from the `utxos` iterator.
+        //   Phase 3 — atomically write the tip marker.
 
-        val RestoreBatchSize = 1024
+        streamDelete(Array[Byte](UtxoPrefix).asBs, keyspaceEnd(UtxoPrefix))
+        streamDelete(Array[Byte](UtxoByKeyPrefix).asBs, keyspaceEnd(UtxoByKeyPrefix))
+
         val buf = mutable.ArrayBuffer.empty[KvStore.Write]
-        buf ++= clears
         utxos.foreach { (input, output) =>
-            val outBytes = ByteString.unsafeFromArray(Cbor.encode(output).toByteArray)
-            buf += KvStore.Put(utxoKey(input), outBytes)
+            buf += KvStore.Put(utxoKey(input), encodeCborBs(output))
             utxoKeysOf(input, output).foreach { k =>
                 buf += KvStore.Put(utxoByKeyKey(k, input), UtxoByKeySentinel)
             }
-            if buf.size >= RestoreBatchSize then {
+            if buf.size >= KvChainStore.RestoreBatchSize then {
                 kv.batch(buf.toSeq)
                 buf.clear()
             }
         }
-        buf += KvStore.Put(tipKey, encodeTip(tip))
-        kv.batch(buf.toSeq)
+        if buf.nonEmpty then kv.batch(buf.toSeq)
+
+        kv.batch(Seq(KvStore.Put(tipKey, encodeTip(tip))))
+    }
+
+    /** Stream-delete every key in `[from, until)` in batches so the working set never exceeds
+      * [[KvChainStore.RestoreBatchSize]]. Each batch is atomic; the whole operation is not.
+      */
+    private def streamDelete(from: ByteString, until: ByteString): Unit = {
+        val buf = mutable.ArrayBuffer.empty[KvStore.Write]
+        kv.rangeScan(from, until).foreach { (k, _) =>
+            buf += KvStore.Delete(k)
+            if buf.size >= KvChainStore.RestoreBatchSize then {
+                kv.batch(buf.toSeq)
+                buf.clear()
+            }
+        }
+        if buf.nonEmpty then kv.batch(buf.toSeq)
     }
 
     def tip: Option[ChainTip] = kv.get(tipKey).map(decodeTip)
@@ -262,6 +270,13 @@ object KvChainStore {
     private val UtxoByKeyPrefix: Byte = 0x05
     private val DeltaPrefix: Byte = 0x06
 
+    /** Cap on the number of [[KvStore.Write]] entries held in-heap at any moment during
+      * [[KvChainStore.restoreUtxoSet]]. 1024 is a compromise: small enough that a mainnet restore
+      * peaks at a few MB of write buffers; large enough that per-batch overhead (RocksDB
+      * write-ahead log fsync, borer encode setup) doesn't dominate.
+      */
+    private[engine] val RestoreBatchSize: Int = 1024
+
     /** Sentinel value for utxo-by-key entries. The entries carry their meaning in the key; the
       * value is unused. Using a distinctive byte (0x01) makes accidental raw reads obviously
       * non-empty without costing storage.
@@ -270,6 +285,19 @@ object KvChainStore {
         ByteString.unsafeFromArray(Array[Byte](0x01))
 
     extension (a: Array[Byte]) private[engine] def asBs: ByteString = ByteString.unsafeFromArray(a)
+
+    /** Exclusive upper bound covering every key in a prefix-byte keyspace. `<prefix>*` keys are all
+      * lexicographically less than `<prefix + 1>` (a single byte), so this is a clean keyspace-end
+      * sentinel even for entries with multi-byte payloads at `slot == Long.MaxValue`.
+      */
+    private[engine] def keyspaceEnd(prefix: Byte): ByteString =
+        ByteString.unsafeFromArray(Array[Byte]((prefix + 1).toByte))
+
+    /** CBOR encode helper — replaces the `Cbor.encode(x).toByteArray` / `ByteString
+      * .unsafeFromArray(_)` pattern repeated throughout this module.
+      */
+    private[engine] inline def encodeCborBs[A: Encoder](a: A): ByteString =
+        ByteString.unsafeFromArray(Cbor.encode(a).toByteArray)
 
     /** Key for a block at `point` — prefix + slot (big-endian u64) + hash (32 bytes). */
     private[engine] def blockKey(point: ChainPoint): ByteString = {
@@ -312,36 +340,38 @@ object KvChainStore {
     private[engine] def utxoKey(input: TransactionInput): ByteString =
         prefixedCbor(UtxoPrefix, Cbor.encode(input).toByteArray)
 
+    /** CBOR-encode a [[UtxoKey]] for inclusion in the `utxo-by-key` composite key. Same encoding
+      * [[scalus.cardano.node.stream.engine.persistence.PersistenceCodecs]] uses for the engine's
+      * own journal, so the two stores share one source of truth.
+      */
+    private[engine] def encodeUtxoKeyForIndex(key: UtxoKey): Array[Byte] = {
+        import scalus.cardano.node.stream.engine.persistence.PersistenceCodecs.given
+        Cbor.encode(key).toByteArray
+    }
+
     /** Key for the secondary UTxO-by-key index:
       * `<prefix=UtxoByKeyPrefix> <u32-BE len-ukey-cbor> <ukey-cbor> <input-cbor>`.
       *
       * The length-prefix on the ukey-cbor makes prefix range-scans unambiguous: two different
       * UtxoKeys can share a CBOR prefix without the scan over one picking up entries for the other.
       */
-    private[engine] def utxoByKeyKey(key: UtxoKey, input: TransactionInput): ByteString = {
-        val ukey = {
-            import scalus.cardano.node.stream.engine.persistence.PersistenceCodecs.given
-            Cbor.encode(key).toByteArray
-        }
-        val inputBytes = Cbor.encode(input).toByteArray
-        val buf = new Array[Byte](1 + 4 + ukey.length + inputBytes.length)
-        buf(0) = UtxoByKeyPrefix
-        ByteBuffer.wrap(buf, 1, 4).order(ByteOrder.BIG_ENDIAN).putInt(ukey.length)
-        System.arraycopy(ukey, 0, buf, 5, ukey.length)
-        System.arraycopy(inputBytes, 0, buf, 5 + ukey.length, inputBytes.length)
-        ByteString.unsafeFromArray(buf)
-    }
+    private[engine] def utxoByKeyKey(key: UtxoKey, input: TransactionInput): ByteString =
+        utxoByKeyComposite(encodeUtxoKeyForIndex(key), Some(Cbor.encode(input).toByteArray))
 
     /** Range-scan prefix for all inputs indexed under `key`. */
-    private[engine] def utxoByKeyPrefix(key: UtxoKey): ByteString = {
-        val ukey = {
-            import scalus.cardano.node.stream.engine.persistence.PersistenceCodecs.given
-            Cbor.encode(key).toByteArray
-        }
-        val buf = new Array[Byte](1 + 4 + ukey.length)
+    private[engine] def utxoByKeyPrefix(key: UtxoKey): ByteString =
+        utxoByKeyComposite(encodeUtxoKeyForIndex(key), None)
+
+    private def utxoByKeyComposite(
+        ukey: Array[Byte],
+        inputBytes: Option[Array[Byte]]
+    ): ByteString = {
+        val tailLen = inputBytes.map(_.length).getOrElse(0)
+        val buf = new Array[Byte](1 + 4 + ukey.length + tailLen)
         buf(0) = UtxoByKeyPrefix
         ByteBuffer.wrap(buf, 1, 4).order(ByteOrder.BIG_ENDIAN).putInt(ukey.length)
         System.arraycopy(ukey, 0, buf, 5, ukey.length)
+        inputBytes.foreach(b => System.arraycopy(b, 0, buf, 5 + ukey.length, b.length))
         ByteString.unsafeFromArray(buf)
     }
 

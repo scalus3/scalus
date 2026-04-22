@@ -83,8 +83,12 @@ trait ChainStoreUtxoSet { self: ChainStore =>
       * `ChainStoreRestorer` when the store bootstraps from a snapshot; also available to apps that
       * manage their own restore pipeline.
       *
-      * Implementations must apply this atomically — either the whole new UTxO set lands or the
-      * store is unchanged. A crash mid-restore must leave the store discardable-and-re-runnable.
+      * **Not required to be atomic.** A mainnet-sized UTxO set can't fit in a single write batch on
+      * every backend, so implementations stream the restore in chunks. A crash mid-restore leaves
+      * the store in a partial state; callers must treat it as discardable-and-re-runnable (wipe and
+      * re-invoke `restoreUtxoSet`). Implementations MUST write `tip` last, so a partially-restored
+      * store has no tip and is observably invalid — the provider's cold-start guard (no persisted
+      * tip) triggers a fresh bootstrap on the next run.
       */
     def restoreUtxoSet(
         tip: ChainTip,
