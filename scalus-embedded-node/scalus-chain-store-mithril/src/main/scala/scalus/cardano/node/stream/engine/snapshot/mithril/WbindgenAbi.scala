@@ -95,8 +95,13 @@ final class WbindgenAbi {
       "__wbg_error_" -> consoleError,
       "__wbg_log_" -> consoleLog,
       "__wbindgen_init_externref_table" -> noop0,
-      // ---- Casts — identity at the handle level: caller has already boxed into externref. ----
-      "__wbindgen_cast_" -> castIdentity,
+      // ---- Casts ----
+      //
+      // `__wbindgen_cast_*` has multiple distinct semantics per hash in this pin: (ptr,len)->String,
+      // U64->BigInt, F64->Number, and two closure-wrap casts. The short-name fallback below
+      // covers the two numeric casts (single-arg cast is double-per-convention); the string-cast
+      // and closure-cast hashes are registered by full name via [[pinnedImports]].
+      "__wbindgen_cast_" -> castNumericFallback,
       // ---- Static global accessors — all resolve to the singleton globalThis. ----
       "__wbg_static_accessor_GLOBAL_" -> staticGlobal,
       "__wbg_static_accessor_GLOBAL_THIS_" -> staticGlobal,
@@ -122,9 +127,15 @@ final class WbindgenAbi {
       "__wbg_postMessage_" -> noopAnyArgs,
       "__wbg_prototypesetcall_" -> noopAnyArgs,
       // ---- JS ctors ----
-      "__wbg_new_" -> genericNew,
-      "__wbg_new_0_" -> newArrayOrMap,
-      "__wbg_new_no_args_" -> newObjectNoArgs,
+      //
+      // Hash-insensitive short names below handle the ctor variants whose semantics the JS
+      // glue uniquely identifies by the short name. The 0-arg and (i32,i32) new ctors whose
+      // short name is just `__wbg_new_` all have distinct semantics depending on the hash
+      // (new Array / Object / Headers / Map / AbortController / Promise / Error / BroadcastChannel),
+      // so those live in [[pinnedImports]] with hash-specific bindings. Pin bump: re-read the
+      // upstream JS glue (shipped alongside the wasm blob) and update that map.
+      "__wbg_new_0_" -> newDate,
+      "__wbg_new_no_args_" -> newFunctionStub,
       "__wbg_new_from_slice_" -> newUint8ArrayFromSlice,
       "__wbg_new_with_byte_offset_and_length_" -> newUint8ArrayView,
       "__wbg_new_with_str_and_init_" -> newRequest,
@@ -402,28 +413,20 @@ final class WbindgenAbi {
     // Casts & static accessors.
     // ------------------------------------------------------------------
 
-    /** `__wbindgen_cast_*`: coerce between representations. Rust-side `u32 -> externref`,
-      * `f64 -> externref`, `i64 -> externref`, `(ptr, len) -> externref-string`. Since our
-      * externrefs are already unified on the JVM side, a cast is an identity/allocation —
-      * (ptr, len) becomes a String handle, numeric primitives become boxed handles.
+    /** Single-arg `__wbindgen_cast_*` fallback for the numeric casts (F64 and U64 BigInt).
+      * Hash-specific pinnings in [[pinnedImports]] override this for the two-arg string cast
+      * and the closure casts.
       */
-    private val castIdentity: WasmFunctionHandle = new WasmFunctionHandle {
+    private val castNumericFallback: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val boxed: AnyRef = args.length match {
                 case 1 =>
-                    // Single-arg cast: either i64 bigint or f64 number. Can't tell from args alone,
-                    // so treat long-encoded value as double iff the bits are a valid NaN/inf/double
-                    // that differs from the integer interpretation. wasm-bindgen always picks one
-                    // signature per call-site, so which branch we take is deterministic per hash;
-                    // passing Double through BigInteger semantics for number-typed call-sites
-                    // would break numeric equality, so we prefer Double here (Number is more
-                    // common in serde_wasm_bindgen output than BigInt).
                     java.lang.Double.valueOf(java.lang.Double.longBitsToDouble(args(0).toLong))
-                case 2 =>
-                    // (ptr, len) string
-                    readString(instance, args(0).toInt, args(1).toInt)
                 case _ =>
-                    throw new RuntimeException(s"unexpected cast arity: ${args.length}")
+                    throw new RuntimeException(
+                      s"unexpected cast arity: ${args.length} — hash-specific pinned handler " +
+                          "should have matched first; see WbindgenAbi.pinnedImports"
+                    )
             }
             Array(alloc(boxed).toLong)
         }
@@ -664,26 +667,73 @@ final class WbindgenAbi {
     // Constructors.
     // ------------------------------------------------------------------
 
-    /** Zero-arg ctors: `new Array()`, `new Map()`, `new Object()`, `new Headers()`. The concrete
-      * ctor a given hash resolves to is determined by the caller's use; distinguishing would
-      * require per-hash dispatch. In practice the caller only writes to its result, and the
-      * reads/writes we service (Array.push, Map.set, Headers.append, etc.) are routed through
-      * [[setIndexed]]/[[headersAppend]] which treat the first type that matches as authoritative.
-      * We default to [[JsObject]] — the most permissive shape — and let the first mutation
-      * reshape it via the generic set/append pathway.
+    /** Zero-arg ctors, keyed by hash via [[pinnedImports]]: `new Date()`, `new Object()`,
+      * `new Array()`, `new Headers()`, `new AbortController()`, `new Map()`.
       */
-    private val newArrayOrMap: WasmFunctionHandle = new WasmFunctionHandle {
+    private val newDate: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(new java.util.Date()).toLong)
+    }
+
+    private val newObject: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
             Array(alloc(JsObject(mutable.LinkedHashMap.empty)).toLong)
     }
 
-    /** `new_no_args_(ptr, len)` — wasm-bindgen ctor with a string label. Used e.g. for
-      * `new URL(str)`. Keep the string as the externref payload.
-      */
-    private val newObjectNoArgs: WasmFunctionHandle = new WasmFunctionHandle {
+    private val newArray: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(JsArray(mutable.ArrayBuffer.empty)).toLong)
+    }
+
+    private val newHeaders: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(JsHeaders(mutable.LinkedHashMap.empty)).toLong)
+    }
+
+    private val newAbortController: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(new JsAbortController()).toLong)
+    }
+
+    private val newMap: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(JsMap(mutable.LinkedHashMap.empty)).toLong)
+    }
+
+    /** `new Uint8Array(buffer)` — 1-arg ctor building a view over the whole buffer. */
+    private val newUint8ArrayFromBuffer: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val s = readString(instance, args(0).toInt, args(1).toInt)
-            Array(alloc(s).toLong)
+            val buf = get(args(0).toInt) match {
+                case b: JsArrayBuffer => b
+                case u: JsUint8Array  => u.buffer
+                case _                => JsArrayBuffer(Array.emptyByteArray)
+            }
+            Array(alloc(JsUint8Array(buf, 0, buf.bytes.length)).toLong)
+        }
+    }
+
+    /** `new BroadcastChannel(name)` — Mithril's feedback receiver uses this cross-tab API; on
+      * JVM we retain the channel name but don't implement actual cross-process broadcast.
+      */
+    private val newBroadcastChannel: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val name = readString(instance, args(0).toInt, args(1).toInt)
+            Array(alloc(JsBroadcastChannel(name)).toLong)
+        }
+    }
+
+    /** `new Function(sourceString)` — JavaScript dynamic code-compilation, typically invoked
+      * as a feature-detection probe (`try { new Function("return this")(); } catch {…}`). We
+      * can't evaluate arbitrary JS source; raise so wasm-bindgen's handleError wrapper catches
+      * the failure and the caller falls through to its `catch` branch.
+      */
+    private val newFunctionStub: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val src = readString(instance, args(0).toInt, args(1).toInt)
+            throw new UnsupportedOperationException(
+              s"new Function($src) — JS dynamic code compilation not supported on JVM; " +
+                  "caller is expected to treat this as a feature-detection failure"
+            )
         }
     }
 
@@ -718,31 +768,108 @@ final class WbindgenAbi {
         }
     }
 
-    /** Generic `__wbg_new_*` ctor — dispatches on arity since the short name `__wbg_new_` covers
-      * many wasm-bindgen-emitted JS constructors that share the same signature shape:
+    /** Hash-specific bindings for the currently pinned upstream mithril-client-wasm 0.9.11. The
+      * source of truth is the npm package's `mithril_client_wasm.js` shipped alongside the
+      * wasm blob at `src/test/resources/mithril/`; re-read it on pin bump to refresh this map.
       *
-      *   - 0 args → empty container; we return [[JsObject]] which morphs into Array/Map/Headers
-      *     on first mutation.
-      *   - 1 arg  → wrap an existing externref (e.g. `new Uint8Array(arrayBuffer)`).
-      *   - 2 args → `(ptr, len)` string ctor; the string itself becomes the payload.
-      *
-      * Callers that need precise semantics must register under a more specific short name
-      * (e.g. `__wbg_new_no_args_`, `__wbg_new_with_str_and_init_`) which the runtime matches
-      * first via direct-name lookup before falling through to this generic.
+      * Categorised:
+      *   - Zero-arg ctors whose short name `__wbg_new_` ambiguously covers many JS builtins.
+      *   - Two-arg `(i32,i32)` ctors that share the same short name but construct very
+      *     different values (Error / BroadcastChannel / Promise-with-executor).
+      *   - One-arg `(ref)` Uint8Array-from-buffer ctor.
+      *   - Two closure-creating `__wbindgen_cast_*` hashes + the (ptr,len)->String cast.
       */
-    private val genericNew: WasmFunctionHandle = new WasmFunctionHandle {
+    def pinnedImports: Map[String, WasmFunctionHandle] = Map(
+      // Zero-arg ctors (all strip to `__wbg_new_` so must be dispatched by full hash).
+      "__wbg_new_0_23cedd11d9b40c9d" -> newDate,
+      "__wbg_new_1ba21ce319a06297" -> newObject,
+      "__wbg_new_25f239778d6112b9" -> newArray,
+      "__wbg_new_3c79b3bb1b32b7d3" -> newHeaders,
+      "__wbg_new_881a222c65f168fc" -> newAbortController,
+      "__wbg_new_b546ae120718850e" -> newMap,
+      // 1-arg `(ref) -> ref`.
+      "__wbg_new_6421f6084cc5bc5a" -> newUint8ArrayFromBuffer,
+      // 2-arg `(i32, i32) -> ref` — distinct semantics per hash.
+      "__wbg_new_df1173567d5ff028" -> newError,
+      "__wbg_new_b3dd747604c3c93e" -> newBroadcastChannel,
+      "__wbg_new_ff12d2b041fb48f1" -> newPromiseWithExecutor,
+      // `__wbindgen_cast_*` hashes with non-numeric semantics.
+      "__wbindgen_cast_2241b6af4c4b2941" -> castStringFromPtrLen,
+      "__wbindgen_cast_4625c577ab2ec9ee" -> castU64ToBigInt,
+      "__wbindgen_cast_17a320bf0cb03ca7" -> castOneArgClosure,
+      "__wbindgen_cast_7fcb4b52657c40f7" -> castZeroArgClosure
+    )
+
+    private val castStringFromPtrLen: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(readString(instance, args(0).toInt, args(1).toInt)).toLong)
+    }
+
+    private val castU64ToBigInt: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val boxed: AnyRef = args.length match {
-                case 0 => JsObject(mutable.LinkedHashMap.empty)
-                case 1 =>
-                    get(args(0).toInt) match {
-                        case b: JsArrayBuffer => JsUint8Array(b, 0, b.bytes.length)
-                        case other            => JsObject(mutable.LinkedHashMap("wrapped" -> other))
-                    }
-                case 2 => readString(instance, args(0).toInt, args(1).toInt)
-                case _ => JsObject(mutable.LinkedHashMap.empty)
-            }
-            Array(alloc(boxed).toLong)
+            val bi = java.math.BigInteger.valueOf(args(0).toLong).and(WbindgenAbi.U64Mask)
+            Array(alloc(bi).toLong)
+        }
+    }
+
+    /** Closure cast: `(fnPtrA: u32, fnPtrB: u32) -> Externref` that wraps the pair into a JS
+      * function invoking `wasm_bindgen__convert__closures_____invoke__hc0a74f7bb86030d0`
+      * with `(fnPtrA, fnPtrB, arg)` when called with one argument. Destructor is
+      * `wasm_bindgen__closure__destroy__h99811cac73495ece`.
+      */
+    private val castOneArgClosure: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(
+              alloc(
+                JsClosure(
+                  args(0).toInt,
+                  args(1).toInt,
+                  invokeExport = "wasm_bindgen__convert__closures_____invoke__hc0a74f7bb86030d0",
+                  destroyExport = "wasm_bindgen__closure__destroy__h99811cac73495ece",
+                  arity = 1
+                )
+              ).toLong
+            )
+    }
+
+    /** Closure cast: zero-arg variant, invoke export
+      * `wasm_bindgen__convert__closures_____invoke__h6b7e05d46d107c93`, destroy export
+      * `wasm_bindgen__closure__destroy__hea47394e049eff9b`.
+      */
+    private val castZeroArgClosure: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(
+              alloc(
+                JsClosure(
+                  args(0).toInt,
+                  args(1).toInt,
+                  invokeExport = "wasm_bindgen__convert__closures_____invoke__h6b7e05d46d107c93",
+                  destroyExport = "wasm_bindgen__closure__destroy__hea47394e049eff9b",
+                  arity = 0
+                )
+              ).toLong
+            )
+    }
+
+    /** `new Promise(executor)` — the executor closure invokes
+      * `wasm_bindgen__convert__closures_____invoke__h2da143d4463a5f08(a, b, resolve, reject)`
+      * synchronously from the Promise ctor. Wiring the real executor call requires the async
+      * runtime (next commit); today we capture the closure info onto the returned Promise so
+      * the bridge can drive it when it lands.
+      */
+    private val newPromiseWithExecutor: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val p = new JsPromise(pending = true, value = null, error = null)
+            p.executor = Some(
+              JsClosure(
+                args(0).toInt,
+                args(1).toInt,
+                invokeExport = "wasm_bindgen__convert__closures_____invoke__h2da143d4463a5f08",
+                destroyExport = "",
+                arity = 2
+              )
+            )
+            Array(alloc(p).toLong)
         }
     }
 
@@ -1139,16 +1266,47 @@ object WbindgenAbi {
     /** Synthetic `Promise`. Until the async bridge lands, only the resolved-value form is wired:
       * `pending=true` means a future continuation will populate `value` (or `error`), but the
       * current runtime can't drive that — any read side will trip the async-bridge stubs.
+      *
+      * Carries:
+      *   - `executor`: the `new Promise(executor)` closure (wiring deferred to async bridge).
+      *   - `continuations`: `.then(onFulfilled, onRejected)` callbacks waiting for this promise.
       */
     final class JsPromise(
         @volatile var pending: Boolean,
         @volatile var value: AnyRef | Null,
         @volatile var error: AnyRef | Null
-    )
+    ) {
+        var executor: Option[JsClosure] = None
+        val continuations: mutable.ArrayBuffer[(Option[JsClosure], Option[JsClosure])] =
+            mutable.ArrayBuffer.empty
+    }
 
     object JsPromise {
         def resolved(v: AnyRef | Null): JsPromise = new JsPromise(pending = false, value = v, error = null)
     }
+
+    /** A wasm-bindgen-emitted JS closure — a Rust function pointer pair plus the export names
+      * that dispatch into it. On JVM, invoking the closure means calling the `invokeExport`
+      * function on the Chicory [[com.dylibso.chicory.runtime.Instance]] with
+      * `(fnPtrA, fnPtrB, ...args)`; destruction is a no-op (JVM GC handles the Scala side; the
+      * Rust side's ref-count decrement goes via `__wbg_cb_unref_` which we already stub).
+      */
+    final case class JsClosure(
+        fnPtrA: Int,
+        fnPtrB: Int,
+        invokeExport: String,
+        destroyExport: String,
+        arity: Int
+    )
+
+    /** Synthetic `BroadcastChannel`. No cross-process broadcast on JVM; the receiver API is
+      * enough for Mithril's in-client feedback loop to stay internally consistent.
+      */
+    final case class JsBroadcastChannel(name: String)
+
+    /** Mask for converting a signed long to an unsigned 64-bit BigInt. */
+    val U64Mask: java.math.BigInteger =
+        new java.math.BigInteger(1, Array[Byte](-1, -1, -1, -1, -1, -1, -1, -1))
 
     /** Render a JVM value as JSON. Used by `JSON.stringify` bridge. For our synthetic host types
       * we emit something sensible; for unknown refs we fall back to `String.valueOf`.

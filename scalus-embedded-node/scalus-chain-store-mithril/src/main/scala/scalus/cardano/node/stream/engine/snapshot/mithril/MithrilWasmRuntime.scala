@@ -62,6 +62,10 @@ object MithrilWasmRuntime {
       * wasm-bindgen appends to every import (e.g. `__wbg_Error_52673b7de5a0ca89`) is stripped
       * before matching, so handlers registered under the short semantic name
       * (`__wbg_Error_`) survive pin bumps that only rotate the hash.
+      *
+      * Resolution precedence on each import: (1) exact full-name match (hash-specific pinning,
+      * overrides everything else), (2) short-name match after `stripHash`, (3) unimplemented
+      * stub that raises when called. So pinned overrides → defaults → error.
       */
     def instantiate(
         imports: Map[String, WasmFunctionHandle]

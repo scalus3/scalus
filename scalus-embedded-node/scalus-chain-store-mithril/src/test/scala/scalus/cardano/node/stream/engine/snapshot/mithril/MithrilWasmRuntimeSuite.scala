@@ -8,7 +8,10 @@ import scala.jdk.CollectionConverters.*
 
 class MithrilWasmRuntimeSuite extends AnyFunSuite {
 
-    private val defaultImports = (new WbindgenAbi).defaultImports
+    private val defaultImports = {
+        val abi = new WbindgenAbi
+        abi.defaultImports ++ abi.pinnedImports
+    }
 
     test("survey: dump every unresolved import with its type signature") {
         val bytes = {
@@ -37,6 +40,26 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
             val results = ft.returns().toString
             info(f"  ${imp.name()}%-65s  ${params} -> ${results}")
         }
+    }
+
+    test("survey: dump exports relevant to closures / function tables / wbindgen helpers") {
+        val bytes = {
+            val in = getClass.getResourceAsStream(MithrilWasmRuntime.WasmResourcePath)
+            try in.readAllBytes()
+            finally in.close()
+        }
+        val module = Parser.parse(bytes)
+        val exportSec = module.exportSection()
+        val exports: Seq[String] =
+            (0 until exportSec.exportCount()).map(i => exportSec.getExport(i).name())
+        val interesting = exports.filter { n =>
+            n.startsWith("__wbindgen_") || n.contains("closure") || n.startsWith("__wbg_") ||
+            n.contains("externref_table") || n.contains("function_table") ||
+            n.contains("invoke") || n.contains("wasm_bindgen")
+        }.sorted
+        info(s"total exports: ${exports.size}")
+        info(s"closure/wbindgen-relevant exports (${interesting.size}):")
+        interesting.foreach(n => info(s"  $n"))
     }
 
     test("survey: dump every wasm-bindgen import name, bucketed by prefix") {
