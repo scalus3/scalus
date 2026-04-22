@@ -232,7 +232,7 @@ eject_one() {
 
     local out_name
     out_name="$(kebab_name "$name")"
-    local project_dir="$target_root/$out_name"
+    local project_dir="$target_root/$out_name/scalus"
     if [[ -e "$project_dir" ]]; then
         echo "error: $project_dir already exists, refusing to overwrite" >&2
         return 1
@@ -247,7 +247,10 @@ eject_one() {
     gen_plugins_sbt               > "$project_dir/project/plugins.sbt"
     gen_build_properties          > "$project_dir/project/build.properties"
     gen_gitignore                 > "$project_dir/.gitignore"
-    gen_readme "$out_name"        > "$project_dir/README.md"
+    gen_readme "$out_name"        > "$project_dir/SCALUS_README.md"
+    if [[ -f "$src_dir/README.md" ]]; then
+        cp "$src_dir/README.md" "$project_dir/README.md"
+    fi
 
     echo "  ejected $name -> $project_dir"
 }

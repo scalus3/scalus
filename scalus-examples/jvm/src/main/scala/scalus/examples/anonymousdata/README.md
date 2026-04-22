@@ -1,6 +1,6 @@
 # Anonymous Data Contract
 
-Port of the [Rosetta Smart Contracts "anonymous_data"](https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/anonymous_data) challenge to Cardano using Scalus.
+On-chain anonymous storage in Scalus.
 
 ## Problem
 

@@ -1,6 +1,6 @@
 ## Storage
 
-This is an implementation of a [smart contract from the Rosetta smart contracts](https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/storage) project.
+On-chain data storage.
 
 The idea of the storage is to store data of **uncapped size**.
 
