@@ -1,10 +1,76 @@
 package scalus.cardano.node.stream.engine.snapshot.mithril
 
+import com.dylibso.chicory.wasm.Parser
+import com.dylibso.chicory.wasm.types.{ExternalType, FunctionImport}
 import org.scalatest.funsuite.AnyFunSuite
+
+import scala.jdk.CollectionConverters.*
 
 class MithrilWasmRuntimeSuite extends AnyFunSuite {
 
     private val defaultImports = (new WbindgenAbi).defaultImports
+
+    test("survey: dump every unresolved import with its type signature") {
+        val bytes = {
+            val in = getClass.getResourceAsStream(MithrilWasmRuntime.WasmResourcePath)
+            try in.readAllBytes()
+            finally in.close()
+        }
+        val module = Parser.parse(bytes)
+        val imps: Seq[FunctionImport] = module
+            .importSection()
+            .stream()
+            .iterator()
+            .asScala
+            .filter(_.importType() == ExternalType.FUNCTION)
+            .map(_.asInstanceOf[FunctionImport])
+            .toSeq
+        val bridged = defaultImports.keySet
+        def isBridged(name: String): Boolean =
+            bridged.contains(name) || bridged.contains(MithrilWasmRuntime.stripHash(name))
+
+        val unresolved = imps.filterNot(i => isBridged(i.name())).sortBy(_.name())
+        info(s"unresolved with sigs (count=${unresolved.size}):")
+        unresolved.foreach { imp =>
+            val ft = module.typeSection().getType(imp.typeIndex())
+            val params = ft.params().toString
+            val results = ft.returns().toString
+            info(f"  ${imp.name()}%-65s  ${params} -> ${results}")
+        }
+    }
+
+    test("survey: dump every wasm-bindgen import name, bucketed by prefix") {
+        val bytes = {
+            val in = getClass.getResourceAsStream(MithrilWasmRuntime.WasmResourcePath)
+            try in.readAllBytes()
+            finally in.close()
+        }
+        val module = Parser.parse(bytes)
+        val names: Seq[String] = module
+            .importSection()
+            .stream()
+            .iterator()
+            .asScala
+            .filter(_.importType() == ExternalType.FUNCTION)
+            .map(_.asInstanceOf[FunctionImport].name())
+            .toSeq
+
+        val bridged = defaultImports.keySet
+        val unresolved = names.filterNot { n =>
+            bridged.contains(n) || bridged.contains(MithrilWasmRuntime.stripHash(n))
+        }
+
+        val byBucket: Map[String, Seq[String]] = unresolved.groupBy { n =>
+            val short = MithrilWasmRuntime.stripHash(n)
+            // Bucket by the segment after `__wbg_` (host-function logical name root).
+            short.stripPrefix("__wbg_").takeWhile(c => c != '_' && c.isLetterOrDigit).toLowerCase
+        }.map { case (k, v) => k -> v.sorted }
+
+        info(s"total=${names.size}, bridged=${names.size - unresolved.size}, unresolved=${unresolved.size}")
+        byBucket.toSeq.sortBy(-_._2.size).foreach { case (bucket, items) =>
+            info(f"  bucket=$bucket%-20s count=${items.size}%3d e.g. ${items.take(3).mkString(", ")}")
+        }
+    }
 
     test("the pinned mithril-client-wasm blob instantiates + runs __wbindgen_start") {
         val (rt, report) = MithrilWasmRuntime.instantiate(defaultImports)
@@ -55,6 +121,33 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
                 info(sw.toString)
             case scala.util.Success(result) =>
                 info(s"mithrilclient_new succeeded: ${result.toSeq}")
+        }
+    }
+
+    test("driver: attempt list_mithril_certificates — surfaces next missing host import") {
+        val (rt, _) = MithrilWasmRuntime.instantiate(defaultImports)
+        val (aggPtr, aggLen) =
+            rt.passString("https://aggregator.testing-preview.api.mithril.network/aggregator")
+        val (keyPtr, keyLen) = rt.passString(
+          "5b3132372c37332c3132342c3136312c362c3133372c3133312c3231332c3230372c3131372c3139382c38352c3137362c3139392c3136322c3234312c36382c3132332c3131392c3134352c31332c3233322c3234332c34392c3232392c322c3234392c3230352c3230352c33392c3233352c34345d"
+        )
+        val undefinedHandle = 1L
+        val clientPtr = rt
+            .exportFn("mithrilclient_new")
+            .apply(aggPtr.toLong, aggLen.toLong, keyPtr.toLong, keyLen.toLong, undefinedHandle)(0)
+        info(s"ctor returned clientPtr=$clientPtr")
+
+        val listExport = Option(rt.instance.`export`("mithrilclient_list_mithril_certificates"))
+        assert(listExport.isDefined, "expected mithrilclient_list_mithril_certificates export")
+        val caught = scala.util.Try(listExport.get.apply(clientPtr))
+        caught match {
+            case scala.util.Failure(t) =>
+                info(s"list_mithril_certificates FAILED: ${t.getClass.getName}: ${t.getMessage}")
+                val sw = new java.io.StringWriter()
+                t.printStackTrace(new java.io.PrintWriter(sw))
+                info(sw.toString)
+            case scala.util.Success(result) =>
+                info(s"list_mithril_certificates returned (Promise handle or sync value): ${result.toSeq}")
         }
     }
 }
