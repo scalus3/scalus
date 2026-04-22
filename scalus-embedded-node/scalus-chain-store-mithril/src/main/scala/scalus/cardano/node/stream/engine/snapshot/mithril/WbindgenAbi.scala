@@ -82,6 +82,12 @@ final class WbindgenAbi {
       // JS built-in constructors / helpers.
       "__wbg_Error_" -> newError,
       "__wbg_Number_" -> newNumber,
+      // web_sys::console bridges — the Rust client uses these to emit diagnostics. Wiring them
+      // up surfaces library-side warnings that would otherwise be silent, including (on some
+      // builds) panic context the library logs before unwinding into `unreachable`.
+      "__wbg_warn_" -> consoleWarn,
+      "__wbg_error_" -> consoleError,
+      "__wbg_log_" -> consoleLog,
       // Runtime init — JS builds a WASM-level table and pre-populates
       // slots 0..3 with [undefined, null, true, false]. Our JVM externref table already owns
       // slots 0..3; no WASM-level table to grow on this side, so this is a no-op.
@@ -279,6 +285,41 @@ final class WbindgenAbi {
     /** Zero-arg no-op — same shape as `noop1` but for imports with no params. */
     private val noop0: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
+    }
+
+    // ------------------------------------------------------------------
+    // web_sys::console bridges. Signature `(externref-handle) -> ()`.
+    // Surfaces any library-side diagnostic that would otherwise be silent.
+    // ------------------------------------------------------------------
+
+    private def consoleAt(level: scribe.Level)(v: AnyRef | Null): Unit = {
+        val rendered = String.valueOf(v)
+        level match {
+            case scribe.Level.Warn  => WbindgenAbi.logger.warn(s"[wasm.console] $rendered")
+            case scribe.Level.Error => WbindgenAbi.logger.error(s"[wasm.console] $rendered")
+            case _                  => WbindgenAbi.logger.info(s"[wasm.console] $rendered")
+        }
+    }
+
+    private val consoleWarn: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            consoleAt(scribe.Level.Warn)(get(args(0).toInt))
+            Array.emptyLongArray
+        }
+    }
+
+    private val consoleError: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            consoleAt(scribe.Level.Error)(get(args(0).toInt))
+            Array.emptyLongArray
+        }
+    }
+
+    private val consoleLog: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            consoleAt(scribe.Level.Info)(get(args(0).toInt))
+            Array.emptyLongArray
+        }
     }
 
     // ------------------------------------------------------------------

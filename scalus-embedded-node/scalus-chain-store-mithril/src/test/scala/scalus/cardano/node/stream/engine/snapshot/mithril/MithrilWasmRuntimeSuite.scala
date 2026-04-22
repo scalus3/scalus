@@ -30,8 +30,14 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         val (rt, report) = MithrilWasmRuntime.instantiate(defaultImports)
         info(s"abi-bridged: resolved=${report.resolvedByCaller}, stubbed=${report.stubbed}")
 
-        val (aggPtr, aggLen) = rt.passString("https://aggregator.example.test")
-        val (keyPtr, keyLen) = rt.passString("genesis_vk_placeholder")
+        val (aggPtr, aggLen) =
+            rt.passString("https://aggregator.testing-preview.api.mithril.network/aggregator")
+        // Real testing-preview network genesis verification key (copied from the upstream
+        // mithril-client-wasm npm README). GenesisVerificationKey::JsonHex decodes this as
+        // ASCII-JSON-of-byte-array; anything else would panic the ctor at build().
+        val (keyPtr, keyLen) = rt.passString(
+          "5b3132372c37332c3132342c3136312c362c3133372c3133312c3231332c3230372c3131372c3139382c38352c3137362c3139392c3136322c3234312c36382c3132332c3131392c3134352c31332c3233322c3234332c34392c3232392c322c3234392c3230352c3230352c33392c3233352c34345d"
+        )
 
         // externref handles: 0 = null, 1 = undefined. Rust's wasm-bindgen clients conventionally
         // accept `undefined` as "use defaults" but may reject `null`. Start with undefined.
