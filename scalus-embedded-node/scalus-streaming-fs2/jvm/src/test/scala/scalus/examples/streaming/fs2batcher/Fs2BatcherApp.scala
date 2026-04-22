@@ -36,9 +36,12 @@ object Fs2BatcherApp extends IOApp {
                 given ExecutionContext = ExecutionContext.global
 
                 val config = StreamProviderConfig(
+                  appId = "scalus.examples.streaming.fs2batcher",
                   cardanoInfo = CardanoInfo.preview,
                   chainSync = ChainSyncSource.Synthetic,
-                  backup = BackupSource.Blockfrost(apiKey, BlockfrostNetwork.Preview)
+                  backup = BackupSource.Blockfrost(apiKey, BlockfrostNetwork.Preview),
+                  enginePersistence =
+                      scalus.cardano.node.stream.engine.persistence.EnginePersistenceStore.noop
                 )
                 val query = UtxoEventQuery(
                   scalus.cardano.node

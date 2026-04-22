@@ -5,12 +5,7 @@ import cps.monads.FutureAsyncMonad
 import scalus.cardano.infra.{CancelSource, CancelledException}
 import scalus.cardano.ledger.{Block, BlockHash, BlockHeader, KeepRaw, OriginalCborByteArray}
 import scalus.cardano.network.blockfetch.{BlockFetchDriver, FetchedBlock}
-import scalus.cardano.network.chainsync.{
-    ChainSyncDriver,
-    ChainSyncEvent,
-    IntersectSeeker,
-    Point
-}
+import scalus.cardano.network.chainsync.{ChainSyncDriver, ChainSyncEvent, IntersectSeeker, Point}
 import scalus.cardano.network.infra.MiniProtocolId
 import scalus.cardano.node.stream.engine.{AppliedBlock, AppliedTransaction, Engine}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip, StartFrom}
@@ -25,22 +20,22 @@ import scala.concurrent.{ExecutionContext, Future}
   * Flow:
   *   1. `IntersectSeeker.seek` negotiates the start point.
   *   2. Loop: `chainSync.next()` yields an event.
-  *       - `Forward(era, headerBytes, tip)` → decode header → hash header-body → fetch block
-  *         via BlockFetch → decode block → build `AppliedBlock` → `engine.onRollForward`.
-  *       - `Backward(to, tip)` → `engine.onRollBackward(to)`.
-  *       - `MsgNoBlocks` from the fetch → treated as "rollback raced us", the next chain-sync
-  *         event will be the rollback (per the M5 design doc); we log and continue.
-  *   3. On a decode / wire-protocol failure: the loop's `Future` fails with the typed cause;
-  *      the handle's `done` reflects it.
+  *      - `Forward(era, headerBytes, tip)` → decode header → hash header-body → fetch block via
+  *        BlockFetch → decode block → build `AppliedBlock` → `engine.onRollForward`.
+  *      - `Backward(to, tip)` → `engine.onRollBackward(to)`.
+  *      - `MsgNoBlocks` from the fetch → treated as "rollback raced us", the next chain-sync event
+  *        will be the rollback (per the M5 design doc); we log and continue.
+  *   3. On a decode / wire-protocol failure: the loop's `Future` fails with the typed cause; the
+  *      handle's `done` reflects it.
   *
-  * Back-pressure: `engine.onRollForward` returns a `Future[Unit]` that completes when the
-  * engine's worker has processed the block. The loop awaits that future before the next
-  * `chainSync.next()` — so a slow subscriber stalls the sync loop instead of flooding memory.
+  * Back-pressure: `engine.onRollForward` returns a `Future[Unit]` that completes when the engine's
+  * worker has processed the block. The loop awaits that future before the next `chainSync.next()` —
+  * so a slow subscriber stalls the sync loop instead of flooding memory.
   *
   * Cancellation: the applier owns an `applierScope` that's `linkedTo(connectionRoot)`. Either
   * endpoint firing (connection cancelling, or the caller invoking `handle.cancel()`) propagates
-  * into the drivers' pending `receive` calls via their `cancelToken`, which unwinds the loop as
-  * a failed `Future`. The handle's `done` then completes with that cause.
+  * into the drivers' pending `receive` calls via their `cancelToken`, which unwinds the loop as a
+  * failed `Future`. The handle's `done` then completes with that cause.
   *
   * See `docs/local/claude/indexer/cardano-network-chainsync.md` § *Chain applier*.
   */
@@ -66,8 +61,8 @@ private final class ChainApplier(
       *
       * Every driver call is threaded through a single sequential `async[Future]` chain, which
       * satisfies the drivers' single-consumer contract. On loop exit (normal or error) sends
-      * `MsgDone` / `MsgClientDone` best-effort so the peer can tear down the routes gracefully;
-      * if `cancelToken` already fired these no-op internally.
+      * `MsgDone` / `MsgClientDone` best-effort so the peer can tear down the routes gracefully; if
+      * `cancelToken` already fired these no-op internally.
       */
     def run(startFrom: StartFrom): Future[Unit] = async[Future] {
         try {
@@ -137,20 +132,10 @@ private final class ChainApplier(
                       s"assuming chain-sync/block-fetch rollback race, continuing"
                 )
             case Right(FetchedBlock(blockEra, blockBytes)) =>
-                // Era on the wire appears twice — ChainSync's Forward header has a u8 tag, and
-                // BlockFetch's MsgBlock inner payload has a u16 tag. They should agree for a
-                // well-behaved peer; we warn but still proceed with the block-fetch era since
-                // that's the one wrapping the block bytes we're about to decode.
-                if blockEra != era then
-                    logger.warn(
-                      s"era mismatch: ChainSync header era=$era but BlockFetch block era=$blockEra at $chainPoint"
-                    )
-                val blockRaw = BlockEnvelope.decodeBlock(Era.fromWire(blockEra), blockBytes) match {
-                    case Left(err) => throw err
-                    case Right(b)  => b
+                ChainApplier.decodeFetchedBlock(era, chainTip, blockEra, blockBytes, logger) match {
+                    case Left(err)      => throw err
+                    case Right(applied) => await(engine.onRollForward(applied))
                 }
-                val applied = ChainApplier.toAppliedBlock(chainTip, blockRaw)
-                await(engine.onRollForward(applied))
         }
     }
 }
@@ -159,10 +144,10 @@ private final class ChainApplier(
   *
   *   - [[done]]: completes normally on peer MsgDone or `cancel(cause)` with a
   *     [[CancelledException]]; completes with the typed cause otherwise.
-  *   - [[cancel]]: stops the loop by firing the internal applier scope. Drivers' pending
-  *     `receive`s fail via their `cancelToken` and the loop unwinds. Returns a future that
-  *     mirrors [[done]] but swallows the failure — `cancel()` is a request to stop, callers
-  *     don't need the cause back.
+  *   - [[cancel]]: stops the loop by firing the internal applier scope. Drivers' pending `receive`s
+  *     fail via their `cancelToken` and the loop unwinds. Returns a future that mirrors [[done]]
+  *     but swallows the failure — `cancel()` is a request to stop, callers don't need the cause
+  *     back.
   */
 final class ChainApplierHandle private[network] (
     applierScope: CancelSource,
@@ -183,9 +168,9 @@ object ChainApplier {
     /** Wire a live [[NodeToNodeConnection]] up to an [[Engine]] and start the sync loop. Returns
       * immediately with a handle; loop progress surfaces on `handle.done`.
       *
-      * The applier owns an internal `CancelSource` linked to `conn.rootToken`. Callers should
-      * not close the connection while the applier is running unless they intend to terminate
-      * sync — use `handle.cancel()` to stop just the applier.
+      * The applier owns an internal `CancelSource` linked to `conn.rootToken`. Callers should not
+      * close the connection while the applier is running unless they intend to terminate sync — use
+      * `handle.cancel()` to stop just the applier.
       */
     def spawn(
         conn: NodeToNodeConnection,
@@ -203,18 +188,17 @@ object ChainApplier {
       *
       * The peer's Point-hash convention is `Blake2b_256(original CBOR bytes of the full
       * `Header = [header_body, body_signature]` wire value)`. Cross-referenced against pallas
-      * (`OriginalHash for KeepRaw<'_, babbage::Header>` in `pallas-traverse/src/hashes.rs`),
-      * which hashes `self.raw_cbor()` on the whole `Header` — not just the body.
+      * (`OriginalHash for KeepRaw<'_, babbage::Header>` in `pallas-traverse/src/hashes.rs`), which
+      * hashes `self.raw_cbor()` on the whole `Header` — not just the body.
       *
-      * An earlier draft hashed just the HeaderBody sub-field, following a
-      * literal-reading of Haskell's `hashAnnotated bheaderBody`. That is what
-      * ouroboros-consensus internally names `HashHeader`, but the point identifier delivered
-      * on the wire by real peers (yaci, preview-relay) is the full-header hash — BlockFetch
-      * consistently returned `MsgNoBlocks` for every header until we switched.
+      * An earlier draft hashed just the HeaderBody sub-field, following a literal-reading of
+      * Haskell's `hashAnnotated bheaderBody`. That is what ouroboros-consensus internally names
+      * `HashHeader`, but the point identifier delivered on the wire by real peers (yaci,
+      * preview-relay) is the full-header hash — BlockFetch consistently returned `MsgNoBlocks` for
+      * every header until we switched.
       *
-      * The returned `ChainPoint.blockHash` is therefore what the peer echoes in
-      * `MsgRollBackward` and what BlockFetch's `MsgRequestRange` needs to resolve a header to
-      * its body.
+      * The returned `ChainPoint.blockHash` is therefore what the peer echoes in `MsgRollBackward`
+      * and what BlockFetch's `MsgRequestRange` needs to resolve a header to its body.
       */
     private[network] def pointOf(headerBytes: ByteString, header: BlockHeader): ChainPoint = {
         val hash = BlockHash.fromByteString(platform.blake2b_256(headerBytes))
@@ -223,9 +207,8 @@ object ChainApplier {
 
     /** Project a decoded block into the engine's [[AppliedBlock]] shape.
       *
-      * `Block.transactions` needs the original CBOR bytes to reassemble each `Transaction` from
-      * its KeepRaw parts, so we pass `blockRaw.raw` through the implicit
-      * [[OriginalCborByteArray]].
+      * `Block.transactions` needs the original CBOR bytes to reassemble each `Transaction` from its
+      * KeepRaw parts, so we pass `blockRaw.raw` through the implicit [[OriginalCborByteArray]].
       */
     private[network] def toAppliedBlock(tip: ChainTip, blockRaw: KeepRaw[Block]): AppliedBlock = {
         given OriginalCborByteArray = OriginalCborByteArray(blockRaw.raw)
@@ -237,5 +220,33 @@ object ChainApplier {
             )
         }
         AppliedBlock(tip, txs)
+    }
+
+    /** Shared BlockFetch post-processing: era-mismatch warn + block decode + project to
+      * [[AppliedBlock]]. Used by both [[ChainApplier.processForward]] and
+      * `PeerReplaySource.pullBlocks` so the era-mismatch policy stays aligned.
+      *
+      * The header has already been decoded by the caller (which needs `chainTip` early for the
+      * BlockFetch request). A well-behaved peer's ChainSync header era (u8 tag) equals its
+      * BlockFetch MsgBlock era (u16 tag); we log on mismatch and proceed with the block-fetch era,
+      * which is the one wrapping the bytes we are about to decode.
+      *
+      * Decode failures propagate as `Left(ChainSyncError)`; callers decide whether to escalate
+      * (applier: throw; replay: wrap into ReplayInterrupted).
+      */
+    private[network] def decodeFetchedBlock(
+        headerEra: Int,
+        chainTip: ChainTip,
+        blockEra: Int,
+        blockBytes: ByteString,
+        logger: scribe.Logger
+    ): Either[ChainSyncError, AppliedBlock] = {
+        if blockEra != headerEra then
+            logger.warn(
+              s"era mismatch: ChainSync header era=$headerEra but BlockFetch block era=$blockEra at ${chainTip.point}"
+            )
+        BlockEnvelope
+            .decodeBlock(Era.fromWire(blockEra), blockBytes)
+            .map(toAppliedBlock(chainTip, _))
     }
 }

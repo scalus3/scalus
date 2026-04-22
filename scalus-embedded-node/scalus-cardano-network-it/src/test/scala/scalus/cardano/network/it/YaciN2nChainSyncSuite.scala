@@ -50,9 +50,12 @@ class YaciN2nChainSyncSuite
             given Dispatcher[IO] = d
 
             val config = StreamProviderConfig(
+              appId = "scalus.it.yaci-n2n-chain-sync.tip",
               cardanoInfo = CardanoInfo.preview, // protocol-params shape; slot config unused here
               chainSync = ChainSyncSource.N2N(host, port, NetworkMagic.YaciDevnet.value),
-              backup = BackupSource.NoBackup
+              backup = BackupSource.NoBackup,
+              enginePersistence =
+                  scalus.cardano.node.stream.engine.persistence.EnginePersistenceStore.noop
             )
 
             // Capture tips into an atomic list so we can assert advancement after the stream
@@ -115,9 +118,12 @@ class YaciN2nChainSyncSuite
             given Dispatcher[IO] = d
 
             val config = StreamProviderConfig(
+              appId = "scalus.it.yaci-n2n-chain-sync.mid-close",
               cardanoInfo = CardanoInfo.preview,
               chainSync = ChainSyncSource.N2N(host, port, NetworkMagic.YaciDevnet.value),
-              backup = BackupSource.NoBackup
+              backup = BackupSource.NoBackup,
+              enginePersistence =
+                  scalus.cardano.node.stream.engine.persistence.EnginePersistenceStore.noop
             )
 
             val tipCount = new AtomicLong(0L)

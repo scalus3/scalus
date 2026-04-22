@@ -77,4 +77,7 @@ final class TxHashIndex {
 
     def confirmationPoint(hash: TransactionHash): Option[ChainPoint] =
         confirmedAt.get(hash)
+
+    /** Snapshot of the own-submission set for persistence. Immutable copy. */
+    def ownSubmissionsSnapshot: Set[TransactionHash] = ownSubmissions.toSet
 }

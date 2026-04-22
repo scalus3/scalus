@@ -6,10 +6,10 @@ import scalus.uplc.builtin.ByteString
 
 /** Cardano HardFork-combinator era tag carried by chain-sync headers and block-fetch blocks.
   *
-  * Era indices match `ouroboros-consensus-cardano`'s `CardanoEras` ordering: Byron first, then
-  * the Shelley family in release order. M5 decodes only Shelley+ (indices 1–6). Later eras are
-  * accepted as `Unknown(idx)` so a new era beyond Conway doesn't break the driver immediately —
-  * the applier still fails with a typed error because it has no ledger type for the new era.
+  * Era indices match `ouroboros-consensus-cardano`'s `CardanoEras` ordering: Byron first, then the
+  * Shelley family in release order. M5 decodes only Shelley+ (indices 1–6). Later eras are accepted
+  * as `Unknown(idx)` so a new era beyond Conway doesn't break the driver immediately — the applier
+  * still fails with a typed error because it has no ledger type for the new era.
   */
 enum Era(val wire: Int):
     case Byron extends Era(0)
@@ -23,8 +23,8 @@ enum Era(val wire: Int):
 
 object Era {
 
-    /** Decode a wire era index. Returns the matching variant; unknown indices yield
-      * [[Era.Unknown]] rather than throwing so callers can surface a typed error.
+    /** Decode a wire era index. Returns the matching variant; unknown indices yield [[Era.Unknown]]
+      * rather than throwing so callers can surface a typed error.
       */
     def fromWire(wire: Int): Era = wire match {
         case 0     => Byron
@@ -44,20 +44,20 @@ object Era {
   * strips the envelope and hands us `(era, bytes)` pairs where `bytes` is the CBOR of the
   * era-specific header or block. This object dispatches on the era tag to run
   * `scalus-cardano-ledger`'s `BlockHeader` / `Block` decoder, returning a
-  * [[scalus.cardano.ledger.KeepRaw]] so callers retain the original bytes (needed for computing
-  * the header hash via Blake2b-256).
+  * [[scalus.cardano.ledger.KeepRaw]] so callers retain the original bytes (needed for computing the
+  * header hash via Blake2b-256).
   *
-  * Shelley+ eras (1–6) share a single `BlockHeader` / `Block` decoder in `scalus-core`.
-  * Intra-era differences (Mary assets, Alonzo Plutus, Babbage inline datums, Conway governance)
-  * live inside the transaction body shape handled by the existing decoders. Byron (era 0) has a
-  * distinct CBOR shape not modelled in `scalus-core`; M5 fails fast with
-  * [[ChainSyncError.ByronEra]]. Unknown eras surface as [[ChainSyncError.Decode]].
+  * Shelley+ eras (1–6) share a single `BlockHeader` / `Block` decoder in `scalus-core`. Intra-era
+  * differences (Mary assets, Alonzo Plutus, Babbage inline datums, Conway governance) live inside
+  * the transaction body shape handled by the existing decoders. Byron (era 0) has a distinct CBOR
+  * shape not modelled in `scalus-core`; M5 fails fast with [[ChainSyncError.ByronEra]]. Unknown
+  * eras surface as [[ChainSyncError.Decode]].
   */
 object BlockEnvelope {
 
-    /** Decode the era-specific header bytes. The returned [[KeepRaw]] preserves the original
-      * bytes for hash computation — the caller's `ChainApplier` hashes `.raw` with Blake2b-256
-      * to obtain the [[scalus.cardano.ledger.BlockHash]] used by `ChainPoint`.
+    /** Decode the era-specific header bytes. The returned [[KeepRaw]] preserves the original bytes
+      * for hash computation — the caller's `ChainApplier` hashes `.raw` with Blake2b-256 to obtain
+      * the [[scalus.cardano.ledger.BlockHash]] used by `ChainPoint`.
       */
     def decodeHeader(
         era: Era,

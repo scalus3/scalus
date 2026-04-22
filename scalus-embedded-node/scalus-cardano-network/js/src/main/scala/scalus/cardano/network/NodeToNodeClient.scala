@@ -5,11 +5,11 @@ import scalus.cardano.network.handshake.NegotiatedVersion
 
 import scala.concurrent.{ExecutionContext, Future}
 
-/** Scala.js stub for [[NodeToNodeClient]]. Scala.js has no raw TCP primitive, so the connect
-  * path fails eagerly with [[UnsupportedOperationException]]. A real JS implementation would
-  * need a Node `net.Socket`-backed `AsyncByteChannel` (or a WebSocket bridge to Ogmios); until
-  * that lands, JS callers should use `ChainSyncSource.BlockfrostPolling` (M13) which is pure
-  * HTTPS and works in-process.
+/** Scala.js stub for [[NodeToNodeClient]]. Scala.js has no raw TCP primitive, so the connect path
+  * fails eagerly with [[UnsupportedOperationException]]. A real JS implementation would need a Node
+  * `net.Socket`-backed `AsyncByteChannel` (or a WebSocket bridge to Ogmios); until that lands, JS
+  * callers should use `ChainSyncSource.BlockfrostPolling` (M13) which is pure HTTPS and works
+  * in-process.
   *
   * Keeping the object FQN identical to the JVM version lets cross-built callers (the
   * `Fs2BlockchainStreamProvider` factory, the M5 `ChainApplier` wiring) reference

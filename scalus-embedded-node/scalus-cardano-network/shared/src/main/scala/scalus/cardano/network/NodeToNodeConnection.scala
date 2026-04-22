@@ -11,9 +11,9 @@ import scala.concurrent.duration.FiniteDuration
   * available.
   *
   * The connection is obtained via a platform factory (e.g.
-  * `scalus.cardano.network.jvm.NodeToNodeClient.connect`) and lives until either the peer / transport
-  * terminates it or the caller invokes [[close]]. Lifecycle events are observable via [[rootToken]]
-  * and [[closed]].
+  * `scalus.cardano.network.jvm.NodeToNodeClient.connect`) and lives until either the peer /
+  * transport terminates it or the caller invokes [[close]]. Lifecycle events are observable via
+  * [[rootToken]] and [[closed]].
   *
   * See `docs/local/claude/indexer/n2n-transport.md` § *The public surface of M4*.
   */

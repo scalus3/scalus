@@ -27,9 +27,8 @@ final case class FetchedBlock(era: Int, blockBytes: ByteString)
   *   close()         ──► send MsgClientDone (best effort)
   * }}}
   *
-  * One in-flight range at a time — M5 scope. Higher pipeline depth is a performance knob that
-  * the chain applier doesn't need for a live-follow workload; revisit in M7's cold-start replay
-  * path.
+  * One in-flight range at a time — M5 scope. Higher pipeline depth is a performance knob that the
+  * chain applier doesn't need for a live-follow workload; revisit in M7's cold-start replay path.
   *
   * Single-consumer contract: at most one `fetchOne` / `close` call may be in flight on the same
   * driver instance (inherited from [[CborMessageStream]]). Violating this races on the mux state
@@ -48,17 +47,16 @@ final class BlockFetchDriver(
     // Single-consumer contract — see class docstring. Plain var, not @volatile.
     private var closed: Boolean = false
 
-    /** Fetch a single block identified by `point`. Encoded as a degenerate range `[point, point]`
-      * — the peer responds with a one-element batch on success.
+    /** Fetch a single block identified by `point`. Encoded as a degenerate range `[point, point]` —
+      * the peer responds with a one-element batch on success.
       *
       * Returns:
       *   - `Future.successful(Right(FetchedBlock))` — peer delivered the block.
-      *   - `Future.successful(Left(ChainSyncError.MissingBlock))` — peer returned
-      *     `MsgNoBlocks` (a chain-sync / block-fetch race: the peer rolled back between
-      *     advertising the header and our fetch request). The applier decides whether to
-      *     continue or escalate.
-      *   - `Future.failed(...)` — wire-level failure (decode error, unexpected message,
-      *     premature EOF, transport cancel). The applier treats these as fatal.
+      *   - `Future.successful(Left(ChainSyncError.MissingBlock))` — peer returned `MsgNoBlocks` (a
+      *     chain-sync / block-fetch race: the peer rolled back between advertising the header and
+      *     our fetch request). The applier decides whether to continue or escalate.
+      *   - `Future.failed(...)` — wire-level failure (decode error, unexpected message, premature
+      *     EOF, transport cancel). The applier treats these as fatal.
       */
     def fetchOne(point: Point): Future[Either[ChainSyncError.MissingBlock, FetchedBlock]] = {
         if closed then return Future.failed(new IllegalStateException("driver closed"))
@@ -109,8 +107,8 @@ final class BlockFetchDriver(
                 Future.failed(unexpectedEof("awaiting block in batch"))
         }
 
-    /** Send `MsgClientDone` best-effort and mark the driver closed. Further calls to
-      * [[fetchOne]] fail with `IllegalStateException`.
+    /** Send `MsgClientDone` best-effort and mark the driver closed. Further calls to [[fetchOne]]
+      * fail with `IllegalStateException`.
       */
     def close(): Future[Unit] = {
         if closed then return Future.unit

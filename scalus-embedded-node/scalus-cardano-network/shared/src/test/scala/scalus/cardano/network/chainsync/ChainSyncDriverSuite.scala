@@ -118,7 +118,7 @@ class ChainSyncDriverSuite extends AnyFunSuite with ScalaFutures {
         val err = f.failed.futureValue
         err match {
             case ChainSyncError.NoIntersection(tip) => assert(tip == peerTip)
-            case other => fail(s"expected NoIntersection, got $other")
+            case other                              => fail(s"expected NoIntersection, got $other")
         }
     }
 
@@ -209,7 +209,7 @@ class ChainSyncDriverSuite extends AnyFunSuite with ScalaFutures {
         val ev = f.futureValue
         ev match {
             case Some(ChainSyncEvent.Forward(6, bytes, _)) => assert(bytes == hdr)
-            case other => fail(s"expected Forward, got $other")
+            case other                                     => fail(s"expected Forward, got $other")
         }
 
         // Driver must only have sent one MsgRequestNext — AwaitReply is a server-side state,
@@ -286,11 +286,11 @@ class ChainSyncDriverSuite extends AnyFunSuite with ScalaFutures {
           ByteString.fromArray(Array[Byte](2)),
           ByteString.fromArray(Array[Byte](3))
         )
-        hdrs.foreach(h =>
-            peer.stage(MsgRollForward(era = 6, h, tipAt(10L, 10, 10)))
-        )
+        hdrs.foreach(h => peer.stage(MsgRollForward(era = 6, h, tipAt(10L, 10, 10))))
         peer.stage(MsgRollBackward(pt(2L, 2), tipAt(10L, 10, 10)))
-        peer.stage(MsgRollForward(era = 6, ByteString.fromArray(Array[Byte](99.toByte)), tipAt(11L, 11, 11)))
+        peer.stage(
+          MsgRollForward(era = 6, ByteString.fromArray(Array[Byte](99.toByte)), tipAt(11L, 11, 11))
+        )
 
         val events = (1 to 5).map(_ => driver.next().futureValue.get).toList
         events match {

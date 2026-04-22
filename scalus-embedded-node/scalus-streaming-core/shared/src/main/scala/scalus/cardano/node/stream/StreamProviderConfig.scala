@@ -2,22 +2,52 @@ package scalus.cardano.node.stream
 
 import scalus.cardano.ledger.CardanoInfo
 import scalus.cardano.node.BlockchainProvider
+import scalus.cardano.node.stream.engine.ChainStore
+import scalus.cardano.node.stream.engine.persistence.EnginePersistenceStore
+import scalus.cardano.node.stream.engine.replay.{ChainStoreReplaySource, ReplaySource}
 
 /** Configuration for a streaming provider.
+  *
+  * `appId` is a reverse-DNS identifier for this application instance (e.g. `com.mycompany.batcher`)
+  * and names the engine's persistent state location. Must be non-empty so two Scalus apps on the
+  * same machine don't collide on state files. See *App identity and persistence location* in
+  * `docs/local/claude/indexer/indexer-node.md`.
   *
   * `cardanoInfo` names the network and seeds the protocol-params cell. `chainSync` picks the
   * live-event source; `backup` answers historical and out-of-window queries that the engine cannot
   * serve from local state; `storage` selects the engine's memory/durability profile.
   *
+  * `enginePersistence` controls warm-restart durability. `null` (the default) asks the factory to
+  * wire the platform-appropriate default — a file-backed store keyed by `appId` on the JVM; JS
+  * adapters may fall back to `.noop`. Explicitly passing `EnginePersistenceStore.noop` opts into
+  * Cold-restart semantics (tests, demos, one-shots).
+  *
+  * `chainStore` is an opt-in durable block-history source used as a fallback for checkpoint replay
+  * ([[StartFrom.At]]) when the in-memory rollback buffer doesn't cover the checkpoint. M7 defines
+  * the trait shape (see [[scalus.cardano.node.stream.engine.ChainStore]]); concrete backends land
+  * with M9. Most apps leave it `None`.
+  *
   * See the indexer design doc at `docs/local/claude/indexer/indexer-node.md` for milestone-level
   * context.
   */
 case class StreamProviderConfig(
+    appId: String,
     cardanoInfo: CardanoInfo,
     chainSync: ChainSyncSource,
     backup: BackupSource,
-    storage: StorageProfile = StorageProfile.Light
-)
+    storage: StorageProfile = StorageProfile.Light,
+    enginePersistence: EnginePersistenceStore | Null = null,
+    chainStore: Option[ChainStore] = None
+) {
+    require(appId.nonEmpty, "StreamProviderConfig.appId must be non-empty")
+
+    /** Replay sources derived from this config, in the order the engine should try them after the
+      * rollback buffer. Today that's just the optional `chainStore`; Phase 2b will add a peer
+      * source when `chainSync` is an N2N configuration.
+      */
+    def fallbackReplaySources: List[ReplaySource] =
+        chainStore.toList.map(new ChainStoreReplaySource(_))
+}
 
 /** Where live chain events come from. */
 sealed trait ChainSyncSource

@@ -3,10 +3,13 @@ package scalus.cardano.node.stream.ox
 import ox.flow.Flow
 import scalus.cardano.ledger.CardanoInfo
 import scalus.cardano.network.{ChainApplier, ChainApplierHandle, ClientConfig, NetworkMagic, NodeToNodeClient, NodeToNodeConnection}
+import scalus.cardano.network.replay.{PeerReplayConnectionFactory, PeerReplaySource}
 import scalus.cardano.node.{BlockchainProvider, BlockfrostProvider}
 import scalus.cardano.node.stream.{BackupSource, BlockfrostNetwork, ChainSyncSource, StartFrom, StreamProviderConfig, UnsupportedSourceException}
 import scalus.cardano.node.stream.BaseStreamProvider
 import scalus.cardano.node.stream.engine.Engine
+import scalus.cardano.node.stream.engine.persistence.{EnginePersistenceStore, FileEnginePersistenceStore}
+import scalus.cardano.node.stream.engine.replay.ReplaySource
 
 import OxScalusAsyncStream.{Id, given}
 
@@ -18,9 +21,9 @@ import scala.concurrent.{Await, ExecutionContext, Future}
   * `Id[A] = A`, so `liftFuture` blocks on the future. That matches ox's direct-style story: the
   * caller owns a virtual thread already, so blocking is cheap and ergonomic.
   *
-  * `preClose` runs before the engine's subscribers are shut down — used by the N2N wiring path
-  * to cancel the [[ChainApplier]] and close the underlying [[NodeToNodeConnection]] so the sync
-  * loop unwinds cleanly before subscribers fail.
+  * `preClose` runs before the engine's subscribers are shut down — used by the N2N wiring path to
+  * cancel the [[ChainApplier]] and close the underlying [[NodeToNodeConnection]] so the sync loop
+  * unwinds cleanly before subscribers fail.
   */
 class OxBlockchainStreamProvider(
     engine: Engine,
@@ -43,47 +46,113 @@ object OxBlockchainStreamProvider {
 
     /** Lightweight overload mirroring `Fs2BlockchainStreamProvider.create`. */
     def create(
+        appId: String,
         cardanoInfo: CardanoInfo,
         chainSync: ChainSyncSource,
         backup: BackupSource
     )(using ExecutionContext): OxBlockchainStreamProvider =
-        create(StreamProviderConfig(cardanoInfo, chainSync, backup))
+        create(StreamProviderConfig(appId, cardanoInfo, chainSync, backup))
 
     /** Full configuration. */
     def create(
         config: StreamProviderConfig
     )(using ExecutionContext): OxBlockchainStreamProvider = {
+        val persistence = resolvePersistence(config)
         config.chainSync match
             case ChainSyncSource.Synthetic =>
                 val backup = buildBackup(config.backup)
+                val engine =
+                    buildEngine(config, backup, persistence, config.fallbackReplaySources)
                 new OxBlockchainStreamProvider(
-                  new Engine(config.cardanoInfo, backup, Engine.DefaultSecurityParam)
+                  engine,
+                  persistenceTeardown(persistence, engine, config)
                 )
             case n: ChainSyncSource.N2N =>
-                connectN2N(config, n)
+                connectN2N(config, n, persistence)
             case ChainSyncSource.N2C(_) =>
                 throw UnsupportedSourceException("ChainSyncSource.N2C is not wired until M7")
     }
 
-    /** Open an N2N connection to `n.host:n.port`, spawn a [[ChainApplier]] driving the engine
-      * from it, and return a provider whose `close()` tears down the applier + connection +
-      * engine subscribers in that order.
+    private def resolvePersistence(
+        config: StreamProviderConfig
+    )(using ExecutionContext): EnginePersistenceStore =
+        Option(config.enginePersistence).getOrElse(
+          FileEnginePersistenceStore.fileForApp(config.appId)
+        )
+
+    private def buildEngine(
+        config: StreamProviderConfig,
+        backup: Option[BlockchainProvider],
+        persistence: EnginePersistenceStore,
+        fallbackReplaySources: List[ReplaySource]
+    )(using ExecutionContext): Engine = {
+        Await.result(persistence.load(), Duration.Inf) match {
+            case None =>
+                new Engine(
+                  config.cardanoInfo,
+                  backup,
+                  Engine.DefaultSecurityParam,
+                  persistence,
+                  fallbackReplaySources
+                )
+            case Some(state) =>
+                Await.result(
+                  Engine.rebuildFrom(
+                    state,
+                    config.cardanoInfo,
+                    backup,
+                    Engine.DefaultSecurityParam,
+                    persistence,
+                    fallbackReplaySources
+                  ),
+                  Duration.Inf
+                )
+        }
+    }
+
+    private def persistenceTeardown(
+        persistence: EnginePersistenceStore,
+        engine: Engine,
+        config: StreamProviderConfig
+    )(using ExecutionContext): () => Future[Unit] = () =>
+        for {
+            _ <- persistence.flush()
+            snap <- engine.takeSnapshot(config.appId, networkMagicFor(config))
+            _ <- persistence.compact(snap)
+            _ <- persistence.close()
+        } yield ()
+
+    private def networkMagicFor(config: StreamProviderConfig): Long = config.chainSync match {
+        case ChainSyncSource.N2N(_, _, magic) => magic
+        case _                                => 0L
+    }
+
+    /** Open an N2N connection to `n.host:n.port`, spawn a [[ChainApplier]] driving the engine from
+      * it, and return a provider whose `close()` tears down the applier + connection + engine
+      * subscribers in that order.
       *
-      * Blocks on connection establishment (handshake + keep-alive start). Failures there
-      * propagate as the original `Future`'s cause via `Await.result`.
+      * Blocks on connection establishment (handshake + keep-alive start). Failures there propagate
+      * as the original `Future`'s cause via `Await.result`.
       */
     private def connectN2N(
         config: StreamProviderConfig,
-        n: ChainSyncSource.N2N
+        n: ChainSyncSource.N2N,
+        persistence: EnginePersistenceStore
     )(using ExecutionContext): OxBlockchainStreamProvider = {
         val backup = buildBackup(config.backup)
-        val engine = new Engine(config.cardanoInfo, backup, Engine.DefaultSecurityParam)
+        val fallbacks = config.fallbackReplaySources :+ buildPeerReplaySource(n)
+        val engine = buildEngine(config, backup, persistence, fallbacks)
         val conn: NodeToNodeConnection = Await.result(
-          NodeToNodeClient.connect(n.host, n.port, NetworkMagic(n.networkMagic), ClientConfig.default),
+          NodeToNodeClient
+              .connect(n.host, n.port, NetworkMagic(n.networkMagic), ClientConfig.default),
           Duration.Inf
         )
+        val startFrom = engine.currentTip match {
+            case Some(tip) => StartFrom.At(tip.point)
+            case None      => StartFrom.Tip
+        }
         val handle: ChainApplierHandle =
-            ChainApplier.spawn(conn, engine, startFrom = StartFrom.Tip)
+            ChainApplier.spawn(conn, engine, startFrom = startFrom)
 
         // Surface applier-loop failures (decode error, NoIntersection, etc.) to subscribers
         // with the typed cause rather than a silent EOS. User-initiated close() cancels the
@@ -102,15 +171,23 @@ object OxBlockchainStreamProvider {
             case _                     => engine.closeAllSubscribers()
         }
 
+        val persistenceClose = persistenceTeardown(persistence, engine, config)
         val preClose: () => Future[Unit] = () => {
-            // Cancel applier first so the sync loop unwinds before we close the socket.
+            // Cancel applier first so the sync loop unwinds before we close the socket,
+            // then seal persistence.
             for {
                 _ <- handle.cancel()
                 _ <- conn.close()
+                _ <- persistenceClose()
             } yield ()
         }
         new OxBlockchainStreamProvider(engine, preClose)
     }
+
+    private def buildPeerReplaySource(n: ChainSyncSource.N2N): PeerReplaySource =
+        new PeerReplaySource(
+          PeerReplayConnectionFactory.forEndpoint(n.host, n.port, NetworkMagic(n.networkMagic))
+        )
 
     /** Test-only synthetic helper — no backup, no chain-sync. */
     def synthetic(

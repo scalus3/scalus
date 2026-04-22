@@ -6,6 +6,9 @@ import scalus.cardano.ledger.{AssetName, BlockHash, Coin, MultiAsset, PolicyId, 
 import scalus.cardano.node.stream.ChainPoint
 
 import scala.collection.immutable.SortedMap
+import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Await
+import scala.concurrent.duration.{FiniteDuration, *}
 
 /** Shared fixtures for engine unit tests. Keeps per-suite prelude short and ensures each test uses
   * the same deterministic hash scheme.
@@ -71,4 +74,23 @@ object EngineTestFixtures {
         producing: IndexedSeq[TransactionOutput] = IndexedSeq.empty
     ): AppliedTransaction =
         AppliedTransaction(txHash(idN), spending, producing)
+
+    /** Drain up to `count` events from a mailbox, awaiting each pull synchronously. Stops early on
+      * a clean close (mailbox returned `None`). Default 5-second per-pull timeout is generous
+      * enough for CI; individual tests can override via [[drainWithTimeout]].
+      */
+    def drain[A](mailbox: Mailbox[A], count: Int): Seq[A] =
+        drainWithTimeout(mailbox, count, 5.seconds)
+
+    def drainWithTimeout[A](mailbox: Mailbox[A], count: Int, timeout: FiniteDuration): Seq[A] = {
+        val buf = ArrayBuffer.empty[A]
+        while buf.size < count do {
+            val next = Await.result(mailbox.pull(), timeout)
+            next match {
+                case Some(a) => buf += a
+                case None    => return buf.toSeq
+            }
+        }
+        buf.toSeq
+    }
 }

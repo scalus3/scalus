@@ -24,7 +24,7 @@ class BlockEnvelopeSuite extends AnyFunSuite {
         val bytes = ByteString.fromArray(Array[Byte](1, 2, 3))
         BlockEnvelope.decodeHeader(Era.Byron, bytes) match {
             case Left(_: ChainSyncError.ByronEra) => ()
-            case other => fail(s"expected ByronEra error, got $other")
+            case other                            => fail(s"expected ByronEra error, got $other")
         }
     }
 
@@ -41,7 +41,7 @@ class BlockEnvelopeSuite extends AnyFunSuite {
         val bytes = ByteString.fromArray(Array[Byte](1, 2, 3))
         BlockEnvelope.decodeBlock(Era.Byron, bytes) match {
             case Left(_: ChainSyncError.ByronEra) => ()
-            case other => fail(s"expected ByronEra error, got $other")
+            case other                            => fail(s"expected ByronEra error, got $other")
         }
     }
 

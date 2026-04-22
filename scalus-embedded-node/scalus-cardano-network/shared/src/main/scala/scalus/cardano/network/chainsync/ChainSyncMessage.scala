@@ -34,12 +34,12 @@ import scalus.uplc.builtin.ByteString
   *
   *   - `point` — `[]` (origin) or `[slot: word64, hash: bstr]`. See [[Point]].
   *   - `tip` — `[point, blockNo: word64]`. See [[Tip]].
-  *   - `header` — HardFork-combinator envelope `[era: word8, tag24(headerCbor)]` where `era` is
-  *     the `HardForkBlock` era index (Byron=0, Shelley=1, …, Conway=6) and `tag24` is CBOR tag 24
+  *   - `header` — HardFork-combinator envelope `[era: word8, tag24(headerCbor)]` where `era` is the
+  *     `HardForkBlock` era index (Byron=0, Shelley=1, …, Conway=6) and `tag24` is CBOR tag 24
   *     (embedded CBOR) wrapping the era-specific header bytes. The decoder extracts the envelope
   *     into `(era, headerBytes)`; era-mapping plus ledger-level decoding lives in
-  *     [[scalus.cardano.network.BlockEnvelope]] at the applier layer so the transport module
-  *     stays free of ledger-dispatch logic.
+  *     [[scalus.cardano.network.BlockEnvelope]] at the applier layer so the transport module stays
+  *     free of ledger-dispatch logic.
   */
 sealed trait ChainSyncMessage
 
@@ -56,11 +56,11 @@ object ChainSyncMessage {
     /** Server → client: chain advanced by one block.
       *
       * @param era
-      *   HardFork era index carried by the envelope. Byron = 0, Shelley = 1, Allegra = 2, Mary =
-      *   3, Alonzo = 4, Babbage = 5, Conway = 6.
+      *   HardFork era index carried by the envelope. Byron = 0, Shelley = 1, Allegra = 2, Mary = 3,
+      *   Alonzo = 4, Babbage = 5, Conway = 6.
       * @param headerBytes
-      *   raw CBOR bytes of the era-specific block header (unwrapped from the inner tag24).
-      *   Decoded upstream by [[scalus.cardano.network.BlockEnvelope.decodeHeader]].
+      *   raw CBOR bytes of the era-specific block header (unwrapped from the inner tag24). Decoded
+      *   upstream by [[scalus.cardano.network.BlockEnvelope.decodeHeader]].
       */
     final case class MsgRollForward(era: Int, headerBytes: ByteString, tip: Tip)
         extends ChainSyncMessage
@@ -151,7 +151,7 @@ object ChainSyncMessage {
         val era = r.readInt()
         r.readTag() match {
             case Tag.EmbeddedCBOR => ()
-            case other            =>
+            case other =>
                 r.validationFailure(
                   s"expected CBOR tag 24 (EmbeddedCBOR) for hard-fork envelope inner, got $other"
                 )

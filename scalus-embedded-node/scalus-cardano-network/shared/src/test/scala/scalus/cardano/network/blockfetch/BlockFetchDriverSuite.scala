@@ -72,7 +72,8 @@ class BlockFetchDriverSuite extends AnyFunSuite with ScalaFutures {
     private def sampleHash(seed: Int): BlockHash =
         BlockHash.fromByteString(ByteString.fromArray(Array.fill(32)(seed.toByte)))
 
-    private def pt(slot: Long, seed: Int): Point.BlockPoint = Point.BlockPoint(slot, sampleHash(seed))
+    private def pt(slot: Long, seed: Int): Point.BlockPoint =
+        Point.BlockPoint(slot, sampleHash(seed))
 
     private def newDriver(): (ScriptedBytes, BlockFetchDriver) = {
         val peer = new ScriptedBytes
@@ -138,9 +139,9 @@ class BlockFetchDriverSuite extends AnyFunSuite with ScalaFutures {
         val (peer, driver) = newDriver()
         val f = driver.fetchOne(pt(1L, 1))
         peer.stage(MsgStartBatch)
-        peer.stage(MsgBlock(era = 6, ByteString.fromArray(Array[Byte](0x01)) /* CBOR int 1 */))
+        peer.stage(MsgBlock(era = 6, ByteString.fromArray(Array[Byte](0x01)) /* CBOR int 1 */ ))
         // Peer wrongly sends a second block instead of BatchDone.
-        peer.stage(MsgBlock(era = 6, ByteString.fromArray(Array[Byte](0x02)) /* CBOR int 2 */))
+        peer.stage(MsgBlock(era = 6, ByteString.fromArray(Array[Byte](0x02)) /* CBOR int 2 */ ))
 
         val err = f.failed.futureValue
         err match {

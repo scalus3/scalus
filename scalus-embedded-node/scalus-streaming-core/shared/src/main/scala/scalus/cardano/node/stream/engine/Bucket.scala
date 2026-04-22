@@ -84,6 +84,14 @@ final class Bucket(val key: UtxoKey) {
         if history.nonEmpty && history.head.point == point then history.removeHead()
     }
 
+    /** Look up this bucket's reverse-delta for the given block point. O(1) when the history is
+      * empty (the common case for a freshly-acquired bucket), otherwise O(n) over the rollback
+      * window — callers are expected to be on the replay / snapshot path, not the live hot path.
+      */
+    def deltaAt(point: ChainPoint): Option[Bucket.Delta] =
+        if history.isEmpty then None
+        else history.find(_.point == point)
+
     def snapshot: Utxos = current.toMap
 
     def size: Int = current.size

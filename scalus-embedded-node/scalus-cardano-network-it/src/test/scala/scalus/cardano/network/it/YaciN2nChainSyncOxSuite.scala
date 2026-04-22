@@ -31,9 +31,12 @@ class YaciN2nChainSyncOxSuite
         given ExecutionContext = ExecutionContext.global
 
         val config = StreamProviderConfig(
+          appId = "scalus.it.yaci-n2n-chain-sync-ox",
           cardanoInfo = CardanoInfo.preview,
           chainSync = ChainSyncSource.N2N(host, port, NetworkMagic.YaciDevnet.value),
-          backup = BackupSource.NoBackup
+          backup = BackupSource.NoBackup,
+          enginePersistence =
+              scalus.cardano.node.stream.engine.persistence.EnginePersistenceStore.noop
         )
 
         supervised {

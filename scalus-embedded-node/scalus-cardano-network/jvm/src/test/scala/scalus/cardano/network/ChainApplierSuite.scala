@@ -22,14 +22,14 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{Future, Promise}
 
-/** End-to-end loopback test for [[ChainApplier]] wiring a pair of [[ScriptedBytes]] peers to a
-  * real [[Engine]]. Exercises intersect → forwards → block-fetch → engine onRollForward, plus
-  * the rollback and chain-sync/block-fetch race (MsgNoBlocks) paths.
+/** End-to-end loopback test for [[ChainApplier]] wiring a pair of [[ScriptedBytes]] peers to a real
+  * [[Engine]]. Exercises intersect → forwards → block-fetch → engine onRollForward, plus the
+  * rollback and chain-sync/block-fetch race (MsgNoBlocks) paths.
   *
-  * Uses two real Cardano Conway-era block fixtures copied from
-  * `bloxbean-cardano-client-lib`'s test resources — synthesising arbitrary encoded blocks is
-  * fragile (the borer-derived encoder doesn't always round-trip arbitrary-generated trees
-  * because raw-byte fidelity is only preserved on decode-then-encode, not generate-then-encode).
+  * Uses two real Cardano Conway-era block fixtures copied from `bloxbean-cardano-client-lib`'s test
+  * resources — synthesising arbitrary encoded blocks is fragile (the borer-derived encoder doesn't
+  * always round-trip arbitrary-generated trees because raw-byte fidelity is only preserved on
+  * decode-then-encode, not generate-then-encode).
   *
   * Placed in the JVM-only test tree because it reads classpath resources.
   */
@@ -99,7 +99,9 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
     ) extends NodeToNodeConnection {
         val rootSource: CancelSource = CancelSource()
         private val closedPromise = Promise[Unit]()
-        rootSource.token.onCancel { () => val _ = closedPromise.trySuccess(()) }
+        rootSource.token.onCancel { () =>
+            val _ = closedPromise.trySuccess(())
+        }
 
         def negotiatedVersion: NegotiatedVersion =
             NegotiatedVersion(
@@ -110,7 +112,7 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
         def channel(proto: MiniProtocolId): MiniProtocolBytes = proto match {
             case MiniProtocolId.ChainSync  => chainSyncPeer
             case MiniProtocolId.BlockFetch => blockFetchPeer
-            case other => sys.error(s"test stub doesn't serve $other")
+            case other                     => sys.error(s"test stub doesn't serve $other")
         }
 
         def rootToken: CancelToken = rootSource.token
@@ -140,20 +142,18 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
       *
       * Re-encoding via `Cbor.encode(block)` is unreliable on real-chain blocks: scalus-core's
       * `KeepRaw[A]` encoder writes `raw` bytes directly to the output, which bypasses borer's
-      * validator; the validator then fails on what looks like a truncated definite-length map
-      * or array. Slicing the raw input instead yields the exact bytes the peer would deliver
-      * on the wire, and they round-trip cleanly through `BlockEnvelope.decodeHeader` /
-      * `decodeBlock`.
+      * validator; the validator then fails on what looks like a truncated definite-length map or
+      * array. Slicing the raw input instead yields the exact bytes the peer would deliver on the
+      * wire, and they round-trip cleanly through `BlockEnvelope.decodeHeader` / `decodeBlock`.
       */
     /** Slice the inner era-specific Block and BlockHeader CBOR bytes out of a BlockFile
       * `[era, block]` without re-encoding.
       *
       * Re-encoding via `Cbor.encode(block)` is unreliable on real-chain blocks: scalus-core's
       * `KeepRaw[A]` encoder writes `raw` bytes directly to the output, which bypasses borer's
-      * validator; the validator then fails on what looks like a truncated definite-length map
-      * or array. Slicing the raw input instead yields the exact bytes the peer would deliver
-      * on the wire, and they round-trip cleanly through `BlockEnvelope.decodeHeader` /
-      * `decodeBlock`.
+      * validator; the validator then fails on what looks like a truncated definite-length map or
+      * array. Slicing the raw input instead yields the exact bytes the peer would deliver on the
+      * wire, and they round-trip cleanly through `BlockEnvelope.decodeHeader` / `decodeBlock`.
       */
     private def loadFixture(resource: String): Fixture = {
         val raw = getClass.getResourceAsStream(resource).readAllBytes()
@@ -379,7 +379,8 @@ class ChainApplierSuite extends AnyFunSuite with ScalaFutures with Eventually {
         blockFetch.stageBlockFetch(MsgBlock(fixture1.era, fixture1.blockBytes))
         blockFetch.stageBlockFetch(MsgBatchDone)
 
-        val handle = ChainApplier.spawn(conn, engine, StartFrom.At(Point.toChainPoint(intersectPoint)))
+        val handle =
+            ChainApplier.spawn(conn, engine, StartFrom.At(Point.toChainPoint(intersectPoint)))
 
         try {
             eventually {

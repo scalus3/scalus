@@ -78,9 +78,12 @@ class PreviewRelaySmokeSuite extends AnyFunSuite with ScalaFutures {
         given ExecutionContext = ExecutionContext.global
 
         val config = StreamProviderConfig(
+          appId = "scalus.it.preview-relay-smoke",
           cardanoInfo = CardanoInfo.preview,
           chainSync = ChainSyncSource.N2N(relayHost, relayPort, NetworkMagic.Preview.value),
-          backup = BackupSource.NoBackup
+          backup = BackupSource.NoBackup,
+          enginePersistence =
+              scalus.cardano.node.stream.engine.persistence.EnginePersistenceStore.noop
         )
 
         // Preview blocks every ~20s on average. Four minutes is enough for a handful of tips

@@ -18,7 +18,8 @@ import scala.util.control.NonFatal
   */
 object NodeToNodeClient {
 
-    private val defaultLogger: scribe.Logger = scribe.Logger("scalus.cardano.network.NodeToNodeClient")
+    private val defaultLogger: scribe.Logger =
+        scribe.Logger("scalus.cardano.network.NodeToNodeClient")
 
     /** Establish a Node-to-Node connection. The returned future completes once the handshake is
       * accepted and the keep-alive loop is running. Any failure before that point (socket error,

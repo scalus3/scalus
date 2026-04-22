@@ -103,9 +103,12 @@ class YaciN2nBackupSeedSuite
         }
 
         val config = StreamProviderConfig(
+          appId = "scalus.it.yaci-n2n-backup-seed",
           cardanoInfo = CardanoInfo.preview,
           chainSync = ChainSyncSource.N2N(host, port, NetworkMagic.YaciDevnet.value),
-          backup = BackupSource.Custom(customBackup)
+          backup = BackupSource.Custom(customBackup),
+          enginePersistence =
+              scalus.cardano.node.stream.engine.persistence.EnginePersistenceStore.noop
         )
 
         val firstEvent = new AtomicReference[Option[UtxoEvent]](None)

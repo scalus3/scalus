@@ -21,8 +21,8 @@ import scala.util.control.NonFatal
   * dedicated thread so tests can make real TCP connections without spinning up cardano-node.
   *
   * Scope: just enough to exercise the NodeToNodeClient happy path and a few fault paths. Not a
-  * complete ouroboros responder — for realistic end-to-end, see `scalus-cardano-network-it` which talks to
-  * yaci-devkit in M9.
+  * complete ouroboros responder — for realistic end-to-end, see `scalus-cardano-network-it` which
+  * talks to yaci-devkit in M9.
   */
 final class StubN2NResponder(behaviour: StubBehaviour = StubBehaviour.AcceptV16) {
     private val server: ServerSocket = new ServerSocket()

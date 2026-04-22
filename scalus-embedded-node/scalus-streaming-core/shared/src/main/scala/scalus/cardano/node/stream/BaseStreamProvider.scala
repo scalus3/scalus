@@ -65,7 +65,13 @@ abstract class BaseStreamProvider[F[_], C[_]](
           maxSize,
           onCancel = () => { engine.unregisterUtxo(id); () }
         )
-        engine.registerUtxoSubscription(id, query.query, opts.includeExistingUtxos, mailbox)
+        engine.registerUtxoSubscription(
+          id,
+          query.query,
+          opts.includeExistingUtxos,
+          mailbox,
+          opts.startFrom
+        )
         mailboxSource.fromMailbox(mailbox)
     }
 

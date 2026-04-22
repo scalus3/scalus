@@ -16,21 +16,6 @@ class EngineSuite extends AnyFunSuite {
     private val ci: CardanoInfo = CardanoInfo.preview
     private val timeout: FiniteDuration = 5.seconds
 
-    /** Drain a mailbox into a list until it closes or produces the requested count. Awaited
-      * synchronously so the test asserts on deterministic state.
-      */
-    private def drain[A](mailbox: Mailbox[A], count: Int): Seq[A] = {
-        val buf = ArrayBuffer.empty[A]
-        while buf.size < count do {
-            val next = Await.result(mailbox.pull(), timeout)
-            next match {
-                case Some(a) => buf += a
-                case None    => return buf.toSeq
-            }
-        }
-        buf.toSeq
-    }
-
     /** Drain whatever is currently buffered without blocking for more. Works by checking a small
       * timeout per pull; a pending pull (nothing buffered) terminates the drain.
       */

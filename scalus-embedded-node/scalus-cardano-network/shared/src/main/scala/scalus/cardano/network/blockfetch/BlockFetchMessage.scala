@@ -27,18 +27,18 @@ import scalus.uplc.builtin.ByteString
   * `base.point` is the same shape as in chain-sync (see
   * [[scalus.cardano.network.chainsync.Point]]).
   *
-  * `base.block` uses a different era-wrapping shape from ChainSync's `base.header`, and a
-  * different era-numbering convention:
+  * `base.block` uses a different era-wrapping shape from ChainSync's `base.header`, and a different
+  * era-numbering convention:
   *
-  *   - ChainSync header: `[era_u8, tag24(headerCbor)]` — era outside the tag24 wrapper,
-  *     using ouroboros-consensus HardForkCombinator 0-based indexing (Byron=0..Conway=6).
-  *   - BlockFetch block: `tag24([era_u16, blockCbor])` — era inside the tag24 wrapper,
-  *     using the cardano-ledger spec 1-based indexing (Byron=1..Conway=7). Pallas's
+  *   - ChainSync header: `[era_u8, tag24(headerCbor)]` — era outside the tag24 wrapper, using
+  *     ouroboros-consensus HardForkCombinator 0-based indexing (Byron=0..Conway=6).
+  *   - BlockFetch block: `tag24([era_u16, blockCbor])` — era inside the tag24 wrapper, using the
+  *     cardano-ledger spec 1-based indexing (Byron=1..Conway=7). Pallas's
   *     `pallas-traverse/src/era.rs` uses the same 1-based scheme; its
   *     `MultiEraBlock::decode_conway` parses the tag24 payload as `(u16, Block)`.
   *
-  * Our codec normalises the 1-based BlockFetch era to the 0-based HardFork scheme the rest of
-  * the codebase uses, so downstream code doesn't have to special-case two era numberings.
+  * Our codec normalises the 1-based BlockFetch era to the 0-based HardFork scheme the rest of the
+  * codebase uses, so downstream code doesn't have to special-case two era numberings.
   * `MsgBlock.era` is therefore 0-based and directly consumable by
   * [[scalus.cardano.network.Era.fromWire]].
   */
@@ -82,9 +82,9 @@ object BlockFetchMessage {
         def write(w: Writer, m: BlockFetchMessage): Writer = m match {
             case MsgRequestRange(start, end) =>
                 w.writeArrayHeader(3).writeInt(0).write(start).write(end)
-            case MsgClientDone => w.writeArrayHeader(1).writeInt(1)
-            case MsgStartBatch => w.writeArrayHeader(1).writeInt(2)
-            case MsgNoBlocks   => w.writeArrayHeader(1).writeInt(3)
+            case MsgClientDone        => w.writeArrayHeader(1).writeInt(1)
+            case MsgStartBatch        => w.writeArrayHeader(1).writeInt(2)
+            case MsgNoBlocks          => w.writeArrayHeader(1).writeInt(3)
             case MsgBlock(era, bytes) =>
                 // Outer: [4, tag24(innerBytes)]. innerBytes is itself CBOR: [era_u16, block].
                 // Era on the wire is 1-based (Byron=1..Conway=7); we store the 0-based
@@ -130,12 +130,12 @@ object BlockFetchMessage {
             }
         }
 
-    /** Parse the tag24 payload of a MsgBlock as `[era, block_cbor]` and return the era + the
-      * raw bytes of the block sub-value (sliced from `wrapperBytes`, no re-encoding).
+    /** Parse the tag24 payload of a MsgBlock as `[era, block_cbor]` and return the era + the raw
+      * bytes of the block sub-value (sliced from `wrapperBytes`, no re-encoding).
       *
-      * Implemented by hand rather than through borer because we want to return the block as
-      * a raw byte slice without forcing borer to decode or skip over it — era is a small uint,
-      * everything after it (up to the end of the wrapper) is the block's serialised CBOR.
+      * Implemented by hand rather than through borer because we want to return the block as a raw
+      * byte slice without forcing borer to decode or skip over it — era is a small uint, everything
+      * after it (up to the end of the wrapper) is the block's serialised CBOR.
       */
     private def decodeEraAndBlock(wrapperBytes: Array[Byte]): (Int, ByteString) = {
         if wrapperBytes.isEmpty || wrapperBytes(0) != 0x82.toByte then

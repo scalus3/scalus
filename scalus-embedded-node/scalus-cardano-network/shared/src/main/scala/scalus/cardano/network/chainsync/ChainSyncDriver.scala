@@ -10,10 +10,9 @@ import scala.concurrent.{ExecutionContext, Future}
 import scala.util.control.NonFatal
 
 /** One event the driver observes on the chain-sync stream. Wire shapes are preserved: `Forward`
-  * carries the raw era-tagged header bytes for decoding by
-  * [[scalus.cardano.network.BlockEnvelope]] at the applier layer; `Backward` carries the
-  * wire-level [[Point]] which the applier converts to [[scalus.cardano.node.stream.ChainPoint]]
-  * before calling `Engine.onRollBackward`.
+  * carries the raw era-tagged header bytes for decoding by [[scalus.cardano.network.BlockEnvelope]]
+  * at the applier layer; `Backward` carries the wire-level [[Point]] which the applier converts to
+  * [[scalus.cardano.node.stream.ChainPoint]] before calling `Engine.onRollBackward`.
   */
 sealed trait ChainSyncEvent
 object ChainSyncEvent {
@@ -34,15 +33,15 @@ object ChainSyncEvent {
   *
   * Error policy: any wire-level surprise (unexpected message shape in a given state, decode
   * failure) or transport-level cancellation propagates the failure to the caller's `Future`. The
-  * driver does NOT itself fire `connectionRoot.cancel(...)` — that decision belongs to the
-  * chain applier, which has the full context (e.g. "decode error → root cancel, but unknown-era
-  * might be tolerable in a future M").
+  * driver does NOT itself fire `connectionRoot.cancel(...)` — that decision belongs to the chain
+  * applier, which has the full context (e.g. "decode error → root cancel, but unknown-era might be
+  * tolerable in a future M").
   *
-  * Single-consumer contract: at most one `findIntersect` / `next` / `close` call may be in
-  * flight on the same driver instance. Inherited from [[CborMessageStream]]. Violating this
-  * races on the mux state and produces undefined behaviour — including the private `closed`
-  * flag, which is deliberately a plain `var` (not `@volatile`) to make the contract loud at the
-  * JMM level rather than paper it over.
+  * Single-consumer contract: at most one `findIntersect` / `next` / `close` call may be in flight
+  * on the same driver instance. Inherited from [[CborMessageStream]]. Violating this races on the
+  * mux state and produces undefined behaviour — including the private `closed` flag, which is
+  * deliberately a plain `var` (not `@volatile`) to make the contract loud at the JMM level rather
+  * than paper it over.
   */
 final class ChainSyncDriver(
     handle: MiniProtocolBytes,
@@ -60,9 +59,9 @@ final class ChainSyncDriver(
       *   - `MsgIntersectNotFound(tip)` → `Future.failed(ChainSyncError.NoIntersection(tip))`
       *   - peer EOF or any other message → typed failure
       *
-      * `points` may be empty — the peer will respond with `MsgIntersectNotFound` carrying its
-      * own tip, which is how [[IntersectSeeker]] discovers the peer's tip in its two-step dance
-      * for `StartFrom.Tip`.
+      * `points` may be empty — the peer will respond with `MsgIntersectNotFound` carrying its own
+      * tip, which is how [[IntersectSeeker]] discovers the peer's tip in its two-step dance for
+      * `StartFrom.Tip`.
       */
     def findIntersect(points: Seq[Point]): Future[(Point, Tip)] = {
         if closed then return Future.failed(new IllegalStateException("driver closed"))
@@ -149,8 +148,8 @@ final class ChainSyncDriver(
     private def unexpectedEof(where: String): Throwable =
         ChainSyncError.Decode(s"$where: peer EOF", cause = null)
 
-    /** CBOR-level decode failures from `CborMessageStream` surface as `FrameDecodeException`;
-      * wrap in our typed `ChainSyncError.Decode` so callers pattern-match one hierarchy.
+    /** CBOR-level decode failures from `CborMessageStream` surface as `FrameDecodeException`; wrap
+      * in our typed `ChainSyncError.Decode` so callers pattern-match one hierarchy.
       */
     private def wrapIfDecode(t: Throwable, where: String): Throwable = t match {
         case fde: scalus.cardano.network.infra.FrameDecodeException =>
