@@ -6,8 +6,8 @@ import scalus.cardano.ledger.Word64
 import java.nio.charset.StandardCharsets
 import scala.collection.mutable
 
-/** wasm-bindgen ABI bridge. Implements the host-function surface the `wasm-pack --target nodejs`
-  * JS glue normally supplies, so the same `.wasm` blob runs under Chicory without any JS runtime.
+/** wasm-bindgen ABI bridge. Implements the host-function surface the `wasm-pack --target nodejs` JS
+  * glue normally supplies, so the same `.wasm` blob runs under Chicory without any JS runtime.
   *
   * The core primitives:
   *
@@ -26,24 +26,25 @@ import scala.collection.mutable
   * into these host imports finish without suspending.
   */
 final class WbindgenAbi(
-    closureHashes: MithrilAsyncRuntime.ClosureHashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+    closureHashes: MithrilAsyncRuntime.ClosureHashes =
+        MithrilAsyncRuntime.ClosureHashes.Release0_9_11
 ) {
 
     import WbindgenAbi.*
 
-    /** Mirror of the WASM module's `__wbindgen_externrefs` table. Slot indices on this map are
-      * the same indices the WASM module sees; allocation goes through the module's own
+    /** Mirror of the WASM module's `__wbindgen_externrefs` table. Slot indices on this map are the
+      * same indices the WASM module sees; allocation goes through the module's own
       * `__externref_table_alloc` export so the two sides agree on which slot a handle refers to.
       *
       * Slot 0 is conventionally `undefined`. Slots 1..3 (or wherever
-      * [[__wbindgen_init_externref_table]] places them) hold the wasm-bindgen JS literal
-      * sentinels (`undefined`, `null`, `true`, `false`).
+      * [[__wbindgen_init_externref_table]] places them) hold the wasm-bindgen JS literal sentinels
+      * (`undefined`, `null`, `true`, `false`).
       *
-      * Pre-init (before the module instance is attached to the table allocator) the bootstrap
-      * slots 0..3 are seeded with [null, undefined, true, false] — matching the JS-glue
-      * convention so the externref handles `0`/`1` mean what wasm-bindgen expects when used
-      * as parameters to the very first host calls during instantiation, before the module's
-      * runtime has run `__wbindgen_init_externref_table`.
+      * Pre-init (before the module instance is attached to the table allocator) the bootstrap slots
+      * 0..3 are seeded with [null, undefined, true, false] — matching the JS-glue convention so the
+      * externref handles `0`/`1` mean what wasm-bindgen expects when used as parameters to the very
+      * first host calls during instantiation, before the module's runtime has run
+      * `__wbindgen_init_externref_table`.
       */
     private val externrefs: mutable.HashMap[Int, AnyRef | Null] = mutable.HashMap(
       0 -> null,
@@ -53,13 +54,14 @@ final class WbindgenAbi(
     )
 
     /** In-process localStorage stand-in. Rust's `web_sys::window().local_storage()` is invoked
-      * during client construction for optional certificate-verification caching; an empty map
-      * is sufficient to let the caller fall through its "no cache" branch.
+      * during client construction for optional certificate-verification caching; an empty map is
+      * sufficient to let the caller fall through its "no cache" branch.
       */
-    private val localStorageData: mutable.LinkedHashMap[String, String] = mutable.LinkedHashMap.empty
+    private val localStorageData: mutable.LinkedHashMap[String, String] =
+        mutable.LinkedHashMap.empty
 
-    /** Cached `__wbindgen_malloc` export — looked up lazily the first time a handler needs to
-      * copy a host string back into WASM memory. One lookup per WASM instance, not per call.
+    /** Cached `__wbindgen_malloc` export — looked up lazily the first time a handler needs to copy
+      * a host string back into WASM memory. One lookup per WASM instance, not per call.
       */
     @volatile private var cachedMalloc: com.dylibso.chicory.runtime.ExportFunction = null
 
@@ -68,17 +70,17 @@ final class WbindgenAbi(
       */
     @volatile private var cachedExternrefAlloc: com.dylibso.chicory.runtime.ExportFunction = null
 
-    /** Cached handle to the module's exported externref table. Needed because allocating a
-      * slot via `__externref_table_alloc` is only half the JS-glue pattern — the other half is
-      * populating the slot via `wasm.__wbindgen_externrefs.set(idx, value)`. We store the slot
-      * index itself as the stored ref so `wasm.__wbindgen_externrefs.get(idx)` round-trips to
-      * `idx`, which is also what our JVM-side `externrefs` map is keyed on.
+    /** Cached handle to the module's exported externref table. Needed because allocating a slot via
+      * `__externref_table_alloc` is only half the JS-glue pattern — the other half is populating
+      * the slot via `wasm.__wbindgen_externrefs.set(idx, value)`. We store the slot index itself as
+      * the stored ref so `wasm.__wbindgen_externrefs.get(idx)` round-trips to `idx`, which is also
+      * what our JVM-side `externrefs` map is keyed on.
       */
     @volatile private var cachedExternrefTable: com.dylibso.chicory.runtime.TableInstance = null
 
     /** The active WASM Instance, captured the first time any handler is invoked. Lets [[alloc]]
-      * route through `__externref_table_alloc` without threading the Instance through every
-      * call site. Set once per instantiation; remains constant thereafter.
+      * route through `__externref_table_alloc` without threading the Instance through every call
+      * site. Set once per instantiation; remains constant thereafter.
       */
     @volatile private var currentInstance: Instance = null.asInstanceOf[Instance]
 
@@ -90,12 +92,12 @@ final class WbindgenAbi(
       */
     def captureForExtension(instance: Instance): Unit = captureInstance(instance)
 
-    /** Allocate an externref slot. Once the WASM instance is attached (after the first host
-      * call), allocations go through the module's `__externref_table_alloc` so the slot index
-      * we return is the same one the module's `__wbindgen_externrefs` table reserves.
+    /** Allocate an externref slot. Once the WASM instance is attached (after the first host call),
+      * allocations go through the module's `__externref_table_alloc` so the slot index we return is
+      * the same one the module's `__wbindgen_externrefs` table reserves.
       *
-      * Before attachment (the bootstrap window during instantiation, before any host call),
-      * we hand out monotonic slots from a JVM-private counter. wasm-bindgen's
+      * Before attachment (the bootstrap window during instantiation, before any host call), we hand
+      * out monotonic slots from a JVM-private counter. wasm-bindgen's
       * `__wbindgen_init_externref_table` runs early and the bootstrap counter is then
       * fast-forwarded past the module-issued indices to avoid collision.
       */
@@ -114,9 +116,9 @@ final class WbindgenAbi(
     }
 
     /** Store the slot index itself as the externref value at that slot in the module's table.
-      * Mirrors the JS glue's `wasm.__wbindgen_externrefs.set(idx, obj)` step (minus the object
-      * — on JVM we keep the object in our own map, and the table just holds the integer
-      * handle so `table.get(idx)` round-trips back to `idx`).
+      * Mirrors the JS glue's `wasm.__wbindgen_externrefs.set(idx, obj)` step (minus the object — on
+      * JVM we keep the object in our own map, and the table just holds the integer handle so
+      * `table.get(idx)` round-trips back to `idx`).
       */
     private def writeTableSlot(instance: Instance, slot: Int): Unit = {
         if cachedExternrefTable == null then
@@ -141,8 +143,8 @@ final class WbindgenAbi(
     def readString(instance: Instance, ptr: Int, len: Int): String =
         new String(instance.memory().readBytes(ptr, len), StandardCharsets.UTF_8)
 
-    /** Wrap every handler so the first call captures the WASM Instance — gives [[alloc]] access
-      * to `__externref_table_alloc` without threading the Instance through call sites.
+    /** Wrap every handler so the first call captures the WASM Instance — gives [[alloc]] access to
+      * `__externref_table_alloc` without threading the Instance through call sites.
       */
     private def captured(h: WasmFunctionHandle): WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -151,11 +153,10 @@ final class WbindgenAbi(
         }
     }
 
-
-    /** Build the default host-import map. Keys are wasm-bindgen **short names** (the prefix up
-      * to and including the trailing underscore before the 16-hex signature hash). The runtime
-      * strips the hash before lookup, so these bindings survive pin bumps that only rotate
-      * signature hashes.
+    /** Build the default host-import map. Keys are wasm-bindgen **short names** (the prefix up to
+      * and including the trailing underscore before the 16-hex signature hash). The runtime strips
+      * the hash before lookup, so these bindings survive pin bumps that only rotate signature
+      * hashes.
       */
     def defaultImports: Map[String, WasmFunctionHandle] =
         rawDefaultImports.view.mapValues(captured).toMap
@@ -297,10 +298,10 @@ final class WbindgenAbi(
     private val isFunction: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val callable = get(args(0).toInt) match {
-                case null                 => false
-                case _: JsIterableFn      => true
-                case _: JsClosure         => true
-                case ref: AnyRef          => ref eq JsQueueMicrotaskFn
+                case null            => false
+                case _: JsIterableFn => true
+                case _: JsClosure    => true
+                case ref: AnyRef     => ref eq JsQueueMicrotaskFn
             }
             Array(if callable then 1L else 0L)
         }
@@ -458,26 +459,24 @@ final class WbindgenAbi(
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val dstPtr = args(0).toInt
             val dstLen = args(1).toInt
-            val bytes: Array[Byte] = get(args(2).toInt) match {
-                case u: JsUint8Array =>
-                    java.util.Arrays.copyOfRange(
-                      u.buffer.bytes,
-                      u.byteOffset,
-                      u.byteOffset + u.byteLength
-                    )
-                case b: JsArrayBuffer => b.bytes
-                case _                => Array.emptyByteArray
+            val (src, srcOffset, srcLen) = get(args(2).toInt) match {
+                case u: JsUint8Array  => (u.buffer.bytes, u.byteOffset, u.byteLength)
+                case b: JsArrayBuffer => (b.bytes, 0, b.bytes.length)
+                case _                => (Array.emptyByteArray, 0, 0)
             }
-            val n = math.min(dstLen, bytes.length)
-            if n > 0 then instance.memory().write(dstPtr, java.util.Arrays.copyOf(bytes, n))
+            val n = math.min(dstLen, srcLen)
+            if n > 0 then
+                instance
+                    .memory()
+                    .write(dstPtr, java.util.Arrays.copyOfRange(src, srcOffset, srcOffset + n))
             Array.emptyLongArray
         }
     }
 
     /** Mirror of the upstream JS init: grow the externref table by 4 and seed it with
-      * `[undefined, null, true, false]` at the four newly-allocated slots, plus `undefined`
-      * at slot 0. Our JVM-side `externrefs` map is updated in lockstep so subsequent reads
-      * agree with what WASM sees on the table.
+      * `[undefined, null, true, false]` at the four newly-allocated slots, plus `undefined` at slot
+      * 0. Our JVM-side `externrefs` map is updated in lockstep so subsequent reads agree with what
+      * WASM sees on the table.
       */
     private val initExternrefTable: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -566,9 +565,9 @@ final class WbindgenAbi(
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val v = get(args(0).toInt)
             val n: java.lang.Double = v match {
-                case null                    => java.lang.Double.valueOf(0.0)
-                case WbindgenAbi.Undefined   => java.lang.Double.valueOf(Double.NaN)
-                case n: java.lang.Number     => java.lang.Double.valueOf(n.doubleValue)
+                case null                  => java.lang.Double.valueOf(0.0)
+                case WbindgenAbi.Undefined => java.lang.Double.valueOf(Double.NaN)
+                case n: java.lang.Number   => java.lang.Double.valueOf(n.doubleValue)
                 case s: String =>
                     val trimmed = s.trim
                     if trimmed.isEmpty then java.lang.Double.valueOf(0.0)
@@ -588,8 +587,8 @@ final class WbindgenAbi(
     // ------------------------------------------------------------------
 
     /** Single-arg `__wbindgen_cast_*` fallback for the numeric casts (F64 and U64 BigInt).
-      * Hash-specific pinnings in [[pinnedImports]] override this for the two-arg string cast
-      * and the closure casts.
+      * Hash-specific pinnings in [[pinnedImports]] override this for the two-arg string cast and
+      * the closure casts.
       */
     private val castNumericFallback: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -606,23 +605,22 @@ final class WbindgenAbi(
         }
     }
 
-    /** All four `static_accessor_*` imports resolve to a globalThis-sentinel externref. JS
-      * glue allocates a fresh slot on every call; we match that behaviour so the externref
-      * table grows in lockstep with what Rust expects.
+    /** All four `static_accessor_*` imports resolve to a globalThis-sentinel externref. JS glue
+      * allocates a fresh slot on every call; we match that behaviour so the externref table grows
+      * in lockstep with what Rust expects.
       */
     private val staticGlobal: WasmFunctionHandle = freshHandle(JsGlobal)
 
-    /** Accessor that returns 0 — the wasm-bindgen convention for a null / "not-defined"
-      * externref handle. Used for `self` and `window` in Node.js, which are browser-only
-      * globals.
+    /** Accessor that returns 0 — the wasm-bindgen convention for a null / "not-defined" externref
+      * handle. Used for `self` and `window` in Node.js, which are browser-only globals.
       */
     private val staticNullHandle: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array(0L)
     }
 
-    /** Zero-arg WASM import that allocates a fresh externref slot holding `singleton` on
-      * every call and returns that slot index. Mirrors the JS glue's `addToExternrefTable0`
-      * pattern — JS does not cache.
+    /** Zero-arg WASM import that allocates a fresh externref slot holding `singleton` on every call
+      * and returns that slot index. Mirrors the JS glue's `addToExternrefTable0` pattern — JS does
+      * not cache.
       */
     private def freshHandle(singleton: AnyRef): WasmFunctionHandle =
         new WasmFunctionHandle {
@@ -637,12 +635,12 @@ final class WbindgenAbi(
     private val lengthOf: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val len = get(args(0).toInt) match {
-                case s: String         => s.getBytes(StandardCharsets.UTF_8).length
-                case a: JsArray        => a.items.size
-                case b: JsArrayBuffer  => b.bytes.length
-                case u: JsUint8Array   => u.byteLength
-                case h: JsHeaders      => h.entries.size
-                case _                 => 0
+                case s: String        => s.getBytes(StandardCharsets.UTF_8).length
+                case a: JsArray       => a.items.size
+                case b: JsArrayBuffer => b.bytes.length
+                case u: JsUint8Array  => u.byteLength
+                case h: JsHeaders     => h.entries.size
+                case _                => 0
             }
             Array(len.toLong)
         }
@@ -673,7 +671,7 @@ final class WbindgenAbi(
                 if key.eq(JsIteratorSymbol) then entriesFnFor(container)
                 else
                     container match {
-                        case m: JsMap    => m.entries.getOrElse(key, WbindgenAbi.Undefined)
+                        case m: JsMap => m.entries.getOrElse(key, WbindgenAbi.Undefined)
                         case o: JsObject =>
                             key match {
                                 case k: String => o.entries.getOrElse(k, WbindgenAbi.Undefined)
@@ -686,8 +684,8 @@ final class WbindgenAbi(
     }
 
     /** Build a zero-arg [[JsIterableFn]] whose call produces a [[JsIterator]] over `container`.
-      * Mirrors JS's `obj[Symbol.iterator]` method lookup: the return is callable and yields
-      * the iterator on invocation (not the iterator itself).
+      * Mirrors JS's `obj[Symbol.iterator]` method lookup: the return is callable and yields the
+      * iterator on invocation (not the iterator itself).
       */
     private def entriesFnFor(container: AnyRef | Null): AnyRef | Null =
         container match {
@@ -696,44 +694,34 @@ final class WbindgenAbi(
             case _ => WbindgenAbi.Undefined
         }
 
-    private def buildEntriesIterator(container: AnyRef | Null): JsIterator = container match {
-        case h: JsHeaders =>
-            val tuples = h.entries.iterator.map { case (k, v) =>
-                JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v)).asInstanceOf[AnyRef | Null]
-            }
-            new JsIterator(tuples)
-        case o: JsObject =>
-            val tuples = o.entries.iterator.map { case (k, v) =>
-                JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v)).asInstanceOf[AnyRef | Null]
-            }
-            new JsIterator(tuples)
-        case a: JsArray =>
-            val tuples = a.items.iterator.zipWithIndex.map { case (v, i) =>
-                JsArray(
-                  mutable.ArrayBuffer[AnyRef | Null](java.lang.Double.valueOf(i.toDouble), v)
-                ).asInstanceOf[AnyRef | Null]
-            }
-            new JsIterator(tuples)
-        case m: JsMap =>
-            val tuples = m.entries.iterator.map { case (k, v) =>
-                JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v)).asInstanceOf[AnyRef | Null]
-            }
-            new JsIterator(tuples)
-        case _ => new JsIterator(Iterator.empty)
+    private def buildEntriesIterator(container: AnyRef | Null): JsIterator = {
+        def tuple(k: AnyRef | Null, v: AnyRef | Null): AnyRef | Null =
+            JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v)).asInstanceOf[AnyRef | Null]
+        val tuples: Iterator[AnyRef | Null] = container match {
+            case h: JsHeaders => h.entries.iterator.map((k, v) => tuple(k, v))
+            case o: JsObject  => o.entries.iterator.map((k, v) => tuple(k, v))
+            case m: JsMap     => m.entries.iterator.map((k, v) => tuple(k, v))
+            case a: JsArray =>
+                a.items.iterator.zipWithIndex.map((v, i) =>
+                    tuple(java.lang.Double.valueOf(i.toDouble), v)
+                )
+            case _ => Iterator.empty
+        }
+        new JsIterator(tuples)
     }
 
-    /** `__wbg_set_*` — polymorphic over Array.set (ref, i32, ref), Map.set / Reflect.set
-      * (ref, ref, ref). The middle arg is either an index or a key handle depending on
-      * container type; we resolve that locally.
+    /** `__wbg_set_*` — polymorphic over Array.set (ref, i32, ref), Map.set / Reflect.set (ref, ref,
+      * ref). The middle arg is either an index or a key handle depending on container type; we
+      * resolve that locally.
       */
     private val setIndexed: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             if args.length == 3 then {
                 (get(args(0).toInt), get(args(1).toInt), get(args(2).toInt)) match {
-                    case (a: JsArray, _, v)           => arraySet(a, args(1).toInt, v)
-                    case (m: JsMap, k, v)             => m.entries(k) = v
-                    case (o: JsObject, k: String, v)  => o.entries(k) = v
-                    case _                            => ()
+                    case (a: JsArray, _, v)          => arraySet(a, args(1).toInt, v)
+                    case (m: JsMap, k, v)            => m.entries(k) = v
+                    case (o: JsObject, k: String, v) => o.entries(k) = v
+                    case _                           => ()
                 }
                 Array.emptyLongArray
             } else Array(alloc(WbindgenAbi.Undefined).toLong)
@@ -748,9 +736,9 @@ final class WbindgenAbi(
     private val hasKey: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val present = (get(args(0).toInt), get(args(1).toInt)) match {
-                case (m: JsMap, k)               => m.entries.contains(k)
-                case (o: JsObject, k: String)    => o.entries.contains(k)
-                case _                           => false
+                case (m: JsMap, k)            => m.entries.contains(k)
+                case (o: JsObject, k: String) => o.entries.contains(k)
+                case _                        => false
             }
             Array(if present then 1L else 0L)
         }
@@ -795,8 +783,8 @@ final class WbindgenAbi(
             Array(alloc(iteratorNextResult(get(args(0).toInt))).toLong)
     }
 
-    /** `__wbg_next_*` GETTER variant — returns the iterator's `next` method bound to the
-      * iterator. Later `method.call(this, ...)` invocations run [[iteratorNextResult]].
+    /** `__wbg_next_*` GETTER variant — returns the iterator's `next` method bound to the iterator.
+      * Later `method.call(this, ...)` invocations run [[iteratorNextResult]].
       */
     private val iteratorNextGetter: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -806,8 +794,8 @@ final class WbindgenAbi(
     }
 
     /** Pull the next element from `container` under the JS iterator protocol. Returns a
-      * [[JsIterResult]] — this is always an object so `typeof it === "object"` holds,
-      * which `js_sys::Iterator::looks_like_iterator` requires.
+      * [[JsIterResult]] — this is always an object so `typeof it === "object"` holds, which
+      * `js_sys::Iterator::looks_like_iterator` requires.
       */
     private def iteratorNextResult(container: AnyRef | Null): JsIterResult = container match {
         case it: JsIterator =>
@@ -832,8 +820,8 @@ final class WbindgenAbi(
             }
     }
 
-    /** `__wbg_key_(ret_ptr, iter_result, key_len)` — iterator-specific shape that writes the
-      * String key into retPtr. Used for Map/Object iteration.
+    /** `__wbg_key_(ret_ptr, iter_result, key_len)` — iterator-specific shape that writes the String
+      * key into retPtr. Used for Map/Object iteration.
       */
     private val copyStringToRetPtr: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -899,8 +887,8 @@ final class WbindgenAbi(
         }
     }
 
-    /** `new BroadcastChannel(name)` — Mithril's feedback receiver uses this cross-tab API; on
-      * JVM we retain the channel name but don't implement actual cross-process broadcast.
+    /** `new BroadcastChannel(name)` — Mithril's feedback receiver uses this cross-tab API; on JVM
+      * we retain the channel name but don't implement actual cross-process broadcast.
       */
     private val newBroadcastChannel: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -909,10 +897,10 @@ final class WbindgenAbi(
         }
     }
 
-    /** `new Function(sourceString)` — JavaScript dynamic code-compilation, typically invoked
-      * as a feature-detection probe (`try { new Function("return this")(); } catch {…}`). We
-      * can't evaluate arbitrary JS source; raise so wasm-bindgen's handleError wrapper catches
-      * the failure and the caller falls through to its `catch` branch.
+    /** `new Function(sourceString)` — JavaScript dynamic code-compilation, typically invoked as a
+      * feature-detection probe (`try { new Function("return this")(); } catch {…}`). We can't
+      * evaluate arbitrary JS source; raise so wasm-bindgen's handleError wrapper catches the
+      * failure and the caller falls through to its `catch` branch.
       */
     private val newFunctionStub: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -938,7 +926,7 @@ final class WbindgenAbi(
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val buf = get(args(0).toInt) match {
                 case b: JsArrayBuffer => b
-                case _ => JsArrayBuffer(Array.emptyByteArray)
+                case _                => JsArrayBuffer(Array.emptyByteArray)
             }
             val offset = args(1).toInt
             val length = args(2).toInt
@@ -955,9 +943,8 @@ final class WbindgenAbi(
         }
     }
 
-    /** `Map.set(k, v)` → returns the Map itself. Same arity as the other polymorphic
-      * `__wbg_set_*` hashes (ref, ref, ref) but returns one externref where they return
-      * nothing.
+    /** `Map.set(k, v)` → returns the Map itself. Same arity as the other polymorphic `__wbg_set_*`
+      * hashes (ref, ref, ref) but returns one externref where they return nothing.
       */
     private val mapSetReturning: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -979,13 +966,13 @@ final class WbindgenAbi(
     }
 
     /** Hash-specific bindings for the currently pinned upstream mithril-client-wasm 0.9.11. The
-      * source of truth is the npm package's `mithril_client_wasm.js` shipped alongside the
-      * wasm blob at `src/test/resources/mithril/`; re-read it on pin bump to refresh this map.
+      * source of truth is the npm package's `mithril_client_wasm.js` shipped alongside the wasm
+      * blob at `src/test/resources/mithril/`; re-read it on pin bump to refresh this map.
       *
       * Categorised:
       *   - Zero-arg ctors whose short name `__wbg_new_` ambiguously covers many JS builtins.
-      *   - Two-arg `(i32,i32)` ctors that share the same short name but construct very
-      *     different values (Error / BroadcastChannel / Promise-with-executor).
+      *   - Two-arg `(i32,i32)` ctors that share the same short name but construct very different
+      *     values (Error / BroadcastChannel / Promise-with-executor).
       *   - One-arg `(ref)` Uint8Array-from-buffer ctor.
       *   - Two closure-creating `__wbindgen_cast_*` hashes + the (ptr,len)->String cast.
       */
@@ -1042,10 +1029,10 @@ final class WbindgenAbi(
             Array(alloc(Word64(args(0).toLong).toBigInteger).toLong)
     }
 
-    /** Closure-cast factory: `(fnPtrA: u32, fnPtrB: u32) -> Externref` that wraps the two
-      * pointers into a [[JsClosure]] targeting the named invoke/destroy exports. Each pinned
-      * `__wbindgen_cast_*` hash corresponds to one Rust closure shape (fixed arity + export
-      * pair); the factory lets us register both variants with one line each.
+    /** Closure-cast factory: `(fnPtrA: u32, fnPtrB: u32) -> Externref` that wraps the two pointers
+      * into a [[JsClosure]] targeting the named invoke/destroy exports. Each pinned
+      * `__wbindgen_cast_*` hash corresponds to one Rust closure shape (fixed arity + export pair);
+      * the factory lets us register both variants with one line each.
       */
     private def closureCast(
         arity: Int,
@@ -1073,9 +1060,9 @@ final class WbindgenAbi(
       destroyExport = closureHashes.zeroArgClosureDestroy
     )
 
-    /** `new Promise(executor)` placeholder — captures the closure pointers but does NOT invoke
-      * the executor. The async runtime ([[MithrilAsyncRuntime]]) overrides this short name in
-      * its overlay map with a version that actually runs the executor.
+    /** `new Promise(executor)` placeholder — captures the closure pointers but does NOT invoke the
+      * executor. The async runtime ([[MithrilAsyncRuntime]]) overrides this short name in its
+      * overlay map with a version that actually runs the executor.
       */
     private val newPromiseWithExecutor: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -1132,9 +1119,9 @@ final class WbindgenAbi(
         }
     }
 
-    /** Sync-mode stub for `globalThis.queueMicrotask` (getter returning the function ref).
-      * Returns a handle to an Undefined-ish sentinel since no real queue is running. The
-      * async runtime overlay replaces this with a real implementation.
+    /** Sync-mode stub for `globalThis.queueMicrotask` (getter returning the function ref). Returns
+      * a handle to an Undefined-ish sentinel since no real queue is running. The async runtime
+      * overlay replaces this with a real implementation.
       */
     private val queueMicrotaskGetterStub: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
@@ -1190,9 +1177,9 @@ final class WbindgenAbi(
     private val anyByteLength: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
             get(args(0).toInt) match {
-                case u: JsUint8Array   => Array(u.byteLength.toLong)
-                case b: JsArrayBuffer  => Array(b.bytes.length.toLong)
-                case _                 => Array(0L)
+                case u: JsUint8Array  => Array(u.byteLength.toLong)
+                case b: JsArrayBuffer => Array(b.bytes.length.toLong)
+                case _                => Array(0L)
             }
     }
 
@@ -1243,7 +1230,7 @@ final class WbindgenAbi(
             val hdrs = get(args(1).toInt)
             (req, hdrs) match {
                 case (r: JsRequest, h: JsHeaders) => r.headers = h
-                case (r: JsRequest, o: JsObject)  =>
+                case (r: JsRequest, o: JsObject) =>
                     val h = JsHeaders(mutable.LinkedHashMap.empty)
                     o.entries.foreach { case (k, v) => h.entries(k) = String.valueOf(v) }
                     r.headers = h
@@ -1267,9 +1254,9 @@ final class WbindgenAbi(
     private val requestSetMode: WasmFunctionHandle = requestSetIntField((r, v) => r.mode = v)
 
     /** Factory for `__wbg_set_{mode,cache,credentials}_*` — all have signature
-      * `(request, i32) -> ()` and just stash the int on the [[JsRequest]] for the fetch bridge
-      * to consult later. The int semantics come from `web_sys::RequestMode` etc. — they're
-      * opaque to us until a real fetch is wired.
+      * `(request, i32) -> ()` and just stash the int on the [[JsRequest]] for the fetch bridge to
+      * consult later. The int semantics come from `web_sys::RequestMode` etc. — they're opaque to
+      * us until a real fetch is wired.
       */
     private def requestSetIntField(setter: (JsRequest, Int) => Unit): WasmFunctionHandle =
         new WasmFunctionHandle {
@@ -1341,7 +1328,9 @@ final class WbindgenAbi(
 
     private val localStorageGet: WasmFunctionHandle = freshHandle(JsLocalStorage)
 
-    /** `__wbg_getItem_(ret_ptr, storage_handle, key_ptr, key_len)` — writes value or (0,0) to retPtr. */
+    /** `__wbg_getItem_(ret_ptr, storage_handle, key_ptr, key_len)` — writes value or (0,0) to
+      * retPtr.
+      */
     private val localStorageGetItem: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val retPtr = args(0).toInt
@@ -1379,7 +1368,8 @@ final class WbindgenAbi(
     // crypto.getRandomValues.
     // ------------------------------------------------------------------
 
-    /** `__wbg_getRandomValues_(ptr, len)` — fill WASM memory with cryptographically random bytes. */
+    /** `__wbg_getRandomValues_(ptr, len)` — fill WASM memory with cryptographically random bytes.
+      */
     private val getRandomValues: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val ptr = args(0).toInt
@@ -1506,23 +1496,24 @@ object WbindgenAbi {
         val continuations: mutable.ArrayBuffer[(Option[JsClosure], Option[JsClosure])] =
             mutable.ArrayBuffer.empty
 
-        /** Scala-side settlement callbacks that fire when this promise transitions from pending
-          * to either fulfilled or rejected. Used by [[MithrilAsyncRuntime]] to thread
-          * `.then(...)` continuations and upstream-promise forwarding.
+        /** Scala-side settlement callbacks that fire when this promise transitions from pending to
+          * either fulfilled or rejected. Used by [[MithrilAsyncRuntime]] to thread `.then(...)`
+          * continuations and upstream-promise forwarding.
           */
         val pendingSettlers: mutable.ArrayBuffer[(AnyRef | Null, AnyRef | Null) => Unit] =
             mutable.ArrayBuffer.empty
     }
 
     object JsPromise {
-        def resolved(v: AnyRef | Null): JsPromise = new JsPromise(pending = false, value = v, error = null)
+        def resolved(v: AnyRef | Null): JsPromise =
+            new JsPromise(pending = false, value = v, error = null)
     }
 
-    /** A wasm-bindgen-emitted JS closure — a Rust function pointer pair plus the export names
-      * that dispatch into it. On JVM, invoking the closure means calling the `invokeExport`
-      * function on the Chicory [[com.dylibso.chicory.runtime.Instance]] with
-      * `(fnPtrA, fnPtrB, ...args)`; destruction is a no-op (JVM GC handles the Scala side; the
-      * Rust side's ref-count decrement goes via `__wbg_cb_unref_` which we already stub).
+    /** A wasm-bindgen-emitted JS closure — a Rust function pointer pair plus the export names that
+      * dispatch into it. On JVM, invoking the closure means calling the `invokeExport` function on
+      * the Chicory [[com.dylibso.chicory.runtime.Instance]] with `(fnPtrA, fnPtrB, ...args)`;
+      * destruction is a no-op (JVM GC handles the Scala side; the Rust side's ref-count decrement
+      * goes via `__wbg_cb_unref_` which we already stub).
       */
     final case class JsClosure(
         fnPtrA: Int,
@@ -1532,64 +1523,63 @@ object WbindgenAbi {
         arity: Int
     )
 
-    /** Synthetic `BroadcastChannel`. No cross-process broadcast on JVM; the receiver API is
-      * enough for Mithril's in-client feedback loop to stay internally consistent.
+    /** Synthetic `BroadcastChannel`. No cross-process broadcast on JVM; the receiver API is enough
+      * for Mithril's in-client feedback loop to stay internally consistent.
       */
     final case class JsBroadcastChannel(name: String)
 
-    /** Zero-arg callable — stands in for a JS function looked up via
-      * `container[Symbol.iterator]`. When invoked via `__wbg_call_` it produces an iterator
-      * (or other ref) by running `produce`. Rust code uses this to duck-type a Headers /
-      * Map / Object as iterable; see `js_sys::try_iter`.
+    /** Zero-arg callable — stands in for a JS function looked up via `container[Symbol.iterator]`.
+      * When invoked via `__wbg_call_` it produces an iterator (or other ref) by running `produce`.
+      * Rust code uses this to duck-type a Headers / Map / Object as iterable; see
+      * `js_sys::try_iter`.
       */
     final case class JsIterableFn(produce: () => AnyRef | Null)
 
-    /** Sentinel returned by the `queueMicrotask` getter so later `fn.call(thisArg, cb)`
-      * sites can recognise the target as "enqueue the callback". Lives here so
-      * [[WbindgenAbi.isFunction]] can recognise it without cycling through
-      * `MithrilAsyncRuntime`.
+    /** Sentinel returned by the `queueMicrotask` getter so later `fn.call(thisArg, cb)` sites can
+      * recognise the target as "enqueue the callback". Lives here so [[WbindgenAbi.isFunction]] can
+      * recognise it without cycling through `MithrilAsyncRuntime`.
       */
     object JsQueueMicrotaskFn {
         override def toString: String = "wbindgen.queueMicrotaskFn"
     }
 
-    /** Render a JVM value as JSON. Used by `JSON.stringify` bridge. For our synthetic host types
-      * we emit something sensible; for unknown refs we fall back to `String.valueOf`.
+    /** Render a JVM value as JSON. Used by `JSON.stringify` bridge. For our synthetic host types we
+      * emit something sensible; for unknown refs we fall back to `String.valueOf`.
       */
     def jsonStringify(v: AnyRef | Null): String = v match {
-        case null                    => "null"
-        case Undefined               => "undefined"
-        case s: String               => escapeJsonString(s)
-        case b: java.lang.Boolean    => if b.booleanValue then "true" else "false"
-        case n: java.lang.Number     =>
+        case null                 => "null"
+        case Undefined            => "undefined"
+        case s: String            => escapeJsonString(s)
+        case b: java.lang.Boolean => if b.booleanValue then "true" else "false"
+        case n: java.lang.Number =>
             val d = n.doubleValue
             if d.isNaN || d.isInfinite then "null"
             else if d == d.toLong.toDouble && math.abs(d) < 1e15 then d.toLong.toString
             else d.toString
-        case a: JsArray              =>
+        case a: JsArray =>
             a.items.iterator.map(jsonStringify).mkString("[", ",", "]")
-        case o: JsObject             =>
+        case o: JsObject =>
             o.entries.iterator
                 .map { case (k, v) => s"${escapeJsonString(k)}:${jsonStringify(v)}" }
                 .mkString("{", ",", "}")
-        case m: JsMap                =>
+        case m: JsMap =>
             m.entries.iterator
                 .collect { case (k: String, v) => s"${escapeJsonString(k)}:${jsonStringify(v)}" }
                 .mkString("{", ",", "}")
-        case other                   => escapeJsonString(String.valueOf(other))
+        case other => escapeJsonString(String.valueOf(other))
     }
 
     private def escapeJsonString(s: String): String = {
         val sb = new StringBuilder(s.length + 2)
         sb.append('"')
         s.foreach {
-            case '"'                          => sb.append("\\\"")
-            case '\\'                         => sb.append("\\\\")
-            case '\n'                         => sb.append("\\n")
-            case '\r'                         => sb.append("\\r")
-            case '\t'                         => sb.append("\\t")
-            case c if c < 0x20                => sb.append(f"\\u$c%04x")
-            case c                            => sb.append(c)
+            case '"'           => sb.append("\\\"")
+            case '\\'          => sb.append("\\\\")
+            case '\n'          => sb.append("\\n")
+            case '\r'          => sb.append("\\r")
+            case '\t'          => sb.append("\\t")
+            case c if c < 0x20 => sb.append(f"\\u$c%04x")
+            case c             => sb.append(c)
         }
         sb.append('"')
         sb.toString

@@ -83,15 +83,24 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
             bridged.contains(n) || bridged.contains(MithrilWasmRuntime.stripHash(n))
         }
 
-        val byBucket: Map[String, Seq[String]] = unresolved.groupBy { n =>
-            val short = MithrilWasmRuntime.stripHash(n)
-            // Bucket by the segment after `__wbg_` (host-function logical name root).
-            short.stripPrefix("__wbg_").takeWhile(c => c != '_' && c.isLetterOrDigit).toLowerCase
-        }.map { case (k, v) => k -> v.sorted }
+        val byBucket: Map[String, Seq[String]] = unresolved
+            .groupBy { n =>
+                val short = MithrilWasmRuntime.stripHash(n)
+                // Bucket by the segment after `__wbg_` (host-function logical name root).
+                short
+                    .stripPrefix("__wbg_")
+                    .takeWhile(c => c != '_' && c.isLetterOrDigit)
+                    .toLowerCase
+            }
+            .map { case (k, v) => k -> v.sorted }
 
-        info(s"total=${names.size}, bridged=${names.size - unresolved.size}, unresolved=${unresolved.size}")
+        info(
+          s"total=${names.size}, bridged=${names.size - unresolved.size}, unresolved=${unresolved.size}"
+        )
         byBucket.toSeq.sortBy(-_._2.size).foreach { case (bucket, items) =>
-            info(f"  bucket=$bucket%-20s count=${items.size}%3d e.g. ${items.take(3).mkString(", ")}")
+            info(
+              f"  bucket=$bucket%-20s count=${items.size}%3d e.g. ${items.take(3).mkString(", ")}"
+            )
         }
     }
 
@@ -168,7 +177,9 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         val listener = new ChicoryTraceListener(
           tableSizeProbe = tableIdx => Option(liveInstance).map(_.table(tableIdx).size()),
           memoryProbe = Some((addr, len) =>
-              Option(liveInstance).map(_.memory().readBytes(addr, len)).getOrElse(Array.emptyByteArray)
+              Option(liveInstance)
+                  .map(_.memory().readBytes(addr, len))
+                  .getOrElse(Array.emptyByteArray)
           )
         )
         val (rt, _) = MithrilWasmRuntime.instantiate(imports, Some(listener))
@@ -192,23 +203,15 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
             case scala.util.Success(r) =>
                 info(s"npm-release list_mithril_certificates returned: ${r.toSeq}")
             case scala.util.Failure(t) =>
-                info(s"npm-release list_mithril_certificates FAILED: ${t.getClass.getName}: ${t.getMessage}")
+                info(
+                  s"npm-release list_mithril_certificates FAILED: ${t.getClass.getName}: ${t.getMessage}"
+                )
         }
     }
 
-    // End-to-end over the real testing-preview aggregator. Drives `list_mithril_certificates`
-    // through the Rust async executor, which issues `fetch` over our HTTP bridge, iterates the
-    // response headers, and reads the body via `Response.arrayBuffer()` + copy-to-Rust-Vec.
-    //
-    // STATUS (2026-04-23): the fetch pipeline works — the live aggregator response reaches
-    // serde_json inside the pinned WASM as valid bytes (confirmed by read-back dumps). Final
-    // deserialization fails with "trailing characters" because the 0.9.11 `SignedEntityType`
-    // enum doesn't know the aggregator's newer `CardanoBlocksTransactions` variant — an
-    // upstream schema drift, not a bridge defect. To prove "receive node data" end-to-end
-    // once the schema lines up, bump the pinned wasm blob to a version whose `SignedEntityType`
-    // covers the aggregator output (or point at an older aggregator on a matching era).
-    //
-    // Marked [network] because it requires DNS + outbound HTTPS to mithril.network.
+    // Expected to reach serde_json and cancel on upstream schema drift: 0.9.11's
+    // `SignedEntityType` enum doesn't know the aggregator's newer `CardanoBlocksTransactions`
+    // variant. Bump the pinned WASM blob once it lines up. [network] = DNS + outbound HTTPS.
     test("e2e [network]: list_mithril_certificates drives real HTTP through the bridge") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*
@@ -242,9 +245,12 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
             case scala.util.Success(v) =>
                 info(s"received node data: ${v.getClass.getSimpleName} -> ${render(v)}")
                 assert(v != null, "expected a non-null certificate list")
-            case scala.util.Failure(t) if t.getMessage != null &&
+            case scala.util.Failure(t)
+                if t.getMessage != null &&
                     t.getMessage.contains("trailing characters") =>
-                info(s"pipeline reached serde_json (bytes transferred into WASM memory): ${t.getMessage}")
+                info(
+                  s"pipeline reached serde_json (bytes transferred into WASM memory): ${t.getMessage}"
+                )
                 cancel("known upstream schema drift — see test comment")
             case scala.util.Failure(t) =>
                 info(s"e2e call failed at an earlier stage: ${t.getClass.getName}: ${t.getMessage}")
@@ -284,7 +290,9 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
                 t.printStackTrace(new java.io.PrintWriter(sw))
                 info(sw.toString)
             case scala.util.Success(result) =>
-                info(s"list_mithril_certificates returned (Promise handle or sync value): ${result.toSeq}")
+                info(
+                  s"list_mithril_certificates returned (Promise handle or sync value): ${result.toSeq}"
+                )
         }
     }
 }
