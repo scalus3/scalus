@@ -147,15 +147,27 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         }
     }
 
-    // Loads the locally-compiled debug build with `console_error_panic_hook` enabled. Latest
-    // status: the original Chicory CALL_INDIRECT underflow is fixed (it was unimplemented
-    // host-import stubs throwing from inside the executor); now the failure is a WASM-level
-    // `TABLE_GET out of bounds` trap inside the Rust executor body, after successful calls to
-    // static_accessor_SELF + is_undefined. Since the panic hook doesn't fire (the trap isn't
-    // a Rust panic but a WASM spec-level table trap), next step is to determine exactly which
-    // table index Rust is accessing — either by patching Chicory's TABLE_GET to log on OOB,
-    // or by wiring `__wbindgen_externrefs.set` via a Chicory TableInstance helper that logs
-    // every write and compares table-size-at-access vs requested index.
+    // Loads the locally-compiled debug build with console_error_panic_hook enabled.
+    //
+    // Progress against the crash (2026-04-23):
+    //   - Ruled out: externref-table alignment (our slots 132/133/136/138 all round-trip via
+    //     setRef, no mismatch; table size is 256, allocations in-bounds).
+    //   - Ruled out: CALL_INDIRECT operand-stack underflow — root-caused as unimplemented
+    //     host imports throwing unreachable (createTask, run) from inside the executor body.
+    //     Stubs wired in the test's debugExtras map.
+    //   - Ruled out: Rust panic — console_error_panic_hook never fires; the trap is WASM
+    //     spec-level, not panic.
+    //
+    // Still failing: `WasmRuntimeException: out of bounds table access` inside the Rust
+    // executor after static_accessor_SELF + is_undefined(JsGlobal_slot). The trap could be
+    // on the funcref table (CALL_INDIRECT upstream) or on a higher externref slot Rust is
+    // accessing via its own internal index (not one we handed it).
+    //
+    // Next step: Chicory-level introspection — either a compile-time patch of
+    // OpcodeImpl.TABLE_GET to log (table_idx, requested_idx, table.size()) on OOB, or a
+    // reflection-based wrapper around TableInstance that logs every access. Until then,
+    // we can't distinguish "Rust allocated a slot outside our JVM map" from "Rust computed
+    // a bad index from heap content."
     ignore("async runtime [debug-wasm]: list_mithril_certificates reaches fetch without tripping closure stubs") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*

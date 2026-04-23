@@ -151,18 +151,6 @@ final class WbindgenAbi(
         }
     }
 
-    /** Like [[captured]] but also logs the call. Use sparingly for debugging. */
-    private def capturedLogged(name: String, h: WasmFunctionHandle): WasmFunctionHandle =
-        new WasmFunctionHandle {
-            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-                captureInstance(instance)
-                val argList = (0 until args.length).map(i => args(i).toLong).mkString(",")
-                WbindgenAbi.logger.info(s"[host-call] $name($argList)")
-                val result = h.apply(instance, args.map(_.toLong)*)
-                result
-            }
-        }
-
     /** Build the default host-import map. Keys are wasm-bindgen **short names** (the prefix up
       * to and including the trailing underscore before the 16-hex signature hash). The runtime
       * strips the hash before lookup, so these bindings survive pin bumps that only rotate
