@@ -56,11 +56,35 @@ class SirToUplcV3Lowering(
         // (where helper A's rhs references helper B AND B's rhs references A) would require a
         // multi-binding `letrec` — not currently generated. Callers that would produce mutual
         // recursion should be detected at helper-construction time.
-        val wrapped = lctx.pendingTopLevelLetRecs.foldRight(retV) {
-            case ((eqFnVar, eqFnRhs), acc) =>
-                LetRecLoweredValue(eqFnVar, eqFnRhs, acc, eqFnVar.pos)
+        // Only wrap with letrec entries actually reachable from `retV`. Eager support-binding
+        // init (ScalusRuntime.initSupportBindings) materializes every support def, and those
+        // lowerings may push conversion-helper entries (e.g. `$builtinListToUplcConstr`) into
+        // `pendingTopLevelLetRecs`. Unconditionally wrapping the root with them would emit
+        // `(λ helper root) rhs` even when neither `root` nor any kept letrec references
+        // `helper`. Reachability: start from `retV.usedUplevelVars`, then expand through any
+        // accepted letrec entry's rhs (`eqFnRhs.usedUplevelVars`) until fixed.
+        val pending = lctx.pendingTopLevelLetRecs.toList
+        val reachableIds: Set[String] = {
+            var ids = retV.usedUplevelVars.map(_.id)
+            var changed = true
+            while changed do {
+                changed = false
+                pending.foreach { case (eqFnVar, eqFnRhs) =>
+                    if ids.contains(eqFnVar.id) then
+                        val newIds = ids ++ eqFnRhs.usedUplevelVars.map(_.id)
+                        if newIds.size != ids.size then
+                            ids = newIds
+                            changed = true
+                }
+            }
+            ids
         }
-        // println(s"lowered  value: ${wrapped.pretty.render(100)}")
+        val wrapped = pending.foldRight(retV) {
+            case ((eqFnVar, eqFnRhs), acc) =>
+                if reachableIds.contains(eqFnVar.id) then
+                    LetRecLoweredValue(eqFnVar, eqFnRhs, acc, eqFnVar.pos)
+                else acc
+        }
         wrapped
     }
 

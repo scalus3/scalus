@@ -27,18 +27,13 @@ object ScalusRuntime {
 
     /** Eagerly materialize every support-module binding into `lctx.scope` as a lazy named var.
       *
-      * Called from [[initContext]] so repeated `SIR.ExternalVar` references to a
-      * support-module binding all resolve (via `lctx.scope.getByName`) to the SAME
-      * `VariableLoweredValue`, avoiding duplicate definitions and leaking pattern-bound vars
-      * across support-binding bodies.
+      * Called from [[initContext]] so repeated `SIR.ExternalVar` references to a support-module
+      * binding all resolve (via `lctx.scope.getByName`) to the SAME `VariableLoweredValue`, avoiding
+      * duplicate definitions and leaking pattern-bound vars across support-binding bodies.
       *
-      * For bindings in the `UplcConstrListOperations` / `UplcConstrOptionOperations` modules
-      * we lower the body under `inUplcConstrListScope = true` so the body's inner
-      * `List.Cons(...)` / `Option.Some(...)` / `List.Nil` / `Option.None` emissions pick
-      * `SumCaseUplcConstrSirTypeGenerator` (matching the module's always-native-Constr
-      * contract). The flag corresponds to the "we're inside a native-Constr dispatcher body"
-      * state the lazy path inherited from the call chain; setting it explicitly here makes
-      * eager init behave like the lazy path.
+      * For bindings in the `UplcConstrListOperations` / `UplcConstrOptionOperations` modules we
+      * lower under `inUplcConstrListScope = true` so inner `List.Cons(...)` / `Option.Some(...)` /
+      * `List.Nil` / `Option.None` emissions pick `SumCaseUplcConstrSirTypeGenerator`.
       */
     def initSupportBindings(lctx: LoweringContext): Unit = {
         val nativeConstrModules = Set(
