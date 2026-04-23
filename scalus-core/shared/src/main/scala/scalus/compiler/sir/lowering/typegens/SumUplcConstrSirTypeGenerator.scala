@@ -137,9 +137,13 @@ object SumUplcConstrSirTypeGenerator {
             case SIRType.Annotated(tp1, _)          => return buildSumUplcConstr(tp1, pos)
             case _                                  => return SumUplcConstr(Map.empty)
 
-        // Build name-based substitution: TypeVar name → concrete type
+        // Build name-based substitution: TypeVar name → concrete type.
+        // Resolve each typeArg through `lctx.typeUnifyEnv` — at call sites like
+        // `ps.points.headOption2`, the enclosing signature may still carry the
+        // extension method's abstract `A` in typeArgs; the call site's TypeVar
+        // binding (e.g. A → Point) lives in `typeUnifyEnv.filledTypes`.
         val typeSubstByName: Map[String, SIRType] =
-            typeParams.map(_.name).zip(typeArgs).toMap
+            typeParams.map(_.name).zip(typeArgs.map(lctx.resolveTypeVarIfNeeded)).toMap
 
         def extractDeclName(t: SIRType): Option[String] = t match
             case SIRType.SumCaseClass(d, _)       => Some(d.name)
@@ -191,14 +195,15 @@ object SumUplcConstrSirTypeGenerator {
                                         case Transparent | Unwrapped =>
                                             TypeVarRepresentation(tv.kind)
                                         case Fixed =>
-                                            throw LoweringException(
-                                              s"SumUplcConstrSirTypeGenerator: Fixed TypeVar " +
-                                                  s"${tv.showDebug} in UplcConstr field " +
-                                                  s"(constr=${constrDecl.name}, " +
-                                                  s"param=${param.name}, tp=${tp.show}). " +
-                                                  s"Upstream should resolve the TypeVar.",
-                                              constrDecl.annotations.pos
-                                            )
+                                            // A Fixed TypeVar in a UplcConstr field means the
+                                            // caller didn't resolve the type param before we got
+                                            // here (e.g. an extension method whose type param is
+                                            // stamped Fixed by the plugin and isn't bound via
+                                            // `typeUnifyEnv` at this call site). Fall back to the
+                                            // type generator's default rep — for a Fixed TypeVar
+                                            // that's `TypeVarRepresentation(Fixed)` (Data-wrapped
+                                            // abstract), matching the pre-guard behavior.
+                                            lctx.typeGenerator(tv).defaultRepresentation(tv)
                                 // Unsubstituted DataDecl TypeVars (e.g., `Option[*]` at a
                                 // constructor call site where Scala inferred `Nothing`/`Any`
                                 // for the type arg) substitute to FreeUnificator via
