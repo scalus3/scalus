@@ -165,19 +165,26 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
     //       init -> is_undefined(1)=1 -> SELF=0 -> WINDOW=0 -> GLOBAL_THIS=138 ->
     //       is_undefined(138)=0 -> WASM-internal work -> TABLE_GET trap.
     //   - Attempted (and did NOT help): Node.js-correct SELF/WINDOW=0 accessors;
-    //     contiguous init via TableInstance.grow(4) instead of 4 separate allocs.
+    //     contiguous init via TableInstance.grow(4); rebuild WITHOUT
+    //     console_error_panic_hook (same trap, only pc shifts slightly due to code layout).
     //
-    // Leading hypothesis: a debug-build Rust assertion or invariant check is walking an
-    // in-struct externref handle, but the externref encoding Chicory exposes on the
-    // operand stack may diverge from what Rust's debug path expects. Could also be a
-    // secondary table allocated by the debug build that we're not tracking.
+    // Because stripping the panic hook didn't change the trap, the failure is NOT in
+    // debug-assertion paths. It's in core wasm-bindgen / Rust-compiled code that
+    // `list_mithril_certificates` executes pre-executor.
     //
-    // Options from here:
-    //   1. Rebuild the debug blob without console_error_panic_hook — may shortcut the
-    //      debug-assertion path that's failing, so the trap reveals a cleaner cause.
-    //   2. Inspect wasm-bindgen-futures + mithril-client source for what
-    //      list_mithril_certificates does pre-executor that touches externrefs.
-    //   3. Pivot: focus on the amaru-based V2 parser (M10b.P3) and revisit WASM later.
+    // Remaining hypothesis: the externref-table protocol Chicory exposes diverges from
+    // what Rust expects in a subtle way. Specifically, `__externref_table_alloc` returns
+    // slot indices from a Rust-maintained free list. For slots on the free list, the
+    // STORED VALUE from when they were last used may still be present. When Rust reuses
+    // a slot and reads the OLD value (perhaps without a corresponding table.set first),
+    // it can interpret an old heap pointer as a new externref handle and trap.
+    //
+    // Options:
+    //   1. Hook `__externref_table_alloc` on the host side to log every Rust-internal
+    //      alloc + zero-initialize the returned slot via `setRef(slot, 0, instance)`
+    //      before handing it back. That would ensure no stale refs leak from the free
+    //      list.
+    //   2. Pivot to M10b.P3 (amaru-based V2 parser) and revisit WASM later.
     ignore("async runtime [debug-wasm]: list_mithril_certificates reaches fetch without tripping closure stubs") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*

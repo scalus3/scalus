@@ -451,16 +451,19 @@ object MithrilAsyncRuntime {
           zeroArgClosureDestroy = "wasm_bindgen__closure__destroy__hea47394e049eff9b"
         )
 
-        /** Locally-compiled debug build of mithril-client-wasm 0.9.11 with
-          * `console_error_panic_hook` enabled. Used for diagnostic test paths only.
+        /** Locally-compiled `--dev` build of mithril-client-wasm 0.9.11 WITHOUT
+          * `console_error_panic_hook` — the panic hook turned out to add debug-assertion
+          * code paths we couldn't satisfy. Invoke-export hashes match the earlier
+          * Debug0_9_11; only the two closure-cast import hashes change when the crate
+          * dependency graph changes.
           */
         val Debug0_9_11: ClosureHashes = ClosureHashes(
           promiseExecutorImport = "__wbg_new_ff12d2b041fb48f1",
           promiseExecutorInvoke = "wasm_bindgen__convert__closures_____invoke__hf498985395075366",
-          oneArgClosureCastImport = "__wbindgen_cast_2b3d1dcae2027ea1",
+          oneArgClosureCastImport = "__wbindgen_cast_7452b1ccf87eddf8",
           oneArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__h83f64fd803aa6bb4",
           oneArgClosureDestroy = "wasm_bindgen__closure__destroy__he23eb76bd87c9db3",
-          zeroArgClosureCastImport = "__wbindgen_cast_5c1cd1869e09aa29",
+          zeroArgClosureCastImport = "__wbindgen_cast_89b1b0c9f354e42b",
           zeroArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__ha680d4b0d17e7dc3",
           zeroArgClosureDestroy = "wasm_bindgen__closure__destroy__h4ed239079f93e789"
         )

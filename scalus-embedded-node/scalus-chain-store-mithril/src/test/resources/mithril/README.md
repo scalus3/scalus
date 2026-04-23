@@ -7,17 +7,18 @@ npm release, pinned to a specific version:
 |-------------------------------------|----------|----------------------------------------------------------------------|
 | `mithril_client_wasm_bg.wasm`       | 0.9.11   | `5eaa37178263cf1d7cb4da62f40264f318e89c66318ad1b0b474861dd295c519`   |
 | `mithril_client_wasm.js`            | 0.9.11   | `d7a2fda84c9434fd6fec510af823f92e21e5525419d1a39d4553789ddf03389d`   |
-| `mithril_client_wasm_bg.debug.wasm` | 0.9.11*  | `30d602cd9fafd6ac4ff52c98e8a0866b4dac61c69f4800a9a1b99f17118f04e1`   |
+| `mithril_client_wasm_bg.debug.wasm` | 0.9.11*  | `b6305304a03aa8f867ebe0c71f9bc1958e68d08e80d73a8d2f59e26da584ee51`   |
 
-`mithril_client_wasm_bg.debug.wasm` is a locally-rebuilt debug-profile
-variant of 0.9.11 with `console_error_panic_hook` enabled, used only
-by the ignored `[debug-wasm]` driver test that chases down why the
-Rust executor body traps inside Chicory. It is NOT the upstream npm
-artefact (the `*` on the version denotes this); rebuild instructions
-live in the commit history and require `wasm-pack` with a
-wasm32-capable LLVM + Rust 1.85-era stable. See
-`MithrilAsyncRuntime.ClosureHashes.Debug0_9_11` for the closure-hash
-mapping this build produces.
+`mithril_client_wasm_bg.debug.wasm` is a locally-rebuilt `--dev`
+profile variant of 0.9.11. Initially built with
+`console_error_panic_hook` enabled to catch panics; later rebuilt
+without the hook after investigation showed the panic hook was not
+the source of the outstanding Chicory trap. Current version has no
+hook. It is NOT the upstream npm artefact (the `*` on the version
+denotes this); rebuild instructions live in the commit history and
+require `wasm-pack` with a wasm32-capable LLVM + Rust 1.85-era
+stable. See `MithrilAsyncRuntime.ClosureHashes.Debug0_9_11` for the
+closure-hash mapping this build produces.
 
 Tests load the `.wasm` from the classpath at
 `/mithril/mithril_client_wasm_bg.wasm`.
