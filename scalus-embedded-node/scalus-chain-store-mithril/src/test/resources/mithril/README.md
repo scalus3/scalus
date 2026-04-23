@@ -3,10 +3,21 @@
 This directory contains the upstream `@mithril-dev/mithril-client-wasm`
 npm release, pinned to a specific version:
 
-| File                          | Version | SHA-256                                                              |
-|-------------------------------|---------|----------------------------------------------------------------------|
-| `mithril_client_wasm_bg.wasm` | 0.9.11  | `5eaa37178263cf1d7cb4da62f40264f318e89c66318ad1b0b474861dd295c519`   |
-| `mithril_client_wasm.js`      | 0.9.11  | `d7a2fda84c9434fd6fec510af823f92e21e5525419d1a39d4553789ddf03389d`   |
+| File                                | Version  | SHA-256                                                              |
+|-------------------------------------|----------|----------------------------------------------------------------------|
+| `mithril_client_wasm_bg.wasm`       | 0.9.11   | `5eaa37178263cf1d7cb4da62f40264f318e89c66318ad1b0b474861dd295c519`   |
+| `mithril_client_wasm.js`            | 0.9.11   | `d7a2fda84c9434fd6fec510af823f92e21e5525419d1a39d4553789ddf03389d`   |
+| `mithril_client_wasm_bg.debug.wasm` | 0.9.11*  | `30d602cd9fafd6ac4ff52c98e8a0866b4dac61c69f4800a9a1b99f17118f04e1`   |
+
+`mithril_client_wasm_bg.debug.wasm` is a locally-rebuilt debug-profile
+variant of 0.9.11 with `console_error_panic_hook` enabled, used only
+by the ignored `[debug-wasm]` driver test that chases down why the
+Rust executor body traps inside Chicory. It is NOT the upstream npm
+artefact (the `*` on the version denotes this); rebuild instructions
+live in the commit history and require `wasm-pack` with a
+wasm32-capable LLVM + Rust 1.85-era stable. See
+`MithrilAsyncRuntime.ClosureHashes.Debug0_9_11` for the closure-hash
+mapping this build produces.
 
 Tests load the `.wasm` from the classpath at
 `/mithril/mithril_client_wasm_bg.wasm`.

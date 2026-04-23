@@ -69,8 +69,18 @@ object MithrilWasmRuntime {
       */
     def instantiate(
         imports: Map[String, WasmFunctionHandle]
+    ): (MithrilWasmRuntime, InstantiationReport) =
+        instantiateFromBytes(loadWasmBytes(), imports)
+
+    /** Variant that takes the WASM blob bytes directly rather than reading the pinned
+      * release blob from the classpath. Used by diagnostic test paths that load a
+      * locally-compiled debug build (e.g. with `console_error_panic_hook` enabled).
+      */
+    def instantiateFromBytes(
+        wasmBytes: Array[Byte],
+        imports: Map[String, WasmFunctionHandle]
     ): (MithrilWasmRuntime, InstantiationReport) = {
-        val module = Parser.parse(loadWasmBytes())
+        val module = Parser.parse(wasmBytes)
 
         val fnImports: Seq[FunctionImport] =
             module

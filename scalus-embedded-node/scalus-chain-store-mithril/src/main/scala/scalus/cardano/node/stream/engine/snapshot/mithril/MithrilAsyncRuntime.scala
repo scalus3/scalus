@@ -32,7 +32,10 @@ import scala.concurrent.{ExecutionContext, Future, Promise as SPromise}
   *
   * See docs/local/claude/indexer/snapshot-bootstrap-m10.md for the overall M10b design.
   */
-final class MithrilAsyncRuntime(val abi: WbindgenAbi) {
+final class MithrilAsyncRuntime(
+    val abi: WbindgenAbi,
+    closureHashes: MithrilAsyncRuntime.ClosureHashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+) {
 
     @volatile private var currentInstance: Instance = null.asInstanceOf[Instance]
 
@@ -119,7 +122,7 @@ final class MithrilAsyncRuntime(val abi: WbindgenAbi) {
       */
     def asyncImports: Map[String, WasmFunctionHandle] = {
         val raw: Seq[(String, WasmFunctionHandle)] = Seq(
-          "__wbg_new_ff12d2b041fb48f1" -> newPromiseWithExecutor,
+          closureHashes.promiseExecutorImport -> newPromiseWithExecutor,
           "__wbg_then_" -> promiseThen,
           "__wbg_resolve_" -> promiseResolve,
           "__wbg_call_" -> callClosure,
@@ -169,7 +172,7 @@ final class MithrilAsyncRuntime(val abi: WbindgenAbi) {
             val executor = JsClosure(
               fnPtrA = args(0).toInt,
               fnPtrB = args(1).toInt,
-              invokeExport = "wasm_bindgen__convert__closures_____invoke__h2da143d4463a5f08",
+              invokeExport = closureHashes.promiseExecutorInvoke,
               destroyExport = "",
               arity = 2
             )
@@ -416,4 +419,50 @@ object MithrilAsyncRuntime {
 
     /** Counterpart for `reject(err)`. */
     final case class PromiseRejectCallback(promise: JsPromise)
+
+    /** Per-build closure-related hash mapping. wasm-bindgen rotates the 16-hex hash on every
+      * Rust signature change AND between debug/release builds, so we keep a small struct
+      * mapping the import names we register to the corresponding invoke-export names. Bump
+      * this when refreshing the pinned WASM blob; the upstream JS glue
+      * (mithril_client_wasm.js shipped alongside the .wasm) is the source of truth.
+      */
+    final case class ClosureHashes(
+        promiseExecutorImport: String,
+        promiseExecutorInvoke: String,
+        oneArgClosureCastImport: String,
+        oneArgClosureInvoke: String,
+        oneArgClosureDestroy: String,
+        zeroArgClosureCastImport: String,
+        zeroArgClosureInvoke: String,
+        zeroArgClosureDestroy: String
+    )
+
+    object ClosureHashes {
+
+        /** Pinned upstream `@mithril-dev/mithril-client-wasm@0.9.11` release build. */
+        val Release0_9_11: ClosureHashes = ClosureHashes(
+          promiseExecutorImport = "__wbg_new_ff12d2b041fb48f1",
+          promiseExecutorInvoke = "wasm_bindgen__convert__closures_____invoke__h2da143d4463a5f08",
+          oneArgClosureCastImport = "__wbindgen_cast_17a320bf0cb03ca7",
+          oneArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__hc0a74f7bb86030d0",
+          oneArgClosureDestroy = "wasm_bindgen__closure__destroy__h99811cac73495ece",
+          zeroArgClosureCastImport = "__wbindgen_cast_7fcb4b52657c40f7",
+          zeroArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__h6b7e05d46d107c93",
+          zeroArgClosureDestroy = "wasm_bindgen__closure__destroy__hea47394e049eff9b"
+        )
+
+        /** Locally-compiled debug build of mithril-client-wasm 0.9.11 with
+          * `console_error_panic_hook` enabled. Used for diagnostic test paths only.
+          */
+        val Debug0_9_11: ClosureHashes = ClosureHashes(
+          promiseExecutorImport = "__wbg_new_ff12d2b041fb48f1",
+          promiseExecutorInvoke = "wasm_bindgen__convert__closures_____invoke__hf498985395075366",
+          oneArgClosureCastImport = "__wbindgen_cast_2b3d1dcae2027ea1",
+          oneArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__h83f64fd803aa6bb4",
+          oneArgClosureDestroy = "wasm_bindgen__closure__destroy__he23eb76bd87c9db3",
+          zeroArgClosureCastImport = "__wbindgen_cast_5c1cd1869e09aa29",
+          zeroArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__ha680d4b0d17e7dc3",
+          zeroArgClosureDestroy = "wasm_bindgen__closure__destroy__h4ed239079f93e789"
+        )
+    }
 }

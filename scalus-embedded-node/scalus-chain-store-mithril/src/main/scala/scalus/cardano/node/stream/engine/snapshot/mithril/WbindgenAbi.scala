@@ -25,7 +25,9 @@ import scala.collection.mutable
   * [[MithrilWasmAsync]] in a follow-up. Everything in this file is **purely synchronous**: calls
   * into these host imports finish without suspending.
   */
-final class WbindgenAbi {
+final class WbindgenAbi(
+    closureHashes: MithrilAsyncRuntime.ClosureHashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+) {
 
     import WbindgenAbi.*
 
@@ -66,6 +68,14 @@ final class WbindgenAbi {
       */
     @volatile private var cachedExternrefAlloc: com.dylibso.chicory.runtime.ExportFunction = null
 
+    /** Cached handle to the module's exported externref table. Needed because allocating a
+      * slot via `__externref_table_alloc` is only half the JS-glue pattern — the other half is
+      * populating the slot via `wasm.__wbindgen_externrefs.set(idx, value)`. We store the slot
+      * index itself as the stored ref so `wasm.__wbindgen_externrefs.get(idx)` round-trips to
+      * `idx`, which is also what our JVM-side `externrefs` map is keyed on.
+      */
+    @volatile private var cachedExternrefTable: com.dylibso.chicory.runtime.TableInstance = null
+
     /** The active WASM Instance, captured the first time any handler is invoked. Lets [[alloc]]
       * route through `__externref_table_alloc` without threading the Instance through every
       * call site. Set once per instantiation; remains constant thereafter.
@@ -90,15 +100,28 @@ final class WbindgenAbi {
       * fast-forwarded past the module-issued indices to avoid collision.
       */
     def alloc(obj: AnyRef | Null): Int = {
-        val slot = if currentInstance != null then
-            externrefAlloc(currentInstance).apply()(0).toInt
-        else {
+        val slot = if currentInstance != null then {
+            val s = externrefAlloc(currentInstance).apply()(0).toInt
+            writeTableSlot(currentInstance, s)
+            s
+        } else {
             val s = nextBootstrapSlot
             nextBootstrapSlot += 1
             s
         }
         externrefs(slot) = obj
         slot
+    }
+
+    /** Store the slot index itself as the externref value at that slot in the module's table.
+      * Mirrors the JS glue's `wasm.__wbindgen_externrefs.set(idx, obj)` step (minus the object
+      * — on JVM we keep the object in our own map, and the table just holds the integer
+      * handle so `table.get(idx)` round-trips back to `idx`).
+      */
+    private def writeTableSlot(instance: Instance, slot: Int): Unit = {
+        if cachedExternrefTable == null then
+            cachedExternrefTable = instance.exports.table("__wbindgen_externrefs")
+        cachedExternrefTable.setRef(slot, slot, instance)
     }
 
     @volatile private var nextBootstrapSlot: Int = 4
@@ -128,12 +151,25 @@ final class WbindgenAbi {
         }
     }
 
+    /** Like [[captured]] but also logs the call. Use sparingly for debugging. */
+    private def capturedLogged(name: String, h: WasmFunctionHandle): WasmFunctionHandle =
+        new WasmFunctionHandle {
+            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+                captureInstance(instance)
+                val argList = (0 until args.length).map(i => args(i).toLong).mkString(",")
+                WbindgenAbi.logger.info(s"[host-call] $name($argList)")
+                val result = h.apply(instance, args.map(_.toLong)*)
+                result
+            }
+        }
+
     /** Build the default host-import map. Keys are wasm-bindgen **short names** (the prefix up
       * to and including the trailing underscore before the 16-hex signature hash). The runtime
       * strips the hash before lookup, so these bindings survive pin bumps that only rotate
       * signature hashes.
       */
-    def defaultImports: Map[String, WasmFunctionHandle] = rawDefaultImports.view.mapValues(captured).toMap
+    def defaultImports: Map[String, WasmFunctionHandle] =
+        rawDefaultImports.view.mapValues(captured).toMap
 
     private def rawDefaultImports: Map[String, WasmFunctionHandle] = Map(
       // ---- Predicates: (externref-handle: i32) -> i32 { 0 | 1 } ----
@@ -413,19 +449,22 @@ final class WbindgenAbi {
       */
     private val initExternrefTable: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            // Mirror wasm.__wbindgen_externrefs.set(idx, obj) for each seeded slot.
             externrefs(0) = WbindgenAbi.Undefined
+            writeTableSlot(instance, 0)
             val s0 = externrefAlloc(instance).apply()(0).toInt
             externrefs(s0) = WbindgenAbi.Undefined
+            writeTableSlot(instance, s0)
             val s1 = externrefAlloc(instance).apply()(0).toInt
             externrefs(s1) = null
+            writeTableSlot(instance, s1)
             val s2 = externrefAlloc(instance).apply()(0).toInt
             externrefs(s2) = java.lang.Boolean.TRUE
+            writeTableSlot(instance, s2)
             val s3 = externrefAlloc(instance).apply()(0).toInt
             externrefs(s3) = java.lang.Boolean.FALSE
-            // After init, fresh externref allocations come from the module — sync our
-            // bootstrap counter past the high-water mark so future alloc() doesn't collide.
-            val maxAfterInit = math.max(nextBootstrapSlot, s3 + 1)
-            nextBootstrapSlot = maxAfterInit
+            writeTableSlot(instance, s3)
+            nextBootstrapSlot = math.max(nextBootstrapSlot, s3 + 1)
             Array.emptyLongArray
         }
     }
@@ -519,20 +558,20 @@ final class WbindgenAbi {
         }
     }
 
-    /** All four `static_accessor_*` imports resolve to the same globalThis handle. */
-    private val staticGlobal: WasmFunctionHandle = singletonHandle(JsGlobal)
-
-    /** Builds a zero-arg WASM import that always returns the same externref handle — the handle
-      * is allocated lazily on first call (we can't alloc during field init without ordering
-      * worries, and these are rarely invoked before real work).
+    /** All four `static_accessor_*` imports resolve to a globalThis-sentinel externref. JS
+      * glue allocates a fresh slot on every call; we match that behaviour so the externref
+      * table grows in lockstep with what Rust expects.
       */
-    private def singletonHandle(singleton: AnyRef): WasmFunctionHandle =
+    private val staticGlobal: WasmFunctionHandle = freshHandle(JsGlobal)
+
+    /** Zero-arg WASM import that allocates a fresh externref slot holding `singleton` on
+      * every call and returns that slot index. Mirrors the JS glue's `addToExternrefTable0`
+      * pattern — JS does not cache.
+      */
+    private def freshHandle(singleton: AnyRef): WasmFunctionHandle =
         new WasmFunctionHandle {
-            @volatile private var cached: Int = -1
-            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-                if cached < 0 then cached = alloc(singleton)
-                Array(cached.toLong)
-            }
+            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+                Array(alloc(singleton).toLong)
         }
 
     // ------------------------------------------------------------------
@@ -648,7 +687,7 @@ final class WbindgenAbi {
         }
     }
 
-    private val iteratorSymbol: WasmFunctionHandle = singletonHandle(JsIteratorSymbol)
+    private val iteratorSymbol: WasmFunctionHandle = freshHandle(JsIteratorSymbol)
 
     private val entriesFn: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -841,7 +880,8 @@ final class WbindgenAbi {
       *   - One-arg `(ref)` Uint8Array-from-buffer ctor.
       *   - Two closure-creating `__wbindgen_cast_*` hashes + the (ptr,len)->String cast.
       */
-    def pinnedImports: Map[String, WasmFunctionHandle] = rawPinnedImports.view.mapValues(captured).toMap
+    def pinnedImports: Map[String, WasmFunctionHandle] =
+        rawPinnedImports.view.mapValues(captured).toMap
 
     private def rawPinnedImports: Map[String, WasmFunctionHandle] = Map(
       // Zero-arg ctors (all strip to `__wbg_new_` so must be dispatched by full hash).
@@ -856,12 +896,12 @@ final class WbindgenAbi {
       // 2-arg `(i32, i32) -> ref` — distinct semantics per hash.
       "__wbg_new_df1173567d5ff028" -> newError,
       "__wbg_new_b3dd747604c3c93e" -> newBroadcastChannel,
-      "__wbg_new_ff12d2b041fb48f1" -> newPromiseWithExecutor,
+      closureHashes.promiseExecutorImport -> newPromiseWithExecutor,
       // `__wbindgen_cast_*` hashes with non-numeric semantics.
       "__wbindgen_cast_2241b6af4c4b2941" -> castStringFromPtrLen,
       "__wbindgen_cast_4625c577ab2ec9ee" -> castU64ToBigInt,
-      "__wbindgen_cast_17a320bf0cb03ca7" -> castOneArgClosure,
-      "__wbindgen_cast_7fcb4b52657c40f7" -> castZeroArgClosure
+      closureHashes.oneArgClosureCastImport -> castOneArgClosure,
+      closureHashes.zeroArgClosureCastImport -> castZeroArgClosure
     )
 
     private val castStringFromPtrLen: WasmFunctionHandle = new WasmFunctionHandle {
@@ -895,21 +935,19 @@ final class WbindgenAbi {
 
     private val castOneArgClosure: WasmFunctionHandle = closureCast(
       arity = 1,
-      invokeExport = "wasm_bindgen__convert__closures_____invoke__hc0a74f7bb86030d0",
-      destroyExport = "wasm_bindgen__closure__destroy__h99811cac73495ece"
+      invokeExport = closureHashes.oneArgClosureInvoke,
+      destroyExport = closureHashes.oneArgClosureDestroy
     )
 
     private val castZeroArgClosure: WasmFunctionHandle = closureCast(
       arity = 0,
-      invokeExport = "wasm_bindgen__convert__closures_____invoke__h6b7e05d46d107c93",
-      destroyExport = "wasm_bindgen__closure__destroy__hea47394e049eff9b"
+      invokeExport = closureHashes.zeroArgClosureInvoke,
+      destroyExport = closureHashes.zeroArgClosureDestroy
     )
 
-    /** `new Promise(executor)` — the executor closure invokes
-      * `wasm_bindgen__convert__closures_____invoke__h2da143d4463a5f08(a, b, resolve, reject)`
-      * synchronously from the Promise ctor. Wiring the real executor call requires the async
-      * runtime (next commit); today we capture the closure info onto the returned Promise so
-      * the bridge can drive it when it lands.
+    /** `new Promise(executor)` placeholder — captures the closure pointers but does NOT invoke
+      * the executor. The async runtime ([[MithrilAsyncRuntime]]) overrides this short name in
+      * its overlay map with a version that actually runs the executor.
       */
     private val newPromiseWithExecutor: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
@@ -918,7 +956,7 @@ final class WbindgenAbi {
               JsClosure(
                 args(0).toInt,
                 args(1).toInt,
-                invokeExport = "wasm_bindgen__convert__closures_____invoke__h2da143d4463a5f08",
+                invokeExport = closureHashes.promiseExecutorInvoke,
                 destroyExport = "",
                 arity = 2
               )
@@ -1167,7 +1205,7 @@ final class WbindgenAbi {
     // localStorage (in-memory stand-in).
     // ------------------------------------------------------------------
 
-    private val localStorageGet: WasmFunctionHandle = singletonHandle(JsLocalStorage)
+    private val localStorageGet: WasmFunctionHandle = freshHandle(JsLocalStorage)
 
     /** `__wbg_getItem_(ret_ptr, storage_handle, key_ptr, key_len)` — writes value or (0,0) to retPtr. */
     private val localStorageGetItem: WasmFunctionHandle = new WasmFunctionHandle {

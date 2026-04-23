@@ -147,23 +147,59 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         }
     }
 
-    // Still fails on a Chicory CALL_INDIRECT → LOCAL_SET stack underflow *inside* the Rust
-    // executor body (h2da143d4463a5f08) after Scala hands it (fnPtrA, fnPtrB, resolveHandle,
-    // rejectHandle). The externref-table wiring (this commit) is correct infrastructure but
-    // does not fix this crash — the underflow is deep inside Rust's own indirect dispatch
-    // through its function table, reached only when the executor runs for real. Next step:
-    // a smaller repro — invoke a known 0-arg closure-invoke export with a synthetic
-    // (fnPtrA, fnPtrB) pair and see if the same crash surfaces; if so, this is a Chicory
-    // re-entry / operand-stack hygiene issue and the fix belongs at the MithrilAsyncRuntime
-    // invokeClosure boundary (possibly running each invoke on a fresh Chicory Machine rather
-    // than re-entering the current one). See MithrilAsyncRuntime.invokeClosure.
-    ignore("async runtime: list_mithril_certificates reaches fetch without tripping closure stubs") {
+    // Loads the locally-compiled debug build with `console_error_panic_hook` enabled. Latest
+    // status: the original Chicory CALL_INDIRECT underflow is fixed (it was unimplemented
+    // host-import stubs throwing from inside the executor); now the failure is a WASM-level
+    // `TABLE_GET out of bounds` trap inside the Rust executor body, after successful calls to
+    // static_accessor_SELF + is_undefined. Since the panic hook doesn't fire (the trap isn't
+    // a Rust panic but a WASM spec-level table trap), next step is to determine exactly which
+    // table index Rust is accessing — either by patching Chicory's TABLE_GET to log on OOB,
+    // or by wiring `__wbindgen_externrefs.set` via a Chicory TableInstance helper that logs
+    // every write and compares table-size-at-access vs requested index.
+    ignore("async runtime [debug-wasm]: list_mithril_certificates reaches fetch without tripping closure stubs") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*
-        val abi = new WbindgenAbi
-        val asyncRt = new MithrilAsyncRuntime(abi)
-        val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports
-        val (rt, _) = MithrilWasmRuntime.instantiate(imports)
+        val hashes = MithrilAsyncRuntime.ClosureHashes.Debug0_9_11
+        val abi = new WbindgenAbi(hashes)
+        val asyncRt = new MithrilAsyncRuntime(abi, hashes)
+
+        // Debug-build-only imports: console.createTask / task.run, used by wasm-bindgen-futures
+        // in dev mode for DevTools async-task grouping. On JVM we just invoke the callback
+        // without any task-tracking overhead.
+        val debugExtras: Map[String, com.dylibso.chicory.runtime.WasmFunctionHandle] = Map(
+          "__wbg_createTask_" -> new com.dylibso.chicory.runtime.WasmFunctionHandle {
+              def apply(
+                  instance: com.dylibso.chicory.runtime.Instance,
+                  args: Array[? <: Long]
+              ): Array[Long] = {
+                  val label = new String(
+                    instance.memory().readBytes(args(0).toInt, args(1).toInt),
+                    java.nio.charset.StandardCharsets.UTF_8
+                  )
+                  Array(abi.alloc(s"jsConsoleTask($label)").toLong)
+              }
+          },
+          "__wbg_run_" -> new com.dylibso.chicory.runtime.WasmFunctionHandle {
+              def apply(
+                  instance: com.dylibso.chicory.runtime.Instance,
+                  args: Array[? <: Long]
+              ): Array[Long] = {
+                  val fn = instance.`export`(
+                    "wasm_bindgen__convert__closures_____invoke__h04cb1f72c9342cc2"
+                  )
+                  val result = fn.apply(args(1).toLong, args(2).toLong)
+                  if result == null || result.isEmpty then Array(0L) else Array(result(0))
+              }
+          }
+        )
+        val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports ++ debugExtras
+        val debugBytes = {
+            val in = getClass.getResourceAsStream("/mithril/mithril_client_wasm_bg.debug.wasm")
+            assert(in != null, "debug wasm blob missing — see test resources")
+            try in.readAllBytes()
+            finally in.close()
+        }
+        val (rt, _) = MithrilWasmRuntime.instantiateFromBytes(debugBytes, imports)
         asyncRt.attach(rt.instance)
 
         val futureResult = asyncRt.submit { _ =>
