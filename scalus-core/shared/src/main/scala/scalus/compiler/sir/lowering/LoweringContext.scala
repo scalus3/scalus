@@ -17,10 +17,13 @@ class LoweringContext(
     val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     val generateErrorTraces: Boolean = false,
     val warnListConversions: Boolean = false,
-    var uplcGeneratorPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
-        given LoweringContext = lctx
-        SirTypeUplcGenerator(tp, lctx.debugLevel > 30)
-    },
+    /** When true, unannotated `List[_]` / `Option[_]` types dispatch to
+      * `SumCaseUplcConstrSirTypeGenerator` (native-Constr form) instead of the default
+      * `SumBuiltinList` / `DataConstr` generator. Set by `IntrinsicResolver` for the duration of
+      * lowering a dispatcher/support-op body that operates on native-Constr lists/options. Saved
+      * and restored around each swap, mirroring `typeUnifyEnv` / `typeVarReprEnv`.
+      */
+    var inUplcConstrListScope: Boolean = false,
     var typeUnifyEnv: SIRUnify.Env = SIRUnify.Env.empty,
     /** Parallel to `typeUnifyEnv.filledTypes`, but tracks the concrete UPLC representation for each
       * abstract TypeVar at its call site. Populated from actual argument representations at
@@ -39,11 +42,6 @@ class LoweringContext(
 ) {
 
     private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]
-
-    /** When set, ExternalVar resolution records resolved names here. Used by initSupportBindings to
-      * detect recursive bindings.
-      */
-    var monitoredExternalVars: Option[MutableSet[String]] = None
 
     /** Cache of pre-lowered SIR nodes, keyed by reference identity.
       *
@@ -104,62 +102,6 @@ class LoweringContext(
         )
     }
 
-    /** Add all support module bindings to the base scope.
-      *
-      * Called during context initialization (like ScalusRuntime.initContext). Bindings are added to
-      * the initial scope so they survive all scope save/restore in lowerLet. They are only included
-      * in UPLC output if actually referenced (via termWithNeededVars).
-      *
-      * Uses two passes because support bindings may be recursive (e.g., `lengthSumDataList` calls
-      * itself via ExternalVar). Pass 1 adds placeholders so recursive references resolve during
-      * lowering. Pass 2 lowers each binding, using monitoredExternalVars to detect self-references
-      * and wrap with LetRec only when needed.
-      */
-    /** Resolve a support module binding on demand. Called when an ExternalVar is not found in scope
-      * — checks support modules and lowers the binding lazily (only when first referenced).
-      */
-    def resolveSupportBinding(name: String): Option[LoweredValue] = {
-        val bindingWithModule = supportModules.collectFirst {
-            case (moduleName, module) if module.defs.exists(_.name == name) =>
-                (module.defs.find(_.name == name).get, moduleName)
-        }
-        bindingWithModule.map { (b, moduleName) =>
-            // UplcConstrListOperations and UplcConstrOptionOperations need the same policy —
-            // they operate on native-Constr lists/options and expect SumUplcConstr throughout
-            // their bodies rather than the default SumBuiltinList / DataConstr.
-            val effectiveLctx =
-                if moduleName == "scalus.compiler.intrinsics.UplcConstrListOperations$"
-                    || moduleName == "scalus.compiler.intrinsics.UplcConstrOptionOperations$"
-                then
-                    new LoweringContext(
-                      scope = this.scope,
-                      targetLanguage = this.targetLanguage,
-                      targetProtocolVersion = this.targetProtocolVersion,
-                      generateErrorTraces = this.generateErrorTraces,
-                      warnListConversions = this.warnListConversions,
-                      uplcGeneratorPolicy = IntrinsicResolver.uplcConstrListPolicy,
-                      typeUnifyEnv = this.typeUnifyEnv,
-                      debug = this.debug,
-                      debugLevel = this.debugLevel,
-                      nestingLevel = this.nestingLevel,
-                      enclosingLambdaParams = this.enclosingLambdaParams,
-                      intrinsicModules = this.intrinsicModules,
-                      supportModules = this.supportModules,
-                    )
-                else this
-            given LoweringContext = effectiveLctx
-            val lowered = Lowering.lowerSIR(b.value)
-            val varVal = LoweredValue.Builder.lvNewLazyNamedVar(
-              b.name,
-              b.tp,
-              lowered.representation,
-              lowered,
-              SIRPosition.empty
-            )
-            varVal
-        }
-    }
-
     def uniqueVarName(prefix: String = "_v"): String = {
         varIdSeq += 1
         s"$prefix$varIdSeq"
@@ -169,8 +111,20 @@ class LoweringContext(
         Lowering.lowerSIR(sir, optTargetType)(using this)
     }
 
+    /** Return the UPLC type generator for `sirType`, based purely on the type (and its annotations).
+      *
+      * Previously this consulted `inUplcConstrListScope` to route unannotated `List[_]` / `Option[_]`
+      * into `SumCaseUplcConstrSirTypeGenerator` inside dispatcher/support-op bodies. Now that
+      * every native-Constr intrinsic signature carries a type-level `@UplcRepr(UplcConstr)`
+      * annotation (which `SIRTyper.sirTypeInEnv` propagates into the SIR type), the routing is
+      * entirely annotation-driven and this function does not need the flag.
+      *
+      * `inUplcConstrListScope` survives only in `IntrinsicResolver.tryResolve` to select the
+      * native-Constr provider binding when dispatching through a support module.
+      */
     def typeGenerator(sirType: SIRType): SirTypeUplcGenerator = {
-        uplcGeneratorPolicy(sirType, this)
+        given LoweringContext = this
+        SirTypeUplcGenerator(sirType, debugLevel > 30)
     }
 
     /** If this is typevariable, try get the value from context, else leave it as is.

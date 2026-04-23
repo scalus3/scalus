@@ -20,6 +20,102 @@ import scalus.uplc.{Term, UplcAnnotation}
   */
 object SumUplcConstrSirTypeGenerator {
 
+    /** A Case-branch-body lambda wrapper used inside UplcConstr pattern matching. Represents
+      * `λfieldVar. inner` where `inner` is the branch's body. Unlike a plain
+      * `ComplexLoweredValue` wrap, `toRepresentation` is pushed into `inner` rather than
+      * applied to the whole lambda — because at the UPLC level, a branch is applied to the
+      * `Constr`'s fields before its body is evaluated. Wrapping the lambda itself in a
+      * repr-conversion (e.g. `Case(λh.λt.h, ...)`) fails at runtime with "non-constructor
+      * scrutinized" because the scrutinee is a lambda.
+      */
+    private final class BranchLambdaWrapper(
+        fieldVar: IdentifiableLoweredValue,
+        val inner: LoweredValue,
+        casePos: SIRPosition
+    ) extends ComplexLoweredValue(Set(fieldVar), inner) {
+        override def sirType: SIRType = inner.sirType
+        override def representation: LoweredValueRepresentation = inner.representation
+        override def pos: SIRPosition = casePos
+
+        override def termInternal(gctx: TermGenerationContext): Term = {
+            val innerCtx = gctx.copy(generatedVars = gctx.generatedVars + fieldVar.id)
+            Term.LamAbs(fieldVar.id, inner.termWithNeededVars(innerCtx), UplcAnnotation(casePos))
+        }
+
+        override def toRepresentation(
+            newRepr: LoweredValueRepresentation,
+            inPos: SIRPosition
+        )(using lctx: LoweringContext): LoweredValue = {
+            if newRepr == representation then this
+            else
+                val convertedInner = inner.toRepresentation(newRepr, inPos)
+                if convertedInner eq inner then this
+                else new BranchLambdaWrapper(fieldVar, convertedInner, casePos)
+        }
+
+        override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
+            Doc.text(s"λ${fieldVar.name}.") + inner.docRef(ctx)
+        override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
+    }
+
+    /** Deref TypeProxy / Annotated / TypeLambda wrappers to find the underlying
+      * [[SIRType.SumCaseClass]] so callers can read its typeArgs. Visited TypeProxies are
+      * tracked to avoid infinite loops on recursive types (e.g. List's tail refers back to List).
+      */
+    private def derefToSumCaseClass(
+        tp: SIRType,
+        visited: Set[SIRType.TypeProxy] = Set.empty
+    ): Option[SIRType.SumCaseClass] = tp match
+        case sc: SIRType.SumCaseClass => Some(sc)
+        case p: SIRType.TypeProxy if p.ref != null && !visited.contains(p) =>
+            derefToSumCaseClass(p.ref, visited + p)
+        case SIRType.Annotated(inner, _) => derefToSumCaseClass(inner, visited)
+        case SIRType.TypeLambda(_, body) => derefToSumCaseClass(body, visited)
+        case _                           => None
+
+    /** DataDecl-level TypeVar substitution for [[inputType]]. Maps the sum's declared type
+      * parameters to the concrete type args at `inputType`'s call site. Empty when the type
+      * args are missing or the shape mismatches the DataDecl.
+      */
+    private def dataDeclSubst(inputType: SIRType): Map[SIRType.TypeVar, SIRType] =
+        SIRType.retrieveDataDecl(inputType) match
+            case Right(decl) =>
+                derefToSumCaseClass(inputType) match
+                    case Some(SIRType.SumCaseClass(_, typeArgs))
+                        if typeArgs.length == decl.typeParams.length =>
+                        decl.typeParams.zip(typeArgs).toMap
+                    case _ => Map.empty
+            case _ => Map.empty
+
+    /** Per-constructor TypeVar substitution, composing [[dataDeclSubst]] with the
+      * constructor-local parent- and typeParam-level mappings. `constrDecl.params.tp` uses the
+      * constructor's own TypeVar instances (distinct from the DataDecl's); `parentTypeArgs`
+      * encodes how those map onto DataDecl typeParams. Combining all three resolves field
+      * types to concrete forms at `inputType`'s call site.
+      */
+    private def constrSubstFor(
+        inputType: SIRType,
+        constrDecl: ConstrDecl,
+        dataDeclSubst: Map[SIRType.TypeVar, SIRType]
+    ): Map[SIRType.TypeVar, SIRType] = {
+        val inputArgs = derefToSumCaseClass(inputType).map(_.typeArgs).getOrElse(Nil)
+        val parentSubst: Map[SIRType.TypeVar, SIRType] =
+            if constrDecl.parentTypeArgs.nonEmpty
+                && inputArgs.length == constrDecl.parentTypeArgs.length
+            then
+                constrDecl.parentTypeArgs
+                    .zip(inputArgs)
+                    .collect { case (tv: SIRType.TypeVar, concrete) => (tv, concrete) }
+                    .toMap
+            else Map.empty
+        val typeParamSubst: Map[SIRType.TypeVar, SIRType] =
+            if constrDecl.typeParams.nonEmpty
+                && inputArgs.length == constrDecl.typeParams.length
+            then constrDecl.typeParams.zip(inputArgs).toMap
+            else Map.empty
+        dataDeclSubst ++ parentSubst ++ typeParamSubst
+    }
+
     /** Build SumUplcConstr with variant info from the type's DataDecl.
       *
       * `pos` is used in error messages so we can locate the SIR site that triggered the build
@@ -95,21 +191,14 @@ object SumUplcConstrSirTypeGenerator {
                                         case Transparent | Unwrapped =>
                                             TypeVarRepresentation(tv.kind)
                                         case Fixed =>
-                                            // TODO: tighten to throw once all upstream
-                                            // sites resolve Fixed TypeVars before reaching
-                                            // here. Currently fires for lambda parameters
-                                            // with abstract polymorphic types from user
-                                            // code (e.g. `def go(lst: List[A])` inside a
-                                            // generic method). Fall back to Transparent
-                                            // (legacy behavior) and print so we can
-                                            // enumerate.
-                                            println(
-                                              s"[TODO SumUplcConstrSirTypeGenerator] Fixed " +
-                                                  s"TypeVar ${tv.showDebug} in UplcConstr " +
-                                                  s"field (constr=${constrDecl.name}, " +
-                                                  s"param=${param.name}, tp=${tp.show})"
+                                            throw LoweringException(
+                                              s"SumUplcConstrSirTypeGenerator: Fixed TypeVar " +
+                                                  s"${tv.showDebug} in UplcConstr field " +
+                                                  s"(constr=${constrDecl.name}, " +
+                                                  s"param=${param.name}, tp=${tp.show}). " +
+                                                  s"Upstream should resolve the TypeVar.",
+                                              constrDecl.annotations.pos
                                             )
-                                            TypeVarRepresentation(Transparent)
                                 // Unsubstituted DataDecl TypeVars (e.g., `Option[*]` at a
                                 // constructor call site where Scala inferred `Nothing`/`Any`
                                 // for the type arg) substitute to FreeUnificator via
@@ -121,7 +210,12 @@ object SumUplcConstrSirTypeGenerator {
                                 case SIRType.FreeUnificator =>
                                     TypeVarRepresentation(SIRType.TypeVarKind.Transparent)
                                 case _ =>
-                                    lctx.typeGenerator(paramType).defaultRepresentation(paramType)
+                                    // Interpretation (a) for `@UplcRepr(UplcConstr)`: nested
+                                    // field reprs are the field type's stable default.
+                                    // `typeGenerator` is now annotation/type-only (no flag),
+                                    // so this is just a direct lookup.
+                                    lctx.typeGenerator(paramType)
+                                        .defaultRepresentation(paramType)
                     }
             }
             idx -> ProductCaseClassRepresentation.ProdUplcConstr(idx, fieldReprs)
@@ -507,27 +601,7 @@ object SumUplcConstrSirTypeGenerator {
                 lctx.scope = caseScope
 
                 fieldVars.foldRight(body) { (fieldVar, inner) =>
-                    new ComplexLoweredValue(Set(fieldVar), inner) {
-                        override def sirType: SIRType = inner.sirType
-                        override def representation: LoweredValueRepresentation =
-                            inner.representation
-                        override def pos: SIRPosition = sirCase.anns.pos
-
-                        override def termInternal(gctx: TermGenerationContext): Term = {
-                            val innerCtx =
-                                gctx.copy(generatedVars = gctx.generatedVars + fieldVar.id)
-                            Term.LamAbs(
-                              fieldVar.id,
-                              inner.termWithNeededVars(innerCtx),
-                              UplcAnnotation(sirCase.anns.pos)
-                            )
-                        }
-
-                        override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
-                            Doc.text(s"λ${fieldVar.name}.") + inner.docRef(ctx)
-                        override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc =
-                            docDef(ctx)
-                    }
+                    BranchLambdaWrapper(fieldVar, inner, sirCase.anns.pos)
                 }
 
             case Pattern.Wildcard =>
@@ -791,32 +865,7 @@ object SumUplcConstrSirTypeGenerator {
               pos
             )
 
-        // Build a substitution from the input type's abstract TypeVars to concrete types.
-        // This has two levels: DataDecl.typeParams (like List[A]'s A) map to input.typeArgs;
-        // each ConstrDecl has its OWN typeParams (separate instances), wired to DataDecl's
-        // via parentTypeArgs. We combine both levels below.
-        // Deref TypeProxy / Annotated / TypeLambda wrappers to find the underlying
-        // SumCaseClass so we can read its typeArgs. Track visited TypeProxies to avoid
-        // infinite loops on recursive types (List's tail refers back to List itself).
-        def derefToSumCaseClass(
-            tp: SIRType,
-            visited: Set[SIRType.TypeProxy]
-        ): Option[SIRType.SumCaseClass] = tp match
-            case sc: SIRType.SumCaseClass => Some(sc)
-            case p: SIRType.TypeProxy if p.ref != null && !visited.contains(p) =>
-                derefToSumCaseClass(p.ref, visited + p)
-            case SIRType.Annotated(inner, _) => derefToSumCaseClass(inner, visited)
-            case SIRType.TypeLambda(_, body) => derefToSumCaseClass(body, visited)
-            case _                           => None
-        val dataDeclSubst: Map[SIRType.TypeVar, SIRType] =
-            SIRType.retrieveDataDecl(input.sirType) match
-                case Right(decl) =>
-                    derefToSumCaseClass(input.sirType, Set.empty) match
-                        case Some(SIRType.SumCaseClass(_, typeArgs))
-                            if typeArgs.length == decl.typeParams.length =>
-                            decl.typeParams.zip(typeArgs).toMap
-                        case _ => Map.empty
-                case _ => Map.empty
+        val baseSubst = dataDeclSubst(input.sirType)
         def makeBranches(recCall: Option[LoweredValue]): Seq[LoweredValue] = {
             val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
             constructors.zipWithIndex.map { (constrDecl, idx) =>
@@ -828,36 +877,7 @@ object SumUplcConstrSirTypeGenerator {
                   idx,
                   ProductCaseClassRepresentation.ProdUplcConstr(idx, Nil)
                 )
-                // Build constrDecl-level subst: constrDecl.params.tp uses constrDecl.typeParams
-                // (distinct TypeVar instances from dataDecl's). The parentTypeArgs encode how
-                // constrDecl typeParams map onto dataDecl typeParams. Compose both to resolve
-                // constrDecl TypeVars to concrete types.
-                val constrSubst: Map[SIRType.TypeVar, SIRType] = {
-                    // Extract inputArgs via derefToSumCaseClass to handle Annotated/TypeProxy
-                    // wrappers — `input.sirType` may be `@[uplcRepr] List[Tile]` or similar.
-                    val inputArgs = derefToSumCaseClass(input.sirType, Set.empty)
-                        .map(_.typeArgs)
-                        .getOrElse(Nil)
-                    val baseSubst = dataDeclSubst
-                    val parentSubst: Map[SIRType.TypeVar, SIRType] =
-                        if constrDecl.parentTypeArgs.nonEmpty
-                            && inputArgs.length == constrDecl.parentTypeArgs.length
-                        then
-                            constrDecl.parentTypeArgs
-                                .zip(inputArgs)
-                                .flatMap {
-                                    case (tv: SIRType.TypeVar, concrete) => Some((tv, concrete))
-                                    case _                               => None
-                                }
-                                .toMap
-                        else Map.empty
-                    val typeParamSubst: Map[SIRType.TypeVar, SIRType] =
-                        if constrDecl.typeParams.nonEmpty
-                            && inputArgs.length == constrDecl.typeParams.length
-                        then constrDecl.typeParams.zip(inputArgs).toMap
-                        else Map.empty
-                    baseSubst ++ parentSubst ++ typeParamSubst
-                }
+                val constrSubst = constrSubstFor(input.sirType, constrDecl, baseSubst)
                 val fieldVars = constrDecl.params.zip(inPuc.fieldReprs).map { (param, repr) =>
                     val paramTpSubst =
                         if constrSubst.isEmpty then param.tp
@@ -1006,21 +1026,31 @@ object SumUplcConstrSirTypeGenerator {
           ),
           pos
         )
+        // Substitute the sum's concrete type args into per-field types below. Without this,
+        // `value: A` of `Option.Some` stays abstract when `input.sirType` is `Option[Tile]`,
+        // and `head.toRepresentation(fieldRepr)` with a concrete `fieldRepr` dispatches via
+        // `TypeVarSirTypeGenerator.convertAbstractFixedToTarget` — a pure relabel that leaves
+        // Data-shape bytes under a native-shape label.
+        val baseSubst = dataDeclSubst(input.sirType)
         val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
         val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>
+            val constrSubst = constrSubstFor(input.sirType, constrDecl, baseSubst)
+            def substParamTp(paramTp: SIRType): SIRType =
+                if constrSubst.isEmpty then paramTp
+                else SIRType.substitute(paramTp, constrSubst, Map.empty)
             val variantRepr = outSum.variants.getOrElse(
               idx,
               ProductCaseClassRepresentation.ProdUplcConstr(
                 idx,
                 constrDecl.params.map { p =>
-                    val tp = lctx.resolveTypeVarIfNeeded(p.tp)
+                    val tp = lctx.resolveTypeVarIfNeeded(substParamTp(p.tp))
                     lctx.typeGenerator(tp).defaultDataRepresentation(tp)
                 }
               )
             )
             var currentList: LoweredValue = dataListVar
             val fields = constrDecl.params.zip(variantRepr.fieldReprs).map { (param, fieldRepr) =>
-                val tp = lctx.resolveTypeVarIfNeeded(param.tp)
+                val tp = lctx.resolveTypeVarIfNeeded(substParamTp(param.tp))
                 val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
                 val head = lvBuiltinApply(SIRBuiltins.headList, currentList, tp, dataRepr, pos)
                 currentList = lvBuiltinApply(
@@ -1073,54 +1103,9 @@ object SumUplcConstrSirTypeGenerator {
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
         val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
-        // Substitute the Sum's concrete type args into the ConstrDecl's param types.
-        // Without this, Some's `value: A` stays as Option.A (abstract) even after
-        // the Sum has been instantiated with a concrete Option[Tile], causing the
-        // fieldVar's sirType (Option.A) to mismatch its representation (ProdUplcConstr(Tile))
-        // and triggering TypeVarSirTypeGenerator to throw on a non-TypeVar repr.
-        def derefToSumCaseClass(
-            tp: SIRType,
-            visited: Set[SIRType.TypeProxy]
-        ): Option[SIRType.SumCaseClass] = tp match
-            case sc: SIRType.SumCaseClass => Some(sc)
-            case SIRType.Annotated(inner, _) => derefToSumCaseClass(inner, visited)
-            case SIRType.TypeLambda(_, body) => derefToSumCaseClass(body, visited)
-            case p: SIRType.TypeProxy if p.ref != null && !visited.contains(p) =>
-                derefToSumCaseClass(p.ref, visited + p)
-            case _ => None
-        val dataDeclSubst: Map[SIRType.TypeVar, SIRType] =
-            SIRType.retrieveDataDecl(input.sirType) match
-                case Right(decl) =>
-                    derefToSumCaseClass(input.sirType, Set.empty) match
-                        case Some(SIRType.SumCaseClass(_, typeArgs))
-                            if typeArgs.length == decl.typeParams.length =>
-                            decl.typeParams.zip(typeArgs).toMap
-                        case _ => Map.empty
-                case _ => Map.empty
+        val baseSubst = dataDeclSubst(input.sirType)
         val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>
-            val constrSubst: Map[SIRType.TypeVar, SIRType] = {
-                val inputArgs = derefToSumCaseClass(input.sirType, Set.empty)
-                    .map(_.typeArgs)
-                    .getOrElse(Nil)
-                val parentSubst: Map[SIRType.TypeVar, SIRType] =
-                    if constrDecl.parentTypeArgs.nonEmpty
-                        && inputArgs.length == constrDecl.parentTypeArgs.length
-                    then
-                        constrDecl.parentTypeArgs
-                            .zip(inputArgs)
-                            .flatMap {
-                                case (tv: SIRType.TypeVar, concrete) => Some((tv, concrete))
-                                case _                               => None
-                            }
-                            .toMap
-                    else Map.empty
-                val typeParamSubst: Map[SIRType.TypeVar, SIRType] =
-                    if constrDecl.typeParams.nonEmpty
-                        && inputArgs.length == constrDecl.typeParams.length
-                    then constrDecl.typeParams.zip(inputArgs).toMap
-                    else Map.empty
-                dataDeclSubst ++ parentSubst ++ typeParamSubst
-            }
+            val constrSubst = constrSubstFor(input.sirType, constrDecl, baseSubst)
             def substParamTp(paramTp: SIRType): SIRType =
                 if constrSubst.isEmpty then paramTp
                 else SIRType.substitute(paramTp, constrSubst, Map.empty)

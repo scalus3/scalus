@@ -101,13 +101,26 @@ object SirTypeUplcGenerator {
 
     /** Resolve a field's representation from its @UplcRepr annotation.
       *
+      * Looks in two places, in order: the field-param's own annotations (`param.annotations`),
+      * and any `SIRType.Annotated` wrapper on the field's declared type (`param.tp`). The latter
+      * is how `List[_] @UplcRepr(UplcConstr)` / `Option[_] @UplcRepr(UplcConstr)` field types
+      * express the repr hint — the annotation rides on the type, not on the TypeBinding.
+      *
       * Returns None if no annotation, otherwise resolves the annotation to a concrete
       * LoweredValueRepresentation based on the field's type.
       */
     def resolveFieldRepr(param: TypeBinding, paramType: SIRType)(using
         lctx: LoweringContext
     ): Option[LoweredValueRepresentation] = {
-        param.annotations.data.get("uplcRepr").map { reprSir =>
+        def typeLevelReprSir(t: SIRType): Option[SIR] = t match
+            case SIRType.Annotated(_, anns) => anns.data.get("uplcRepr")
+            case _                          => None
+        val reprSirOpt =
+            param.annotations.data
+                .get("uplcRepr")
+                .orElse(typeLevelReprSir(param.tp))
+                .orElse(typeLevelReprSir(paramType))
+        reprSirOpt.map { reprSir =>
             resolveReprAnnotation(reprSir, paramType)
         }
     }

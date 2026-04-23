@@ -808,6 +808,17 @@ object SIRUnify {
         val env = env0.withUpcasting
 
         (childCandidate, parentCandidate) match
+            // Annotated wrappers are representation-hint metadata; peel them for structural
+            // subtype comparison. When the parent side is annotated, preserve the annotation
+            // on the final step of the returned path so the caller (e.g. `maybeUpcast` →
+            // `upcastOne` chain) upcasts to the annotated target.
+            case (SIRType.Annotated(innerChild, _), _) =>
+                subtypeSeq(innerChild, parentCandidate, env0)
+            case (_, SIRType.Annotated(innerParent, anns)) =>
+                subtypeSeq(childCandidate, innerParent, env0) match
+                    case Nil => Nil
+                    case xs  =>
+                        xs.init :+ SIRType.Annotated(xs.last, anns)
             case (SIRType.TypeNothing, SIRType.TypeNothing) => List(SIRType.TypeNothing)
             case (SIRType.TypeNothing, _)                   => List(childCandidate, parentCandidate)
             case (_, SIRType.TypeNothing)                   => List.empty

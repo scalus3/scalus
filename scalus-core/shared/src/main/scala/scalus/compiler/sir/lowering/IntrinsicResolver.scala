@@ -2,6 +2,7 @@ package scalus.compiler.sir.lowering
 
 import org.typelevel.paiges.Doc
 import scalus.compiler.sir.*
+import scalus.compiler.sir.lowering.IntrinsicResolver.bindIntrinsicListResolverElementTypeVars
 import scalus.compiler.sir.lowering.typegens.*
 import scalus.uplc.Term
 
@@ -94,11 +95,10 @@ object IntrinsicResolver {
       * intrinsic modules, these are NOT used for provider substitution.
       *
       * `UplcConstrListOperations` and `UplcConstrOptionOperations` carry per-typeparam
-      * `@UplcRepr(TypeVar(Transparent))` so their TypeVars come through with author-written
-      * kinds, matching the dispatcher annotations and avoiding the abstract-A `Transparent →
-      * Unwrapped` boundary at standalone-lowered support-op call sites.
-      * `NativeListOperations` is still on the legacy blanket-Transparent path until Phase 4
-      * migrates it.
+      * `@UplcRepr(TypeVar(Transparent))` so their TypeVars come through with author-written kinds,
+      * matching the dispatcher annotations and avoiding the abstract-A `Transparent → Unwrapped`
+      * boundary at standalone-lowered support-op call sites. `NativeListOperations` is still on the
+      * legacy blanket-Transparent path until Phase 4 migrates it.
       */
     lazy val defaultSupportModules: Map[String, Module] = {
         val modules = scalus.compiler.compiledModules(
@@ -306,13 +306,22 @@ object IntrinsicResolver {
                                         case None => firstLoweredOnly
                                 val allocatedKeys =
                                     scala.collection.mutable.ListBuffer.empty[Int]
+                                // Propagate the self arg's `@UplcRepr` annotation into the final
+                                // return position of the expected type, mirroring the
+                                // dispatcher/support op's declared return annotation so inner
+                                // match lowering sees the correct target representation.
+                                val loweringAppType = firstEffective.sirType match
+                                    case SIRType.Annotated(_, anns)
+                                        if anns.data.contains("uplcRepr") =>
+                                        propagateReturnAnnotation(appType, anns)
+                                    case _ => appType
                                 val lowered =
-                                    val savedPolicy = lctx.uplcGeneratorPolicy
+                                    val savedScope = lctx.inUplcConstrListScope
                                     val savedFilledTypes = lctx.typeUnifyEnv.filledTypes
                                     val savedReprEnv = lctx.typeVarReprEnv
                                     if reprNames.contains(UplcConstrListRepr) then
-                                        lctx.uplcGeneratorPolicy = uplcConstrListPolicy
-                                        bindElementTypeVars(
+                                        lctx.inUplcConstrListScope = true
+                                        bindIntrinsicListResolverElementTypeVars(
                                           binding,
                                           argSirs.head.tp,
                                           appType,
@@ -321,7 +330,7 @@ object IntrinsicResolver {
                                           lctx
                                         )
                                     try
-                                        // Lower tail args UNDER the policy swap — the user's
+                                        // Lower tail args UNDER the scope flag — the user's
                                         // lambda's internal sum-type constructors (e.g.
                                         // `Option.Some(...)`) must use the native-Constr
                                         // generator, not the default DataConstr, so its output
@@ -339,9 +348,9 @@ object IntrinsicResolver {
                                                 allocatedKeys += key
                                                 nextBody
                                             }
-                                        Lowering.lowerSIR(substituted, Some(appType))
+                                        Lowering.lowerSIR(substituted, Some(loweringAppType))
                                     finally
-                                        lctx.uplcGeneratorPolicy = savedPolicy
+                                        lctx.inUplcConstrListScope = savedScope
                                         val merged =
                                             savedFilledTypes ++ lctx.typeUnifyEnv.filledTypes
                                         lctx.typeUnifyEnv =
@@ -434,16 +443,32 @@ object IntrinsicResolver {
                                 case None => loweredArg
                             val (substituted, allocatedKey) =
                                 substituteSelf(binding.value, rewrittenArgSir, effectiveArg)
+                            // Propagate the self arg's `@UplcRepr` annotation into the expected
+                            // return type's final position so inner match lowering sees the same
+                            // target representation as the binding's declared return. (Applies
+                            // even with the UplcConstr policy still active, for consistency.)
+                            val loweringAppType = effectiveArg.sirType match
+                                case SIRType.Annotated(_, anns)
+                                    if anns.data.contains("uplcRepr") =>
+                                    propagateReturnAnnotation(appType, anns)
+                                case _ => appType
                             val lowered =
                                 try {
-                                    // For UplcConstr list intrinsics, temporarily swap policy
-                                    // so List constructors (Cons/Nil) produce Constr terms
-                                    val savedPolicy = lctx.uplcGeneratorPolicy
+                                    // For UplcConstr list intrinsics, temporarily enable the
+                                    // UplcConstr-list scope so inline List.Cons / Option.Some
+                                    // constructors in user lambdas produce native Constr terms.
+                                    // The support ops' type-level `@UplcRepr(UplcConstr)`
+                                    // annotations close the rhsRepr mismatch at
+                                    // `resolveSupportBinding` (that path no longer needs the
+                                    // scope) but the dispatcher path still requires it — user
+                                    // lambdas lowered here carry Option.Some/List.Cons
+                                    // constructions that must produce native-Constr terms.
+                                    val savedScope = lctx.inUplcConstrListScope
                                     val savedFilledTypes = lctx.typeUnifyEnv.filledTypes
                                     val savedReprEnv = lctx.typeVarReprEnv
                                     if reprNames.contains(UplcConstrListRepr) then
-                                        lctx.uplcGeneratorPolicy = uplcConstrListPolicy
-                                        bindElementTypeVars(
+                                        lctx.inUplcConstrListScope = true
+                                        bindIntrinsicListResolverElementTypeVars(
                                           binding,
                                           argSir.tp,
                                           appType,
@@ -451,9 +476,9 @@ object IntrinsicResolver {
                                           loweredArg,
                                           lctx
                                         )
-                                    try Lowering.lowerSIR(substituted, Some(appType))
+                                    try Lowering.lowerSIR(substituted, Some(loweringAppType))
                                     finally
-                                        lctx.uplcGeneratorPolicy = savedPolicy
+                                        lctx.inUplcConstrListScope = savedScope
                                         // Keep the TypeVar bindings we added — they may be
                                         // needed when the caller converts the intrinsic's
                                         // result to its target output repr (TypeVar fields
@@ -466,16 +491,7 @@ object IntrinsicResolver {
                                             lctx.typeUnifyEnv.copy(filledTypes = merged)
                                         lctx.typeVarReprEnv = savedReprEnv
                                 } finally lctx.argCache.remove(allocatedKey)
-                            // Annotate the final return position (walking through Fun types).
-                            def annotateReturnType(
-                                tp: SIRType,
-                                anns: AnnotationsDecl
-                            ): SIRType = tp match
-                                case SIRType.Fun(arg, ret) =>
-                                    SIRType.Fun(arg, annotateReturnType(ret, anns))
-                                case t if SIRType.isSum(t) =>
-                                    SIRType.Annotated(t, anns)
-                                case _ => tp
+                            val annotateReturnType = propagateReturnAnnotation
                             // If the inlined body's sirType has free TypeVars (not bound by
                             // any inner TypeLambda), wrap them with an outer TypeLambda. The
                             // result of currying `map[A,B](self)` is conceptually
@@ -789,7 +805,7 @@ object IntrinsicResolver {
       * This lets equalsRepr inside the intrinsic body resolve TypeVars to Annotated types, enabling
       * field-by-field comparison instead of pack+equalsData fallback.
       */
-    private def bindElementTypeVars(
+    private def bindIntrinsicListResolverElementTypeVars(
         binding: Binding,
         listType: SIRType,
         appType: SIRType,
@@ -797,9 +813,29 @@ object IntrinsicResolver {
         loweredSelfArg: LoweredValue,
         lctx: LoweringContext
     ): Unit = {
-        val elemType = SumCaseClassRepresentation.SumBuiltinList
-            .retrieveListElementType(listType)
-            .getOrElse(return)
+        SumCaseClassRepresentation.SumBuiltinList.retrieveListElementType(listType) match {
+            case None =>
+            case Some(elementType) =>
+                bindIntrinsicListResolverElementTypeVars1(
+                  binding,
+                  appType,
+                  callSiteFunType,
+                  loweredSelfArg,
+                  lctx,
+                  elementType
+                )
+
+        }
+    }
+
+    private def bindIntrinsicListResolverElementTypeVars1(
+        binding: Binding,
+        appType: SIRType,
+        callSiteFunType: SIRType,
+        loweredSelfArg: LoweredValue,
+        lctx: LoweringContext,
+        elemType: SIRType
+    ): Unit = {
         // Role-aware TypeVar binding:
         //   1. SELF-PARAMETER TypeVars (e.g., A in map[A, B](self: List[A], ...))
         //      get bound to Annotated(inputElementType, UplcConstr) — this lets
@@ -910,13 +946,34 @@ object IntrinsicResolver {
 
     }
 
-    /** UplcConstr list policy: for List types with Transparent TypeVar elements, use SumUplcConstr
-      * representation (Case/Constr) instead of SumBuiltinList. Also routes Option to SumUplcConstr
-      * in this context — inside `UplcConstrListOperations` / `UplcConstrOptionOperations` support
-      * bodies, Option must be native Constr so pattern-matching preserves the element repr.
+    /** Walk through Fun / TypeLambda wrappers and wrap the final sum return position with `anns`.
+      * Used to propagate a self arg's `@UplcRepr` annotation into the expected return type when
+      * lowering an intrinsic / support-op body, so that inner match/chooseCommonRepresentation
+      * logic sees the same target annotation as the binding's declared return.
       */
-    val uplcConstrListPolicy: (SIRType, LoweringContext) => SirTypeUplcGenerator = (tp, lctx) => {
-        given LoweringContext = lctx
+    private[lowering] def propagateReturnAnnotation(
+        tp: SIRType,
+        anns: AnnotationsDecl
+    ): SIRType = tp match
+        case SIRType.Fun(arg, ret) =>
+            SIRType.Fun(arg, propagateReturnAnnotation(ret, anns))
+        case SIRType.TypeLambda(tps, body) =>
+            SIRType.TypeLambda(tps, propagateReturnAnnotation(body, anns))
+        case SIRType.Annotated(inner, existing) if existing.data.contains("uplcRepr") =>
+            tp
+        case t if SIRType.isSum(t) =>
+            SIRType.Annotated(t, anns)
+        case _ => tp
+
+    /** True if `tp` (after peeling `TypeLambda` / `TypeProxy` / `Annotated`) is a
+      * `scalus.cardano.onchain.plutus.prelude.List` or `Option`.
+      *
+      * Used by `IntrinsicResolver.tryResolve` / `tryResolveFull` to detect dispatcher boundaries
+      * where `inUplcConstrListScope` should be flipped while selecting the native-Constr
+      * provider binding. `LoweringContext.typeGenerator` no longer consults the flag (annotation-
+      * driven), so the only remaining effect is provider selection inside the resolver.
+      */
+    def isUplcConstrListOrOption(tp: SIRType): Boolean = {
         def hasDeclName(t: SIRType, name: String, seen: Set[SIRType.TypeProxy]): Boolean = t match
             case SIRType.SumCaseClass(decl, _) => decl.name == name
             case SIRType.TypeLambda(_, body)   => hasDeclName(body, name, seen)
@@ -925,11 +982,7 @@ object IntrinsicResolver {
                 else hasDeclName(p.ref, name, seen + p)
             case SIRType.Annotated(inner, _) => hasDeclName(inner, name, seen)
             case _                           => false
-        def isListType(t: SIRType): Boolean =
-            hasDeclName(t, "scalus.cardano.onchain.plutus.prelude.List", Set.empty)
-        def isOptionType(t: SIRType): Boolean =
-            hasDeclName(t, "scalus.cardano.onchain.plutus.prelude.Option", Set.empty)
-        if isListType(tp) || isOptionType(tp) then SumCaseUplcConstrSirTypeGenerator
-        else SirTypeUplcGenerator(tp, lctx.debugLevel > 30)
+        hasDeclName(tp, "scalus.cardano.onchain.plutus.prelude.List", Set.empty) ||
+            hasDeclName(tp, "scalus.cardano.onchain.plutus.prelude.Option", Set.empty)
     }
 }

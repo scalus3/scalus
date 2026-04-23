@@ -1205,36 +1205,40 @@ case class LambdaRepresentation(
             case SIRType.TypeProxy(ref) if ref != null => extract(ref)
             case SIRType.Annotated(t1, _)              => extract(t1)
             case _                                     => None
-        val (decl, typeArgs) = extract(declaredParamType).getOrElse(return None)
-        // Map decl's typeParam name → reprSubstitutes for any typeArg that's a substituted TypeVar.
-        val nameToRepr: Map[String, LoweredValueRepresentation] =
-            decl.typeParams
-                .zip(typeArgs)
-                .flatMap {
-                    case (param, argTv: SIRType.TypeVar) =>
-                        reprSubstitutes.get(argTv).map(r => param.name -> r)
-                    case _ => None
+        extract(declaredParamType) match
+            case None => None
+            case Some((decl, typeArgs)) => {
+                // Map decl's typeParam name → reprSubstitutes for any typeArg that's a substituted TypeVar.
+                val nameToRepr: Map[String, LoweredValueRepresentation] =
+                    decl.typeParams
+                        .zip(typeArgs)
+                        .flatMap {
+                            case (param, argTv: SIRType.TypeVar) =>
+                                reprSubstitutes.get(argTv).map(r => param.name -> r)
+                            case _ => None
+                        }
+                        .toMap
+                if nameToRepr.isEmpty then return None
+                // Walk variants: for each constructor field whose param.tp is a TypeVar in nameToRepr,
+                // substitute that field's repr. Otherwise keep existing repr.
+                val newVariants = suc.variants.map { case (tag, puc) =>
+                    val constructor = decl.constructors(tag)
+                    val newFieldReprs =
+                        puc.fieldReprs.zip(constructor.params).map { case (fr, param) =>
+                            param.tp match
+                                case tv: SIRType.TypeVar =>
+                                    nameToRepr.getOrElse(tv.name, fr)
+                                case SIRType.TypeProxy(ref) =>
+                                    ref match
+                                        case tv: SIRType.TypeVar =>
+                                            nameToRepr.getOrElse(tv.name, fr)
+                                        case _ => fr
+                                case _ => fr
+                        }
+                    tag -> ProductCaseClassRepresentation.ProdUplcConstr(puc.tag, newFieldReprs)
                 }
-                .toMap
-        if nameToRepr.isEmpty then return None
-        // Walk variants: for each constructor field whose param.tp is a TypeVar in nameToRepr,
-        // substitute that field's repr. Otherwise keep existing repr.
-        val newVariants = suc.variants.map { case (tag, puc) =>
-            val constructor = decl.constructors(tag)
-            val newFieldReprs = puc.fieldReprs.zip(constructor.params).map { case (fr, param) =>
-                param.tp match
-                    case tv: SIRType.TypeVar =>
-                        nameToRepr.getOrElse(tv.name, fr)
-                    case SIRType.TypeProxy(ref) =>
-                        ref match
-                            case tv: SIRType.TypeVar =>
-                                nameToRepr.getOrElse(tv.name, fr)
-                            case _ => fr
-                    case _ => fr
+                Some(SumCaseClassRepresentation.SumUplcConstr(newVariants))
             }
-            tag -> ProductCaseClassRepresentation.ProdUplcConstr(puc.tag, newFieldReprs)
-        }
-        Some(SumCaseClassRepresentation.SumUplcConstr(newVariants))
     }
 
     /** Extract TypeVar→repr mappings by walking a type pattern and actual repr in parallel.

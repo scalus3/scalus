@@ -29,6 +29,27 @@ object Lowering {
 
     private lazy val builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
+    /** Patch missing return-position `@UplcRepr` annotation onto `base`'s return type, using
+      * `source` (typically the binding's declared DefDef type) as the annotation donor.
+      *
+      * Walks matching `Fun` chains in parallel. If the final return position in `base` is
+      * unannotated but the corresponding position in `source` is `Annotated(..., uplcRepr→…)`,
+      * wrap `base`'s return with that annotation. This works around the LamAbs body type losing
+      * the DefDef's declared return annotation.
+      */
+    private def mergeReturnAnnotation(base: SIRType, source: SIRType): SIRType =
+        (base, source) match
+            case (SIRType.Fun(baseArg, baseRet), SIRType.Fun(_, sourceRet)) =>
+                SIRType.Fun(baseArg, mergeReturnAnnotation(baseRet, sourceRet))
+            case (SIRType.TypeLambda(params, bodyBase), SIRType.TypeLambda(_, bodySrc)) =>
+                SIRType.TypeLambda(params, mergeReturnAnnotation(bodyBase, bodySrc))
+            case (b, SIRType.Annotated(_, anns)) if anns.data.contains("uplcRepr") =>
+                b match
+                    case SIRType.Annotated(_, bAnns) if bAnns.data.contains("uplcRepr") => b
+                    case _                                                              =>
+                        SIRType.Annotated(b, anns)
+            case _ => base
+
     def lowerSIR(
         sir: SIR,
         optTargetType: Option[SIRType] = None
@@ -54,7 +75,15 @@ object Lowering {
                             case Some(targetType) =>
                                 (lctx.typeGenerator(targetType), constr.copy(tp = targetType))
                             case None =>
-                                (lctx.typeGenerator(resolvedType), constr)
+                                // See comment below in the fallback branch: inside a dispatcher
+                                // scope, unannotated `List.Nil` must materialize as native Constr.
+                                val gen =
+                                    if lctx.inUplcConstrListScope
+                                        && IntrinsicResolver
+                                            .isUplcConstrListOrOption(resolvedType)
+                                    then typegens.SumCaseUplcConstrSirTypeGenerator
+                                    else lctx.typeGenerator(resolvedType)
+                                (gen, constr)
                     else
                         // For constructors with a parent sum type, check if the parent
                         // uses UplcConstr. If so, use the parent's type generator so the
@@ -124,7 +153,39 @@ object Lowering {
                                     case _ => None
                                 reprPropGen match
                                     case Some(gen) => (gen, constr)
-                                    case None      => (lctx.typeGenerator(resolvedType), constr)
+                                    case None      =>
+                                        // Check the caller's target type: if it's an annotated
+                                        // `List[_] @UplcConstr` / `Option[_] @UplcConstr`, use
+                                        // SumCaseUplcConstrSirTypeGenerator for this Cons/Some
+                                        // construction. This propagates a method's annotated
+                                        // return type into inner branch Constr emissions.
+                                        val targetUsesUplcConstr = optTargetType.exists {
+                                            case SIRType.Annotated(inner, anns)
+                                                if anns.data.contains("uplcRepr")
+                                                    && IntrinsicResolver
+                                                        .isUplcConstrListOrOption(inner) =>
+                                                true
+                                            case _ => false
+                                        }
+                                        // For the `inUplcConstrListScope` flag path, check
+                                        // whether this Constr's PARENT sum type is List/Option
+                                        // (since the constr itself is e.g. `Option$.Some`, which
+                                        // wouldn't match `isUplcConstrListOrOption` directly).
+                                        val parentIsListOrOption = resolvedType match
+                                            case SIRType.CaseClass(_, _, Some(parent)) =>
+                                                IntrinsicResolver
+                                                    .isUplcConstrListOrOption(parent)
+                                            case _ =>
+                                                IntrinsicResolver
+                                                    .isUplcConstrListOrOption(resolvedType)
+                                        val gen =
+                                            if targetUsesUplcConstr
+                                            then typegens.SumCaseUplcConstrSirTypeGenerator
+                                            else if lctx.inUplcConstrListScope
+                                                && parentIsListOrOption
+                                            then typegens.SumCaseUplcConstrSirTypeGenerator
+                                            else lctx.typeGenerator(resolvedType)
+                                        (gen, constr)
                 typeGenerator.genConstr(effectiveConstr)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
@@ -133,15 +194,42 @@ object Lowering {
                           s"  scrutinee.tp = ${scrutinee.tp.show}\n"
                     )
                 val loweredScrutinee = lowerSIR(scrutinee)
+                // Match-result type is the Scala-level LUB of branches, which strips
+                // `@UplcRepr` annotations. If we're in a native-Constr dispatcher scope
+                // OR any branch's body type carries `@UplcRepr(UplcConstr)`, propagate
+                // that annotation to the target passed to branch lowering, so inner
+                // Constr emissions / repr-conversions see the UplcConstr shape.
+                def hasUplcReprAnn(t: SIRType): Boolean = t match
+                    case SIRType.Annotated(_, anns) => anns.data.contains("uplcRepr")
+                    case _                          => false
+                val anyBranchUplcRepr = cases.exists(c => hasUplcReprAnn(c.body.tp))
+                val shouldAnnotate =
+                    (lctx.inUplcConstrListScope || anyBranchUplcRepr)
+                        && IntrinsicResolver.isUplcConstrListOrOption(rhsType)
+                        && !hasUplcReprAnn(rhsType)
+                val effectiveTarget =
+                    if shouldAnnotate then
+                        val uplcConstrAnns = scalus.compiler.sir.AnnotationsDecl(
+                          anns.pos,
+                          data = Map(
+                            "uplcRepr" -> SIR.Const(
+                              scalus.uplc.Constant.String("UplcConstr"),
+                              SIRType.String,
+                              scalus.compiler.sir.AnnotationsDecl(anns.pos)
+                            )
+                          )
+                        )
+                        Some(SIRType.Annotated(rhsType, uplcConstrAnns))
+                    else optTargetType
                 // Use representation-aware dispatch: if scrutinee has SumUplcConstr repr,
                 // use Case-based genMatch instead of the default type generator's match.
                 val retval = loweredScrutinee.representation match
                     case _: SumCaseClassRepresentation.SumUplcConstr =>
                         typegens.SumUplcConstrSirTypeGenerator
-                            .genMatchUplcConstr(sirMatch, loweredScrutinee, optTargetType)
+                            .genMatchUplcConstr(sirMatch, loweredScrutinee, effectiveTarget)
                     case _ =>
                         lctx.typeGenerator(loweredScrutinee.sirType)
-                            .genMatch(sirMatch, loweredScrutinee, optTargetType)
+                            .genMatch(sirMatch, loweredScrutinee, effectiveTarget)
                 if lctx.debug then
                     lctx.log(
                       s"Lowered match: ${sir.pretty.render(100)}\n" +
@@ -240,7 +328,6 @@ object Lowering {
                               s"Found external variable $name in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}"
                             )
                         }
-                        lctx.monitoredExternalVars.foreach(_.add(name))
                         value
                     case None =>
                         // Check if this is a UniversalDataConversion function used outside Apply
@@ -253,14 +340,15 @@ object Lowering {
                                   s"This usually indicates the function is being used incorrectly in the code.",
                               ev.anns.pos
                             )
-                        // Try support modules on demand
-                        lctx.resolveSupportBinding(name) match
-                            case Some(value) => value
-                            case None =>
-                                throw LoweringException(
-                                  s"External variable $name not found in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}",
-                                  ev.anns.pos
-                                )
+                        // Support bindings are eagerly materialized in `ScalusRuntime.initContext`
+                        // (`initSupportBindings`) — every support-module def is registered in
+                        // `lctx.scope` before user lowering starts. If `getByName` missed here,
+                        // the name either targets a not-yet-registered intrinsic/support module
+                        // or is genuinely unknown. Treat as a hard error rather than lazy-resolve.
+                        throw LoweringException(
+                          s"External variable $name not found in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}",
+                          ev.anns.pos
+                        )
                 myVar
                 // StaticLoweredValue(
                 //  ev,
@@ -460,8 +548,6 @@ object Lowering {
                         println(
                           s"Error lowering cast: ${sir.pretty.render(100)} at ${anns.pos.file}:${anns.pos.startLine + 1}"
                         )
-                        // lctx.debug = true
-                        // lvCast(loweredExpr, tp, anns.pos)
                         throw ex
             case sirBuiltin @ SIR.Builtin(bn, tp, anns) =>
                 BuiltinRefLoweredValue(
@@ -534,17 +620,18 @@ object Lowering {
                     bindings match
                         case List(Binding(name, tp, rhs)) =>
                             lctx.zCombinatorNeeded = true
-                            // Use `rhs.tp` instead of the binding's declared `tp`: for
-                            // a recursive LamAbs, `rhs.tp = Fun(param.tp, term.tp)` preserves
-                            // per-param `@UplcRepr` annotations (via LamAbs.param.tp), whereas
-                            // `tp` (selfTypeFromDef) only carries return-position annotations.
-                            // Using `tp` here would compute the self-reference repr from an
-                            // unannotated type, then `loweredRhs.toRepresentation(rhsRepr)`
-                            // below would down-convert the correctly-annotated lambda to it,
-                            // forcing spurious Data<->UplcConstr conversions at every
-                            // recursive call site.
+                            // Use `rhs.tp` (from LamAbs) as the base — it preserves the
+                            // method's TypeVar kinds (e.g. `@UplcRepr(TypeVar(Unwrapped)) B`
+                            // becomes `TypeVar(B, id, Unwrapped)` in LamAbs.param.tp/body.tp).
+                            // But `body.tp` is the body's *inferred* type and loses the
+                            // declared return `@UplcRepr` annotation. Patch it back in from
+                            // the binding's `tp` (DefDef signature) which preserves return
+                            // annotations. This is a workaround until the compiler plugin
+                            // annotates `LamAbs.term.tp` with the DefDef's declared return
+                            // annotation directly.
+                            val rhsRepTp = mergeReturnAnnotation(rhs.tp, tp)
                             val rhsRepr =
-                                lctx.typeGenerator(rhs.tp).defaultRepresentation(rhs.tp)
+                                lctx.typeGenerator(rhsRepTp).defaultRepresentation(rhsRepTp)
                             val newVar = VariableLoweredValue(
                               id = lctx.uniqueVarName(name),
                               name = name,
@@ -1149,7 +1236,8 @@ object Lowering {
                             )
                         case None =>
                             throw LoweringException(
-                              s"Unexpected variable $v is not in scope",
+                              s"Unexpected variable $v (id=${v.id}, " +
+                                  s"name=${v.name}, pos=${v.pos.show}) is not in scope",
                               value.pos
                             )
         }

@@ -536,6 +536,19 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             // anything → SumUplcConstr: delegate to SumUplcConstrSirTypeGenerator
             case (_, _: SumCaseClassRepresentation.SumUplcConstr) =>
                 SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+            // ProdUplcConstr value at a sum-list-type site: wrap as a singleton
+            // SumUplcConstr of the input's variant, then delegate. This happens when a
+            // variant built via native Constr emission (e.g. `List.Nil` inside a
+            // native-Constr dispatcher scope) flows into code expecting the sum form.
+            case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
+                val wrappedRepr =
+                    SumCaseClassRepresentation.SumUplcConstr(Map(puc.tag -> puc))
+                val wrapped = new RepresentationProxyLoweredValue(input, wrappedRepr, pos)
+                SumUplcConstrSirTypeGenerator.toRepresentation(
+                  wrapped,
+                  outputRepresentation,
+                  pos
+                )
             case _ =>
                 throw LoweringException(
                   s"Unexpected representation conversion for ${input.sirType.show} from ${input.representation} to ${outputRepresentation}",
@@ -804,6 +817,10 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 retrieveElementType(body, pos)
             case SIRType.TypeProxy(ref) =>
                 retrieveElementType(ref, pos)
+            case SIRType.Annotated(inner, _) =>
+                // `@UplcRepr` (and other) annotations are metadata on top of the real
+                // structural type; peel them before structural checks.
+                retrieveElementType(inner, pos)
             case _ =>
                 throw LoweringException(
                   s"Cannot retrieve element type from ${tp.show}, expected List type",

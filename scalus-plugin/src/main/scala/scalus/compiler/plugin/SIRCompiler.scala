@@ -374,7 +374,8 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tps.name.show,
               Some(tps.hashCode),
-              SIRType.TypeVarKind.Fixed
+              typer.extractTypeVarKindFromUplcRepr(tps)
+                  .getOrElse(SIRType.TypeVarKind.Fixed)
             )
         }
         val sirTypeVars = (typeParamsSymbols zip sirTypeParams).toMap
@@ -842,7 +843,8 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tp.typeSymbol.name.show,
               None,
-              SIRType.TypeVarKind.Fixed
+              typer.extractTypeVarKindFromUplcRepr(tp.typeSymbol)
+                  .getOrElse(SIRType.TypeVarKind.Fixed)
             )
         }
         val constrDecls = dataInfo.constructorsSymbols.map { sym =>
@@ -876,7 +878,8 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tp.name.show,
               Some(tp.hashCode),
-              SIRType.TypeVarKind.Fixed
+              typer.extractTypeVarKindFromUplcRepr(tp)
+                  .getOrElse(SIRType.TypeVarKind.Fixed)
             )
         )
         val envTypeVars2 = primaryConstructorTypeParams(constrSymbol).foldLeft(env.typeVars) {
@@ -884,7 +887,8 @@ final class SIRCompiler(
                 acc + (tp -> SIRType.TypeVar(
                   tp.name.show,
                   Some(tp.hashCode),
-                  SIRType.TypeVarKind.Fixed
+                  typer.extractTypeVarKindFromUplcRepr(tp)
+                      .getOrElse(SIRType.TypeVarKind.Fixed)
                 ))
         }
         val nEnv = env.copy(typeVars = envTypeVars2)
@@ -1495,7 +1499,6 @@ final class SIRCompiler(
                       s"selfTypeFromDef: ${selfTypeFromDef.show}\n" +
                       s"bodyExpr.tp: ${bodyExpr.tp.show}\n"
                 )
-
             val lbFlags = tryMethodResultType(dd) match {
                 case Some(rtp) => calculateLocalBindingFlags(rtp)
                 case None      => LocalBindingFlags.None
@@ -1625,13 +1628,12 @@ final class SIRCompiler(
                 val (currentTps, nextTps) = sirTypeParams.splitAt(firstList.size)
                 val (nextTypeFromDef, nextTypeVarMap, mismatchWasFound) = typeFromDef match {
                     case SIRType.TypeLambda(tvs, nextTypeFromDef) =>
-                        if tvs.length != currentTps.length then {
-                            if !typeFromDefMismatchWasFound then
-                                report.warning(
-                                  s"Type from definition has ${tvs.length} type parameters, but ${currentTps.length} expected",
-                                  pos
-                                )
-                        }
+                        val hasMismatch = tvs.length != currentTps.length
+                        if hasMismatch && !typeFromDefMismatchWasFound then
+                            report.warning(
+                              s"Type from definition has ${tvs.length} type parameters, but ${currentTps.length} expected",
+                              pos
+                            )
                         val nextTypeVarMap = tvs
                             .zip(currentTps)
                             .foldLeft(
@@ -1639,7 +1641,7 @@ final class SIRCompiler(
                             ) { case (acc, (tvFromDef, tvFromParam)) =>
                                 acc + (tvFromDef -> tvFromParam)
                             }
-                        (nextTypeFromDef, nextTypeVarMap, true)
+                        (nextTypeFromDef, nextTypeVarMap, hasMismatch)
                     case _ =>
                         if !typeFromDefMismatchWasFound then
                             report.warning(

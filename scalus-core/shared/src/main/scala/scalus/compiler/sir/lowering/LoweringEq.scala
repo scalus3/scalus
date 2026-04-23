@@ -174,7 +174,11 @@ object LoweringEq {
             case SIRType.SumCaseClass(_, _) => ()
             case _                          => return generateDataEquals(lhs, rhs, pos)
         val rhsConv = rhs.toRepresentation(lhsSum, pos)
-        val typeKey = sumEqKey(baseType)
+        // Cache key must include the concrete `lhsSum` representation: two call sites with
+        // the same type but different SumUplcConstr field reprs produce structurally-different
+        // helper bodies (field comparisons walk the baked-in field reprs). A type-only key
+        // would hand caller B caller A's helper → runtime repr mismatch.
+        val typeKey = sumEqKey(baseType) + "|" + lhsSum.show
         val funType = SIRType.Fun(baseType, SIRType.Fun(baseType, SIRType.Boolean))
         val innerFunType = SIRType.Fun(baseType, SIRType.Boolean)
         val innerFunRepr = LambdaRepresentation(

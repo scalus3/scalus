@@ -125,9 +125,8 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                 (SumCaseClassRepresentation.PairIntDataList, _) =>
                 SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
             case (inRepr, outRepr) =>
-                val trace = Thread.currentThread().getStackTrace.take(30).mkString("\n  ")
                 throw LoweringException(
-                  s"SumCaseUplcConstrSirTypeGenerator: unhandled conversion $inRepr → $outRepr for ${input.sirType.show}\n  $trace",
+                  s"SumCaseUplcConstrSirTypeGenerator: unhandled conversion $inRepr → $outRepr for ${input.sirType.show}",
                   pos
                 )
     }

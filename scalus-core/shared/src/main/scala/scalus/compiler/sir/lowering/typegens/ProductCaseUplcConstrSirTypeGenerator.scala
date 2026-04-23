@@ -77,27 +77,14 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        val targetGen = lctx.typeGenerator(targetType)
-        val targetRepr = targetGen.defaultRepresentation(targetType)
-        targetRepr match
-            case _: SumCaseClassRepresentation.SumBuiltinList =>
-                // Upcasting to list type — convert to Data first
-                val asDataConstr =
-                    input.toRepresentation(ProductCaseClassRepresentation.ProdDataConstr, pos)
-                TypeRepresentationProxyLoweredValue(asDataConstr, targetType, targetRepr, pos)
-            case _: SumCaseClassRepresentation.SumUplcConstr =>
-                // Upcasting to sum UplcConstr — keep native Constr
-                TypeRepresentationProxyLoweredValue(input, targetType, targetRepr, pos)
-            case _ =>
-                // Default: convert to ProdDataConstr for Data-compatible contexts
-                val asDataConstr =
-                    input.toRepresentation(ProductCaseClassRepresentation.ProdDataConstr, pos)
-                TypeRepresentationProxyLoweredValue(
-                  asDataConstr,
-                  targetType,
-                  SumCaseClassRepresentation.DataConstr,
-                  pos
-                )
+        // Structural upcast from a ProdUplcConstr variant to its parent sum: at the UPLC
+        // level the bytes are already `Constr(tag, fields)`, which is exactly the shape of a
+        // `SumUplcConstr`. Build the target `SumUplcConstr` repr and relabel — no Data round
+        // trip is needed, and none would be safe in isolation (abstract TypeVar fields cannot
+        // be Data-encoded without concrete type info).
+        val targetSumRepr =
+            typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
+        TypeRepresentationProxyLoweredValue(input, targetType, targetSumRepr, pos)
     }
 
     override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue =
@@ -106,26 +93,11 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
     ): LoweredValue =
-        // Debug: print info when near the error location (line 428, accessing 'depth')
-        val pos = sel.anns.pos
-        if pos.startLine == 428 || (sel.field == "depth" && pos.startLine >= 425 && pos.startLine <= 430)
-        then
-            println(
-              s"[DEBUG genSelect at ${pos.startLine}:${pos.startColumn}-${pos.endColumn}] field=${sel.field}"
-            )
-            println(s"  scrutinee type: ${loweredScrutinee.sirType}")
-            println(s"  scrutinee repr: ${loweredScrutinee.representation}")
-            println(s"  defaultRepr for type: ${defaultRepresentation(loweredScrutinee.sirType)}")
-
-        val result = loweredScrutinee.representation match
+        loweredScrutinee.representation match
             case _: ProductCaseClassRepresentation.ProdUplcConstr |
                 _: SumCaseClassRepresentation.SumUplcConstr =>
-                if pos.startLine == 428 || (sel.field == "depth" && pos.startLine >= 425 && pos.startLine <= 430)
-                then println(s"  -> Taking ProdUplcConstr branch")
                 ProductCaseUplcOnlySirTypeGenerator.genSelect(sel, loweredScrutinee)
             case tvr: TypeVarRepresentation if tvr.isBuiltin =>
-                if pos.startLine == 428 || (sel.field == "depth" && pos.startLine >= 425 && pos.startLine <= 430)
-                then println(s"  -> Taking TypeVar branch")
                 // Transparent TypeVar — value is native Constr at runtime.
                 // Resolve to ProdUplcConstr for the concrete type, then use UplcConstr select.
                 val pucRepr = defaultRepresentation(loweredScrutinee.sirType)
@@ -133,11 +105,8 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                     RepresentationProxyLoweredValue(loweredScrutinee, pucRepr, sel.anns.pos)
                 ProductCaseUplcOnlySirTypeGenerator.genSelect(sel, resolved)
             case _ =>
-                if pos.startLine == 428 || (sel.field == "depth" && pos.startLine >= 425 && pos.startLine <= 430)
-                then println(s"  -> Taking fallback Data branch")
                 // Data-based repr (ProdDataConstr, TypeVar(Fixed), etc.) — use Data extraction
                 ProductCaseSirTypeGenerator.genSelect(sel, loweredScrutinee)
-        result
 
     override def genMatch(
         matchData: SIR.Match,

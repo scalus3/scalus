@@ -299,10 +299,10 @@ object StackTraceMachineError {
             val sb = new StringBuilder
             sb.append("\n  Source trace (last ")
             sb.append(trace.size)
-            sb.append(" positions, oldest first):\n")
+            sb.append(" positions, newest first):\n")
             var prev: ScalusSourcePos = ScalusSourcePos.empty
             var repeatCount = 0
-            trace.foreach { pos =>
+            trace.reverseIterator.foreach { pos =>
                 if pos == prev then repeatCount += 1
                 else
                     if repeatCount > 0 then sb.append(s"    ... repeated $repeatCount times\n")
@@ -845,7 +845,8 @@ class CekMachine(
     logger: Logger,
     getBuiltinRuntime: DefaultFun => BuiltinRuntime,
     caseOnBuiltinsEnabled: Boolean = false,
-    profiling: Boolean = false
+    profiling: Boolean = false,
+    tracing: Boolean = false
 ) {
     import CekValue.*
     import Context.*
@@ -862,7 +863,7 @@ class CekMachine(
     private var traceCount = 0L
 
     private inline def recordSourcePos(pos: ScalusSourcePos): Unit =
-        if profiling && !pos.isEmpty then
+        if (profiling || tracing) && !pos.isEmpty then
             traceBuffer(traceIndex) = pos
             traceIndex = (traceIndex + 1) % traceBufferSize
             traceCount += 1

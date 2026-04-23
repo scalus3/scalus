@@ -131,7 +131,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(beforeSlot)
         val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
         assert(
-          winResult.budget == (ExUnits(memory = 108646L, steps = 37692141L))
+          winResult.budget == (ExUnits(memory = 108182L, steps = 37461561L))
         )
     }
 
@@ -192,7 +192,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(afterDeadlineSlot)
         val timeoutResult = assertSuccess(provider, timeoutTx, pricebetUtxo._1)
         assert(
-          timeoutResult.budget == (ExUnits(memory = 58039L, steps = 20230879L))
+          timeoutResult.budget == (ExUnits(memory = 57575L, steps = 20000299L))
         )
     }
 

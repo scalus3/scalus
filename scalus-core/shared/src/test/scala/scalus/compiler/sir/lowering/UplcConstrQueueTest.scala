@@ -8,7 +8,6 @@ import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.{Constant, Term}
 import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.uplc.eval.{PlutusVM, Result}
-import scalus.uplc.builtin.Builtins.remainderInteger
 
 @UplcRepr(UplcRepresentation.UplcConstr)
 case class Item(value: BigInt, extra: BigInt)
