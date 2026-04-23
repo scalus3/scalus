@@ -29,15 +29,26 @@ final class WbindgenAbi {
 
     import WbindgenAbi.*
 
-    // wasm-bindgen's JS runtime reserves the first four externref slots for JS literals.
-    // Keeping the same indices makes crash traces consistent with the reference implementation.
-    private val table: mutable.ArrayBuffer[AnyRef | Null] =
-        mutable.ArrayBuffer[AnyRef | Null](
-          null,
-          WbindgenAbi.Undefined,
-          java.lang.Boolean.TRUE,
-          java.lang.Boolean.FALSE
-        )
+    /** Mirror of the WASM module's `__wbindgen_externrefs` table. Slot indices on this map are
+      * the same indices the WASM module sees; allocation goes through the module's own
+      * `__externref_table_alloc` export so the two sides agree on which slot a handle refers to.
+      *
+      * Slot 0 is conventionally `undefined`. Slots 1..3 (or wherever
+      * [[__wbindgen_init_externref_table]] places them) hold the wasm-bindgen JS literal
+      * sentinels (`undefined`, `null`, `true`, `false`).
+      *
+      * Pre-init (before the module instance is attached to the table allocator) the bootstrap
+      * slots 0..3 are seeded with [null, undefined, true, false] — matching the JS-glue
+      * convention so the externref handles `0`/`1` mean what wasm-bindgen expects when used
+      * as parameters to the very first host calls during instantiation, before the module's
+      * runtime has run `__wbindgen_init_externref_table`.
+      */
+    private val externrefs: mutable.HashMap[Int, AnyRef | Null] = mutable.HashMap(
+      0 -> null,
+      1 -> WbindgenAbi.Undefined,
+      2 -> java.lang.Boolean.TRUE,
+      3 -> java.lang.Boolean.FALSE
+    )
 
     /** In-process localStorage stand-in. Rust's `web_sys::window().local_storage()` is invoked
       * during client construction for optional certificate-verification caching; an empty map
@@ -50,30 +61,81 @@ final class WbindgenAbi {
       */
     @volatile private var cachedMalloc: com.dylibso.chicory.runtime.ExportFunction = null
 
-    /** Allocate a new externref slot holding `obj`. */
+    /** Cached `__externref_table_alloc` export — used by [[alloc]] to allocate slots in the
+      * module's own externref table so JVM and WASM agree on slot indices.
+      */
+    @volatile private var cachedExternrefAlloc: com.dylibso.chicory.runtime.ExportFunction = null
+
+    /** The active WASM Instance, captured the first time any handler is invoked. Lets [[alloc]]
+      * route through `__externref_table_alloc` without threading the Instance through every
+      * call site. Set once per instantiation; remains constant thereafter.
+      */
+    @volatile private var currentInstance: Instance = null.asInstanceOf[Instance]
+
+    private def captureInstance(instance: Instance): Unit =
+        if currentInstance == null then currentInstance = instance
+
+    /** Public hook so external import-providers (e.g. [[MithrilAsyncRuntime]]) can capture the
+      * Instance via the same path as [[captured]] handlers do.
+      */
+    def captureForExtension(instance: Instance): Unit = captureInstance(instance)
+
+    /** Allocate an externref slot. Once the WASM instance is attached (after the first host
+      * call), allocations go through the module's `__externref_table_alloc` so the slot index
+      * we return is the same one the module's `__wbindgen_externrefs` table reserves.
+      *
+      * Before attachment (the bootstrap window during instantiation, before any host call),
+      * we hand out monotonic slots from a JVM-private counter. wasm-bindgen's
+      * `__wbindgen_init_externref_table` runs early and the bootstrap counter is then
+      * fast-forwarded past the module-issued indices to avoid collision.
+      */
     def alloc(obj: AnyRef | Null): Int = {
-        table.append(obj)
-        table.size - 1
+        val slot = if currentInstance != null then
+            externrefAlloc(currentInstance).apply()(0).toInt
+        else {
+            val s = nextBootstrapSlot
+            nextBootstrapSlot += 1
+            s
+        }
+        externrefs(slot) = obj
+        slot
     }
 
-    def get(idx: Int): AnyRef | Null =
-        if idx < 0 || idx >= table.size then null else table(idx)
+    @volatile private var nextBootstrapSlot: Int = 4
 
-    def set(idx: Int, obj: AnyRef | Null): Unit = {
-        while table.size <= idx do table.append(null)
-        table(idx) = obj
+    def get(idx: Int): AnyRef | Null = externrefs.getOrElse(idx, null)
+
+    def set(idx: Int, obj: AnyRef | Null): Unit =
+        externrefs(idx) = obj
+
+    private def externrefAlloc(instance: Instance): com.dylibso.chicory.runtime.ExportFunction = {
+        if cachedExternrefAlloc == null then
+            cachedExternrefAlloc = instance.`export`("__externref_table_alloc")
+        cachedExternrefAlloc
     }
 
     /** Read a UTF-8 string written by WASM at (ptr, len). */
     def readString(instance: Instance, ptr: Int, len: Int): String =
         new String(instance.memory().readBytes(ptr, len), StandardCharsets.UTF_8)
 
+    /** Wrap every handler so the first call captures the WASM Instance — gives [[alloc]] access
+      * to `__externref_table_alloc` without threading the Instance through call sites.
+      */
+    private def captured(h: WasmFunctionHandle): WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            captureInstance(instance)
+            h.apply(instance, args.map(_.toLong)*)
+        }
+    }
+
     /** Build the default host-import map. Keys are wasm-bindgen **short names** (the prefix up
       * to and including the trailing underscore before the 16-hex signature hash). The runtime
       * strips the hash before lookup, so these bindings survive pin bumps that only rotate
       * signature hashes.
       */
-    def defaultImports: Map[String, WasmFunctionHandle] = Map(
+    def defaultImports: Map[String, WasmFunctionHandle] = rawDefaultImports.view.mapValues(captured).toMap
+
+    private def rawDefaultImports: Map[String, WasmFunctionHandle] = Map(
       // ---- Predicates: (externref-handle: i32) -> i32 { 0 | 1 } ----
       "__wbg___wbindgen_is_undefined_" -> isUndefined,
       "__wbg___wbindgen_is_object_" -> isObject,
@@ -95,7 +157,7 @@ final class WbindgenAbi {
       "__wbg_warn_" -> consoleWarn,
       "__wbg_error_" -> consoleError,
       "__wbg_log_" -> consoleLog,
-      "__wbindgen_init_externref_table" -> noop0,
+      "__wbindgen_init_externref_table" -> initExternrefTable,
       // ---- Casts ----
       //
       // `__wbindgen_cast_*` has multiple distinct semantics per hash in this pin: (ptr,len)->String,
@@ -342,6 +404,30 @@ final class WbindgenAbi {
 
     private val noopAnyArgs: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
+    }
+
+    /** Mirror of the upstream JS init: grow the externref table by 4 and seed it with
+      * `[undefined, null, true, false]` at the four newly-allocated slots, plus `undefined`
+      * at slot 0. Our JVM-side `externrefs` map is updated in lockstep so subsequent reads
+      * agree with what WASM sees on the table.
+      */
+    private val initExternrefTable: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            externrefs(0) = WbindgenAbi.Undefined
+            val s0 = externrefAlloc(instance).apply()(0).toInt
+            externrefs(s0) = WbindgenAbi.Undefined
+            val s1 = externrefAlloc(instance).apply()(0).toInt
+            externrefs(s1) = null
+            val s2 = externrefAlloc(instance).apply()(0).toInt
+            externrefs(s2) = java.lang.Boolean.TRUE
+            val s3 = externrefAlloc(instance).apply()(0).toInt
+            externrefs(s3) = java.lang.Boolean.FALSE
+            // After init, fresh externref allocations come from the module — sync our
+            // bootstrap counter past the high-water mark so future alloc() doesn't collide.
+            val maxAfterInit = math.max(nextBootstrapSlot, s3 + 1)
+            nextBootstrapSlot = maxAfterInit
+            Array.emptyLongArray
+        }
     }
 
     // ------------------------------------------------------------------
@@ -755,7 +841,9 @@ final class WbindgenAbi {
       *   - One-arg `(ref)` Uint8Array-from-buffer ctor.
       *   - Two closure-creating `__wbindgen_cast_*` hashes + the (ptr,len)->String cast.
       */
-    def pinnedImports: Map[String, WasmFunctionHandle] = Map(
+    def pinnedImports: Map[String, WasmFunctionHandle] = rawPinnedImports.view.mapValues(captured).toMap
+
+    private def rawPinnedImports: Map[String, WasmFunctionHandle] = Map(
       // Zero-arg ctors (all strip to `__wbg_new_` so must be dispatched by full hash).
       "__wbg_new_0_23cedd11d9b40c9d" -> newDate,
       "__wbg_new_1ba21ce319a06297" -> newObject,

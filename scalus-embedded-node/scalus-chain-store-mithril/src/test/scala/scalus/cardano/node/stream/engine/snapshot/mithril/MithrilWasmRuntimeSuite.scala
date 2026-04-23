@@ -147,13 +147,16 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         }
     }
 
-    // Currently fails inside Chicory's CALL_INDIRECT → LOCAL_SET with an operand-stack underflow
-    // when the Promise executor closure is re-entered. Likely root cause: our JVM-side abi
-    // handle space and the WASM module's `__wbindgen_externrefs` table are disjoint, so the
-    // resolve/reject closure handles we allocate on the JVM side are being passed into WASM as
-    // externrefs that don't correspond to live entries in the module's own table. Next session
-    // will wire alloc → `__externref_table_alloc` so both sides agree on slot indices. See
-    // MithrilAsyncRuntime.scala header for the runtime design.
+    // Still fails on a Chicory CALL_INDIRECT → LOCAL_SET stack underflow *inside* the Rust
+    // executor body (h2da143d4463a5f08) after Scala hands it (fnPtrA, fnPtrB, resolveHandle,
+    // rejectHandle). The externref-table wiring (this commit) is correct infrastructure but
+    // does not fix this crash — the underflow is deep inside Rust's own indirect dispatch
+    // through its function table, reached only when the executor runs for real. Next step:
+    // a smaller repro — invoke a known 0-arg closure-invoke export with a synthetic
+    // (fnPtrA, fnPtrB) pair and see if the same crash surfaces; if so, this is a Chicory
+    // re-entry / operand-stack hygiene issue and the fix belongs at the MithrilAsyncRuntime
+    // invokeClosure boundary (possibly running each invoke on a fresh Chicory Machine rather
+    // than re-entering the current one). See MithrilAsyncRuntime.invokeClosure.
     ignore("async runtime: list_mithril_certificates reaches fetch without tripping closure stubs") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*

@@ -112,15 +112,30 @@ final class MithrilAsyncRuntime(val abi: WbindgenAbi) {
 
     /** Host-import overlay. These override the synchronous stand-ins in [[WbindgenAbi]] with
       * real async-aware implementations; pass this map **last** when merging so it wins.
+      *
+      * Each handler is wrapped so the first call captures the live WASM Instance — same
+      * convention as [[WbindgenAbi.captured]], and required so [[WbindgenAbi.alloc]] can route
+      * through `__externref_table_alloc`.
       */
-    def asyncImports: Map[String, WasmFunctionHandle] = Map(
-      "__wbg_new_ff12d2b041fb48f1" -> newPromiseWithExecutor,
-      "__wbg_then_" -> promiseThen,
-      "__wbg_resolve_" -> promiseResolve,
-      "__wbg_call_" -> callClosure,
-      "__wbg_queueMicrotask_" -> queueMicrotask,
-      "__wbg_setTimeout_" -> setTimeoutHandler
-    )
+    def asyncImports: Map[String, WasmFunctionHandle] = {
+        val raw: Seq[(String, WasmFunctionHandle)] = Seq(
+          "__wbg_new_ff12d2b041fb48f1" -> newPromiseWithExecutor,
+          "__wbg_then_" -> promiseThen,
+          "__wbg_resolve_" -> promiseResolve,
+          "__wbg_call_" -> callClosure,
+          "__wbg_queueMicrotask_" -> queueMicrotask,
+          "__wbg_setTimeout_" -> setTimeoutHandler
+        )
+        raw.map((name, h) => name -> wrapCapture(h)).toMap
+    }
+
+    private def wrapCapture(h: WasmFunctionHandle): WasmFunctionHandle =
+        new WasmFunctionHandle {
+            def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+                abi.captureForExtension(instance)
+                h.apply(instance, args.map(_.toLong)*)
+            }
+        }
 
     // ------------------------------------------------------------------
 
