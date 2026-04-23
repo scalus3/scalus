@@ -215,7 +215,7 @@ final class WbindgenAbi(
       "__wbg_stringify_" -> stringify,
       "__wbg_getTime_" -> getTime,
       "__wbg_postMessage_" -> noopAnyArgs,
-      "__wbg_prototypesetcall_" -> noopAnyArgs,
+      "__wbg_prototypesetcall_" -> uint8ArrayPrototypeSetCall,
       // ---- JS ctors ----
       //
       // Hash-insensitive short names below handle the ctor variants whose semantics the JS
@@ -295,7 +295,15 @@ final class WbindgenAbi(
     }
 
     private val isFunction: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array(0L)
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val callable = get(args(0).toInt) match {
+                case null                 => false
+                case _: JsIterableFn      => true
+                case _: JsClosure         => true
+                case ref: AnyRef          => ref eq JsQueueMicrotaskFn
+            }
+            Array(if callable then 1L else 0L)
+        }
     }
 
     private val isBigint: WasmFunctionHandle = new WasmFunctionHandle {
@@ -356,9 +364,10 @@ final class WbindgenAbi(
 
     private val stringGet: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val handle = args(0).toInt
-            val retPtr = args(1).toInt
-            get(handle) match {
+            // Upstream ABI: `(retPtr: i32, obj: externref)`. arg0 is the return pointer,
+            // arg1 is the object. Writes `(ptr, len)` at retPtr for Some, `(0, 0)` for None.
+            val retPtr = args(0).toInt
+            get(args(1).toInt) match {
                 case s: String => writeStringRet(instance, retPtr, s)
                 case _ =>
                     instance.memory().writeI32(retPtr, 0)
@@ -370,16 +379,18 @@ final class WbindgenAbi(
 
     private val numberGet: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val handle = args(0).toInt
-            val retPtr = args(1).toInt
+            // Upstream ABI: `(retPtr: i32, obj: externref)`. Writes `[tag i32, _padding, f64]`
+            // at retPtr: tag is 1 for Some (a number), 0 for None. See the JS glue.
+            val retPtr = args(0).toInt
+            val handle = args(1).toInt
             get(handle) match {
                 case n: java.lang.Number =>
-                    instance.memory().writeI32(retPtr, 0)
+                    instance.memory().writeI32(retPtr, 1)
                     instance
                         .memory()
                         .writeLong(retPtr + 8, java.lang.Double.doubleToLongBits(n.doubleValue))
                 case _ =>
-                    instance.memory().writeI32(retPtr, 1)
+                    instance.memory().writeI32(retPtr, 0)
             }
             Array.emptyLongArray
         }
@@ -387,14 +398,14 @@ final class WbindgenAbi(
 
     private val bigintGetAsI64: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val handle = args(0).toInt
-            val retPtr = args(1).toInt
+            val retPtr = args(0).toInt
+            val handle = args(1).toInt
             get(handle) match {
                 case b: java.math.BigInteger =>
-                    instance.memory().writeI32(retPtr, 0)
+                    instance.memory().writeI32(retPtr, 1)
                     instance.memory().writeLong(retPtr + 8, b.longValue)
                 case _ =>
-                    instance.memory().writeI32(retPtr, 1)
+                    instance.memory().writeI32(retPtr, 0)
             }
             Array.emptyLongArray
         }
@@ -406,8 +417,9 @@ final class WbindgenAbi(
 
     private val debugString: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val handle = args(0).toInt
-            val retPtr = args(1).toInt
+            // Upstream ABI: `(retPtr: i32, obj: externref)`. Writes UTF-8 (ptr,len) at retPtr.
+            val retPtr = args(0).toInt
+            val handle = args(1).toInt
             writeStringRet(instance, retPtr, String.valueOf(get(handle)))
             Array.emptyLongArray
         }
@@ -435,6 +447,31 @@ final class WbindgenAbi(
 
     private val noopAnyArgs: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
+    }
+
+    /** `Uint8Array.prototype.set.call(wasmSlice, sourceTypedArray)` — copy `sourceTypedArray`'s
+      * bytes into WASM linear memory at `(ptr, len)`. This is how `js_sys::Uint8Array::copy_to`
+      * transfers an HTTP response body (or any typed-array payload) back into a Rust `Vec<u8>`.
+      * Silently does nothing if the source isn't recognisable as a byte array.
+      */
+    private val uint8ArrayPrototypeSetCall: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val dstPtr = args(0).toInt
+            val dstLen = args(1).toInt
+            val bytes: Array[Byte] = get(args(2).toInt) match {
+                case u: JsUint8Array =>
+                    java.util.Arrays.copyOfRange(
+                      u.buffer.bytes,
+                      u.byteOffset,
+                      u.byteOffset + u.byteLength
+                    )
+                case b: JsArrayBuffer => b.bytes
+                case _                => Array.emptyByteArray
+            }
+            val n = math.min(dstLen, bytes.length)
+            if n > 0 then instance.memory().write(dstPtr, java.util.Arrays.copyOf(bytes, n))
+            Array.emptyLongArray
+        }
     }
 
     /** Mirror of the upstream JS init: grow the externref table by 4 and seed it with
@@ -632,17 +669,57 @@ final class WbindgenAbi(
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val container = get(args(0).toInt)
             val key = get(args(1).toInt)
-            val result = container match {
-                case m: JsMap    => m.entries.getOrElse(key, WbindgenAbi.Undefined)
-                case o: JsObject =>
-                    key match {
-                        case k: String => o.entries.getOrElse(k, WbindgenAbi.Undefined)
-                        case _         => WbindgenAbi.Undefined
+            val result: AnyRef | Null =
+                if key.eq(JsIteratorSymbol) then entriesFnFor(container)
+                else
+                    container match {
+                        case m: JsMap    => m.entries.getOrElse(key, WbindgenAbi.Undefined)
+                        case o: JsObject =>
+                            key match {
+                                case k: String => o.entries.getOrElse(k, WbindgenAbi.Undefined)
+                                case _         => WbindgenAbi.Undefined
+                            }
+                        case _ => WbindgenAbi.Undefined
                     }
-                case _ => WbindgenAbi.Undefined
-            }
             Array(alloc(result).toLong)
         }
+    }
+
+    /** Build a zero-arg [[JsIterableFn]] whose call produces a [[JsIterator]] over `container`.
+      * Mirrors JS's `obj[Symbol.iterator]` method lookup: the return is callable and yields
+      * the iterator on invocation (not the iterator itself).
+      */
+    private def entriesFnFor(container: AnyRef | Null): AnyRef | Null =
+        container match {
+            case _: JsHeaders | _: JsObject | _: JsArray | _: JsMap =>
+                JsIterableFn(() => buildEntriesIterator(container))
+            case _ => WbindgenAbi.Undefined
+        }
+
+    private def buildEntriesIterator(container: AnyRef | Null): JsIterator = container match {
+        case h: JsHeaders =>
+            val tuples = h.entries.iterator.map { case (k, v) =>
+                JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v)).asInstanceOf[AnyRef | Null]
+            }
+            new JsIterator(tuples)
+        case o: JsObject =>
+            val tuples = o.entries.iterator.map { case (k, v) =>
+                JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v)).asInstanceOf[AnyRef | Null]
+            }
+            new JsIterator(tuples)
+        case a: JsArray =>
+            val tuples = a.items.iterator.zipWithIndex.map { case (v, i) =>
+                JsArray(
+                  mutable.ArrayBuffer[AnyRef | Null](java.lang.Double.valueOf(i.toDouble), v)
+                ).asInstanceOf[AnyRef | Null]
+            }
+            new JsIterator(tuples)
+        case m: JsMap =>
+            val tuples = m.entries.iterator.map { case (k, v) =>
+                JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v)).asInstanceOf[AnyRef | Null]
+            }
+            new JsIterator(tuples)
+        case _ => new JsIterator(Iterator.empty)
     }
 
     /** `__wbg_set_*` — polymorphic over Array.set (ref, i32, ref), Map.set / Reflect.set
@@ -709,44 +786,34 @@ final class WbindgenAbi(
     private val iteratorSymbol: WasmFunctionHandle = freshHandle(JsIteratorSymbol)
 
     private val entriesFn: WasmFunctionHandle = new WasmFunctionHandle {
-        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val it = get(args(0).toInt) match {
-                case o: JsObject =>
-                    val tuples = o.entries.iterator.map { case (k, v) =>
-                        val pair = JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v))
-                        pair.asInstanceOf[AnyRef | Null]
-                    }
-                    new JsIterator(tuples)
-                case a: JsArray =>
-                    val tuples = a.items.iterator.zipWithIndex.map { case (v, i) =>
-                        val pair = JsArray(
-                          mutable.ArrayBuffer[AnyRef | Null](java.lang.Double.valueOf(i.toDouble), v)
-                        )
-                        pair.asInstanceOf[AnyRef | Null]
-                    }
-                    new JsIterator(tuples)
-                case m: JsMap =>
-                    val tuples = m.entries.iterator.map { case (k, v) =>
-                        val pair = JsArray(mutable.ArrayBuffer[AnyRef | Null](k, v))
-                        pair.asInstanceOf[AnyRef | Null]
-                    }
-                    new JsIterator(tuples)
-                case _ => new JsIterator(Iterator.empty)
-            }
-            Array(alloc(it).toLong)
-        }
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(buildEntriesIterator(get(args(0).toInt))).toLong)
     }
 
     private val iteratorNext: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(iteratorNextResult(get(args(0).toInt))).toLong)
+    }
+
+    /** `__wbg_next_*` GETTER variant — returns the iterator's `next` method bound to the
+      * iterator. Later `method.call(this, ...)` invocations run [[iteratorNextResult]].
+      */
+    private val iteratorNextGetter: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            val result = get(args(0).toInt) match {
-                case it: JsIterator =>
-                    if it.underlying.hasNext then JsIterResult(it.underlying.next(), done = false)
-                    else JsIterResult(WbindgenAbi.Undefined, done = true)
-                case _ => JsIterResult(WbindgenAbi.Undefined, done = true)
-            }
-            Array(alloc(result).toLong)
+            val target = get(args(0).toInt)
+            Array(alloc(JsIterableFn(() => iteratorNextResult(target))).toLong)
         }
+    }
+
+    /** Pull the next element from `container` under the JS iterator protocol. Returns a
+      * [[JsIterResult]] — this is always an object so `typeof it === "object"` holds,
+      * which `js_sys::Iterator::looks_like_iterator` requires.
+      */
+    private def iteratorNextResult(container: AnyRef | Null): JsIterResult = container match {
+        case it: JsIterator =>
+            if it.underlying.hasNext then JsIterResult(it.underlying.next(), done = false)
+            else JsIterResult(WbindgenAbi.Undefined, done = true)
+        case _ => JsIterResult(WbindgenAbi.Undefined, done = true)
     }
 
     private val iterResultDone: WasmFunctionHandle = new WasmFunctionHandle {
@@ -948,7 +1015,21 @@ final class WbindgenAbi(
       // element set), one returns a ref (`Map.set(k, v)` which returns the Map itself). The
       // short-name fallback only handles the void-returning shape; the ref-returning one
       // needs its own handler to avoid unbalancing the operand stack.
-      "__wbg_set_efaaf145b9377369" -> mapSetReturning
+      "__wbg_set_efaaf145b9377369" -> mapSetReturning,
+      // Two `__wbg_get_*` hashes collide on short name and return arity but differ in PARAM
+      // shape: `(ref, i32) -> ref` is indexed access (Array[i]); `(ref, ref) -> ref` is
+      // Reflect.get(container, key). They can't share one short-name handler because the
+      // handler would need to know whether arg(1) is an i32 index or a ref handle. Route
+      // them explicitly: short name stays on [[getIndexed]] (i32 key); ref-key variant
+      // goes to [[getWithRefKey]].
+      "__wbg_get_af9dab7e9603ea93" -> getWithRefKey,
+      // Two `__wbg_next_*` hashes collide on short name AND return arity: one is the
+      // property GETTER (`it.next`) returning the bound method, the other is the INVOKER
+      // (`it.next()`) returning the IteratorNext. The short-name fallback defaults to the
+      // invoker shape; the getter is pinned separately so `js_sys::Iterator::looks_like_iterator`
+      // — which reads `it["next"]` and expects a Function — finds a callable.
+      "__wbg_next_138a17bbf04e926c" -> iteratorNextGetter,
+      "__wbg_next_3cfe5c0fe2a4cc53" -> iteratorNext
     )
 
     private val castStringFromPtrLen: WasmFunctionHandle = new WasmFunctionHandle {
@@ -1455,6 +1536,22 @@ object WbindgenAbi {
       * enough for Mithril's in-client feedback loop to stay internally consistent.
       */
     final case class JsBroadcastChannel(name: String)
+
+    /** Zero-arg callable — stands in for a JS function looked up via
+      * `container[Symbol.iterator]`. When invoked via `__wbg_call_` it produces an iterator
+      * (or other ref) by running `produce`. Rust code uses this to duck-type a Headers /
+      * Map / Object as iterable; see `js_sys::try_iter`.
+      */
+    final case class JsIterableFn(produce: () => AnyRef | Null)
+
+    /** Sentinel returned by the `queueMicrotask` getter so later `fn.call(thisArg, cb)`
+      * sites can recognise the target as "enqueue the callback". Lives here so
+      * [[WbindgenAbi.isFunction]] can recognise it without cycling through
+      * `MithrilAsyncRuntime`.
+      */
+    object JsQueueMicrotaskFn {
+        override def toString: String = "wbindgen.queueMicrotaskFn"
+    }
 
     /** Render a JVM value as JSON. Used by `JSON.stringify` bridge. For our synthetic host types
       * we emit something sensible; for unknown refs we fall back to `String.valueOf`.

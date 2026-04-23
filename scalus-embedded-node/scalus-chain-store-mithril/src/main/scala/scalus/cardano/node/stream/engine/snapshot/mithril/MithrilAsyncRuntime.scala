@@ -3,12 +3,15 @@ package scalus.cardano.node.stream.engine.snapshot.mithril
 import com.dylibso.chicory.runtime.{Instance, WasmFunctionHandle}
 import scalus.cardano.node.stream.engine.snapshot.mithril.MithrilAsyncRuntime.{
     PromiseRejectCallback,
-    PromiseResolveCallback,
-    QueueMicrotaskFnSentinel
+    PromiseResolveCallback
 }
 import scalus.cardano.node.stream.engine.snapshot.mithril.WbindgenAbi.*
 
+import java.net.URI
+import java.net.http.{HttpClient, HttpRequest, HttpResponse}
+import java.time.Duration
 import java.util.concurrent.{ArrayBlockingQueue, Executors, ThreadFactory}
+import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise as SPromise}
 
 /** Asynchronous runtime for the Mithril WASM client.
@@ -72,40 +75,56 @@ final class MithrilAsyncRuntime(
         }
     }
 
-    /** If `handle` refers to a [[JsPromise]], block on dispatcher thread (draining microtasks)
-      * until it settles, then complete the returned Future with its value or error. Otherwise
-      * complete with the raw value — some async APIs return a plain value sync-wrapped into a
-      * Future for uniformity.
+    /** Post `body` to the dispatcher thread — used by I/O completions (HTTP responses, timer
+      * fires) to funnel back onto the single-threaded WASM executor. Microtasks are drained
+      * after `body` runs, so any promise settlement inside it fans out its `.then` chains
+      * before the next dispatcher task.
       */
-    def awaitPromise[T](handle: Int)(decode: AnyRef => T): Future[T] = {
+    private def postToDispatcher(body: => Unit): Unit = {
+        dispatcher.submit(new Runnable {
+            def run(): Unit = {
+                try body
+                catch {
+                    case t: Throwable =>
+                        MithrilAsyncRuntime.logger.error(
+                          s"dispatcher task failed: ${t.getMessage}",
+                          t
+                        )
+                }
+                drainMicrotasks()
+            }
+        })
+    }
+
+    /** If `handle` refers to a [[JsPromise]], complete the returned Future when it settles
+      * (via [[JsPromise.pendingSettlers]]). Otherwise complete with the raw value — some
+      * async APIs return a plain value sync-wrapped into a Future for uniformity.
+      *
+      * Event-driven, not polled: the dispatcher thread returns immediately after registering
+      * the settler, so pending HTTP completions queued on the dispatcher run freely and
+      * eventually trigger the promise transition.
+      */
+    def awaitPromise[T](handle: Int)(decode: AnyRef | Null => T): Future[T] = {
         val out = SPromise[T]()
         dispatcher.submit(new Runnable {
             def run(): Unit = {
                 try {
                     drainMicrotasks()
-                    val attempts = new java.util.concurrent.atomic.AtomicInteger(0)
-                    while attempts.get() < MithrilAsyncRuntime.MaxDrainRounds do {
-                        abi.get(handle) match {
-                            case p: JsPromise =>
-                                if !p.pending then {
-                                    if p.error != null then
-                                        out.failure(new RuntimeException(s"promise rejected: ${p.error}"))
-                                    else out.success(decode(p.value))
-                                    return
-                                }
-                            case other =>
-                                out.success(decode(other))
-                                return
-                        }
-                        drainMicrotasks()
-                        attempts.incrementAndGet()
+                    abi.get(handle) match {
+                        case p: JsPromise if !p.pending =>
+                            completeFromPromise(p, decode, out)
+                        case p: JsPromise =>
+                            p.pendingSettlers.append { (v, e) =>
+                                if e != null then
+                                    out.failure(new RuntimeException(s"promise rejected: $e"))
+                                else
+                                    try out.success(decode(v))
+                                    catch { case t: Throwable => out.failure(t) }
+                            }
+                        case other =>
+                            try out.success(decode(other))
+                            catch { case t: Throwable => out.failure(t) }
                     }
-                    out.failure(
-                      new RuntimeException(
-                        s"MithrilAsyncRuntime: promise still pending after " +
-                            s"${MithrilAsyncRuntime.MaxDrainRounds} drain rounds"
-                      )
-                    )
                 } catch {
                     case t: Throwable => out.failure(t)
                 }
@@ -113,6 +132,17 @@ final class MithrilAsyncRuntime(
         })
         out.future
     }
+
+    private def completeFromPromise[T](
+        p: JsPromise,
+        decode: AnyRef | Null => T,
+        out: SPromise[T]
+    ): Unit =
+        if p.error != null then
+            out.failure(new RuntimeException(s"promise rejected: ${p.error}"))
+        else
+            try out.success(decode(p.value))
+            catch { case t: Throwable => out.failure(t) }
 
     /** Host-import overlay. These override the synchronous stand-ins in [[WbindgenAbi]] with
       * real async-aware implementations; pass this map **last** when merging so it wins.
@@ -132,7 +162,23 @@ final class MithrilAsyncRuntime(
           // void. Same short name — must be registered by full hash to disambiguate.
           "__wbg_queueMicrotask_9b549dfce8865860" -> queueMicrotaskGetter,
           "__wbg_queueMicrotask_fca69f5bfad613a5" -> queueMicrotaskInvoke,
-          "__wbg_setTimeout_" -> setTimeoutHandler
+          "__wbg_setTimeout_" -> setTimeoutHandler,
+          // Fetch — both fetch(request) and fetch(globalThis, request) overloads share this
+          // short name; the handler branches on arity. Returns a JsPromise<JsResponse> that
+          // settles when the HTTP response arrives.
+          "__wbg_fetch_" -> fetchHandler,
+          // Response.text() / .arrayBuffer() — body is already fully buffered on JVM, so the
+          // returned promise is always already-resolved.
+          "__wbg_text_" -> responseText,
+          "__wbg_arrayBuffer_" -> responseArrayBuffer,
+          // ReadableStream no-op variants — every `close_*` hash maps to a no-op in absence
+          // of a real streaming reader. `enqueue_*` + the BYOB request accessors are present
+          // for completeness; real implementations come when streaming body reads land.
+          "__wbg_close_" -> streamClose,
+          "__wbg_enqueue_" -> streamEnqueue,
+          "__wbg_byobRequest_" -> streamByobRequest,
+          "__wbg_respond_" -> streamByobRespond,
+          "__wbg_view_" -> streamByobView
         )
         raw.map((name, h) => name -> wrapCapture(h)).toMap
     }
@@ -335,7 +381,12 @@ final class MithrilAsyncRuntime(
                     val e = if callArgs.nonEmpty then abi.get(callArgs(0).toInt) else null
                     rejectRaw(cb.promise, e)
                     Array(abi.alloc(WbindgenAbi.Undefined).toLong)
-                case QueueMicrotaskFnSentinel =>
+                case fn: JsIterableFn =>
+                    // Zero-arg bound-method invocation — e.g. `headers[Symbol.iterator]()`
+                    // produces the iterator. Args beyond `this` are ignored; Rust's
+                    // try_iter path always calls with zero args.
+                    Array(abi.alloc(fn.produce()).toLong)
+                case JsQueueMicrotaskFn =>
                     // `globalThis.queueMicrotask.call(thisArg, cb)` — treat as
                     // queueMicrotask(cb).
                     if callArgs.length >= 1 then {
@@ -365,7 +416,7 @@ final class MithrilAsyncRuntime(
       */
     private val queueMicrotaskGetter: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
-            Array(abi.alloc(QueueMicrotaskFnSentinel).toLong)
+            Array(abi.alloc(JsQueueMicrotaskFn).toLong)
     }
 
     /** `queueMicrotask(cb)` — enqueue the closure onto our dispatcher. Returns void. */
@@ -418,20 +469,230 @@ final class MithrilAsyncRuntime(
         val result = fn.apply(allArgs*)
         if result == null || result.isEmpty then 0L else result(0)
     }
+
+    // ------------------------------------------------------------------
+    // fetch / Response body bridges.
+    // ------------------------------------------------------------------
+
+    private lazy val httpClient: HttpClient = HttpClient
+        .newBuilder()
+        .connectTimeout(Duration.ofSeconds(MithrilAsyncRuntime.HttpConnectTimeoutSeconds))
+        .build()
+
+    /** `fetch(request)` and `fetch(globalThis, request)` both resolve here; we branch on arity
+      * to find the request handle. Returns a pending [[JsPromise]] whose settlement is posted
+      * to the dispatcher thread when the async HTTP call completes.
+      */
+    private val fetchHandler: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val requestHandle = if args.length >= 2 then args(1).toInt else args(0).toInt
+            val promise = new JsPromise(pending = true, value = null, error = null)
+            val promiseHandle = abi.alloc(promise)
+            abi.get(requestHandle) match {
+                case req: JsRequest =>
+                    MithrilAsyncRuntime.logger.debug(
+                      s"fetch ${req.method.toUpperCase} ${req.url}"
+                    )
+                    issueHttpRequest(req, promise)
+                case other =>
+                    postToDispatcher {
+                        rejectRaw(promise, s"fetch: expected JsRequest, got $other")
+                    }
+            }
+            Array(promiseHandle.toLong)
+        }
+    }
+
+    private def issueHttpRequest(req: JsRequest, promise: JsPromise): Unit = {
+        val httpReq =
+            try buildHttpRequest(req)
+            catch {
+                case t: Throwable =>
+                    postToDispatcher {
+                        rejectRaw(promise, s"fetch setup failed: ${t.getMessage}")
+                    }
+                    return
+            }
+        httpClient
+            .sendAsync(httpReq, HttpResponse.BodyHandlers.ofByteArray())
+            .whenComplete { (resp, ex) =>
+                if ex != null then {
+                    MithrilAsyncRuntime.logger.warn(
+                      s"fetch ${req.url} failed: ${unwrap(ex).getMessage}"
+                    )
+                    postToDispatcher {
+                        rejectRaw(promise, s"fetch failed: ${unwrap(ex).getMessage}")
+                    }
+                } else {
+                    MithrilAsyncRuntime.logger.debug(
+                      s"fetch ${req.url} → ${resp.statusCode} (${resp.body.length} bytes)"
+                    )
+                    postToDispatcher {
+                        settleWith(promise, toJsResponse(req.url, resp))
+                    }
+                }
+            }
+    }
+
+    private def buildHttpRequest(req: JsRequest): HttpRequest = {
+        val uri = URI.create(req.url)
+        var builder = HttpRequest
+            .newBuilder(uri)
+            .timeout(Duration.ofSeconds(MithrilAsyncRuntime.HttpRequestTimeoutSeconds))
+        req.headers.entries.foreach { case (name, value) =>
+            if !MithrilAsyncRuntime.restrictedHeaders.contains(name.toLowerCase) then
+                builder = builder.header(name, value)
+        }
+        val bodyPublisher = req.body match {
+            case Some(s: String)       => HttpRequest.BodyPublishers.ofString(s)
+            case Some(u: JsUint8Array) =>
+                val arr = java.util.Arrays.copyOfRange(
+                  u.buffer.bytes,
+                  u.byteOffset,
+                  u.byteOffset + u.byteLength
+                )
+                HttpRequest.BodyPublishers.ofByteArray(arr)
+            case Some(b: JsArrayBuffer) => HttpRequest.BodyPublishers.ofByteArray(b.bytes)
+            case _                      => HttpRequest.BodyPublishers.noBody()
+        }
+        val method = Option(req.method).filter(_.nonEmpty).getOrElse("GET").toUpperCase
+        builder = builder.method(method, bodyPublisher)
+        builder.build()
+    }
+
+    private def toJsResponse(url: String, resp: HttpResponse[Array[Byte]]): JsResponse = {
+        val headers = JsHeaders(mutable.LinkedHashMap.empty[String, String])
+        resp.headers.map.forEach { (name, values) =>
+            // HTTP/2 pseudo-headers (`:status`, `:authority`, …) are exposed by
+            // `java.net.http.HttpClient` but Rust's http crate rejects colon-prefixed names
+            // as invalid — strip them to match browser-fetch semantics.
+            if !values.isEmpty && !name.startsWith(":") then
+                headers.entries(name) = values.get(0)
+        }
+        // Java's HttpClient does not auto-decompress. Rust reqwest defaults to
+        // `Accept-Encoding: gzip`; if the server honoured it we'd otherwise hand the Rust
+        // side compressed bytes and text/json decoding would fail. Decode here and strip
+        // the header so the response metadata reflects the actual body.
+        val encoding = Option(resp.headers.firstValue("content-encoding").orElse(null))
+            .map(_.trim.toLowerCase)
+        val decodedBody = encoding match {
+            case Some("gzip") => decompressGzip(resp.body)
+            case _            => resp.body
+        }
+        encoding.foreach(_ => headers.entries.remove("content-encoding"))
+        new JsResponse(
+          url = url,
+          status = resp.statusCode,
+          headers = headers,
+          body = decodedBody
+        )
+    }
+
+    private def decompressGzip(data: Array[Byte]): Array[Byte] = {
+        if data.isEmpty then data
+        else {
+            val in = new java.util.zip.GZIPInputStream(new java.io.ByteArrayInputStream(data))
+            try in.readAllBytes()
+            finally in.close()
+        }
+    }
+
+    private def unwrap(t: Throwable): Throwable = t match {
+        case ce: java.util.concurrent.CompletionException if ce.getCause != null => ce.getCause
+        case other                                                               => other
+    }
+
+    /** `response.text()` — decode UTF-8 from the buffered body. Body is already fully in memory
+      * (we use `BodyHandlers.ofByteArray`), so the returned promise is already-resolved.
+      */
+    private val responseText: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val p = abi.get(args(0).toInt) match {
+                case r: JsResponse =>
+                    JsPromise.resolved(new String(r.body, java.nio.charset.StandardCharsets.UTF_8))
+                case other =>
+                    rejectedPromise(s"Response.text: expected JsResponse, got $other")
+            }
+            Array(abi.alloc(p).toLong)
+        }
+    }
+
+    /** `response.arrayBuffer()` — return buffered body as [[JsArrayBuffer]]. */
+    private val responseArrayBuffer: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val p = abi.get(args(0).toInt) match {
+                case r: JsResponse => JsPromise.resolved(JsArrayBuffer(r.body))
+                case other         =>
+                    rejectedPromise(s"Response.arrayBuffer: expected JsResponse, got $other")
+            }
+            Array(abi.alloc(p).toLong)
+        }
+    }
+
+    private def rejectedPromise(msg: String): JsPromise = {
+        val p = new JsPromise(pending = true, value = null, error = null)
+        rejectRaw(p, msg)
+        p
+    }
+
+    // ------------------------------------------------------------------
+    // ReadableStream — placeholders. The Rust client may exercise these for streaming
+    // responses; for the small JSON endpoints (`list_mithril_certificates`, etc.) the body
+    // is read via `.text()` / `.arrayBuffer()` and the streaming path is dormant. These
+    // stubs return inert values so the collision detector is happy; full streaming support
+    // lands when snapshot-download integration needs it.
+    // ------------------------------------------------------------------
+
+    private val streamClose: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
+    }
+
+    private val streamEnqueue: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
+    }
+
+    private val streamByobRequest: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array(0L)
+    }
+
+    private val streamByobRespond: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
+    }
+
+    private val streamByobView: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array(0L)
+    }
 }
 
 object MithrilAsyncRuntime {
-
-    /** Cap on microtask drain rounds in [[MithrilAsyncRuntime.awaitPromise]] — prevents a
-      * runaway continuation chain from looping forever. If you trip this, check for an
-      * accidentally re-armed continuation.
-      */
-    val MaxDrainRounds: Int = 1024
 
     /** Cap on microtasks drained in a single call — prevents a microtask that re-queues
       * itself indefinitely from starving the outer loop.
       */
     val MaxMicrotasksPerDrain: Int = 4096
+
+    /** Connect-phase timeout for HTTP requests issued through the fetch bridge. */
+    val HttpConnectTimeoutSeconds: Long = 30L
+
+    /** End-to-end request timeout. Must accommodate the slowest aggregator endpoints
+      * (certificate list on a cold mainnet can approach tens of seconds).
+      */
+    val HttpRequestTimeoutSeconds: Long = 120L
+
+    /** Headers `java.net.http.HttpClient` refuses to let the caller set, plus
+      * `accept-encoding` — we drop it from forwarded requests so the JDK client stays on
+      * its default (no compression) and the Rust side always sees raw bytes.
+      */
+    val restrictedHeaders: Set[String] =
+        Set(
+          "host",
+          "connection",
+          "content-length",
+          "upgrade",
+          "expect",
+          "transfer-encoding",
+          "accept-encoding"
+        )
 
     private val logger: scribe.Logger =
         scribe.Logger("scalus.cardano.node.stream.engine.snapshot.mithril.MithrilAsyncRuntime")
@@ -443,13 +704,6 @@ object MithrilAsyncRuntime {
 
     /** Counterpart for `reject(err)`. */
     final case class PromiseRejectCallback(promise: JsPromise)
-
-    /** Sentinel returned by the `queueMicrotask` getter so later `fn.call(thisArg, cb)`
-      * sites can recognise the target as "enqueue the callback".
-      */
-    object QueueMicrotaskFnSentinel {
-        override def toString: String = "wbindgen.queueMicrotaskFn"
-    }
 
     /** Per-build closure-related hash mapping. wasm-bindgen rotates the 16-hex hash on every
       * Rust signature change AND between debug/release builds, so we keep a small struct
