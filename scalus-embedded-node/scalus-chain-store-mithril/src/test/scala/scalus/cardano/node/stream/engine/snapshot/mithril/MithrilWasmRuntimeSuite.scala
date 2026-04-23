@@ -169,7 +169,7 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
     test("async runtime [npm-release]: feasibility probe on canonical blob") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*
-        val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+        val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_10_4
         val abi = new WbindgenAbi(hashes)
         val asyncRt = new MithrilAsyncRuntime(abi, hashes)
         val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports
@@ -317,7 +317,7 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         val port = server.getAddress.getPort
 
         try {
-            val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+            val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_10_4
             val abi = new WbindgenAbi(hashes)
             val asyncRt = new MithrilAsyncRuntime(abi, hashes)
             val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports
@@ -394,7 +394,7 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
             server.start()
             val port = server.getAddress.getPort
 
-            val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+            val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_10_4
             val abi = new WbindgenAbi(hashes)
             val asyncRt = new MithrilAsyncRuntime(abi, hashes)
             val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports
@@ -471,7 +471,7 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         info(s"mock aggregator listening at $aggregatorUrl")
 
         try {
-            val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+            val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_10_4
             val abi = new WbindgenAbi(hashes)
             val asyncRt = new MithrilAsyncRuntime(abi, hashes)
             val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports
@@ -505,16 +505,13 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         } finally server.stop(0)
     }
 
-    // Pinned 0.9.11 was released 2026-01-13, predating the `CardanoBlocksTransactions`
-    // variant added to `SignedEntityType` on 2026-01-15. The live preview aggregator emits
-    // it; serde_json then reports "trailing characters" (its error shape for unknown-variant
-    // + mismatched-arity on the inner 3-tuple). Bridge is proven correct via the loopback
-    // tests above; bump the pinned blob when we want end-to-end against preview.
-    // [network] = DNS + outbound HTTPS.
+    // End-to-end against the live preview aggregator: async executor → JDK fetch →
+    // Uint8Array copy back into Rust → serde_json. Pinned WASM is 0.10.4 which knows the
+    // `CardanoBlocksTransactions` variant. [network] = DNS + outbound HTTPS.
     test("e2e [network]: list_mithril_certificates drives real HTTP through the bridge") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*
-        val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+        val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_10_4
         val abi = new WbindgenAbi(hashes)
         val asyncRt = new MithrilAsyncRuntime(abi, hashes)
         val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports
@@ -544,15 +541,8 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
             case scala.util.Success(v) =>
                 info(s"received node data: ${v.getClass.getSimpleName} -> ${render(v)}")
                 assert(v != null, "expected a non-null certificate list")
-            case scala.util.Failure(t)
-                if t.getMessage != null &&
-                    t.getMessage.contains("trailing characters") =>
-                info(
-                  s"pipeline reached serde_json (bytes transferred into WASM memory): ${t.getMessage}"
-                )
-                cancel("known upstream schema drift — see test comment")
             case scala.util.Failure(t) =>
-                info(s"e2e call failed at an earlier stage: ${t.getClass.getName}: ${t.getMessage}")
+                info(s"e2e call failed: ${t.getClass.getName}: ${t.getMessage}")
                 cancel(s"network/aggregator/bridge error: ${t.getMessage}")
         }
     }

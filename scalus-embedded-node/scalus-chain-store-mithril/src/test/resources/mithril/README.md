@@ -5,8 +5,8 @@ npm release, pinned to a specific version:
 
 | File                                | Version  | SHA-256                                                              |
 |-------------------------------------|----------|----------------------------------------------------------------------|
-| `mithril_client_wasm_bg.wasm`       | 0.9.11   | `5eaa37178263cf1d7cb4da62f40264f318e89c66318ad1b0b474861dd295c519`   |
-| `mithril_client_wasm.js`            | 0.9.11   | `d7a2fda84c9434fd6fec510af823f92e21e5525419d1a39d4553789ddf03389d`   |
+| `mithril_client_wasm_bg.wasm`       | 0.10.4   | `af141364a587f664081585221d935cf41439c3b54e59ab8d8662d0df69d91fc0`   |
+| `mithril_client_wasm.js`            | 0.10.4   | `c28e21f3719815b63c2bae39a02ae5bd9a9633107946e365cee65a8b31aa5b7a`   |
 
 During the M10b.P2 WASM investigation we also kept a locally-rebuilt
 `--dev` / `--release` variant around for debugging, but it was removed

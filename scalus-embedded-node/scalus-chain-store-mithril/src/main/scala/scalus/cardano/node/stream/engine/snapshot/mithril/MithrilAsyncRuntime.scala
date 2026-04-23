@@ -35,7 +35,7 @@ import scala.concurrent.{ExecutionContext, Future, Promise as SPromise}
 final class MithrilAsyncRuntime(
     val abi: WbindgenAbi,
     closureHashes: MithrilAsyncRuntime.ClosureHashes =
-        MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+        MithrilAsyncRuntime.ClosureHashes.Release0_10_4
 ) {
 
     @volatile private var currentInstance: Instance = null.asInstanceOf[Instance]
@@ -156,8 +156,11 @@ final class MithrilAsyncRuntime(
           // Two upstream queueMicrotask variants SHARE arity (both (ref) -> ...) but differ
           // in return shape: the getter form returns a ref, the invocation form returns
           // void. Same short name — must be registered by full hash to disambiguate.
+          // Register both the 0.9.11 and 0.10.4 hash sets so either pinned blob works.
           "__wbg_queueMicrotask_9b549dfce8865860" -> queueMicrotaskGetter,
           "__wbg_queueMicrotask_fca69f5bfad613a5" -> queueMicrotaskInvoke,
+          "__wbg_queueMicrotask_f8819e5ffc402f36" -> queueMicrotaskGetter,
+          "__wbg_queueMicrotask_5d15a957e6aa920e" -> queueMicrotaskInvoke,
           "__wbg_setTimeout_" -> setTimeoutHandler,
           "__wbg_fetch_" -> fetchHandler,
           "__wbg_text_" -> responseText,
@@ -708,5 +711,23 @@ object MithrilAsyncRuntime {
           zeroArgClosureDestroy = "wasm_bindgen__closure__destroy__hea47394e049eff9b"
         )
 
+        /** Pinned upstream `@mithril-dev/mithril-client-wasm@0.10.4` release build.
+          *
+          * 0.10.4 rewrote the closure ABI: cast intrinsics now use zero-padded slot indices
+          * (`__wbindgen_cast_0000000000000001`) instead of per-closure hex hashes, and a single
+          * generic `__wbindgen_destroy_closure` replaces the per-closure destroy exports. The
+          * destroy fields below hold that generic name so the interface is preserved; callers don't
+          * need to know about the rename.
+          */
+        val Release0_10_4: ClosureHashes = ClosureHashes(
+          promiseExecutorImport = "__wbg_new_typed_323f37fd55ab048d",
+          promiseExecutorInvoke = "wasm_bindgen__convert__closures_____invoke__he20fbab6b1673584",
+          oneArgClosureCastImport = "__wbindgen_cast_0000000000000001",
+          oneArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__h023fd7017d50e9e0",
+          oneArgClosureDestroy = "__wbindgen_destroy_closure",
+          zeroArgClosureCastImport = "__wbindgen_cast_0000000000000002",
+          zeroArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__hc4b57cdb0d692e9e",
+          zeroArgClosureDestroy = "__wbindgen_destroy_closure"
+        )
     }
 }

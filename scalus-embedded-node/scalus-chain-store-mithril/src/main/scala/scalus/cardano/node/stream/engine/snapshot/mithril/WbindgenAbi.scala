@@ -27,7 +27,7 @@ import scala.collection.mutable
   */
 final class WbindgenAbi(
     closureHashes: MithrilAsyncRuntime.ClosureHashes =
-        MithrilAsyncRuntime.ClosureHashes.Release0_9_11
+        MithrilAsyncRuntime.ClosureHashes.Release0_10_4
 ) {
 
     import WbindgenAbi.*
@@ -225,6 +225,8 @@ final class WbindgenAbi(
       // (new Array / Object / Headers / Map / AbortController / Promise / Error / BroadcastChannel),
       // so those live in [[pinnedImports]] with hash-specific bindings. Pin bump: re-read the
       // upstream JS glue (shipped alongside the wasm blob) and update that map.
+      "__wbg_get_unchecked_" -> getIndexed,
+      "__wbg_get_with_ref_key_" -> getWithRefKey,
       "__wbg_new_0_" -> newDate,
       "__wbg_new_no_args_" -> newFunctionStub,
       "__wbg_new_from_slice_" -> newUint8ArrayFromSlice,
@@ -455,6 +457,27 @@ final class WbindgenAbi(
       * transfers an HTTP response body (or any typed-array payload) back into a Rust `Vec<u8>`.
       * Silently does nothing if the source isn't recognisable as a byte array.
       */
+    /** `jsTypedArray.set(getArrayU8FromWasm0(ptr, len))` — opposite direction from
+      * [[uint8ArrayPrototypeSetCall]]: copy WASM memory bytes INTO a JS-side typed array. Used e.g.
+      * when Rust writes a request body into a JS Uint8Array allocated for it. If `arg0` is a
+      * [[JsUint8Array]], the underlying buffer is mutated in place so later reads see the new
+      * bytes; if the destination isn't recognisably byte-capable, silently no-op.
+      */
+    private val uint8ArraySetFromWasmBytes: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val srcPtr = args(1).toInt
+            val srcLen = args(2).toInt
+            val bytes = instance.memory().readBytes(srcPtr, srcLen)
+            get(args(0).toInt) match {
+                case u: JsUint8Array =>
+                    val n = math.min(srcLen, u.byteLength)
+                    System.arraycopy(bytes, 0, u.buffer.bytes, u.byteOffset, n)
+                case _ => ()
+            }
+            Array.emptyLongArray
+        }
+    }
+
     private val uint8ArrayPrototypeSetCall: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
             val dstPtr = args(0).toInt
@@ -981,21 +1004,34 @@ final class WbindgenAbi(
 
     private def rawPinnedImports: Map[String, WasmFunctionHandle] = Map(
       // Zero-arg ctors (all strip to `__wbg_new_` so must be dispatched by full hash).
+      // Both 0.9.11 and 0.10.4 hashes are listed so either pinned blob works.
       "__wbg_new_0_23cedd11d9b40c9d" -> newDate,
       "__wbg_new_1ba21ce319a06297" -> newObject,
+      "__wbg_new_aa8d0fa9762c29bd" -> newObject,
       "__wbg_new_25f239778d6112b9" -> newArray,
+      "__wbg_new_682678e2f47e32bc" -> newArray,
       "__wbg_new_3c79b3bb1b32b7d3" -> newHeaders,
+      "__wbg_new_15a4889b4b90734d" -> newHeaders,
       "__wbg_new_881a222c65f168fc" -> newAbortController,
+      "__wbg_new_98c22165a42231aa" -> newAbortController,
       "__wbg_new_b546ae120718850e" -> newMap,
+      "__wbg_new_34d45cc8e36aaead" -> newMap,
       // 1-arg `(ref) -> ref`.
       "__wbg_new_6421f6084cc5bc5a" -> newUint8ArrayFromBuffer,
+      "__wbg_new_0c7403db6e782f19" -> newUint8ArrayFromBuffer,
       // 2-arg `(i32, i32) -> ref` — distinct semantics per hash.
       "__wbg_new_df1173567d5ff028" -> newError,
+      "__wbg_new_5e360d2ff7b9e1c3" -> newError,
       "__wbg_new_b3dd747604c3c93e" -> newBroadcastChannel,
+      "__wbg_new_aadb2b3f13e701cf" -> newBroadcastChannel,
       closureHashes.promiseExecutorImport -> newPromiseWithExecutor,
-      // `__wbindgen_cast_*` hashes with non-numeric semantics.
+      // `__wbindgen_cast_*` hashes with non-numeric semantics. 0.10.4 reuses the short name
+      // with zero-padded indices (0x1..0x5) instead of real hex hashes, so we list both
+      // pin sets; only one is present in any given blob.
       "__wbindgen_cast_2241b6af4c4b2941" -> castStringFromPtrLen,
+      "__wbindgen_cast_0000000000000004" -> castStringFromPtrLen,
       "__wbindgen_cast_4625c577ab2ec9ee" -> castU64ToBigInt,
+      "__wbindgen_cast_0000000000000005" -> castU64ToBigInt,
       closureHashes.oneArgClosureCastImport -> castOneArgClosure,
       closureHashes.zeroArgClosureCastImport -> castZeroArgClosure,
       // `__wbg_set_*` hash collisions: three variants return void (array/object/typed-array
@@ -1003,6 +1039,10 @@ final class WbindgenAbi(
       // short-name fallback only handles the void-returning shape; the ref-returning one
       // needs its own handler to avoid unbalancing the operand stack.
       "__wbg_set_efaaf145b9377369" -> mapSetReturning,
+      // 0.10.4 hashes for the same collisions — JS glue at mithril_client_wasm.js has
+      // `Map.set(k, v); return ret` and `Uint8Array.set(getArrayU8FromWasm0(ptr, len))`.
+      "__wbg_set_fde2cec06c23692b" -> mapSetReturning,
+      "__wbg_set_3d484eb794afec82" -> uint8ArraySetFromWasmBytes,
       // Two `__wbg_get_*` hashes collide on short name and return arity but differ in PARAM
       // shape: `(ref, i32) -> ref` is indexed access (Array[i]); `(ref, ref) -> ref` is
       // Reflect.get(container, key). They can't share one short-name handler because the
@@ -1010,13 +1050,16 @@ final class WbindgenAbi(
       // them explicitly: short name stays on [[getIndexed]] (i32 key); ref-key variant
       // goes to [[getWithRefKey]].
       "__wbg_get_af9dab7e9603ea93" -> getWithRefKey,
+      "__wbg_get_1affdbdd5573b16a" -> getWithRefKey,
       // Two `__wbg_next_*` hashes collide on short name AND return arity: one is the
       // property GETTER (`it.next`) returning the bound method, the other is the INVOKER
       // (`it.next()`) returning the IteratorNext. The short-name fallback defaults to the
       // invoker shape; the getter is pinned separately so `js_sys::Iterator::looks_like_iterator`
       // — which reads `it["next"]` and expects a Function — finds a callable.
       "__wbg_next_138a17bbf04e926c" -> iteratorNextGetter,
-      "__wbg_next_3cfe5c0fe2a4cc53" -> iteratorNext
+      "__wbg_next_3cfe5c0fe2a4cc53" -> iteratorNext,
+      "__wbg_next_7646edaa39458ef7" -> iteratorNextGetter,
+      "__wbg_next_0340c4ae324393c3" -> iteratorNext
     )
 
     private val castStringFromPtrLen: WasmFunctionHandle = new WasmFunctionHandle {
