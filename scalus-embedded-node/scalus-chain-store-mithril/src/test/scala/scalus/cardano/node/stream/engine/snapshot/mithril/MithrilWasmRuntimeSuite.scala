@@ -147,90 +147,23 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         }
     }
 
-    // Loads the locally-compiled debug build with console_error_panic_hook enabled, plus a
-    // ChicoryTraceListener for Chicory-level introspection of table traps.
+    // Feasibility probe for the async path on the pinned NPM release blob: drives
+    // list_mithril_certificates THROUGH the Promise executor (not just stashing it),
+    // verifying we can return a live Promise handle to the caller without tripping any
+    // of the WASM-level traps we hit earlier in the investigation.
     //
-    // Confirmed facts after 2026-04-23 investigation:
-    //   - Module has 2 tables: table[0]=funcref size 2004, table[1]=externref (size 256
-    //     initial; grew to 260 after init's grow(4)).
-    //   - Trap: `TABLE_GET tableIdx=1 requestedIdx=1704896 pc=0x4a69dd`.
-    //   - 1704896 = 0x1A03C0: the START OF THE GENESIS KEY STRING we passed to
-    //     mithrilclient_new. Memory dump confirms: at 0x1A03B0 we see tail of the
-    //     aggregator URL ("ggregator") followed by length fields (0x48=72 URL len,
-    //     0xF2=242 key len) then the key bytes. Rust is using a memory pointer as a slot.
-    //   - Tagging writeTableSlot to store `slot + 1_000_000` did NOT shift the trap's
-    //     requestedIdx, so the corrupt index does NOT come from our setRef storage.
-    //   - Trap fires BEFORE the Promise executor is invoked (no
-    //     `__wbg_new_ff12d2b041fb48f1` host call precedes it). Sequence:
-    //       init -> is_undefined(1)=1 -> SELF=0 -> WINDOW=0 -> GLOBAL_THIS=138 ->
-    //       is_undefined(138)=0 -> WASM-internal work -> TABLE_GET trap.
-    //   - Attempted (and did NOT help): Node.js-correct SELF/WINDOW=0 accessors;
-    //     contiguous init via TableInstance.grow(4); rebuild WITHOUT
-    //     console_error_panic_hook (same trap, only pc shifts slightly due to code layout).
-    //
-    // Because stripping the panic hook didn't change the trap, the failure is NOT in
-    // debug-assertion paths. It's in core wasm-bindgen / Rust-compiled code that
-    // `list_mithril_certificates` executes pre-executor.
-    //
-    // Remaining hypothesis: the externref-table protocol Chicory exposes diverges from
-    // what Rust expects in a subtle way. Specifically, `__externref_table_alloc` returns
-    // slot indices from a Rust-maintained free list. For slots on the free list, the
-    // STORED VALUE from when they were last used may still be present. When Rust reuses
-    // a slot and reads the OLD value (perhaps without a corresponding table.set first),
-    // it can interpret an old heap pointer as a new externref handle and trap.
-    //
-    // Options:
-    //   1. Hook `__externref_table_alloc` on the host side to log every Rust-internal
-    //      alloc + zero-initialize the returned slot via `setRef(slot, 0, instance)`
-    //      before handing it back. That would ensure no stale refs leak from the free
-    //      list.
-    //   2. Pivot to M10b.P3 (amaru-based V2 parser) and revisit WASM later.
-    ignore("async runtime [debug-wasm]: list_mithril_certificates reaches fetch without tripping closure stubs") {
+    // The critical fix that made this work was splitting the two `__wbg_queueMicrotask_*`
+    // imports by full hash — they share arity but have DIFFERENT return shapes
+    // (getter -> externref; invoke -> void). A single handler returning `emptyLongArray`
+    // imbalanced the WASM operand stack on the getter path, which downstream manifested
+    // as `MStack.pop -1` deep inside the Rust executor.
+    test("async runtime [npm-release]: feasibility probe on canonical blob") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*
-        val hashes = MithrilAsyncRuntime.ClosureHashes.Debug0_9_11
+        val hashes = MithrilAsyncRuntime.ClosureHashes.Release0_9_11
         val abi = new WbindgenAbi(hashes)
         val asyncRt = new MithrilAsyncRuntime(abi, hashes)
-
-        // Debug-build-only imports: console.createTask / task.run, used by wasm-bindgen-futures
-        // in dev mode for DevTools async-task grouping. On JVM we just invoke the callback
-        // without any task-tracking overhead.
-        val debugExtras: Map[String, com.dylibso.chicory.runtime.WasmFunctionHandle] = Map(
-          "__wbg_createTask_" -> new com.dylibso.chicory.runtime.WasmFunctionHandle {
-              def apply(
-                  instance: com.dylibso.chicory.runtime.Instance,
-                  args: Array[? <: Long]
-              ): Array[Long] = {
-                  val label = new String(
-                    instance.memory().readBytes(args(0).toInt, args(1).toInt),
-                    java.nio.charset.StandardCharsets.UTF_8
-                  )
-                  Array(abi.alloc(s"jsConsoleTask($label)").toLong)
-              }
-          },
-          "__wbg_run_" -> new com.dylibso.chicory.runtime.WasmFunctionHandle {
-              def apply(
-                  instance: com.dylibso.chicory.runtime.Instance,
-                  args: Array[? <: Long]
-              ): Array[Long] = {
-                  val fn = instance.`export`(
-                    "wasm_bindgen__convert__closures_____invoke__h04cb1f72c9342cc2"
-                  )
-                  val result = fn.apply(args(1).toLong, args(2).toLong)
-                  if result == null || result.isEmpty then Array(0L) else Array(result(0))
-              }
-          }
-        )
-        val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports ++ debugExtras
-        val debugBytes = {
-            val in = getClass.getResourceAsStream("/mithril/mithril_client_wasm_bg.debug.wasm")
-            assert(in != null, "debug wasm blob missing — see test resources")
-            try in.readAllBytes()
-            finally in.close()
-        }
-        // Late-bound instance ref so the trace listener can query table sizes at execution
-        // time. The listener fires during .build() (through __wbindgen_start) and later
-        // during our calls; it must consult the LIVE instance for current table sizes.
+        val imports = abi.defaultImports ++ abi.pinnedImports ++ asyncRt.asyncImports
         var liveInstance: com.dylibso.chicory.runtime.Instance = null
         val listener = new ChicoryTraceListener(
           tableSizeProbe = tableIdx => Option(liveInstance).map(_.table(tableIdx).size()),
@@ -238,20 +171,9 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
               Option(liveInstance).map(_.memory().readBytes(addr, len)).getOrElse(Array.emptyByteArray)
           )
         )
-        val (rt, _) = MithrilWasmRuntime.instantiateFromBytes(debugBytes, imports, Some(listener))
+        val (rt, _) = MithrilWasmRuntime.instantiate(imports, Some(listener))
         liveInstance = rt.instance
         asyncRt.attach(rt.instance)
-
-        // Dump the module's table layout so we know which tableIdx is which.
-        val tableSection = com.dylibso.chicory.wasm.Parser.parse(debugBytes).tableSection()
-        if tableSection != null then {
-            info(s"debug-wasm module has ${tableSection.tableCount()} tables:")
-            (0 until tableSection.tableCount()).foreach { i =>
-                val t = tableSection.getTable(i)
-                info(s"  table[$i] elementType=${t.elementType()} initialSize=${rt.instance.table(i).size()}")
-            }
-        }
-
         val futureResult = asyncRt.submit { _ =>
             val (aggPtr, aggLen) =
                 rt.passString("https://aggregator.testing-preview.api.mithril.network/aggregator")
@@ -268,12 +190,9 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         val outcome = Await.result(futureResult, 10.seconds)
         outcome match {
             case scala.util.Success(r) =>
-                info(s"list_mithril_certificates returned: ${r.toSeq}")
+                info(s"npm-release list_mithril_certificates returned: ${r.toSeq}")
             case scala.util.Failure(t) =>
-                info(s"list_mithril_certificates FAILED: ${t.getClass.getName}: ${t.getMessage}")
-                val sw = new java.io.StringWriter()
-                t.printStackTrace(new java.io.PrintWriter(sw))
-                info(sw.toString.linesIterator.take(15).mkString("\n"))
+                info(s"npm-release list_mithril_certificates FAILED: ${t.getClass.getName}: ${t.getMessage}")
         }
     }
 

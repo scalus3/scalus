@@ -3,7 +3,8 @@ package scalus.cardano.node.stream.engine.snapshot.mithril
 import com.dylibso.chicory.runtime.{Instance, WasmFunctionHandle}
 import scalus.cardano.node.stream.engine.snapshot.mithril.MithrilAsyncRuntime.{
     PromiseRejectCallback,
-    PromiseResolveCallback
+    PromiseResolveCallback,
+    QueueMicrotaskFnSentinel
 }
 import scalus.cardano.node.stream.engine.snapshot.mithril.WbindgenAbi.*
 
@@ -126,7 +127,11 @@ final class MithrilAsyncRuntime(
           "__wbg_then_" -> promiseThen,
           "__wbg_resolve_" -> promiseResolve,
           "__wbg_call_" -> callClosure,
-          "__wbg_queueMicrotask_" -> queueMicrotask,
+          // Two upstream queueMicrotask variants SHARE arity (both (ref) -> ...) but differ
+          // in return shape: the getter form returns a ref, the invocation form returns
+          // void. Same short name — must be registered by full hash to disambiguate.
+          "__wbg_queueMicrotask_9b549dfce8865860" -> queueMicrotaskGetter,
+          "__wbg_queueMicrotask_fca69f5bfad613a5" -> queueMicrotaskInvoke,
           "__wbg_setTimeout_" -> setTimeoutHandler
         )
         raw.map((name, h) => name -> wrapCapture(h)).toMap
@@ -330,6 +335,19 @@ final class MithrilAsyncRuntime(
                     val e = if callArgs.nonEmpty then abi.get(callArgs(0).toInt) else null
                     rejectRaw(cb.promise, e)
                     Array(abi.alloc(WbindgenAbi.Undefined).toLong)
+                case QueueMicrotaskFnSentinel =>
+                    // `globalThis.queueMicrotask.call(thisArg, cb)` — treat as
+                    // queueMicrotask(cb).
+                    if callArgs.length >= 1 then {
+                        abi.get(callArgs(0).toInt) match {
+                            case c: JsClosure =>
+                                microtasks.add(() =>
+                                    invokeClosure(currentInstance, c, Array.emptyLongArray)
+                                )
+                            case _ => ()
+                        }
+                    }
+                    Array(abi.alloc(WbindgenAbi.Undefined).toLong)
                 case null =>
                     throw new RuntimeException(
                       s"__wbg_call_: target handle ${args(0).toInt} is null"
@@ -342,11 +360,17 @@ final class MithrilAsyncRuntime(
         }
     }
 
-    private val queueMicrotask: WasmFunctionHandle = new WasmFunctionHandle {
+    /** `globalThis.queueMicrotask` — getter for the function. Returns an externref to a
+      * sentinel we'll later invoke when it's `.call(thisArg, cb)`-ed.
+      */
+    private val queueMicrotaskGetter: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(abi.alloc(QueueMicrotaskFnSentinel).toLong)
+    }
+
+    /** `queueMicrotask(cb)` — enqueue the closure onto our dispatcher. Returns void. */
+    private val queueMicrotaskInvoke: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            // Signature variants: void or externref return. Arity-1 variant: (closure_handle).
-            // We can't distinguish the closure/`queueMicrotask` getter form by arity, so check
-            // the value at the handle — if it's a JsClosure, enqueue it.
             abi.get(args(0).toInt) match {
                 case c: JsClosure =>
                     microtasks.add(() => invokeClosure(currentInstance, c, Array.emptyLongArray))
@@ -420,6 +444,13 @@ object MithrilAsyncRuntime {
     /** Counterpart for `reject(err)`. */
     final case class PromiseRejectCallback(promise: JsPromise)
 
+    /** Sentinel returned by the `queueMicrotask` getter so later `fn.call(thisArg, cb)`
+      * sites can recognise the target as "enqueue the callback".
+      */
+    object QueueMicrotaskFnSentinel {
+        override def toString: String = "wbindgen.queueMicrotaskFn"
+    }
+
     /** Per-build closure-related hash mapping. wasm-bindgen rotates the 16-hex hash on every
       * Rust signature change AND between debug/release builds, so we keep a small struct
       * mapping the import names we register to the corresponding invoke-export names. Bump
@@ -451,21 +482,5 @@ object MithrilAsyncRuntime {
           zeroArgClosureDestroy = "wasm_bindgen__closure__destroy__hea47394e049eff9b"
         )
 
-        /** Locally-compiled `--dev` build of mithril-client-wasm 0.9.11 WITHOUT
-          * `console_error_panic_hook` — the panic hook turned out to add debug-assertion
-          * code paths we couldn't satisfy. Invoke-export hashes match the earlier
-          * Debug0_9_11; only the two closure-cast import hashes change when the crate
-          * dependency graph changes.
-          */
-        val Debug0_9_11: ClosureHashes = ClosureHashes(
-          promiseExecutorImport = "__wbg_new_ff12d2b041fb48f1",
-          promiseExecutorInvoke = "wasm_bindgen__convert__closures_____invoke__hf498985395075366",
-          oneArgClosureCastImport = "__wbindgen_cast_7452b1ccf87eddf8",
-          oneArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__h83f64fd803aa6bb4",
-          oneArgClosureDestroy = "wasm_bindgen__closure__destroy__he23eb76bd87c9db3",
-          zeroArgClosureCastImport = "__wbindgen_cast_89b1b0c9f354e42b",
-          zeroArgClosureInvoke = "wasm_bindgen__convert__closures_____invoke__ha680d4b0d17e7dc3",
-          zeroArgClosureDestroy = "wasm_bindgen__closure__destroy__h4ed239079f93e789"
-        )
     }
 }

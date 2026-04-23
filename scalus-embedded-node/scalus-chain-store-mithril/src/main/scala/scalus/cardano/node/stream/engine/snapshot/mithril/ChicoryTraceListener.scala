@@ -19,6 +19,16 @@ import com.dylibso.chicory.wasm.types.{Instruction, OpCode}
 final class ChicoryTraceListener(
     tableSizeProbe: Int => Option[Int],
     memoryProbe: Option[(Int, Int) => Array[Byte]] = None,
+    /** Set of WASM function indices to log on CALL — lets us observe otherwise-invisible
+      * Rust-internal calls to exports like `__externref_table_alloc`. Pair with
+      * [[onAllocResult]] to capture the returned slot index once the call returns.
+      */
+    callTraceFnIndices: Set[Int] = Set.empty,
+    /** Optional callback fired the instruction AFTER a call to a function in
+      * [[callTraceFnIndices]] whose top-of-stack is the call's return value. Useful for
+      * intercepting `__externref_table_alloc` returns to zero-init the slot host-side.
+      */
+    onAllocResult: Option[(Int, Int) => Unit] = None,
     ringCapacity: Int = 32
 ) extends ExecutionListener {
 
@@ -34,9 +44,25 @@ final class ChicoryTraceListener(
             ring(idx)
         }
 
+    // One-instruction deferred callback: when a CALL to a traced function fires, we record
+    // the pre-call stack depth; on the FOLLOWING instruction the return value sits on top
+    // of the stack and we can hand it to onAllocResult before moving on.
+    private var pendingAllocCapture: Int = -1 // stackDepth the call was made at, or -1
+
     def onExecution(instr: Instruction, stack: MStack): Unit = {
         val op = instr.opcode()
         val entry = Entry(instr.address(), op, stack.size())
+
+        // Fulfil any pending alloc-capture from the previous CALL before we overwrite ring.
+        if pendingAllocCapture >= 0 && stack.size() == pendingAllocCapture + 1 then {
+            val slot = stack.peek().toInt
+            onAllocResult.foreach(_(instr.address(), slot))
+            pendingAllocCapture = -1
+        } else if pendingAllocCapture >= 0 then {
+            // Unexpected stack depth — the call didn't return one value; bail.
+            pendingAllocCapture = -1
+        }
+
         ring(ringHead) = entry
         ringHead = (ringHead + 1) % ringCapacity
         if ringSize < ringCapacity then ringSize += 1
@@ -66,6 +92,14 @@ final class ChicoryTraceListener(
                 val tableIdx = instr.operand(1).toInt
                 val requestedIdx = if stack.size() > 0 then stack.peek() else Long.MinValue
                 checkBounds(op, tableIdx, requestedIdx, instr.address())
+            case OpCode.CALL =>
+                val targetFn = instr.operand(0).toInt
+                if callTraceFnIndices.contains(targetFn) then {
+                    ChicoryTraceListener.logger.info(
+                      s"[call-trace] CALL fn=$targetFn at pc=0x${instr.address().toHexString} preStack=${stack.size()}"
+                    )
+                    pendingAllocCapture = stack.size()
+                }
             case _ => ()
     }
 
