@@ -840,11 +840,11 @@ lazy val scalusChainStoreMithril = project
       scalacOptions ++= commonScalacOptions,
       libraryDependencies += "com.dylibso.chicory" % "runtime" % "1.4.0",
       libraryDependencies += "com.dylibso.chicory" % "wasi" % "1.4.0",
+      libraryDependencies += "com.github.luben" % "zstd-jni" % "1.5.6-3",
+      libraryDependencies += "org.apache.commons" % "commons-compress" % "1.28.0",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.9",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.9",
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "com.github.luben" % "zstd-jni" % "1.5.6-3" % "test",
-      libraryDependencies += "org.apache.commons" % "commons-compress" % "1.28.0" % "test",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.9" % "test",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.9" % "test",
       publish / skip := false
     )
 

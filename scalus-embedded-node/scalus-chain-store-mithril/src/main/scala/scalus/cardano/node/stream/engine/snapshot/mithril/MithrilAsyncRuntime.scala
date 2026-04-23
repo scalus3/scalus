@@ -60,6 +60,11 @@ final class MithrilAsyncRuntime(
         currentInstance = instance
     }
 
+    /** Release the dispatcher thread. Idempotent. Subsequent `submit` / `awaitPromise` calls will
+      * be rejected by the executor.
+      */
+    def close(): Unit = dispatcher.shutdown()
+
     /** Submit `body` for execution on the dispatcher thread; drain microtasks before returning its
       * result.
       */
