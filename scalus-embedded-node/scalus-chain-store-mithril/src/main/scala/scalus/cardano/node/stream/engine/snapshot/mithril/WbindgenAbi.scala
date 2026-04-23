@@ -232,7 +232,11 @@ final class WbindgenAbi(
       // ---- Promise / microtask / timers — synchronous stand-ins. ----
       "__wbg_resolve_" -> promiseResolve,
       "__wbg_then_" -> promiseThen,
-      "__wbg_queueMicrotask_" -> queueMicrotaskHandler,
+      // NOTE: two `__wbg_queueMicrotask_*` hashes exist with different return arities
+      // (getter returns externref, invoke returns void). Short-name registration would
+      // fail the collision detector. Hash-specific bindings below.
+      "__wbg_queueMicrotask_9b549dfce8865860" -> queueMicrotaskGetterStub,
+      "__wbg_queueMicrotask_fca69f5bfad613a5" -> queueMicrotaskInvokeStub,
       "__wbg_setTimeout_" -> setTimeoutHandler,
       "__wbg_clearTimeout_" -> clearTimeoutHandler,
       "__wbg_abort_" -> abortHandler,
@@ -884,6 +888,29 @@ final class WbindgenAbi(
         }
     }
 
+    /** `Map.set(k, v)` → returns the Map itself. Same arity as the other polymorphic
+      * `__wbg_set_*` hashes (ref, ref, ref) but returns one externref where they return
+      * nothing.
+      */
+    private val mapSetReturning: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
+            val container = get(args(0).toInt)
+            val key = get(args(1).toInt)
+            val value = get(args(2).toInt)
+            container match {
+                case m: JsMap =>
+                    m.entries(key) = value
+                case o: JsObject =>
+                    key match {
+                        case k: String => o.entries(k) = value
+                        case _         => ()
+                    }
+                case _ => ()
+            }
+            Array(args(0)) // return the container handle unchanged
+        }
+    }
+
     /** Hash-specific bindings for the currently pinned upstream mithril-client-wasm 0.9.11. The
       * source of truth is the npm package's `mithril_client_wasm.js` shipped alongside the
       * wasm blob at `src/test/resources/mithril/`; re-read it on pin bump to refresh this map.
@@ -916,7 +943,12 @@ final class WbindgenAbi(
       "__wbindgen_cast_2241b6af4c4b2941" -> castStringFromPtrLen,
       "__wbindgen_cast_4625c577ab2ec9ee" -> castU64ToBigInt,
       closureHashes.oneArgClosureCastImport -> castOneArgClosure,
-      closureHashes.zeroArgClosureCastImport -> castZeroArgClosure
+      closureHashes.zeroArgClosureCastImport -> castZeroArgClosure,
+      // `__wbg_set_*` hash collisions: three variants return void (array/object/typed-array
+      // element set), one returns a ref (`Map.set(k, v)` which returns the Map itself). The
+      // short-name fallback only handles the void-returning shape; the ref-returning one
+      // needs its own handler to avoid unbalancing the operand stack.
+      "__wbg_set_efaaf145b9377369" -> mapSetReturning
     )
 
     private val castStringFromPtrLen: WasmFunctionHandle = new WasmFunctionHandle {
@@ -1019,11 +1051,17 @@ final class WbindgenAbi(
         }
     }
 
-    /** Accept the task; drop it. A real executor will come with the async bridge. Both the
-      * `void`-returning and `externref`-returning signature variants are in the module; be
-      * permissive and let WASM ignore the (non-existent) result for the externref variant.
+    /** Sync-mode stub for `globalThis.queueMicrotask` (getter returning the function ref).
+      * Returns a handle to an Undefined-ish sentinel since no real queue is running. The
+      * async runtime overlay replaces this with a real implementation.
       */
-    private val queueMicrotaskHandler: WasmFunctionHandle = new WasmFunctionHandle {
+    private val queueMicrotaskGetterStub: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] =
+            Array(alloc(WbindgenAbi.Undefined).toLong)
+    }
+
+    /** Sync-mode stub for `queueMicrotask(cb)` invocation. Returns void. */
+    private val queueMicrotaskInvokeStub: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array.emptyLongArray
     }
 

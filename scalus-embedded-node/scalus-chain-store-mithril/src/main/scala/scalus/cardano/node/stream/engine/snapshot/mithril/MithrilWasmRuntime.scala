@@ -100,6 +100,12 @@ object MithrilWasmRuntime {
                 .map(_.asInstanceOf[FunctionImport])
                 .toSeq
 
+        // Short-name collision check: fail loudly at load time if two full-hash imports
+        // share a short name but differ in signature. Without this guard a single short-name
+        // handler silently serves both, and the arity/return-shape mismatch manifests
+        // arbitrarily far away as a Chicory operand-stack underflow.
+        validateShortNameSignatures(module, fnImports, imports.keySet, imports)
+
         def resolve(name: String): Option[WasmFunctionHandle] =
             imports.get(name).orElse(imports.get(stripHash(name)))
 
@@ -149,6 +155,60 @@ object MithrilWasmRuntime {
         }
 
     private val HashSuffix = "_[0-9a-f]{16}$".r
+
+    /** Detect cases where the WASM module has two or more full-hash imports that strip to
+      * the same short name AND return a different number of values. Those are the ABI
+      * mismatches that would unbalance the WASM operand stack if a single short-name
+      * handler serves all of them (a handler can only return one fixed arity).
+      *
+      * Parameter-arity / parameter-type mismatches are NOT flagged: our handlers receive
+      * `Array[? <: Long]` and typically branch on args.length, so they can serve
+      * multiple input shapes correctly. It's the **return shape** that's fixed by the
+      * handler's `Array[Long]` return value — mismatch there is what breaks the stack.
+      *
+      * Imports whose full-hash name is explicitly registered by the caller bypass the
+      * short-name fallback and are not part of the collision.
+      */
+    private def validateShortNameSignatures(
+        module: com.dylibso.chicory.wasm.WasmModule,
+        fnImports: Seq[FunctionImport],
+        registeredFullNames: Set[String],
+        allImports: Map[String, WasmFunctionHandle]
+    ): Unit = {
+        val typeSection = module.typeSection()
+        val groups: Map[String, Seq[FunctionImport]] =
+            fnImports.groupBy(i => stripHash(i.name()))
+        val dangerous = groups.collect {
+            case (short, imps) if imps.size >= 2 && allImports.contains(short) =>
+                // Only flag if (a) multiple imports strip to the same short name, AND (b) a
+                // short-name handler is registered. Without a short-name handler each
+                // unbound hash gets its own `unimplementedImport` stub — no conflation.
+                val unbound = imps.filterNot(i => registeredFullNames.contains(i.name()))
+                val returnArities = unbound
+                    .map(i => typeSection.getType(i.typeIndex()).returns.size)
+                    .distinct
+                (short, unbound, returnArities)
+        }.filter { case (_, unbound, arities) => unbound.size >= 2 && arities.size >= 2 }
+
+        if dangerous.nonEmpty then {
+            val msg = dangerous
+                .map { case (short, imps, _) =>
+                    val variants = imps
+                        .map { i =>
+                            val t = typeSection.getType(i.typeIndex())
+                            s"    ${i.name()}  ${t.params} -> ${t.returns}"
+                        }
+                        .mkString("\n")
+                    s"  short name `$short` has imports with differing return arities:\n$variants"
+                }
+                .mkString("\n")
+            throw new IllegalStateException(
+              "WASM import short-name collisions with differing RETURN shapes detected — " +
+                  "a single short-name handler cannot serve both without unbalancing the " +
+                  "operand stack. Register each full-hash import explicitly:\n" + msg
+            )
+        }
+    }
 
     final case class InstantiationReport(
         totalImports: Int,
