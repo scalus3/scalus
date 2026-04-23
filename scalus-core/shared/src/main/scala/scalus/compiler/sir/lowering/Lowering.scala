@@ -350,11 +350,6 @@ object Lowering {
                           ev.anns.pos
                         )
                 myVar
-                // StaticLoweredValue(
-                //  ev,
-                //  Term.Var(NamedDeBruijn(name)),
-                //  SirTypeUplcGenerator(tp).defaultRepresentation
-                // )
             case sirLet @ SIR.Let(bindings, body, flags, anns) =>
                 // don;t generate FromData/ToData (now handled by Data Representation)
                 val nBindings =
@@ -425,24 +420,16 @@ object Lowering {
                 loweredScrutinee.sirType match {
                     case tv: SIRType.TypeVar =>
                         scrutinee.tp match
-                            case tp1: SIRType.TypeVar =>
-                            //
-                            case other =>
-                                println(
-                                  "lowered scrutinee is typed as type variable, but scrutinee is not"
+                            case _: SIRType.TypeVar =>
+                            case _ =>
+                                throw LoweringException(
+                                  s"Lowered scrutinee is typed as type variable but scrutinee is not.\n" +
+                                      s"  scrutinee.tp: ${scrutinee.tp.show}\n" +
+                                      s"  resolved typevar: ${lctx.typeUnifyEnv.filledTypes
+                                              .get(tv)}, typeVar = $tv\n" +
+                                      s"  loweredScrutinee.sirType: ${loweredScrutinee.sirType.show}, representation: ${loweredScrutinee.representation}",
+                                  anns.pos
                                 )
-                                println(s"scrutinee: $scrutinee")
-                                println(s"loweredScrutinee: $loweredScrutinee")
-                                println(s"scrutinee.tp: ${scrutinee.tp.show}")
-                                println(
-                                  s"resolved typevar: ${lctx.typeUnifyEnv.filledTypes.get(tv)}, typeVae = ${tv}"
-                                )
-                                println(
-                                  s"loweredScrutinee.sirType: ${loweredScrutinee.sirType.show}, representation: ${loweredScrutinee.representation}"
-                                )
-                                println(s"lowered scrutinee crerated at:")
-                                loweredScrutinee.createdEx.printStackTrace()
-                                ???
                     case _ =>
                 }
                 val generator = lctx.typeGenerator(loweredScrutinee.sirType)
@@ -840,9 +827,10 @@ object Lowering {
         val tp = lctx.resolveTypeVarIfNeeded(app.tp)
         val gen = lctx.typeGenerator(tp)
         val targetRepr = gen.defaultRepresentation(tp)
-        System.err.println(
-          s"[fromDefaultTypeVarRepr] app.tp=${app.tp.show}, resolved tp=${tp.show}, loweredArg.repr=${loweredArg.representation}, targetRepr=${targetRepr}"
-        )
+        if lctx.debug then
+            lctx.log(
+              s"[fromDefaultTypeVarRepr] app.tp=${app.tp.show}, resolved tp=${tp.show}, loweredArg.repr=${loweredArg.representation}, targetRepr=$targetRepr"
+            )
         val converted = loweredArg.toRepresentation(targetRepr, app.anns.pos)
         if converted eq loweredArg then converted
         else
@@ -1001,32 +989,16 @@ object Lowering {
                       ex.cause
                     )
                 case NonFatal(ex) =>
-                    println(
-                      s"Error lowering app: ${app.pretty.render(100)} at ${app.anns.pos.file}:${app.anns.pos.startLine + 1}"
-                    )
-                    println(ex.getMessage)
-                    println(s"=== Problematic Apply Node ===")
-                    println(s"app.tp=${app.tp.show}")
-                    println(s"app.tp class=${app.tp.getClass.getName}")
-                    println(s"app.f class=${app.f.getClass.getSimpleName}")
-                    println(s"app.f=${app.f}")
-                    println(s"f.tp=${app.f.tp.show}")
-                    println(s"f=${app.f.pretty.render(100)}")
-                    println(s"lowered f.tp: ${fun.sirType.show}")
-                    println(s"arg.tp=${app.arg.tp.show}")
-                    println(s"unrolled arg.tp=${SIRType.unrollTypeProxy(app.arg.tp).show}")
-                    println(s"lowered arg.tp: ${arg.sirType.show}")
-                    println(s"=== End Problematic Apply Node ===")
-                    lctx.debug = true
-                    // redu with debug mode to see the error
-                    lvApply(
-                      fun,
-                      arg,
-                      app.anns.pos,
-                      Some(app.tp),
-                      None // representation can depend from fun, so should be calculated.
-                    )
-                    throw ex;
+                    if lctx.debug then
+                        lctx.log(
+                          s"Error lowering app: ${app.pretty.render(100)} at ${app.anns.pos.file}:${app.anns.pos.startLine + 1}\n" +
+                              s"  ${ex.getMessage}\n" +
+                              s"  app.tp=${app.tp.show} (${app.tp.getClass.getName})\n" +
+                              s"  app.f=${app.f.pretty.render(100)} (${app.f.getClass.getSimpleName})\n" +
+                              s"  f.tp=${app.f.tp.show}, lowered f.tp=${fun.sirType.show}\n" +
+                              s"  arg.tp=${app.arg.tp.show} (unrolled=${SIRType.unrollTypeProxy(app.arg.tp).show}), lowered arg.tp=${arg.sirType.show}"
+                        )
+                    throw ex
         result
     }
 
@@ -1150,17 +1122,11 @@ object Lowering {
 
     private def lowerToData(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
         if SIRType.isPolyFunOrFun(app.arg.tp) then {
-            println(
-              s"Warning: lowering ToData for poly function ${app.arg.pretty.render(100)} at ${app.anns.pos.file}:${app.anns.pos.startLine + 1}"
-            )
-            println(
-              s" app= ${app.pretty.render(100)}"
-            )
-            println(
-              s"  app.arg.tp = ${app.arg.tp.show}, app.tp = ${app.tp.show}, app.f = ${app.f.pretty.render(100)}"
-            )
             throw LoweringException(
-              s"Argument of toData should be a data type, but got ${app.arg.tp.show}",
+              s"Argument of toData should be a data type, but got ${app.arg.tp.show}.\n" +
+                  s"  app.arg = ${app.arg.pretty.render(100)}\n" +
+                  s"  app.f = ${app.f.pretty.render(100)}\n" +
+                  s"  app.tp = ${app.tp.show}",
               app.anns.pos
             )
         }

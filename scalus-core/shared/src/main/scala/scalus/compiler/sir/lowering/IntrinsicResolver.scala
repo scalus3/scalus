@@ -64,31 +64,29 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrList",
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption"
         )
-        // Post-process IntrinsicsNativeList, IntrinsicsUplcConstrList, and IntrinsicsUplcConstrOption:
-        // make TypeVars Transparent so that native values pass through without implicit Data
-        // conversion at boundaries. The dispatcher modules' annotations (added in Phase 3 for
-        // documentation/intent) are equivalent to Transparent here, so this stamping is
-        // idempotent for them. HO function arguments (like Eq in contains) are explicitly
-        // wrapped with toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
+        // Stamp TypeVars Transparent so native values pass through without implicit Data
+        // conversion. HO function arguments (e.g. Eq in contains) are explicitly wrapped with
+        // toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
         modules.map { (name, module) =>
             if name == NativeListOps || name == UplcConstrListOps || name == UplcConstrOptionOps
-            then
-                val transparentDefs = module.defs.map { binding =>
-                    val newValue =
-                        SIR.mapTypeVars(
-                          binding.value,
-                          _.copy(kind = SIRType.TypeVarKind.Transparent)
-                        )
-                    val newTp =
-                        SIRType.mapTypeVars(
-                          binding.tp,
-                          _.copy(kind = SIRType.TypeVarKind.Transparent)
-                        )
-                    Binding(binding.name, newTp, newValue)
-                }
-                name -> module.copy(defs = transparentDefs)
+            then name -> stampTransparent(module)
             else name -> module
         }
+    }
+
+    private def stampTransparent(module: Module): Module = {
+        val transparentDefs = module.defs.map { binding =>
+            val newValue = SIR.mapTypeVars(
+              binding.value,
+              _.copy(kind = SIRType.TypeVarKind.Transparent)
+            )
+            val newTp = SIRType.mapTypeVars(
+              binding.tp,
+              _.copy(kind = SIRType.TypeVarKind.Transparent)
+            )
+            Binding(binding.name, newTp, newValue)
+        }
+        module.copy(defs = transparentDefs)
     }
 
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
@@ -111,20 +109,7 @@ object IntrinsicResolver {
         // dispatcher wraps the HO function with representation conversion adapters.
         modules.map { (name, module) =>
             if name == "scalus.compiler.intrinsics.NativeListOperations" then
-                val transparentDefs = module.defs.map { binding =>
-                    val newValue =
-                        SIR.mapTypeVars(
-                          binding.value,
-                          _.copy(kind = SIRType.TypeVarKind.Transparent)
-                        )
-                    val newTp =
-                        SIRType.mapTypeVars(
-                          binding.tp,
-                          _.copy(kind = SIRType.TypeVarKind.Transparent)
-                        )
-                    Binding(binding.name, newTp, newValue)
-                }
-                name -> module.copy(defs = transparentDefs)
+                name -> stampTransparent(module)
             else name -> module
         }
     }
@@ -372,7 +357,6 @@ object IntrinsicResolver {
         extractModuleAndMethod(f) match
             case None => None
             case Some((moduleName, methodName)) =>
-                val reprNames0 = representationNames(loweredArg.representation)
                 if lctx.debug then
                     lctx.log(
                       s"IntrinsicResolver: module=$moduleName method=$methodName repr=${loweredArg.representation.doc.render(80)}"
