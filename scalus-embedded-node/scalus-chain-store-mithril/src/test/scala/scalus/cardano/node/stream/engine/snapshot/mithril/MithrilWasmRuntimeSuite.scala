@@ -147,27 +147,32 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         }
     }
 
-    // Loads the locally-compiled debug build with console_error_panic_hook enabled.
+    // Loads the locally-compiled debug build with console_error_panic_hook enabled, plus a
+    // ChicoryTraceListener for Chicory-level introspection of table traps.
     //
-    // Progress against the crash (2026-04-23):
-    //   - Ruled out: externref-table alignment (our slots 132/133/136/138 all round-trip via
-    //     setRef, no mismatch; table size is 256, allocations in-bounds).
-    //   - Ruled out: CALL_INDIRECT operand-stack underflow — root-caused as unimplemented
-    //     host imports throwing unreachable (createTask, run) from inside the executor body.
-    //     Stubs wired in the test's debugExtras map.
-    //   - Ruled out: Rust panic — console_error_panic_hook never fires; the trap is WASM
-    //     spec-level, not panic.
+    // Confirmed facts (2026-04-23):
+    //   - Trap is on table[1] (externref table, size 256).
+    //     Module has 2 tables: table[0]=funcref size 2004, table[1]=externref size 256.
+    //   - Trap is `TABLE_GET tableIdx=1 requestedIdx=1704896` — Rust is using a value of
+    //     magnitude ~1.7M as a slot index. That's the size of a WASM memory pointer, not a
+    //     slot index. Rust is mistaking something (likely a heap address) for a slot handle.
+    //   - The trap fires after our `static_accessor_SELF + is_undefined(JsGlobal_slot=138)`
+    //     returns 0 (false), so Rust takes the "globalThis exists" branch. Inside that
+    //     branch, before the next host call, the WASM-internal TABLE_GET traps.
     //
-    // Still failing: `WasmRuntimeException: out of bounds table access` inside the Rust
-    // executor after static_accessor_SELF + is_undefined(JsGlobal_slot). The trap could be
-    // on the funcref table (CALL_INDIRECT upstream) or on a higher externref slot Rust is
-    // accessing via its own internal index (not one we handed it).
+    // Leading hypothesis: either our `__wbindgen_init_externref_table` implementation doesn't
+    // match Rust's expectations around sentinel slots, or Chicory's externref table-storage
+    // encoding diverges from how the JS-runtime externref table encodes values — causing
+    // Rust's later read of a stored slot-handle to yield a memory address instead of the
+    // small int we thought we stored.
     //
-    // Next step: Chicory-level introspection — either a compile-time patch of
-    // OpcodeImpl.TABLE_GET to log (table_idx, requested_idx, table.size()) on OOB, or a
-    // reflection-based wrapper around TableInstance that logs every access. Until then,
-    // we can't distinguish "Rust allocated a slot outside our JVM map" from "Rust computed
-    // a bad index from heap content."
+    // Next steps:
+    //   1. Log WASM memory contents at address 1704896 (is it a recognizable structure?).
+    //   2. Cross-reference pc=0x4a69dd with the debug build's function-offset table to find
+    //      the Rust function containing the trap — then read its source for context.
+    //   3. Potentially change writeTableSlot to store something other than the slot index
+    //      itself (e.g., an arbitrary tagged sentinel) to confirm whether the stored value
+    //      is what's being misinterpreted.
     ignore("async runtime [debug-wasm]: list_mithril_certificates reaches fetch without tripping closure stubs") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*
@@ -211,8 +216,26 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
             try in.readAllBytes()
             finally in.close()
         }
-        val (rt, _) = MithrilWasmRuntime.instantiateFromBytes(debugBytes, imports)
+        // Late-bound instance ref so the trace listener can query table sizes at execution
+        // time. The listener fires during .build() (through __wbindgen_start) and later
+        // during our calls; it must consult the LIVE instance for current table sizes.
+        var liveInstance: com.dylibso.chicory.runtime.Instance = null
+        val listener = new ChicoryTraceListener(tableIdx =>
+            Option(liveInstance).map(_.table(tableIdx).size())
+        )
+        val (rt, _) = MithrilWasmRuntime.instantiateFromBytes(debugBytes, imports, Some(listener))
+        liveInstance = rt.instance
         asyncRt.attach(rt.instance)
+
+        // Dump the module's table layout so we know which tableIdx is which.
+        val tableSection = com.dylibso.chicory.wasm.Parser.parse(debugBytes).tableSection()
+        if tableSection != null then {
+            info(s"debug-wasm module has ${tableSection.tableCount()} tables:")
+            (0 until tableSection.tableCount()).foreach { i =>
+                val t = tableSection.getTable(i)
+                info(s"  table[$i] elementType=${t.elementType()} initialSize=${rt.instance.table(i).size()}")
+            }
+        }
 
         val futureResult = asyncRt.submit { _ =>
             val (aggPtr, aggLen) =

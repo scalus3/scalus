@@ -1,6 +1,12 @@
 package scalus.cardano.node.stream.engine.snapshot.mithril
 
-import com.dylibso.chicory.runtime.{HostFunction, Instance, Store, WasmFunctionHandle}
+import com.dylibso.chicory.runtime.{
+    ExecutionListener,
+    HostFunction,
+    Instance,
+    Store,
+    WasmFunctionHandle
+}
 import com.dylibso.chicory.wasm.Parser
 import com.dylibso.chicory.wasm.types.{ExternalType, FunctionImport, FunctionType}
 
@@ -68,9 +74,10 @@ object MithrilWasmRuntime {
       * stub that raises when called. So pinned overrides → defaults → error.
       */
     def instantiate(
-        imports: Map[String, WasmFunctionHandle]
+        imports: Map[String, WasmFunctionHandle],
+        listener: Option[ExecutionListener] = None
     ): (MithrilWasmRuntime, InstantiationReport) =
-        instantiateFromBytes(loadWasmBytes(), imports)
+        instantiateFromBytes(loadWasmBytes(), imports, listener)
 
     /** Variant that takes the WASM blob bytes directly rather than reading the pinned
       * release blob from the classpath. Used by diagnostic test paths that load a
@@ -78,7 +85,8 @@ object MithrilWasmRuntime {
       */
     def instantiateFromBytes(
         wasmBytes: Array[Byte],
-        imports: Map[String, WasmFunctionHandle]
+        imports: Map[String, WasmFunctionHandle],
+        listener: Option[ExecutionListener] = None
     ): (MithrilWasmRuntime, InstantiationReport) = {
         val module = Parser.parse(wasmBytes)
 
@@ -104,7 +112,9 @@ object MithrilWasmRuntime {
 
         val store = new Store()
         store.addFunction(hostFunctions*)
-        val instance = store.instantiate("mithril", module)
+        val builder = Instance.builder(module).withImportValues(store.toImportValues)
+        listener.foreach(builder.withUnsafeExecutionListener)
+        val instance = builder.build()
 
         // wasm-pack --target nodejs emits `__wbindgen_start` as an export (not as the module's
         // start section) that the JS glue calls right after instantiation — it initialises
