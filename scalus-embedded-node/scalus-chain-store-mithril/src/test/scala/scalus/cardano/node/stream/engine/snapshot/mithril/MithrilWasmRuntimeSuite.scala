@@ -150,29 +150,34 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
     // Loads the locally-compiled debug build with console_error_panic_hook enabled, plus a
     // ChicoryTraceListener for Chicory-level introspection of table traps.
     //
-    // Confirmed facts (2026-04-23):
-    //   - Trap is on table[1] (externref table, size 256).
-    //     Module has 2 tables: table[0]=funcref size 2004, table[1]=externref size 256.
-    //   - Trap is `TABLE_GET tableIdx=1 requestedIdx=1704896` — Rust is using a value of
-    //     magnitude ~1.7M as a slot index. That's the size of a WASM memory pointer, not a
-    //     slot index. Rust is mistaking something (likely a heap address) for a slot handle.
-    //   - The trap fires after our `static_accessor_SELF + is_undefined(JsGlobal_slot=138)`
-    //     returns 0 (false), so Rust takes the "globalThis exists" branch. Inside that
-    //     branch, before the next host call, the WASM-internal TABLE_GET traps.
+    // Confirmed facts after 2026-04-23 investigation:
+    //   - Module has 2 tables: table[0]=funcref size 2004, table[1]=externref (size 256
+    //     initial; grew to 260 after init's grow(4)).
+    //   - Trap: `TABLE_GET tableIdx=1 requestedIdx=1704896 pc=0x4a69dd`.
+    //   - 1704896 = 0x1A03C0: the START OF THE GENESIS KEY STRING we passed to
+    //     mithrilclient_new. Memory dump confirms: at 0x1A03B0 we see tail of the
+    //     aggregator URL ("ggregator") followed by length fields (0x48=72 URL len,
+    //     0xF2=242 key len) then the key bytes. Rust is using a memory pointer as a slot.
+    //   - Tagging writeTableSlot to store `slot + 1_000_000` did NOT shift the trap's
+    //     requestedIdx, so the corrupt index does NOT come from our setRef storage.
+    //   - Trap fires BEFORE the Promise executor is invoked (no
+    //     `__wbg_new_ff12d2b041fb48f1` host call precedes it). Sequence:
+    //       init -> is_undefined(1)=1 -> SELF=0 -> WINDOW=0 -> GLOBAL_THIS=138 ->
+    //       is_undefined(138)=0 -> WASM-internal work -> TABLE_GET trap.
+    //   - Attempted (and did NOT help): Node.js-correct SELF/WINDOW=0 accessors;
+    //     contiguous init via TableInstance.grow(4) instead of 4 separate allocs.
     //
-    // Leading hypothesis: either our `__wbindgen_init_externref_table` implementation doesn't
-    // match Rust's expectations around sentinel slots, or Chicory's externref table-storage
-    // encoding diverges from how the JS-runtime externref table encodes values — causing
-    // Rust's later read of a stored slot-handle to yield a memory address instead of the
-    // small int we thought we stored.
+    // Leading hypothesis: a debug-build Rust assertion or invariant check is walking an
+    // in-struct externref handle, but the externref encoding Chicory exposes on the
+    // operand stack may diverge from what Rust's debug path expects. Could also be a
+    // secondary table allocated by the debug build that we're not tracking.
     //
-    // Next steps:
-    //   1. Log WASM memory contents at address 1704896 (is it a recognizable structure?).
-    //   2. Cross-reference pc=0x4a69dd with the debug build's function-offset table to find
-    //      the Rust function containing the trap — then read its source for context.
-    //   3. Potentially change writeTableSlot to store something other than the slot index
-    //      itself (e.g., an arbitrary tagged sentinel) to confirm whether the stored value
-    //      is what's being misinterpreted.
+    // Options from here:
+    //   1. Rebuild the debug blob without console_error_panic_hook — may shortcut the
+    //      debug-assertion path that's failing, so the trap reveals a cleaner cause.
+    //   2. Inspect wasm-bindgen-futures + mithril-client source for what
+    //      list_mithril_certificates does pre-executor that touches externrefs.
+    //   3. Pivot: focus on the amaru-based V2 parser (M10b.P3) and revisit WASM later.
     ignore("async runtime [debug-wasm]: list_mithril_certificates reaches fetch without tripping closure stubs") {
         import scala.concurrent.Await
         import scala.concurrent.duration.*
@@ -220,8 +225,11 @@ class MithrilWasmRuntimeSuite extends AnyFunSuite {
         // time. The listener fires during .build() (through __wbindgen_start) and later
         // during our calls; it must consult the LIVE instance for current table sizes.
         var liveInstance: com.dylibso.chicory.runtime.Instance = null
-        val listener = new ChicoryTraceListener(tableIdx =>
-            Option(liveInstance).map(_.table(tableIdx).size())
+        val listener = new ChicoryTraceListener(
+          tableSizeProbe = tableIdx => Option(liveInstance).map(_.table(tableIdx).size()),
+          memoryProbe = Some((addr, len) =>
+              Option(liveInstance).map(_.memory().readBytes(addr, len)).getOrElse(Array.emptyByteArray)
+          )
         )
         val (rt, _) = MithrilWasmRuntime.instantiateFromBytes(debugBytes, imports, Some(listener))
         liveInstance = rt.instance

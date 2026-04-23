@@ -151,6 +151,7 @@ final class WbindgenAbi(
         }
     }
 
+
     /** Build the default host-import map. Keys are wasm-bindgen **short names** (the prefix up
       * to and including the trailing underscore before the 16-hex signature hash). The runtime
       * strips the hash before lookup, so these bindings survive pin bumps that only rotate
@@ -189,11 +190,13 @@ final class WbindgenAbi(
       // covers the two numeric casts (single-arg cast is double-per-convention); the string-cast
       // and closure-cast hashes are registered by full name via [[pinnedImports]].
       "__wbindgen_cast_" -> castNumericFallback,
-      // ---- Static global accessors — all resolve to the singleton globalThis. ----
+      // ---- Static global accessors — match the Node.js semantics the upstream JS glue uses.
+      // In Node.js, GLOBAL and GLOBAL_THIS are defined and return the globalThis object;
+      // SELF and WINDOW are undefined (they're browser-only), so those return 0 (null slot).
       "__wbg_static_accessor_GLOBAL_" -> staticGlobal,
       "__wbg_static_accessor_GLOBAL_THIS_" -> staticGlobal,
-      "__wbg_static_accessor_SELF_" -> staticGlobal,
-      "__wbg_static_accessor_WINDOW_" -> staticGlobal,
+      "__wbg_static_accessor_SELF_" -> staticNullHandle,
+      "__wbg_static_accessor_WINDOW_" -> staticNullHandle,
       // ---- Polymorphic reflection ----
       "__wbg_length_" -> lengthOf,
       "__wbg_get_" -> getIndexed,
@@ -437,24 +440,40 @@ final class WbindgenAbi(
       */
     private val initExternrefTable: WasmFunctionHandle = new WasmFunctionHandle {
         def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = {
-            // Mirror wasm.__wbindgen_externrefs.set(idx, obj) for each seeded slot.
+            // Mirror the upstream JS init exactly:
+            //   const offset = table.grow(4);
+            //   table.set(0, undefined);
+            //   table.set(offset + 0, undefined);
+            //   table.set(offset + 1, null);
+            //   table.set(offset + 2, true);
+            //   table.set(offset + 3, false);
+            //
+            // The grow-by-4 guarantees the four seed slots are contiguous — Rust code may
+            // assume this layout, so using four separate `__externref_table_alloc` calls
+            // (which pull from the free list and may return scattered indices) is wrong.
+            if cachedExternrefTable == null then
+                cachedExternrefTable = instance.exports.table("__wbindgen_externrefs")
+            val offset = cachedExternrefTable.grow(4, 0, instance)
+            writeTableSlotWithValue(instance, 0, 0)
             externrefs(0) = WbindgenAbi.Undefined
-            writeTableSlot(instance, 0)
-            val s0 = externrefAlloc(instance).apply()(0).toInt
-            externrefs(s0) = WbindgenAbi.Undefined
-            writeTableSlot(instance, s0)
-            val s1 = externrefAlloc(instance).apply()(0).toInt
-            externrefs(s1) = null
-            writeTableSlot(instance, s1)
-            val s2 = externrefAlloc(instance).apply()(0).toInt
-            externrefs(s2) = java.lang.Boolean.TRUE
-            writeTableSlot(instance, s2)
-            val s3 = externrefAlloc(instance).apply()(0).toInt
-            externrefs(s3) = java.lang.Boolean.FALSE
-            writeTableSlot(instance, s3)
-            nextBootstrapSlot = math.max(nextBootstrapSlot, s3 + 1)
+            writeTableSlotWithValue(instance, offset, offset)
+            externrefs(offset) = WbindgenAbi.Undefined
+            writeTableSlotWithValue(instance, offset + 1, offset + 1)
+            externrefs(offset + 1) = null
+            writeTableSlotWithValue(instance, offset + 2, offset + 2)
+            externrefs(offset + 2) = java.lang.Boolean.TRUE
+            writeTableSlotWithValue(instance, offset + 3, offset + 3)
+            externrefs(offset + 3) = java.lang.Boolean.FALSE
+            nextBootstrapSlot = math.max(nextBootstrapSlot, offset + 4)
             Array.emptyLongArray
         }
+    }
+
+    /** Like [[writeTableSlot]] but stores an explicit value (rather than the slot index). */
+    private def writeTableSlotWithValue(instance: Instance, slot: Int, value: Int): Unit = {
+        if cachedExternrefTable == null then
+            cachedExternrefTable = instance.exports.table("__wbindgen_externrefs")
+        cachedExternrefTable.setRef(slot, value, instance)
     }
 
     // ------------------------------------------------------------------
@@ -551,6 +570,14 @@ final class WbindgenAbi(
       * table grows in lockstep with what Rust expects.
       */
     private val staticGlobal: WasmFunctionHandle = freshHandle(JsGlobal)
+
+    /** Accessor that returns 0 — the wasm-bindgen convention for a null / "not-defined"
+      * externref handle. Used for `self` and `window` in Node.js, which are browser-only
+      * globals.
+      */
+    private val staticNullHandle: WasmFunctionHandle = new WasmFunctionHandle {
+        def apply(instance: Instance, args: Array[? <: Long]): Array[Long] = Array(0L)
+    }
 
     /** Zero-arg WASM import that allocates a fresh externref slot holding `singleton` on
       * every call and returns that slot index. Mirrors the JS glue's `addToExternrefTable0`

@@ -18,6 +18,7 @@ import com.dylibso.chicory.wasm.types.{Instruction, OpCode}
   */
 final class ChicoryTraceListener(
     tableSizeProbe: Int => Option[Int],
+    memoryProbe: Option[(Int, Int) => Array[Byte]] = None,
     ringCapacity: Int = 32
 ) extends ExecutionListener {
 
@@ -75,6 +76,19 @@ final class ChicoryTraceListener(
               s"[trap-imminent] $op tableIdx=$tableIdx requestedIdx=$requestedIdx size=$size pc=0x${pc.toHexString}"
             )
             dumpRing()
+            // If the requested index is in WASM-memory-pointer range and we have a memory
+            // probe, dump 32 bytes around it — the index may be a heap address Rust is
+            // mistaking for a slot handle.
+            memoryProbe.foreach { probe =>
+                if requestedIdx > 0 && requestedIdx < (1 << 30) then {
+                    val addr = math.max(0L, requestedIdx - 16).toInt
+                    val bytes = probe(addr, 48)
+                    val hex = bytes.map(b => f"${b & 0xff}%02x").mkString(" ")
+                    ChicoryTraceListener.logger.error(
+                      s"[trap-imminent] memory[0x${addr.toHexString}..+48]: $hex"
+                    )
+                }
+            }
     }
 
     private def dumpRing(): Unit = {
