@@ -156,7 +156,6 @@ final class MithrilAsyncRuntime(
           // Two upstream queueMicrotask variants SHARE arity (both (ref) -> ...) but differ
           // in return shape: the getter form returns a ref, the invocation form returns
           // void. Same short name — must be registered by full hash to disambiguate.
-          // Register both the 0.9.11 and 0.10.4 hash sets so either pinned blob works.
           "__wbg_queueMicrotask_9b549dfce8865860" -> queueMicrotaskGetter,
           "__wbg_queueMicrotask_fca69f5bfad613a5" -> queueMicrotaskInvoke,
           "__wbg_queueMicrotask_f8819e5ffc402f36" -> queueMicrotaskGetter,
