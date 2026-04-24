@@ -50,7 +50,8 @@ final class ImmutableDbRestorer(store: ChainStore) {
 
     def restore(
         immutableDir: Path,
-        onProgress: ImmutableDbRestorer.Progress => Unit = _ => ()
+        onProgress: ImmutableDbRestorer.Progress => Unit = _ => (),
+        stopAtSlotInclusive: Option[Long] = None
     ): ImmutableDbRestorer.Stats = {
         val reader = new ImmutableDbReader(immutableDir)
         val chunks = reader.chunkNumbers
@@ -61,27 +62,39 @@ final class ImmutableDbRestorer(store: ChainStore) {
         var totalBytes = 0L
         var skippedByron = 0L
         var lastTip: Option[ChainTip] = None
+        var stopped = false
 
-        for (chunkNo, chunkIdx) <- chunks.zipWithIndex do {
+        val chunkIter = chunks.zipWithIndex.iterator
+        while chunkIter.hasNext && !stopped do {
+            val (chunkNo, chunkIdx) = chunkIter.next()
             var chunkBlocks = 0L
-            reader.readChunk(chunkNo).foreach { raw =>
+            val blockIter = reader.readChunk(chunkNo).iterator
+            while blockIter.hasNext && !stopped do {
+                val raw = blockIter.next()
                 HfcDiskBlockDecoder.decode(raw) match {
                     case Right(decoded) =>
-                        val block = decoded.block.value
-                        val tip = ChainTip(
-                          point = ChainPoint(
-                            slot = decoded.slot,
-                            blockHash = BlockHash.fromByteString(
-                              ByteString.fromArray(decoded.headerHash)
+                        // Stop at the caller's cap — used by SnapshotDirRestorer so the
+                        // ImmutableDB tip matches the ledger-state snapshot's slot, which is
+                        // typically a few blocks behind the last chunk's last block.
+                        if stopAtSlotInclusive.exists(cap => decoded.slot > cap) then
+                            stopped = true
+                        else {
+                            val block = decoded.block.value
+                            val tip = ChainTip(
+                              point = ChainPoint(
+                                slot = decoded.slot,
+                                blockHash = BlockHash.fromByteString(
+                                  ByteString.fromArray(decoded.headerHash)
+                                )
+                              ),
+                              blockNo = block.header.blockNumber
                             )
-                          ),
-                          blockNo = block.header.blockNumber
-                        )
-                        store.appendBlock(AppliedBlock.fromRaw(tip, decoded.block))
-                        lastTip = Some(tip)
-                        totalBlocks += 1
-                        totalBytes += raw.blockBytes.length
-                        chunkBlocks += 1
+                            store.appendBlock(AppliedBlock.fromRaw(tip, decoded.block))
+                            lastTip = Some(tip)
+                            totalBlocks += 1
+                            totalBytes += raw.blockBytes.length
+                            chunkBlocks += 1
+                        }
                     case Left(HfcDiskBlockDecoder.Error.ByronEra(_)) =>
                         // Byron chunks don't fit `scalus-cardano-ledger`'s Babbage+ block shape;
                         // skipping them is consistent with the project scope, not a silent error
