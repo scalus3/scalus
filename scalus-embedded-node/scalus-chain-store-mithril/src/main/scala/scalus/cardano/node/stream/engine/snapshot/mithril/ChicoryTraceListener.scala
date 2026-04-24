@@ -3,30 +3,30 @@ package scalus.cardano.node.stream.engine.snapshot.mithril
 import com.dylibso.chicory.runtime.{ExecutionListener, MStack}
 import com.dylibso.chicory.wasm.types.{Instruction, OpCode}
 
-/** Chicory `ExecutionListener` that watches for table-related opcodes and logs the table
-  * index + the operand that would trap, plus a short ring-buffer of the most recent opcodes
-  * leading up to the observation. Use ONLY for debugging — every WASM instruction goes
-  * through this hook, so enabling it in hot loops tanks performance.
+/** Chicory `ExecutionListener` that watches for table-related opcodes and logs the table index +
+  * the operand that would trap, plus a short ring-buffer of the most recent opcodes leading up to
+  * the observation. Use ONLY for debugging — every WASM instruction goes through this hook, so
+  * enabling it in hot loops tanks performance.
   *
-  * The hook fires BEFORE the instruction executes; for `TABLE_GET` that means the requested
-  * index is still on top of the operand stack. If the index is >= the target table's size
-  * the subsequent `TABLE_GET` would trap; we log the pair (tableIdx, requestedIdx) so the
-  * caller can reason about which table is the victim and where the index came from.
+  * The hook fires BEFORE the instruction executes; for `TABLE_GET` that means the requested index
+  * is still on top of the operand stack. If the index is >= the target table's size the subsequent
+  * `TABLE_GET` would trap; we log the pair (tableIdx, requestedIdx) so the caller can reason about
+  * which table is the victim and where the index came from.
   *
-  * The ring buffer keeps the `RingCapacity` most recent instructions with their PC (WASM
-  * byte offset) so you can dump it on trap for post-mortem.
+  * The ring buffer keeps the `RingCapacity` most recent instructions with their PC (WASM byte
+  * offset) so you can dump it on trap for post-mortem.
   */
 final class ChicoryTraceListener(
     tableSizeProbe: Int => Option[Int],
     memoryProbe: Option[(Int, Int) => Array[Byte]] = None,
     /** Set of WASM function indices to log on CALL — lets us observe otherwise-invisible
-      * Rust-internal calls to exports like `__externref_table_alloc`. Pair with
-      * [[onAllocResult]] to capture the returned slot index once the call returns.
+      * Rust-internal calls to exports like `__externref_table_alloc`. Pair with [[onAllocResult]]
+      * to capture the returned slot index once the call returns.
       */
     callTraceFnIndices: Set[Int] = Set.empty,
-    /** Optional callback fired the instruction AFTER a call to a function in
-      * [[callTraceFnIndices]] whose top-of-stack is the call's return value. Useful for
-      * intercepting `__externref_table_alloc` returns to zero-init the slot host-side.
+    /** Optional callback fired the instruction AFTER a call to a function in [[callTraceFnIndices]]
+      * whose top-of-stack is the call's return value. Useful for intercepting
+      * `__externref_table_alloc` returns to zero-init the slot host-side.
       */
     onAllocResult: Option[(Int, Int) => Unit] = None,
     ringCapacity: Int = 32

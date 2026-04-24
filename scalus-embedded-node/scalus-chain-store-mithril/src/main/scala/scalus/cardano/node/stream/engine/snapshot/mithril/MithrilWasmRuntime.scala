@@ -1,12 +1,6 @@
 package scalus.cardano.node.stream.engine.snapshot.mithril
 
-import com.dylibso.chicory.runtime.{
-    ExecutionListener,
-    HostFunction,
-    Instance,
-    Store,
-    WasmFunctionHandle
-}
+import com.dylibso.chicory.runtime.{ExecutionListener, HostFunction, Instance, Store, WasmFunctionHandle}
 import com.dylibso.chicory.wasm.Parser
 import com.dylibso.chicory.wasm.types.{ExternalType, FunctionImport, FunctionType}
 
@@ -14,14 +8,14 @@ import java.io.InputStream
 import scala.jdk.CollectionConverters.*
 
 /** Loads the pinned `mithril-client-wasm` blob into a Chicory runtime. The Mithril Rust crate is
-  * compiled with `wasm-pack --target nodejs`, which produces a WASM module plus JS glue; this
-  * class provides the host-function imports the glue normally supplies, so the same `.wasm` blob
-  * runs inside a pure-JVM Chicory instance without any JS runtime.
+  * compiled with `wasm-pack --target nodejs`, which produces a WASM module plus JS glue; this class
+  * provides the host-function imports the glue normally supplies, so the same `.wasm` blob runs
+  * inside a pure-JVM Chicory instance without any JS runtime.
   *
   * See `docs/local/claude/indexer/indexer-node.md` milestone M10b. This scaffolding is the first
   * step (P1: can we instantiate at all?). Every wasm-bindgen import is initially stubbed to
-  * [[unimplementedImport]], which throws with a concrete name — so driving the module
-  * incrementally reveals exactly which imports any given code path hits.
+  * [[unimplementedImport]], which throws with a concrete name — so driving the module incrementally
+  * reveals exactly which imports any given code path hits.
   */
 final class MithrilWasmRuntime private (val instance: Instance) {
 
@@ -61,17 +55,17 @@ object MithrilWasmRuntime {
     val ImportModule: String = "__wbindgen_placeholder__"
 
     /** Instantiate the pinned blob against `imports`. Unresolved names get a
-      * [[unimplementedImport]] stub so a call into them raises with the wasm-bindgen name, which
-      * is how we discover the actual host-function demand set for a given code path.
+      * [[unimplementedImport]] stub so a call into them raises with the wasm-bindgen name, which is
+      * how we discover the actual host-function demand set for a given code path.
       *
       * Lookup is **hash-insensitive** in the wasm-bindgen sense: the 16-hex signature hash that
       * wasm-bindgen appends to every import (e.g. `__wbg_Error_52673b7de5a0ca89`) is stripped
-      * before matching, so handlers registered under the short semantic name
-      * (`__wbg_Error_`) survive pin bumps that only rotate the hash.
+      * before matching, so handlers registered under the short semantic name (`__wbg_Error_`)
+      * survive pin bumps that only rotate the hash.
       *
       * Resolution precedence on each import: (1) exact full-name match (hash-specific pinning,
-      * overrides everything else), (2) short-name match after `stripHash`, (3) unimplemented
-      * stub that raises when called. So pinned overrides → defaults → error.
+      * overrides everything else), (2) short-name match after `stripHash`, (3) unimplemented stub
+      * that raises when called. So pinned overrides → defaults → error.
       */
     def instantiate(
         imports: Map[String, WasmFunctionHandle],
@@ -79,9 +73,9 @@ object MithrilWasmRuntime {
     ): (MithrilWasmRuntime, InstantiationReport) =
         instantiateFromBytes(loadWasmBytes(), imports, listener)
 
-    /** Variant that takes the WASM blob bytes directly rather than reading the pinned
-      * release blob from the classpath. Used by diagnostic test paths that load a
-      * locally-compiled debug build (e.g. with `console_error_panic_hook` enabled).
+    /** Variant that takes the WASM blob bytes directly rather than reading the pinned release blob
+      * from the classpath. Used by diagnostic test paths that load a locally-compiled debug build
+      * (e.g. with `console_error_panic_hook` enabled).
       */
     def instantiateFromBytes(
         wasmBytes: Array[Byte],
@@ -144,8 +138,8 @@ object MithrilWasmRuntime {
         (new MithrilWasmRuntime(instance), report)
     }
 
-    /** wasm-bindgen appends `_[0-9a-f]{16}` to every import for global uniqueness. The hash is
-      * a hash of the binding's Rust signature and changes on ABI bumps; the prefix is stable.
+    /** wasm-bindgen appends `_[0-9a-f]{16}` to every import for global uniqueness. The hash is a
+      * hash of the binding's Rust signature and changes on ABI bumps; the prefix is stable.
       * Stripping the hash gives the semantic short name we register handlers against.
       */
     private[mithril] def stripHash(name: String): String =
@@ -156,18 +150,18 @@ object MithrilWasmRuntime {
 
     private val HashSuffix = "_[0-9a-f]{16}$".r
 
-    /** Detect cases where the WASM module has two or more full-hash imports that strip to
-      * the same short name AND return a different number of values. Those are the ABI
-      * mismatches that would unbalance the WASM operand stack if a single short-name
-      * handler serves all of them (a handler can only return one fixed arity).
+    /** Detect cases where the WASM module has two or more full-hash imports that strip to the same
+      * short name AND return a different number of values. Those are the ABI mismatches that would
+      * unbalance the WASM operand stack if a single short-name handler serves all of them (a
+      * handler can only return one fixed arity).
       *
       * Parameter-arity / parameter-type mismatches are NOT flagged: our handlers receive
-      * `Array[? <: Long]` and typically branch on args.length, so they can serve
-      * multiple input shapes correctly. It's the **return shape** that's fixed by the
-      * handler's `Array[Long]` return value — mismatch there is what breaks the stack.
+      * `Array[? <: Long]` and typically branch on args.length, so they can serve multiple input
+      * shapes correctly. It's the **return shape** that's fixed by the handler's `Array[Long]`
+      * return value — mismatch there is what breaks the stack.
       *
-      * Imports whose full-hash name is explicitly registered by the caller bypass the
-      * short-name fallback and are not part of the collision.
+      * Imports whose full-hash name is explicitly registered by the caller bypass the short-name
+      * fallback and are not part of the collision.
       */
     private def validateShortNameSignatures(
         module: com.dylibso.chicory.wasm.WasmModule,
@@ -178,17 +172,19 @@ object MithrilWasmRuntime {
         val typeSection = module.typeSection()
         val groups: Map[String, Seq[FunctionImport]] =
             fnImports.groupBy(i => stripHash(i.name()))
-        val dangerous = groups.collect {
-            case (short, imps) if imps.size >= 2 && allImports.contains(short) =>
-                // Only flag if (a) multiple imports strip to the same short name, AND (b) a
-                // short-name handler is registered. Without a short-name handler each
-                // unbound hash gets its own `unimplementedImport` stub — no conflation.
-                val unbound = imps.filterNot(i => registeredFullNames.contains(i.name()))
-                val returnArities = unbound
-                    .map(i => typeSection.getType(i.typeIndex()).returns.size)
-                    .distinct
-                (short, unbound, returnArities)
-        }.filter { case (_, unbound, arities) => unbound.size >= 2 && arities.size >= 2 }
+        val dangerous = groups
+            .collect {
+                case (short, imps) if imps.size >= 2 && allImports.contains(short) =>
+                    // Only flag if (a) multiple imports strip to the same short name, AND (b) a
+                    // short-name handler is registered. Without a short-name handler each
+                    // unbound hash gets its own `unimplementedImport` stub — no conflation.
+                    val unbound = imps.filterNot(i => registeredFullNames.contains(i.name()))
+                    val returnArities = unbound
+                        .map(i => typeSection.getType(i.typeIndex()).returns.size)
+                        .distinct
+                    (short, unbound, returnArities)
+            }
+            .filter { case (_, unbound, arities) => unbound.size >= 2 && arities.size >= 2 }
 
         if dangerous.nonEmpty then {
             val msg = dangerous
@@ -227,9 +223,9 @@ object MithrilWasmRuntime {
         finally in.close()
     }
 
-    /** Default `WasmFunctionHandle` for any import the caller hasn't supplied — throws on call
-      * with the concrete wasm-bindgen import name so we can tell which imports a code path
-      * actually exercises.
+    /** Default `WasmFunctionHandle` for any import the caller hasn't supplied — throws on call with
+      * the concrete wasm-bindgen import name so we can tell which imports a code path actually
+      * exercises.
       */
     private def unimplementedImport(name: String): WasmFunctionHandle =
         new WasmFunctionHandle {

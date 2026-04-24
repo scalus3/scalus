@@ -32,25 +32,25 @@ final class MithrilClientSuite extends AnyFunSuite {
             val latest = snapshots.head
             info(
               s"${snapshots.size} v2 snapshots; latest hash=${latest.hash} " +
-                  s"immutable=${latest.beacon.immutable_file_number}"
+                  s"immutable=${latest.beacon.immutableFileNumber}"
             )
 
             val metaOpt = Await.result(client.getCardanoDatabaseV2Snapshot(latest.hash), 30.seconds)
             val meta = metaOpt.getOrElse(fail(s"metadata not found for ${latest.hash}"))
             info(
-              s"merkle_root=${meta.merkle_root} " +
-                  s"immutables.avg=${meta.immutables.average_size_uncompressed}B"
+              s"merkle_root=${meta.merkleRoot} " +
+                  s"immutables.avg=${meta.immutables.averageSizeUncompressed}B"
             )
 
             val workDir = Files.createTempDirectory("scalus-mithril-client-test-")
             try {
                 val files = Await.result(
-                  client.downloadImmutable(meta, meta.beacon.immutable_file_number, workDir),
+                  client.downloadImmutable(meta, meta.beacon.immutableFileNumber, workDir),
                   120.seconds
                 )
                 val names = files.map(_.getFileName.toString).toSet
                 info(s"extracted ${files.size} files: ${names.mkString(", ")}")
-                val n = meta.beacon.immutable_file_number
+                val n = meta.beacon.immutableFileNumber
                 assert(names.contains(s"$n.chunk"))
                 assert(names.contains(s"$n.primary"))
                 assert(names.contains(s"$n.secondary"))

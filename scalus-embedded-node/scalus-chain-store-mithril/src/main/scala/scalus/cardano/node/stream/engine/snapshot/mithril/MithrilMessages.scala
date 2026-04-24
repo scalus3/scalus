@@ -5,7 +5,12 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.{named, CodecMakerConfig, Js
 
 /** Typed Scala mirrors of the JSON shapes the Mithril aggregator returns — matches
   * `mithril-common/src/messages/` and `mithril-common/src/entities/cardano_database.rs` on the Rust
-  * side. Field names use `snake_case` where that's what the wire format emits.
+  * side.
+  *
+  * Field names are camelCase in Scala; jsoniter's `enforce_snake_case2` mapper translates to the
+  * aggregator's snake_case wire shape on the fly. One exception is [[MultiFilesUri.Template]],
+  * which Rust's `serde` leaves capitalised — `@named("Template")` pins the wire name against the
+  * mapper.
   *
   * Scope: just enough to drive the restore path. Fields whose Rust type is a polymorphic enum with
   * variant-specific payloads (`SignedEntityType`, `ProtocolMessage`) are held as raw JSON text —
@@ -15,42 +20,42 @@ object MithrilMessages {
 
     final case class CardanoDbBeacon(
         epoch: Long,
-        immutable_file_number: Long
+        immutableFileNumber: Long
     )
 
     /** Protocol parameters as emitted under `metadata.parameters` on every certificate. */
-    final case class ProtocolParameters(k: Long, m: Long, phi_f: Double)
+    final case class ProtocolParameters(k: Long, m: Long, phiF: Double)
 
     /** An entry in `GET /certificates` — the restore path uses this to find a certificate that
       * covers the snapshot it wants to verify.
       */
     final case class MithrilCertificateListItem(
         hash: String,
-        previous_hash: String,
+        previousHash: String,
         epoch: Long,
         metadata: CertificateMetadata,
-        signed_message: String,
-        aggregate_verification_key: String
+        signedMessage: String,
+        aggregateVerificationKey: String
     )
 
     final case class CertificateMetadata(
         network: String,
         version: String,
         parameters: ProtocolParameters,
-        initiated_at: String,
-        sealed_at: String,
-        total_signers: Long
+        initiatedAt: String,
+        sealedAt: String,
+        totalSigners: Long
     )
 
     /** An entry in `GET /artifact/cardano-database`. */
     final case class CardanoDatabaseV2ListItem(
         hash: String,
-        merkle_root: String,
+        merkleRoot: String,
         beacon: CardanoDbBeacon,
-        certificate_hash: String,
-        total_db_size_uncompressed: Long,
-        cardano_node_version: String,
-        created_at: String
+        certificateHash: String,
+        totalDbSizeUncompressed: Long,
+        cardanoNodeVersion: String,
+        createdAt: String
     )
 
     /** Full v2 metadata for one snapshot — the response of `GET /artifact/cardano-database/{hash}`.
@@ -58,41 +63,42 @@ object MithrilMessages {
       */
     final case class CardanoDatabaseV2Metadata(
         hash: String,
-        merkle_root: String,
+        merkleRoot: String,
         network: String,
         beacon: CardanoDbBeacon,
-        certificate_hash: String,
-        total_db_size_uncompressed: Long,
+        certificateHash: String,
+        totalDbSizeUncompressed: Long,
         digests: DigestsLocations,
         immutables: ImmutablesLocations,
         ancillary: AncillaryLocations,
-        cardano_node_version: String,
-        created_at: String
+        cardanoNodeVersion: String,
+        createdAt: String
     )
 
     final case class DigestsLocations(
-        size_uncompressed: Long,
+        sizeUncompressed: Long,
         locations: Seq[DigestLocation]
     )
 
     final case class ImmutablesLocations(
-        average_size_uncompressed: Long,
+        averageSizeUncompressed: Long,
         locations: Seq[ImmutablesLocation]
     )
 
     final case class AncillaryLocations(
-        size_uncompressed: Long,
+        sizeUncompressed: Long,
         locations: Seq[AncillaryLocation]
     )
 
     // `type`-tagged enums — match Rust's `#[serde(tag = "type", rename_all = "snake_case")]` with
-    // a `#[serde(other)]` fallback. `@named` sets the discriminator value per case.
+    // a `#[serde(other)]` fallback. `@named` pins the discriminator value per case; the
+    // field-name mapper doesn't apply to discriminator values, so we keep them explicit.
     sealed trait DigestLocation
     object DigestLocation {
         @named("cloud_storage")
         final case class CloudStorage(
             uri: String,
-            compression_algorithm: Option[String]
+            compressionAlgorithm: Option[String]
         ) extends DigestLocation
         @named("aggregator")
         final case class Aggregator(uri: String) extends DigestLocation
@@ -104,7 +110,7 @@ object MithrilMessages {
         @named("cloud_storage")
         final case class CloudStorage(
             uri: MultiFilesUri,
-            compression_algorithm: Option[String]
+            compressionAlgorithm: Option[String]
         ) extends ImmutablesLocation
         @named("unknown") case object Unknown extends ImmutablesLocation
     }
@@ -114,57 +120,96 @@ object MithrilMessages {
         @named("cloud_storage")
         final case class CloudStorage(
             uri: String,
-            compression_algorithm: Option[String]
+            compressionAlgorithm: Option[String]
         ) extends AncillaryLocation
         @named("unknown") case object Unknown extends AncillaryLocation
     }
 
-    /** Rust's `MultiFilesUri` — `{"Template": "https://…/{immutable_file_number}.tar.zst"}`. */
-    final case class MultiFilesUri(Template: Option[String]) {
+    /** Rust's `MultiFilesUri` — `{"Template": "https://…/{immutable_file_number}.tar.zst"}`. The
+      * wire field is capitalised `Template` (Rust serde default), hence the explicit `@named`.
+      */
+    final case class MultiFilesUri(@named("Template") template: Option[String]) {
         def resolve(immutableFileNumber: Long): Option[String] =
-            Template.map(_.replace("{immutable_file_number}", immutableFileNumber.toString))
+            template.map(_.replace("{immutable_file_number}", immutableFileNumber.toString))
     }
 
     // -------- jsoniter codecs --------
+    //
+    // `withFieldNameMapper(enforce_snake_case2)` — `totalDbSize` ↔ `total_db_size`; preserves
+    // acronym groups correctly (as opposed to `enforce_snake_case`).
+    // `withSkipUnexpectedFields(true)` — the aggregator returns polymorphic wire fields
+    // (`signed_entity_type`, `protocol_message`, …) that we don't model here; drop them silently.
+    //
+    // The config must be inlined per `given` (jsoniter's macro rejects `val`-bound configs as
+    // non-constant expressions), so `snakeCase` here is only a readability helper used inside
+    // each inline expression — it never leaks out as a shared value.
 
-    given JsonValueCodec[CardanoDbBeacon] = JsonCodecMaker.make
-    given JsonValueCodec[ProtocolParameters] = JsonCodecMaker.make
-    given JsonValueCodec[CertificateMetadata] = JsonCodecMaker.make
-    given JsonValueCodec[MultiFilesUri] = JsonCodecMaker.make
+    given JsonValueCodec[CardanoDbBeacon] = JsonCodecMaker.make(
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+    )
+    given JsonValueCodec[ProtocolParameters] = JsonCodecMaker.make(
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+    )
+    given JsonValueCodec[CertificateMetadata] = JsonCodecMaker.make(
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+    )
+    given JsonValueCodec[MultiFilesUri] = JsonCodecMaker.make(
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+    )
 
     given JsonValueCodec[DigestLocation] = JsonCodecMaker.make(
-      CodecMakerConfig.withDiscriminatorFieldName(Some("type"))
+      CodecMakerConfig
+          .withDiscriminatorFieldName(Some("type"))
+          .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
     )
     given JsonValueCodec[ImmutablesLocation] = JsonCodecMaker.make(
-      CodecMakerConfig.withDiscriminatorFieldName(Some("type"))
+      CodecMakerConfig
+          .withDiscriminatorFieldName(Some("type"))
+          .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
     )
     given JsonValueCodec[AncillaryLocation] = JsonCodecMaker.make(
-      CodecMakerConfig.withDiscriminatorFieldName(Some("type"))
+      CodecMakerConfig
+          .withDiscriminatorFieldName(Some("type"))
+          .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
     )
 
-    given JsonValueCodec[DigestsLocations] = JsonCodecMaker.make
-    given JsonValueCodec[ImmutablesLocations] = JsonCodecMaker.make
-    given JsonValueCodec[AncillaryLocations] = JsonCodecMaker.make
-
-    // `withSkipUnexpectedFields` — jsoniter silently drops unknown fields; we want that so
-    // the presence of polymorphic wire fields (`signed_entity_type`, `protocol_message`, …)
-    // doesn't force us to type them while we only care about the restore-path data. The
-    // config must be passed inline: jsoniter's macro rejects `val`-bound configs as
-    // non-constant expressions.
+    given JsonValueCodec[DigestsLocations] = JsonCodecMaker.make(
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+    )
+    given JsonValueCodec[ImmutablesLocations] = JsonCodecMaker.make(
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+    )
+    given JsonValueCodec[AncillaryLocations] = JsonCodecMaker.make(
+      CodecMakerConfig.withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+    )
 
     given JsonValueCodec[MithrilCertificateListItem] = JsonCodecMaker.make(
-      CodecMakerConfig.withSkipUnexpectedFields(true)
+      CodecMakerConfig
+          .withSkipUnexpectedFields(true)
+          .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
     )
     given JsonValueCodec[CardanoDatabaseV2ListItem] = JsonCodecMaker.make(
-      CodecMakerConfig.withSkipUnexpectedFields(true)
+      CodecMakerConfig
+          .withSkipUnexpectedFields(true)
+          .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
     )
     given JsonValueCodec[CardanoDatabaseV2Metadata] = JsonCodecMaker.make(
-      CodecMakerConfig.withSkipUnexpectedFields(true)
+      CodecMakerConfig
+          .withSkipUnexpectedFields(true)
+          .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
     )
 
     // Seq codecs collide on JVM erasure — name them explicitly.
     given certificateListCodec: JsonValueCodec[Seq[MithrilCertificateListItem]] =
-        JsonCodecMaker.make(CodecMakerConfig.withSkipUnexpectedFields(true))
+        JsonCodecMaker.make(
+          CodecMakerConfig
+              .withSkipUnexpectedFields(true)
+              .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+        )
     given cardanoDatabaseV2ListCodec: JsonValueCodec[Seq[CardanoDatabaseV2ListItem]] =
-        JsonCodecMaker.make(CodecMakerConfig.withSkipUnexpectedFields(true))
+        JsonCodecMaker.make(
+          CodecMakerConfig
+              .withSkipUnexpectedFields(true)
+              .withFieldNameMapper(JsonCodecMaker.enforce_snake_case2)
+        )
 }
