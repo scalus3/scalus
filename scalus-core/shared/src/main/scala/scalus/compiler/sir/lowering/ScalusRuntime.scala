@@ -667,8 +667,12 @@ object ScalusRuntime {
         // a single letrec-bound var avoids emitting N copies of the same list walk. Registered
         // via `cachedTopLevelHelpers` + `pendingTopLevelLetRecs` in the same manner as
         // `LoweringEq`'s `sumEq` helpers.
+        // Use `stableKey` (not `show`) so structurally-equal reprs produce the same cache
+        // key — avoids over-specializing on `SumReprProxy` identity, which leaks into `show`
+        // via default `Object.toString` and causes identical conversions at different call
+        // sites to create duplicate helpers.
         val cacheKey =
-            s"builtinListToUplcConstr|${listType.show}|${inListRepr.show}|${outSum.show}"
+            s"builtinListToUplcConstr|${listType.show}|${inListRepr.stableKey}|${outSum.stableKey}"
         val goVar = lctx.cachedTopLevelHelpers.get(cacheKey) match
             case Some(v) => v
             case None =>
@@ -803,7 +807,7 @@ object ScalusRuntime {
         // Cache by (direction, listType, inSumRepr, resolvedOutListRepr). See the mirror
         // caching in `builtinListToUplcConstr` for rationale.
         val cacheKey =
-            s"uplcConstrToBuiltinList|${listType.show}|${inSumRepr.show}|${resolvedOutListRepr.show}"
+            s"uplcConstrToBuiltinList|${listType.show}|${inSumRepr.stableKey}|${resolvedOutListRepr.stableKey}"
         val goVar = lctx.cachedTopLevelHelpers.get(cacheKey) match
             case Some(v) => v
             case None =>

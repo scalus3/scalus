@@ -178,7 +178,10 @@ object LoweringEq {
         // the same type but different SumUplcConstr field reprs produce structurally-different
         // helper bodies (field comparisons walk the baked-in field reprs). A type-only key
         // would hand caller B caller A's helper → runtime repr mismatch.
-        val typeKey = sumEqKey(baseType) + "|" + lhsSum.show
+        //
+        // Use `stableKey` (not `show`/`toString`) so structurally-equal reprs produce equal
+        // keys — avoids over-specializing on `SumReprProxy` identity.
+        val typeKey = sumEqKey(baseType) + "|" + lhsSum.stableKey
         val funType = SIRType.Fun(baseType, SIRType.Fun(baseType, SIRType.Boolean))
         val innerFunType = SIRType.Fun(baseType, SIRType.Boolean)
         val innerFunRepr = LambdaRepresentation(

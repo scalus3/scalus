@@ -79,6 +79,15 @@ class SirToUplcV3Lowering(
             }
             ids
         }
+        val keptCount = pending.count { case (v, _) => reachableIds.contains(v.id) }
+        System.err.println(
+          s"[#10 filter] pending=${pending.size} kept=$keptCount dropped=${pending.size - keptCount}"
+        )
+        pending.zipWithIndex.foreach { case ((v, _), i) =>
+            System.err.println(
+              s"[#10 filter]   [$i] ${v.id} @ ${v.pos.file}:${v.pos.startLine + 1}"
+            )
+        }
         val wrapped = pending.foldRight(retV) {
             case ((eqFnVar, eqFnRhs), acc) =>
                 if reachableIds.contains(eqFnVar.id) then
