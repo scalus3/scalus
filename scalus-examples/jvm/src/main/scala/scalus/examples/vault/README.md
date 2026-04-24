@@ -1,33 +1,19 @@
 # Vault
 
 Prevents cryptocurrency from being immediately withdrawn by an adversary who has stolen the owner's key. The owner
-issues a withdrawal request; after a wait time, the withdrawal can be finalized. During the wait time, the owner can
-cancel the request.
+issues a withdrawal request; after a mandatory wait time, the withdrawal can be finalized. During the wait time, the
+owner (or a recovery key holder) can cancel the request.
 
-## On-chain state
+## How it works
 
-```
-State
-├── owner                : PubKeyHash
-├── status               : Idle | Pending
-├── amount               : BigInt
-├── waitTime             : BigInt          -- delay in milliseconds
-└── finalizationDeadline : PosixTime
-```
+The contract is a state machine with two states: Idle and Pending. The datum tracks the owner, the current state, the
+requested amount, the wait time, and the finalization deadline.
 
-## Actions
+- **Deposit** — anyone can add funds at any time. The state stays Idle.
+- **InitiateWithdrawal** — the owner requests a withdrawal. The state transitions to Pending and the finalization
+  deadline is set to the current time plus the wait time.
+- **FinalizeWithdrawal** — after the deadline has passed, the owner completes the withdrawal and receives the funds.
+- **Cancel** — while Pending, the owner cancels the request. The state returns to Idle and the funds stay locked.
 
-| Action               | When                     | Effect                             |
-|----------------------|--------------------------|------------------------------------|
-| `Deposit`            | Any time                 | Adds funds, state stays Idle       |
-| `InitiateWithdrawal` | Idle                     | Sets Pending, records deadline     |
-| `FinalizeWithdrawal` | Pending + after deadline | Releases funds to owner            |
-| `Cancel`             | Pending                  | Returns to Idle, funds stay locked |
-
-## Files
-
-| File                      | Purpose                        |
-|---------------------------|--------------------------------|
-| `VaultValidator.scala`    | On-chain state machine         |
-| `VaultContract.scala`     | PlutusV3 compilation           |
-| `VaultTransactions.scala` | Off-chain transaction builders |
+`VaultValidator.scala` is the on-chain state machine. `VaultTransactions.scala` builds the off-chain transactions for
+all four actions.

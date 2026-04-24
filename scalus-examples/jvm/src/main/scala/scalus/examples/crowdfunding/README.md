@@ -1,32 +1,19 @@
 # Crowdfunding
 
 Campaign with a funding goal and deadline. Anyone can donate before the deadline. If the goal is met, the recipient
-withdraws the funds. If not, donors reclaim their contributions by burning their donation tokens.
+withdraws the funds. If not, donors reclaim their contributions.
 
-## On-chain state
+## How it works
 
-```
-CampaignDatum
-├── totalSum         : BigInt
-├── goal             : BigInt
-├── recipient        : PubKeyHash
-├── deadline         : PosixTime
-├── withdrawn        : BigInt
-└── donationPolicyId : PolicyId
-```
+The contract datum tracks the total donated amount, the goal, the recipient, and the deadline. Each donor receives a
+donation token as a receipt.
 
-## Actions
+- **Create** — mints a campaign NFT and initializes the datum.
+- **Donate** — before the deadline, a donor sends ADA to the contract. A donation token is minted and sent to the
+  donor, and the datum's total is incremented.
+- **Withdraw** — after the deadline, if the goal is met, the recipient claims the collected funds.
+- **Reclaim** — after the deadline, if the goal is not met, a donor burns their donation token and reclaims the
+  corresponding ADA.
 
-| Action     | When                       | Effect                                    |
-|------------|----------------------------|-------------------------------------------|
-| `Create`   | Minting                    | Creates campaign with NFT                 |
-| `Donate`   | Before deadline            | Mints donation token, increments totalSum |
-| `Withdraw` | After deadline, goal met   | Recipient claims funds                    |
-| `Reclaim`  | After deadline, goal unmet | Donor burns donation token, reclaims ADA  |
-
-## Files
-
-| File                          | Purpose                      |
-|-------------------------------|------------------------------|
-| `Crowdfunding.scala`          | On-chain validator + minting |
-| `CrowdfundingEndpoints.scala` | Off-chain API endpoints      |
+`Crowdfunding.scala` contains the on-chain validator and minting policy. `CrowdfundingEndpoints.scala` provides
+off-chain API endpoints for building transactions.

@@ -1,35 +1,20 @@
 # Auction
 
 English auction where the seller creates a contract with a starting bid and duration. Anyone can bid before the auction
-ends; the highest bidder wins the item when the seller ends the auction. Previous bidders are refunded.
+ends; the highest bidder wins the item when the seller closes the auction. Previous bidders are refunded.
+
+## How it works
 
 Each auction instance is parameterized by a one-shot UTxO, giving it a unique policy ID. The minted NFT represents the
-auctioned item.
+auctioned item. The datum tracks the seller, highest bidder, current bid, end time, and item ID.
 
-## On-chain state
+- **Start** — spends the one-shot UTxO, mints the auction NFT, and creates the initial datum.
+- **Bid** — before the end time, a new bidder places a higher bid. The previous highest bidder is refunded via an
+  indexed output (O(1) lookup).
+- **End** — after the end time, the seller closes the auction. The NFT goes to the winner and the bid goes to the
+  seller. If nobody bid, the seller reclaims the NFT.
 
-```
-Datum
-├── seller          : PubKeyHash
-├── highestBidder   : Option[PubKeyHash]
-├── highestBid      : BigInt
-├── auctionEndTime  : PosixTime
-└── itemId          : ByteString
-```
+The contract uses indexed UTxO lookups and the delayed redeemer pattern. `Auction.scala` contains both the on-chain
+validator and the off-chain transaction builders.
 
-## Actions
-
-| Action  | When            | Effect                                                          |
-|---------|-----------------|-----------------------------------------------------------------|
-| `Start` | Minting only    | Spends one-shot UTxO, mints auction NFT, creates initial datum  |
-| `Bid`   | Before end time | Updates highest bid, refunds previous bidder via indexed output |
-| `End`   | After end time  | Pays NFT to winner + bid to seller (or seller reclaims if none) |
-
-Uses indexed UTxO lookups (O(1)) and delayed redeemer pattern.
-
-## Files
-
-| File                   | Purpose                                      |
-|------------------------|----------------------------------------------|
-| `Auction.scala`        | On-chain validator + off-chain factory/txs   |
-| `UnfixedAuction.scala` | Vulnerable version (double-satisfaction bug) |
+`UnfixedAuction.scala` is a deliberately vulnerable version that demonstrates a double-satisfaction bug.

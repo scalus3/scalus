@@ -1,29 +1,16 @@
 # Vesting
 
 Handles the maturation of cryptocurrency for a beneficiary. Before the start time, nothing can be withdrawn. Between
-start and expiration, the available amount is proportional to elapsed time. After expiration, the entire balance is
-available.
+start and expiration, the available amount grows proportionally with elapsed time. After expiration, the entire balance
+is available.
 
-## On-chain state
+## How it works
 
-```
-Config (validator parameter)
-├── beneficiary    : PubKeyHash
-├── startTimestamp : PosixTime
-├── duration       : BigInt        -- vesting period in milliseconds
-└── initialAmount  : BigInt
-```
+The contract is parameterized by the beneficiary, the start timestamp, the vesting duration, and the initial amount.
+The vested fraction at any point is `elapsed / duration`, clamped to [0, 1].
 
-## Actions
+- **Withdraw** — the beneficiary claims up to the currently vested portion. The remainder stays locked at the contract
+  address in a continuation UTxO.
 
-| Action             | Effect                                                     |
-|--------------------|------------------------------------------------------------|
-| `Withdraw(amount)` | Beneficiary claims up to vested portion; rest stays locked |
-
-## Files
-
-| File                        | Purpose                        |
-|-----------------------------|--------------------------------|
-| `VestingValidator.scala`    | On-chain spending validator    |
-| `VestingContract.scala`     | PlutusV3 compilation           |
-| `VestingTransactions.scala` | Off-chain transaction builders |
+`VestingValidator.scala` is the on-chain spending validator that computes the vested amount and enforces the withdrawal
+limit. `VestingTransactions.scala` builds the off-chain withdraw transaction.

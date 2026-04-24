@@ -1,30 +1,17 @@
 # Editable NFT
 
-NFT with mutable data that can be permanently sealed. Minting creates a reference NFT (label 100) holding the data and a
-user NFT (label 222) for ownership. The data can be edited until sealed.
+NFT with mutable metadata that can be permanently sealed. Minting creates a reference NFT (CIP-68 label 100) holding
+the data and a user NFT (label 222) for ownership.
 
-## On-chain state
+## How it works
 
-```
-ReferenceNftDatum
-├── tokenId  : ByteString   -- immutable identifier
-├── data     : Data          -- mutable metadata
-└── isSealed : Bool          -- once true, permanently locked
-```
+The reference NFT datum contains a token ID, an arbitrary data field, and a sealed flag. The owner of the user NFT
+controls the reference NFT.
 
-## Actions
+- **Mint** — spending a seed UTxO creates both the reference and user NFTs.
+- **Edit** — while not sealed, the owner can update the data field in the reference NFT's datum.
+- **Seal** — the owner permanently locks the data by setting the sealed flag to true.
+- **Burn** — at any time, the owner can burn both tokens.
 
-| Action | When       | Effect                            |
-|--------|------------|-----------------------------------|
-| Mint   | Seed spent | Creates reference + user NFT pair |
-| Edit   | Not sealed | Updates data field                |
-| Seal   | Not sealed | Sets isSealed to true             |
-| Burn   | Any time   | Burns both tokens                 |
-
-## Files
-
-| File                            | Purpose                        |
-|---------------------------------|--------------------------------|
-| `EditableNftValidator.scala`    | On-chain validator             |
-| `EditableNftContract.scala`     | PlutusV3 compilation           |
-| `EditableNftTransactions.scala` | Off-chain transaction builders |
+`EditableNftValidator.scala` is the on-chain validator. `EditableNftTransactions.scala` builds the off-chain
+transactions for minting, editing, sealing, and burning.

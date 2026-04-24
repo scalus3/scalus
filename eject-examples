@@ -15,15 +15,10 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 EXAMPLES_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/main/scala/scalus/examples"
+TESTS_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/test/scala/scalus/examples"
 
-# Extract `val scalusStableVersion = "X.Y.Z"` from build.sbt.
-# `|| true` prevents pipefail from masking the "not found" case.
-SCALUS_VERSION="$({ grep -E '^val scalusStableVersion\s*=' "$SCRIPT_DIR/build.sbt" \
-    || true; } | head -n1 | sed -E 's/.*"([^"]+)".*/\1/')"
-if [[ -z "$SCALUS_VERSION" ]]; then
-    echo "error: could not determine scalusStableVersion from build.sbt" >&2
-    exit 1
-fi
+# Known good snapshot version (update on tagged releases).
+SCALUS_VERSION="0.16.0+259-683121c7-SNAPSHOT"
 
 # Read sbt version from this repo so ejected projects use the same.
 SBT_VERSION="$({ grep -E '^sbt\.version' "$SCRIPT_DIR/project/build.properties" \
@@ -31,6 +26,12 @@ SBT_VERSION="$({ grep -E '^sbt\.version' "$SCRIPT_DIR/project/build.properties" 
 SBT_VERSION="${SBT_VERSION:-1.12.9}"
 
 SCALA_VERSION="3.3.7"
+
+EXCLUDED_EXAMPLES="cape"
+
+# Examples that need sources from other examples bundled in.
+# Format: "example:dep1,dep2"
+BUNDLED_DEPS="storage:linkedlist"
 
 usage() {
     cat <<EOF
@@ -48,14 +49,19 @@ Options:
   --only NAMES...  Eject only the named examples (last arg is target dir).
   --list           Print all available examples and exit.
 
-Each example becomes <target-dir>/<name>/ with its own build.sbt,
-project/plugins.sbt, README.md, and copied sources.
+Each example becomes <target-dir>/<kebab-name>/scalus/ with its own build.sbt,
+project/, sources, tests, and README.
 EOF
 }
 
 list_examples() {
     find "$EXAMPLES_ROOT" -mindepth 1 -maxdepth 1 -type d \
-        -exec basename {} \; | sort
+        -exec basename {} \; | sort | while IFS= read -r name; do
+        case " $EXCLUDED_EXAMPLES " in
+            *" $name "*) ;;
+            *) echo "$name" ;;
+        esac
+    done
 }
 
 # Maps source directory names to kebab-case output names
@@ -84,16 +90,24 @@ kebab_name() {
 
 detect_extra_deps() {
     local src_dir="$1"
+    local test_dir="$2"
     local extras=()
-    if grep -rqE '^[[:space:]]*import[[:space:]]+scalus\.bloxbean' "$src_dir" 2>/dev/null; then
-        extras+=( '"org.scalus" %% "scalus-bloxbean-cardano-client-lib" % scalusVersion' )
+    local scan_dirs=("$src_dir")
+    if [[ -d "$test_dir" ]]; then
+        scan_dirs+=("$test_dir")
     fi
-    if grep -rqE '^[[:space:]]*import[[:space:]]+scalus\.patterns' "$src_dir" 2>/dev/null; then
-        # scalus-design-patterns is JVM-only and not yet on Maven Central;
-        # user must `sbt publishLocal` it.
-        extras+=( '"org.scalus" %% "scalus-design-patterns" % scalusVersion' )
-    fi
-    # Guard empty-array expansion for bash 3.2 under `set -u`.
+    for d in "${scan_dirs[@]}"; do
+        if grep -rqE '^[[:space:]]*import[[:space:]]+scalus\.bloxbean' "$d" 2>/dev/null; then
+            extras+=( '"org.scalus" %% "scalus-bloxbean-cardano-client-lib" % scalusVersion' )
+            break
+        fi
+    done
+    for d in "${scan_dirs[@]}"; do
+        if grep -rqE '^[[:space:]]*import[[:space:]]+scalus\.patterns' "$d" 2>/dev/null; then
+            extras+=( '"org.scalus" %% "scalus-design-patterns" % scalusVersion' )
+            break
+        fi
+    done
     if (( ${#extras[@]} )); then
         printf '%s\n' "${extras[@]}"
     fi
@@ -109,9 +123,9 @@ BLOCK
 }
 
 gen_build_sbt() {
-    local name="$1" src_dir="$2"
+    local name="$1" src_dir="$2" test_dir="$3"
     local extras
-    extras="$(detect_extra_deps "$src_dir")"
+    extras="$(detect_extra_deps "$src_dir" "$test_dir")"
     local extra_lines=""
     if [[ -n "$extras" ]]; then
         while IFS= read -r dep; do
@@ -131,11 +145,18 @@ lazy val root = (project in file("."))
     .enablePlugins(ScalusBlueprintPlugin)
     .settings(
         name := "$name",
+        Compile / scalaSource := baseDirectory.value,
+        Compile / unmanagedSourceDirectories := Seq(baseDirectory.value),
+        Compile / unmanagedSources / excludeFilter := new SimpleFileFilter(_.toPath.startsWith((baseDirectory.value / "test").toPath)),
+        Test / scalaSource := baseDirectory.value / "test",
+        Test / unmanagedSourceDirectories := Seq(baseDirectory.value / "test"),
         scalacOptions ++= Seq("-deprecation", "-feature"),
         addCompilerPlugin(("org.scalus" %% "scalus-plugin" % scalusVersion).cross(CrossVersion.full)),
         libraryDependencies ++= Seq(
             "org.scalus" %% "scalus"                % scalusVersion,
-            "org.scalus" %% "scalus-cardano-ledger" % scalusVersion$extra_lines
+            "org.scalus" %% "scalus-cardano-ledger" % scalusVersion,
+            "org.scalus" %% "scalus-testkit"         % scalusVersion % Test,
+            "org.scalatest" %% "scalatest"           % "3.2.19"     % Test$extra_lines
         )
     )
 EOF
@@ -167,10 +188,10 @@ project/project/
 EOF
 }
 
-gen_readme() {
+gen_getting_started() {
     local name="$1"
     cat <<EOF
-# $name
+# Getting Started
 
 Standalone Scalus example, ejected from
 [scalus3/scalus](https://github.com/scalus3/scalus).
@@ -179,6 +200,12 @@ Standalone Scalus example, ejected from
 
 \`\`\`sh
 sbt compile
+\`\`\`
+
+## Test
+
+\`\`\`sh
+sbt test
 \`\`\`
 
 ## Generate a CIP-57 blueprint
@@ -220,11 +247,34 @@ address; the transaction hash is printed on success.
 EOF
 }
 
+# Rewrites package declarations: scalus.examples.X -> X
+rewrite_packages() {
+    local dir="$1"
+    while IFS= read -r -d '' f; do
+        sed -i 's/^package scalus\.examples\./package /' "$f"
+        sed -i 's/import scalus\.examples\./import /' "$f"
+    done < <(find "$dir" -name '*.scala' -print0)
+}
+
+# Returns bundled dependency names for an example, if any.
+get_bundled_deps() {
+    local name="$1"
+    for entry in $BUNDLED_DEPS; do
+        local key="${entry%%:*}"
+        local deps="${entry#*:}"
+        if [[ "$key" == "$name" ]]; then
+            echo "$deps" | tr ',' ' '
+            return
+        fi
+    done
+}
+
 # ---- core -------------------------------------------------------------------
 
 eject_one() {
     local name="$1" target_root="$2"
     local src_dir="$EXAMPLES_ROOT/$name"
+    local test_dir="$TESTS_ROOT/$name"
     if [[ ! -d "$src_dir" ]]; then
         echo "error: example '$name' not found at $src_dir" >&2
         return 1
@@ -232,22 +282,52 @@ eject_one() {
 
     local out_name
     out_name="$(kebab_name "$name")"
-    local project_dir="$target_root/$out_name/scalus"
+    local project_dir="$target_root/$out_name"
     if [[ -e "$project_dir" ]]; then
         echo "error: $project_dir already exists, refusing to overwrite" >&2
         return 1
     fi
 
     mkdir -p "$project_dir/project"
-    mkdir -p "$project_dir/src/main/scala/scalus/examples/$name"
 
-    cp -R "$src_dir"/. "$project_dir/src/main/scala/scalus/examples/$name"/
+    # Copy main sources (flat, next to build.sbt)
+    find "$src_dir" -maxdepth 1 -name '*.scala' -exec cp {} "$project_dir/" \;
 
-    gen_build_sbt "$out_name" "$src_dir" > "$project_dir/build.sbt"
+    # Copy bundled dependency sources into their own package dirs
+    local deps
+    deps="$(get_bundled_deps "$name")"
+    if [[ -n "$deps" ]]; then
+        for dep in $deps; do
+            local dep_src="$EXAMPLES_ROOT/$dep"
+            if [[ -d "$dep_src" ]]; then
+                mkdir -p "$project_dir/$dep"
+                find "$dep_src" -maxdepth 1 -name '*.scala' -exec cp {} "$project_dir/$dep/" \;
+            fi
+            local dep_test="$TESTS_ROOT/$dep"
+            if [[ -d "$dep_test" ]]; then
+                mkdir -p "$project_dir/test/$dep"
+                find "$dep_test" -maxdepth 1 -name '*.scala' -exec cp {} "$project_dir/test/$dep/" \;
+            fi
+        done
+    fi
+
+    # Copy test sources
+    if [[ -d "$test_dir" ]]; then
+        mkdir -p "$project_dir/test"
+        find "$test_dir" -maxdepth 1 -name '*.scala' -exec cp {} "$project_dir/test/" \;
+    fi
+
+    # Rewrite package declarations
+    rewrite_packages "$project_dir"
+
+    # Generate build files
+    gen_build_sbt "$out_name" "$src_dir" "$test_dir" > "$project_dir/build.sbt"
     gen_plugins_sbt               > "$project_dir/project/plugins.sbt"
     gen_build_properties          > "$project_dir/project/build.properties"
     gen_gitignore                 > "$project_dir/.gitignore"
-    gen_readme "$out_name"        > "$project_dir/SCALUS_README.md"
+    gen_getting_started "$out_name" > "$project_dir/GETTING_STARTED.md"
+
+    # Copy the example's own README if it exists
     if [[ -f "$src_dir/README.md" ]]; then
         cp "$src_dir/README.md" "$project_dir/README.md"
     fi

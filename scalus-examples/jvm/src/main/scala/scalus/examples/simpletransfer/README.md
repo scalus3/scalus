@@ -2,27 +2,12 @@
 
 The owner deposits native cryptocurrency; the recipient withdraws arbitrary fractions of the balance.
 
-On Cardano a full withdrawal would not preserve the contract UTxO, so the recipient must leave a minimum amount during a
-withdraw.
+## How it works
 
-## On-chain state
+The contract is parameterized by the owner and recipient public key hashes.
 
-```
-Parties (validator parameter)
-├── owner     : PubKeyHash
-└── recipient : PubKeyHash
-```
+- **Deposit** — the owner adds funds. The validator requires exactly one continuation output at the contract address.
+- **Withdraw** — the recipient claims any amount. On Cardano a full withdrawal would destroy the contract UTxO, so the
+  recipient must leave a minimum amount to preserve it (or spend the UTxO entirely if no continuation is needed).
 
-## Actions
-
-| Action     | Effect                                                    |
-|------------|-----------------------------------------------------------|
-| `Deposit`  | Owner adds funds; one continuation output at contract     |
-| `Withdraw` | Recipient claims; zero or one continuation output allowed |
-
-## Files
-
-| File                            | Purpose                     |
-|---------------------------------|-----------------------------|
-| `SimpleTransferValidator.scala` | On-chain spending validator |
-| `SimpleTransferContract.scala`  | PlutusV3 compilation        |
+`SimpleTransferValidator.scala` is the on-chain spending validator.

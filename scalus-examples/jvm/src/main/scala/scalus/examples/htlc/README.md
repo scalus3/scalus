@@ -5,27 +5,13 @@ the preimage before the deadline. After the deadline, the committer reclaims the
 
 Used as a building block for cross-chain atomic swaps.
 
-## On-chain state
+## How it works
 
-```
-Config (validator parameter)
-├── committer : PubKeyHash
-├── receiver  : PubKeyHash
-├── image     : ByteString    -- SHA3-256 hash
-└── timeout   : PosixTime
-```
+The contract is parameterized by the committer, receiver, the hash commitment, and a timeout.
 
-## Actions
+- **Reveal** — before the timeout, the receiver provides a preimage that hashes to the committed value and claims the
+  deposit.
+- **Timeout** — after the timeout, the committer reclaims the deposit.
 
-| Action    | When           | Effect                           |
-|-----------|----------------|----------------------------------|
-| `Reveal`  | Before timeout | Receiver proves preimage, claims |
-| `Timeout` | After timeout  | Committer reclaims               |
-
-## Files
-
-| File                     | Purpose                        |
-|--------------------------|--------------------------------|
-| `HtlcValidator.scala`    | On-chain spending validator    |
-| `HtlcContract.scala`     | PlutusV3 compilation           |
-| `HtlcTransactions.scala` | Off-chain transaction builders |
+`HtlcValidator.scala` is the on-chain spending validator. `HtlcTransactions.scala` builds the off-chain transactions
+for revealing and timing out.

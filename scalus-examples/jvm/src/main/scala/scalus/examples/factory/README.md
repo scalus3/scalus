@@ -1,26 +1,15 @@
 # Factory
 
 Creates and manages product NFTs using the factory pattern. Each product gets a unique token name derived from
-`blake2b_256(seedUtxO)`. The minting policy enforces one-shot spending; a spending validator governs product lifecycle.
+`blake2b_256(seedUtxO)`.
 
-## On-chain state
+## How it works
 
-```
-ProductDatum
-├── tag     : ByteString
-└── creator : PubKeyHash
-```
+The minting policy enforces one-shot spending of a seed UTxO to guarantee unique token names. A spending validator
+governs the product lifecycle. Each product NFT is locked at the script address with a datum containing a tag string
+and the creator's public key hash.
 
-## Actions
+- **Create** — spends a seed UTxO, mints a product NFT, and locks it at the script address with the product datum.
+- **Destroy** — the creator burns the product NFT and reclaims the locked ADA.
 
-| Action    | Effect                                 |
-|-----------|----------------------------------------|
-| `Create`  | Spends seed UTxO, mints product NFT    |
-| `Destroy` | Burns product NFT, reclaims locked ADA |
-
-## Files
-
-| File                   | Purpose                 |
-|------------------------|-------------------------|
-| `Factory.scala`        | On-chain validation     |
-| `FactoryExample.scala` | Off-chain usage example |
+`Factory.scala` contains the on-chain validation logic. `FactoryExample.scala` demonstrates off-chain usage.

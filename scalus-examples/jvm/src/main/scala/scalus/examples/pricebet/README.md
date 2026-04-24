@@ -3,29 +3,15 @@
 Two players bet on whether an exchange rate will be above or below a target value. An oracle publishes the rate as a
 reference input. The winner claims the pot; if no opponent joins, the owner reclaims after the deadline.
 
-## On-chain state
+## How it works
 
-```
-PricebetState
-├── owner        : PubKeyHash
-├── player       : PubKeyHash
-├── deadline     : PosixTime
-└── exchangeRate : Rational
-```
+The owner creates the contract by depositing a bet and specifying a target exchange rate and a deadline. The datum
+tracks both players, the deadline, and the target rate.
 
-## Actions
+- **Join** — before the deadline, a second player matches the bet.
+- **Win** — after the deadline, the player whose prediction matches the oracle's published exchange rate claims the pot.
+  The oracle data is read from a reference input, so the oracle UTxO is not consumed.
+- **Timeout** — after the deadline, if no opponent joined, the owner reclaims the deposit.
 
-| Action    | When            | Effect                                    |
-|-----------|-----------------|-------------------------------------------|
-| `Join`    | Before deadline | Second player matches the bet             |
-| `Win`     | After deadline  | Winner claims pot (oracle rate vs target) |
-| `Timeout` | After deadline  | Owner reclaims if no opponent joined      |
-
-## Files
-
-| File                         | Purpose                        |
-|------------------------------|--------------------------------|
-| `PricebetValidator.scala`    | On-chain spending validator    |
-| `OracleValidator.scala`      | Oracle data feed validator     |
-| `PricebetContract.scala`     | PlutusV3 compilation           |
-| `PricebetTransactions.scala` | Off-chain transaction builders |
+`PricebetValidator.scala` is the on-chain spending validator. `OracleValidator.scala` is the oracle's data feed
+validator. `PricebetTransactions.scala` builds the off-chain transactions.

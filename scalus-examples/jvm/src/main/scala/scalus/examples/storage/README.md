@@ -1,17 +1,15 @@
-## Storage
+# Storage
 
-On-chain data storage.
+On-chain data storage of uncapped size.
 
-The idea of the storage is to store data of **uncapped size**.
+## How it works
 
-Since Cardano uses a UTxO model, the main way to put data on the Cardano blockchain is to create a transaction that has
-an output with a *datum*, which is Cardanos way to bundle some data with a transaction output.
+Cardano transactions have a size limit (~16 KB), so storing large data requires splitting it across multiple UTxOs.
+This implementation uses the Linked List pattern to create a chain of UTxOs, each holding a chunk of the data as its
+datum. NFTs link the chunks together in order.
 
-Transactions, however, have a size limit. It's currently 16KB, but while it may increase in the future, 
-there's always going to be a limit.
+`StorageTransactions.scala` provides the off-chain logic: it splits data into chunks, creates a linked list root with
+the first chunk, and appends subsequent chunks as additional nodes. Reading the data back involves traversing the
+linked list and concatenating the chunks.
 
-Thus, to be able to store _unlimited_ data, a more sophisticated approach is required.
-This implementation uses a Linked List pattern, which utilizes transaction outputs and NFTs to create a 
-**chain of UTxOs**, allowing you to chunk the data, several UTxOs.
-
-Find more information about it in the [Scalus Linked List implementation](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/patterns/LinkedList.scala).
+The underlying linked list implementation lives in the `scalus-design-patterns` module.

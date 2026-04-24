@@ -3,36 +3,16 @@
 Self-sovereign identity (SSI) system. An owner mints an identity token and can delegate attribute creation to other
 parties. Delegations are time-bounded and can be revoked.
 
-Token name prefixes distinguish types: `"i"` identity, `"d"` delegation, `"a"` attribute. Delegation and attribute names
-are derived via `blake2b_224` for unlinkability.
+## How it works
 
-## On-chain state
+Token name prefixes distinguish types: `"i"` for identity, `"d"` for delegation, `"a"` for attribute. Delegation and
+attribute names are derived via `blake2b_224` for unlinkability.
 
-```
-IdentityDatum
-└── ownerPkh : PubKeyHash
+- **Mint identity** — the owner spends a seed UTxO and mints an `"i"`-prefixed identity token.
+- **Mint delegation** — the owner creates a time-bounded delegation by minting a `"d"`-prefixed token. The delegation
+  datum records the delegatee's public key hash and the validity period.
+- **Mint attribute** — a delegatee with a valid delegation mints an `"a"`-prefixed attribute token.
+- **Revoke** — the owner burns delegation or attribute tokens to revoke them.
 
-DelegationDatum
-├── identityPolicyId : PolicyId
-├── delegatorPkh     : PubKeyHash
-├── delegateePkh     : PubKeyHash
-├── validFrom        : PosixTime
-└── validTo          : PosixTime
-```
-
-## Actions
-
-| Action          | Effect                                           |
-|-----------------|--------------------------------------------------|
-| Mint identity   | Owner spends seed UTxO, mints "i"-prefixed token |
-| Mint delegation | Mints "d"-prefixed delegation token              |
-| Mint attribute  | Delegatee mints "a"-prefixed attribute token     |
-| Revoke          | Burns delegation or attribute tokens             |
-
-## Files
-
-| File                                      | Purpose                          |
-|-------------------------------------------|----------------------------------|
-| `DecentralizedIdentityValidator.scala`    | On-chain parameterized validator |
-| `DecentralizedIdentityContract.scala`     | PlutusV3 compilation             |
-| `DecentralizedIdentityTransactions.scala` | Off-chain transaction builders   |
+`DecentralizedIdentityValidator.scala` is the on-chain parameterized validator. `DecentralizedIdentityTransactions.scala`
+builds the off-chain transactions for all operations.
