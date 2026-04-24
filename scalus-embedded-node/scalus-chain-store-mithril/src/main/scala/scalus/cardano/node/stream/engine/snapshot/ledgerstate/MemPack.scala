@@ -30,7 +30,17 @@ package scalus.cardano.node.stream.engine.snapshot.ledgerstate
   */
 object MemPack {
 
-    class DecodeError(msg: String) extends RuntimeException(msg)
+    /** `pos` is the byte offset within the MemPack payload at which decoding failed (0-based,
+      * relative to the `Reader`'s start); `-1` when the error isn't tied to a specific cursor
+      * position (e.g. raised by [[unknownTag]] from a higher-level reader that doesn't hold a
+      * `Reader`). `pos` is also included in `getMessage` so stack-trace lines carry it.
+      */
+    class DecodeError(msg: String, val pos: Int) extends RuntimeException {
+        def this(msg: String) = this(msg, -1)
+
+        override def getMessage: String =
+            if pos >= 0 then s"$msg (at MemPack offset $pos)" else msg
+    }
 
     /** Cursor-based reader over a backing `Array[Byte]`. Mutates `pos` in place as bytes are
       * consumed. Construct via [[apply]]; keep each reader instance to a single thread.
@@ -42,16 +52,19 @@ object MemPack {
         def remaining: Int = end - pos
         def eof: Boolean = pos >= end
 
+        /** Raise a [[DecodeError]] whose `pos` is the current offset — for higher-level readers
+          * that detect a semantic violation after already consuming some bytes.
+          */
+        def fail(msg: String): Nothing = throw new DecodeError(msg, offset)
+
         /** Consume `n` bytes of forward progress, failing if fewer remain. Returns the offset at
           * which those bytes start in the backing array.
           */
         def advance(n: Int): Int = {
-            if n < 0 then throw new DecodeError(s"advance: negative count $n")
+            if n < 0 then fail(s"advance: negative count $n")
             val newPos = pos + n
             if newPos > end then
-                throw new DecodeError(
-                  s"MemPack: unexpected end of input, need $n bytes but only ${end - pos} remain"
-                )
+                fail(s"unexpected end of input, need $n bytes but only ${end - pos} remain")
             val at = pos
             pos = newPos
             at
@@ -129,9 +142,7 @@ object MemPack {
                 if (b & 0x80) != 0 then {
                     acc = (acc << 7) | (b & 0x7f).toLong
                     i += 1
-                    if i >= 10 then throw new DecodeError(
-                      "VarLen Word64: more than 10 bytes of continuation"
-                    )
+                    if i >= 10 then fail("VarLen Word64: more than 10 bytes of continuation")
                 } else {
                     acc = (acc << 7) | b.toLong
                     done = true
@@ -140,9 +151,7 @@ object MemPack {
             // Mirror unpack7BitVarLenLast for Word64: if the first byte supplied too many
             // high bits the decode is invalid. See mempack src `0b_1111_1110` mask.
             if i == 9 && (firstByte & 0xfe) != 0x80 then
-                throw new DecodeError(
-                  f"VarLen Word64: excess bits in leading byte 0x$firstByte%02x"
-                )
+                fail(f"VarLen Word64: excess bits in leading byte 0x$firstByte%02x")
             acc
         }
 
@@ -151,10 +160,8 @@ object MemPack {
           */
         def readLength(): Int = {
             val w = readVarLenWord()
-            if w < 0 then
-                throw new DecodeError(s"Length: negative value in underlying VarLen Word: $w")
-            if w > Int.MaxValue then
-                throw new DecodeError(s"Length: exceeds Int.MaxValue ($w)")
+            if w < 0 then fail(s"Length: negative value in underlying VarLen Word: $w")
+            if w > Int.MaxValue then fail(s"Length: exceeds Int.MaxValue ($w)")
             w.toInt
         }
 
@@ -171,7 +178,7 @@ object MemPack {
             readTag() match {
                 case 0 => false
                 case 1 => true
-                case t => throw new DecodeError(s"Bool: unexpected tag $t")
+                case t => fail(s"Bool: unexpected tag $t")
             }
         }
 
@@ -180,7 +187,7 @@ object MemPack {
             readTag() match {
                 case 0 => None
                 case 1 => Some(readA)
-                case t => throw new DecodeError(s"Maybe: unexpected tag $t")
+                case t => fail(s"Maybe: unexpected tag $t")
             }
         }
 
@@ -205,7 +212,15 @@ object MemPack {
     }
 
     /** Raise an `unknownTagM`-shaped error — matches the Haskell error message for parity with
-      * round-trip fixtures that assert on it.
+      * round-trip fixtures that assert on it. `pos` points at the byte AFTER the tag byte (so
+      * the failing tag is at `pos - 1`); passing a [[Reader]] is encouraged over the
+      * typeName-only overload so the error carries location info.
+      */
+    def unknownTag(typeName: String, tag: Int, r: Reader): Nothing =
+        throw new DecodeError(s"Unrecognized Tag: $tag while decoding $typeName", r.offset)
+
+    /** Raise an `unknownTagM`-shaped error without a reader context. Use only from call sites
+      * that genuinely don't hold a `Reader` (should be rare); prefer the 3-arg overload.
       */
     def unknownTag(typeName: String, tag: Int): Nothing =
         throw new DecodeError(s"Unrecognized Tag: $tag while decoding $typeName")

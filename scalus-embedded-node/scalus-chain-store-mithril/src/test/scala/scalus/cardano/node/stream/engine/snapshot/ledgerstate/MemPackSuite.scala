@@ -158,6 +158,27 @@ final class MemPackSuite extends AnyFunSuite {
         intercept[MemPack.DecodeError](MemPackReaders.readTxIn(r))
     }
 
+    test("DecodeError carries cursor position when raised mid-decode") {
+        // Trigger a tag-mismatch after consuming a known prefix. Bool reads 1 byte; a non-0/1
+        // byte fails with pos = 1 (offset after the tag byte).
+        val r = MemPack.Reader(Array[Byte](0x42.toByte))
+        val ex = intercept[MemPack.DecodeError](r.readBool())
+        assert(ex.pos == 1, s"expected pos=1, got ${ex.pos}")
+        assert(ex.getMessage.contains("offset 1"), ex.getMessage)
+    }
+
+    test("DecodeError: position reflects cursor at moment of failure") {
+        // Consume 5 bytes successfully, then fail on an invalid CompactValue tag at offset 5.
+        val bytes = new Array[Byte](6)
+        for i <- 0 until 5 do bytes(i) = i.toByte
+        bytes(5) = 0x99.toByte // invalid CV tag
+        val r = MemPack.Reader(bytes)
+        r.readBytes(5) // advance past the 5-byte prefix
+        val ex = intercept[MemPack.DecodeError](MemPackReaders.readCompactValue(r))
+        assert(ex.pos == 6, s"expected pos=6 (after the tag byte), got ${ex.pos}")
+        assert(ex.getMessage.contains("CompactValue"))
+    }
+
     test("CompactAddr — Shelley enterprise address, round-trip via toBytes") {
         // Build a real Shelley enterprise address, take its canonical bytes, then prepend the
         // MemPack Length prefix. The reader should produce back the same address.

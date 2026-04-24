@@ -92,7 +92,7 @@ object MemPackReaders {
         try Address.fromByteString(ByteString.fromArray(bytes))
         catch
             case ex: IllegalArgumentException =>
-                throw new MemPack.DecodeError(
+                r.fail(
                   s"CompactAddr: malformed address bytes (${bytes.length} byte payload): ${ex.getMessage}"
                 )
     }
@@ -128,14 +128,12 @@ object MemPackReaders {
                 val coin = readPackedCoinInsideCompactValue(r)
                 val numMA = r.readVarLenWord()
                 if numMA < 0 || numMA > Int.MaxValue then
-                    throw new MemPack.DecodeError(
-                      s"CompactValue multi-asset: numAssets $numMA out of Int range"
-                    )
+                    r.fail(s"CompactValue multi-asset: numAssets $numMA out of Int range")
                 val rep = r.readLengthPrefixedBytes()
-                val ma = decodeMultiAssetRep(rep, numMA.toInt)
+                val ma = decodeMultiAssetRep(rep, numMA.toInt, r)
                 Value(coin, ma)
             case t =>
-                MemPack.unknownTag("CompactValue", t)
+                MemPack.unknownTag("CompactValue", t, r)
         }
     }
 
@@ -149,12 +147,16 @@ object MemPackReaders {
       * if it's the last distinct offset. Duplicate offsets (same asset name used under more
       * than one policy) share a length.
       */
-    private def decodeMultiAssetRep(rep: Array[Byte], numMA: Int): MultiAsset = {
+    private def decodeMultiAssetRep(
+        rep: Array[Byte],
+        numMA: Int,
+        outer: MemPack.Reader
+    ): MultiAsset = {
         if numMA == 0 then return MultiAsset.empty
 
         val minSize = 12 * numMA
         if rep.length < minSize then
-            throw new MemPack.DecodeError(
+            outer.fail(
               s"CompactValue multi-asset rep: need at least $minSize bytes for $numMA assets, got ${rep.length}"
             )
 
@@ -184,7 +186,7 @@ object MemPackReaders {
             val off = distinctSorted(j)
             val nextOff = if j + 1 < distinctSorted.length then distinctSorted(j + 1) else rep.length
             if off < 0 || off > rep.length || nextOff < off then
-                throw new MemPack.DecodeError(
+                outer.fail(
                   s"CompactValue multi-asset rep: invalid asset-name offset $off (rep=${rep.length})"
                 )
             assetLen(off) = nextOff - off
@@ -197,7 +199,7 @@ object MemPackReaders {
             val pidOff = policyOffsets(i)
             val anOff = assetOffsets(i)
             if pidOff < 0 || pidOff + PolicyIdSize > rep.length then
-                throw new MemPack.DecodeError(
+                outer.fail(
                   s"CompactValue multi-asset rep: policyId offset $pidOff out of bounds (rep=${rep.length})"
                 )
             val policyBytes = new Array[Byte](PolicyIdSize)
@@ -224,7 +226,7 @@ object MemPackReaders {
         tag match {
             case 0 => Credential.ScriptHash(ScriptHash.fromArray(readHash28(r)))
             case 1 => Credential.KeyHash(AddrKeyHash.fromArray(readHash28(r)))
-            case t => MemPack.unknownTag("Credential", t)
+            case t => MemPack.unknownTag("Credential", t, r)
         }
     }
 
@@ -283,7 +285,7 @@ object MemPackReaders {
       */
     def readCompactCoinStandalone(r: MemPack.Reader): Coin = {
         val tag = r.readTag()
-        if tag != 0 then MemPack.unknownTag("CompactForm Coin", tag)
+        if tag != 0 then MemPack.unknownTag("CompactForm Coin", tag, r)
         Coin(r.readVarLenWord())
     }
 
@@ -355,14 +357,15 @@ object MemPackReaders {
                   scriptRef = Some(ScriptRef(script))
                 )
             case t =>
-                MemPack.unknownTag("BabbageTxOut", t)
+                MemPack.unknownTag("BabbageTxOut", t, r)
         }
     }
 
     /** Thrown when a TxOut MemPack variant or sub-structure we don't yet handle is hit — keeps
       * restore behaviour "fail loud" rather than silently dropping the entry from the UTxO set.
       */
-    final class UnsupportedTxOutVariant(msg: String) extends MemPack.DecodeError(msg)
+    final class UnsupportedTxOutVariant(msg: String, pos: Int)
+        extends MemPack.DecodeError(msg, pos)
 
     /** Read an `AlonzoScript era` MemPack: tag 0 = native script, tag 1 = plutus script. Used
       * inside the tag-5 TxOut variant.
@@ -374,7 +377,7 @@ object MemPackReaders {
         tag match {
             case 0 => Script.Native(readTimelock(r))
             case 1 => readPlutusScript(r)
-            case t => MemPack.unknownTag("AlonzoScript", t)
+            case t => MemPack.unknownTag("AlonzoScript", t, r)
         }
     }
 
@@ -391,7 +394,7 @@ object MemPackReaders {
         try Cbor.decode(bytes).to[Timelock].value
         catch
             case ex: RuntimeException =>
-                throw new MemPack.DecodeError(
+                r.fail(
                   s"Timelock: failed to decode CBOR (${bytes.length} bytes): ${ex.getMessage}"
                 )
     }
@@ -419,9 +422,10 @@ object MemPackReaders {
             case 3 =>
                 throw new UnsupportedTxOutVariant(
                   s"PlutusScript tag 3 (Dijkstra PlutusV4) — not yet modelled in Scalus Script; " +
-                      s"encountered a ${raw.length}-byte script in a ref-script TxOut."
+                      s"encountered a ${raw.length}-byte script in a ref-script TxOut.",
+                  r.offset
                 )
-            case t => MemPack.unknownTag("PlutusScript", t)
+            case t => MemPack.unknownTag("PlutusScript", t, r)
         }
     }
 
@@ -455,7 +459,7 @@ object MemPackReaders {
             try Cbor.decode(bytes).to[Data].value
             catch
                 case ex: RuntimeException =>
-                    throw new MemPack.DecodeError(
+                    r.fail(
                       s"BinaryData inline datum: failed to decode Plutus Data CBOR " +
                           s"(${bytes.length} bytes): ${ex.getMessage}"
                     )
@@ -482,12 +486,12 @@ object MemPackReaders {
                     try Cbor.decode(bytes).to[Data].value
                     catch
                         case ex: RuntimeException =>
-                            throw new MemPack.DecodeError(
+                            r.fail(
                               s"Datum inline: failed to decode Plutus Data CBOR (${bytes.length} bytes): ${ex.getMessage}"
                             )
                 Some(DatumOption.Inline(data))
             case t =>
-                MemPack.unknownTag("Datum", t)
+                MemPack.unknownTag("Datum", t, r)
         }
     }
 }
