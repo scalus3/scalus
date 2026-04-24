@@ -29,8 +29,12 @@ object TaggedOrderedStrictSet extends TaggedSeq:
         pv: ProtocolVersion = ProtocolVersion.conwayPV
     ): TaggedOrderedStrictSet[A] = ListSet
         .from(
+          // See `TaggedSortedSet` for why we dropped the `checkNonEmpty` gate: empty tagged sets
+          // occur in real Conway preview blocks even though the CDDL marks them `nonempty_set`.
+          // Duplicate checking stays; users who want non-empty enforcement can call
+          // `checkNonEmpty` from `TaggedSeq` explicitly.
           if pv >= ProtocolVersion.conwayPV
-          then checkDuplicates(checkNonEmpty(s))
+          then checkDuplicates(s)
           else s
         )
         .toIndexedSeq

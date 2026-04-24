@@ -3,11 +3,11 @@ package scalus.cardano.network
 import cps.*
 import cps.monads.FutureAsyncMonad
 import scalus.cardano.infra.{CancelSource, CancelledException}
-import scalus.cardano.ledger.{Block, BlockHash, BlockHeader, KeepRaw, OriginalCborByteArray}
+import scalus.cardano.ledger.{Block, BlockHash, BlockHeader, KeepRaw}
 import scalus.cardano.network.blockfetch.{BlockFetchDriver, FetchedBlock}
 import scalus.cardano.network.chainsync.{ChainSyncDriver, ChainSyncEvent, IntersectSeeker, Point}
 import scalus.cardano.network.infra.MiniProtocolId
-import scalus.cardano.node.stream.engine.{AppliedBlock, AppliedTransaction, Engine}
+import scalus.cardano.node.stream.engine.{AppliedBlock, Engine}
 import scalus.cardano.node.stream.{ChainPoint, ChainTip, StartFrom}
 import scalus.uplc.builtin.{platform, ByteString}
 
@@ -205,22 +205,12 @@ object ChainApplier {
         ChainPoint(header.slot, hash)
     }
 
-    /** Project a decoded block into the engine's [[AppliedBlock]] shape.
-      *
-      * `Block.transactions` needs the original CBOR bytes to reassemble each `Transaction` from its
-      * KeepRaw parts, so we pass `blockRaw.raw` through the implicit [[OriginalCborByteArray]].
+    /** Project a decoded block into the engine's [[AppliedBlock]] shape. Delegates to
+      * [[AppliedBlock.fromRaw]] so the N2N applier and the Mithril snapshot restorer produce
+      * identical projections.
       */
-    private[network] def toAppliedBlock(tip: ChainTip, blockRaw: KeepRaw[Block]): AppliedBlock = {
-        given OriginalCborByteArray = OriginalCborByteArray(blockRaw.raw)
-        val txs = blockRaw.value.transactions.map { tx =>
-            AppliedTransaction(
-              id = tx.id,
-              inputs = tx.body.value.inputs.toSet,
-              outputs = tx.body.value.outputs.map(_.value).toIndexedSeq
-            )
-        }
-        AppliedBlock(tip, txs)
-    }
+    private[network] def toAppliedBlock(tip: ChainTip, blockRaw: KeepRaw[Block]): AppliedBlock =
+        AppliedBlock.fromRaw(tip, blockRaw)
 
     /** Shared BlockFetch post-processing: era-mismatch warn + block decode + project to
       * [[AppliedBlock]]. Used by both [[ChainApplier.processForward]] and

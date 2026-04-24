@@ -65,11 +65,9 @@ case class TransactionBody(
     /** Transaction deposit return */
     donation: Option[Coin] = None
 ):
-    /** Validate optional withdrawals */
-    require(
-      withdrawals.forall(_.withdrawals.nonEmpty),
-      "If withdrawals are present, they must be non-empty"
-    )
+    // NOTE: the CDDL marks `withdrawals` as non-empty-if-present, but real Conway preview blocks
+    // contain transactions whose withdrawals map is present-but-empty. Dropping the runtime check
+    // so the decoder accepts ledger-validated blocks; see `TaggedSortedSet` for rationale.
 
     /** Validate network ID if present */
     require(
@@ -272,6 +270,14 @@ object TransactionBody:
 
                     case 5 => // Withdrawals
                         withdrawals = Some(r.read[Withdrawals]())
+
+                    case 6 => // Legacy update_proposal (removed in Conway)
+                        // Appears in real preview blocks straddling the Babbage→Conway hard fork
+                        // (e.g. first blocks of epoch 644). Conway's encoder drops this key but
+                        // the ledger still accepted transactions carrying it across the boundary.
+                        // Read-and-discard: we don't surface protocol-update proposals to the
+                        // engine, and a strict reject here would break snapshot restore.
+                        r.skipElement()
 
                     case 7 => // Auxiliary data hash
                         auxiliaryDataHash = Some(r.read[AuxiliaryDataHash]())

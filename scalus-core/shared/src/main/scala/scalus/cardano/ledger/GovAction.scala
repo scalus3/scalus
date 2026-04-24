@@ -187,7 +187,10 @@ object GovAction {
                     GovAction.HardForkInitiation(prevActionId, protocolVersion)
 
                 case 2 => // TreasuryWithdrawals
-                    // Read withdrawals map (as ByteString -> Coin)
+                    // Read withdrawals map (as ByteString -> Coin). Conway/Dijkstra wrap the
+                    // map in tag 258; consume the tag if present so our plain Map decoder sees
+                    // the inner map.
+                    TaggedOrderedSet.skipTagIfPresent(r)
                     val withdrawals = r.read[Map[RewardAccount, Coin]]()
                     val policyHash = r.read[Option[PolicyHash]]()
                     GovAction.TreasuryWithdrawals(withdrawals, policyHash)
@@ -198,7 +201,11 @@ object GovAction {
 
                 case 4 => // UpdateCommittee
                     val prevActionId = r.read[Option[GovActionId]]()
+                    // Conway/Dijkstra on-chain CDDL wraps set-typed fields in tag 258.
+                    // Consume the tag if present before reading as a plain set / map.
+                    TaggedOrderedSet.skipTagIfPresent(r)
                     val removedMembers = r.read[ScalaSet[Credential]]()
+                    TaggedOrderedSet.skipTagIfPresent(r)
                     val addedMembers = r.read[Map[Credential, Long]]()
                     val threshold = r.read[UnitInterval]()
                     GovAction.UpdateCommittee(prevActionId, removedMembers, addedMembers, threshold)

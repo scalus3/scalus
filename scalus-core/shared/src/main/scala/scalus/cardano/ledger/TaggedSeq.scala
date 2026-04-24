@@ -31,10 +31,17 @@ trait TaggedSeq(tag: Tag = Tag.Other(258)):
         seq
 
     def readTagged[A: Decoder](r: Reader): IndexedSeq[A] =
+        skipTagIfPresent(r)
+        Decoder.fromFactory[A, IndexedSeq].read(r)
+
+    /** Consume a leading CBOR tag (this trait's `tag`, default 258) if the next data item is a tag.
+      * Shared between `readTagged` and ad-hoc sites that decode into a plain `Set`/`Map` but still
+      * need to tolerate Conway's on-chain `tag 258` set marker.
+      */
+    def skipTagIfPresent(r: Reader): Unit =
         if r.dataItem() == DataItem.Tag then
             val t = r.readTag()
             if t != tag then r.validationFailure(s"Expected tag $tag, got $t")
-        Decoder.fromFactory[A, IndexedSeq].read(r)
 
     def writeTagged[A: Encoder](w: Writer, v: IterableOnce[A]): Writer =
         val s = IndexedSeq.from(v)

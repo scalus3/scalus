@@ -31,12 +31,11 @@ object TaggedSortedMap extends TaggedSeq:
         inline def toSet: Set[A] = ListSet.from(s.values)
 
     given [K, A: Encoder]: Encoder[TaggedSortedMap[K, A]] = (w, a) => writeTagged(w, a.values)
-    given [K: Ordering, A: Decoder](using
-        pv: ProtocolVersion = ProtocolVersion.conwayPV
-    )(using K KeyOf A): Decoder[TaggedSortedMap[K, A]] =
-        if pv >= ProtocolVersion.conwayPV
-        then r => from(checkNonEmpty(readTagged(r)))
-        else r => from(readTagged(r))
+
+    // See `TaggedSortedSet` for the rationale: empty tagged sets can appear in real Conway
+    // blocks even though the CDDL marks them `nonempty_set`. Decoder accepts any size.
+    given [K: Ordering, A: Decoder](using K KeyOf A): Decoder[TaggedSortedMap[K, A]] =
+        r => from(readTagged(r))
 
     given [K, A](using p: Pretty[A]): Pretty[TaggedSortedMap[K, A]] with
         def pretty(a: TaggedSortedMap[K, A], style: Style): Doc =

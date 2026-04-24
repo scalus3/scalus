@@ -107,15 +107,18 @@ sealed trait Redeemers:
             redeemers.values.foldLeft(ExUnits.zero) { case (acc, (_, exUnits)) => acc + exUnits }
 
 object Redeemers:
+    // NOTE: the CDDL marks Redeemers as non-empty but real Conway preview blocks contain
+    // witness sets with an empty redeemers field. Dropping the runtime `require` on both
+    // variants so the decoder accepts ledger-validated blocks; see `TaggedSortedSet` for the
+    // same rationale applied to other tagged-set fields.
+
     /** Array-based representation (legacy format) */
-    final case class Array(redeemers: IndexedSeq[Redeemer]) extends Redeemers:
-        require(redeemers.nonEmpty, "Must have at least one redeemer")
+    final case class Array(redeemers: IndexedSeq[Redeemer]) extends Redeemers
 
     /** Map-based representation (new format) Maps (tag, index) pairs to (data, exUnits) pairs
       */
     final case class Map(redeemers: immutable.Map[(RedeemerTag, Int), (Data, ExUnits)])
-        extends Redeemers:
-        require(redeemers.nonEmpty, "Must have at least one redeemer")
+        extends Redeemers
 
     def apply(redeemers: Redeemer*): Redeemers = from(redeemers)
 

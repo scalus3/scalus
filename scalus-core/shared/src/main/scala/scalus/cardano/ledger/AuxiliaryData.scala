@@ -64,8 +64,16 @@ object Metadatum:
                     val items = r.read[IndexedSeq[Metadatum]]()
                     Metadatum.List(items)
 
-                case DI.Int | DI.Long | DI.OverLong =>
+                case DI.Int | DI.Long =>
                     Metadatum.Int(r.readLong())
+
+                case DI.OverLong =>
+                    // CBOR OverLong = unsigned uint64 beyond Long.MaxValue (or negative int64
+                    // beyond Long.MinValue). readOverLong() returns the raw 8 bytes reinterpreted
+                    // as a signed Long, so the bit pattern is preserved round-trip. Metadata can
+                    // carry arbitrary integers, and at least one Dijkstra-era preview block has
+                    // one that doesn't fit in a signed Long.
+                    Metadatum.Int(r.readOverLong())
 
                 case DI.Bytes | DI.BytesStart =>
                     val bytes = r.read[ByteString]()

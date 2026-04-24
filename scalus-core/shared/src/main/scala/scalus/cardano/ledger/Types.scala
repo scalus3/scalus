@@ -97,7 +97,13 @@ object Mint {
     }
 
     given Encoder[Mint] = MultiAsset.given_Encoder_MultiAsset
-    given Decoder[Mint] = MultiAsset.given_Decoder_MultiAsset.map(Mint.apply)
+
+    // Same rationale as `TaggedSortedSet`: real Conway preview blocks contain transactions whose
+    // `mint` field is present-but-empty. Enforcing `Mint.apply`'s non-empty/non-zero invariants at
+    // decode time would reject ledger-validated blocks. The opaque-subtype relation `Mint <:
+    // MultiAsset` is in scope here, so the decoded `MultiAsset` ascribes to `Mint` with no cast.
+    // Construction from user code still goes through `Mint.apply` where the invariants apply.
+    given Decoder[Mint] = Decoder(r => MultiAsset.given_Decoder_MultiAsset.read(r))
 }
 
 case class MultiAsset private (assets: SortedMap[PolicyId, SortedMap[AssetName, Long]]) {
@@ -265,10 +271,23 @@ object MultiAsset {
     given Encoder[MultiAsset] =
         Encoder.forMap[PolicyId, SortedMap[AssetName, Long], SortedMap].contramap(_.assets)
 
-    given Decoder[MultiAsset] = Decoder { r =>
-        given Decoder[TreeMap[AssetName, Long]] = Decoder.forTreeMap[AssetName, Long]
-        Decoder.forTreeMap[PolicyId, TreeMap[AssetName, Long]].map(MultiAsset.apply).read(r)
+    // Native-token amounts are u64 per CDDL but practical values almost always fit in a signed
+    // Long. One preview-mainnet exception: `"Asteria Admin"` was minted with quantity
+    // 9_999_999_999_999_999_999, which exceeds Long.MaxValue. We read OverLong as the raw 8-byte
+    // bit pattern reinterpreted as signed (Borer's `readOverLong` semantics) so the value
+    // round-trips through our signed `Long` representation. Downstream code that needs to
+    // arithmetic on such amounts must widen to `BigInt` itself; until scalus moves asset amounts
+    // off `Long`, this is the least-disruptive fix.
+    private given assetAmountDecoder: Decoder[Long] = Decoder { reader =>
+        import io.bullet.borer.DataItem as DI
+        reader.dataItem() match
+            case DI.OverLong => reader.readOverLong()
+            case _           => reader.readLong()
     }
+    private given assetTreeMapDecoder: Decoder[TreeMap[AssetName, Long]] =
+        Decoder.forTreeMap[AssetName, Long]
+    given Decoder[MultiAsset] =
+        Decoder.forTreeMap[PolicyId, TreeMap[AssetName, Long]].map(MultiAsset.apply)
 
     given CommutativeGroup[MultiAsset] with
         def combine(x: MultiAsset, y: MultiAsset): MultiAsset = x + y

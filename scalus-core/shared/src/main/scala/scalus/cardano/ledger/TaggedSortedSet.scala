@@ -28,12 +28,13 @@ object TaggedSortedSet extends TaggedSeq:
         inline def toIndexedSeq: IndexedSeq[A] = s.toIndexedSeq
 
     given [A: Encoder]: Encoder[TaggedSortedSet[A]] = writeTagged(_, _)
-    given [A: Decoder: Ordering](using
-        pv: ProtocolVersion = ProtocolVersion.conwayPV
-    ): Decoder[TaggedSortedSet[A]] =
-        if pv >= ProtocolVersion.conwayPV
-        then r => from(checkNonEmpty(readTagged(r)))
-        else r => from(readTagged(r))
+
+    // Conway's CDDL marks some set fields as `nonempty_set`, but real mainnet / preview blocks
+    // do contain empty tagged sets (we saw ~75K Conway preview blocks with a tx-body field like
+    // an empty tagged set). Enforcing the non-empty constraint at decode time would reject those
+    // ledger-validated blocks. We keep `checkNonEmpty` available on the `TaggedSeq` trait for
+    // user-code opt-in use; the decoder here accepts any size >=0.
+    given [A: Decoder: Ordering]: Decoder[TaggedSortedSet[A]] = r => from(readTagged(r))
 
     given [A](using p: Pretty[A]): Pretty[TaggedSortedSet[A]] with
         def pretty(a: TaggedSortedSet[A], style: Style): Doc =
