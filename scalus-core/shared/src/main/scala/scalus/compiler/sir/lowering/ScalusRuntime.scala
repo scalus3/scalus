@@ -674,7 +674,9 @@ object ScalusRuntime {
         val cacheKey =
             s"builtinListToUplcConstr|${listType.show}|${inListRepr.stableKey}|${outSum.stableKey}"
         val goVar = lctx.cachedTopLevelHelpers.get(cacheKey) match
-            case Some(v) => v
+            case Some(v) =>
+                LoweringContext.traceLetRec("HIT", "builtinListToUplcConstr", cacheKey)
+                v
             case None =>
                 val id = lctx.uniqueVarName(BUILTIN_LIST_TO_UPLC_CONSTR_NAME)
                 val v = new VariableLoweredValue(
@@ -745,6 +747,7 @@ object ScalusRuntime {
                   pos
                 )
                 lctx.pendingTopLevelLetRecs += ((v, rhs))
+                LoweringContext.traceLetRec("ADD", "builtinListToUplcConstr", cacheKey)
                 v
         lctx.zCombinatorNeeded = true
         lvApplyDirect(goVar, input, listType, outSum, pos)
@@ -809,7 +812,9 @@ object ScalusRuntime {
         val cacheKey =
             s"uplcConstrToBuiltinList|${listType.show}|${inSumRepr.stableKey}|${resolvedOutListRepr.stableKey}"
         val goVar = lctx.cachedTopLevelHelpers.get(cacheKey) match
-            case Some(v) => v
+            case Some(v) =>
+                LoweringContext.traceLetRec("HIT", "uplcConstrToBuiltinList", cacheKey)
+                v
             case None =>
                 val id = lctx.uniqueVarName("$uplcConstrToBuiltinList")
                 val v = new VariableLoweredValue(
@@ -857,6 +862,7 @@ object ScalusRuntime {
                   pos
                 )
                 lctx.pendingTopLevelLetRecs += ((v, rhs))
+                LoweringContext.traceLetRec("ADD", "uplcConstrToBuiltinList", cacheKey)
                 v
         lctx.zCombinatorNeeded = true
         lvApplyDirect(goVar, input, listType, resolvedOutListRepr, pos)

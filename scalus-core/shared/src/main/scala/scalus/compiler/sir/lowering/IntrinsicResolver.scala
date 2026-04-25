@@ -52,7 +52,7 @@ object IntrinsicResolver {
       * `compiledModules(...)` and replaces it with `SIRLinker.readModules(...)` that accesses the
       * objects' `sirModule` vals.
       */
-    lazy val defaultIntrinsicModules: Map[String, Module] = {
+    def defaultIntrinsicModules: Map[String, Module] = {
         val modules = scalus.compiler.compiledModules(
           "scalus.compiler.intrinsics.BuiltinListOperations",
           "scalus.compiler.intrinsics.BuiltinListOperationsV11",
@@ -98,7 +98,7 @@ object IntrinsicResolver {
       * boundary at standalone-lowered support-op call sites. `NativeListOperations` is still on the
       * legacy blanket-Transparent path until Phase 4 migrates it.
       */
-    lazy val defaultSupportModules: Map[String, Module] = {
+    def defaultSupportModules: Map[String, Module] = {
         val modules = scalus.compiler.compiledModules(
           "scalus.compiler.intrinsics.NativeListOperations",
           "scalus.compiler.intrinsics.UplcConstrListOperations",

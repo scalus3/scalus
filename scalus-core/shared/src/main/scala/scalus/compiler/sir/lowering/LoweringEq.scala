@@ -193,19 +193,21 @@ object LoweringEq {
           InOutRepresentationPair(lhsSum, innerFunRepr)
         )
         // Reuse cached helper across emission sites; emit and register on first encounter.
-        val eqFnVar = lctx.cachedTopLevelHelpers.getOrElseUpdate(
-          typeKey,
-          createSumEqHelper(
-            typeKey,
-            baseType,
-            lhsSum,
-            funType,
-            funRepr,
-            innerFunType,
-            innerFunRepr,
-            pos
-          )
-        )
+        val eqFnVar = lctx.cachedTopLevelHelpers.get(typeKey) match
+            case Some(v) =>
+                LoweringContext.traceLetRec("HIT", "sumEq", typeKey)
+                v
+            case None =>
+                createSumEqHelper(
+                  typeKey,
+                  baseType,
+                  lhsSum,
+                  funType,
+                  funRepr,
+                  innerFunType,
+                  innerFunRepr,
+                  pos
+                )
         lvApplyDirect(
           lvApplyDirect(eqFnVar, lhs, innerFunType, innerFunRepr, pos),
           rhsConv,
@@ -339,6 +341,7 @@ object LoweringEq {
           pos
         )
         lctx.pendingTopLevelLetRecs += ((eqFnVar, eqFnRhs))
+        LoweringContext.traceLetRec("ADD", "sumEq", typeKey)
         eqFnVar
     }
 

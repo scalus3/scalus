@@ -162,3 +162,29 @@ class LoweringContext(
         println(s"info: ${msg} at ${pos.show}")
     }
 }
+
+object LoweringContext {
+    /** Process-wide trace facility for `pendingTopLevelLetRecs` add/hit events. Gated by
+      * `SCALUS_TRACE_LETREC` env var (or `-Dscalus.trace.letrec=true` JVM prop). Emits a
+      * monotonic counter so events across multiple `compile { }` calls in the same JVM can be
+      * interleaved and diffed (run-alone vs. run-combined).
+      *
+      * Intended usage sites: `ScalusRuntime.builtinListToUplcConstr`,
+      * `ScalusRuntime.uplcConstrToBuiltinList`, `LoweringEq.createSumEqHelper`.
+      */
+    private val letRecTraceEnabled: Boolean =
+        sys.env.contains("SCALUS_TRACE_LETREC") ||
+            sys.props.get("scalus.trace.letrec").exists(_ != "false")
+    private val letRecCounter: java.util.concurrent.atomic.AtomicInteger =
+        new java.util.concurrent.atomic.AtomicInteger(0)
+
+    def traceLetRec(event: String, site: String, key: String): Unit =
+        if letRecTraceEnabled then
+            val n = letRecCounter.incrementAndGet()
+            System.err.println(s"LETREC_$event #$n [$site] key=$key")
+
+    def traceLetRecBoundary(tag: String): Unit =
+        if letRecTraceEnabled then
+            val n = letRecCounter.incrementAndGet()
+            System.err.println(s"LETREC_BOUND #$n $tag")
+}
