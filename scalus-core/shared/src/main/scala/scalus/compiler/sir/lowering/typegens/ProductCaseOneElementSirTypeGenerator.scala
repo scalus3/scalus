@@ -188,17 +188,18 @@ case class ProductCaseOneElementSirTypeGenerator(
 
     }
 
-    override def genConstr(constr: SIR.Constr)(using
-        lctx: LoweringContext
-    ): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         import ProductCaseOneElementSirTypeGenerator.*
-        if constr.args.size != 1 then
+        if loweredArgs.size != 1 then
             throw LoweringException(
-              s"Expected one argument for product case class, got ${constr.args.size}",
+              s"Expected one argument for product case class, got ${loweredArgs.size}",
               constr.anns.pos
             )
-        val loweredArg = lctx.lower(constr.args.head)
-        WrappedArg(constr, loweredArg)
+        WrappedArg(constr, loweredArgs.head)
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using

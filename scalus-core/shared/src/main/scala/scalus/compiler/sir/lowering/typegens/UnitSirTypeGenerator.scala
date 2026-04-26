@@ -57,7 +57,11 @@ object UnitSirTypeGenerator extends SirTypeUplcGenerator {
           pos
         )
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue =
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue =
         throw LoweringException(
           s"Unit type can't be used in constr, but got $constr",
           constr.anns.pos

@@ -666,34 +666,21 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         }
     }
 
-    override def genConstr(constr: SIR.Constr)(using
-        lctx: LoweringContext
-    ): LoweredValue = {
-        val loweredArgs = constr.args.map(arg => lctx.lower(arg))
-        genConstrFromLoweredImpl(constr, loweredArgs)
-    }
-
-    override def genConstrFromLowered(
+    override def genConstrLowered(
         constr: SIR.Constr,
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
-    )(using LoweringContext): LoweredValue =
-        genConstrFromLoweredImpl(constr, loweredArgs)
-
-    private def genConstrFromLoweredImpl(
-        constr: SIR.Constr,
-        loweredArgs: scala.List[LoweredValue]
     )(using lctx: LoweringContext): LoweredValue = {
         // Cascade to UplcConstr when any argument has Transparent TypeVar repr
         // (can't be serialized to Data)
         if hasTransparentTypeVarArgs(loweredArgs) then
-            genConstrUplcConstrFromLowered(constr, loweredArgs)
+            genConstrUplcConstr(constr, loweredArgs)
         else
             val argTypeGens = loweredArgs.map(_.sirType).map(lctx.typeGenerator)
             val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
                 typeGen.canBeConvertedToData(arg.sirType)
             }
-            if !canBeConvertedToData then genConstrUplcConstrFromLowered(constr, loweredArgs)
+            if !canBeConvertedToData then genConstrUplcConstr(constr, loweredArgs)
             else genConstrDataConstr(constr, loweredArgs, argTypeGens)
     }
 
@@ -1120,12 +1107,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         retval
     }
 
-    def genConstrUplcConstr(constr: SIR.Constr)(using
-        lctx: LoweringContext
-    ): LoweredValue =
-        genConstrUplcConstrFromLowered(constr, constr.args.map(arg => lctx.lower(arg)))
-
-    def genConstrUplcConstrFromLowered(
+    def genConstrUplcConstr(
         constr: SIR.Constr,
         loweredArgs: scala.List[LoweredValue]
     )(using

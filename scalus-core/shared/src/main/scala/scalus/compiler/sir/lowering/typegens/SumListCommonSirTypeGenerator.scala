@@ -617,19 +617,23 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         }
     }
 
-    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         import SumListCommonSirTypeGenerator.*
         constr.name match
             case SIRType.List.NilConstr.name | SIRType.BuiltinList.Nil.name | PairNilName =>
                 genNil(constr.tp, constr.anns.pos)
             case SIRType.List.Cons.name | SIRType.BuiltinList.Cons.name | PairConsName =>
-                if constr.args.size != 2 then
+                if loweredArgs.size != 2 then
                     throw LoweringException(
-                      s"Constr construnctor with ${constr.args.size} args, should be 2",
+                      s"Constr construnctor with ${loweredArgs.size} args, should be 2",
                       constr.anns.pos
                     )
-                val head = lctx.lower(constr.args.head)
-                val tail = lctx.lower(constr.args.tail.head)
+                val head = loweredArgs.head
+                val tail = loweredArgs.tail.head
                 val elementType = retrieveElementType(constr.tp, constr.anns.pos)
                 val headElementUpcasted = head
                     .maybeUpcast(elementType, constr.anns.pos)

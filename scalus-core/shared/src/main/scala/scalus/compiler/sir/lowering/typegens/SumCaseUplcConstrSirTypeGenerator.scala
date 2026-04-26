@@ -155,10 +155,17 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                         )
     }
 
-    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         // Resolve the concrete CaseClass type from the SumCaseClass
         val caseClassType = constr.data.constrType(constr.name)
-        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr.copy(tp = caseClassType))
+        ProductCaseSirTypeGenerator.genConstrUplcConstr(
+          constr.copy(tp = caseClassType),
+          loweredArgs
+        )
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using

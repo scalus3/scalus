@@ -76,16 +76,16 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
         )
     }
 
-    override def genConstr(constr: SIR.Constr)(using
-        lctx: LoweringContext
-    ): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         if constr.name == "scalus.cardano.onchain.plutus.prelude.AssocMap"
             ||
             constr.name == "scalus.cardano.onchain.plutus.prelude.SortedMap"
         then
-            // TODO: add 'target type' to lower
-            val loweredArg = lctx.lower(constr.args.head)
-            val loweredArgR = loweredArg.toRepresentation(
+            val loweredArgR = loweredArgs.head.toRepresentation(
               pairListReprFor(constr.tp, constr.anns.pos),
               constr.anns.pos
             )

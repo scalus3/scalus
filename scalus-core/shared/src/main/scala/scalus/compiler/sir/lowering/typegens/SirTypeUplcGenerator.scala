@@ -41,30 +41,33 @@ trait SirTypeUplcGenerator {
         LoweringContext
     ): LoweredValue
 
-    /** Generate constructor for this type. Always called on DataDecl.tp
+    /** Generate constructor for this type — the workhorse, takes pre-lowered arguments.
+      * Implementations override this. Always called on `DataDecl.tp` (or a more specific
+      * case-class type for Sum→Product dispatch).
       *
-      * @param constr - constructor, which we should generate
+      * @param constr - constructor SIR node (carries name, decl, parentTypeArgs, anns, tp)
+      * @param loweredArgs - already-lowered constructor arguments, in declaration order.
+      *   Length matches `constr.args`.
+      * @param optTargetType - optional target type (e.g., for Nil typing where the constr's
+      *   declared `tp` is `List[Nothing]`).
       */
-    def genConstr(constr: SIR.Constr)(using
-        LoweringContext
-    ): LoweredValue
-
-    /** Generate constructor with pre-lowered arguments.
-      *
-      * Used when the caller has already lowered arguments (e.g., to inspect their repr
-      * for Transparent TypeVar cascade). Default implementation ignores loweredArgs and
-      * falls back to genConstr (which re-lowers args). Generators that support pre-lowered
-      * args should override this.
-      *
-      * @param constr - constructor SIR node
-      * @param loweredArgs - already-lowered constructor arguments
-      * @param optTargetType - optional target type (e.g., for Nil typing)
-      */
-    def genConstrFromLowered(
+    def genConstrLowered(
         constr: SIR.Constr,
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType] = None
-    )(using LoweringContext): LoweredValue = genConstr(constr)
+    )(using LoweringContext): LoweredValue
+
+    /** Convenience entry point — pre-lowers `constr.args` and delegates to
+      * [[genConstrLowered]]. Use this when the caller hasn't already lowered the arguments;
+      * callers that have pre-lowered arguments (like the main lowering driver) should call
+      * [[genConstrLowered]] directly to avoid double-lowering. Marked `final` so all
+      * dispatch decisions live in [[genConstrLowered]] and its overrides.
+      */
+    final def genConstr(
+        constr: SIR.Constr,
+        optTargetType: Option[SIRType] = None
+    )(using lctx: LoweringContext): LoweredValue =
+        genConstrLowered(constr, constr.args.map(arg => lctx.lower(arg)), optTargetType)
 
     def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         LoweringContext

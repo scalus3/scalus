@@ -54,9 +54,6 @@ object Lowering {
         sir: SIR,
         optTargetType: Option[SIRType] = None
     )(using lctx: LoweringContext): LoweredValue = {
-        // Check precomputed cache (used by intrinsic resolution to avoid re-lowering args)
-        val cached = lctx.precomputedValues.get(sir)
-        if cached != null then return cached
         lctx.nestingLevel += 1
         val retval = sir match
             case SIR.Decl(data, term) =>
@@ -67,6 +64,18 @@ object Lowering {
                 lowerSIR(term, optTargetType)
             case constr @ SIR.Constr(name, decl, args, tp, anns) =>
                 val resolvedType = lctx.resolveTypeVarIfNeeded(tp)
+                // For List.Cons we pre-lower the tail FIRST (the original order before
+                // refactor — the previous identity-cache-based design lowered the tail
+                // during the repr peek and then the head later inside genConstr's
+                // args.map; tail-first ordering affects lctx state evolution and must
+                // be preserved). For other constructors, lower args in declaration order.
+                val loweredArgs = resolvedType match
+                    case SIRType.CaseClass(cd, _, Some(_))
+                        if cd.name.endsWith("List$.Cons") && constr.args.length >= 2 =>
+                        val loweredTail = lctx.lower(constr.args.last)
+                        val loweredInit = constr.args.init.map(arg => lctx.lower(arg))
+                        loweredInit :+ loweredTail
+                    case _ => constr.args.map(arg => lctx.lower(arg))
                 val (typeGenerator, effectiveConstr) =
                     if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
@@ -132,21 +141,14 @@ object Lowering {
                                 // Repr propagation: for List.Cons, if the tail argument
                                 // has SumUplcConstr repr, produce UplcConstr instead of
                                 // builtin list. This handles inline-expanded prepended().
-                                // Always cache lowered tail to avoid O(N²) re-lowering.
+                                // The tail is already lowered (`loweredArgs.last`); just
+                                // peek its representation.
                                 val reprPropGen = resolvedType match
                                     case SIRType.CaseClass(cd, _, Some(_))
                                         if cd.name.endsWith(
                                           "List$.Cons"
-                                        ) && constr.args.length >= 2 =>
-                                        val tailSir = constr.args.last
-                                        val loweredTail =
-                                            Option(lctx.precomputedValues.get(tailSir))
-                                                .getOrElse {
-                                                    val lt = lowerSIR(tailSir)
-                                                    lctx.precomputedValues.put(tailSir, lt)
-                                                    lt
-                                                }
-                                        loweredTail.representation match
+                                        ) && loweredArgs.length >= 2 =>
+                                        loweredArgs.last.representation match
                                             case _: SumCaseClassRepresentation.SumUplcConstr =>
                                                 Some(typegens.SumCaseUplcConstrSirTypeGenerator)
                                             case _ => None
@@ -186,7 +188,7 @@ object Lowering {
                                             then typegens.SumCaseUplcConstrSirTypeGenerator
                                             else lctx.typeGenerator(resolvedType)
                                         (gen, constr)
-                typeGenerator.genConstr(effectiveConstr)
+                typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
                     lctx.log(

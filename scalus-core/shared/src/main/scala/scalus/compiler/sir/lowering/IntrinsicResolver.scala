@@ -12,8 +12,9 @@ import scalus.uplc.Term
   * When the lowering encounters a method call like `list.isEmpty`, the resolver checks if there is
   * an optimized intrinsic implementation for the argument's runtime representation (e.g.,
   * `SumDataList`). If found, it substitutes the provider's body (with the actual argument SIR) and
-  * re-lowers it. The already-lowered argument is cached in `lctx.precomputedValues` so that
-  * re-lowering the substituted SIR finds it without recomputation.
+  * re-lowers it. Already-lowered arguments are tracked via the annotation-keyed `argCache`
+  * mechanism (see `LoweringContext.argCache`), so re-lowering the substituted SIR returns the
+  * pre-lowered value without recomputation.
   *
   * The registry is hardcoded — adding new intrinsic providers requires editing the registry and
   * creating the `@Compile` provider object.

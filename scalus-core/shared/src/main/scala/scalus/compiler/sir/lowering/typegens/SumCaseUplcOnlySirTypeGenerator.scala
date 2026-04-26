@@ -38,8 +38,12 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         LoweringContext
     ): LoweredValue = ???
 
-    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
-        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr)
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
+        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr, loweredArgs)
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using

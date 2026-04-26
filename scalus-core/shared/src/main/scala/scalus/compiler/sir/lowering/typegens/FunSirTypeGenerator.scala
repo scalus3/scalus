@@ -203,7 +203,11 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
         }
     }
 
-    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         throw LoweringException(
           s"Constr can't be generated for function type: name=${constr.name}, tp=${constr.tp.show}",
           constr.anns.pos

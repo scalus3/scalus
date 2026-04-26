@@ -306,12 +306,17 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             )
     }
 
-    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         constr.tp match {
             case tv: SIRType.TypeVar =>
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(tp1) =>
-                        lctx.typeGenerator(tp1).genConstr(constr)
+                        lctx.typeGenerator(tp1)
+                            .genConstrLowered(constr, loweredArgs, optTargetType)
                     case None =>
                         throw LoweringException(
                           s"TypeVarSirTypeGenerator does not support constructors, got ${constr.name}",

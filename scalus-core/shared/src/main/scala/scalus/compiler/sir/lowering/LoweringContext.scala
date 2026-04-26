@@ -4,7 +4,6 @@ import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.compiler.sir.*
 
-import java.util.IdentityHashMap
 import scala.collection.mutable.Map as MutableMap
 import scala.collection.mutable.Set as MutableSet
 
@@ -42,14 +41,6 @@ class LoweringContext(
 ) {
 
     private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]
-
-    /** Cache of pre-lowered SIR nodes, keyed by reference identity.
-      *
-      * Used during intrinsic resolution: the resolver adds an entry before lowering the substituted
-      * provider body, and removes it after. This way `lowerSIR` finds the cached value for the
-      * substituted argument without recomputing it.
-      */
-    val precomputedValues: IdentityHashMap[SIR, LoweredValue] = new IdentityHashMap()
 
     /** Annotation-keyed cache of pre-lowered values. Indexed by Int.
       *

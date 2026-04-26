@@ -168,7 +168,11 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
         TypeRepresentationProxyLoweredValue(input, targetType, input.representation, pos)
     }
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue = {
         throw LoweringException(
           s"BuiltinArray cannot be constructed via Constr pattern - use BuiltinArray(...) or listToArray",
           constr.anns.pos

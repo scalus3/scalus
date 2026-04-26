@@ -102,7 +102,11 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
 
     def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using LoweringContext): LoweredValue
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue =
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue =
         throw LoweringException("Constr can generated for primitive type", constr.anns.pos)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
@@ -865,7 +869,11 @@ object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcGenerator {
             )
     }
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue = {
         throw LoweringException(
           s"MLResultGenerator can't generate constructor for ${constr.name}",
           constr.anns.pos
