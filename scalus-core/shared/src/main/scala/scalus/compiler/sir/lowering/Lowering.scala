@@ -64,11 +64,10 @@ object Lowering {
                 lowerSIR(term, optTargetType)
             case constr @ SIR.Constr(name, decl, args, tp, anns) =>
                 val resolvedType = lctx.resolveTypeVarIfNeeded(tp)
-                // For List.Cons we pre-lower the tail FIRST (the original order before
-                // refactor — the previous identity-cache-based design lowered the tail
-                // during the repr peek and then the head later inside genConstr's
-                // args.map; tail-first ordering affects lctx state evolution and must
-                // be preserved). For other constructors, lower args in declaration order.
+                // For List.Cons we pre-lower the tail FIRST. The previous identity-
+                // cache-based design lowered the tail during a repr peek and then the
+                // head later inside genConstr's args.map; tail-first ordering affects
+                // lctx state evolution and must be preserved.
                 val loweredArgs = resolvedType match
                     case SIRType.CaseClass(cd, _, Some(_))
                         if cd.name.endsWith("List$.Cons") && constr.args.length >= 2 =>
@@ -76,118 +75,16 @@ object Lowering {
                         val loweredInit = constr.args.init.map(arg => lctx.lower(arg))
                         loweredInit :+ loweredTail
                     case _ => constr.args.map(arg => lctx.lower(arg))
+                // Nil with target type carries special dispatch (the constr's declared
+                // tp is `List[Nothing]` — we need to honor the caller's target type for
+                // type-correct Nil emission). Other Constr forms dispatch by their
+                // resolved type; the chosen generator's `genConstrLowered` then handles
+                // any context-driven delegation (see `ConstrDispatcher`).
                 val (typeGenerator, effectiveConstr) =
                     if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
-                    then
-                        optTargetType match
-                            case Some(targetType) =>
-                                (lctx.typeGenerator(targetType), constr.copy(tp = targetType))
-                            case None =>
-                                // See comment below in the fallback branch: inside a dispatcher
-                                // scope, unannotated `List.Nil` must materialize as native Constr.
-                                val gen =
-                                    if lctx.inUplcConstrListScope
-                                        && IntrinsicResolver
-                                            .isUplcConstrListOrOption(resolvedType)
-                                    then typegens.SumCaseUplcConstrSirTypeGenerator
-                                    else lctx.typeGenerator(resolvedType)
-                                (gen, constr)
-                    else
-                        // For constructors with a parent sum type, check if the parent
-                        // uses UplcConstr. If so, use the parent's type generator so the
-                        // constructor produces UplcConstr (not DataConstr).
-                        // parent type check for UplcConstr dispatch
-                        //
-                        // Substitute constrDecl.typeParams with the constructor's actual
-                        // typeArgs in the parent — `parent` from constrDecl carries the
-                        // constructor's own TypeVar instances (e.g. List$.Cons's parent is
-                        // List[A_cons]), but we want the parent at the call site
-                        // (e.g. List[B] when constr.tp is Cons[B]). Without this
-                        // substitution, defaultRepresentation(parent) sees an abstract
-                        // List[A_cons] with A_cons stamped Fixed (the plugin default for
-                        // declarations), which trips Fixed-in-UplcConstr-field guards.
-                        val parentTypeGen = resolvedType match
-                            case SIRType.CaseClass(cd, typeArgs, Some(parent)) =>
-                                // The parent type captured on the constrDecl is the
-                                // declaration-site form — for List$.Cons that's the
-                                // TypeLambda `[A] =>> List[A]` (parameterized by the
-                                // sum's typeParams). Apply the constructor's typeArgs to
-                                // get the parent at the call site (e.g. `List[B]` for
-                                // Cons[B]). Without this, defaultRepresentation(parent)
-                                // sees `[A] =>> List[A]` with A stamped Fixed (the plugin
-                                // default for declarations) and trips Fixed-in-UplcConstr-
-                                // field guards.
-                                val substitutedParent = parent match
-                                    case SIRType.TypeLambda(params, body)
-                                        if params.length == typeArgs.length =>
-                                        SIRType.substitute(
-                                          body,
-                                          params.zip(typeArgs).toMap,
-                                          Map.empty
-                                        )
-                                    case _ => parent
-                                val parentGen = lctx.typeGenerator(substitutedParent)
-                                val parentRepr =
-                                    parentGen.defaultRepresentation(substitutedParent)
-                                parentRepr match
-                                    case suc: SumCaseClassRepresentation.SumUplcConstr =>
-                                        Some(parentGen)
-                                    case _ => None
-                            case _ => None
-                        parentTypeGen match
-                            case Some(gen) => (gen, constr)
-                            case None      =>
-                                // Repr propagation: for List.Cons, if the tail argument
-                                // has SumUplcConstr repr, produce UplcConstr instead of
-                                // builtin list. This handles inline-expanded prepended().
-                                // The tail is already lowered (`loweredArgs.last`); just
-                                // peek its representation.
-                                val reprPropGen = resolvedType match
-                                    case SIRType.CaseClass(cd, _, Some(_))
-                                        if cd.name.endsWith(
-                                          "List$.Cons"
-                                        ) && loweredArgs.length >= 2 =>
-                                        loweredArgs.last.representation match
-                                            case _: SumCaseClassRepresentation.SumUplcConstr =>
-                                                Some(typegens.SumCaseUplcConstrSirTypeGenerator)
-                                            case _ => None
-                                    case _ => None
-                                reprPropGen match
-                                    case Some(gen) => (gen, constr)
-                                    case None      =>
-                                        // Check the caller's target type: if it's an annotated
-                                        // `List[_] @UplcConstr` / `Option[_] @UplcConstr`, use
-                                        // SumCaseUplcConstrSirTypeGenerator for this Cons/Some
-                                        // construction. This propagates a method's annotated
-                                        // return type into inner branch Constr emissions.
-                                        val targetUsesUplcConstr = optTargetType.exists {
-                                            case SIRType.Annotated(inner, anns)
-                                                if anns.data.contains("uplcRepr")
-                                                    && IntrinsicResolver
-                                                        .isUplcConstrListOrOption(inner) =>
-                                                true
-                                            case _ => false
-                                        }
-                                        // For the `inUplcConstrListScope` flag path, check
-                                        // whether this Constr's PARENT sum type is List/Option
-                                        // (since the constr itself is e.g. `Option$.Some`, which
-                                        // wouldn't match `isUplcConstrListOrOption` directly).
-                                        val parentIsListOrOption = resolvedType match
-                                            case SIRType.CaseClass(_, _, Some(parent)) =>
-                                                IntrinsicResolver
-                                                    .isUplcConstrListOrOption(parent)
-                                            case _ =>
-                                                IntrinsicResolver
-                                                    .isUplcConstrListOrOption(resolvedType)
-                                        val gen =
-                                            if targetUsesUplcConstr
-                                            then typegens.SumCaseUplcConstrSirTypeGenerator
-                                            else if lctx.inUplcConstrListScope
-                                                && parentIsListOrOption
-                                            then typegens.SumCaseUplcConstrSirTypeGenerator
-                                            else lctx.typeGenerator(resolvedType)
-                                        (gen, constr)
+                    then typegens.ConstrDispatcher.dispatchNil(constr, resolvedType, optTargetType)
+                    else (lctx.typeGenerator(resolvedType), constr)
                 typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then

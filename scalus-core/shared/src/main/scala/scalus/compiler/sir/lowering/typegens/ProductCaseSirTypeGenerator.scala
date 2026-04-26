@@ -671,17 +671,25 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        // Cascade to UplcConstr when any argument has Transparent TypeVar repr
-        // (can't be serialized to Data)
-        if hasTransparentTypeVarArgs(loweredArgs) then
-            genConstrUplcConstr(constr, loweredArgs)
-        else
-            val argTypeGens = loweredArgs.map(_.sirType).map(lctx.typeGenerator)
-            val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
-                typeGen.canBeConvertedToData(arg.sirType)
-            }
-            if !canBeConvertedToData then genConstrUplcConstr(constr, loweredArgs)
-            else genConstrDataConstr(constr, loweredArgs, argTypeGens)
+        // Context-driven delegation: parent's default repr is SumUplcConstr, target type
+        // is annotated @UplcConstr, tail repr is SumUplcConstr (Cons), or
+        // inUplcConstrListScope. See ConstrDispatcher.shouldDelegateToUplcConstr for the
+        // full set of conditions.
+        ConstrDispatcher.shouldDelegateToUplcConstr(constr, loweredArgs, optTargetType) match
+            case Some(other) if other ne this =>
+                other.genConstrLowered(constr, loweredArgs, optTargetType)
+            case _ =>
+                // Cascade to UplcConstr when any argument has Transparent TypeVar repr
+                // (can't be serialized to Data)
+                if hasTransparentTypeVarArgs(loweredArgs) then
+                    genConstrUplcConstr(constr, loweredArgs)
+                else
+                    val argTypeGens = loweredArgs.map(_.sirType).map(lctx.typeGenerator)
+                    val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall {
+                        case (arg, typeGen) => typeGen.canBeConvertedToData(arg.sirType)
+                    }
+                    if !canBeConvertedToData then genConstrUplcConstr(constr, loweredArgs)
+                    else genConstrDataConstr(constr, loweredArgs, argTypeGens)
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using

@@ -623,6 +623,11 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
         import SumListCommonSirTypeGenerator.*
+        // Context-driven delegation (see ConstrDispatcher).
+        ConstrDispatcher.shouldDelegateToUplcConstr(constr, loweredArgs, optTargetType) match
+            case Some(other) if other ne this =>
+                return other.genConstrLowered(constr, loweredArgs, optTargetType)
+            case _ =>
         constr.name match
             case SIRType.List.NilConstr.name | SIRType.BuiltinList.Nil.name | PairNilName =>
                 genNil(constr.tp, constr.anns.pos)
