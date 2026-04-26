@@ -422,8 +422,16 @@ object Lowering {
                 val loweredCond =
                     lowerSIR(cond, Some(SIRType.Boolean))
                         .toRepresentation(PrimitiveRepresentation.Constant, cond.anns.pos)
-                val loweredT = lowerSIR(t, Some(tp))
-                val loweredF = lowerSIR(f, Some(tp))
+                // Prefer the caller's target type when provided so that any @UplcRepr
+                // annotation on the surrounding context (e.g. an annotated function return
+                // type) propagates into the branches' lowering. Falling back to the if's own
+                // static `tp` ignores those annotations and forces both branches to the
+                // unwrapped default repr; the outer wrapper then needs a structural
+                // conversion that, for `List[ChessSet]` and similar, can fail to thread the
+                // element representations correctly.
+                val branchTarget = optTargetType.orElse(Some(tp))
+                val loweredT = lowerSIR(t, branchTarget)
+                val loweredF = lowerSIR(f, branchTarget)
                 lvIfThenElse(loweredCond, loweredT, loweredF, anns.pos)
             case SIR.Cast(expr, tp, anns) =>
                 val loweredExpr = lowerSIR(expr, Some(tp))
