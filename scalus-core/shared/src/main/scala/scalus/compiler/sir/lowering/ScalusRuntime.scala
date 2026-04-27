@@ -662,17 +662,26 @@ object ScalusRuntime {
                 Doc.text("Constr(0)")
             override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
         }
-        // Cache the recursive helper by (direction, listType, inListRepr, outSum). Two conversion
-        // sites with the same (type, fromRepr, toRepr) produce identical helper bodies — sharing
-        // a single letrec-bound var avoids emitting N copies of the same list walk. Registered
-        // via `cachedTopLevelHelpers` + `pendingTopLevelLetRecs` in the same manner as
-        // `LoweringEq`'s `sumEq` helpers.
+        // Cache the recursive helper by (direction, listType, inListRepr, outSum, captured-env).
+        // Two conversion sites with the same (type, fromRepr, toRepr) produce identical helper
+        // bodies — sharing a single letrec-bound var avoids emitting N copies of the same list
+        // walk. Registered via `cachedTopLevelHelpers` + `pendingTopLevelLetRecs` in the same
+        // manner as `LoweringEq`'s `sumEq` helpers.
+        //
         // Use `stableKey` (not `show`) so structurally-equal reprs produce the same cache
         // key — avoids over-specializing on `SumReprProxy` identity, which leaks into `show`
         // via default `Object.toString` and causes identical conversions at different call
         // sites to create duplicate helpers.
+        //
+        // The `captureFingerprint` term discriminates by call-site `lctx` state (TypeVar repr
+        // bindings, unify env, `inUplcConstrListScope`) restricted to TypeVars in the type
+        // signature. Necessary because the lvLamAbs body internally consults this state during
+        // construction (e.g. element-repr resolution); without it, two callers with different
+        // env state would share a single first-built helper whose RHS only matches one of them.
+        // See sessions 11-15 alone-vs-combined Heisenbug analysis.
         val cacheKey =
-            s"builtinListToUplcConstr|${listType.show}|${inListRepr.stableKey}|${outSum.stableKey}"
+            s"builtinListToUplcConstr|${listType.show}|${inListRepr.stableKey}|${outSum.stableKey}" +
+                s"|${lctx.captureFingerprint(listType)}"
         val goVar = lctx.cachedTopLevelHelpers.get(cacheKey) match
             case Some(v) =>
                 LoweringContext.traceLetRec("HIT", "builtinListToUplcConstr", cacheKey)
@@ -807,10 +816,11 @@ object ScalusRuntime {
           ),
           resolvedOutListRepr
         )
-        // Cache by (direction, listType, inSumRepr, resolvedOutListRepr). See the mirror
-        // caching in `builtinListToUplcConstr` for rationale.
+        // Cache by (direction, listType, inSumRepr, resolvedOutListRepr, captured-env). See
+        // the mirror caching in `builtinListToUplcConstr` for rationale.
         val cacheKey =
-            s"uplcConstrToBuiltinList|${listType.show}|${inSumRepr.stableKey}|${resolvedOutListRepr.stableKey}"
+            s"uplcConstrToBuiltinList|${listType.show}|${inSumRepr.stableKey}|${resolvedOutListRepr.stableKey}" +
+                s"|${lctx.captureFingerprint(listType)}"
         val goVar = lctx.cachedTopLevelHelpers.get(cacheKey) match
             case Some(v) =>
                 LoweringContext.traceLetRec("HIT", "uplcConstrToBuiltinList", cacheKey)

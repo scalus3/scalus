@@ -137,6 +137,56 @@ class LoweringContext(
         typeUnifyEnv.filledTypes.get(tp)
     }
 
+    /** Produce a stable fingerprint of the parts of the enclosing call-site state that a
+      * cached helper's RHS captures from `lctx`, restricted to TypeVars occurring in `tps`.
+      *
+      * Helpers in `cachedTopLevelHelpers` are built once per cache key and reused on
+      * subsequent hits — but their RHS bodies often consult `typeVarReprEnv` and the
+      * `inUplcConstrListScope` flag during construction (e.g. element-repr resolution
+      * inside an `lvMatchList` body). If the cache key omits this state, the FIRST caller's
+      * env wins, and later callers under a different env get a helper RHS that doesn't
+      * match their context. This is the alone-vs-combined Heisenbug pattern documented in
+      * sessions 11-15: the same `(type, fromRepr, toRepr)` cache key produces
+      * functionally-different helpers depending on first-miss timing.
+      *
+      * Including this fingerprint in the cache key forces helpers with different captured
+      * env state to live as separate entries.
+      */
+    def captureFingerprint(tps: SIRType*): String = {
+        val seen = new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
+        val acc = scala.collection.mutable.LinkedHashSet[SIRType.TypeVar]()
+        def collect(t: SIRType, bound: Set[SIRType.TypeVar]): Unit = t match
+            case tv: SIRType.TypeVar =>
+                if !bound.contains(tv) then acc += tv
+            case SIRType.TypeLambda(ps, body) => collect(body, bound ++ ps)
+            case SIRType.Fun(in, out)         => collect(in, bound); collect(out, bound)
+            case SIRType.CaseClass(_, args, parent) =>
+                args.foreach(collect(_, bound)); parent.foreach(collect(_, bound))
+            case SIRType.SumCaseClass(_, args) =>
+                args.foreach(collect(_, bound))
+            case SIRType.Annotated(t1, _) => collect(t1, bound)
+            case SIRType.TypeProxy(ref) =>
+                if ref != null && !seen.containsKey(t) then
+                    seen.put(t.asInstanceOf[SIRType.TypeProxy], true)
+                    collect(ref, bound)
+            case _ => // primitives, FreeUnificator, TypeNothing
+        tps.foreach(collect(_, Set.empty))
+        val freeTvs = acc.toList
+        def tvId(tv: SIRType.TypeVar): String =
+            s"${tv.name}#${tv.optId.getOrElse(0L)}"
+        // Restrict to TypeVars that are STILL UNRESOLVED via `typeUnifyEnv` (i.e. carry an
+        // abstract repr binding via `typeVarReprEnv`). Resolved TypeVars are already
+        // structurally captured by `tps.show` / `stableKey`. Including the unify env or every
+        // env binding over-specializes — sessions 11-15 noted that route. The relevant
+        // discriminator is: are there abstract TypeVar reprs in the env that affect helper
+        // RHS construction at this site?
+        val reprBindings = freeTvs.flatMap { tv =>
+            if typeUnifyEnv.filledTypes.contains(tv) then None
+            else typeVarReprEnv.get(tv).map(repr => s"${tvId(tv)}=${repr.stableKey}")
+        }
+        s"scope=$inUplcConstrListScope|repr=[${reprBindings.mkString(",")}]"
+    }
+
     def log(msg: String): Unit = {
         val nestingPrefix = "  " * nestingLevel
         val msgLines = msg.split("\n")

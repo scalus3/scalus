@@ -181,7 +181,13 @@ object LoweringEq {
         //
         // Use `stableKey` (not `show`/`toString`) so structurally-equal reprs produce equal
         // keys — avoids over-specializing on `SumReprProxy` identity.
-        val typeKey = sumEqKey(baseType) + "|" + lhsSum.stableKey
+        //
+        // Plus `captureFingerprint`: the helper RHS dispatches on field reprs which may consult
+        // `lctx.typeVarReprEnv` and the unify env for parametric fields. Without this, the
+        // first caller's env wins and later callers under different env state share a helper
+        // whose RHS doesn't match — see sessions 11-15 alone-vs-combined Heisenbug.
+        val typeKey = sumEqKey(baseType) + "|" + lhsSum.stableKey +
+            "|" + lctx.captureFingerprint(baseType)
         val funType = SIRType.Fun(baseType, SIRType.Fun(baseType, SIRType.Boolean))
         val innerFunType = SIRType.Fun(baseType, SIRType.Boolean)
         val innerFunRepr = LambdaRepresentation(
