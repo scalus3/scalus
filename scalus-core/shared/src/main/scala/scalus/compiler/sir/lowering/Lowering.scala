@@ -283,15 +283,25 @@ object Lowering {
                                     s"[Lambda body upcast] Upcasting body from ${loweredBody.sirType.show} to ${targetType.show}, representation: ${loweredBody.representation}"
                                   )
                               val upcasted = loweredBody.maybeUpcast(targetType, anns.pos)
-                              // If return type has @UplcRepr annotation, convert body to annotated repr
-                              val result = targetType match
-                                  case SIRType.Annotated(_, retAnns)
-                                      if retAnns.data.contains("uplcRepr") =>
+                              // If return type has a binding @UplcRepr annotation,
+                              // convert body to that pinned repr. Two sources count:
+                              //   (a) `SIRType.Annotated(_, retAnns)` — explicit
+                              //       per-occurrence annotation on the return position,
+                              //   (b) class-level `@UplcRepr(UplcConstr)` on the
+                              //       return type's case class declaration (e.g.,
+                              //       `ChessSet` is `@UplcRepr(UplcConstr)` so any
+                              //       lambda returning `ChessSet` should yield UC
+                              //       bytes — without this, a body like `_.board`
+                              //       projecting from a Data SE leaks Data ChessSet
+                              //       to a UC slot, surfacing as native-UC selectors
+                              //       applied to Data.Constr scrutinees at runtime).
+                              val result =
+                                  if hasUplcReprPin(targetType) then
                                       val targetGen =
                                           summon[LoweringContext].typeGenerator(targetType)
                                       val targetRepr = targetGen.defaultRepresentation(targetType)
                                       upcasted.toRepresentation(targetRepr, anns.pos)
-                                  case _ => upcasted
+                                  else upcasted
                               if lctx.debug then
                                   lctx.log(
                                     s"[Lambda body upcast] After upcast: ${result.sirType.show}, representation: ${result.representation}"
@@ -845,6 +855,22 @@ object Lowering {
       * with `B` not yet bound to the lambda's body type.
       */
     @scala.annotation.tailrec
+    /** True if `tp` has a binding `@UplcRepr` annotation — either as a
+      * `SIRType.Annotated(_, anns)` wrapper or as a class-level annotation in
+      * its constrDecl. Used by `SIR.LamAbs` lowering to decide whether the
+      * return type pins a specific repr that the body's natural repr must
+      * conform to.
+      */
+    private def hasUplcReprPin(tp: SIRType): Boolean = tp match {
+        case SIRType.Annotated(_, anns) if anns.data.contains("uplcRepr") => true
+        case SIRType.Annotated(inner, _) => hasUplcReprPin(inner)
+        case SIRType.CaseClass(decl, _, _) => decl.annotations.data.contains("uplcRepr")
+        case SIRType.SumCaseClass(decl, _) => decl.annotations.data.contains("uplcRepr")
+        case SIRType.TypeLambda(_, body) => hasUplcReprPin(body)
+        case SIRType.TypeProxy(ref) if ref != null => hasUplcReprPin(ref)
+        case _ => false
+    }
+
     private def hasFreeTypeVarRoot(tp: SIRType): Boolean = tp match {
         case _: SIRType.TypeVar                    => true
         case SIRType.TypeProxy(ref) if ref != null => hasFreeTypeVarRoot(ref)
