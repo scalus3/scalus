@@ -432,7 +432,7 @@ object Lowering {
                 val branchTarget = optTargetType.orElse(Some(tp))
                 val loweredT = lowerSIR(t, branchTarget)
                 val loweredF = lowerSIR(f, branchTarget)
-                lvIfThenElse(loweredCond, loweredT, loweredF, anns.pos)
+                lvIfThenElse(loweredCond, loweredT, loweredF, anns.pos, branchTarget)
             case SIR.Cast(expr, tp, anns) =>
                 val loweredExpr = lowerSIR(expr, Some(tp))
                 val isTypeProxy = anns.data.contains("typeProxy")
