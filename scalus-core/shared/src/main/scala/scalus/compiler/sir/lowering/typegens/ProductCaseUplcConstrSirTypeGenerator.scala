@@ -79,12 +79,26 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValue = {
         // Structural upcast from a ProdUplcConstr variant to its parent sum: at the UPLC
         // level the bytes are already `Constr(tag, fields)`, which is exactly the shape of a
-        // `SumUplcConstr`. Build the target `SumUplcConstr` repr and relabel — no Data round
-        // trip is needed, and none would be safe in isolation (abstract TypeVar fields cannot
-        // be Data-encoded without concrete type info).
-        val targetSumRepr =
-            typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
-        TypeRepresentationProxyLoweredValue(input, targetType, targetSumRepr, pos)
+        // `SumUplcConstr` — but only when `input` is actually in UC form. If it has been
+        // converted to Data (e.g. via `toDefaultTypeVarRepr` or a passthrough wrap), a pure
+        // relabel would lie about the byte layout: downstream `genSelect`/`genMatch` on the
+        // upcasted value would emit native-UC selectors against Data.Constr bytes, surfacing
+        // as `MultiplyInteger Apply LamAbs` runtime crashes (4-arg case branch on a 2-field
+        // CEK Data.Constr scrutinee). Mirror the dispatch in
+        // `SumCaseUplcConstrSirTypeGenerator.upcastOne`: only relabel when input is already
+        // UC-shaped; otherwise convert to UC first.
+        input.representation match
+            case _: ProductCaseClassRepresentation.ProdUplcConstr |
+                _: SumCaseClassRepresentation.SumUplcConstr =>
+                val targetSumRepr =
+                    typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
+                TypeRepresentationProxyLoweredValue(input, targetType, targetSumRepr, pos)
+            case _ =>
+                val ucRepr = defaultRepresentation(input.sirType)
+                val converted = input.toRepresentation(ucRepr, pos)
+                val targetSumRepr =
+                    typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
+                TypeRepresentationProxyLoweredValue(converted, targetType, targetSumRepr, pos)
     }
 
     override def genConstrLowered(
