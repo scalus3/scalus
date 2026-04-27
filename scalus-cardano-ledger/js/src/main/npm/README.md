@@ -1,6 +1,10 @@
-# Scalus - Cardano Plutus Script Evaluator for JavaScript
+# Scalus - Cardano Toolkit for JavaScript
 
-Scalus provides a JavaScript/TypeScript interface for evaluating Cardano Plutus scripts and calculating execution budgets.
+Scalus brings a near-complete Cardano node emulator, Plutus script evaluator, and transaction
+tooling to JavaScript and TypeScript. It is compiled from the JVM Scalus codebase via Scala.jsю
+
+The core features include a **Node Emulator** -- a local, in-process implementation of a Cardano node, complete with
+most of the ledger rules to validate incoming transactions, as well ledger state transitions.
 
 ## Installation
 
@@ -8,191 +12,190 @@ Scalus provides a JavaScript/TypeScript interface for evaluating Cardano Plutus 
 npm install scalus
 ```
 
-## Usage
+## Emulator
 
-### Basic Script Evaluation
+The emulator implements Cardano ledger validation locally. Transactions go through the same
+rule checks as a real node: phase 1 & 2 validation, and a near-complete suite of ledger rules. This makes it suitable
+for automated tests, local development, and any application that needs a self-contained Cardano environment.
 
-```javascript
-const { Scalus } = require('scalus');
+### Quick Start
 
-// A simple Plutus script (double-CBOR-encoded hex)
+```typescript
+import { Emulator, SlotConfig } from "scalus";
+
+// Fund two addresses with 10 000 ADA each
+const emulator = Emulator.withAddresses(
+  [aliceAddress, bobAddress],
+  SlotConfig.preview,
+  10_000_000_000n   // lovelace (optional, defaults to 10 000 ADA)
+);
+
+// Query UTxOs
+const aliceUtxos = emulator.getUtxosForAddress(aliceAddress); // Uint8Array[]
+const allUtxos   = emulator.getAllUtxos();                     // Uint8Array[]
+const utxoMap    = emulator.getUtxosCbor();                    // single CBOR map
+
+// Build & sign a transaction with your favourite CBOR library, then submit:
+const result = emulator.submitTx(txCborBytes);
+// { isSuccess: true, txHash: "ab12…" }
+// or { isSuccess: false, error: "…", logs: ["…"] }
+```
+
+Every UTxO returned by the emulator is a CBOR-encoded `Map[TransactionInput, TransactionOutput]`
+entry. Decode it using your favourite CBOR codec library.
+
+### Time Control
+
+```typescript
+emulator.setSlot(500);   // jump to an absolute slot
+emulator.tick(10);       // advance by 10 slots
+```
+
+Use this to test validity-interval logic, time-locked scripts, and epoch transitions.
+
+### Transaction Lookup
+
+```typescript
+emulator.hasTx(txHashBytes);  // true if the tx was accepted
+```
+
+### Staking and Delegation
+
+Query delegation state and reward balances:
+
+```typescript
+emulator.getDelegation(stakeCredentialCbor);
+// { poolId: Uint8Array | null, rewards: bigint }
+
+emulator.getStakeReward(scriptHashHex);
+// bigint | null
+```
+
+### Datum Store
+
+```typescript
+emulator.getDatum(datumHashBytes);  // Uint8Array | null
+```
+
+Datums observed in submitted transactions are indexed automatically. You can also pre-seed
+them via `withState` (see below).
+
+### Snapshots
+
+```typescript
+const snap = emulator.snapshot();  // independent copy of the current state
+```
+
+Useful for branching test scenarios from a shared setup without re-submitting transactions.
+
+### Full Initial State
+
+`Emulator.withState` lets you seed not just UTxOs but also stake credentials, pool
+registrations, DRep registrations, and a datum store:
+
+```typescript
+const emulator = Emulator.withState(
+  {
+    utxos: utxoMapCbor,           // Uint8Array — CBOR Map[TxIn, TxOut]
+    stakeRegistrations: [
+      { credentialType: "key", credentialHash: "abcd…", rewards: 42_000_000n },
+      { credentialType: "key", credentialHash: "1234…", rewards: 0n, delegatedTo: poolIdHex },
+    ],
+    poolRegistrations: [
+      { params: poolRegCertCbor },
+    ],
+    drepRegistrations: [
+      { credentialType: "key", credentialHash: "ef01…", deposit: 500_000_000n },
+    ],
+    datums: [
+      { hash: datumHashHex, datum: datumCborHex },
+    ],
+  },
+  SlotConfig.preview
+);
+```
+
+All fields except `utxos` are optional.
+
+## Plutus Script Evaluation
+
+### Evaluate a Single Script
+
+```typescript
+import { Scalus } from "scalus";
+
+// Scripts are represented as double-CBOR-encoded hex strings
 const script = "545301010023357389210753756363657373004981";
 
-// Apply a data argument to the script
-const applied = Scalus.applyDataArgToScript(script, JSON.stringify({"int": 42}));
+// Apply a data argument (Plutus Data JSON format)
+const applied = Scalus.applyDataArgToScript(script, JSON.stringify({ int: 42 }));
 
-// Evaluate the script
 const result = Scalus.evaluateScript(applied);
+// { isSuccess: true, budget: { memory: 1032n, steps: 203598n }, logs: [] }
+```
 
-console.log(result);
-// { isSuccess: true, budget: { memory: 1032n, steps: 203598n }, logs: [...] }
+### Evaluate All Scripts in a Transaction
 
-if (result.isSuccess) {
-    console.log('Memory:', result.budget.memory);
-    console.log('Steps:', result.budget.steps);
-} else {
-    console.log('Script failed. Logs:', result.logs);
+```typescript
+import { Scalus, SlotConfig } from "scalus";
+
+const costModels = [plutusV1Costs, plutusV2Costs, plutusV3Costs]; // number[][]
+
+const redeemers = Scalus.evalPlutusScripts(
+  txCborBytes,        // Uint8Array
+  utxoCborBytes,      // Uint8Array — CBOR Map[TxIn, TxOut]
+  SlotConfig.mainnet,
+  costModels
+);
+
+for (const r of redeemers) {
+  console.log(`${r.tag}[${r.index}]: ${r.budget.memory} mem, ${r.budget.steps} steps`);
 }
 ```
 
-### Data JSON Format
+On failure, `evalPlutusScripts` throws a `PlutusScriptEvaluationException` with
+`.message` and `.logs` (the script's trace output).
 
-When using `applyDataArgToScript`, the data argument must be a JSON string in Plutus Data format:
+### Plutus Data JSON Format
 
-```javascript
-// Integer
-{"int": 42}
+Data arguments passed to `applyDataArgToScript` use the standard Plutus Data JSON encoding:
 
-// Bytes (hex-encoded)
-{"bytes": "deadbeef"}
-
-// List
-{"list": [{"int": 1}, {"int": 2}, {"int": 3}]}
-
-// Map (array of key-value objects)
-{"map": [{"k": {"int": 1}, "v": {"bytes": "aa"}}]}
-
-// Constructor (for sum types)
-{"constructor": 0, "fields": [{"int": 42}]}
-
-// Nested structure
-{"constructor": 0, "fields": [
-    {"list": [{"int": 1}, {"int": 2}]},
-    {"map": [{"k": {"bytes": "abcd"}, "v": {"int": 100}}]}
-]}
+```jsonc
+{ "int": 42 }
+{ "bytes": "deadbeef" }
+{ "list": [{ "int": 1 }, { "int": 2 }] }
+{ "map": [{ "k": { "int": 1 }, "v": { "bytes": "aa" } }] }
+{ "constructor": 0, "fields": [{ "int": 42 }] }
 ```
 
-### Evaluate Transaction Scripts
+## Slot Configuration
 
-Evaluate all Plutus scripts in a transaction against a UTxO set:
+Built-in configs for mainnet, preview, and preprod, or construct your own:
 
-```javascript
-const { Scalus, SlotConfig } = require('scalus');
-const fs = require('fs');
+```typescript
+import { SlotConfig } from "scalus";
 
-// Load protocol parameters (e.g., from Blockfrost)
-const protocolParams = JSON.parse(fs.readFileSync("protocol-params.json", "utf8"));
+const cfg = SlotConfig.mainnet; // or .preview, .preprod
+const time = cfg.slotToTime(100_000); // POSIX ms
+const slot = cfg.timeToSlot(time);
 
-// Extract cost models for each Plutus version
-const costModels = [
-    protocolParams.cost_models_raw.PlutusV1,
-    protocolParams.cost_models_raw.PlutusV2,
-    protocolParams.cost_models_raw.PlutusV3
-];
-
-// Load transaction and UTxO CBOR bytes
-const txBytes = new Uint8Array(fs.readFileSync("transaction.cbor"));
-const utxoBytes = new Uint8Array(fs.readFileSync("utxo.cbor"));
-
-// Use predefined slot configurations
-const slotConfig = SlotConfig.mainnet;  // or SlotConfig.preview, SlotConfig.preprod
-
-// Evaluate all Plutus scripts in the transaction
-const redeemers = Scalus.evalPlutusScripts(txBytes, utxoBytes, slotConfig, costModels);
-
-redeemers.forEach(redeemer => {
-    console.log(`${redeemer.tag}[${redeemer.index}]:`);
-    console.log('  Memory:', redeemer.budget.memory);
-    console.log('  Steps:', redeemer.budget.steps);
-});
+// Custom config
+const custom = new SlotConfig(zeroTime, zeroSlot, slotLength);
 ```
-
-### Handling Script Failures
-
-When a Plutus script fails, `evalPlutusScripts` throws a `PlutusScriptEvaluationException` with the error message and script logs:
-
-```javascript
-try {
-    const redeemers = Scalus.evalPlutusScripts(txBytes, utxoBytes, slotConfig, costModels);
-} catch (error) {
-    console.log("Error message:", error.message);
-    console.log("Script logs:", error.logs);
-}
-```
-
-### Slot Configuration
-
-Use predefined slot configurations or create custom ones:
-
-```javascript
-const { SlotConfig } = require('scalus');
-
-// Predefined configurations
-const mainnet = SlotConfig.mainnet;
-const preview = SlotConfig.preview;
-const preprod = SlotConfig.preprod;
-
-// Convert between slots and POSIX time
-const time = mainnet.slotToTime(100000);  // slot -> milliseconds
-const slot = mainnet.timeToSlot(time);    // milliseconds -> slot
-```
-
-## API Reference
-
-### `Scalus.evaluateScript(doubleCborHex: string): Result`
-
-Evaluates a Plutus script from its double-CBOR-encoded hex representation.
-
-**Returns:** A `Result` object:
-- `isSuccess`: boolean indicating success or failure
-- `budget`: `ExUnits` with `memory` and `steps` (as BigInt)
-- `logs`: Array of log messages
-
-### `Scalus.applyDataArgToScript(doubleCborHex: string, dataJson: string): string`
-
-Applies a data argument to a Plutus script.
-
-**Parameters:**
-- `doubleCborHex`: The double-CBOR-encoded hex string of the Plutus script
-- `dataJson`: JSON representation of the Data argument (see format above)
-
-**Returns:** The double-CBOR-encoded hex string of the script with the argument applied
-
-### `Scalus.evalPlutusScripts(txCborBytes, utxoCborBytes, slotConfig, costModels): Redeemer[]`
-
-Evaluates all Plutus scripts in a transaction.
-
-**Parameters:**
-- `txCborBytes`: `Uint8Array` - CBOR bytes of the transaction
-- `utxoCborBytes`: `Uint8Array` - CBOR bytes of the UTxO map
-- `slotConfig`: `SlotConfig` - Slot configuration for time conversions
-- `costModels`: `number[][]` - Cost models array `[PlutusV1, PlutusV2, PlutusV3]`
-
-**Returns:** Array of `Redeemer` objects:
-- `tag`: Redeemer tag (e.g., "Spend", "Mint")
-- `index`: Redeemer index
-- `budget`: `ExUnits` with computed execution costs
-
-**Throws:** `PlutusScriptEvaluationException` with `.message` and `.logs` on script failure
-
-### `SlotConfig`
-
-Slot configuration for time conversions.
-
-**Static properties:**
-- `SlotConfig.mainnet` - Mainnet configuration (Shelley era)
-- `SlotConfig.preview` - Preview testnet configuration
-- `SlotConfig.preprod` - Preprod testnet configuration
-
-**Methods:**
-- `slotToTime(slot: number): number` - Convert slot to POSIX time (milliseconds)
-- `timeToSlot(time: number): number` - Convert POSIX time to slot
 
 ## Browser Usage
 
 The bundle works in browsers with a CommonJS shim:
 
 ```html
+
 <script>
     var module = { exports: {} };
     var exports = module.exports;
 </script>
 <script src="scalus.js"></script>
 <script>
-    const Scalus = module.exports.Scalus;
-    const SlotConfig = module.exports.SlotConfig;
-
-    // Use the API...
+    const { Scalus, SlotConfig, Emulator } = module.exports;
 </script>
 ```
 
@@ -200,6 +203,7 @@ The bundle works in browsers with a CommonJS shim:
 
 Apache-2.0
 
-## Repository
+## Links
 
-https://github.com/nau/scalus
+- [Repository](https://github.com/nau/scalus)
+- [Documentation](https://scalus.org)
