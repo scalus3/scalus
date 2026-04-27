@@ -205,5 +205,5 @@ Apache-2.0
 
 ## Links
 
-- [Repository](https://github.com/nau/scalus)
+- [Repository](https://github.com/scalus3/scalus)
 - [Documentation](https://scalus.org)
