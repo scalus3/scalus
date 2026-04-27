@@ -407,9 +407,29 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(resolvedType) =>
                         val gen = lctx.typeGenerator(resolvedType)
-                        val repr =
-                            if tv.isBuiltin then gen.defaultRepresentation(resolvedType)
-                            else gen.defaultTypeVarReperesentation(resolvedType)
+                        // Pick the proxy's repr from the value's ACTUAL repr kind, not from
+                        // `tv.isBuiltin` (a static TypeVar-declaration property). The input's
+                        // bytes are determined by the upstream conversion that produced this
+                        // value (e.g. `toDefaultTypeVarRepr` produces Fixed/Data form,
+                        // `fromDefaultTypeVarRepr` produces Unwrapped/concrete-default form).
+                        // Mis-aligning the proxy's static repr with the actual bytes leads
+                        // genSelect/genMatch to emit a selector for the wrong byte layout —
+                        // the corruption shape behind `MultiplyInteger Apply LamAbs at
+                        // KnightsTest:477:59` (Data ChessSet flowing through a native-UC
+                        // 4-arg λf0..f3 Case selector).
+                        val repr = input.representation match
+                            case TypeVarRepresentation(SIRType.TypeVarKind.Fixed) =>
+                                gen.defaultTypeVarReperesentation(resolvedType)
+                            case TypeVarRepresentation(SIRType.TypeVarKind.Unwrapped) =>
+                                gen.defaultRepresentation(resolvedType)
+                            case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) =>
+                                // Wildcard — fall back to TypeVar-declaration kind.
+                                if tv.isBuiltin then gen.defaultRepresentation(resolvedType)
+                                else gen.defaultTypeVarReperesentation(resolvedType)
+                            case _ =>
+                                // Non-TypeVar repr: trust it; the value's static label is
+                                // already a concrete repr (e.g. `Constant`, `ProdUplcConstr`).
+                                input.representation
                         val proxy = new TypeRepresentationProxyLoweredValue(
                           input,
                           resolvedType,

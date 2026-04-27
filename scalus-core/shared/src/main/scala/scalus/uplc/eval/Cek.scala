@@ -1183,6 +1183,32 @@ class CekMachine(
                                               env,
                                               lastSourcePos
                                             )
+                                        // Diagnostic (gated by -Dscalus.assert.case.data.arity=1):
+                                        // when a Data.Constr scrutinee enters the case-on-Data
+                                        // branch, the matched branch should expect at most 2
+                                        // bindings (tag, argsList). If branch 0 is a deeper
+                                        // lambda chain, this is almost certainly a native-UC
+                                        // ProductCase selector (4-arg λf0..f3) being misdispatched
+                                        // on a Data-encoded value — the exact corruption shape
+                                        // behind `MultiplyInteger Apply LamAbs at :477:59`.
+                                        if System.getProperty("scalus.assert.case.data.arity") != null
+                                        then {
+                                            @scala.annotation.tailrec
+                                            def lamDepth(t: Term, acc: Int): Int = t match
+                                                case Term.LamAbs(_, body, _) => lamDepth(body, acc + 1)
+                                                case _                       => acc
+                                            val depth = lamDepth(cases(0), 0)
+                                            if depth > 2 then
+                                                System.err.println(
+                                                  s"[CASE-DATA-ARITY-MISMATCH] Data.Constr(tag=$tag, " +
+                                                      s"args.size=${args.toScalaList.size}) → branch[0] " +
+                                                      s"has lambda depth=$depth (>2). Likely a native-UC " +
+                                                      s"selector applied to Data. lastSourcePos=$lastSourcePos"
+                                                )
+                                                System.err.println(
+                                                  s"  branch[0] = ${cases(0).pretty.render(200).take(800)}"
+                                                )
+                                        }
                                         val tagVal = VCon(Constant.Integer(tag))
                                         val argsVal = VCon(
                                           Constant.List(
