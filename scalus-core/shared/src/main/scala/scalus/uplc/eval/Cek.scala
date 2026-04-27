@@ -1329,6 +1329,38 @@ class CekMachine(
         fun: CekValue,
         arg: CekValue
     ): CekState = {
+        // Diagnostic (gated by -Dscalus.assert.apply.data.to.uc=1):
+        // catches the BIND moment where Data.Constr bytes flow into a slot
+        // whose function body uses THAT SAME variable as scrutinee of a
+        // Term.Case with a 4+-arg lambda branch (= native-UC ProductCase
+        // selector). This is the upstream of the case-on-Data-Constr
+        // crash; the position annotation here points to the actual Apply
+        // that mis-binds.
+        if System.getProperty("scalus.assert.apply.data.to.uc") != null then
+            arg match
+                case VCon(Constant.Data(Data.Constr(t, args))) =>
+                    fun match
+                        case VLamAbs(name, body, _) =>
+                            val maxArity = maxLamChainOnVar(body, name, 0)
+                            val argsSize = args.toScalaList.size
+                            // Fire when the static selector expects more bindings (4+) than
+                            // the case-on-Data path will provide for a Data.Constr scrutinee
+                            // (always 2: tag + argsList). A 4-arg selector means a native-UC
+                            // ProductCase selector applied to a Data value — the corruption.
+                            if maxArity >= 4 then
+                                System.err.println(
+                                  s"[APPLY-DATA-TO-NATIVE-UC] binding Data.Constr(tag=$t, args.size=$argsSize) to '$name' " +
+                                      s"used as Case scrutinee with selector arity=$maxArity. " +
+                                      s"lastSourcePos=$lastSourcePos"
+                                )
+                                System.err.println(
+                                  s"  bodyAnn=${body.annotation.pos}"
+                                )
+                                System.err.println(
+                                  s"  body=${body.pretty.render(200).take(600)}"
+                                )
+                        case _ => ()
+                case _ => ()
         fun match
             case VLamAbs(name, term, env) => Compute(ctx, env :+ (name, arg), term)
             case VBuiltin(fun, term, runtime) =>
@@ -1351,6 +1383,41 @@ class CekMachine(
                   lastSourcePos,
                   getSourceTrace
                 )
+    }
+
+    @scala.annotation.tailrec
+    private def lamChainDepth(t: Term, acc: Int): Int = t match
+        case Term.LamAbs(_, body, _) => lamChainDepth(body, acc + 1)
+        case _                       => acc
+
+    // Walk the body of a VLamAbs looking for the maximum lambda-chain arity
+    // of any Term.Case branch whose scrutinee is exactly the lambda's bound
+    // parameter (by NamedDeBruijn name match). Returns the max arity seen,
+    // or 0 if no such Case was found. Bound by a small recursion-depth budget.
+    private def maxLamChainOnVar(t: Term, paramName: String, depth: Int): Int = {
+        if depth > 8 then 0
+        else
+            t match
+                case Term.Case(scrut, branches, _) if branches.nonEmpty =>
+                    val scrutMatchesParam = scrut match
+                        case Term.Var(ndb, _) => ndb.name == paramName
+                        case _                => false
+                    val here = if scrutMatchesParam then lamChainDepth(branches.head, 0) else 0
+                    val sub = maxLamChainOnVar(scrut, paramName, depth + 1)
+                    val branchMax =
+                        branches
+                            .map(b => maxLamChainOnVar(b, paramName, depth + 1))
+                            .foldLeft(0)(math.max)
+                    math.max(here, math.max(sub, branchMax))
+                case Term.Apply(f, a, _) =>
+                    math.max(
+                      maxLamChainOnVar(f, paramName, depth + 1),
+                      maxLamChainOnVar(a, paramName, depth + 1)
+                    )
+                case Term.Force(b, _)     => maxLamChainOnVar(b, paramName, depth + 1)
+                case Term.Delay(b, _)     => maxLamChainOnVar(b, paramName, depth + 1)
+                case Term.LamAbs(_, b, _) => maxLamChainOnVar(b, paramName, depth + 1)
+                case _                    => 0
     }
 
     /** `force` a term and proceed.

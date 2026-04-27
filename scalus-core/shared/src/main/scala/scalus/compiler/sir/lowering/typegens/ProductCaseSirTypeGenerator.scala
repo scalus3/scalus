@@ -1127,7 +1127,15 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         // Adopt fields: convert each argument to the target field representation.
         // For function fields: canonical LambdaRepresentation.
         // For fields with @UplcRepr annotation: the annotated representation.
-        // For other fields: keep as-is (use actual argument repr).
+        // For other fields: when the field's static type has a class-level
+        //   @UplcRepr annotation that pins it (e.g., `board: ChessSet` where
+        //   `ChessSet` is `@UplcRepr(UplcConstr)`), force conversion to that
+        //   pinned repr. Without this, an arg in Data form would be silently
+        //   embedded as the field value with the arg's Data static repr —
+        //   downstream projections would then produce Data bytes where UC was
+        //   expected, surfacing as native-UC selectors applied to Data.Constr
+        //   scrutinees at runtime. For TypeVar fields, keep arg as-is (we
+        //   cannot compute a concrete target repr without the substitution).
         val adoptedArgs = loweredArgs.zip(constrDecl.params).map { (arg, param) =>
             if SIRType.isPolyFunOrFun(param.tp) then
                 val canonicalRepr = FunSirTypeGenerator.defaultRepresentation(param.tp)
@@ -1138,7 +1146,19 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     case Some(targetRepr) =>
                         arg.maybeUpcast(paramType, constr.anns.pos)
                             .toRepresentation(targetRepr, constr.anns.pos)
-                    case None => arg
+                    case None =>
+                        // Pin to the field type's natural repr only when the
+                        // type itself has a class-level @UplcRepr annotation
+                        // (so the type carries a binding intent). For
+                        // unannotated types, keep the arg's actual repr — that
+                        // preserves existing behavior for plain product fields.
+                        if hasClassLevelUplcRepr(paramType) then
+                            val targetRepr = lctx
+                                .typeGenerator(paramType)
+                                .defaultRepresentation(paramType)
+                            arg.maybeUpcast(paramType, constr.anns.pos)
+                                .toRepresentation(targetRepr, constr.anns.pos)
+                        else arg
         }
         val fieldReprs = adoptedArgs.map(_.representation).toList
         val repr = ProdUplcConstr(constrIndex, fieldReprs)
@@ -1169,6 +1189,19 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
         loweredValue
     }
+
+    /** Returns true if `tp` (or any unwrapped form) carries a class-level
+      * `@UplcRepr` annotation in its constrDecl. Used by `genConstrUplcConstr`
+      * to decide whether the field's static type pins a specific repr that
+      * arg.repr must conform to.
+      */
+    private def hasClassLevelUplcRepr(tp: SIRType): Boolean = tp match
+        case SIRType.CaseClass(decl, _, _)    => decl.annotations.data.contains("uplcRepr")
+        case SIRType.SumCaseClass(decl, _)    => decl.annotations.data.contains("uplcRepr")
+        case SIRType.Annotated(inner, _)      => hasClassLevelUplcRepr(inner)
+        case SIRType.TypeLambda(_, body)      => hasClassLevelUplcRepr(body)
+        case SIRType.TypeProxy(ref) if ref != null => hasClassLevelUplcRepr(ref)
+        case _                                => false
 
     def retrieveConstrIndex(tp: SIRType, pos: SIRPosition): Int = {
         tp match {
