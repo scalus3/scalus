@@ -1624,8 +1624,38 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
             case other =>
                 kind match
                     case TypeVarKind.Transparent =>
-                        // Wildcard source — any concrete target accepts (bytes unknown).
-                        true
+                        // Wildcard source — bytes unknown unless the caller has registered
+                        // a concrete repr in `typeVarReprEnv` for this TypeVar. The previous
+                        // unconditional `true` claim let Data-encoded bytes ride through a
+                        // relabel chain into native-UC slots; that produced the
+                        // `MultiplyInteger Apply LamAbs` runtime crash at KnightsTest:477,
+                        // because the Case selector then dispatched a Data.Constr through
+                        // the case-on-Data-Constr branch and built a partial-applied lambda.
+                        //
+                        // Sound rule: claim compat only when (a) the source TypeVar is
+                        // bound in `typeVarReprEnv` to a concrete repr that itself is
+                        // compatible with the target, OR (b) tp resolves to a non-TypeVar
+                        // concrete type whose default repr is compatible with the target.
+                        // Otherwise refuse; downstream typeGenerator will either dispatch
+                        // a real conversion or throw with a useful message.
+                        val tvOpt = tp match
+                            case t: SIRType.TypeVar => Some(t)
+                            case _                  => None
+                        val envReprOpt = tvOpt.flatMap(lctx.typeVarReprEnv.get)
+                        envReprOpt match
+                            case Some(boundRepr) =>
+                                boundRepr.isCompatibleOn(tp, repr, pos)
+                            case None =>
+                                val concrete = lctx.resolveTypeVarIfNeeded(tp)
+                                concrete match
+                                    case _: SIRType.TypeVar => false
+                                    case other =>
+                                        repr.isCompatibleOn(
+                                          concrete,
+                                          lctx.typeGenerator(concrete)
+                                              .defaultRepresentation(concrete),
+                                          pos
+                                        )
                     case TypeVarKind.Unwrapped =>
                         // Bytes are in concrete-default form. Compatible only with the
                         // defaultRepresentation of the resolved concrete type.

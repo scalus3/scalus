@@ -62,6 +62,7 @@ trait LoweredValue {
         lctx: LoweringContext
     ): LoweredValue = {
         if representation == this.representation then this
+        else if LoweredValue.isTransparentTypeVarTarget(representation) then this
         else if this.representation.isCompatibleOn(sirType, representation, pos) then
             RepresentationProxyLoweredValue(this, representation, pos)
         else lctx.typeGenerator(sirType).toRepresentation(this, representation, pos)
@@ -393,6 +394,7 @@ class VariableLoweredValue(
         using lctx: LoweringContext
     ): LoweredValue = {
         if representation == this.representation then this
+        else if LoweredValue.isTransparentTypeVarTarget(representation) then this
         else if this.representation.isCompatibleOn(sirType, representation, pos) then
             RepresentationProxyLoweredValue(this, representation, pos)
         else
@@ -502,6 +504,7 @@ case class DependendVariableLoweredValue(
         using LoweringContext
     ): LoweredValue = {
         if representation == this.representation then this
+        else if LoweredValue.isTransparentTypeVarTarget(representation) then this
         else if this.representation.isCompatibleOn(sirType, representation, pos) then
             RepresentationProxyLoweredValue(this, representation, pos)
         else if representation == parent.representation then parent
@@ -1435,6 +1438,19 @@ object LoweredValue {
         val style: Style = Style.Normal,
         var printedIdentifiers: Set[String] = Set.empty
     )
+
+    /** True iff `target` is `TypeVarRepresentation(Transparent)`. When converting *to* a
+      * Transparent target, we skip the relabel proxy: a Transparent target is a wildcard
+      * accept ("any bytes are fine"), so retaining the source's concrete repr label is
+      * strictly more informative than relabeling to Transparent and losing it. The
+      * dropped relabel was previously the launch point of corruption chains where
+      * Data-encoded bytes acquired a Transparent label, then later passed permissive
+      * `isCompatibleOn` checks on their way to a native-UC target slot.
+      */
+    def isTransparentTypeVarTarget(target: LoweredValueRepresentation): Boolean = target match {
+        case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
+        case _                                                      => false
+    }
 
     /** Builder for LoweredValue, to avoid boilerplate code. Import this object to make available
       */

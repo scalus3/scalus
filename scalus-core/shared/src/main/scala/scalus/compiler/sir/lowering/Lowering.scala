@@ -838,7 +838,32 @@ object Lowering {
         case _                                     => false
     }
 
-    private def lowerNormalApp(app: SIR.Apply, @unused optTargetType: Option[SIRType])(using
+    /** True iff `tp` is a TypeVar at its root, or a single-arg TypeRefApply whose argument
+      * is a TypeVar (e.g. `List[B]`, `Option[A]`). Walks past `TypeProxy`, `TypeLambda`,
+      * `Annotated`. The narrow shape covered here matches the SIR-plugin output-type leak
+      * observed in `IntrinsicsUplcConstrList.map[A,B]` where `app.tp` carries `List[B]`
+      * with `B` not yet bound to the lambda's body type.
+      */
+    @scala.annotation.tailrec
+    private def hasFreeTypeVarRoot(tp: SIRType): Boolean = tp match {
+        case _: SIRType.TypeVar                    => true
+        case SIRType.TypeProxy(ref) if ref != null => hasFreeTypeVarRoot(ref)
+        case SIRType.TypeLambda(_, body)           => hasFreeTypeVarRoot(body)
+        case SIRType.Annotated(t, _)               => hasFreeTypeVarRoot(t)
+        case SIRType.SumCaseClass(_, args) =>
+            args.exists {
+                case _: SIRType.TypeVar => true
+                case _                  => false
+            }
+        case SIRType.CaseClass(_, args, _) =>
+            args.exists {
+                case _: SIRType.TypeVar => true
+                case _                  => false
+            }
+        case _ => false
+    }
+
+    private def lowerNormalApp(app: SIR.Apply, optTargetType: Option[SIRType])(using
         lctx: LoweringContext
     ): LoweredValue = {
         if lctx.debug then
@@ -849,7 +874,20 @@ object Lowering {
                   s"  arg.tp = ${app.arg.tp.show}\n" +
                   s"  f = ${app.f.pretty.render(100)}\n"
             )
-        if lctx.intrinsicModules.nonEmpty && !isFunOrTypeLambdaOverFun(app.tp) then
+        // Refine the resolver's appType using optTargetType when app.tp contains
+        // unresolved TypeVars that the outer target can fill in. The Scala SIR plugin
+        // doesn't always substitute output type parameters into Apply.tp (e.g.
+        // `descAndNo.quicksort.map { _.board }` may emit `Apply(...): List[B]` instead
+        // of `List[ChessSet]`), which leaves the intrinsic resolver unable to unify
+        // and bind the output TypeVar — downstream conversions then trip on the
+        // unresolved element. When the outer match-branch / let body / annotated
+        // return type is known, prefer it for resolver dispatch.
+        val refinedAppTp: SIRType = optTargetType match {
+            case Some(target) if hasFreeTypeVarRoot(app.tp) =>
+                target
+            case _ => app.tp
+        }
+        if lctx.intrinsicModules.nonEmpty && !isFunOrTypeLambdaOverFun(refinedAppTp) then
             IntrinsicResolver.gatherApplyChain(app) match
                 case Some((head, argSirs)) if argSirs.length > 1 =>
                     val firstLowered = lowerSIR(argSirs.head)
@@ -857,7 +895,7 @@ object Lowering {
                       head,
                       argSirs,
                       firstLowered :: scala.List.empty,
-                      app.tp,
+                      refinedAppTp,
                       app.anns.pos
                     )(using lctx) match
                         case Some(result) => return result
@@ -868,7 +906,7 @@ object Lowering {
 
         // Try intrinsic resolution
         if lctx.intrinsicModules.nonEmpty then
-            IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(using
+            IntrinsicResolver.tryResolve(app.f, app.arg, arg, refinedAppTp, app.anns.pos)(using
               lctx
             ) match
                 case Some(result) =>

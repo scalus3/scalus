@@ -133,8 +133,43 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                       representation,
                                       pos
                                     )
-                    case _ =>
+                    case _: TypeVarRepresentation =>
+                        // TypeVar→TypeVar relabel — wildcard semantics carry through.
                         new RepresentationProxyLoweredValue(input, representation, pos)
+                    case concreteTarget =>
+                        // Transparent source → concrete target. Mirror the Unwrapped policy:
+                        // if input.sirType resolves to a concrete type, route through that
+                        // type's converter; otherwise we must consult typeVarReprEnv before
+                        // claiming the bytes match the target. Permissive relabeling here was
+                        // the launch point for the MultiplyInteger-on-LamAbs corruption chain
+                        // at KnightsTest:477 — Data-encoded bytes acquired a Transparent
+                        // label, then surfaced as if they were native UC ProdUplcConstr.
+                        input.sirType match
+                            case tv: SIRType.TypeVar =>
+                                lctx.typeVarReprEnv.get(tv) match
+                                    case Some(boundRepr) =>
+                                        val viaBound =
+                                            new RepresentationProxyLoweredValue(
+                                              input,
+                                              boundRepr,
+                                              pos
+                                            )
+                                        viaBound.toRepresentation(concreteTarget, pos)
+                                    case None =>
+                                        throw LoweringException(
+                                          s"TypeVarSirTypeGenerator: cannot convert Transparent " +
+                                              s"TypeVar to $concreteTarget without a typeVarReprEnv " +
+                                              s"binding for ${tv.name}#${tv.optId.getOrElse("-")} " +
+                                              s"(bytes are unknown). Type: ${input.sirType.show}",
+                                          pos
+                                        )
+                            case concrete =>
+                                // input.sirType is concrete — defer to its generator.
+                                val sourceRepr =
+                                    lctx.typeGenerator(concrete).defaultRepresentation(concrete)
+                                val viaSource =
+                                    new RepresentationProxyLoweredValue(input, sourceRepr, pos)
+                                viaSource.toRepresentation(concreteTarget, pos)
 
             case Unwrapped =>
                 // Bytes are in concrete-default form. Without knowing the concrete type
