@@ -79,15 +79,15 @@ class SirToUplcV3Lowering(
             }
             ids
         }
-        // The two System.err.println calls below were originally a session-12
-        // pending-letrec reachability trace. They turned out to be LOAD-BEARING for the
-        // alone-vs-combined Heisenbug in `KnightsTest` / `KnightsTestMinimal` (sessions
-        // 11-15) — the System.err.println synchronization / JIT timing side-effect
-        // masks the residual flap that the cache-key fingerprint fixes (commit
-        // 3db34bd0f, cacc59756) didn't fully close. A pure-touch workaround
-        // (just reading `v.id` / `v.pos.*`) does NOT reproduce the stabilization, so
-        // the println call itself is what matters. Keep until the residual full-suite
-        // flap is fixed structurally; remove cleanly at that point.
+        // Session-18 note: these `[#10 filter]` System.err.println calls were
+        // originally session-12 pending-letrec reachability traces. They were
+        // load-bearing for the alone-vs-combined Heisenbug at KT:477:59 until
+        // the structural fix at `LoweredValueRepresentation.scala` (Unwrapped
+        // TypeVar compat discrimination). With that fix the prints are no
+        // longer load-bearing for the existing flap, but we keep them as a
+        // guard while the team continues adding `@UplcRepr` annotations —
+        // re-introducing a related Heisenbug class would be hard to spot
+        // without this trace surfacing it.
         val keptCount = pending.count { case (v, _) => reachableIds.contains(v.id) }
         System.err.println(
           s"[#10 filter] pending=${pending.size} kept=$keptCount dropped=${pending.size - keptCount}"

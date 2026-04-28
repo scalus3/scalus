@@ -1105,6 +1105,21 @@ class CekMachine(
                         require(tag.value < Int.MaxValue, s"Constructor tag too large: $tag")
                         val index = tag.value.toInt
                         if index < cases.size then
+                            // Session-18 diagnostic (gated by -Dscalus.assert.apply.data.to.uc=1):
+                            // catch wrong-arity VConstr → branch mismatch at the actual eval
+                            // moment, BEFORE residual lambdas leak out. lastSourcePos points to
+                            // the surrounding Term we last visited.
+                            if System.getProperty("scalus.assert.apply.data.to.uc") != null then
+                                val branchArity = lamChainDepth(cases(index), 0)
+                                if branchArity > args.size then
+                                    System.err.println(
+                                      s"[CASE-VCONSTR-ARITY-MISMATCH] VConstr(tag=$tag, args.size=${args.size}) " +
+                                          s"matched against branch[$index] with arity=$branchArity. " +
+                                          s"residual=${branchArity - args.size}. lastSourcePos=$lastSourcePos"
+                                    )
+                                    System.err.println(
+                                      s"  branch=${cases(index).pretty.render(200).take(600)}"
+                                    )
                             Compute(transferArgStack(args, ctx), env, cases(index))
                         else throw new MissingCaseBranch(tag, env, lastSourcePos)
                     case VCon(const) if caseOnBuiltinsEnabled =>
@@ -1350,6 +1365,29 @@ class CekMachine(
                             if maxArity >= 4 then
                                 System.err.println(
                                   s"[APPLY-DATA-TO-NATIVE-UC] binding Data.Constr(tag=$t, args.size=$argsSize) to '$name' " +
+                                      s"used as Case scrutinee with selector arity=$maxArity. " +
+                                      s"lastSourcePos=$lastSourcePos"
+                                )
+                                System.err.println(
+                                  s"  bodyAnn=${body.annotation.pos}"
+                                )
+                                System.err.println(
+                                  s"  body=${body.pretty.render(200).take(600)}"
+                                )
+                        case _ => ()
+                // Session-18 extension: catch native VConstr arity mismatch.
+                // The session-17 fix (`c7602ba8f`) closed the Data→native-UC relabel
+                // surface, but the residual flap is a NATIVE VConstr with WRONG arity
+                // being fed to a Case branch with a higher-arity selector. Catch the
+                // BIND moment so the position annotation points to the mis-binding Apply.
+                case VConstr(tag, vargs) =>
+                    fun match
+                        case VLamAbs(name, body, _) =>
+                            val maxArity = maxLamChainOnVar(body, name, 0)
+                            val argsSize = vargs.size
+                            if maxArity > argsSize then
+                                System.err.println(
+                                  s"[APPLY-VCONSTR-ARITY-MISMATCH] binding VConstr(tag=$tag, args.size=$argsSize) to '$name' " +
                                       s"used as Case scrutinee with selector arity=$maxArity. " +
                                       s"lastSourcePos=$lastSourcePos"
                                 )

@@ -167,11 +167,25 @@ object SumCaseClassRepresentation {
             tp: SIRType,
             repr: LoweredValueRepresentation,
             pos: SIRPosition
-        )(using LoweringContext): Boolean =
+        )(using lctx: LoweringContext): Boolean =
             repr match {
-                case DataConstr               => true
-                case TypeVarRepresentation(_) => true
-                case other                    => false
+                case DataConstr => true
+                case TypeVarRepresentation(kind) =>
+                    import SIRType.TypeVarKind.*
+                    kind match
+                        case Transparent => true
+                        case Fixed       => true
+                        case Unwrapped =>
+                            // Unwrapped's invariant: bytes are in tp's
+                            // defaultRepresentation form. Compatible only when tp's
+                            // default IS this Data form — for `@UplcRepr(UplcConstr)`
+                            // types whose default is native Constr, a relabel without
+                            // conversion would leave Data bytes labeled as native Constr
+                            // and cause `MultiplyInteger Apply LamAbs`-style residual
+                            // lambdas at runtime when downstream genSelect emits a
+                            // native-arity Case branch on the Data scrutinee.
+                            lctx.typeGenerator(tp).defaultRepresentation(tp) == this
+                case other => false
             }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.Data.tp
@@ -762,12 +776,22 @@ object ProductCaseClassRepresentation {
             repr: LoweredValueRepresentation,
             pos: SIRPosition
         )(using
-            LoweringContext
+            lctx: LoweringContext
         ): Boolean =
             repr match {
-                case ProdDataConstr           => true
-                case TypeVarRepresentation(_) => true
-                case other                    => false
+                case ProdDataConstr => true
+                case TypeVarRepresentation(kind) =>
+                    import SIRType.TypeVarKind.*
+                    kind match
+                        case Transparent => true
+                        case Fixed       => true
+                        case Unwrapped =>
+                            // Unwrapped's invariant: bytes are in tp's
+                            // defaultRepresentation form. Compatible only when tp's
+                            // default IS this Data form — see DataConstr.isCompatibleOn
+                            // for the full rationale.
+                            lctx.typeGenerator(tp).defaultRepresentation(tp) == this
+                case other => false
             }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.Data.tp
