@@ -777,9 +777,19 @@ object ScalusRuntime {
               s"[warnListConversions] SumUplcConstr→SumBuiltinList at ${pos.show}: ${input.sirType.show}"
             )
         val listType = input.sirType
-        val elemType = SumCaseClassRepresentation.SumBuiltinList
+        val rawElemType = SumCaseClassRepresentation.SumBuiltinList
             .retrieveListElementType(listType)
             .getOrElse(SIRType.Data.tp)
+        // If the input's static type carries an abstract `TypeVar` element (e.g.
+        // `List[B]` from a generic intrinsic-binding that hasn't been alpha-renamed
+        // at the call site), try to resolve it from `lctx.typeUnifyEnv.filledTypes`
+        // before bailing. The intrinsic dispatcher's
+        // `bindIntrinsicListResolverElementTypeVars1` will have bound the TypeVar
+        // to the concrete element type during the dispatch — using that here lets
+        // downstream Data-encoding emit against the right concrete type.
+        val elemType = rawElemType match
+            case tv: SIRType.TypeVar => lctx.resolveTypeVarIfNeeded(tv)
+            case other               => other
         val outElemRepr = outListRepr.elementRepr
         // Resolve target element repr: TypeVarRepresentation(Fixed) → defaultTypeVarRepresentation
         val resolvedOutElemRepr = outElemRepr match
