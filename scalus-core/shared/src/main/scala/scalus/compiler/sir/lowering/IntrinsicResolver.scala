@@ -883,10 +883,46 @@ object IntrinsicResolver {
         val filledFromUnify: Map[SIRType.TypeVar, SIRType] = unifyResult match
             case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
             case _                                   => Map.empty
-        // First, propagate filledFromUnify (handles the case where one side was pre-filled
-        // — not expected here but defensive).
+        // Propagate filledFromUnify. The compiled intrinsic binding is shared across
+        // dispatches, so its internal TypeVars (e.g. `B#523` for `List$.map`'s `[A, B]`)
+        // keep the same optIds at every call site. A previous dispatch leaves stale
+        // bindings for those TypeVars in `lctx.typeUnifyEnv.filledTypes`; the fresh
+        // unify against this call site's `callSiteTpStripped` rebinds them to the
+        // current site's appType element. We must let the fresh bindings OVERWRITE
+        // the stale carryover for binding-internal TypeVars — otherwise the next
+        // dispatch of the same binding would see e.g. `B#523 → <prev appType element>`
+        // and propagate it through downstream lowering, surfacing as the residual
+        // `LoweringException: cannot convert with TypeVar element B` heisenbug.
+        // Pre-existing call-site TypeVars (not in the binding's signature) keep
+        // their existing bindings — that's correct, the call site's outer code
+        // still references them.
+        val bindingInternalTvs =
+            scala.collection.mutable.Set.empty[SIRType.TypeVar]
+        // Non-allocating walk to collect TypeVars from `binding.tp`. We only need
+        // identity, not a rebuilt type tree, so avoid `SIRType.mapTypeVars` which
+        // would allocate fresh `TypeProxy` / structural nodes per dispatch.
+        val seenProxies = new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
+        def collectTvs(t: SIRType): Unit = t match
+            case tv: SIRType.TypeVar => bindingInternalTvs += tv
+            case SIRType.TypeLambda(ps, body) =>
+                ps.foreach(bindingInternalTvs += _)
+                collectTvs(body)
+            case SIRType.Fun(in, out) => collectTvs(in); collectTvs(out)
+            case SIRType.CaseClass(_, args, parent) =>
+                args.foreach(collectTvs)
+                parent.foreach(collectTvs)
+            case SIRType.SumCaseClass(_, args) => args.foreach(collectTvs)
+            case SIRType.Annotated(t1, _)      => collectTvs(t1)
+            case SIRType.TypeProxy(ref) =>
+                if ref != null && !seenProxies.containsKey(t) then
+                    seenProxies.put(t.asInstanceOf[SIRType.TypeProxy], true)
+                    collectTvs(ref)
+            case _ => ()
+        collectTvs(binding.tp)
         val afterCrossFilled = filledFromUnify.foldLeft(afterOutput) { case (acc, (tv, t)) =>
-            if acc.contains(tv) then acc else acc + (tv -> t)
+            if !acc.contains(tv) then acc + (tv -> t)
+            else if bindingInternalTvs.contains(tv) then acc + (tv -> t) // overwrite stale
+            else acc // keep call-site
         }
         // Then walk eqClasses: for each TypeVar not yet bound, if any of its equivalents
         // IS bound in afterCrossFilled, inherit that concrete type.
