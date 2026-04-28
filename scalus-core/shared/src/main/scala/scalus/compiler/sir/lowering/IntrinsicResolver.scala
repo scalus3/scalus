@@ -898,7 +898,27 @@ object IntrinsicResolver {
         // still references them.
         val bindingInternalTvs =
             scala.collection.mutable.Set.empty[SIRType.TypeVar]
-        SIRType.mapTypeVars(binding.tp, tv => { bindingInternalTvs += tv; tv })
+        // Non-allocating walk to collect TypeVars from `binding.tp`. We only need
+        // identity, not a rebuilt type tree, so avoid `SIRType.mapTypeVars` which
+        // would allocate fresh `TypeProxy` / structural nodes per dispatch.
+        val seenProxies = new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
+        def collectTvs(t: SIRType): Unit = t match
+            case tv: SIRType.TypeVar => bindingInternalTvs += tv
+            case SIRType.TypeLambda(ps, body) =>
+                ps.foreach(bindingInternalTvs += _)
+                collectTvs(body)
+            case SIRType.Fun(in, out) => collectTvs(in); collectTvs(out)
+            case SIRType.CaseClass(_, args, parent) =>
+                args.foreach(collectTvs)
+                parent.foreach(collectTvs)
+            case SIRType.SumCaseClass(_, args) => args.foreach(collectTvs)
+            case SIRType.Annotated(t1, _)      => collectTvs(t1)
+            case SIRType.TypeProxy(ref) =>
+                if ref != null && !seenProxies.containsKey(t) then
+                    seenProxies.put(t.asInstanceOf[SIRType.TypeProxy], true)
+                    collectTvs(ref)
+            case _ => ()
+        collectTvs(binding.tp)
         val afterCrossFilled = filledFromUnify.foldLeft(afterOutput) { case (acc, (tv, t)) =>
             if !acc.contains(tv) then acc + (tv -> t)
             else if bindingInternalTvs.contains(tv) then acc + (tv -> t) // overwrite stale
