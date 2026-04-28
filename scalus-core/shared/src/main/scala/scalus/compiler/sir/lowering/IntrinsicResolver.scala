@@ -335,54 +335,8 @@ object IntrinsicResolver {
                                         Lowering.lowerSIR(substituted, Some(loweringAppType))
                                     finally
                                         lctx.inUplcConstrListScope = savedScope
-                                        // Merge filledTypes back to outer scope, but EXCLUDE
-                                        // entries introduced by THIS dispatch that bind the
-                                        // binding's own internal TypeVars. The compiled
-                                        // intrinsic binding is shared across dispatches, so
-                                        // its internal `[A, B]` TypeVars (e.g. `B#523` for
-                                        // map's binding) keep the same optIds at every call
-                                        // site. If we let those bindings leak into the outer
-                                        // scope, the next dispatch of the same binding would
-                                        // see a stale `B#523 → <prev appType element>` in
-                                        // `filledTypes`, and the unify-against-callSite at
-                                        // `bindIntrinsicListResolverElementTypeVars1` would
-                                        // be unable to overwrite it (line 905's
-                                        // `if acc.contains(tv) then acc` keeps the carryover).
-                                        // The result is the abstract `List[B]` static throw
-                                        // at `uplcConstrToBuiltinList: cannot convert with
-                                        // TypeVar element B`.
-                                        //
-                                        // Walk `binding.tp` (signature) for the binding's
-                                        // internal TypeVar identities. NOTE: deliberately
-                                        // NOT walking `binding.value` — substituteSelf
-                                        // splices argCache-bound call-site TypeVars into
-                                        // the body, and walking the body would harvest
-                                        // those legitimate call-site TVs too, then strip
-                                        // their bindings from the outer scope. Keep this
-                                        // walk signature-only; if a future binding ever
-                                        // declares a TypeVar in the body that isn't in the
-                                        // signature, fix it at that binding's declaration
-                                        // rather than widening this filter.
-                                        // Restrict the filter to entries NEWLY introduced
-                                        // during this dispatch — any pre-existing call-site
-                                        // binding under a colliding `(name, optId)` key is
-                                        // preserved (defensive against TypeVar id aliasing).
-                                        val bindingInternalTvs =
-                                            scala.collection.mutable.Set
-                                                .empty[SIRType.TypeVar]
-                                        SIRType.mapTypeVars(
-                                          binding.tp,
-                                          tv => { bindingInternalTvs += tv; tv }
-                                        )
-                                        val savedKeys = savedFilledTypes.keySet
-                                        val newBindings =
-                                            lctx.typeUnifyEnv.filledTypes.view
-                                                .filterKeys(k =>
-                                                    savedKeys.contains(k)
-                                                        || !bindingInternalTvs.contains(k)
-                                                )
-                                                .toMap
-                                        val merged = savedFilledTypes ++ newBindings
+                                        val merged =
+                                            savedFilledTypes ++ lctx.typeUnifyEnv.filledTypes
                                         lctx.typeUnifyEnv =
                                             lctx.typeUnifyEnv.copy(filledTypes = merged)
                                         lctx.typeVarReprEnv = savedReprEnv
@@ -929,10 +883,26 @@ object IntrinsicResolver {
         val filledFromUnify: Map[SIRType.TypeVar, SIRType] = unifyResult match
             case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
             case _                                   => Map.empty
-        // First, propagate filledFromUnify (handles the case where one side was pre-filled
-        // — not expected here but defensive).
+        // Propagate filledFromUnify. The compiled intrinsic binding is shared across
+        // dispatches, so its internal TypeVars (e.g. `B#523` for `List$.map`'s `[A, B]`)
+        // keep the same optIds at every call site. A previous dispatch leaves stale
+        // bindings for those TypeVars in `lctx.typeUnifyEnv.filledTypes`; the fresh
+        // unify against this call site's `callSiteTpStripped` rebinds them to the
+        // current site's appType element. We must let the fresh bindings OVERWRITE
+        // the stale carryover for binding-internal TypeVars — otherwise the next
+        // dispatch of the same binding would see e.g. `B#523 → <prev appType element>`
+        // and propagate it through downstream lowering, surfacing as the residual
+        // `LoweringException: cannot convert with TypeVar element B` heisenbug.
+        // Pre-existing call-site TypeVars (not in the binding's signature) keep
+        // their existing bindings — that's correct, the call site's outer code
+        // still references them.
+        val bindingInternalTvs =
+            scala.collection.mutable.Set.empty[SIRType.TypeVar]
+        SIRType.mapTypeVars(binding.tp, tv => { bindingInternalTvs += tv; tv })
         val afterCrossFilled = filledFromUnify.foldLeft(afterOutput) { case (acc, (tv, t)) =>
-            if acc.contains(tv) then acc else acc + (tv -> t)
+            if !acc.contains(tv) then acc + (tv -> t)
+            else if bindingInternalTvs.contains(tv) then acc + (tv -> t) // overwrite stale
+            else acc                                                      // keep call-site
         }
         // Then walk eqClasses: for each TypeVar not yet bound, if any of its equivalents
         // IS bound in afterCrossFilled, inherit that concrete type.
