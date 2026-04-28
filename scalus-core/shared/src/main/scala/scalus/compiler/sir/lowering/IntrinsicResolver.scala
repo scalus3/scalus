@@ -336,7 +336,8 @@ object IntrinsicResolver {
                                     finally
                                         lctx.inUplcConstrListScope = savedScope
                                         // Merge filledTypes back to outer scope, but EXCLUDE
-                                        // the binding's own internal TypeVars. The compiled
+                                        // entries introduced by THIS dispatch that bind the
+                                        // binding's own internal TypeVars. The compiled
                                         // intrinsic binding is shared across dispatches, so
                                         // its internal `[A, B]` TypeVars (e.g. `B#523` for
                                         // map's binding) keep the same optIds at every call
@@ -349,8 +350,23 @@ object IntrinsicResolver {
                                         // `if acc.contains(tv) then acc` keeps the carryover).
                                         // The result is the abstract `List[B]` static throw
                                         // at `uplcConstrToBuiltinList: cannot convert with
-                                        // TypeVar element B`. Filter the binding's TypeVars
-                                        // out of the merge.
+                                        // TypeVar element B`.
+                                        //
+                                        // Walk `binding.tp` (signature) for the binding's
+                                        // internal TypeVar identities. NOTE: deliberately
+                                        // NOT walking `binding.value` — substituteSelf
+                                        // splices argCache-bound call-site TypeVars into
+                                        // the body, and walking the body would harvest
+                                        // those legitimate call-site TVs too, then strip
+                                        // their bindings from the outer scope. Keep this
+                                        // walk signature-only; if a future binding ever
+                                        // declares a TypeVar in the body that isn't in the
+                                        // signature, fix it at that binding's declaration
+                                        // rather than widening this filter.
+                                        // Restrict the filter to entries NEWLY introduced
+                                        // during this dispatch — any pre-existing call-site
+                                        // binding under a colliding `(name, optId)` key is
+                                        // preserved (defensive against TypeVar id aliasing).
                                         val bindingInternalTvs =
                                             scala.collection.mutable.Set
                                                 .empty[SIRType.TypeVar]
@@ -358,8 +374,14 @@ object IntrinsicResolver {
                                           binding.tp,
                                           tv => { bindingInternalTvs += tv; tv }
                                         )
+                                        val savedKeys = savedFilledTypes.keySet
                                         val newBindings =
-                                            lctx.typeUnifyEnv.filledTypes -- bindingInternalTvs
+                                            lctx.typeUnifyEnv.filledTypes.view
+                                                .filterKeys(k =>
+                                                    savedKeys.contains(k)
+                                                        || !bindingInternalTvs.contains(k)
+                                                )
+                                                .toMap
                                         val merged = savedFilledTypes ++ newBindings
                                         lctx.typeUnifyEnv =
                                             lctx.typeUnifyEnv.copy(filledTypes = merged)
