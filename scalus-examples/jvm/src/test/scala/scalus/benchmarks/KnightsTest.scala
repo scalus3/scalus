@@ -30,7 +30,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
     val printComparison = true
     val profilingEnabled = true
-    val ignoreBudgetAssertions = true
+    val ignoreBudgetAssertions = false
 
     /** Compare budgets with a small tolerance (default 0.5% = 50 bps). Needed because CSE pass's
       * tie-breaking depends on Scala-compiler symbol IDs embedded in Term names (see
@@ -194,10 +194,12 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants.
-                // With optimizeUplc=true: mem=550_142_929, steps=111_902_743_585
+                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants
+                // + isCompatibleOn TypeVarKind discrimination (session 18).
+                // With optimizeUplc=true: mem=445_174_581, steps=86_329_049_292.
+                // Previous (pre-isCompatibleOn-fix): 550_142_929 / 111_902_743_585.
                 // Pre-annotation baseline: mem=447_798_345, steps=96_701_055_855.
-                ExUnits(memory = 550142929L, steps = 111902743585L)
+                ExUnits(memory = 445174581L, steps = 86329049292L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -301,10 +303,12 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val options = summon[Options]
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
-                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants.
-                // With optimizeUplc=true: mem=1_072_962_493, steps=218_211_607_720
+                // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants
+                // + isCompatibleOn TypeVarKind discrimination (session 18).
+                // With optimizeUplc=true: mem=873_898_759, steps=170_137_815_977.
+                // Previous (pre-isCompatibleOn-fix): 1_072_962_493 / 218_211_607_720.
                 // Pre-annotation baseline: mem=856_547_657, steps=186_040_711_969.
-                ExUnits(memory = 1072962493L, steps = 218211607720L)
+                ExUnits(memory = 873898759L, steps = 170137815977L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
