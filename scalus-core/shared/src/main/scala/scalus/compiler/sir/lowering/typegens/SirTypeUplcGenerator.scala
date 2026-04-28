@@ -88,8 +88,10 @@ trait SirTypeUplcGenerator {
     protected def hasTransparentTypeVarArgs(loweredArgs: scala.List[LoweredValue]): Boolean =
         loweredArgs.exists { arg =>
             arg.representation match
-                case tvr: TypeVarRepresentation => tvr.isBuiltin
-                case _                          => false
+                case tvr: TypeVarRepresentation =>
+                    import SIRType.TypeVarKind.*
+                    tvr.kind == Transparent || tvr.kind == Unwrapped
+                case _ => false
         }
 
 }

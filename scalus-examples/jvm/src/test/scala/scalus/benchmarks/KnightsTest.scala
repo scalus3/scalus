@@ -60,14 +60,12 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             else term.evaluateDebug
 
     test("100_4x4") {
-        System.err.println("=== BEGIN 100_4x4 lowering ===")
         val sir = compile {
             val result = runKnights(100, 4)
             val expected: Solution = List.empty
             require(result === expected)
         }
         val uplc = sir.toUplc(optimizeUplc = true)
-        System.err.println("=== END 100_4x4 lowering ===")
         val result = uplc.evalWithOptionalProfile
 
         val options = summon[Options]
@@ -103,14 +101,12 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     test("100_4x4_experiment_copy") {
         // Identical body to 100_4x4; placed at a later source position to compare
         // uplcConstrToBuiltinList call sites between the failing and passing positions.
-        System.err.println("=== BEGIN 100_4x4_experiment_copy lowering ===")
         val sir = compile {
             val result = runKnights(100, 4)
             val expected: Solution = List.empty
             require(result === expected)
         }
         val uplc = sir.toUplc(optimizeUplc = true)
-        System.err.println("=== END 100_4x4_experiment_copy lowering ===")
         val result = uplc.evalWithOptionalProfile
         assert(result.isSuccess, s"Runtime failure: $result")
     }

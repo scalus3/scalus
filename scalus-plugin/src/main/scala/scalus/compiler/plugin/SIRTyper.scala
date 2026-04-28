@@ -32,8 +32,6 @@ class SIRTyper(using Context) {
     private val uplcReprAnnotation = Symbols.requiredClass("scalus.compiler.UplcRepr")
     private val uplcRepresentationClass =
         Symbols.requiredClass("scalus.compiler.UplcRepresentation")
-    private val uplcRepresentationTypeVarKindClass =
-        Symbols.requiredClass("scalus.compiler.UplcRepresentation.TypeVarKind")
 
     /** Extract a `TypeVarKind` from `@UplcRepr(TypeVar(kind))` on a symbol. Returns `None` if the
       * annotation is absent or its argument isn't a `TypeVar(...)` shape. Used by

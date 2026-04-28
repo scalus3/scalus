@@ -483,10 +483,12 @@ object SIRUnify {
             // generators look up the filled-in type's repr). Fixed TypeVars are always
             // Data-encoded — the annotation is meaningless and is stripped below so
             // structural matching works.
-            case (a @ SIRType.Annotated(_, _), v: SIRType.TypeVar) if v.isBuiltin =>
+            case (a @ SIRType.Annotated(_, _), v: SIRType.TypeVar)
+                if v.kind == SIRType.TypeVarKind.Transparent || v.kind == SIRType.TypeVarKind.Unwrapped =>
                 val nEnv = env.copy(filledTypes = env.filledTypes.updated(v, a))
                 checkEqType(nEnv, v, a)
-            case (v: SIRType.TypeVar, a @ SIRType.Annotated(_, _)) if v.isBuiltin =>
+            case (v: SIRType.TypeVar, a @ SIRType.Annotated(_, _))
+                if v.kind == SIRType.TypeVarKind.Transparent || v.kind == SIRType.TypeVarKind.Unwrapped =>
                 val nEnv = env.copy(filledTypes = env.filledTypes.updated(v, a))
                 checkEqType(nEnv, v, a)
             // Unwrap Annotated before TypeVar — annotations are representation hints,

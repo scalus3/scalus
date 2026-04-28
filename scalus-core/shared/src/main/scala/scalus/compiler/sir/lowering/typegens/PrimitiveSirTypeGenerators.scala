@@ -75,16 +75,14 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
                     case (Fixed, Unwrapped) =>
                         // Data-wrapped → native concrete-default
                         dataToUplcValue(input, pos)
-                    // TODO: Transparent ↔ non-Transparent should throw — Transparent means
-                    // "unknown, substitute at inline"; it must not cross a repr-change
-                    // boundary. For now: print and pass through so we can enumerate real
-                    // occurrences, then tighten to `throw LoweringException(...)`.
                     case (_, _) =>
-                        println(
-                          s"[TODO PrimitiveSirTypeGenerator] Transparent↔non-Transparent repr change at $pos: " +
-                              s"${inTvr.kind} → ${outTvr.kind}, tp=${input.sirType.show}"
+                        // Transparent ↔ non-Transparent: Transparent means "unknown,
+                        // substitute at inline"; it must not cross a repr-change boundary.
+                        throw LoweringException(
+                          s"Unsupported Transparent↔non-Transparent TypeVar repr change " +
+                              s"at $pos: ${inTvr.kind} → ${outTvr.kind}, tp=${input.sirType.show}",
+                          pos
                         )
-                        input
             case (_, _) =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $outputRepresentation",
