@@ -12,7 +12,7 @@ class SourceTraceTest extends AnyFunSuite:
 
     test("evaluateScriptDebug should include source trace on failure") {
         val sir = compile {
-            val x = BigInt(1) / BigInt(0)  // Division by zero - will fail
+            val x = BigInt(1) / BigInt(0) // Division by zero - will fail
             x
         }
 
@@ -28,14 +28,16 @@ class SourceTraceTest extends AnyFunSuite:
                         assert(trace.nonEmpty, "Source trace should not be empty")
                         info(s"Source trace has ${trace.size} positions")
                     case other =>
-                        fail(s"Expected StackTraceMachineError, got ${other.getClass.getSimpleName}")
+                        fail(
+                          s"Expected StackTraceMachineError, got ${other.getClass.getSimpleName}"
+                        )
             case _ =>
                 fail("Expected failure, got success")
     }
 
     test("evaluateScriptProfile should include source trace on failure") {
         val sir = compile {
-            val x = BigInt(1) / BigInt(0)  // Division by zero - will fail
+            val x = BigInt(1) / BigInt(0) // Division by zero - will fail
             x
         }
 
@@ -51,14 +53,16 @@ class SourceTraceTest extends AnyFunSuite:
                         assert(trace.nonEmpty, "Source trace should not be empty with profiling")
                         info(s"Source trace with profiling has ${trace.size} positions")
                     case other =>
-                        fail(s"Expected StackTraceMachineError, got ${other.getClass.getSimpleName}")
+                        fail(
+                          s"Expected StackTraceMachineError, got ${other.getClass.getSimpleName}"
+                        )
             case _ =>
                 fail("Expected failure, got success")
     }
 
     test("source trace should be empty without debug or profiling") {
         val sir = compile {
-            val x = BigInt(1) / BigInt(0)  // Division by zero - will fail
+            val x = BigInt(1) / BigInt(0) // Division by zero - will fail
             x
         }
 

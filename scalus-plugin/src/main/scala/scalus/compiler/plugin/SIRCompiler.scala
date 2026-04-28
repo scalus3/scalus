@@ -374,7 +374,8 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tps.name.show,
               Some(tps.hashCode),
-              typer.extractTypeVarKindFromUplcRepr(tps)
+              typer
+                  .extractTypeVarKindFromUplcRepr(tps)
                   .getOrElse(SIRType.TypeVarKind.Fixed)
             )
         }
@@ -843,7 +844,8 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tp.typeSymbol.name.show,
               None,
-              typer.extractTypeVarKindFromUplcRepr(tp.typeSymbol)
+              typer
+                  .extractTypeVarKindFromUplcRepr(tp.typeSymbol)
                   .getOrElse(SIRType.TypeVarKind.Fixed)
             )
         }
@@ -878,7 +880,8 @@ final class SIRCompiler(
             SIRType.TypeVar(
               tp.name.show,
               Some(tp.hashCode),
-              typer.extractTypeVarKindFromUplcRepr(tp)
+              typer
+                  .extractTypeVarKindFromUplcRepr(tp)
                   .getOrElse(SIRType.TypeVarKind.Fixed)
             )
         )
@@ -887,7 +890,8 @@ final class SIRCompiler(
                 acc + (tp -> SIRType.TypeVar(
                   tp.name.show,
                   Some(tp.hashCode),
-                  typer.extractTypeVarKindFromUplcRepr(tp)
+                  typer
+                      .extractTypeVarKindFromUplcRepr(tp)
                       .getOrElse(SIRType.TypeVarKind.Fixed)
                 ))
         }

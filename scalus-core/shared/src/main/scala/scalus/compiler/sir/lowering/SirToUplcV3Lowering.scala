@@ -79,11 +79,10 @@ class SirToUplcV3Lowering(
             }
             ids
         }
-        val wrapped = pending.foldRight(retV) {
-            case ((eqFnVar, eqFnRhs), acc) =>
-                if reachableIds.contains(eqFnVar.id) then
-                    LetRecLoweredValue(eqFnVar, eqFnRhs, acc, eqFnVar.pos)
-                else acc
+        val wrapped = pending.foldRight(retV) { case ((eqFnVar, eqFnRhs), acc) =>
+            if reachableIds.contains(eqFnVar.id) then
+                LetRecLoweredValue(eqFnVar, eqFnRhs, acc, eqFnVar.pos)
+            else acc
         }
         wrapped
     }

@@ -21,12 +21,11 @@ import scalus.uplc.{Term, UplcAnnotation}
 object SumUplcConstrSirTypeGenerator {
 
     /** A Case-branch-body lambda wrapper used inside UplcConstr pattern matching. Represents
-      * `λfieldVar. inner` where `inner` is the branch's body. Unlike a plain
-      * `ComplexLoweredValue` wrap, `toRepresentation` is pushed into `inner` rather than
-      * applied to the whole lambda — because at the UPLC level, a branch is applied to the
-      * `Constr`'s fields before its body is evaluated. Wrapping the lambda itself in a
-      * repr-conversion (e.g. `Case(λh.λt.h, ...)`) fails at runtime with "non-constructor
-      * scrutinized" because the scrutinee is a lambda.
+      * `λfieldVar. inner` where `inner` is the branch's body. Unlike a plain `ComplexLoweredValue`
+      * wrap, `toRepresentation` is pushed into `inner` rather than applied to the whole lambda —
+      * because at the UPLC level, a branch is applied to the `Constr`'s fields before its body is
+      * evaluated. Wrapping the lambda itself in a repr-conversion (e.g. `Case(λh.λt.h, ...)`) fails
+      * at runtime with "non-constructor scrutinized" because the scrutinee is a lambda.
       */
     private final class BranchLambdaWrapper(
         fieldVar: IdentifiableLoweredValue,
@@ -59,8 +58,8 @@ object SumUplcConstrSirTypeGenerator {
     }
 
     /** Deref TypeProxy / Annotated / TypeLambda wrappers to find the underlying
-      * [[SIRType.SumCaseClass]] so callers can read its typeArgs. Visited TypeProxies are
-      * tracked to avoid infinite loops on recursive types (e.g. List's tail refers back to List).
+      * [[SIRType.SumCaseClass]] so callers can read its typeArgs. Visited TypeProxies are tracked
+      * to avoid infinite loops on recursive types (e.g. List's tail refers back to List).
       */
     private def derefToSumCaseClass(
         tp: SIRType,
@@ -74,8 +73,8 @@ object SumUplcConstrSirTypeGenerator {
         case _                           => None
 
     /** DataDecl-level TypeVar substitution for [[inputType]]. Maps the sum's declared type
-      * parameters to the concrete type args at `inputType`'s call site. Empty when the type
-      * args are missing or the shape mismatches the DataDecl.
+      * parameters to the concrete type args at `inputType`'s call site. Empty when the type args
+      * are missing or the shape mismatches the DataDecl.
       */
     private def dataDeclSubst(inputType: SIRType): Map[SIRType.TypeVar, SIRType] =
         SIRType.retrieveDataDecl(inputType) match
@@ -87,11 +86,11 @@ object SumUplcConstrSirTypeGenerator {
                     case _ => Map.empty
             case _ => Map.empty
 
-    /** Per-constructor TypeVar substitution, composing [[dataDeclSubst]] with the
-      * constructor-local parent- and typeParam-level mappings. `constrDecl.params.tp` uses the
-      * constructor's own TypeVar instances (distinct from the DataDecl's); `parentTypeArgs`
-      * encodes how those map onto DataDecl typeParams. Combining all three resolves field
-      * types to concrete forms at `inputType`'s call site.
+    /** Per-constructor TypeVar substitution, composing [[dataDeclSubst]] with the constructor-local
+      * parent- and typeParam-level mappings. `constrDecl.params.tp` uses the constructor's own
+      * TypeVar instances (distinct from the DataDecl's); `parentTypeArgs` encodes how those map
+      * onto DataDecl typeParams. Combining all three resolves field types to concrete forms at
+      * `inputType`'s call site.
       */
     private def constrSubstFor(
         inputType: SIRType,

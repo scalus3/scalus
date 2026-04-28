@@ -1190,18 +1190,17 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         loweredValue
     }
 
-    /** Returns true if `tp` (or any unwrapped form) carries a class-level
-      * `@UplcRepr` annotation in its constrDecl. Used by `genConstrUplcConstr`
-      * to decide whether the field's static type pins a specific repr that
-      * arg.repr must conform to.
+    /** Returns true if `tp` (or any unwrapped form) carries a class-level `@UplcRepr` annotation in
+      * its constrDecl. Used by `genConstrUplcConstr` to decide whether the field's static type pins
+      * a specific repr that arg.repr must conform to.
       */
     private def hasClassLevelUplcRepr(tp: SIRType): Boolean = tp match
-        case SIRType.CaseClass(decl, _, _)    => decl.annotations.data.contains("uplcRepr")
-        case SIRType.SumCaseClass(decl, _)    => decl.annotations.data.contains("uplcRepr")
-        case SIRType.Annotated(inner, _)      => hasClassLevelUplcRepr(inner)
-        case SIRType.TypeLambda(_, body)      => hasClassLevelUplcRepr(body)
+        case SIRType.CaseClass(decl, _, _)         => decl.annotations.data.contains("uplcRepr")
+        case SIRType.SumCaseClass(decl, _)         => decl.annotations.data.contains("uplcRepr")
+        case SIRType.Annotated(inner, _)           => hasClassLevelUplcRepr(inner)
+        case SIRType.TypeLambda(_, body)           => hasClassLevelUplcRepr(body)
         case SIRType.TypeProxy(ref) if ref != null => hasClassLevelUplcRepr(ref)
-        case _                                => false
+        case _                                     => false
 
     def retrieveConstrIndex(tp: SIRType, pos: SIRPosition): Int = {
         tp match {

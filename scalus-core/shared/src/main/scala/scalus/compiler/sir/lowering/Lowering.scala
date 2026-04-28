@@ -32,9 +32,9 @@ object Lowering {
       * `source` (typically the binding's declared DefDef type) as the annotation donor.
       *
       * Walks matching `Fun` chains in parallel. If the final return position in `base` is
-      * unannotated but the corresponding position in `source` is `Annotated(..., uplcRepr→…)`,
-      * wrap `base`'s return with that annotation. This works around the LamAbs body type losing
-      * the DefDef's declared return annotation.
+      * unannotated but the corresponding position in `source` is `Annotated(..., uplcRepr→…)`, wrap
+      * `base`'s return with that annotation. This works around the LamAbs body type losing the
+      * DefDef's declared return annotation.
       */
     private def mergeReturnAnnotation(base: SIRType, source: SIRType): SIRType =
         (base, source) match
@@ -45,7 +45,7 @@ object Lowering {
             case (b, SIRType.Annotated(_, anns)) if anns.data.contains("uplcRepr") =>
                 b match
                     case SIRType.Annotated(_, bAnns) if bAnns.data.contains("uplcRepr") => b
-                    case _                                                              =>
+                    case _ =>
                         SIRType.Annotated(b, anns)
             case _ => base
 
@@ -847,27 +847,26 @@ object Lowering {
         case _                                     => false
     }
 
-    /** True iff `tp` is a TypeVar at its root, or a single-arg TypeRefApply whose argument
-      * is a TypeVar (e.g. `List[B]`, `Option[A]`). Walks past `TypeProxy`, `TypeLambda`,
-      * `Annotated`. The narrow shape covered here matches the SIR-plugin output-type leak
-      * observed in `IntrinsicsUplcConstrList.map[A,B]` where `app.tp` carries `List[B]`
-      * with `B` not yet bound to the lambda's body type.
+    /** True iff `tp` is a TypeVar at its root, or a single-arg TypeRefApply whose argument is a
+      * TypeVar (e.g. `List[B]`, `Option[A]`). Walks past `TypeProxy`, `TypeLambda`, `Annotated`.
+      * The narrow shape covered here matches the SIR-plugin output-type leak observed in
+      * `IntrinsicsUplcConstrList.map[A,B]` where `app.tp` carries `List[B]` with `B` not yet bound
+      * to the lambda's body type.
       */
     @scala.annotation.tailrec
-    /** True if `tp` has a binding `@UplcRepr` annotation — either as a
-      * `SIRType.Annotated(_, anns)` wrapper or as a class-level annotation in
-      * its constrDecl. Used by `SIR.LamAbs` lowering to decide whether the
-      * return type pins a specific repr that the body's natural repr must
+    /** True if `tp` has a binding `@UplcRepr` annotation — either as a `SIRType.Annotated(_, anns)`
+      * wrapper or as a class-level annotation in its constrDecl. Used by `SIR.LamAbs` lowering to
+      * decide whether the return type pins a specific repr that the body's natural repr must
       * conform to.
       */
     private def hasUplcReprPin(tp: SIRType): Boolean = tp match {
         case SIRType.Annotated(_, anns) if anns.data.contains("uplcRepr") => true
-        case SIRType.Annotated(inner, _) => hasUplcReprPin(inner)
-        case SIRType.CaseClass(decl, _, _) => decl.annotations.data.contains("uplcRepr")
-        case SIRType.SumCaseClass(decl, _) => decl.annotations.data.contains("uplcRepr")
-        case SIRType.TypeLambda(_, body) => hasUplcReprPin(body)
+        case SIRType.Annotated(inner, _)                                  => hasUplcReprPin(inner)
+        case SIRType.CaseClass(decl, _, _)         => decl.annotations.data.contains("uplcRepr")
+        case SIRType.SumCaseClass(decl, _)         => decl.annotations.data.contains("uplcRepr")
+        case SIRType.TypeLambda(_, body)           => hasUplcReprPin(body)
         case SIRType.TypeProxy(ref) if ref != null => hasUplcReprPin(ref)
-        case _ => false
+        case _                                     => false
     }
 
     private def hasFreeTypeVarRoot(tp: SIRType): Boolean = tp match {

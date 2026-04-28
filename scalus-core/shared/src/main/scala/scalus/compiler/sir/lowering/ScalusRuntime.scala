@@ -28,8 +28,8 @@ object ScalusRuntime {
     /** Eagerly materialize every support-module binding into `lctx.scope` as a lazy named var.
       *
       * Called from [[initContext]] so repeated `SIR.ExternalVar` references to a support-module
-      * binding all resolve (via `lctx.scope.getByName`) to the SAME `VariableLoweredValue`, avoiding
-      * duplicate definitions and leaking pattern-bound vars across support-binding bodies.
+      * binding all resolve (via `lctx.scope.getByName`) to the SAME `VariableLoweredValue`,
+      * avoiding duplicate definitions and leaking pattern-bound vars across support-binding bodies.
       *
       * For bindings in the `UplcConstrListOperations` / `UplcConstrOptionOperations` modules we
       * lower under `inUplcConstrListScope = true` so inner `List.Cons(...)` / `Option.Some(...)` /

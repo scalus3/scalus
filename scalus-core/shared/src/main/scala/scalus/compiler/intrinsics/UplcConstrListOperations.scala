@@ -16,8 +16,7 @@ import scalus.compiler.UplcRepresentation.TypeVarKind.{Transparent, Unwrapped}
   * `SIRType.Annotated(..., uplcRepr=UplcConstr)`. Unlike symbol-level annotations (which only wrap
   * the DefDef's declared return), type-level annotations land in the SIR type itself, so a local
   * `def go(lst: List[A] @UplcRepr(UplcConstr)): List[A] @UplcRepr(UplcConstr)` has a `rhs.tp` that
-  * is fully annotated on both in/out — matching what `lowerLet:560` reads when computing
-  * `rhsRepr`.
+  * is fully annotated on both in/out — matching what `lowerLet:560` reads when computing `rhsRepr`.
   *
   * Type parameters remain `@UplcRepr(TypeVar(Unwrapped))`: element bytes flow through in `A`'s
   * stable default representation.
@@ -153,8 +152,8 @@ object UplcConstrListOperations {
     }
 
     /** Local pair type for `quicksort`'s one-pass partition result. Annotated
-      * `@UplcRepr(UplcConstr)` so construction uses native-Constr emission — avoids
-      * Data-encoding the `List[A]` fields for abstract element type `A`.
+      * `@UplcRepr(UplcConstr)` so construction uses native-Constr emission — avoids Data-encoding
+      * the `List[A]` fields for abstract element type `A`.
       */
     @UplcRepr(UplcRepresentation.UplcConstr)
     case class Partition[@UplcRepr(TypeVar(Unwrapped)) A_Partition](

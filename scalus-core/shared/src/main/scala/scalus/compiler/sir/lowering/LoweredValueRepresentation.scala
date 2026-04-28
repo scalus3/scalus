@@ -23,21 +23,21 @@ sealed trait LoweredValueRepresentation {
       * representations return equal `stableKey` strings.
       *
       * Distinct from `toString`: for `SumReprProxy` the default `Object.toString` returns
-      * `ClassName@HEX` (identity-based), leaking proxy-instance identity into any key that
-      * embeds the repr rendering (e.g. `LoweringEq`'s sumEq helper cache, UPLC var-name
-      * derivation). Use `stableKey` there instead.
+      * `ClassName@HEX` (identity-based), leaking proxy-instance identity into any key that embeds
+      * the repr rendering (e.g. `LoweringEq`'s sumEq helper cache, UPLC var-name derivation). Use
+      * `stableKey` there instead.
       *
       * Implemented in terms of [[stableKeyInternal]] which threads a `seen` set through the
       * recursion so self-referential `SumReprProxy` produces `SumProxy(cycle)` as a stable
-      * placeholder. Override [[stableKeyInternal]] in every subclass that recursively contains
-      * a [[LoweredValueRepresentation]] field so the `seen` set is propagated.
+      * placeholder. Override [[stableKeyInternal]] in every subclass that recursively contains a
+      * [[LoweredValueRepresentation]] field so the `seen` set is propagated.
       */
     final def stableKey: String = stableKeyInternal(Set.empty)
 
-    /** Recursive worker for [[stableKey]]. Default delegates to `toString`, which is correct
-      * for leaf case-objects and case-classes whose fields don't recursively contain a
-      * [[LoweredValueRepresentation]]. Any subclass that does contain a nested repr must
-      * override and call `child.stableKeyInternal(seen)` on each nested field.
+    /** Recursive worker for [[stableKey]]. Default delegates to `toString`, which is correct for
+      * leaf case-objects and case-classes whose fields don't recursively contain a
+      * [[LoweredValueRepresentation]]. Any subclass that does contain a nested repr must override
+      * and call `child.stableKeyInternal(seen)` on each nested field.
       */
     def stableKeyInternal(seen: Set[SumCaseClassRepresentation.SumReprProxy]): String = toString
 
@@ -175,7 +175,7 @@ object SumCaseClassRepresentation {
                     kind match
                         case Transparent => true
                         case Fixed       => true
-                        case Unwrapped =>
+                        case Unwrapped   =>
                             // Unwrapped's invariant: bytes are in tp's
                             // defaultRepresentation form. Compatible only when tp's
                             // default IS this Data form — for `@UplcRepr(UplcConstr)`
@@ -522,10 +522,10 @@ object SumCaseClassRepresentation {
         )(using lctx: LoweringContext): Boolean =
             isCompatibleOnTracked(tp, repr, Set.empty, pos)
 
-        /** Proxy-tracked compatibility check. `tp` is the SIR type of the sum we're checking
-          * (used to derive per-variant field types for the Unwrapped-kind case). The `seen`
-          * set tracks SumReprProxy instances already being compared to detect cycles in
-          * recursive types (e.g., List tail → List).
+        /** Proxy-tracked compatibility check. `tp` is the SIR type of the sum we're checking (used
+          * to derive per-variant field types for the Unwrapped-kind case). The `seen` set tracks
+          * SumReprProxy instances already being compared to detect cycles in recursive types (e.g.,
+          * List tail → List).
           */
         private[lowering] def isCompatibleOnTracked(
             tp: SIRType,
@@ -568,9 +568,9 @@ object SumCaseClassRepresentation {
                                 variantsMatchDefaultReprs(tp, pos)
                     case other => this == other
 
-        /** Unwrapped-kind compatibility helper: for each variant, check every field repr is
-          * the default for that field's (substituted) SIR type. Returns false if `tp` can't
-          * be resolved to a concrete DataDecl (e.g. unresolved TypeVar / FreeUnificator).
+        /** Unwrapped-kind compatibility helper: for each variant, check every field repr is the
+          * default for that field's (substituted) SIR type. Returns false if `tp` can't be resolved
+          * to a concrete DataDecl (e.g. unresolved TypeVar / FreeUnificator).
           */
         private def variantsMatchDefaultReprs(tp: SIRType, pos: SIRPosition)(using
             lctx: LoweringContext
@@ -614,9 +614,9 @@ object SumCaseClassRepresentation {
 
     object SumUplcConstr {
 
-        /** Compare field repr lists with proxy tracking. `tp` unavailable at this level; nested
-          * sum checks pass `FreeUnificator` (the Unwrapped-kind branch returns false for
-          * un-resolved tp per agreed semantics).
+        /** Compare field repr lists with proxy tracking. `tp` unavailable at this level; nested sum
+          * checks pass `FreeUnificator` (the Unwrapped-kind branch returns false for un-resolved tp
+          * per agreed semantics).
           */
         private[lowering] def fieldsCompatibleTracked(
             inFields: scala.List[LoweredValueRepresentation],
@@ -715,10 +715,10 @@ object SumCaseClassRepresentation {
 
         override def doc: Doc = ref.doc
 
-        /** Cycle-detecting delegation to `ref`. `seen` tracks proxy *instances* (identity-keyed
-          * via default `equals`/`hashCode`) already being rendered on this call stack; on
-          * revisit, emit `SumProxy(cycle)` as the stable placeholder — the common case for
-          * self-recursive types like `List`'s tail field.
+        /** Cycle-detecting delegation to `ref`. `seen` tracks proxy *instances* (identity-keyed via
+          * default `equals`/`hashCode`) already being rendered on this call stack; on revisit, emit
+          * `SumProxy(cycle)` as the stable placeholder — the common case for self-recursive types
+          * like `List`'s tail field.
           */
         override def stableKeyInternal(seen: Set[SumReprProxy]): String =
             if seen.contains(this) then "SumProxy(cycle)"
@@ -785,7 +785,7 @@ object ProductCaseClassRepresentation {
                     kind match
                         case Transparent => true
                         case Fixed       => true
-                        case Unwrapped =>
+                        case Unwrapped   =>
                             // Unwrapped's invariant: bytes are in tp's
                             // defaultRepresentation form. Compatible only when tp's
                             // default IS this Data form — see DataConstr.isCompatibleOn
@@ -940,9 +940,9 @@ object ProductCaseClassRepresentation {
                     case _ => false
                 }
 
-        /** Unwrapped compatibility: every fieldRepr matches its field's default repr derived
-          * from `tp`'s constructor param types. Returns false if tp can't be resolved to a
-          * concrete constructor.
+        /** Unwrapped compatibility: every fieldRepr matches its field's default repr derived from
+          * `tp`'s constructor param types. Returns false if tp can't be resolved to a concrete
+          * constructor.
           */
         private def fieldsMatchDefaultReprs(tp: SIRType, pos: SIRPosition)(using
             lctx: LoweringContext

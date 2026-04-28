@@ -102,13 +102,14 @@ class LoweringContext(
         Lowering.lowerSIR(sir, optTargetType)(using this)
     }
 
-    /** Return the UPLC type generator for `sirType`, based purely on the type (and its annotations).
+    /** Return the UPLC type generator for `sirType`, based purely on the type (and its
+      * annotations).
       *
-      * Previously this consulted `inUplcConstrListScope` to route unannotated `List[_]` / `Option[_]`
-      * into `SumCaseUplcConstrSirTypeGenerator` inside dispatcher/support-op bodies. Now that
-      * every native-Constr intrinsic signature carries a type-level `@UplcRepr(UplcConstr)`
-      * annotation (which `SIRTyper.sirTypeInEnv` propagates into the SIR type), the routing is
-      * entirely annotation-driven and this function does not need the flag.
+      * Previously this consulted `inUplcConstrListScope` to route unannotated `List[_]` /
+      * `Option[_]` into `SumCaseUplcConstrSirTypeGenerator` inside dispatcher/support-op bodies.
+      * Now that every native-Constr intrinsic signature carries a type-level
+      * `@UplcRepr(UplcConstr)` annotation (which `SIRTyper.sirTypeInEnv` propagates into the SIR
+      * type), the routing is entirely annotation-driven and this function does not need the flag.
       *
       * `inUplcConstrListScope` survives only in `IntrinsicResolver.tryResolve` to select the
       * native-Constr provider binding when dispatching through a support module.
@@ -137,20 +138,19 @@ class LoweringContext(
         typeUnifyEnv.filledTypes.get(tp)
     }
 
-    /** Produce a stable fingerprint of the parts of the enclosing call-site state that a
-      * cached helper's RHS captures from `lctx`, restricted to TypeVars occurring in `tps`.
+    /** Produce a stable fingerprint of the parts of the enclosing call-site state that a cached
+      * helper's RHS captures from `lctx`, restricted to TypeVars occurring in `tps`.
       *
-      * Helpers in `cachedTopLevelHelpers` are built once per cache key and reused on
-      * subsequent hits — but their RHS bodies often consult `typeVarReprEnv` and the
-      * `inUplcConstrListScope` flag during construction (e.g. element-repr resolution
-      * inside an `lvMatchList` body). If the cache key omits this state, the FIRST caller's
-      * env wins, and later callers under a different env get a helper RHS that doesn't
-      * match their context. This is the alone-vs-combined Heisenbug pattern documented in
-      * sessions 11-15: the same `(type, fromRepr, toRepr)` cache key produces
-      * functionally-different helpers depending on first-miss timing.
+      * Helpers in `cachedTopLevelHelpers` are built once per cache key and reused on subsequent
+      * hits — but their RHS bodies often consult `typeVarReprEnv` and the `inUplcConstrListScope`
+      * flag during construction (e.g. element-repr resolution inside an `lvMatchList` body). If the
+      * cache key omits this state, the FIRST caller's env wins, and later callers under a different
+      * env get a helper RHS that doesn't match their context. This is the alone-vs-combined
+      * Heisenbug pattern documented in sessions 11-15: the same `(type, fromRepr, toRepr)` cache
+      * key produces functionally-different helpers depending on first-miss timing.
       *
-      * Including this fingerprint in the cache key forces helpers with different captured
-      * env state to live as separate entries.
+      * Including this fingerprint in the cache key forces helpers with different captured env state
+      * to live as separate entries.
       */
     def captureFingerprint(tps: SIRType*): String = {
         val seen = new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
@@ -218,10 +218,11 @@ class LoweringContext(
 }
 
 object LoweringContext {
+
     /** Process-wide trace facility for `pendingTopLevelLetRecs` add/hit events. Gated by
-      * `SCALUS_TRACE_LETREC` env var (or `-Dscalus.trace.letrec=true` JVM prop). Emits a
-      * monotonic counter so events across multiple `compile { }` calls in the same JVM can be
-      * interleaved and diffed (run-alone vs. run-combined).
+      * `SCALUS_TRACE_LETREC` env var (or `-Dscalus.trace.letrec=true` JVM prop). Emits a monotonic
+      * counter so events across multiple `compile { }` calls in the same JVM can be interleaved and
+      * diffed (run-alone vs. run-combined).
       *
       * Intended usage sites: `ScalusRuntime.builtinListToUplcConstr`,
       * `ScalusRuntime.uplcConstrToBuiltinList`, `LoweringEq.createSumEqHelper`.

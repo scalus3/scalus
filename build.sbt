@@ -133,8 +133,8 @@ lazy val PluginDependency: List[Def.Setting[?]] = List(scalacOptions ++= {
 
     // NOTE: uncomment for faster Scalus Plugin development
     // this will recompile the plugin when the jar is modified
-        Seq(s"-Xplugin:${jar.getAbsolutePath}", s"-Jdummy=${jar.lastModified}")
-    //Seq(s"-Xplugin:${jar.getAbsolutePath}")
+    Seq(s"-Xplugin:${jar.getAbsolutePath}", s"-Jdummy=${jar.lastModified}")
+    // Seq(s"-Xplugin:${jar.getAbsolutePath}")
 })
 
 // =============================================================================

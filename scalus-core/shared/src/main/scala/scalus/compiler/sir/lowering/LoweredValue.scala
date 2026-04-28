@@ -1440,12 +1440,12 @@ object LoweredValue {
     )
 
     /** True iff `target` is `TypeVarRepresentation(Transparent)`. When converting *to* a
-      * Transparent target, we skip the relabel proxy: a Transparent target is a wildcard
-      * accept ("any bytes are fine"), so retaining the source's concrete repr label is
-      * strictly more informative than relabeling to Transparent and losing it. The
-      * dropped relabel was previously the launch point of corruption chains where
-      * Data-encoded bytes acquired a Transparent label, then later passed permissive
-      * `isCompatibleOn` checks on their way to a native-UC target slot.
+      * Transparent target, we skip the relabel proxy: a Transparent target is a wildcard accept
+      * ("any bytes are fine"), so retaining the source's concrete repr label is strictly more
+      * informative than relabeling to Transparent and losing it. The dropped relabel was previously
+      * the launch point of corruption chains where Data-encoded bytes acquired a Transparent label,
+      * then later passed permissive `isCompatibleOn` checks on their way to a native-UC target
+      * slot.
       */
     def isTransparentTypeVarTarget(target: LoweredValueRepresentation): Boolean = target match {
         case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true

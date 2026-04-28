@@ -431,8 +431,7 @@ object IntrinsicResolver {
                             // target representation as the binding's declared return. (Applies
                             // even with the UplcConstr policy still active, for consistency.)
                             val loweringAppType = effectiveArg.sirType match
-                                case SIRType.Annotated(_, anns)
-                                    if anns.data.contains("uplcRepr") =>
+                                case SIRType.Annotated(_, anns) if anns.data.contains("uplcRepr") =>
                                     propagateReturnAnnotation(appType, anns)
                                 case _ => appType
                             val lowered =
@@ -952,9 +951,9 @@ object IntrinsicResolver {
       * `scalus.cardano.onchain.plutus.prelude.List` or `Option`.
       *
       * Used by `IntrinsicResolver.tryResolve` / `tryResolveFull` to detect dispatcher boundaries
-      * where `inUplcConstrListScope` should be flipped while selecting the native-Constr
-      * provider binding. `LoweringContext.typeGenerator` no longer consults the flag (annotation-
-      * driven), so the only remaining effect is provider selection inside the resolver.
+      * where `inUplcConstrListScope` should be flipped while selecting the native-Constr provider
+      * binding. `LoweringContext.typeGenerator` no longer consults the flag (annotation- driven),
+      * so the only remaining effect is provider selection inside the resolver.
       */
     def isUplcConstrListOrOption(tp: SIRType): Boolean = {
         def hasDeclName(t: SIRType, name: String, seen: Set[SIRType.TypeProxy]): Boolean = t match
@@ -966,6 +965,6 @@ object IntrinsicResolver {
             case SIRType.Annotated(inner, _) => hasDeclName(inner, name, seen)
             case _                           => false
         hasDeclName(tp, "scalus.cardano.onchain.plutus.prelude.List", Set.empty) ||
-            hasDeclName(tp, "scalus.cardano.onchain.plutus.prelude.Option", Set.empty)
+        hasDeclName(tp, "scalus.cardano.onchain.plutus.prelude.Option", Set.empty)
     }
 }

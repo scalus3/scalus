@@ -817,7 +817,7 @@ object SIRUnify {
             case (_, SIRType.Annotated(innerParent, anns)) =>
                 subtypeSeq(childCandidate, innerParent, env0) match
                     case Nil => Nil
-                    case xs  =>
+                    case xs =>
                         xs.init :+ SIRType.Annotated(xs.last, anns)
             case (SIRType.TypeNothing, SIRType.TypeNothing) => List(SIRType.TypeNothing)
             case (SIRType.TypeNothing, _)                   => List(childCandidate, parentCandidate)

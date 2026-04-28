@@ -28,10 +28,10 @@ class KnightsTestMinimal extends AnyFunSuite, ScalusTest:
     )
 
     /** Evaluate `sir` and assert the script succeeds with `value` as a BigInt. Accepts both the
-      * native [[Constant.Integer]] form and the Data-wrapped [[Data.I]] form, because some
-      * lowering paths (e.g. a `.x` access on a `TypeVar(Fixed)`-returning extension method)
-      * route the result through Data-based extraction and leave the final `unIData` unwrap to
-      * a later alignment step that isn't always emitted.
+      * native [[Constant.Integer]] form and the Data-wrapped [[Data.I]] form, because some lowering
+      * paths (e.g. a `.x` access on a `TypeVar(Fixed)`-returning extension method) route the result
+      * through Data-based extraction and leave the final `unIData` unwrap to a later alignment step
+      * that isn't always emitted.
       */
     private def assertBigIntResult(sir: SIR, expected: BigInt): Unit =
         val result = sir.toUplc(optimizeUplc = false).evaluateDebug
@@ -200,7 +200,6 @@ class KnightsTestMinimal extends AnyFunSuite, ScalusTest:
             case other                      => fail(s"Unexpected: $other")
     }
 
-
     test("runKnights depth=20 size=4") {
         val sir = compile { runKnights(BigInt(20), BigInt(4)).length }
         sir.toUplc(optimizeUplc = false).evaluateDebug match
@@ -301,7 +300,9 @@ class KnightsTestMinimal extends AnyFunSuite, ScalusTest:
         assertBigIntResult(sir, BigInt(0))
     }
 
-    test("++ then head.depth on List[SolutionEntry] — Knights root cause (UnConstrData on native Constr)") {
+    test(
+      "++ then head.depth on List[SolutionEntry] — Knights root cause (UnConstrData on native Constr)"
+    ) {
         // Minimal reproducer for the remaining KnightsTest 100_4x4/6x6/8x8 failure:
         // `++` on `@UplcRepr(UplcConstr) List[SolutionEntry]` leaves the nested Option
         // field in native form, so the later `Case → unConstrData → ...` conversion trips

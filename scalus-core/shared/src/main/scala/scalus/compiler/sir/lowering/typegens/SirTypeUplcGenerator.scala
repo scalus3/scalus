@@ -57,11 +57,11 @@ trait SirTypeUplcGenerator {
         optTargetType: Option[SIRType] = None
     )(using LoweringContext): LoweredValue
 
-    /** Convenience entry point — pre-lowers `constr.args` and delegates to
-      * [[genConstrLowered]]. Use this when the caller hasn't already lowered the arguments;
-      * callers that have pre-lowered arguments (like the main lowering driver) should call
-      * [[genConstrLowered]] directly to avoid double-lowering. Marked `final` so all
-      * dispatch decisions live in [[genConstrLowered]] and its overrides.
+    /** Convenience entry point — pre-lowers `constr.args` and delegates to [[genConstrLowered]].
+      * Use this when the caller hasn't already lowered the arguments; callers that have pre-lowered
+      * arguments (like the main lowering driver) should call [[genConstrLowered]] directly to avoid
+      * double-lowering. Marked `final` so all dispatch decisions live in [[genConstrLowered]] and
+      * its overrides.
       */
     final def genConstr(
         constr: SIR.Constr,
@@ -104,10 +104,10 @@ object SirTypeUplcGenerator {
 
     /** Resolve a field's representation from its @UplcRepr annotation.
       *
-      * Looks in two places, in order: the field-param's own annotations (`param.annotations`),
-      * and any `SIRType.Annotated` wrapper on the field's declared type (`param.tp`). The latter
-      * is how `List[_] @UplcRepr(UplcConstr)` / `Option[_] @UplcRepr(UplcConstr)` field types
-      * express the repr hint — the annotation rides on the type, not on the TypeBinding.
+      * Looks in two places, in order: the field-param's own annotations (`param.annotations`), and
+      * any `SIRType.Annotated` wrapper on the field's declared type (`param.tp`). The latter is how
+      * `List[_] @UplcRepr(UplcConstr)` / `Option[_] @UplcRepr(UplcConstr)` field types express the
+      * repr hint — the annotation rides on the type, not on the TypeBinding.
       *
       * Returns None if no annotation, otherwise resolves the annotation to a concrete
       * LoweredValueRepresentation based on the field's type.

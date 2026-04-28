@@ -41,7 +41,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     private def assertBudgetClose(
         actual: ExUnits,
         expected: ExUnits,
-        toleranceBps: Int = 500  // 5% tolerance for budget variance
+        toleranceBps: Int = 500 // 5% tolerance for budget variance
     ): Unit = {
         def within(a: Long, e: Long): Boolean =
             math.abs(a - e) * 10000L <= e * toleranceBps
@@ -88,7 +88,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
 
         if !result.isSuccess then println(s"4x4 Result: $result")
         assert(result.isSuccess)
-        if (!ignoreBudgetAssertions) {
+        if !ignoreBudgetAssertions then {
             assertBudgetClose(result.budget, scalusBudget)
         }
 
@@ -208,7 +208,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                         throw new IllegalStateException("Unsupported target lowering backend")
         if !result.isSuccess then println(s"Result:  $result")
         assert(result.isSuccess)
-        if (!ignoreBudgetAssertions) {
+        if !ignoreBudgetAssertions then {
             assertBudgetClose(result.budget, scalusBudget)
         }
 
@@ -316,7 +316,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                 }
         if !result.isSuccess then println(s"8x8 Result: $result")
         assert(result.isSuccess, s"Runtime failure: $result")
-        if (!ignoreBudgetAssertions) {
+        if !ignoreBudgetAssertions then {
             assertBudgetClose(result.budget, scalusBudget)
         }
 
@@ -415,9 +415,11 @@ object KnightsTest:
         def lastPiece: Tile = self.visited.head
 
         def deleteFirst: ChessSet =
-            extension [@UplcRepr(
+            extension [
+                @UplcRepr(
                   UplcRepresentation.TypeVar(UplcRepresentation.TypeVarKind.Transparent)
-                ) A](@UplcRepr(UplcRepresentation.UplcConstr) self: List[A])
+                ) A
+            ](@UplcRepr(UplcRepresentation.UplcConstr) self: List[A])
                 def secondLast: Option[A] =
                     self.reverse match
                         case List.Nil => fail()
