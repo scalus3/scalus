@@ -29,7 +29,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
     )
 
     val printComparison = true
-    val profilingEnabled = true
+    val profilingEnabled = false
     val ignoreBudgetAssertions = false
 
     /** Compare budgets with a small tolerance (default 0.5% = 50 bps). Needed because CSE pass's
