@@ -9,7 +9,6 @@ import scalus.pretty
 import scalus.uplc.*
 import scalus.uplc.UplcAnnotation
 
-import scala.annotation.unused
 import scala.util.control.NonFatal
 
 object Lowering {
