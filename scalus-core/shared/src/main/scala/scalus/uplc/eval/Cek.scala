@@ -862,6 +862,15 @@ class CekMachine(
     private var traceIndex = 0
     private var traceCount = 0L
 
+    // Cached diagnostic-flag readings. `System.getProperty` synchronizes on the
+    // global Properties Hashtable; checking it on every Apply / FrameCases would
+    // serialize all CEK threads through that monitor. Read once at machine-init
+    // and use the cached booleans in the hot path.
+    private val assertApplyDataToUc: Boolean =
+        System.getProperty("scalus.assert.apply.data.to.uc") != null
+    private val assertCaseDataArity: Boolean =
+        System.getProperty("scalus.assert.case.data.arity") != null
+
     private inline def recordSourcePos(pos: ScalusSourcePos): Unit =
         if (profiling || tracing) && !pos.isEmpty then
             traceBuffer(traceIndex) = pos
@@ -1109,7 +1118,7 @@ class CekMachine(
                             // catch wrong-arity VConstr → branch mismatch at the actual eval
                             // moment, BEFORE residual lambdas leak out. lastSourcePos points to
                             // the surrounding Term we last visited.
-                            if System.getProperty("scalus.assert.apply.data.to.uc") != null then
+                            if assertApplyDataToUc then
                                 val branchArity = lamChainDepth(cases(index), 0)
                                 if branchArity > args.size then
                                     System.err.println(
@@ -1206,13 +1215,8 @@ class CekMachine(
                                         // ProductCase selector (4-arg λf0..f3) being misdispatched
                                         // on a Data-encoded value — the exact corruption shape
                                         // behind `MultiplyInteger Apply LamAbs at :477:59`.
-                                        if System.getProperty("scalus.assert.case.data.arity") != null
-                                        then {
-                                            @scala.annotation.tailrec
-                                            def lamDepth(t: Term, acc: Int): Int = t match
-                                                case Term.LamAbs(_, body, _) => lamDepth(body, acc + 1)
-                                                case _                       => acc
-                                            val depth = lamDepth(cases(0), 0)
+                                        if assertCaseDataArity then {
+                                            val depth = lamChainDepth(cases(0), 0)
                                             if depth > 2 then
                                                 System.err.println(
                                                   s"[CASE-DATA-ARITY-MISMATCH] Data.Constr(tag=$tag, " +
@@ -1351,7 +1355,7 @@ class CekMachine(
         // selector). This is the upstream of the case-on-Data-Constr
         // crash; the position annotation here points to the actual Apply
         // that mis-binds.
-        if System.getProperty("scalus.assert.apply.data.to.uc") != null then
+        if assertApplyDataToUc then
             arg match
                 case VCon(Constant.Data(Data.Constr(t, args))) =>
                     fun match
