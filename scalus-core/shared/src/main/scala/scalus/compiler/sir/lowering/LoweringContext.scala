@@ -174,17 +174,30 @@ class LoweringContext(
         val freeTvs = acc.toList
         def tvId(tv: SIRType.TypeVar): String =
             s"${tv.name}#${tv.optId.getOrElse(0L)}"
-        // Restrict to TypeVars that are STILL UNRESOLVED via `typeUnifyEnv` (i.e. carry an
-        // abstract repr binding via `typeVarReprEnv`). Resolved TypeVars are already
-        // structurally captured by `tps.show` / `stableKey`. Including the unify env or every
-        // env binding over-specializes — sessions 11-15 noted that route. The relevant
-        // discriminator is: are there abstract TypeVar reprs in the env that affect helper
-        // RHS construction at this site?
-        val reprBindings = freeTvs.flatMap { tv =>
-            if typeUnifyEnv.filledTypes.contains(tv) then None
-            else typeVarReprEnv.get(tv).map(repr => s"${tvId(tv)}=${repr.stableKey}")
+        // For each free TypeVar in `tps`, capture two pieces of state:
+        //   - resolution: `typeUnifyEnv.filledTypes.get(tv)` rendered with `showDebug` so
+        //     resolved TypeVars include their IDs (avoids name collisions across distinct
+        //     same-named TypeVars). The caller-provided `tps.show` does NOT capture this:
+        //     `List[B]` rendering is the same whether B is resolved or not, so callers with
+        //     `listType=List[B]` but different B-resolutions would otherwise share a helper.
+        //   - abstract repr: `typeVarReprEnv.get(tv)` for unresolved TypeVars whose abstract
+        //     representation affects helper RHS construction.
+        // Plus `inUplcConstrListScope` (binary flag).
+        //
+        // Restricted to free TypeVars in `tps` to avoid over-specializing on irrelevant
+        // env bindings — including the entire `filledTypes` over-keyed and broke valid
+        // helper sharing across structurally-equivalent calls.
+        val bindings = freeTvs.flatMap { tv =>
+            val resolved = typeUnifyEnv.filledTypes.get(tv).map(_.showDebug)
+            val repr =
+                if resolved.isEmpty then typeVarReprEnv.get(tv).map(_.stableKey) else None
+            if resolved.isEmpty && repr.isEmpty then None
+            else
+                Some(
+                  s"${tvId(tv)}=${resolved.map("u:" + _).getOrElse("")}${repr.map("r:" + _).getOrElse("")}"
+                )
         }
-        s"scope=$inUplcConstrListScope|repr=[${reprBindings.mkString(",")}]"
+        s"scope=$inUplcConstrListScope|env=[${bindings.mkString(",")}]"
     }
 
     def log(msg: String): Unit = {
