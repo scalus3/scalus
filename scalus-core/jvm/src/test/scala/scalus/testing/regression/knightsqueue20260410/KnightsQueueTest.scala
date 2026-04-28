@@ -162,4 +162,20 @@ class KnightsQueueTest extends AnyFunSuite {
                 fail(s"KnightsQueueRepro failed: $ex")
             case other => fail(s"Unexpected: $other")
     }
+
+    test("depth field access on @UplcRepr(UplcConstr) SolutionEntry") {
+        val sir = compile {
+            // Bug: accessing depth field on SolutionEntry with @UplcRepr(UplcConstr)
+            val board = KnightsQueueRepro.createBoard(BigInt(4), KnightsQueueRepro.Tile(1, 1))
+            val entry = KnightsQueueRepro.SolutionEntry(BigInt(5), board)
+            entry.depth === BigInt(5)
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(Term.Const(Constant.Bool(v), _), _, _, _) =>
+                assert(v, s"Expected true, got $v")
+            case Result.Failure(ex, _, _, _) =>
+                fail(s"depth field access failed: $ex")
+            case other => fail(s"Unexpected: $other")
+    }
 }

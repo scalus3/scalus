@@ -299,10 +299,10 @@ object StackTraceMachineError {
             val sb = new StringBuilder
             sb.append("\n  Source trace (last ")
             sb.append(trace.size)
-            sb.append(" positions, oldest first):\n")
+            sb.append(" positions, newest first):\n")
             var prev: ScalusSourcePos = ScalusSourcePos.empty
             var repeatCount = 0
-            trace.foreach { pos =>
+            trace.reverseIterator.foreach { pos =>
                 if pos == prev then repeatCount += 1
                 else
                     if repeatCount > 0 then sb.append(s"    ... repeated $repeatCount times\n")
@@ -845,7 +845,8 @@ class CekMachine(
     logger: Logger,
     getBuiltinRuntime: DefaultFun => BuiltinRuntime,
     caseOnBuiltinsEnabled: Boolean = false,
-    profiling: Boolean = false
+    profiling: Boolean = false,
+    tracing: Boolean = false
 ) {
     import CekValue.*
     import Context.*
@@ -861,8 +862,17 @@ class CekMachine(
     private var traceIndex = 0
     private var traceCount = 0L
 
+    // Cached diagnostic-flag readings. `System.getProperty` synchronizes on the
+    // global Properties Hashtable; checking it on every Apply / FrameCases would
+    // serialize all CEK threads through that monitor. Read once at machine-init
+    // and use the cached booleans in the hot path.
+    private val assertApplyDataToUc: Boolean =
+        System.getProperty("scalus.assert.apply.data.to.uc") != null
+    private val assertCaseDataArity: Boolean =
+        System.getProperty("scalus.assert.case.data.arity") != null
+
     private inline def recordSourcePos(pos: ScalusSourcePos): Unit =
-        if profiling && !pos.isEmpty then
+        if (profiling || tracing) && !pos.isEmpty then
             traceBuffer(traceIndex) = pos
             traceIndex = (traceIndex + 1) % traceBufferSize
             traceCount += 1
@@ -1104,6 +1114,21 @@ class CekMachine(
                         require(tag.value < Int.MaxValue, s"Constructor tag too large: $tag")
                         val index = tag.value.toInt
                         if index < cases.size then
+                            // Session-18 diagnostic (gated by -Dscalus.assert.apply.data.to.uc=1):
+                            // catch wrong-arity VConstr → branch mismatch at the actual eval
+                            // moment, BEFORE residual lambdas leak out. lastSourcePos points to
+                            // the surrounding Term we last visited.
+                            if assertApplyDataToUc then
+                                val branchArity = lamChainDepth(cases(index), 0)
+                                if branchArity > args.size then
+                                    System.err.println(
+                                      s"[CASE-VCONSTR-ARITY-MISMATCH] VConstr(tag=$tag, args.size=${args.size}) " +
+                                          s"matched against branch[$index] with arity=$branchArity. " +
+                                          s"residual=${branchArity - args.size}. lastSourcePos=$lastSourcePos"
+                                    )
+                                    System.err.println(
+                                      s"  branch=${cases(index).pretty.render(200).take(600)}"
+                                    )
                             Compute(transferArgStack(args, ctx), env, cases(index))
                         else throw new MissingCaseBranch(tag, env, lastSourcePos)
                     case VCon(const) if caseOnBuiltinsEnabled =>
@@ -1182,6 +1207,27 @@ class CekMachine(
                                               env,
                                               lastSourcePos
                                             )
+                                        // Diagnostic (gated by -Dscalus.assert.case.data.arity=1):
+                                        // when a Data.Constr scrutinee enters the case-on-Data
+                                        // branch, the matched branch should expect at most 2
+                                        // bindings (tag, argsList). If branch 0 is a deeper
+                                        // lambda chain, this is almost certainly a native-UC
+                                        // ProductCase selector (4-arg λf0..f3) being misdispatched
+                                        // on a Data-encoded value — the exact corruption shape
+                                        // behind `MultiplyInteger Apply LamAbs at :477:59`.
+                                        if assertCaseDataArity then {
+                                            val depth = lamChainDepth(cases(0), 0)
+                                            if depth > 2 then
+                                                System.err.println(
+                                                  s"[CASE-DATA-ARITY-MISMATCH] Data.Constr(tag=$tag, " +
+                                                      s"args.size=${args.toScalaList.size}) → branch[0] " +
+                                                      s"has lambda depth=$depth (>2). Likely a native-UC " +
+                                                      s"selector applied to Data. lastSourcePos=$lastSourcePos"
+                                                )
+                                                System.err.println(
+                                                  s"  branch[0] = ${cases(0).pretty.render(200).take(800)}"
+                                                )
+                                        }
                                         val tagVal = VCon(Constant.Integer(tag))
                                         val argsVal = VCon(
                                           Constant.List(
@@ -1302,6 +1348,61 @@ class CekMachine(
         fun: CekValue,
         arg: CekValue
     ): CekState = {
+        // Diagnostic (gated by -Dscalus.assert.apply.data.to.uc=1):
+        // catches the BIND moment where Data.Constr bytes flow into a slot
+        // whose function body uses THAT SAME variable as scrutinee of a
+        // Term.Case with a 4+-arg lambda branch (= native-UC ProductCase
+        // selector). This is the upstream of the case-on-Data-Constr
+        // crash; the position annotation here points to the actual Apply
+        // that mis-binds.
+        if assertApplyDataToUc then
+            arg match
+                case VCon(Constant.Data(Data.Constr(t, args))) =>
+                    fun match
+                        case VLamAbs(name, body, _) =>
+                            val maxArity = maxLamChainOnVar(body, name, 0)
+                            val argsSize = args.toScalaList.size
+                            // Fire when the static selector expects more bindings (4+) than
+                            // the case-on-Data path will provide for a Data.Constr scrutinee
+                            // (always 2: tag + argsList). A 4-arg selector means a native-UC
+                            // ProductCase selector applied to a Data value — the corruption.
+                            if maxArity >= 4 then
+                                System.err.println(
+                                  s"[APPLY-DATA-TO-NATIVE-UC] binding Data.Constr(tag=$t, args.size=$argsSize) to '$name' " +
+                                      s"used as Case scrutinee with selector arity=$maxArity. " +
+                                      s"lastSourcePos=$lastSourcePos"
+                                )
+                                System.err.println(
+                                  s"  bodyAnn=${body.annotation.pos}"
+                                )
+                                System.err.println(
+                                  s"  body=${body.pretty.render(200).take(600)}"
+                                )
+                        case _ => ()
+                // Session-18 extension: catch native VConstr arity mismatch.
+                // The session-17 fix (`c7602ba8f`) closed the Data→native-UC relabel
+                // surface, but the residual flap is a NATIVE VConstr with WRONG arity
+                // being fed to a Case branch with a higher-arity selector. Catch the
+                // BIND moment so the position annotation points to the mis-binding Apply.
+                case VConstr(tag, vargs) =>
+                    fun match
+                        case VLamAbs(name, body, _) =>
+                            val maxArity = maxLamChainOnVar(body, name, 0)
+                            val argsSize = vargs.size
+                            if maxArity > argsSize then
+                                System.err.println(
+                                  s"[APPLY-VCONSTR-ARITY-MISMATCH] binding VConstr(tag=$tag, args.size=$argsSize) to '$name' " +
+                                      s"used as Case scrutinee with selector arity=$maxArity. " +
+                                      s"lastSourcePos=$lastSourcePos"
+                                )
+                                System.err.println(
+                                  s"  bodyAnn=${body.annotation.pos}"
+                                )
+                                System.err.println(
+                                  s"  body=${body.pretty.render(200).take(600)}"
+                                )
+                        case _ => ()
+                case _ => ()
         fun match
             case VLamAbs(name, term, env) => Compute(ctx, env :+ (name, arg), term)
             case VBuiltin(fun, term, runtime) =>
@@ -1324,6 +1425,41 @@ class CekMachine(
                   lastSourcePos,
                   getSourceTrace
                 )
+    }
+
+    @scala.annotation.tailrec
+    private def lamChainDepth(t: Term, acc: Int): Int = t match
+        case Term.LamAbs(_, body, _) => lamChainDepth(body, acc + 1)
+        case _                       => acc
+
+    // Walk the body of a VLamAbs looking for the maximum lambda-chain arity
+    // of any Term.Case branch whose scrutinee is exactly the lambda's bound
+    // parameter (by NamedDeBruijn name match). Returns the max arity seen,
+    // or 0 if no such Case was found. Bound by a small recursion-depth budget.
+    private def maxLamChainOnVar(t: Term, paramName: String, depth: Int): Int = {
+        if depth > 8 then 0
+        else
+            t match
+                case Term.Case(scrut, branches, _) if branches.nonEmpty =>
+                    val scrutMatchesParam = scrut match
+                        case Term.Var(ndb, _) => ndb.name == paramName
+                        case _                => false
+                    val here = if scrutMatchesParam then lamChainDepth(branches.head, 0) else 0
+                    val sub = maxLamChainOnVar(scrut, paramName, depth + 1)
+                    val branchMax =
+                        branches
+                            .map(b => maxLamChainOnVar(b, paramName, depth + 1))
+                            .foldLeft(0)(math.max)
+                    math.max(here, math.max(sub, branchMax))
+                case Term.Apply(f, a, _) =>
+                    math.max(
+                      maxLamChainOnVar(f, paramName, depth + 1),
+                      maxLamChainOnVar(a, paramName, depth + 1)
+                    )
+                case Term.Force(b, _)     => maxLamChainOnVar(b, paramName, depth + 1)
+                case Term.Delay(b, _)     => maxLamChainOnVar(b, paramName, depth + 1)
+                case Term.LamAbs(_, b, _) => maxLamChainOnVar(b, paramName, depth + 1)
+                case _                    => 0
     }
 
     /** `force` a term and proceed.

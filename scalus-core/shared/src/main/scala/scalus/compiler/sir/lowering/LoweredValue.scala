@@ -61,7 +61,11 @@ trait LoweredValue {
     def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        lctx.typeGenerator(sirType).toRepresentation(this, representation, pos)
+        if representation == this.representation then this
+        else if LoweredValue.isTransparentTypeVarTarget(representation) then this
+        else if this.representation.isCompatibleOn(sirType, representation, pos) then
+            RepresentationProxyLoweredValue(this, representation, pos)
+        else lctx.typeGenerator(sirType).toRepresentation(this, representation, pos)
     }
 
     def upcastOne(targetType: SIRType, pos: SIRPosition)(using
@@ -131,8 +135,35 @@ trait LoweredValue {
                         .isCompatibleOn(targetType, targetRepr, pos)
                 then structurallyUpcasted
                 else structurallyUpcasted.toRepresentation(targetRepr, pos)
+            case _ if containsFreeUnificatorTarget(targetType) =>
+                // Widening to/through FreeUnificator (Any): structural unification succeeds
+                // trivially because FreeUnificator unifies with anything, but the target's
+                // default repr is TypeVarRepresentation(Fixed) (Data-wrapped). If the value's
+                // current repr doesn't satisfy that, we must wrap — e.g., `() => BigInt`
+                // widened to `() => Any` needs its returned Integer wrapped via `iData` to
+                // become Data. Route through the type's generator (FunSirTypeGenerator for
+                // Fun targets, TypeVarSirTypeGenerator for bare FreeUnificator) which knows
+                // how to emit the proper conversion.
+                val targetRepr = lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+                if structurallyUpcasted.representation == targetRepr then structurallyUpcasted
+                else if structurallyUpcasted.representation
+                        .isCompatibleOn(targetType, targetRepr, pos)
+                then structurallyUpcasted
+                else structurallyUpcasted.toRepresentation(targetRepr, pos)
             case _ => structurallyUpcasted
     }
+
+    /** True when `tp` is `FreeUnificator` directly, or a `Fun`/`TypeLambda` whose output
+      * transitively mentions `FreeUnificator` at the return position. Used by [[maybeUpcast]] to
+      * decide when structural unification needs repr reconciliation.
+      */
+    private def containsFreeUnificatorTarget(tp: SIRType): Boolean = tp match
+        case SIRType.FreeUnificator                => true
+        case SIRType.Fun(_, out)                   => containsFreeUnificatorTarget(out)
+        case SIRType.TypeLambda(_, body)           => containsFreeUnificatorTarget(body)
+        case SIRType.Annotated(inner, _)           => containsFreeUnificatorTarget(inner)
+        case SIRType.TypeProxy(ref) if ref != null => containsFreeUnificatorTarget(ref)
+        case _                                     => false
 
     def findSelfOrSubtems(p: LoweredValue => Boolean): Option[LoweredValue]
 
@@ -363,13 +394,12 @@ class VariableLoweredValue(
         using lctx: LoweringContext
     ): LoweredValue = {
         if representation == this.representation then this
+        else if LoweredValue.isTransparentTypeVarTarget(representation) then this
         else if this.representation.isCompatibleOn(sirType, representation, pos) then
-            // Compatible but not identical — relabel without conversion
             RepresentationProxyLoweredValue(this, representation, pos)
         else
             otherRepresentations.get(representation) match {
                 case Some(depVar) =>
-                    // if we have already created dependent variable for this representation, return it
                     depVar
                 case None =>
                     val retval = summon[LoweringContext]
@@ -387,7 +417,6 @@ class VariableLoweredValue(
                     otherRepresentations.put(representation, depVar)
                     depVar
             }
-
     }
 
     override def dominatingUplevelVars: Set[IdentifiableLoweredValue] =
@@ -475,6 +504,7 @@ case class DependendVariableLoweredValue(
         using LoweringContext
     ): LoweredValue = {
         if representation == this.representation then this
+        else if LoweredValue.isTransparentTypeVarTarget(representation) then this
         else if this.representation.isCompatibleOn(sirType, representation, pos) then
             RepresentationProxyLoweredValue(this, representation, pos)
         else if representation == parent.representation then parent
@@ -1409,6 +1439,19 @@ object LoweredValue {
         var printedIdentifiers: Set[String] = Set.empty
     )
 
+    /** True iff `target` is `TypeVarRepresentation(Transparent)`. When converting *to* a
+      * Transparent target, we skip the relabel proxy: a Transparent target is a wildcard accept
+      * ("any bytes are fine"), so retaining the source's concrete repr label is strictly more
+      * informative than relabeling to Transparent and losing it. The dropped relabel was previously
+      * the launch point of corruption chains where Data-encoded bytes acquired a Transparent label,
+      * then later passed permissive `isCompatibleOn` checks on their way to a native-UC target
+      * slot.
+      */
+    def isTransparentTypeVarTarget(target: LoweredValueRepresentation): Boolean = target match {
+        case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
+        case _                                                      => false
+    }
+
     /** Builder for LoweredValue, to avoid boilerplate code. Import this object to make available
       */
     object Builder {
@@ -1914,29 +1957,41 @@ object LoweredValue {
             val (argTypevarResolved, typeAligned) = arg.sirType match {
                 case tv: SIRType.TypeVar =>
                     val resolvedArgType = lctx.resolveTypeVarIfNeeded(arg.sirType)
+                    import SIRType.TypeVarKind.*
+                    def reprFor(
+                        gen: typegens.SirTypeUplcGenerator,
+                        tp: SIRType
+                    ): LoweredValueRepresentation =
+                        tv.kind match
+                            case Transparent | Unwrapped => gen.defaultRepresentation(tp)
+                            case Fixed                   => gen.defaultTypeVarReperesentation(tp)
                     resolvedArgType match
                         case tv1: SIRType.TypeVar =>
                             val targetArgGen = lctx.typeGenerator(targetArgType)
-                            val targetArgRepr =
-                                if tv.isBuiltin then
-                                    targetArgGen.defaultRepresentation(targetArgType)
-                                else targetArgGen.defaultTypeVarReperesentation(targetArgType)
+                            val targetArgRepr = reprFor(targetArgGen, targetArgType)
+                            // Don't silently relabel: ask the value to convert to the target
+                            // repr. If arg.representation's kind disagrees with targetArgRepr
+                            // (e.g., Fixed→Unwrapped) and the TypeVar isn't resolvable, the
+                            // generator throws — which is what we want: a compile-time error
+                            // instead of a runtime byte-shape mismatch.
+                            val argConverted = arg.toRepresentation(targetArgRepr, inPos)
                             val argTyped = new TypeRepresentationProxyLoweredValue(
-                              arg,
+                              argConverted,
                               targetArgType,
-                              targetArgRepr,
+                              argConverted.representation,
                               inPos
                             )
                             (argTyped, true)
                         case other =>
                             val gen = lctx.typeGenerator(other)
-                            val targetArgRepr =
-                                if tv.isBuiltin then gen.defaultRepresentation(other)
-                                else gen.defaultTypeVarReperesentation(other)
+                            val targetArgRepr = reprFor(gen, other)
+                            // Same rule as above: convert, don't relabel. With `other`
+                            // concrete the generator can emit real unwrap/wrap builtins.
+                            val argConverted = arg.toRepresentation(targetArgRepr, inPos)
                             val argTyped = new TypeRepresentationProxyLoweredValue(
-                              arg,
+                              argConverted,
                               other,
-                              targetArgRepr,
+                              argConverted.representation,
                               inPos
                             )
                             (argTyped, false)
@@ -2159,9 +2214,14 @@ object LoweredValue {
                         )
 
                     }
-                    val resRepresentation = resRepr.getOrElse(
-                      lctx.typeGenerator(resType).defaultRepresentation(resType)
-                    )
+                    // Prefer `applied.representation` — which carries annotation-derived
+                    // per-param reprs from `fRepresentationPair.outRepr` — over
+                    // `defaultRepresentation(resType)`, which is computed from the declared
+                    // Scala type and may lack per-param `@UplcRepr` annotations. The default
+                    // otherwise inserts eager alignment conversions at every partial
+                    // application — the root cause of KnightsTest's 34k whole-queue
+                    // conversions in the annotated depthSearch loop.
+                    val resRepresentation = resRepr.getOrElse(applied.representation)
                     val retval = alignTypeArgumentsAndRepresentations(
                       applied,
                       resType,

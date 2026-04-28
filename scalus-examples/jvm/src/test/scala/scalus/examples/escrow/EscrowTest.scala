@@ -110,7 +110,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         )
 
         assertResult(
-          ExUnits(memory = 242959, steps = 80494342)
+          ExUnits(memory = 231621L, steps = 79379490L)
         ):
             depositTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(depositTx).await()
@@ -182,7 +182,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         )
 
         assertResult(
-          ExUnits(memory = 221040, steps = 72308038)
+          ExUnits(memory = 211276L, steps = 70850794L)
         ):
             payTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(payTx).await()
@@ -267,7 +267,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         )
 
         assertResult(
-          ExUnits(memory = 234222, steps = 78031260)
+          ExUnits(memory = 228352L, steps = 79151493L)
         ):
             refundTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(refundTx).await()

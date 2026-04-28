@@ -41,7 +41,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (ExUnits(memory = 207398, steps = 66207117))
+          res.budget == (ExUnits(memory = 202724L, steps = 66170631L))
         )
     }
 
@@ -90,7 +90,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (ExUnits(memory = 362074, steps = 111702264))
+          res.budget == (ExUnits(memory = 355456L, steps = 111552918L))
         )
     }
 
@@ -120,7 +120,7 @@ class SimpleTransferValidatorTest extends AnyFunSuite with ScalusTest {
         val res = contract.program.runWithDebug(ctx)
         assert(res.isSuccess, res.logs)
         assert(
-          res.budget == (ExUnits(memory = 117998, steps = 39202644))
+          res.budget == (ExUnits(memory = 113998L, steps = 38621205L))
         )
     }
 

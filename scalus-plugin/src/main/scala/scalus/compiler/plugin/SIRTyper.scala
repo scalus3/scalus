@@ -33,6 +33,62 @@ class SIRTyper(using Context) {
     private val uplcRepresentationClass =
         Symbols.requiredClass("scalus.compiler.UplcRepresentation")
 
+    /** Extract a `TypeVarKind` from `@UplcRepr(TypeVar(kind))` on a symbol. Returns `None` if the
+      * annotation is absent or its argument isn't a `TypeVar(...)` shape. Used by
+      * [[SIRCompiler.compileDefDef]] to stamp the correct kind on a method's `SIRType.TypeVar`.
+      */
+    def extractTypeVarKindFromUplcRepr(sym: Symbol): Option[SIRType.TypeVarKind] = {
+        def fromSym(s: Symbol): Option[SIRType.TypeVarKind] =
+            s.getAnnotation(uplcReprAnnotation).flatMap { annot =>
+                annot.argument(0).flatMap {
+                    case Typed(inner, _) => unwrapKindArg(inner)
+                    case other           => unwrapKindArg(other)
+                }
+            }
+        fromSym(sym).orElse {
+            // Scala 3 stores class-level type-param annotations on the class's typeParam
+            // symbols, not on the primary constructor's mirrored typeParam symbols. When
+            // the plugin processes case-class bodies via `primaryConstructor.paramSymss`,
+            // the symbols we receive have `owner = <init>` and carry no annotations. Fall
+            // back to looking up the same-named typeParam on the enclosing class.
+            if sym.isTypeParam && sym.owner.exists && sym.owner.owner.exists then
+                val ownerOwner = sym.owner.owner
+                if ownerOwner.isClass then
+                    ownerOwner.typeParams
+                        .find(_.name.show == sym.name.show)
+                        .flatMap(fromSym)
+                else None
+            else None
+        }
+    }
+
+    /** Looks for `UplcRepresentation.TypeVar(<KindTermRef>)` and decodes the kind term. */
+    private def unwrapKindArg(tree: Tree): Option[SIRType.TypeVarKind] = tree match {
+        case Apply(fun, List(kindTree)) if isTypeVarApply(fun) =>
+            decodeTypeVarKindRef(kindTree)
+        case _ => None
+    }
+
+    private def isTypeVarApply(tree: Tree): Boolean = {
+        val symName = tree.symbol.name.show
+        symName == "TypeVar" || symName == "apply"
+    }
+
+    private def decodeTypeVarKindRef(tree: Tree): Option[SIRType.TypeVarKind] = {
+        val termSym = tree match {
+            case Typed(inner, _) => inner.symbol
+            case other           => other.symbol
+        }
+        if !termSym.exists then None
+        else
+            termSym.name.show match {
+                case "Transparent" => Some(SIRType.TypeVarKind.Transparent)
+                case "Unwrapped"   => Some(SIRType.TypeVarKind.Unwrapped)
+                case "Fixed"       => Some(SIRType.TypeVarKind.Fixed)
+                case _             => None
+            }
+    }
+
     /** Extracts the UplcRepr annotation from a symbol and encodes it as a map entry. */
     private def extractUplcReprAnnotation(sym: Symbol): Map[String, SIR] = {
         sym.getAnnotation(uplcReprAnnotation) match {
@@ -138,8 +194,9 @@ class SIRTyper(using Context) {
                 else if sym.isClass then makeSIRNonFunClassType(tpc, Nil, env)
                 else if sym.isTypeParam then
                     env.vars.get(sym) match
-                        case Some(t) => t
-                        case None    =>
+                        case Some(t) =>
+                            t
+                        case None =>
 //                            val name = sym.fullName.show
                             unsupportedType(tp, s"Unfilled typeParam: ${tpc.show}", env)
                 else if sym.isAliasType then
@@ -253,7 +310,8 @@ class SIRTyper(using Context) {
                 SIRType.TypeVar(
                   paramName,
                   Some(tp.typeSymbol.hashCode),
-                  SIRType.TypeVarKind.Fixed
+                  extractTypeVarKindFromUplcRepr(tp.typeSymbol)
+                      .getOrElse(SIRType.TypeVarKind.Fixed)
                 )
             case tpc: ThisType =>
                 sirTypeInEnv(tpc.underlying, env)
@@ -268,7 +326,8 @@ class SIRTyper(using Context) {
                     SIRType.TypeVar(
                       name.show,
                       Some(ref.typeSymbol.hashCode()),
-                      SIRType.TypeVarKind.Fixed
+                      extractTypeVarKindFromUplcRepr(ref.typeSymbol)
+                          .getOrElse(SIRType.TypeVarKind.Fixed)
                     )
                 }
                 SIRType.TypeLambda(params, sirTypeInEnvWithErr(tpp.resultType, env))
@@ -277,7 +336,8 @@ class SIRTyper(using Context) {
                     SIRType.TypeVar(
                       name.show,
                       Some(ref.typeSymbol.hashCode()),
-                      SIRType.TypeVarKind.Fixed
+                      extractTypeVarKindFromUplcRepr(ref.typeSymbol)
+                          .getOrElse(SIRType.TypeVarKind.Fixed)
                     )
                 }
                 SIRType.TypeLambda(params, sirTypeInEnvWithErr(tpl.resType, env))
@@ -297,7 +357,6 @@ class SIRTyper(using Context) {
                         typeVar.stripped match
                             case TypeParamRef(binder, idx) =>
                                 val paramName = binder.paramNames(idx).show
-                                // unsupportedType(tp, s"TypeVar ${typeVar.show}, name=${name}", env)
                                 val symCode =
                                     if typeVar.typeSymbol == Symbols.NoSymbol then
                                         // (binder.typeSymbol.hashCode().toLong << 32) + idx
@@ -306,10 +365,22 @@ class SIRTyper(using Context) {
                                 //  not sure, if typeVar,typeSymbol is exista and is unique.
                                 // code as binding symbol ?
                                 // TODO: make SymCode long to accept such encoding
+                                // Look for `@UplcRepr(TypeVar(kind))` on the referenced
+                                // type parameter. For method-level params the binder's
+                                // paramRef symbol carries the annotation; for class-level
+                                // params it lives on the enclosing class's typeParam, which
+                                // `extractTypeVarKindFromUplcRepr` falls back to.
+                                val kindFromAnn =
+                                    if typeVar.typeSymbol != Symbols.NoSymbol then
+                                        extractTypeVarKindFromUplcRepr(typeVar.typeSymbol)
+                                    else
+                                        binder.typeSymbol.typeParams
+                                            .lift(idx)
+                                            .flatMap(extractTypeVarKindFromUplcRepr)
                                 SIRType.TypeVar(
                                   paramName,
                                   Some(symCode),
-                                  SIRType.TypeVarKind.Fixed
+                                  kindFromAnn.getOrElse(SIRType.TypeVarKind.Fixed)
                                 )
                             case other =>
                                 // this is a filled typeVar, which can be substitutef
@@ -700,13 +771,13 @@ class SIRTyper(using Context) {
         val (typeParamSymbols, paramSymbols) =
             retrieveTypeParamsAndParamsFromConstructor(typeSymbol, env)
         val tparams =
-            typeParamSymbols.map(s =>
+            typeParamSymbols.map { s =>
                 SIRType.TypeVar(
                   s.name.show,
                   Some(s.hashCode),
-                  SIRType.TypeVarKind.Fixed
+                  extractTypeVarKindFromUplcRepr(s).getOrElse(SIRType.TypeVarKind.Fixed)
                 )
-            )
+            }
         val nVars = env.vars ++ typeParamSymbols.zip(tparams)
         val nEnv = env.copy(vars = nVars)
         val params = paramSymbols.map { s =>
@@ -863,7 +934,8 @@ class SIRTyper(using Context) {
                         SIRType.TypeVar(
                           tps.name.show,
                           Some(tps.hashCode),
-                          SIRType.TypeVarKind.Fixed
+                          extractTypeVarKindFromUplcRepr(tps)
+                              .getOrElse(SIRType.TypeVarKind.Fixed)
                         )
                     )
                 val newVars = s.typeParams.zip(sirTypeParams).toMap
@@ -896,7 +968,8 @@ class SIRTyper(using Context) {
                 SIRType.TypeVar(
                   tp.name.show,
                   Some(tp.hashCode()),
-                  SIRType.TypeVarKind.Fixed
+                  extractTypeVarKindFromUplcRepr(tp)
+                      .getOrElse(SIRType.TypeVarKind.Fixed)
                 )
             )
         val dataDeclBaseAnns = AnnotationsDecl.fromSym(typeSymbol)

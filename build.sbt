@@ -133,8 +133,8 @@ lazy val PluginDependency: List[Def.Setting[?]] = List(scalacOptions ++= {
 
     // NOTE: uncomment for faster Scalus Plugin development
     // this will recompile the plugin when the jar is modified
-    //    Seq(s"-Xplugin:${jar.getAbsolutePath}", s"-Jdummy=${jar.lastModified}")
-    Seq(s"-Xplugin:${jar.getAbsolutePath}")
+    Seq(s"-Xplugin:${jar.getAbsolutePath}", s"-Jdummy=${jar.lastModified}")
+    // Seq(s"-Xplugin:${jar.getAbsolutePath}")
 })
 
 // =============================================================================
@@ -422,6 +422,8 @@ lazy val scalusUplcJitCompiler = project
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
       // Exclude benchmark-tagged tests from default test runs
       Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark"),
+      // Full stack traces for test failures (helps debug deep lowering errors)
+      Test / testOptions += Tests.Argument("-oF"),
       inConfig(Test)(PluginDependency),
       publish / skip := true
     )

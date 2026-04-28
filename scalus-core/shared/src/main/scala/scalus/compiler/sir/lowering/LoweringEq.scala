@@ -174,7 +174,20 @@ object LoweringEq {
             case SIRType.SumCaseClass(_, _) => ()
             case _                          => return generateDataEquals(lhs, rhs, pos)
         val rhsConv = rhs.toRepresentation(lhsSum, pos)
-        val typeKey = sumEqKey(baseType)
+        // Cache key must include the concrete `lhsSum` representation: two call sites with
+        // the same type but different SumUplcConstr field reprs produce structurally-different
+        // helper bodies (field comparisons walk the baked-in field reprs). A type-only key
+        // would hand caller B caller A's helper → runtime repr mismatch.
+        //
+        // Use `stableKey` (not `show`/`toString`) so structurally-equal reprs produce equal
+        // keys — avoids over-specializing on `SumReprProxy` identity.
+        //
+        // Plus `captureFingerprint`: the helper RHS dispatches on field reprs which may consult
+        // `lctx.typeVarReprEnv` and the unify env for parametric fields. Without this, the
+        // first caller's env wins and later callers under different env state share a helper
+        // whose RHS doesn't match — see sessions 11-15 alone-vs-combined Heisenbug.
+        val typeKey = sumEqKey(baseType) + "|" + lhsSum.stableKey +
+            "|" + lctx.captureFingerprint(baseType)
         val funType = SIRType.Fun(baseType, SIRType.Fun(baseType, SIRType.Boolean))
         val innerFunType = SIRType.Fun(baseType, SIRType.Boolean)
         val innerFunRepr = LambdaRepresentation(
@@ -186,19 +199,21 @@ object LoweringEq {
           InOutRepresentationPair(lhsSum, innerFunRepr)
         )
         // Reuse cached helper across emission sites; emit and register on first encounter.
-        val eqFnVar = lctx.cachedTopLevelHelpers.getOrElseUpdate(
-          typeKey,
-          createSumEqHelper(
-            typeKey,
-            baseType,
-            lhsSum,
-            funType,
-            funRepr,
-            innerFunType,
-            innerFunRepr,
-            pos
-          )
-        )
+        val eqFnVar = lctx.cachedTopLevelHelpers.get(typeKey) match
+            case Some(v) =>
+                LoweringContext.traceLetRec("HIT", "sumEq", typeKey)
+                v
+            case None =>
+                createSumEqHelper(
+                  typeKey,
+                  baseType,
+                  lhsSum,
+                  funType,
+                  funRepr,
+                  innerFunType,
+                  innerFunRepr,
+                  pos
+                )
         lvApplyDirect(
           lvApplyDirect(eqFnVar, lhs, innerFunType, innerFunRepr, pos),
           rhsConv,
@@ -332,6 +347,7 @@ object LoweringEq {
           pos
         )
         lctx.pendingTopLevelLetRecs += ((eqFnVar, eqFnRhs))
+        LoweringContext.traceLetRec("ADD", "sumEq", typeKey)
         eqFnVar
     }
 

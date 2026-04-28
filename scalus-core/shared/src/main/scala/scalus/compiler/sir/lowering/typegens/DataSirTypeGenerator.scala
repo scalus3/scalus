@@ -98,12 +98,16 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
                     )
     }
 
-    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         val pos = constr.anns.pos
         constr.name match {
             case SIRType.Data.I.name =>
                 // Data.I(value: Integer) => iData(value)
-                val argLowered = lctx.lower(constr.args.head)
+                val argLowered = loweredArgs.head
                 // If arg is already packed as Data, just retype it to Data.I
                 if argLowered.representation.isPackedData then
                     TypeRepresentationProxyLoweredValue(
@@ -126,7 +130,7 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
 
             case SIRType.Data.B.name =>
                 // Data.B(value: ByteString) => bData(value)
-                val argLowered = lctx.lower(constr.args.head)
+                val argLowered = loweredArgs.head
                 // If arg is already packed as Data, just retype it to Data.B
                 if argLowered.representation.isPackedData then
                     TypeRepresentationProxyLoweredValue(
@@ -150,7 +154,7 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
             case SIRType.Data.List.name =>
                 // Data.List(values: List[Data]) => listData(values)
                 // The argument is List[Data] which lowers to SumDataList (BuiltinList[Data])
-                val argLowered = lctx.lower(constr.args.head)
+                val argLowered = loweredArgs.head
                 val argAsSumDataList =
                     argLowered.toRepresentation(
                       SumCaseClassRepresentation.SumBuiltinList(
@@ -168,7 +172,7 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
 
             case SIRType.Data.Map.name =>
                 // Data.Map(values: List[(Data, Data)]) => mapData(values)
-                val argLowered = lctx.lower(constr.args.head)
+                val argLowered = loweredArgs.head
                 val pairRepr = SumCaseClassRepresentation.SumPairBuiltinList(
                   SumCaseClassRepresentation.DataData,
                   SumCaseClassRepresentation.DataData
@@ -185,10 +189,10 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
 
             case SIRType.Data.Constr.name =>
                 // Data.Constr(tag: Integer, args: List[Data]) => constrData(tag, args)
-                val tagLowered = lctx.lower(constr.args(0))
+                val tagLowered = loweredArgs(0)
                 val tagAsConstant =
                     tagLowered.toRepresentation(PrimitiveRepresentation.Constant, pos)
-                val argsLowered = lctx.lower(constr.args(1))
+                val argsLowered = loweredArgs(1)
                 val argsAsSumDataList =
                     argsLowered.toRepresentation(
                       SumCaseClassRepresentation.SumBuiltinList(

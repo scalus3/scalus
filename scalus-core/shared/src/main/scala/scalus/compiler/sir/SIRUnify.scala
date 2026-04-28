@@ -478,16 +478,18 @@ object SIRUnify {
                                     .updated(v1, v1EqTypes + v2)
                                     .updated(v2, v2EqTypes + v1)
                                 UnificationSuccess(env.copy(eqTypes = nEqTypes), v1)
-            // Transparent TypeVars are UPLC-level passthrough, so the repr hint carried by
+            // Transparent TypeVars are UPLC-level wildcards, so the repr hint carried by
             // an Annotated wrapper must survive unification (downstream generators look up
             // the filled-in type's repr). Fixed TypeVars are always Data-encoded — the
             // annotation is meaningless and is stripped below so structural matching works.
-            case (a @ SIRType.Annotated(_, _), v: SIRType.TypeVar)
-                if v.kind == SIRType.TypeVarKind.Transparent =>
+            // Unwrapped is intentionally NOT included: an Unwrapped TypeVar is already in
+            // the concrete-default form for its type, and propagating the Annotated wrapper
+            // through the unify env can mis-fingerprint downstream `cachedTopLevelHelpers`
+            // and surface as `LoweringException: cannot convert with TypeVar element B`.
+            case (a @ SIRType.Annotated(_, _), v: SIRType.TypeVar) if v.isBuiltin =>
                 val nEnv = env.copy(filledTypes = env.filledTypes.updated(v, a))
                 checkEqType(nEnv, v, a)
-            case (v: SIRType.TypeVar, a @ SIRType.Annotated(_, _))
-                if v.kind == SIRType.TypeVarKind.Transparent =>
+            case (v: SIRType.TypeVar, a @ SIRType.Annotated(_, _)) if v.isBuiltin =>
                 val nEnv = env.copy(filledTypes = env.filledTypes.updated(v, a))
                 checkEqType(nEnv, v, a)
             // Unwrap Annotated before TypeVar — annotations are representation hints,
@@ -809,6 +811,17 @@ object SIRUnify {
         val env = env0.withUpcasting
 
         (childCandidate, parentCandidate) match
+            // Annotated wrappers are representation-hint metadata; peel them for structural
+            // subtype comparison. When the parent side is annotated, preserve the annotation
+            // on the final step of the returned path so the caller (e.g. `maybeUpcast` →
+            // `upcastOne` chain) upcasts to the annotated target.
+            case (SIRType.Annotated(innerChild, _), _) =>
+                subtypeSeq(innerChild, parentCandidate, env0)
+            case (_, SIRType.Annotated(innerParent, anns)) =>
+                subtypeSeq(childCandidate, innerParent, env0) match
+                    case Nil => Nil
+                    case xs =>
+                        xs.init :+ SIRType.Annotated(xs.last, anns)
             case (SIRType.TypeNothing, SIRType.TypeNothing) => List(SIRType.TypeNothing)
             case (SIRType.TypeNothing, _)                   => List(childCandidate, parentCandidate)
             case (_, SIRType.TypeNothing)                   => List.empty

@@ -47,7 +47,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 140899, steps = 46704909)
+          ExUnits(memory = 139293L, steps = 47153240L)
         )
     }
 
@@ -74,7 +74,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 141500, steps = 46831782)
+          ExUnits(memory = 139894L, steps = 47280113L)
         )
     }
 
@@ -101,7 +101,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 140899, steps = 46704909)
+          ExUnits(memory = 139293L, steps = 47153240L)
         )
     }
 
@@ -242,7 +242,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           p2RevealTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 88326, steps = 27766004)
+          ExUnits(memory = 85794L, steps = 27354821L)
         )
     }
 
@@ -289,7 +289,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           timeoutTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 91297, steps = 28121732)
+          ExUnits(memory = 89665L, steps = 27854549L)
         )
     }
 
@@ -377,7 +377,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           loseTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 130574, steps = 40991237)
+          ExUnits(memory = 126710L, steps = 40360871L)
         )
     }
 
@@ -422,7 +422,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           timeoutTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 91297, steps = 28166908)
+          ExUnits(memory = 89665L, steps = 27899725L)
         )
     }
 
@@ -533,7 +533,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           loseTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 130574, steps = 41036413)
+          ExUnits(memory = 126710L, steps = 40406047L)
         )
     }
 
@@ -703,7 +703,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           p1RevealTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 87725, steps = 27639131)
+          ExUnits(memory = 85193L, steps = 27227948L)
         )
     }
 }

@@ -41,30 +41,33 @@ trait SirTypeUplcGenerator {
         LoweringContext
     ): LoweredValue
 
-    /** Generate constructor for this type. Always called on DataDecl.tp
+    /** Generate constructor for this type — the workhorse, takes pre-lowered arguments.
+      * Implementations override this. Always called on `DataDecl.tp` (or a more specific
+      * case-class type for Sum→Product dispatch).
       *
-      * @param constr - constructor, which we should generate
+      * @param constr - constructor SIR node (carries name, decl, parentTypeArgs, anns, tp)
+      * @param loweredArgs - already-lowered constructor arguments, in declaration order.
+      *   Length matches `constr.args`.
+      * @param optTargetType - optional target type (e.g., for Nil typing where the constr's
+      *   declared `tp` is `List[Nothing]`).
       */
-    def genConstr(constr: SIR.Constr)(using
-        LoweringContext
-    ): LoweredValue
-
-    /** Generate constructor with pre-lowered arguments.
-      *
-      * Used when the caller has already lowered arguments (e.g., to inspect their repr
-      * for Transparent TypeVar cascade). Default implementation ignores loweredArgs and
-      * falls back to genConstr (which re-lowers args). Generators that support pre-lowered
-      * args should override this.
-      *
-      * @param constr - constructor SIR node
-      * @param loweredArgs - already-lowered constructor arguments
-      * @param optTargetType - optional target type (e.g., for Nil typing)
-      */
-    def genConstrFromLowered(
+    def genConstrLowered(
         constr: SIR.Constr,
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType] = None
-    )(using LoweringContext): LoweredValue = genConstr(constr)
+    )(using LoweringContext): LoweredValue
+
+    /** Convenience entry point — pre-lowers `constr.args` and delegates to [[genConstrLowered]].
+      * Use this when the caller hasn't already lowered the arguments; callers that have pre-lowered
+      * arguments (like the main lowering driver) should call [[genConstrLowered]] directly to avoid
+      * double-lowering. Marked `final` so all dispatch decisions live in [[genConstrLowered]] and
+      * its overrides.
+      */
+    final def genConstr(
+        constr: SIR.Constr,
+        optTargetType: Option[SIRType] = None
+    )(using lctx: LoweringContext): LoweredValue =
+        genConstrLowered(constr, constr.args.map(arg => lctx.lower(arg)), optTargetType)
 
     def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         LoweringContext
@@ -78,15 +81,19 @@ trait SirTypeUplcGenerator {
         LoweringContext
     ): LoweredValue
 
-    /** Check if any lowered argument has Transparent TypeVar representation. When true, the
-      * constructor should cascade to UplcConstr representation because Transparent values can't be
-      * serialized to Data.
+    /** Check if any lowered argument has a Transparent (wildcard, passthrough) TypeVar
+      * representation. When true, the constructor should cascade to UplcConstr representation
+      * because Transparent values can't be safely serialized to Data without knowing the caller's
+      * concrete substitution. Unwrapped TypeVars are NOT included here — they are in the type's
+      * defaultRepresentation form, which is independently navigable; the cascade decision for them
+      * is handled by the surrounding generator dispatch (see
+      * `LoweringException: cannot convert with TypeVar element` paths if this is widened).
       */
     protected def hasTransparentTypeVarArgs(loweredArgs: scala.List[LoweredValue]): Boolean =
         loweredArgs.exists { arg =>
             arg.representation match
-                case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
-                case _                                                      => false
+                case tvr: TypeVarRepresentation => tvr.isBuiltin
+                case _                          => false
         }
 
 }
@@ -101,13 +108,26 @@ object SirTypeUplcGenerator {
 
     /** Resolve a field's representation from its @UplcRepr annotation.
       *
+      * Looks in two places, in order: the field-param's own annotations (`param.annotations`), and
+      * any `SIRType.Annotated` wrapper on the field's declared type (`param.tp`). The latter is how
+      * `List[_] @UplcRepr(UplcConstr)` / `Option[_] @UplcRepr(UplcConstr)` field types express the
+      * repr hint — the annotation rides on the type, not on the TypeBinding.
+      *
       * Returns None if no annotation, otherwise resolves the annotation to a concrete
       * LoweredValueRepresentation based on the field's type.
       */
     def resolveFieldRepr(param: TypeBinding, paramType: SIRType)(using
         lctx: LoweringContext
     ): Option[LoweredValueRepresentation] = {
-        param.annotations.data.get("uplcRepr").map { reprSir =>
+        def typeLevelReprSir(t: SIRType): Option[SIR] = t match
+            case SIRType.Annotated(_, anns) => anns.data.get("uplcRepr")
+            case _                          => None
+        val reprSirOpt =
+            param.annotations.data
+                .get("uplcRepr")
+                .orElse(typeLevelReprSir(param.tp))
+                .orElse(typeLevelReprSir(paramType))
+        reprSirOpt.map { reprSir =>
             resolveReprAnnotation(reprSir, paramType)
         }
     }
@@ -209,7 +229,7 @@ object SirTypeUplcGenerator {
             case "SumDataList" =>
                 new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData)
             case "SumPairDataList"       => SumPairBuiltinListSirTypeGenerator
-            case "Map"                   => MapSirTypeGenerator
+            case "PackedDataMap"         => MapSirTypeGenerator
             case "Data"                  => SIRTypeUplcDataGenerator
             case "BuiltinArray"          => BuiltinArraySirTypeGenerator
             case "ProductCaseOneElement" =>

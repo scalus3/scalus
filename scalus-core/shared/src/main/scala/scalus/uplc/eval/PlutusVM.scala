@@ -73,7 +73,7 @@ class PlutusVM(
       *   The result of the evaluation
       */
     def evaluateScriptDebug(program: DeBruijnedProgram): Result =
-        runWithBudgetTracking(program.term, validateResult = true)
+        runWithBudgetTracking(program.term, tracing = true, validateResult = true)
 
     /** Evaluates a Plutus script with profiling enabled.
       *
@@ -86,7 +86,7 @@ class PlutusVM(
       *   Result with `profile` set
       */
     def evaluateScriptProfile(program: DeBruijnedProgram): Result =
-        runWithBudgetTracking(program.term, profiling = true, validateResult = true)
+        runWithBudgetTracking(program.term, profiling = true, tracing = true, validateResult = true)
 
     /** Evaluates a debruijned term using the CEK machine. This method does not follow CIP-117.
       *
@@ -131,6 +131,7 @@ class PlutusVM(
     private def runWithBudgetTracking(
         debruijnedTerm: Term,
         profiling: Boolean = false,
+        tracing: Boolean = false,
         validateResult: Boolean = false
     ): Result = {
         val spenderLogger = TallyingBudgetSpenderLogger(CountingBudgetSpender())
@@ -140,7 +141,8 @@ class PlutusVM(
           spenderLogger,
           builtins.getBuiltinRuntime,
           caseOnBuiltinsEnabled,
-          profiling = profiling
+          profiling = profiling,
+          tracing = tracing
         )
         try
             val term = DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))

@@ -55,46 +55,46 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
         // assert(compiled.script.script.size == 1485)
         assert(
           compiled.script.script.size ==
-              1392
+              1387
         )
     }
 
     // Expected execution budgets for success tests
     // TODO: review after changing PairData representations
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "deposit_successful" -> (ExUnits(memory = 55778, steps = 23_418_865)),
+      "deposit_successful" -> (ExUnits(memory = 55178L, steps = 23322865L)),
       // "accept_successful" -> ExUnits(memory = 73023, steps = 27249620),
-      "accept_successful" -> (ExUnits(memory = 67743, steps = 25_194_033)),
+      "accept_successful" -> (ExUnits(memory = 66443L, steps = 25044594L)),
       // "accept_with_multiple_inputs" -> ExUnits(memory = 78845, steps = 30325979),
-      "accept_with_multiple_inputs" -> (ExUnits(memory = 73565, steps = 28_270_392)),
+      "accept_with_multiple_inputs" -> (ExUnits(memory = 72265L, steps = 28120953L)),
       // "accept_with_datum_attached" -> ExUnits(memory = 73023, steps = 27249620),
-      "accept_with_datum_attached" -> (ExUnits(memory = 67743, steps = 25_194_033)),
+      "accept_with_datum_attached" -> (ExUnits(memory = 66443L, steps = 25044594L)),
       // "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 97969, steps = 37424519),
-      "accept_with_multiple_outputs_to_seller" -> (ExUnits(memory = 90161, steps = 34_552_644)),
+      "accept_with_multiple_outputs_to_seller" -> (ExUnits(memory = 86761L, steps = 34067205L)),
       // "refund_successful" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_successful" -> (ExUnits(memory = 81418, steps = 30_029_992)),
+      "refund_successful" -> (ExUnits(memory = 80118L, steps = 29880553L)),
       // "refund_after_exact_deadline" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_after_exact_deadline" -> (ExUnits(memory = 81418, steps = 30_029_992)),
+      "refund_after_exact_deadline" -> (ExUnits(memory = 80118L, steps = 29880553L)),
       // "refund_with_multiple_inputs" -> ExUnits(memory = 93612, steps = 35805398),
-      "refund_with_multiple_inputs" -> (ExUnits(memory = 87240, steps = 33_106_351)),
+      "refund_with_multiple_inputs" -> (ExUnits(memory = 85940L, steps = 32956912L)),
       // "refund_with_datum_attached" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_with_datum_attached" -> (ExUnits(memory = 81418, steps = 30_029_992)),
+      "refund_with_datum_attached" -> (ExUnits(memory = 80118L, steps = 29880553L)),
       // "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 112736, steps = 42903938)
-      "refund_with_multiple_outputs_to_buyer" -> (ExUnits(memory = 103836, steps = 39_388_603))
+      "refund_with_multiple_outputs_to_buyer" -> (ExUnits(memory = 100436L, steps = 38903164L))
     )
 
     // TODO: review after changing PairData representations
     private val expectedFees: Map[String, Coin] = Map(
-      "deposit_successful" -> Coin(4907),
-      "accept_successful" -> Coin(5726),
-      "accept_with_multiple_inputs" -> Coin(6283),
-      "accept_with_datum_attached" -> Coin(5726),
-      "accept_with_multiple_outputs_to_seller" -> Coin(7694),
-      "refund_successful" -> Coin(6863),
-      "refund_after_exact_deadline" -> Coin(6863),
-      "refund_with_multiple_inputs" -> Coin(7421),
-      "refund_with_datum_attached" -> Coin(6863),
-      "refund_with_multiple_outputs_to_buyer" -> Coin(8832)
+      "deposit_successful" -> Coin(4866),
+      "accept_successful" -> Coin(5640),
+      "accept_with_multiple_inputs" -> Coin(6198),
+      "accept_with_datum_attached" -> Coin(5640),
+      "accept_with_multiple_outputs_to_seller" -> Coin(7463),
+      "refund_successful" -> Coin(6778),
+      "refund_after_exact_deadline" -> Coin(6778),
+      "refund_with_multiple_inputs" -> Coin(7335),
+      "refund_with_datum_attached" -> Coin(6778),
+      "refund_with_multiple_outputs_to_buyer" -> Coin(8601)
     )
 
     // Generate test cases from the JSON

@@ -1,5 +1,59 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `@UplcRepr` annotation propagation through lambda parameters and return types: function/extension
+  param annotations are honoured in `lvApply`, lambda body repr is pinned to the class-level
+  `@UplcRepr` on the return type, and product-field reprs flow through `IfThenElse`/`Apply`
+  target-type propagation
+- `appendedAll` intrinsic for `UplcConstr` lists — eliminates per-element re-encoding when
+  concatenating two `@UplcRepr(UplcConstr)` lists (used by `Queue` in the Knights benchmark)
+- native `UplcConstr` Option intrinsics — `isDefined`, `isEmpty`, `get`, `getOrElse`, `map`,
+  `flatMap`, `filter`, `exists`, `forall` now have native-Constr code paths
+- type-level `@UplcRepr(UplcConstr)` annotations recognised by SIR generators
+  (`ProductCaseUplcConstrSirTypeGenerator`, `SumCaseUplcConstrSirTypeGenerator`)
+- gated CEK diagnostic assertions for representation/arity mismatches
+  (`-Dscalus.assert.apply.data.to.uc=1`): `[APPLY-DATA-TO-NATIVE-UC]`,
+  `[APPLY-VCONSTR-ARITY-MISMATCH]`, `[CASE-VCONSTR-ARITY-MISMATCH]`,
+  `[CASE-DATA-ARITY-MISMATCH]`
+
+### Changed
+
+- removed `Options.nativeListElements` flag — the type-level `@UplcRepr` machinery now keeps native
+  lists end-to-end, so the dual lowering paths and per-test `if/else` budget snapshots are gone
+- `cachedTopLevelHelpers` cache keys now discriminate by call-site env capture and resolved
+  `TypeVar` bindings (`captureFingerprint(tps)` plus `typeUnifyEnv.filledTypes` rendered via
+  `showDebug`), so two callers with the same SIR shape but different repr environment get
+  separate helpers
+- `pendingTopLevelLetRecs` is scoped per compile unit (no cross-compile leakage); only letrec
+  bindings reachable from the lowering root are wrapped
+- `stableKey` includes structural repr info to reduce `SumReprProxy` identity leaks across
+  `cachedTopLevelHelpers` lookups
+- `ProductCaseUplcConstrSirTypeGenerator.upcastOne` now dispatches on `input.representation`
+  rather than relabeling unconditionally — closes the unsafe-Data-as-UC relabel surface that
+  produced 4-arg native selectors against Data scrutinees
+- `precomputedValues` removed; canonical `genConstrLowered` API hosts the dispatch chain in the
+  generators instead of an outer wrapper
+
+### Fixed
+
+- `ProdDataConstr` / `DataConstr` `.isCompatibleOn(_, TypeVarRepresentation(_))` was unconditionally
+  permissive: any TypeVar kind matched. For `@UplcRepr(UplcConstr)` types whose default rep is
+  native Constr, a Data → `TypeVarRepresentation(Unwrapped)` "compat" returned true, producing a
+  pure relabel and leaving Data bytes labeled as Unwrapped. Downstream `genSelect` then emitted a
+  4-arg native-UC selector against a 2-arg `Data.Constr` scrutinee, leaving a 2-arg residual
+  lambda and a `MultiplyInteger Apply LamAbs` runtime crash. Fix: discriminate `TypeVarKind` —
+  `Transparent`/`Fixed` stay compatible; `Unwrapped` only when
+  `lctx.typeGenerator(tp).defaultRepresentation(tp) == this`
+- `Fixed` `TypeVar` in `UplcConstr` fields falls back to default rep instead of leaking abstract
+  Data marker
+- representations propagate through `TypeVar` and `FreeUnificator` widenings so structural
+  unification doesn't drop the caller's repr context
+- `lowerUnboxedNil` consults `lctx.typeGenerator` for policy consistency
+- `lvApply` preserves `@UplcRepr` param reprs; CSE guarded against partial-builtin helpers
+
 ## 0.16.0 (2026-03-06)
 
 ### Added

@@ -681,24 +681,36 @@ object FlatInstances:
 
     given HashConsedFlat[SIRType.TypeVar] with
 
+        // Two-bit kind tag: 0 = Transparent, 1 = Unwrapped, 2 = Fixed.
+        // (Was a 1-bit Boolean before Unwrapped existed — all SIR modules must be
+        // recompiled after this change.)
+        private val KindBits: Int = 2
+
         override def bitSizeHC(a: SIRType.TypeVar, hashCons: HashConsed.State): Int =
-            summon[Flat[String]].bitSize(a.name) + summon[Flat[Long]].bitSize(
-              a.optId.getOrElse(0L) + 1
-            )
+            summon[Flat[String]].bitSize(a.name) +
+                summon[Flat[Long]].bitSize(a.optId.getOrElse(0L) + 1) +
+                KindBits
 
         override def encodeHC(a: SIRType.TypeVar, encode: HashConsedEncoderState): Unit =
             summon[Flat[String]].encode(a.name, encode.encode)
             summon[Flat[Long]].encode(a.optId.getOrElse(0L), encode.encode)
-            // Backward-compatible: serialize as boolean (Transparent=true, else false)
-            summon[Flat[Boolean]].encode(a.isBuiltin, encode.encode)
+            val tag = a.kind match
+                case SIRType.TypeVarKind.Transparent => 0
+                case SIRType.TypeVarKind.Unwrapped   => 1
+                case SIRType.TypeVarKind.Fixed       => 2
+            encode.encode.bits(KindBits, tag.toByte)
 
         override def decodeHC(decode: HashConsedDecoderState): SIRType.TypeVar =
             val name = summon[Flat[String]].decode(decode.decode)
             val optId = summon[Flat[Long]].decode(decode.decode) match
                 case 0  => None
                 case id => Some(id)
-            val isBuiltin = summon[Flat[Boolean]].decode(decode.decode)
-            SIRType.TypeVar(name, optId, SIRType.TypeVarKind.fromIsBuiltin(isBuiltin))
+            val kind = decode.decode.bits8(KindBits) match
+                case 0 => SIRType.TypeVarKind.Transparent
+                case 1 => SIRType.TypeVarKind.Unwrapped
+                case 2 => SIRType.TypeVarKind.Fixed
+                case n => throw new IllegalStateException(s"Unknown TypeVarKind tag: $n")
+            SIRType.TypeVar(name, optId, kind)
 
     object SIRTypeSumCaseClassFlat extends HashConsedMutRefReprFlat[SIRType, SIRTypeHashConsedRef] {
 

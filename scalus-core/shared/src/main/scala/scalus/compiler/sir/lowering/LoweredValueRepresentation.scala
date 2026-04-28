@@ -19,6 +19,28 @@ sealed trait LoweredValueRepresentation {
     def doc: Doc = Doc.text(this.toString)
     def show = doc.render(80)
 
+    /** Stable structural key for use as cache-key / identifier-suffix. Two structurally-equal
+      * representations return equal `stableKey` strings.
+      *
+      * Distinct from `toString`: for `SumReprProxy` the default `Object.toString` returns
+      * `ClassName@HEX` (identity-based), leaking proxy-instance identity into any key that embeds
+      * the repr rendering (e.g. `LoweringEq`'s sumEq helper cache, UPLC var-name derivation). Use
+      * `stableKey` there instead.
+      *
+      * Implemented in terms of [[stableKeyInternal]] which threads a `seen` set through the
+      * recursion so self-referential `SumReprProxy` produces `SumProxy(cycle)` as a stable
+      * placeholder. Override [[stableKeyInternal]] in every subclass that recursively contains a
+      * [[LoweredValueRepresentation]] field so the `seen` set is propagated.
+      */
+    final def stableKey: String = stableKeyInternal(Set.empty)
+
+    /** Recursive worker for [[stableKey]]. Default delegates to `toString`, which is correct for
+      * leaf case-objects and case-classes whose fields don't recursively contain a
+      * [[LoweredValueRepresentation]]. Any subclass that does contain a nested repr must override
+      * and call `child.stableKeyInternal(seen)` on each nested field.
+      */
+    def stableKeyInternal(seen: Set[SumCaseClassRepresentation.SumReprProxy]): String = toString
+
     /** The SIR type that values actually have at the UPLC level for this representation.
       *
       * @param semanticType
@@ -145,11 +167,25 @@ object SumCaseClassRepresentation {
             tp: SIRType,
             repr: LoweredValueRepresentation,
             pos: SIRPosition
-        )(using LoweringContext): Boolean =
+        )(using lctx: LoweringContext): Boolean =
             repr match {
-                case DataConstr               => true
-                case TypeVarRepresentation(_) => true
-                case other                    => false
+                case DataConstr => true
+                case TypeVarRepresentation(kind) =>
+                    import SIRType.TypeVarKind.*
+                    kind match
+                        case Transparent => true
+                        case Fixed       => true
+                        case Unwrapped   =>
+                            // Unwrapped's invariant: bytes are in tp's
+                            // defaultRepresentation form. Compatible only when tp's
+                            // default IS this Data form — for `@UplcRepr(UplcConstr)`
+                            // types whose default is native Constr, a relabel without
+                            // conversion would leave Data bytes labeled as native Constr
+                            // and cause `MultiplyInteger Apply LamAbs`-style residual
+                            // lambdas at runtime when downstream genSelect emits a
+                            // native-arity Case branch on the Data scrutinee.
+                            lctx.typeGenerator(tp).defaultRepresentation(tp) == this
+                case other => false
             }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.Data.tp
@@ -249,14 +285,16 @@ object SumCaseClassRepresentation {
                             elementRepr.isCompatibleOn(elemType, otherElemRepr, pos)
                         case None => elementRepr.isDataCentric
                 // SumUplcConstr is compatible with SumBuiltinList(Transparent) —
-                // Transparent element TypeVar accepts any list representation as proxy
-                case _: SumUplcConstr =>
-                    elementRepr match
-                        case tvr: TypeVarRepresentation
-                            if tvr.kind == SIRType.TypeVarKind.Transparent =>
-                            true
-                        case _ => false
-                case _ => this == repr
+                // a Transparent (unknown/passthrough) element TypeVar accepts any list
+                // representation as proxy. Unwrapped/Fixed have concrete element-shape
+                // expectations and need explicit conversion.
+                // SumBuiltinList (a UPLC cons-list) and SumUplcConstr (a Constr chain) are
+                // different runtime structures — conversion is always needed, regardless of
+                // the element repr. Returning `true` here would cause `toRepresentation` to
+                // emit a no-op Proxy wrapper, leaving a BuiltinList value where UplcConstr
+                // is expected at runtime.
+                case _: SumUplcConstr => false
+                case _                => this == repr
             }
 
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = {
@@ -266,6 +304,9 @@ object SumCaseClassRepresentation {
                     decl.name == SIRType.List.dataDecl.name ||
                     decl.name == SIRType.BuiltinList.dataDecl.name
         }
+
+        override def stableKeyInternal(seen: Set[SumReprProxy]): String =
+            s"SumBuiltinList(${elementRepr.stableKeyInternal(seen)})"
     }
 
     object SumBuiltinList {
@@ -360,6 +401,9 @@ object SumCaseClassRepresentation {
                                     )
                                 case None => false
         }
+
+        override def stableKeyInternal(seen: Set[SumReprProxy]): String =
+            s"SumPairBuiltinList(${keyRepr.stableKeyInternal(seen)},${valueRepr.stableKeyInternal(seen)})"
     }
 
     object SumPairBuiltinList {
@@ -476,39 +520,104 @@ object SumCaseClassRepresentation {
             repr: LoweredValueRepresentation,
             pos: SIRPosition
         )(using lctx: LoweringContext): Boolean =
-            isCompatibleOnTracked(repr, Set.empty, pos)
+            isCompatibleOnTracked(tp, repr, Set.empty, pos)
 
-        /** Proxy-tracked compatibility check. The `seen` set tracks SumReprProxy instances already
-          * being compared to detect cycles in recursive types (e.g., List tail → List).
+        /** Proxy-tracked compatibility check. `tp` is the SIR type of the sum we're checking (used
+          * to derive per-variant field types for the Unwrapped-kind case). The `seen` set tracks
+          * SumReprProxy instances already being compared to detect cycles in recursive types (e.g.,
+          * List tail → List).
           */
         private[lowering] def isCompatibleOnTracked(
+            tp: SIRType,
             repr: LoweredValueRepresentation,
             seen: Set[SumReprProxy],
             pos: SIRPosition
-        )(using lctx: LoweringContext): Boolean = repr match
-            case proxy: SumReprProxy =>
-                if seen.contains(proxy) then true // cycle — already comparing this proxy
-                else if proxy.ref != null then isCompatibleOnTracked(proxy.ref, seen + proxy, pos)
-                else true
-            case other: SumUplcConstr =>
-                this == other || variants.forall { (tag, inProd) =>
-                    other.variants.get(tag) match
-                        case None => true
-                        case Some(outProd) =>
-                            SumUplcConstr.fieldsCompatibleTracked(
-                              inProd.fieldReprs,
-                              outProd.fieldReprs,
-                              seen,
-                              pos
-                            )
-                }
-            case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
-            case other                                                  => this == other
+        )(using lctx: LoweringContext): Boolean =
+            // Fast structural short-circuit: equal `stableKey` ⇒ same repr (cycle-broken by
+            // `SumProxy(cycle)`).
+            if this.stableKey == repr.stableKey then true
+            else
+                repr match
+                    case proxy: SumReprProxy =>
+                        if seen.contains(proxy) then true // cycle — already comparing
+                        else if proxy.ref != null then
+                            isCompatibleOnTracked(tp, proxy.ref, seen + proxy, pos)
+                        else false // unset proxy with a non-matching stableKey
+                    case other: SumUplcConstr =>
+                        variants.forall { (tag, inProd) =>
+                            other.variants.get(tag) match
+                                case None => true
+                                case Some(outProd) =>
+                                    SumUplcConstr.fieldsCompatibleTracked(
+                                      inProd.fieldReprs,
+                                      outProd.fieldReprs,
+                                      seen,
+                                      pos
+                                    )
+                        }
+                    case tvr: TypeVarRepresentation =>
+                        import SIRType.TypeVarKind.*
+                        tvr.kind match
+                            case Transparent => true
+                            case Fixed       => false
+                            case Unwrapped   =>
+                                // Compatible if every variant's field reprs are each field
+                                // type's default representation. Requires resolving `tp` to
+                                // a concrete DataDecl/constructor chain so we can pair each
+                                // ProdUplcConstr's fieldReprs with constructor param types.
+                                variantsMatchDefaultReprs(tp, pos)
+                    case other => this == other
+
+        /** Unwrapped-kind compatibility helper: for each variant, check every field repr is the
+          * default for that field's (substituted) SIR type. Returns false if `tp` can't be resolved
+          * to a concrete DataDecl (e.g. unresolved TypeVar / FreeUnificator).
+          */
+        private def variantsMatchDefaultReprs(tp: SIRType, pos: SIRPosition)(using
+            lctx: LoweringContext
+        ): Boolean = {
+            val (constructors, typeArgs, typeParams) = tp match
+                case SIRType.SumCaseClass(decl, tArgs) =>
+                    (decl.constructors, tArgs, decl.typeParams)
+                case SIRType.CaseClass(cd, tArgs, Some(SIRType.SumCaseClass(decl, pArgs))) =>
+                    (decl.constructors, pArgs, decl.typeParams)
+                case SIRType.CaseClass(cd, tArgs, None) =>
+                    (scala.List(cd), tArgs, cd.typeParams)
+                case SIRType.TypeLambda(_, body) =>
+                    return variantsMatchDefaultReprs(body, pos)
+                case SIRType.TypeProxy(ref) if ref != null =>
+                    return variantsMatchDefaultReprs(ref, pos)
+                case SIRType.Annotated(inner, _) =>
+                    return variantsMatchDefaultReprs(inner, pos)
+                case _ => return false
+            val typeSubst: Map[SIRType.TypeVar, SIRType] =
+                typeParams.zip(typeArgs.map(lctx.resolveTypeVarIfNeeded)).toMap
+            constructors.zipWithIndex.forall { case (constrDecl, idx) =>
+                variants.get(idx) match
+                    case None => true
+                    case Some(prod) =>
+                        prod.fieldReprs.zip(constrDecl.params).forall { case (fr, param) =>
+                            val fieldType =
+                                SIRType.substitute(param.tp, typeSubst, Map.empty)
+                            val defaultRepr =
+                                lctx.typeGenerator(fieldType).defaultRepresentation(fieldType)
+                            fr == defaultRepr || fr.stableKey == defaultRepr.stableKey
+                        }
+            }
+        }
+
+        override def stableKeyInternal(seen: Set[SumReprProxy]): String =
+            variants.toSeq
+                .sortBy(_._1)
+                .map { case (tag, prod) => s"$tag:${prod.stableKeyInternal(seen)}" }
+                .mkString("SumUplcConstr(", ",", ")")
     }
 
     object SumUplcConstr {
 
-        /** Compare field repr lists with proxy tracking. */
+        /** Compare field repr lists with proxy tracking. `tp` unavailable at this level; nested sum
+          * checks pass `FreeUnificator` (the Unwrapped-kind branch returns false for un-resolved tp
+          * per agreed semantics).
+          */
         private[lowering] def fieldsCompatibleTracked(
             inFields: scala.List[LoweredValueRepresentation],
             outFields: scala.List[LoweredValueRepresentation],
@@ -519,13 +628,18 @@ object SumCaseClassRepresentation {
                 inFields.zip(outFields).forall { (inR, outR) =>
                     (inR, outR) match
                         case (a: SumUplcConstr, b) =>
-                            a.isCompatibleOnTracked(b, seen, pos)
+                            a.isCompatibleOnTracked(SIRType.FreeUnificator, b, seen, pos)
                         case (a: SumReprProxy, b: SumReprProxy) =>
                             if seen.contains(a) || seen.contains(b) then true
                             else if a.ref != null && b.ref != null then
                                 a.ref match
                                     case aSum: SumUplcConstr =>
-                                        aSum.isCompatibleOnTracked(b.ref, seen + a + b, pos)
+                                        aSum.isCompatibleOnTracked(
+                                          SIRType.FreeUnificator,
+                                          b.ref,
+                                          seen + a + b,
+                                          pos
+                                        )
                                     case _ => a.ref == b.ref
                             else true
                         case (a: SumReprProxy, b) =>
@@ -533,7 +647,12 @@ object SumCaseClassRepresentation {
                             else if a.ref != null then
                                 a.ref match
                                     case aSum: SumUplcConstr =>
-                                        aSum.isCompatibleOnTracked(b, seen + a, pos)
+                                        aSum.isCompatibleOnTracked(
+                                          SIRType.FreeUnificator,
+                                          b,
+                                          seen + a,
+                                          pos
+                                        )
                                     case _ => a.ref.isCompatibleOn(SIRType.FreeUnificator, b, pos)
                             else true
                         case (a, b: SumReprProxy) =>
@@ -547,7 +666,24 @@ object SumCaseClassRepresentation {
                             ) =>
                             tagA == tagB && fieldsCompatibleTracked(fieldsA, fieldsB, seen, pos)
                         case _ =>
-                            inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
+                            val compatible = inR.isCompatibleOn(SIRType.FreeUnificator, outR, pos)
+                            // Debug: check for TypeVarRepresentation(Fixed) vs Constant mismatch
+                            (inR, outR) match
+                                case (
+                                      TypeVarRepresentation(SIRType.TypeVarKind.Fixed),
+                                      PrimitiveRepresentation.Constant
+                                    ) | (
+                                      PrimitiveRepresentation.Constant,
+                                      TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
+                                    ) =>
+                                    System.err.println(
+                                      s"[DEBUG fieldsCompatibleTracked] Checking compatibility:"
+                                    )
+                                    System.err.println(s"  inR = $inR")
+                                    System.err.println(s"  outR = $outR")
+                                    System.err.println(s"  compatible = $compatible")
+                                case _ => // no debug
+                            compatible
                 }
     }
 
@@ -558,28 +694,35 @@ object SumCaseClassRepresentation {
     class SumReprProxy(var ref: SumCaseClassRepresentation)
         extends SumCaseClassRepresentation(false, false) {
 
+        // `ref` is set by `buildSumUplcConstr` before it returns, and no external caller
+        // observes the proxy mid-build (all field reprs are computed via
+        // `typeGenerator(paramType).defaultRepresentation(paramType)`, which doesn't
+        // compare against the partially-built selfProxy). So every method below delegates
+        // directly to `ref` — no null-guards needed.
+
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
-            if ref != null then ref.defaultUni(semanticType)
-            else DefaultUni.BuiltinValue
+            ref.defaultUni(semanticType)
 
         override def isCompatibleOn(
             tp: SIRType,
             repr: LoweredValueRepresentation,
             pos: SIRPosition
-        )(using lctx: LoweringContext): Boolean = repr match
-            // Self-referential proxy — always compatible with same family
-            case _: SumUplcConstr | _: SumReprProxy => true
-            case _ =>
-                if ref != null then ref.isCompatibleOn(tp, repr, pos)
-                else false
+        )(using lctx: LoweringContext): Boolean =
+            ref.isCompatibleOn(tp, repr, pos)
 
         override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean =
-            if ref != null then ref.isCompatibleWithType(tp)
-            else true
+            ref.isCompatibleWithType(tp)
 
-        override def doc: Doc =
-            if ref != null then ref.doc
-            else Doc.text("SumReprProxy(unset)")
+        override def doc: Doc = ref.doc
+
+        /** Cycle-detecting delegation to `ref`. `seen` tracks proxy *instances* (identity-keyed via
+          * default `equals`/`hashCode`) already being rendered on this call stack; on revisit, emit
+          * `SumProxy(cycle)` as the stable placeholder — the common case for self-recursive types
+          * like `List`'s tail field.
+          */
+        override def stableKeyInternal(seen: Set[SumReprProxy]): String =
+            if seen.contains(this) then "SumProxy(cycle)"
+            else s"SumProxy(${ref.stableKeyInternal(seen + this)})"
     }
 
 }
@@ -633,12 +776,22 @@ object ProductCaseClassRepresentation {
             repr: LoweredValueRepresentation,
             pos: SIRPosition
         )(using
-            LoweringContext
+            lctx: LoweringContext
         ): Boolean =
             repr match {
-                case ProdDataConstr           => true
-                case TypeVarRepresentation(_) => true
-                case other                    => false
+                case ProdDataConstr => true
+                case TypeVarRepresentation(kind) =>
+                    import SIRType.TypeVarKind.*
+                    kind match
+                        case Transparent => true
+                        case Fixed       => true
+                        case Unwrapped   =>
+                            // Unwrapped's invariant: bytes are in tp's
+                            // defaultRepresentation form. Compatible only when tp's
+                            // default IS this Data form — see DataConstr.isCompatibleOn
+                            // for the full rationale.
+                            lctx.typeGenerator(tp).defaultRepresentation(tp) == this
+                case other => false
             }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
             SIRType.Data.tp
@@ -700,6 +853,11 @@ object ProductCaseClassRepresentation {
                         resolved.isCompatibleOn(tp, this, pos)
                 case _ => false
             }
+
+        override def stableKeyInternal(
+            seen: Set[SumCaseClassRepresentation.SumReprProxy]
+        ): String =
+            s"ProdBuiltinPair(${fstRepr.stableKeyInternal(seen)},${sndRepr.stableKeyInternal(seen)})"
     }
 
     object ProdBuiltinPair {
@@ -754,26 +912,74 @@ object ProductCaseClassRepresentation {
             repr: LoweredValueRepresentation,
             pos: SIRPosition
         )(using LoweringContext): Boolean =
-            isCompatibleOnTracked(repr, Set.empty, pos)
+            isCompatibleOnTracked(tp, repr, Set.empty, pos)
 
         private[lowering] def isCompatibleOnTracked(
+            tp: SIRType,
             repr: LoweredValueRepresentation,
             seen: Set[SumCaseClassRepresentation.SumReprProxy],
             pos: SIRPosition
-        )(using LoweringContext): Boolean =
-            repr match {
-                case ProdUplcConstr(otherTag, otherFieldReprs) =>
-                    tag == otherTag &&
-                    SumCaseClassRepresentation.SumUplcConstr.fieldsCompatibleTracked(
-                      fieldReprs,
-                      otherFieldReprs,
-                      seen,
-                      pos
-                    )
-                case TypeVarRepresentation(SIRType.TypeVarKind.Transparent) => true
-                case tvr: TypeVarRepresentation                             => tvr.isBuiltin
-                case _                                                      => false
+        )(using lctx: LoweringContext): Boolean =
+            if this.stableKey == repr.stableKey then true
+            else
+                repr match {
+                    case ProdUplcConstr(otherTag, otherFieldReprs) =>
+                        tag == otherTag &&
+                        SumCaseClassRepresentation.SumUplcConstr.fieldsCompatibleTracked(
+                          fieldReprs,
+                          otherFieldReprs,
+                          seen,
+                          pos
+                        )
+                    case tvr: TypeVarRepresentation =>
+                        import SIRType.TypeVarKind.*
+                        tvr.kind match
+                            case Transparent => true
+                            case Fixed       => false
+                            case Unwrapped   => fieldsMatchDefaultReprs(tp, pos)
+                    case _ => false
+                }
+
+        /** Unwrapped compatibility: every fieldRepr matches its field's default repr derived from
+          * `tp`'s constructor param types. Returns false if tp can't be resolved to a concrete
+          * constructor.
+          */
+        private def fieldsMatchDefaultReprs(tp: SIRType, pos: SIRPosition)(using
+            lctx: LoweringContext
+        ): Boolean = {
+            val (constrDecl, typeArgs, typeParams): (
+                scalus.compiler.sir.ConstrDecl,
+                scala.List[SIRType],
+                scala.List[SIRType.TypeVar]
+            ) = tp match
+                case SIRType.CaseClass(cd, tArgs, _) =>
+                    (cd, tArgs, cd.typeParams)
+                case SIRType.SumCaseClass(decl, tArgs) =>
+                    // ProdUplcConstr.tag indexes into decl.constructors
+                    if tag < 0 || tag >= decl.constructors.length then return false
+                    (decl.constructors(tag), tArgs, decl.typeParams)
+                case SIRType.TypeLambda(_, body) =>
+                    return fieldsMatchDefaultReprs(body, pos)
+                case SIRType.TypeProxy(ref) if ref != null =>
+                    return fieldsMatchDefaultReprs(ref, pos)
+                case SIRType.Annotated(inner, _) =>
+                    return fieldsMatchDefaultReprs(inner, pos)
+                case _ => return false
+            val typeSubst: Map[SIRType.TypeVar, SIRType] =
+                typeParams.zip(typeArgs.map(lctx.resolveTypeVarIfNeeded)).toMap
+            fieldReprs.zip(constrDecl.params).forall { case (fr, param) =>
+                val fieldType = SIRType.substitute(param.tp, typeSubst, Map.empty)
+                val defaultRepr = lctx.typeGenerator(fieldType).defaultRepresentation(fieldType)
+                fr == defaultRepr || fr.stableKey == defaultRepr.stableKey
             }
+        }
+
+        override def stableKeyInternal(
+            seen: Set[SumCaseClassRepresentation.SumReprProxy]
+        ): String =
+            fieldReprs
+                .map(_.stableKeyInternal(seen))
+                .mkString(s"ProdUplcConstr($tag,[", ",", "])")
     }
 
     /** BuiltinArray with parameterized element representation.
@@ -815,6 +1021,11 @@ object ProductCaseClassRepresentation {
                         resolved.isCompatibleOn(tp, this, pos)
                 case _ => false
             }
+
+        override def stableKeyInternal(
+            seen: Set[SumCaseClassRepresentation.SumReprProxy]
+        ): String =
+            s"ProdBuiltinArray(${elementRepr.stableKeyInternal(seen)})"
     }
 
     object ProdBuiltinArray {
@@ -875,6 +1086,11 @@ object ProductCaseClassRepresentation {
                     representation.isCompatibleOn(argType, innerRepr, pos)
                 case _ => false
             }
+
+        override def stableKeyInternal(
+            seen: Set[SumCaseClassRepresentation.SumReprProxy]
+        ): String =
+            s"OneElementWrapper(${representation.stableKeyInternal(seen)})"
     }
 
     object OneElementWrapper {
@@ -1140,14 +1356,19 @@ case class LambdaRepresentation(
                             lctx.typeGenerator(argumentType)
                                 .defaultTypeVarReperesentation(argumentType)
                         case suc: SumCaseClassRepresentation.SumUplcConstr =>
-                            // Canonical repr is SumUplcConstr — rebuild for concrete type.
-                            // Delegate to the type generator's defaultRepresentation, which for
-                            // SumUplcConstr types goes through `buildSumUplcConstr`. That routine
-                            // substitutes DataDecl TypeVars with concrete type args and forces
-                            // TypeVar fields to Transparent — preventing DataDecl's `Fixed` kind
-                            // from leaking into field reprs (which would later cause Data/native
-                            // mismatches during representation conversion).
-                            lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
+                            // Try to substitute element reprs from `reprSubstitutes`
+                            // (e.g. `List[B]` with B → mapper outputRepr) so the result
+                            // list's element repr matches the actual bytes produced by the
+                            // body. Falls back to defaultRepresentation if no substitution
+                            // can be derived from the TypeVar typeArgs.
+                            substituteSumUplcConstrFromReprs(
+                              declaredParamType,
+                              argumentType,
+                              suc,
+                              reprSubstitutes
+                            ).getOrElse(
+                              lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
+                            )
                         case other =>
                             val result = lctx
                                 .typeGenerator(argumentType)
@@ -1155,6 +1376,69 @@ case class LambdaRepresentation(
                             result
 
         resolve(declaredParamType, argumentType, declaredRepr)
+    }
+
+    /** Substitute reprSubstitutes into a SumUplcConstr's variant fields when their type positions
+      * correspond to TypeVars we have actual reprs for.
+      *
+      * For e.g. `declaredParamType = List[B]`, `declaredRepr = SumUplcConstr(... [Transparent, …])`
+      * and `reprSubstitutes = {B → ProdUplcConstr(SolutionEntry [Fixed, …])}`: builds
+      * `SumUplcConstr(... [reprSubstitutes(B), …])` so the list's element repr matches what the
+      * upstream caller actually produces (preserving Fixed-encoded fields), instead of falling back
+      * to the type-default repr (Constant-encoded fields) which would mislabel bytes.
+      *
+      * Returns None if no substitution can be made (caller should fall back to
+      * defaultRepresentation).
+      */
+    private def substituteSumUplcConstrFromReprs(
+        declaredParamType: SIRType,
+        argumentType: SIRType,
+        suc: SumCaseClassRepresentation.SumUplcConstr,
+        reprSubstitutes: Map[SIRType.TypeVar, LoweredValueRepresentation]
+    )(using lctx: LoweringContext): Option[SumCaseClassRepresentation.SumUplcConstr] = {
+        if reprSubstitutes.isEmpty then return None
+        // Extract decl + typeArgs from declaredParamType.
+        def extract(tp: SIRType): Option[(DataDecl, scala.List[SIRType])] = tp match
+            case SIRType.SumCaseClass(decl, args)      => Some((decl, args))
+            case SIRType.CaseClass(_, _, Some(p))      => extract(p)
+            case SIRType.TypeLambda(_, body)           => extract(body)
+            case SIRType.TypeProxy(ref) if ref != null => extract(ref)
+            case SIRType.Annotated(t1, _)              => extract(t1)
+            case _                                     => None
+        extract(declaredParamType) match
+            case None => None
+            case Some((decl, typeArgs)) => {
+                // Map decl's typeParam name → reprSubstitutes for any typeArg that's a substituted TypeVar.
+                val nameToRepr: Map[String, LoweredValueRepresentation] =
+                    decl.typeParams
+                        .zip(typeArgs)
+                        .flatMap {
+                            case (param, argTv: SIRType.TypeVar) =>
+                                reprSubstitutes.get(argTv).map(r => param.name -> r)
+                            case _ => None
+                        }
+                        .toMap
+                if nameToRepr.isEmpty then return None
+                // Walk variants: for each constructor field whose param.tp is a TypeVar in nameToRepr,
+                // substitute that field's repr. Otherwise keep existing repr.
+                val newVariants = suc.variants.map { case (tag, puc) =>
+                    val constructor = decl.constructors(tag)
+                    val newFieldReprs =
+                        puc.fieldReprs.zip(constructor.params).map { case (fr, param) =>
+                            param.tp match
+                                case tv: SIRType.TypeVar =>
+                                    nameToRepr.getOrElse(tv.name, fr)
+                                case SIRType.TypeProxy(ref) =>
+                                    ref match
+                                        case tv: SIRType.TypeVar =>
+                                            nameToRepr.getOrElse(tv.name, fr)
+                                        case _ => fr
+                                case _ => fr
+                        }
+                    tag -> ProductCaseClassRepresentation.ProdUplcConstr(puc.tag, newFieldReprs)
+                }
+                Some(SumCaseClassRepresentation.SumUplcConstr(newVariants))
+            }
     }
 
     /** Extract TypeVar→repr mappings by walking a type pattern and actual repr in parallel.
@@ -1207,11 +1491,19 @@ case class LambdaRepresentation(
                   SIRType.BuiltinArray(elemType),
                   ProductCaseClassRepresentation.ProdBuiltinArray(elemRepr)
                 ) =>
-                // Array type: element TypeVar → element repr
                 elemType match
                     case tv: SIRType.TypeVar if builtinTypeVars.contains(tv) =>
                         Map(tv -> elemRepr)
                     case _ => Map.empty
+            case (SIRType.Fun(inT, outT), lr: LambdaRepresentation) =>
+                extractTypeVarReprs(inT, lr.canonicalRepresentationPair.inRepr, builtinTypeVars) ++
+                    extractTypeVarReprs(
+                      outT,
+                      lr.canonicalRepresentationPair.outRepr,
+                      builtinTypeVars
+                    )
+            case (tv: SIRType.TypeVar, repr) if builtinTypeVars.contains(tv) =>
+                Map(tv -> repr)
             case _ => Map.empty
     }
 
@@ -1259,6 +1551,12 @@ case class LambdaRepresentation(
         }
     }
 
+    override def stableKeyInternal(
+        seen: Set[SumCaseClassRepresentation.SumReprProxy]
+    ): String =
+        s"LambdaRepresentation(${funTp.show},in=${canonicalRepresentationPair.inRepr
+                .stableKeyInternal(seen)},out=${canonicalRepresentationPair.outRepr
+                .stableKeyInternal(seen)})"
 }
 
 sealed trait PrimitiveRepresentation(val isPackedData: Boolean, val isDataCentric: Boolean)
@@ -1322,7 +1620,9 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
 
     import SIRType.TypeVarKind
 
-    /** Backward-compatible check */
+    /** True only for Transparent ("unknown/passthrough"). Unwrapped is concrete — requires
+      * conversion at boundaries like Fixed does.
+      */
     inline def isBuiltin: Boolean = kind == TypeVarKind.Transparent
 
     // assume that TypeVarDataRepresentation is a packed data.
@@ -1335,16 +1635,68 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
         tp: SIRType,
         repr: LoweredValueRepresentation,
         pos: SIRPosition
-    )(using LoweringContext): Boolean =
-        if isBuiltin then true
-        else
-            repr match {
-                case TypeVarRepresentation(_)              => true
-                case PrimitiveRepresentation.PackedData    => true
-                case SumCaseClassRepresentation.DataData   => true
-                case SumCaseClassRepresentation.DataConstr => true
-                case _                                     => repr.isPackedData
-            }
+    )(using lctx: LoweringContext): Boolean =
+        // Match on (sourceKind, target-as-pair-or-shape). Each kind has distinct
+        // semantics; cross-kind TypeVar↔TypeVar combinations are NOT compatible.
+        repr match
+            case TypeVarRepresentation(otherKind) =>
+                (kind, otherKind) match
+                    case (TypeVarKind.Transparent, TypeVarKind.Transparent) => true
+                    case (TypeVarKind.Unwrapped, TypeVarKind.Unwrapped)     => true
+                    case (TypeVarKind.Fixed, TypeVarKind.Fixed)             => true
+                    case _                                                  => false
+            case other =>
+                kind match
+                    case TypeVarKind.Transparent =>
+                        // Wildcard source — bytes unknown unless the caller has registered
+                        // a concrete repr in `typeVarReprEnv` for this TypeVar. The previous
+                        // unconditional `true` claim let Data-encoded bytes ride through a
+                        // relabel chain into native-UC slots; that produced the
+                        // `MultiplyInteger Apply LamAbs` runtime crash at KnightsTest:477,
+                        // because the Case selector then dispatched a Data.Constr through
+                        // the case-on-Data-Constr branch and built a partial-applied lambda.
+                        //
+                        // Sound rule: claim compat only when (a) the source TypeVar is
+                        // bound in `typeVarReprEnv` to a concrete repr that itself is
+                        // compatible with the target, OR (b) tp resolves to a non-TypeVar
+                        // concrete type whose default repr is compatible with the target.
+                        // Otherwise refuse; downstream typeGenerator will either dispatch
+                        // a real conversion or throw with a useful message.
+                        val tvOpt = tp match
+                            case t: SIRType.TypeVar => Some(t)
+                            case _                  => None
+                        val envReprOpt = tvOpt.flatMap(lctx.typeVarReprEnv.get)
+                        envReprOpt match
+                            case Some(boundRepr) =>
+                                boundRepr.isCompatibleOn(tp, repr, pos)
+                            case None =>
+                                val concrete = lctx.resolveTypeVarIfNeeded(tp)
+                                concrete match
+                                    case _: SIRType.TypeVar => false
+                                    case other =>
+                                        repr.isCompatibleOn(
+                                          concrete,
+                                          lctx.typeGenerator(concrete)
+                                              .defaultRepresentation(concrete),
+                                          pos
+                                        )
+                    case TypeVarKind.Unwrapped =>
+                        // Bytes are in concrete-default form. Compatible only with the
+                        // defaultRepresentation of the resolved concrete type.
+                        val concrete = lctx.resolveTypeVarIfNeeded(tp)
+                        repr.isCompatibleOn(
+                          concrete,
+                          lctx.typeGenerator(concrete).defaultRepresentation(concrete),
+                          pos
+                        )
+                    case TypeVarKind.Fixed =>
+                        // Legacy Fixed = Data-wrapped equivalent — compatible with Data forms.
+                        val concrete = lctx.resolveTypeVarIfNeeded(tp)
+                        repr.isCompatibleOn(
+                          concrete,
+                          lctx.typeGenerator(concrete).defaultTypeVarReperesentation(concrete),
+                          pos
+                        )
 
     override def isCompatibleWithType(tp: SIRType)(using LoweringContext): Boolean = true
 
@@ -1378,6 +1730,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
     override def doc: Doc = {
         val suffix = kind match
             case TypeVarKind.Transparent => "(B)"
+            case TypeVarKind.Unwrapped   => "(U)"
             case TypeVarKind.Fixed       => "(R)"
         Doc.text("TypeVar") + Doc.text(suffix)
     }

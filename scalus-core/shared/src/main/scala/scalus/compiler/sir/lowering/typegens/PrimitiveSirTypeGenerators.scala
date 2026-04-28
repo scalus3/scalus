@@ -32,6 +32,7 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
         import SIRType.TypeVarKind.*
         tvr.kind match
             case Transparent => true
+            case Unwrapped   => true // concrete default for primitives = Constant (native)
             case Fixed       => false
 
     def toRepresentation(
@@ -63,15 +64,25 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
                 if isNativeTypeVar(tvr) then dataToUplcValue(input, pos)
                 else input
             case (inTvr: TypeVarRepresentation, outTvr: TypeVarRepresentation) =>
-                if outTvr.isBuiltin then input
-                else if inTvr.isBuiltin then {
-                    // impossible, but let it will be here
-                    RepresentationProxyLoweredValue(
-                      uplcToDataValue(input, pos),
-                      outputRepresentation,
-                      pos
-                    )
-                } else input
+                import SIRType.TypeVarKind.*
+                (inTvr.kind, outTvr.kind) match
+                    case (Transparent, Transparent) => input
+                    case (Unwrapped, Unwrapped)     => input
+                    case (Fixed, Fixed)             => input
+                    case (Unwrapped, Fixed)         =>
+                        // Native concrete-default → Data-wrapped
+                        uplcToDataValue(input, pos)
+                    case (Fixed, Unwrapped) =>
+                        // Data-wrapped → native concrete-default
+                        dataToUplcValue(input, pos)
+                    case (_, _) =>
+                        // Transparent ↔ non-Transparent: Transparent means "unknown,
+                        // substitute at inline"; it must not cross a repr-change boundary.
+                        throw LoweringException(
+                          s"Unsupported Transparent↔non-Transparent TypeVar repr change " +
+                              s"at $pos: ${inTvr.kind} → ${outTvr.kind}, tp=${input.sirType.show}",
+                          pos
+                        )
             case (_, _) =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $outputRepresentation",
@@ -89,7 +100,11 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
 
     def dataToUplcValue(input: LoweredValue, pos: SIRPosition)(using LoweringContext): LoweredValue
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue =
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue =
         throw LoweringException("Constr can generated for primitive type", constr.anns.pos)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
@@ -852,7 +867,11 @@ object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcGenerator {
             )
     }
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue = {
         throw LoweringException(
           s"MLResultGenerator can't generate constructor for ${constr.name}",
           constr.anns.pos

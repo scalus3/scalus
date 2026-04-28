@@ -9,7 +9,6 @@ import scalus.pretty
 import scalus.uplc.*
 import scalus.uplc.UplcAnnotation
 
-import scala.annotation.unused
 import scala.util.control.NonFatal
 
 object Lowering {
@@ -29,13 +28,31 @@ object Lowering {
 
     private lazy val builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
+    /** Patch missing return-position `@UplcRepr` annotation onto `base`'s return type, using
+      * `source` (typically the binding's declared DefDef type) as the annotation donor.
+      *
+      * Walks matching `Fun` chains in parallel. If the final return position in `base` is
+      * unannotated but the corresponding position in `source` is `Annotated(..., uplcRepr→…)`, wrap
+      * `base`'s return with that annotation. This works around the LamAbs body type losing the
+      * DefDef's declared return annotation.
+      */
+    private def mergeReturnAnnotation(base: SIRType, source: SIRType): SIRType =
+        (base, source) match
+            case (SIRType.Fun(baseArg, baseRet), SIRType.Fun(_, sourceRet)) =>
+                SIRType.Fun(baseArg, mergeReturnAnnotation(baseRet, sourceRet))
+            case (SIRType.TypeLambda(params, bodyBase), SIRType.TypeLambda(_, bodySrc)) =>
+                SIRType.TypeLambda(params, mergeReturnAnnotation(bodyBase, bodySrc))
+            case (b, SIRType.Annotated(_, anns)) if anns.data.contains("uplcRepr") =>
+                b match
+                    case SIRType.Annotated(_, bAnns) if bAnns.data.contains("uplcRepr") => b
+                    case _ =>
+                        SIRType.Annotated(b, anns)
+            case _ => base
+
     def lowerSIR(
         sir: SIR,
         optTargetType: Option[SIRType] = None
     )(using lctx: LoweringContext): LoweredValue = {
-        // Check precomputed cache (used by intrinsic resolution to avoid re-lowering args)
-        val cached = lctx.precomputedValues.get(sir)
-        if cached != null then return cached
         lctx.nestingLevel += 1
         val retval = sir match
             case SIR.Decl(data, term) =>
@@ -46,58 +63,28 @@ object Lowering {
                 lowerSIR(term, optTargetType)
             case constr @ SIR.Constr(name, decl, args, tp, anns) =>
                 val resolvedType = lctx.resolveTypeVarIfNeeded(tp)
+                // For List.Cons we pre-lower the tail FIRST. The previous identity-
+                // cache-based design lowered the tail during a repr peek and then the
+                // head later inside genConstr's args.map; tail-first ordering affects
+                // lctx state evolution and must be preserved.
+                val loweredArgs = resolvedType match
+                    case SIRType.CaseClass(cd, _, Some(_))
+                        if cd.name.endsWith("List$.Cons") && constr.args.length >= 2 =>
+                        val loweredTail = lctx.lower(constr.args.last)
+                        val loweredInit = constr.args.init.map(arg => lctx.lower(arg))
+                        loweredInit :+ loweredTail
+                    case _ => constr.args.map(arg => lctx.lower(arg))
+                // Nil with target type carries special dispatch (the constr's declared
+                // tp is `List[Nothing]` — we need to honor the caller's target type for
+                // type-correct Nil emission). Other Constr forms dispatch by their
+                // resolved type; the chosen generator's `genConstrLowered` then handles
+                // any context-driven delegation (see `ConstrDispatcher`).
                 val (typeGenerator, effectiveConstr) =
                     if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
-                    then
-                        optTargetType match
-                            case Some(targetType) =>
-                                (lctx.typeGenerator(targetType), constr.copy(tp = targetType))
-                            case None =>
-                                (lctx.typeGenerator(resolvedType), constr)
-                    else
-                        // For constructors with a parent sum type, check if the parent
-                        // uses UplcConstr. If so, use the parent's type generator so the
-                        // constructor produces UplcConstr (not DataConstr).
-                        // parent type check for UplcConstr dispatch
-                        val parentTypeGen = resolvedType match
-                            case SIRType.CaseClass(cd, _, Some(parent)) =>
-                                val parentGen = lctx.typeGenerator(parent)
-                                val parentRepr = parentGen.defaultRepresentation(parent)
-                                parentRepr match
-                                    case suc: SumCaseClassRepresentation.SumUplcConstr =>
-                                        Some(parentGen)
-                                    case _ => None
-                            case _ => None
-                        parentTypeGen match
-                            case Some(gen) => (gen, constr)
-                            case None      =>
-                                // Repr propagation: for List.Cons, if the tail argument
-                                // has SumUplcConstr repr, produce UplcConstr instead of
-                                // builtin list. This handles inline-expanded prepended().
-                                // Always cache lowered tail to avoid O(N²) re-lowering.
-                                val reprPropGen = resolvedType match
-                                    case SIRType.CaseClass(cd, _, Some(_))
-                                        if cd.name.endsWith(
-                                          "List$.Cons"
-                                        ) && constr.args.length >= 2 =>
-                                        val tailSir = constr.args.last
-                                        val loweredTail =
-                                            Option(lctx.precomputedValues.get(tailSir))
-                                                .getOrElse {
-                                                    val lt = lowerSIR(tailSir)
-                                                    lctx.precomputedValues.put(tailSir, lt)
-                                                    lt
-                                                }
-                                        loweredTail.representation match
-                                            case _: SumCaseClassRepresentation.SumUplcConstr =>
-                                                Some(typegens.SumCaseUplcConstrSirTypeGenerator)
-                                            case _ => None
-                                    case _ => None
-                                reprPropGen match
-                                    case Some(gen) => (gen, constr)
-                                    case None      => (lctx.typeGenerator(resolvedType), constr)
-                typeGenerator.genConstr(effectiveConstr)
+                    then typegens.ConstrDispatcher.dispatchNil(constr, resolvedType, optTargetType)
+                    else (lctx.typeGenerator(resolvedType), constr)
+                typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
                     lctx.log(
@@ -105,15 +92,42 @@ object Lowering {
                           s"  scrutinee.tp = ${scrutinee.tp.show}\n"
                     )
                 val loweredScrutinee = lowerSIR(scrutinee)
+                // Match-result type is the Scala-level LUB of branches, which strips
+                // `@UplcRepr` annotations. If we're in a native-Constr dispatcher scope
+                // OR any branch's body type carries `@UplcRepr(UplcConstr)`, propagate
+                // that annotation to the target passed to branch lowering, so inner
+                // Constr emissions / repr-conversions see the UplcConstr shape.
+                def hasUplcReprAnn(t: SIRType): Boolean = t match
+                    case SIRType.Annotated(_, anns) => anns.data.contains("uplcRepr")
+                    case _                          => false
+                val anyBranchUplcRepr = cases.exists(c => hasUplcReprAnn(c.body.tp))
+                val shouldAnnotate =
+                    (lctx.inUplcConstrListScope || anyBranchUplcRepr)
+                        && IntrinsicResolver.isUplcConstrListOrOption(rhsType)
+                        && !hasUplcReprAnn(rhsType)
+                val effectiveTarget =
+                    if shouldAnnotate then
+                        val uplcConstrAnns = scalus.compiler.sir.AnnotationsDecl(
+                          anns.pos,
+                          data = Map(
+                            "uplcRepr" -> SIR.Const(
+                              scalus.uplc.Constant.String("UplcConstr"),
+                              SIRType.String,
+                              scalus.compiler.sir.AnnotationsDecl(anns.pos)
+                            )
+                          )
+                        )
+                        Some(SIRType.Annotated(rhsType, uplcConstrAnns))
+                    else optTargetType
                 // Use representation-aware dispatch: if scrutinee has SumUplcConstr repr,
                 // use Case-based genMatch instead of the default type generator's match.
                 val retval = loweredScrutinee.representation match
                     case _: SumCaseClassRepresentation.SumUplcConstr =>
                         typegens.SumUplcConstrSirTypeGenerator
-                            .genMatchUplcConstr(sirMatch, loweredScrutinee, optTargetType)
+                            .genMatchUplcConstr(sirMatch, loweredScrutinee, effectiveTarget)
                     case _ =>
                         lctx.typeGenerator(loweredScrutinee.sirType)
-                            .genMatch(sirMatch, loweredScrutinee, optTargetType)
+                            .genMatch(sirMatch, loweredScrutinee, effectiveTarget)
                 if lctx.debug then
                     lctx.log(
                       s"Lowered match: ${sir.pretty.render(100)}\n" +
@@ -121,6 +135,20 @@ object Lowering {
                     )
                 retval
             case SIR.Var(name, tp, anns) =>
+                // Annotation-based argCache lookup. Set by `IntrinsicResolver.substituteSelf`
+                // when substituting lambda params with the arg's lowered value. Survives
+                // `substituteVarAndTypes` walking that creates fresh SIR.Var instances.
+                anns.data.get(IntrinsicResolver.ArgCacheAnnotKey) match
+                    case Some(SIR.Const(scalus.uplc.Constant.Integer(idx), _, _)) =>
+                        val key = idx.toInt
+                        lctx.argCache.get(key) match
+                            case Some(lv) => return lv
+                            case None =>
+                                throw LoweringException(
+                                  s"argCache miss for key $key (var $name)",
+                                  anns.pos
+                                )
+                    case _ => // fall through to normal Var lowering
                 lctx.scope.getByName(name) match
                     case Some(value) =>
                         // TODO: check types are correct
@@ -147,16 +175,14 @@ object Lowering {
                                         // Preserve concrete repr from scope binding
                                         // (e.g., variables bound in UplcConstr match context
                                         // have ProdUplcConstr repr from variant fields).
-                                        // For TypeVar reprs, use defaultTypeVarReperesentation —
-                                        // the actual repr is resolved at call site via reprFun.
+                                        // For TypeVar reprs, preserve the binding's kind rather
+                                        // than rewriting to Fixed: rewriting an Unwrapped-bound
+                                        // variable to Fixed at reference time produces a
+                                        // byte-shape lie (bytes were in concrete-default form,
+                                        // but the new label says Data-wrapped).
                                         val repr = value.representation match
-                                            case tvr: TypeVarRepresentation if tvr.isBuiltin =>
-                                                tvr
-                                            case _: TypeVarRepresentation =>
-                                                val gen = lctx.typeGenerator(tp)
-                                                gen.defaultTypeVarReperesentation(tp)
-                                            case concrete =>
-                                                concrete
+                                            case tvr: TypeVarRepresentation => tvr
+                                            case concrete                   => concrete
                                         TypeRepresentationProxyLoweredValue(
                                           value,
                                           tp,
@@ -164,7 +190,6 @@ object Lowering {
                                           anns.pos
                                         )
                             case _ => value
-
                         }
                     case None =>
                         throw LoweringException(
@@ -201,7 +226,6 @@ object Lowering {
                               s"Found external variable $name in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}"
                             )
                         }
-                        lctx.monitoredExternalVars.foreach(_.add(name))
                         value
                     case None =>
                         // Check if this is a UniversalDataConversion function used outside Apply
@@ -214,20 +238,16 @@ object Lowering {
                                   s"This usually indicates the function is being used incorrectly in the code.",
                               ev.anns.pos
                             )
-                        // Try support modules on demand
-                        lctx.resolveSupportBinding(name) match
-                            case Some(value) => value
-                            case None =>
-                                throw LoweringException(
-                                  s"External variable $name not found in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}",
-                                  ev.anns.pos
-                                )
+                        // Support bindings are eagerly materialized in `ScalusRuntime.initContext`
+                        // (`initSupportBindings`) — every support-module def is registered in
+                        // `lctx.scope` before user lowering starts. If `getByName` missed here,
+                        // the name either targets a not-yet-registered intrinsic/support module
+                        // or is genuinely unknown. Treat as a hard error rather than lazy-resolve.
+                        throw LoweringException(
+                          s"External variable $name not found in the scope at ${ev.anns.pos.file}:${ev.anns.pos.startLine}",
+                          ev.anns.pos
+                        )
                 myVar
-                // StaticLoweredValue(
-                //  ev,
-                //  Term.Var(NamedDeBruijn(name)),
-                //  SirTypeUplcGenerator(tp).defaultRepresentation
-                // )
             case sirLet @ SIR.Let(bindings, body, flags, anns) =>
                 // don;t generate FromData/ToData (now handled by Data Representation)
                 val nBindings =
@@ -262,15 +282,25 @@ object Lowering {
                                     s"[Lambda body upcast] Upcasting body from ${loweredBody.sirType.show} to ${targetType.show}, representation: ${loweredBody.representation}"
                                   )
                               val upcasted = loweredBody.maybeUpcast(targetType, anns.pos)
-                              // If return type has @UplcRepr annotation, convert body to annotated repr
-                              val result = targetType match
-                                  case SIRType.Annotated(_, retAnns)
-                                      if retAnns.data.contains("uplcRepr") =>
+                              // If return type has a binding @UplcRepr annotation,
+                              // convert body to that pinned repr. Two sources count:
+                              //   (a) `SIRType.Annotated(_, retAnns)` — explicit
+                              //       per-occurrence annotation on the return position,
+                              //   (b) class-level `@UplcRepr(UplcConstr)` on the
+                              //       return type's case class declaration (e.g.,
+                              //       `ChessSet` is `@UplcRepr(UplcConstr)` so any
+                              //       lambda returning `ChessSet` should yield UC
+                              //       bytes — without this, a body like `_.board`
+                              //       projecting from a Data SE leaks Data ChessSet
+                              //       to a UC slot, surfacing as native-UC selectors
+                              //       applied to Data.Constr scrutinees at runtime).
+                              val result =
+                                  if hasUplcReprPin(targetType) then
                                       val targetGen =
                                           summon[LoweringContext].typeGenerator(targetType)
                                       val targetRepr = targetGen.defaultRepresentation(targetType)
                                       upcasted.toRepresentation(targetRepr, anns.pos)
-                                  case _ => upcasted
+                                  else upcasted
                               if lctx.debug then
                                   lctx.log(
                                     s"[Lambda body upcast] After upcast: ${result.sirType.show}, representation: ${result.representation}"
@@ -298,24 +328,16 @@ object Lowering {
                 loweredScrutinee.sirType match {
                     case tv: SIRType.TypeVar =>
                         scrutinee.tp match
-                            case tp1: SIRType.TypeVar =>
-                            //
-                            case other =>
-                                println(
-                                  "lowered scrutinee is typed as type variable, but scrutinee is not"
+                            case _: SIRType.TypeVar =>
+                            case _ =>
+                                throw LoweringException(
+                                  s"Lowered scrutinee is typed as type variable but scrutinee is not.\n" +
+                                      s"  scrutinee.tp: ${scrutinee.tp.show}\n" +
+                                      s"  resolved typevar: ${lctx.typeUnifyEnv.filledTypes
+                                              .get(tv)}, typeVar = $tv\n" +
+                                      s"  loweredScrutinee.sirType: ${loweredScrutinee.sirType.show}, representation: ${loweredScrutinee.representation}",
+                                  anns.pos
                                 )
-                                println(s"scrutinee: $scrutinee")
-                                println(s"loweredScrutinee: $loweredScrutinee")
-                                println(s"scrutinee.tp: ${scrutinee.tp.show}")
-                                println(
-                                  s"resolved typevar: ${lctx.typeUnifyEnv.filledTypes.get(tv)}, typeVae = ${tv}"
-                                )
-                                println(
-                                  s"loweredScrutinee.sirType: ${loweredScrutinee.sirType.show}, representation: ${loweredScrutinee.representation}"
-                                )
-                                println(s"lowered scrutinee crerated at:")
-                                loweredScrutinee.createdEx.printStackTrace()
-                                ???
                     case _ =>
                 }
                 val generator = lctx.typeGenerator(loweredScrutinee.sirType)
@@ -409,9 +431,17 @@ object Lowering {
                 val loweredCond =
                     lowerSIR(cond, Some(SIRType.Boolean))
                         .toRepresentation(PrimitiveRepresentation.Constant, cond.anns.pos)
-                val loweredT = lowerSIR(t, Some(tp))
-                val loweredF = lowerSIR(f, Some(tp))
-                lvIfThenElse(loweredCond, loweredT, loweredF, anns.pos)
+                // Prefer the caller's target type when provided so that any @UplcRepr
+                // annotation on the surrounding context (e.g. an annotated function return
+                // type) propagates into the branches' lowering. Falling back to the if's own
+                // static `tp` ignores those annotations and forces both branches to the
+                // unwrapped default repr; the outer wrapper then needs a structural
+                // conversion that, for `List[ChessSet]` and similar, can fail to thread the
+                // element representations correctly.
+                val branchTarget = optTargetType.orElse(Some(tp))
+                val loweredT = lowerSIR(t, branchTarget)
+                val loweredF = lowerSIR(f, branchTarget)
+                lvIfThenElse(loweredCond, loweredT, loweredF, anns.pos, branchTarget)
             case SIR.Cast(expr, tp, anns) =>
                 val loweredExpr = lowerSIR(expr, Some(tp))
                 val isTypeProxy = anns.data.contains("typeProxy")
@@ -421,8 +451,6 @@ object Lowering {
                         println(
                           s"Error lowering cast: ${sir.pretty.render(100)} at ${anns.pos.file}:${anns.pos.startLine + 1}"
                         )
-                        // lctx.debug = true
-                        // lvCast(loweredExpr, tp, anns.pos)
                         throw ex
             case sirBuiltin @ SIR.Builtin(bn, tp, anns) =>
                 BuiltinRefLoweredValue(
@@ -495,8 +523,18 @@ object Lowering {
                     bindings match
                         case List(Binding(name, tp, rhs)) =>
                             lctx.zCombinatorNeeded = true
+                            // Use `rhs.tp` (from LamAbs) as the base — it preserves the
+                            // method's TypeVar kinds (e.g. `@UplcRepr(TypeVar(Unwrapped)) B`
+                            // becomes `TypeVar(B, id, Unwrapped)` in LamAbs.param.tp/body.tp).
+                            // But `body.tp` is the body's *inferred* type and loses the
+                            // declared return `@UplcRepr` annotation. Patch it back in from
+                            // the binding's `tp` (DefDef signature) which preserves return
+                            // annotations. This is a workaround until the compiler plugin
+                            // annotates `LamAbs.term.tp` with the DefDef's declared return
+                            // annotation directly.
+                            val rhsRepTp = mergeReturnAnnotation(rhs.tp, tp)
                             val rhsRepr =
-                                lctx.typeGenerator(rhs.tp).defaultRepresentation(tp)
+                                lctx.typeGenerator(rhsRepTp).defaultRepresentation(rhsRepTp)
                             val newVar = VariableLoweredValue(
                               id = lctx.uniqueVarName(name),
                               name = name,
@@ -536,6 +574,7 @@ object Lowering {
         else if isTypeProxyApp(app) then lowerTypeProxy(app)
         else if isTypeProxyReprApp(app) then lowerTypeProxyRepr(app)
         else if isToDefaultTypeVarReprApp(app) then lowerToDefaultTypeVarRepr(app)
+        else if isFromDefaultTypeVarReprApp(app) then lowerFromDefaultTypeVarRepr(app)
         else if isUnboxedNilApp(app) then lowerUnboxedNil(app, optTargetType)
         else if LoweringEq.isEqualsReprApp(app) then LoweringEq.lowerEqualsRepr(app)
         // Enabled globally: generateEqualsForRepr falls back to generateDataEquals (== equalsData)
@@ -549,6 +588,8 @@ object Lowering {
     private val TypeProxyReprName = "scalus.compiler.intrinsics.IntrinsicHelpers$.typeProxyRepr"
     private val ToDefaultTypeVarReprName =
         "scalus.compiler.intrinsics.IntrinsicHelpers$.toDefaultTypeVarRepr"
+    private val FromDefaultTypeVarReprName =
+        "scalus.compiler.intrinsics.IntrinsicHelpers$.fromDefaultTypeVarRepr"
     private val UnboxedNilName =
         "scalus.cardano.onchain.plutus.prelude.List$.unboxedNil"
 
@@ -562,6 +603,10 @@ object Lowering {
 
     private def isToDefaultTypeVarReprApp(app: SIR.Apply): Boolean = app.f match
         case SIR.ExternalVar(_, name, _, _) => name == ToDefaultTypeVarReprName
+        case _                              => false
+
+    private def isFromDefaultTypeVarReprApp(app: SIR.Apply): Boolean = app.f match
+        case SIR.ExternalVar(_, name, _, _) => name == FromDefaultTypeVarReprName
         case _                              => false
 
     private def isUnboxedNilApp(app: SIR.Apply): Boolean = app.f match
@@ -596,7 +641,7 @@ object Lowering {
                           )
                         )
         val elemRepr =
-            typegens.SirTypeUplcGenerator(elemType).defaultRepresentation(elemType)
+            lctx.typeGenerator(elemType).defaultRepresentation(elemType)
         elemRepr match
             case _: SumCaseClassRepresentation.SumUplcConstr |
                 _: ProductCaseClassRepresentation.ProdUplcConstr =>
@@ -687,6 +732,33 @@ object Lowering {
             )
     }
 
+    private def lowerFromDefaultTypeVarRepr(
+        app: SIR.Apply
+    )(using lctx: LoweringContext): LoweredValue = {
+        val loweredArg = lowerSIR(app.arg)
+        // TypeVars are bound in typeUnifyEnv but not substituted in the SIR AST, so resolve
+        // before looking up the generator. Without this, TypeVar_A maps to TypeVarSirTypeGenerator
+        // (a no-op), while we need the concrete type's generator (e.g., ProdUplcConstr for
+        // @UplcRepr(UplcConstr) types).
+        val tp = lctx.resolveTypeVarIfNeeded(app.tp)
+        val gen = lctx.typeGenerator(tp)
+        val targetRepr = gen.defaultRepresentation(tp)
+        if lctx.debug then
+            lctx.log(
+              s"[fromDefaultTypeVarRepr] app.tp=${app.tp.show}, resolved tp=${tp.show}, loweredArg.repr=${loweredArg.representation}, targetRepr=$targetRepr"
+            )
+        val converted = loweredArg.toRepresentation(targetRepr, app.anns.pos)
+        if converted eq loweredArg then converted
+        else
+            LoweredValue.Builder.lvNewLazyIdVar(
+              lctx.uniqueVarName("_tvFromRepr"),
+              tp,
+              targetRepr,
+              converted,
+              app.anns.pos
+            )
+    }
+
     /** Interpret a SIR expression produced by the plugin for a `ReprTag` value.
       *
       * The plugin compiles `ReprTag` case objects as `SIR.Constr` with 0 args, and
@@ -751,6 +823,7 @@ object Lowering {
             case "Constant"          => PrimitiveRepresentation.Constant
             case "PackedData"        => PrimitiveRepresentation.PackedData
             case "PackedSumDataList" => SumCaseClassRepresentation.PackedSumDataList
+            case "PackedDataMap"     => ProductCaseClassRepresentation.PackedDataMap
             // Compound list reprs for test backward compat
             case "SumBuiltinList(DataData)" =>
                 SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
@@ -765,7 +838,56 @@ object Lowering {
                 throw LoweringException(s"unknown ReprTag '$name'", pos)
     }
 
-    private def lowerNormalApp(app: SIR.Apply, @unused optTargetType: Option[SIRType])(using
+    @scala.annotation.tailrec
+    private def isFunOrTypeLambdaOverFun(tp: SIRType): Boolean = tp match {
+        case _: SIRType.Fun                        => true
+        case SIRType.TypeLambda(_, body)           => isFunOrTypeLambdaOverFun(body)
+        case SIRType.TypeProxy(ref) if ref != null => isFunOrTypeLambdaOverFun(ref)
+        case SIRType.Annotated(t, _)               => isFunOrTypeLambdaOverFun(t)
+        case _                                     => false
+    }
+
+    /** True iff `tp` is a TypeVar at its root, or a single-arg TypeRefApply whose argument is a
+      * TypeVar (e.g. `List[B]`, `Option[A]`). Walks past `TypeProxy`, `TypeLambda`, `Annotated`.
+      * The narrow shape covered here matches the SIR-plugin output-type leak observed in
+      * `IntrinsicsUplcConstrList.map[A,B]` where `app.tp` carries `List[B]` with `B` not yet bound
+      * to the lambda's body type.
+      */
+    @scala.annotation.tailrec
+    /** True if `tp` has a binding `@UplcRepr` annotation — either as a `SIRType.Annotated(_, anns)`
+      * wrapper or as a class-level annotation in its constrDecl. Used by `SIR.LamAbs` lowering to
+      * decide whether the return type pins a specific repr that the body's natural repr must
+      * conform to.
+      */
+    private def hasUplcReprPin(tp: SIRType): Boolean = tp match {
+        case SIRType.Annotated(_, anns) if anns.data.contains("uplcRepr") => true
+        case SIRType.Annotated(inner, _)                                  => hasUplcReprPin(inner)
+        case SIRType.CaseClass(decl, _, _)         => decl.annotations.data.contains("uplcRepr")
+        case SIRType.SumCaseClass(decl, _)         => decl.annotations.data.contains("uplcRepr")
+        case SIRType.TypeLambda(_, body)           => hasUplcReprPin(body)
+        case SIRType.TypeProxy(ref) if ref != null => hasUplcReprPin(ref)
+        case _                                     => false
+    }
+
+    private def hasFreeTypeVarRoot(tp: SIRType): Boolean = tp match {
+        case _: SIRType.TypeVar                    => true
+        case SIRType.TypeProxy(ref) if ref != null => hasFreeTypeVarRoot(ref)
+        case SIRType.TypeLambda(_, body)           => hasFreeTypeVarRoot(body)
+        case SIRType.Annotated(t, _)               => hasFreeTypeVarRoot(t)
+        case SIRType.SumCaseClass(_, args) =>
+            args.exists {
+                case _: SIRType.TypeVar => true
+                case _                  => false
+            }
+        case SIRType.CaseClass(_, args, _) =>
+            args.exists {
+                case _: SIRType.TypeVar => true
+                case _                  => false
+            }
+        case _ => false
+    }
+
+    private def lowerNormalApp(app: SIR.Apply, optTargetType: Option[SIRType])(using
         lctx: LoweringContext
     ): LoweredValue = {
         if lctx.debug then
@@ -776,12 +898,39 @@ object Lowering {
                   s"  arg.tp = ${app.arg.tp.show}\n" +
                   s"  f = ${app.f.pretty.render(100)}\n"
             )
+        // Refine the resolver's appType using optTargetType when app.tp contains
+        // unresolved TypeVars that the outer target can fill in. The Scala SIR plugin
+        // doesn't always substitute output type parameters into Apply.tp (e.g.
+        // `descAndNo.quicksort.map { _.board }` may emit `Apply(...): List[B]` instead
+        // of `List[ChessSet]`), which leaves the intrinsic resolver unable to unify
+        // and bind the output TypeVar — downstream conversions then trip on the
+        // unresolved element. When the outer match-branch / let body / annotated
+        // return type is known, prefer it for resolver dispatch.
+        val refinedAppTp: SIRType = optTargetType match {
+            case Some(target) if hasFreeTypeVarRoot(app.tp) =>
+                target
+            case _ => app.tp
+        }
+        if lctx.intrinsicModules.nonEmpty && !isFunOrTypeLambdaOverFun(refinedAppTp) then
+            IntrinsicResolver.gatherApplyChain(app) match
+                case Some((head, argSirs)) if argSirs.length > 1 =>
+                    val firstLowered = lowerSIR(argSirs.head)
+                    IntrinsicResolver.tryResolveFull(
+                      head,
+                      argSirs,
+                      firstLowered :: scala.List.empty,
+                      refinedAppTp,
+                      app.anns.pos
+                    )(using lctx) match
+                        case Some(result) => return result
+                        case None         => // fall through
+                case _ => // fall through
         val fun = lowerSIR(app.f)
         val arg = lowerSIR(app.arg)
 
         // Try intrinsic resolution
         if lctx.intrinsicModules.nonEmpty then
-            IntrinsicResolver.tryResolve(app.f, app.arg, arg, app.tp, app.anns.pos)(using
+            IntrinsicResolver.tryResolve(app.f, app.arg, arg, refinedAppTp, app.anns.pos)(using
               lctx
             ) match
                 case Some(result) =>
@@ -809,32 +958,16 @@ object Lowering {
                       ex.cause
                     )
                 case NonFatal(ex) =>
-                    println(
-                      s"Error lowering app: ${app.pretty.render(100)} at ${app.anns.pos.file}:${app.anns.pos.startLine + 1}"
-                    )
-                    println(ex.getMessage)
-                    println(s"=== Problematic Apply Node ===")
-                    println(s"app.tp=${app.tp.show}")
-                    println(s"app.tp class=${app.tp.getClass.getName}")
-                    println(s"app.f class=${app.f.getClass.getSimpleName}")
-                    println(s"app.f=${app.f}")
-                    println(s"f.tp=${app.f.tp.show}")
-                    println(s"f=${app.f.pretty.render(100)}")
-                    println(s"lowered f.tp: ${fun.sirType.show}")
-                    println(s"arg.tp=${app.arg.tp.show}")
-                    println(s"unrolled arg.tp=${SIRType.unrollTypeProxy(app.arg.tp).show}")
-                    println(s"lowered arg.tp: ${arg.sirType.show}")
-                    println(s"=== End Problematic Apply Node ===")
-                    lctx.debug = true
-                    // redu with debug mode to see the error
-                    lvApply(
-                      fun,
-                      arg,
-                      app.anns.pos,
-                      Some(app.tp),
-                      None // representation can depend from fun, so should be calculated.
-                    )
-                    throw ex;
+                    if lctx.debug then
+                        lctx.log(
+                          s"Error lowering app: ${app.pretty.render(100)} at ${app.anns.pos.file}:${app.anns.pos.startLine + 1}\n" +
+                              s"  ${ex.getMessage}\n" +
+                              s"  app.tp=${app.tp.show} (${app.tp.getClass.getName})\n" +
+                              s"  app.f=${app.f.pretty.render(100)} (${app.f.getClass.getSimpleName})\n" +
+                              s"  f.tp=${app.f.tp.show}, lowered f.tp=${fun.sirType.show}\n" +
+                              s"  arg.tp=${app.arg.tp.show} (unrolled=${SIRType.unrollTypeProxy(app.arg.tp).show}), lowered arg.tp=${arg.sirType.show}"
+                        )
+                    throw ex
         result
     }
 
@@ -958,17 +1091,11 @@ object Lowering {
 
     private def lowerToData(app: SIR.Apply)(using lctx: LoweringContext): LoweredValue = {
         if SIRType.isPolyFunOrFun(app.arg.tp) then {
-            println(
-              s"Warning: lowering ToData for poly function ${app.arg.pretty.render(100)} at ${app.anns.pos.file}:${app.anns.pos.startLine + 1}"
-            )
-            println(
-              s" app= ${app.pretty.render(100)}"
-            )
-            println(
-              s"  app.arg.tp = ${app.arg.tp.show}, app.tp = ${app.tp.show}, app.f = ${app.f.pretty.render(100)}"
-            )
             throw LoweringException(
-              s"Argument of toData should be a data type, but got ${app.arg.tp.show}",
+              s"Argument of toData should be a data type, but got ${app.arg.tp.show}.\n" +
+                  s"  app.arg = ${app.arg.pretty.render(100)}\n" +
+                  s"  app.f = ${app.f.pretty.render(100)}\n" +
+                  s"  app.tp = ${app.tp.show}",
               app.anns.pos
             )
         }
@@ -1044,7 +1171,8 @@ object Lowering {
                             )
                         case None =>
                             throw LoweringException(
-                              s"Unexpected variable $v is not in scope",
+                              s"Unexpected variable $v (id=${v.id}, " +
+                                  s"name=${v.name}, pos=${v.pos.show}) is not in scope",
                               value.pos
                             )
         }
@@ -1197,15 +1325,15 @@ object Lowering {
         import SumCaseClassRepresentation.*
         import ProductCaseClassRepresentation.*
         (src, tgt) match
-            // TypeVar rules: Transparent is already native, Fixed is already Data.
-            // Only error on Transparent→Fixed (unknown toData).
+            // TypeVar rules: Transparent and Unwrapped are passthrough native, Fixed is Data.
+            // Only error on passthrough→Fixed (unknown toData).
             // All other TypeVar combinations: no conversion.
             case (
-                  TypeVarRepresentation(SIRType.TypeVarKind.Transparent),
+                  src: TypeVarRepresentation,
                   TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
-                ) =>
+                ) if src.isBuiltin =>
                 throw LoweringException(
-                  s"Cannot convert Transparent TypeVar to Fixed: unknown toData for type ${typeShow}",
+                  s"Cannot convert ${src.kind} TypeVar to Fixed: unknown toData for type ${typeShow}",
                   pos
                 )
             case (_: TypeVarRepresentation, _) | (_, _: TypeVarRepresentation) => false

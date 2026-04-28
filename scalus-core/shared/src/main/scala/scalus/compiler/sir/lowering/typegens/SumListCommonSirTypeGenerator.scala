@@ -18,8 +18,8 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
     ): Boolean =
         import SIRType.TypeVarKind.*
         tvr.kind match
-            case Transparent => true
-            case Fixed       => false
+            case Transparent | Unwrapped => true
+            case Fixed                   => false
 
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext
@@ -201,18 +201,39 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(outputRepresentation, pos)
             case (
                   SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant),
-                  tv @ TypeVarRepresentation(_)
+                  tv @ TypeVarRepresentation(kind)
                 ) =>
-                input
-                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
-                    .toRepresentation(tv, pos)
+                import SIRType.TypeVarKind.*
+                kind match
+                    case Transparent =>
+                        // Wildcard target — relabel.
+                        new RepresentationProxyLoweredValue(input, tv, pos)
+                    case Unwrapped =>
+                        // Target Unwrapped wants bytes in defaultRepresentation form. For a
+                        // list of native primitives, source IS the default — pure relabel.
+                        new RepresentationProxyLoweredValue(input, tv, pos)
+                    case Fixed =>
+                        // Target Fixed wants Data-encoded bytes — convert via PackedSumDataList.
+                        input
+                            .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
+                            .toRepresentation(tv, pos)
             case (
-                  tv @ TypeVarRepresentation(_),
+                  tv @ TypeVarRepresentation(kind),
                   SumCaseClassRepresentation.SumBuiltinList(PrimitiveRepresentation.Constant)
                 ) =>
-                input
-                    .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
-                    .toRepresentation(outputRepresentation, pos)
+                import SIRType.TypeVarKind.*
+                kind match
+                    case Transparent =>
+                        // Wildcard source — relabel as native list.
+                        new RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+                    case Unwrapped =>
+                        // Source bytes already in defaultRepresentation form (= target).
+                        new RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+                    case Fixed =>
+                        // Source is Data-encoded — convert via PackedSumDataList.
+                        input
+                            .toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
+                            .toRepresentation(outputRepresentation, pos)
             // === SumBuiltinList → PackedSumDataList (via listData) ===
             case (
                   SumCaseClassRepresentation.SumBuiltinList(_),
@@ -468,23 +489,42 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                     .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
             case (_, tv: TypeVarRepresentation) =>
-                if tv.isBuiltin || isNativeTypeVar(tv) then input
-                else {
-                    val inputAsData =
-                        input.toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
-                    new RepresentationProxyLoweredValue(inputAsData, tv, pos)
-                }
+                import SIRType.TypeVarKind.*
+                tv.kind match
+                    case Transparent =>
+                        // Wildcard target — relabel.
+                        new RepresentationProxyLoweredValue(input, tv, pos)
+                    case Unwrapped =>
+                        // Convert input to defaultRepresentation form, then relabel.
+                        val targetUnderlying = defaultRepresentation(input.sirType)
+                        val converted = input.toRepresentation(targetUnderlying, pos)
+                        new RepresentationProxyLoweredValue(converted, tv, pos)
+                    case Fixed =>
+                        val inputAsData = input.toRepresentation(
+                          SumCaseClassRepresentation.PackedSumDataList,
+                          pos
+                        )
+                        new RepresentationProxyLoweredValue(inputAsData, tv, pos)
             case (tv: TypeVarRepresentation, _) =>
-                if tv.isBuiltin || isNativeTypeVar(tv) then
-                    RepresentationProxyLoweredValue(input, outputRepresentation, pos)
-                else if input.representation == outputRepresentation then input
-                else
-                    val r0 = RepresentationProxyLoweredValue(
-                      input,
-                      SumCaseClassRepresentation.PackedSumDataList,
-                      pos
-                    )
-                    r0.toRepresentation(outputRepresentation, pos)
+                import SIRType.TypeVarKind.*
+                tv.kind match
+                    case Transparent =>
+                        new RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+                    case Unwrapped =>
+                        // Source bytes are in defaultRepresentation form. Relabel as that
+                        // underlying repr, then convert.
+                        val sourceUnderlying = defaultRepresentation(input.sirType)
+                        val r0 = new RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
+                        r0.toRepresentation(outputRepresentation, pos)
+                    case Fixed =>
+                        if input.representation == outputRepresentation then input
+                        else
+                            val r0 = new RepresentationProxyLoweredValue(
+                              input,
+                              SumCaseClassRepresentation.PackedSumDataList,
+                              pos
+                            )
+                            r0.toRepresentation(outputRepresentation, pos)
             // SumReprProxy: unwrap and delegate
             case (_: SumCaseClassRepresentation.SumReprProxy, _) =>
                 SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
@@ -496,6 +536,19 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             // anything → SumUplcConstr: delegate to SumUplcConstrSirTypeGenerator
             case (_, _: SumCaseClassRepresentation.SumUplcConstr) =>
                 SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+            // ProdUplcConstr value at a sum-list-type site: wrap as a singleton
+            // SumUplcConstr of the input's variant, then delegate. This happens when a
+            // variant built via native Constr emission (e.g. `List.Nil` inside a
+            // native-Constr dispatcher scope) flows into code expecting the sum form.
+            case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
+                val wrappedRepr =
+                    SumCaseClassRepresentation.SumUplcConstr(Map(puc.tag -> puc))
+                val wrapped = new RepresentationProxyLoweredValue(input, wrappedRepr, pos)
+                SumUplcConstrSirTypeGenerator.toRepresentation(
+                  wrapped,
+                  outputRepresentation,
+                  pos
+                )
             case _ =>
                 throw LoweringException(
                   s"Unexpected representation conversion for ${input.sirType.show} from ${input.representation} to ${outputRepresentation}",
@@ -564,19 +617,28 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         }
     }
 
-    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         import SumListCommonSirTypeGenerator.*
+        // Context-driven delegation (see ConstrDispatcher).
+        ConstrDispatcher.shouldDelegateToUplcConstr(constr, loweredArgs, optTargetType) match
+            case Some(other) if other ne this =>
+                return other.genConstrLowered(constr, loweredArgs, optTargetType)
+            case _ =>
         constr.name match
             case SIRType.List.NilConstr.name | SIRType.BuiltinList.Nil.name | PairNilName =>
                 genNil(constr.tp, constr.anns.pos)
             case SIRType.List.Cons.name | SIRType.BuiltinList.Cons.name | PairConsName =>
-                if constr.args.size != 2 then
+                if loweredArgs.size != 2 then
                     throw LoweringException(
-                      s"Constr construnctor with ${constr.args.size} args, should be 2",
+                      s"Constr construnctor with ${loweredArgs.size} args, should be 2",
                       constr.anns.pos
                     )
-                val head = lctx.lower(constr.args.head)
-                val tail = lctx.lower(constr.args.tail.head)
+                val head = loweredArgs.head
+                val tail = loweredArgs.tail.head
                 val elementType = retrieveElementType(constr.tp, constr.anns.pos)
                 val headElementUpcasted = head
                     .maybeUpcast(elementType, constr.anns.pos)
@@ -764,6 +826,10 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 retrieveElementType(body, pos)
             case SIRType.TypeProxy(ref) =>
                 retrieveElementType(ref, pos)
+            case SIRType.Annotated(inner, _) =>
+                // `@UplcRepr` (and other) annotations are metadata on top of the real
+                // structural type; peel them before structural checks.
+                retrieveElementType(inner, pos)
             case _ =>
                 throw LoweringException(
                   s"Cannot retrieve element type from ${tp.show}, expected List type",

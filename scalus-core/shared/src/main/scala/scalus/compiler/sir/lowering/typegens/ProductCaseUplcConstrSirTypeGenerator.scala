@@ -50,16 +50,26 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
             if input.representation == outputRepresentation then input
             else RepresentationProxyLoweredValue(input, outputRepresentation, pos)
         else
-            // Resolve TypeVar repr before delegating.
-            // Transparent (builtin) TypeVar → ProdUplcConstr (native Constr at runtime).
-            // Fixed TypeVar → ProdDataConstr (Data at runtime).
             val resolved = input.representation match
-                case tvr: TypeVarRepresentation if tvr.isBuiltin =>
-                    val pucRepr = defaultRepresentation(input.sirType)
-                    RepresentationProxyLoweredValue(input, pucRepr, pos)
-                case _: TypeVarRepresentation =>
-                    val tvRepr = defaultTypeVarReperesentation(input.sirType)
-                    RepresentationProxyLoweredValue(input, tvRepr, pos)
+                case tvr: TypeVarRepresentation =>
+                    import SIRType.TypeVarKind.*
+                    tvr.kind match
+                        case Transparent =>
+                            // Pure relabel: Transparent bytes are unknown/passthrough.
+                            val pucRepr = defaultRepresentation(input.sirType)
+                            RepresentationProxyLoweredValue(input, pucRepr, pos)
+                        case Unwrapped =>
+                            // Bytes ARE in concrete-default form (Unwrapped's invariant).
+                            // Use input.toRepresentation so the matrix decides proxy vs
+                            // actual conversion if needed downstream.
+                            input.toRepresentation(defaultRepresentation(input.sirType), pos)
+                        case Fixed =>
+                            // Bytes are Data-wrapped — go via defaultTypeVarReperesentation,
+                            // which is the Data form for this product type.
+                            input.toRepresentation(
+                              defaultTypeVarReperesentation(input.sirType),
+                              pos
+                            )
                 case _ => input
             ProductCaseSirTypeGenerator.toRepresentation(resolved, outputRepresentation, pos)
     }
@@ -67,31 +77,36 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        val targetGen = lctx.typeGenerator(targetType)
-        val targetRepr = targetGen.defaultRepresentation(targetType)
-        targetRepr match
-            case _: SumCaseClassRepresentation.SumBuiltinList =>
-                // Upcasting to list type — convert to Data first
-                val asDataConstr =
-                    input.toRepresentation(ProductCaseClassRepresentation.ProdDataConstr, pos)
-                TypeRepresentationProxyLoweredValue(asDataConstr, targetType, targetRepr, pos)
-            case _: SumCaseClassRepresentation.SumUplcConstr =>
-                // Upcasting to sum UplcConstr — keep native Constr
-                TypeRepresentationProxyLoweredValue(input, targetType, targetRepr, pos)
+        // Structural upcast from a ProdUplcConstr variant to its parent sum: at the UPLC
+        // level the bytes are already `Constr(tag, fields)`, which is exactly the shape of a
+        // `SumUplcConstr` — but only when `input` is actually in UC form. If it has been
+        // converted to Data (e.g. via `toDefaultTypeVarRepr` or a passthrough wrap), a pure
+        // relabel would lie about the byte layout: downstream `genSelect`/`genMatch` on the
+        // upcasted value would emit native-UC selectors against Data.Constr bytes, surfacing
+        // as `MultiplyInteger Apply LamAbs` runtime crashes (4-arg case branch on a 2-field
+        // CEK Data.Constr scrutinee). Mirror the dispatch in
+        // `SumCaseUplcConstrSirTypeGenerator.upcastOne`: only relabel when input is already
+        // UC-shaped; otherwise convert to UC first.
+        input.representation match
+            case _: ProductCaseClassRepresentation.ProdUplcConstr |
+                _: SumCaseClassRepresentation.SumUplcConstr =>
+                val targetSumRepr =
+                    typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
+                TypeRepresentationProxyLoweredValue(input, targetType, targetSumRepr, pos)
             case _ =>
-                // Default: convert to ProdDataConstr for Data-compatible contexts
-                val asDataConstr =
-                    input.toRepresentation(ProductCaseClassRepresentation.ProdDataConstr, pos)
-                TypeRepresentationProxyLoweredValue(
-                  asDataConstr,
-                  targetType,
-                  SumCaseClassRepresentation.DataConstr,
-                  pos
-                )
+                val ucRepr = defaultRepresentation(input.sirType)
+                val converted = input.toRepresentation(ucRepr, pos)
+                val targetSumRepr =
+                    typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
+                TypeRepresentationProxyLoweredValue(converted, targetType, targetSumRepr, pos)
     }
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue =
-        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr)
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue =
+        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr, loweredArgs)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext

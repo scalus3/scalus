@@ -91,15 +91,42 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                   SumCaseClassRepresentation.PackedSumDataList
                 ) =>
                 SumCaseSirTypeGenerator.toRepresentation(input, representation, pos)
-            // SumUplcConstr, DataConstr, PairIntDataList, TypeVar → SumUplcConstrSirTypeGenerator
+            // TypeVar source: dispatch by kind, then delegate or convert appropriately
+            case (inTvr: TypeVarRepresentation, _) =>
+                import SIRType.TypeVarKind.*
+                inTvr.kind match
+                    case Transparent =>
+                        // Wildcard source — delegate (existing behavior).
+                        SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+                    case Unwrapped =>
+                        // Source bytes are in defaultRepresentation form for input.sirType.
+                        val sourceUnderlying = defaultRepresentation(input.sirType)
+                        val r0 = RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
+                        toRepresentation(r0, representation, pos)
+                    case Fixed =>
+                        // Source bytes are Data-shaped — delegate (existing behavior).
+                        SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+            // TypeVar target: dispatch by kind
+            case (_, outTvr: TypeVarRepresentation) =>
+                import SIRType.TypeVarKind.*
+                outTvr.kind match
+                    case Transparent => input
+                    case Unwrapped =>
+                        val targetUnderlying = defaultRepresentation(input.sirType)
+                        val converted = input.toRepresentation(targetUnderlying, pos)
+                        new RepresentationProxyLoweredValue(converted, outTvr, pos)
+                    case Fixed =>
+                        val targetUnderlying = defaultTypeVarReperesentation(input.sirType)
+                        val converted = input.toRepresentation(targetUnderlying, pos)
+                        new RepresentationProxyLoweredValue(converted, outTvr, pos)
+            // SumUplcConstr, DataConstr, PairIntDataList → SumUplcConstrSirTypeGenerator
             case (_: SumCaseClassRepresentation.SumUplcConstr, _) |
                 (SumCaseClassRepresentation.DataConstr, _) |
-                (SumCaseClassRepresentation.PairIntDataList, _) | (_: TypeVarRepresentation, _) =>
+                (SumCaseClassRepresentation.PairIntDataList, _) =>
                 SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
             case (inRepr, outRepr) =>
-                val trace = Thread.currentThread().getStackTrace.take(30).mkString("\n  ")
                 throw LoweringException(
-                  s"SumCaseUplcConstrSirTypeGenerator: unhandled conversion $inRepr → $outRepr for ${input.sirType.show}\n  $trace",
+                  s"SumCaseUplcConstrSirTypeGenerator: unhandled conversion $inRepr → $outRepr for ${input.sirType.show}",
                   pos
                 )
     }
@@ -128,10 +155,17 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                         )
     }
 
-    override def genConstr(constr: SIR.Constr)(using lctx: LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
         // Resolve the concrete CaseClass type from the SumCaseClass
         val caseClassType = constr.data.constrType(constr.name)
-        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr.copy(tp = caseClassType))
+        ProductCaseSirTypeGenerator.genConstrUplcConstr(
+          constr.copy(tp = caseClassType),
+          loweredArgs
+        )
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using

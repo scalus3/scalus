@@ -63,7 +63,7 @@ trait SIRModuleAnnotation extends StaticAnnotation
   *   @UplcRepr(UplcRepresentation.ProductCaseOneElement)
   *   case class PubKeyHash(hash: ByteString)
   *
-  *   @UplcRepr(UplcRepresentation.Map)
+  *   @UplcRepr(UplcRepresentation.PackedDataMap)
   *   case class AssocMap[K, V](inner: List[(K, V)])
   *
   *   @UplcRepr(UplcRepresentation.UplcConstr)

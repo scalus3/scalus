@@ -41,7 +41,11 @@ object TypeNothingSirTypeGenerator extends SirTypeUplcGenerator {
         input
     }
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue = {
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue = {
         throw LoweringException(
           s"TypeNothingSirTypeGenerator does not support constructors, got ${constr.name}",
           constr.anns.pos

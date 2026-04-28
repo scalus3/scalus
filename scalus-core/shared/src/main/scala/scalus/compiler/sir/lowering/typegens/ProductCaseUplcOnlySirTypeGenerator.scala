@@ -48,8 +48,12 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         TypeRepresentationProxyLoweredValue(input, targetType, input.representation, pos)
     }
 
-    override def genConstr(constr: SIR.Constr)(using LoweringContext): LoweredValue =
-        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr)
+    override def genConstrLowered(
+        constr: SIR.Constr,
+        loweredArgs: scala.List[LoweredValue],
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue =
+        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr, loweredArgs)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
@@ -88,6 +92,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
         val rawFieldType = lctx.resolveTypeVarIfNeeded(constrDecl.params(fieldIndex).tp)
         val fieldRepr = puc.fieldReprs(fieldIndex)
+
         val fieldParam = constrDecl.params(fieldIndex)
         val fieldType =
             if fieldParam.annotations.data.contains("uplcRepr") then
