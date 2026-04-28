@@ -81,17 +81,19 @@ trait SirTypeUplcGenerator {
         LoweringContext
     ): LoweredValue
 
-    /** Check if any lowered argument has a passthrough TypeVar representation (Transparent or
-      * Unwrapped). When true, the constructor should cascade to UplcConstr representation because
-      * such values can't be serialized to Data.
+    /** Check if any lowered argument has a Transparent (wildcard, passthrough) TypeVar
+      * representation. When true, the constructor should cascade to UplcConstr representation
+      * because Transparent values can't be safely serialized to Data without knowing the
+      * caller's concrete substitution. Unwrapped TypeVars are NOT included here — they are in
+      * the type's defaultRepresentation form, which is independently navigable; the cascade
+      * decision for them is handled by the surrounding generator dispatch (see
+      * `LoweringException: cannot convert with TypeVar element` paths if this is widened).
       */
     protected def hasTransparentTypeVarArgs(loweredArgs: scala.List[LoweredValue]): Boolean =
         loweredArgs.exists { arg =>
             arg.representation match
-                case tvr: TypeVarRepresentation =>
-                    import SIRType.TypeVarKind.*
-                    tvr.kind == Transparent || tvr.kind == Unwrapped
-                case _ => false
+                case tvr: TypeVarRepresentation => tvr.isBuiltin
+                case _                          => false
         }
 
 }
