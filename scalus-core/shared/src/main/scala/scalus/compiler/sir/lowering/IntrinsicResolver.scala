@@ -902,7 +902,7 @@ object IntrinsicResolver {
         val afterCrossFilled = filledFromUnify.foldLeft(afterOutput) { case (acc, (tv, t)) =>
             if !acc.contains(tv) then acc + (tv -> t)
             else if bindingInternalTvs.contains(tv) then acc + (tv -> t) // overwrite stale
-            else acc                                                      // keep call-site
+            else acc // keep call-site
         }
         // Then walk eqClasses: for each TypeVar not yet bound, if any of its equivalents
         // IS bound in afterCrossFilled, inherit that concrete type.
