@@ -335,8 +335,32 @@ object IntrinsicResolver {
                                         Lowering.lowerSIR(substituted, Some(loweringAppType))
                                     finally
                                         lctx.inUplcConstrListScope = savedScope
-                                        val merged =
-                                            savedFilledTypes ++ lctx.typeUnifyEnv.filledTypes
+                                        // Merge filledTypes back to outer scope, but EXCLUDE
+                                        // the binding's own internal TypeVars. The compiled
+                                        // intrinsic binding is shared across dispatches, so
+                                        // its internal `[A, B]` TypeVars (e.g. `B#523` for
+                                        // map's binding) keep the same optIds at every call
+                                        // site. If we let those bindings leak into the outer
+                                        // scope, the next dispatch of the same binding would
+                                        // see a stale `B#523 → <prev appType element>` in
+                                        // `filledTypes`, and the unify-against-callSite at
+                                        // `bindIntrinsicListResolverElementTypeVars1` would
+                                        // be unable to overwrite it (line 905's
+                                        // `if acc.contains(tv) then acc` keeps the carryover).
+                                        // The result is the abstract `List[B]` static throw
+                                        // at `uplcConstrToBuiltinList: cannot convert with
+                                        // TypeVar element B`. Filter the binding's TypeVars
+                                        // out of the merge.
+                                        val bindingInternalTvs =
+                                            scala.collection.mutable.Set
+                                                .empty[SIRType.TypeVar]
+                                        SIRType.mapTypeVars(
+                                          binding.tp,
+                                          tv => { bindingInternalTvs += tv; tv }
+                                        )
+                                        val newBindings =
+                                            lctx.typeUnifyEnv.filledTypes -- bindingInternalTvs
+                                        val merged = savedFilledTypes ++ newBindings
                                         lctx.typeUnifyEnv =
                                             lctx.typeUnifyEnv.copy(filledTypes = merged)
                                         lctx.typeVarReprEnv = savedReprEnv
