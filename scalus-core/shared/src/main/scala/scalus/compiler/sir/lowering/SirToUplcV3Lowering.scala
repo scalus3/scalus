@@ -79,24 +79,6 @@ class SirToUplcV3Lowering(
             }
             ids
         }
-        // Session-18 note: these `[#10 filter]` System.err.println calls were
-        // originally session-12 pending-letrec reachability traces. They were
-        // load-bearing for the alone-vs-combined Heisenbug at KT:477:59 until
-        // the structural fix at `LoweredValueRepresentation.scala` (Unwrapped
-        // TypeVar compat discrimination). With that fix the prints are no
-        // longer load-bearing for the existing flap, but we keep them as a
-        // guard while the team continues adding `@UplcRepr` annotations —
-        // re-introducing a related Heisenbug class would be hard to spot
-        // without this trace surfacing it.
-        val keptCount = pending.count { case (v, _) => reachableIds.contains(v.id) }
-        System.err.println(
-          s"[#10 filter] pending=${pending.size} kept=$keptCount dropped=${pending.size - keptCount}"
-        )
-        pending.zipWithIndex.foreach { case ((v, _), i) =>
-            System.err.println(
-              s"[#10 filter]   [$i] ${v.id} @ ${v.pos.file}:${v.pos.startLine + 1}"
-            )
-        }
         val wrapped = pending.foldRight(retV) {
             case ((eqFnVar, eqFnRhs), acc) =>
                 if reachableIds.contains(eqFnVar.id) then
