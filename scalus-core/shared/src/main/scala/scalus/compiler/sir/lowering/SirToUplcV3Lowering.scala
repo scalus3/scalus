@@ -79,6 +79,24 @@ class SirToUplcV3Lowering(
             }
             ids
         }
+        // The two System.err.println calls below were originally a session-12
+        // pending-letrec reachability trace. They turned out to be LOAD-BEARING for the
+        // alone-vs-combined Heisenbug in `KnightsTest` / `KnightsTestMinimal` (sessions
+        // 11-15) — the System.err.println synchronization / JIT timing side-effect
+        // masks the residual flap that the cache-key fingerprint fixes (commit
+        // 3db34bd0f, cacc59756) didn't fully close. A pure-touch workaround
+        // (just reading `v.id` / `v.pos.*`) does NOT reproduce the stabilization, so
+        // the println call itself is what matters. Keep until the residual full-suite
+        // flap is fixed structurally; remove cleanly at that point.
+        val keptCount = pending.count { case (v, _) => reachableIds.contains(v.id) }
+        System.err.println(
+          s"[#10 filter] pending=${pending.size} kept=$keptCount dropped=${pending.size - keptCount}"
+        )
+        pending.zipWithIndex.foreach { case ((v, _), i) =>
+            System.err.println(
+              s"[#10 filter]   [$i] ${v.id} @ ${v.pos.file}:${v.pos.startLine + 1}"
+            )
+        }
         val wrapped = pending.foldRight(retV) {
             case ((eqFnVar, eqFnRhs), acc) =>
                 if reachableIds.contains(eqFnVar.id) then
