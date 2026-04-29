@@ -14,6 +14,14 @@ import scala.util.control.NonFatal
   */
 object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
 
+    // Diagnostic flag: when set, the (puc, ProdDataList) lowering checks each
+    // puc.fieldReprs[i] against `typeGenerator(fieldType).defaultRepresentation`
+    // and prints a stderr dump on disagreement. Disagreement on primitive fields
+    // is the smoking gun for the runtime "Case index N out of bounds for 1 branches"
+    // failure observed in KnightsTestMinimal.
+    private[lowering] val diagPucDataLB: Boolean =
+        System.getProperty("scalus.diag.puc.dataLB") != null
+
     override def defaultRepresentation(tp: SIRType)(using
         loweringContext: LoweringContext
     ): LoweredValueRepresentation = {
@@ -253,6 +261,45 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val constrDecl = retrieveConstrDecl(input.sirType, pos)
                 val fieldNames = constrDecl.params.indices.map(i => lctx.uniqueVarName(s"_uc_f$i"))
                 val fieldTypes = constrDecl.params.map(p => lctx.resolveTypeVarIfNeeded(p.tp))
+                // Diagnostic for repr/type lying-label bugs surfacing at runtime as
+                // "Case index N out of bounds for M branches" — gated by
+                // `-Dscalus.diag.puc.dataLB=1`. We log when puc.fieldReprs disagrees
+                // with what `typeGenerator(fieldType).defaultRepresentation` would
+                // compute. Specifically: a primitive field (BigInt/ByteString/etc.)
+                // whose puc.fieldReprs[i] is NOT a primitive repr is a concrete
+                // smoking gun — the destructure body will route the field through
+                // a Constr-shaped conversion (case f [4-arg destr]) instead of a
+                // primitive builtin (iData, bData…), then crash at runtime when the
+                // value is a real primitive.
+                if ProductCaseSirTypeGenerator.diagPucDataLB then
+                    // Identify the "input" shape — what Term we're going to wrap with
+                    // `Term.Case(<input>, <branch>)`. The lying-label bug shows up as
+                    // `input` being a VariableLoweredValue whose name was allocated by
+                    // a parent destructure for a primitive field — yet here we're
+                    // claiming sirType = a multi-field product. Log the input's class
+                    // and (if VariableLoweredValue) its id/name/sirType/representation
+                    // so we can grep for "input.id = _uc_f1*" with sirType = ChessSet.
+                    val inputDescr = input match
+                        case v: VariableLoweredValue =>
+                            s"VariableLoweredValue(id=${v.id}, name=${v.name}, sirType=${v.sirType.show}, repr=${v.representation})"
+                        case other =>
+                            s"${other.getClass.getSimpleName}(sirType=${other.sirType.show}, repr=${other.representation})"
+                    System.err.println(
+                      s"""[PUC-DATALIST-DIAG] (puc, ProdDataList) emission
+                         |  pos:                  ${pos.show}
+                         |  input:                $inputDescr
+                         |  input.sirType (dbg):  ${input.sirType.showDebug}
+                         |  puc.tag:              ${puc.tag}
+                         |  puc.fieldReprs (${puc.fieldReprs.size}):
+                         |${puc.fieldReprs.zipWithIndex
+                            .map { case (r, i) => s"    [$i] $r" }
+                            .mkString("\n")}
+                         |  fieldTypes from constrDecl (${fieldTypes.size}):
+                         |${fieldTypes.zipWithIndex
+                            .map { case (t, i) => s"    [$i] ${t.show}" }
+                            .mkString("\n")}
+                         |""".stripMargin
+                    )
                 val fieldVars =
                     fieldNames.zip(fieldTypes).zip(puc.fieldReprs).map { case ((name, tp), repr) =>
                         new VariableLoweredValue(

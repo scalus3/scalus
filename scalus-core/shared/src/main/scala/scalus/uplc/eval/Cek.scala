@@ -870,6 +870,14 @@ class CekMachine(
         System.getProperty("scalus.assert.apply.data.to.uc") != null
     private val assertCaseDataArity: Boolean =
         System.getProperty("scalus.assert.case.data.arity") != null
+    // Diagnostic for the "Case index N out of bounds for M branches" /
+    // "Case on bool/list/unit branch missing" classes of failure. When set,
+    // dumps the cases pretty-printed, the recent source trace, and a tail
+    // of the env at the throw site — so we can identify which lowering path
+    // produced the bad-shape Case (e.g. a 1-branch product field projection
+    // that ended up scrutinizing a Constant.Integer).
+    private val diagCaseOnBuiltin: Boolean =
+        System.getProperty("scalus.diag.case.on.builtin") != null
 
     private inline def recordSourcePos(pos: ScalusSourcePos): Unit =
         if (profiling || tracing) && !pos.isEmpty then
@@ -895,6 +903,73 @@ class CekMachine(
     private def lastSourcePos: ScalusSourcePos =
         val t = this.term
         if t == null then ScalusSourcePos.empty else t.sourcePos
+
+    /** Emit a structured stderr diagnostic for `Case-on-Constant` branch-shape failures.
+      *
+      * Triggered by `-Dscalus.diag.case.on.builtin=1`. The throw site already encodes the symptom
+      * (e.g. "Case index 2 out of bounds for 1 branches"); this dump adds the missing context:
+      * which lowering produced the Case.
+      *
+      * Specifically prints:
+      *   - the source position carried by the failing Term (lastSourcePos)
+      *   - up to 32 most-recent recorded source positions (from the trace ring)
+      *   - the cases.size and a pretty-printed prefix of each branch (truncated)
+      *   - a brief tail of the env (binding names + value heads), for env-leak cases where a
+      *     sibling binding's repr leaked into this slot
+      *
+      * Keep this cheap: rendering happens only on the failure path. Emit to stderr so CI captures
+      * it even if the exception's message is later truncated by an outer reporter.
+      */
+    private def dumpCaseOnBuiltinDiag(
+        kind: String,
+        symptom: String,
+        cases: Seq[Term],
+        env: CekValEnv
+    ): Unit = {
+        val pos = lastSourcePos
+        val trace = getSourceTrace.takeRight(32)
+        val currentTerm = this.term match
+            case t: Term => t.pretty.render(160).take(800)
+            case _       => "(none)"
+        val branchesDump = cases.zipWithIndex
+            .map { case (br, i) =>
+                // Render wide and keep a generous prefix so off-by-one and
+                // wrong-binder bugs are visible. The failing Case's scrutinee
+                // is the first sub-term inside the branch body — it must not
+                // be truncated.
+                val rendered = br.pretty.render(200).take(2000)
+                s"  [$i] $rendered"
+            }
+            .mkString("\n")
+        val envTail = env
+            .takeRight(24)
+            .map { case (name, v) =>
+                val vStr = (v match
+                    case VCon(c)           => s"VCon(${c.toString.take(80)})"
+                    case VConstr(t, a)     => s"VConstr(tag=$t, args.size=${a.size})"
+                    case VLamAbs(n, _, _)  => s"VLamAbs($n, ...)"
+                    case VBuiltin(b, _, _) => s"VBuiltin($b)"
+                    case other             => other.getClass.getSimpleName
+                ).take(120)
+                s"  $name → $vStr"
+            }
+            .mkString("\n")
+        System.err.println(
+          s"""[CASE-ON-BUILTIN-DIAG] $kind
+             |  symptom:        $symptom
+             |  lastSourcePos:  $pos
+             |  cases.size:     ${cases.size}
+             |  current term (the failing `case`, including its scrutinee):
+             |    $currentTerm
+             |  recent source-trace (oldest → newest, last ${trace.size}):
+             |${trace.map(p => s"    $p").mkString("\n")}
+             |  branches:
+             |$branchesDump
+             |  env tail (last ${env.takeRight(24).size}):
+             |$envTail
+             |""".stripMargin
+        )
+    }
 
     private class ProfilingBudgetSpender(wrapped: BudgetSpender) extends BudgetSpender {
         // Key by (file, line) to aggregate across different column/endLine/inlinedFrom variants
@@ -1136,6 +1211,13 @@ class CekMachine(
                             case Constant.Integer(i) =>
                                 if i >= 0 && i < cases.size then Compute(ctx, env, cases(i.toInt))
                                 else
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseIndexOutOfBounds",
+                                          s"VCon(Integer($i)) — caller likely fed a primitive integer where a Constr was expected",
+                                          cases,
+                                          env
+                                        )
                                     throw new CaseIndexOutOfBounds(
                                       i,
                                       cases.size,
@@ -1146,6 +1228,13 @@ class CekMachine(
                                 // Bool has exactly 2 constructors (False=0, True=1)
                                 // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
                                 if cases.size == 0 || cases.size > 2 then
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseBoolBranchMissing",
+                                          s"VCon(Bool($b)) — branch count $cases.size invalid",
+                                          cases,
+                                          env
+                                        )
                                     throw new CaseBoolBranchMissing(
                                       b,
                                       cases.size,
@@ -1155,6 +1244,13 @@ class CekMachine(
                                 val index = if b then 1 else 0
                                 if index < cases.size then Compute(ctx, env, cases(index))
                                 else
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseBoolBranchMissing",
+                                          s"VCon(Bool($b)) — index=$index out of $cases.size",
+                                          cases,
+                                          env
+                                        )
                                     throw new CaseBoolBranchMissing(
                                       b,
                                       cases.size,
@@ -1165,11 +1261,26 @@ class CekMachine(
                                 // Unit has exactly 1 constructor (Unit=0)
                                 // Valid: exactly 1 branch
                                 if cases.size == 1 then Compute(ctx, env, cases(0))
-                                else throw new CaseUnitBranchMissing(cases.size, env, lastSourcePos)
+                                else
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseUnitBranchMissing",
+                                          s"VCon(Unit) — branch count $cases.size != 1",
+                                          cases,
+                                          env
+                                        )
+                                    throw new CaseUnitBranchMissing(cases.size, env, lastSourcePos)
                             case list @ Constant.List(elemType, elements) =>
                                 // List has 2 constructors: Cons=0 (head, tail), Nil=1
                                 // Valid: 1 or 2 branches. Invalid: 0 or 3+ branches
                                 if cases.size == 0 || cases.size > 2 then
+                                    if diagCaseOnBuiltin then
+                                        dumpCaseOnBuiltinDiag(
+                                          "CaseListBranchError",
+                                          s"VCon(List(elemType=$elemType, elements.size=${elements.size})) — branch count ${cases.size} invalid",
+                                          cases,
+                                          env
+                                        )
                                     throw new CaseListBranchError(cases.size, env, lastSourcePos)
                                 elements match
                                     case head :: tail =>
