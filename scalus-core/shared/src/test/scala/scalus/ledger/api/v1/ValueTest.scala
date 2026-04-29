@@ -9,6 +9,8 @@ import scalus.cardano.ledger.LedgerToPlutusTranslation
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 
+import scala.annotation.nowarn
+
 class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     given [T: Arbitrary]: Arbitrary[List[T]] = Arbitrary {
         for
@@ -132,11 +134,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     test("unsafeFromList properties") {
         checkEval { (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
             val validList =
-                list.distinct(using Eq.keyPairEq)
+                list.distinct(using Eq.keyPairEq: @nowarn("cat=deprecation"))
                     .quicksort(using Ord.keyPairOrd)
                     .filterMap { case (cs, tokens) =>
                         val validTokens = tokens
-                            .distinct(using Eq.keyPairEq)
+                            .distinct(using Eq.keyPairEq: @nowarn("cat=deprecation"))
                             .quicksort(using Ord.keyPairOrd)
                             .filter { case (_, value) =>
                                 value !== BigInt(0)
@@ -227,11 +229,11 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     test("fromStrictlyAscendingListWithNonZeroAmounts properties") {
         checkEval { (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
             val validList =
-                list.distinct(using Eq.keyPairEq)
+                list.distinct(using Eq.keyPairEq: @nowarn("cat=deprecation"))
                     .quicksort(using Ord.keyPairOrd)
                     .filterMap { case (cs, tokens) =>
                         val validTokens = tokens
-                            .distinct(using Eq.keyPairEq)
+                            .distinct(using Eq.keyPairEq: @nowarn("cat=deprecation"))
                             .quicksort(using Ord.keyPairOrd)
                             .filter { case (_, value) =>
                                 value !== BigInt(0)

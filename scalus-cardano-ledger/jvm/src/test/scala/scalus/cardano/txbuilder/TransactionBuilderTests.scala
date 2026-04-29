@@ -31,8 +31,10 @@ import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint, *}
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.|>
 
+import scala.annotation.nowarn
 import scala.collection.immutable.SortedMap
 
+@nowarn("cat=deprecation")
 class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
     given CardanoInfo = CardanoInfo.mainnet
@@ -1263,10 +1265,14 @@ def unitDRedeemer(purpose: RedeemerPurpose) = DetachedRedeemer(
   purpose = purpose
 )
 
-def transactionL: Lens[ContextTuple, Transaction] = Focus[ContextTuple](_._1)
+// `Focus[ContextTuple]` macro expansions reference `ExpectedSigner` via the tuple type,
+// so the lenses inherit the deprecation warning at the macro inline site. `@nowarn` on the
+// def doesn't reach inlined warnings, so use a broad ascription on the macro call.
+@nowarn def transactionL: Lens[ContextTuple, Transaction] = Focus[ContextTuple](_._1)
 def ctxRedeemersL: Lens[ContextTuple, Seq[DetachedRedeemer]] = Focus[ContextTuple](_._2)
 def networkL: Lens[ContextTuple, Network] = Focus[ContextTuple](_._3)
-def expectedSignersL: Lens[ContextTuple, Set[ExpectedSigner]] = Focus[ContextTuple](_._4)
+@nowarn def expectedSignersL: Lens[ContextTuple, Set[ExpectedSigner]] =
+    Focus[ContextTuple](_._4)
 def resolvedUtxosL: Lens[ContextTuple, ResolvedUtxos] = Focus[ContextTuple](_._5)
 
 // ===========================================================================
@@ -1363,6 +1369,7 @@ private def fromRight[A, B](e: Either[A, B]): B =
 
 // The fields of a Context, to cut down on noise
 // Note: delayedRedeemerSpecs is excluded since it contains lambdas that can't be compared
+@nowarn("cat=deprecation")
 private type ContextTuple = (
     Transaction,
     Seq[DetachedRedeemer],

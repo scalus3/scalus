@@ -12,6 +12,15 @@ import scalus.uplc.eval.Result
 
 class SortedMapTest extends AnyFunSuite with EvalTestKit {
 
+    /** Keep the first occurrence per key, preserving input order. Used to construct reference lists
+      * for `SortedMap` constructor tests without going through the deprecated `Eq.keyPairEq` (which
+      * intentionally violates the `Eq` contract).
+      */
+    private def distinctByKey[A: Eq, B](lst: List[(A, B)]): List[(A, B)] =
+        lst.foldLeft(List.empty[(A, B)]) { (acc, p) =>
+            if acc.exists(_._1 === p._1) then acc else List.Cons(p, acc)
+        }.reverse
+
     test("empty") {
         assertEvalEq(
           SortedMap.empty[BigInt, BigInt].toList,
@@ -44,7 +53,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
     test("unsafeFromList") {
         check { (list: List[(BigInt, BigInt)]) =>
             val strictlyAscendingList =
-                list.distinct(using Eq.keyPairEq).quicksort(using Ord.keyPairOrd)
+                distinctByKey(list).quicksort(using Ord.keyPairOrd)
             SortedMap.unsafeFromList(strictlyAscendingList).toList === strictlyAscendingList
         }
 
@@ -71,7 +80,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
     test("fromList") {
         check { (list: List[(BigInt, BigInt)]) =>
             val strictlyAscendingList =
-                list.distinct(using Eq.keyPairEq).quicksort(using Ord.keyPairOrd)
+                distinctByKey(list).quicksort(using Ord.keyPairOrd)
             SortedMap.fromList(list).toList === strictlyAscendingList
         }
 
@@ -100,7 +109,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
     test("fromStrictlyAscendingList") {
         check { (list: List[(BigInt, BigInt)]) =>
             val strictlyAscendingList =
-                list.distinct(using Eq.keyPairEq).quicksort(using Ord.keyPairOrd)
+                distinctByKey(list).quicksort(using Ord.keyPairOrd)
             SortedMap
                 .fromStrictlyAscendingList(strictlyAscendingList)
                 .toList === strictlyAscendingList
