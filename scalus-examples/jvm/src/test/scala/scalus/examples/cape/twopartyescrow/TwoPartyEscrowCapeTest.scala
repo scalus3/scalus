@@ -1,6 +1,5 @@
 package scalus.examples.cape.twopartyescrow
 
-import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits}

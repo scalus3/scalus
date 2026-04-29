@@ -5,7 +5,6 @@ import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.compiler.sir.*
 
 import scala.collection.mutable.Map as MutableMap
-import scala.collection.mutable.Set as MutableSet
 
 class LoweringContext(
     var zCombinatorNeeded: Boolean = false,

@@ -3,6 +3,8 @@ package scalus.uplc
 import scalus.uplc.Term.λ
 import scalus.uplc.TermDSL.given
 
+import scala.language.implicitConversions
+
 /** Marker injected at the top of a compiled UPLC program to identify it as Scalus-generated.
   *
   * The tag wraps the program term as `[(lam _scalusTag body) (con string "S")]`, which evaluates to

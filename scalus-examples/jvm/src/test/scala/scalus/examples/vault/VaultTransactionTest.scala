@@ -1,6 +1,5 @@
 package scalus.examples.vault
 
-import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.*

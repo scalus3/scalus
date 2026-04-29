@@ -1,7 +1,6 @@
 package scalus.examples.simpletransfer
 
 import org.scalacheck.Gen
-import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data

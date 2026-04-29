@@ -1,6 +1,5 @@
 package scalus.examples.betting
 
-import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData

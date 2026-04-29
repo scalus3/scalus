@@ -649,10 +649,10 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             case puc: ProductCaseClassRepresentation.ProdUplcConstr =>
                 val baseSum =
                     typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
-                val targetSum = baseSum match
-                    case SumCaseClassRepresentation.SumUplcConstr(variants) =>
-                        SumCaseClassRepresentation.SumUplcConstr(variants.updated(puc.tag, puc))
-                    case other => other
+                val targetSum =
+                    SumCaseClassRepresentation.SumUplcConstr(
+                      baseSum.variants.updated(puc.tag, puc)
+                    )
                 return new TypeRepresentationProxyLoweredValue(
                   input,
                   targetType,

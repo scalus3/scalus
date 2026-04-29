@@ -930,7 +930,7 @@ class CekMachine(
         val trace = getSourceTrace.takeRight(32)
         val currentTerm = this.term match
             case t: Term => t.pretty.render(160).take(800)
-            case _       => "(none)"
+            case null    => "(none)"
         val branchesDump = cases.zipWithIndex
             .map { case (br, i) =>
                 // Render wide and keep a generous prefix so off-by-one and

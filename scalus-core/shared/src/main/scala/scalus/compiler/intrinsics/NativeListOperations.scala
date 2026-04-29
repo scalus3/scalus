@@ -5,7 +5,6 @@ import scalus.cardano.onchain.plutus.prelude.{List, Option}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.uplc.builtin.BuiltinList
 import scalus.uplc.builtin.Builtins.*
-import scalus.uplc.builtin.Data
 
 /** Native list operations — implementations with Transparent TypeVars.
   *

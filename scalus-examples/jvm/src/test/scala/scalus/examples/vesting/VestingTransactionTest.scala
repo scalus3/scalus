@@ -1,6 +1,5 @@
 package scalus.examples.vesting
 
-import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.utils.AllResolvedScripts

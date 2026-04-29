@@ -1,6 +1,5 @@
 package scalus.examples.lottery
 
-import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.Builtins.sha2_256
 import scalus.uplc.builtin.Data.toData

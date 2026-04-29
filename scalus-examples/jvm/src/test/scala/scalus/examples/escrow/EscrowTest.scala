@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
-import scalus.compiler.Options
 import scalus.testing.kit.Party.{Alice, Bob, Eve}
 import scalus.testing.kit.{ScalusTest, TestUtil}
 import scalus.utils.await

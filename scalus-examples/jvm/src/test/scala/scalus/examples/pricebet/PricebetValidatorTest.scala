@@ -1,6 +1,5 @@
 package scalus.examples.pricebet
 
-import scalus.compiler.Options
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.*

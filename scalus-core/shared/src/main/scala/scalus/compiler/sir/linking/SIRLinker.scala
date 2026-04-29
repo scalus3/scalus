@@ -3,7 +3,6 @@ package scalus.compiler.sir.linking
 import scalus.compiler.Options
 import scalus.compiler.sir.*
 
-import scala.annotation.unused
 import scala.collection.mutable
 
 case class SIRLinkerOptions(

@@ -9,7 +9,7 @@ import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.{Constant, Term}
 import scalus.compiler.{UplcRepr, UplcRepresentation}
-import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.eval.{PlutusVM, ProfileFormatter, Result}
 
 /** Data-compatible case class with @UplcRepr(UplcConstr). */

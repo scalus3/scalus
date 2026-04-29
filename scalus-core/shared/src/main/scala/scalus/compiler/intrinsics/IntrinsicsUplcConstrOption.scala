@@ -2,7 +2,7 @@ package scalus.compiler.intrinsics
 
 import scalus.Compile
 import scalus.cardano.onchain.plutus.prelude.{fail, Option}
-import scalus.compiler.intrinsics.IntrinsicHelpers.{fromDefaultTypeVarRepr, toDefaultTypeVarRepr}
+import scalus.compiler.intrinsics.IntrinsicHelpers.fromDefaultTypeVarRepr
 import scalus.compiler.UplcRepr
 import scalus.compiler.UplcRepresentation
 import scalus.compiler.UplcRepresentation.TypeVar
