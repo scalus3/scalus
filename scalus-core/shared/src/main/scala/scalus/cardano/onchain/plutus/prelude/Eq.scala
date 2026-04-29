@@ -46,6 +46,19 @@ object Eq:
 
     end extension
 
+    /** @deprecated
+      *   Violates the `Eq` equivalence-relation contract — collapses structurally-distinct values
+      *   that share a key. The lowering's repr-aware Eq optimization assumes every `Eq[(A, B)]`
+      *   means "compare both fields"; passing this instance silently replaces it with that
+      *   structural form and fails to dedupe by key (observed as
+      *   `fromStrictlyAscendingListWithNonZeroAmounts` runtime errors). Express "by-key dedup" as a
+      *   separate non-Eq abstraction or use `quicksort(using Ord.keyPairOrd)` followed by an
+      *   explicit consecutive-key dedupe.
+      */
+    @deprecated(
+      "keyPairEq violates the Eq equivalence-relation contract; use Eq.derived[T] or a non-Eq abstraction.",
+      "0.15.0"
+    )
     def keyPairEq[A: Eq, B]: Eq[(A, B)] = (lhs: (A, B), rhs: (A, B)) => lhs._1 === rhs._1
 
 end Eq
