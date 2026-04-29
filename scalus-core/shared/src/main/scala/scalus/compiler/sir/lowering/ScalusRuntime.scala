@@ -800,12 +800,80 @@ object ScalusRuntime {
             case other => other
         val resolvedOutListRepr = SumCaseClassRepresentation.SumBuiltinList(resolvedOutElemRepr)
         if elemType.isInstanceOf[SIRType.TypeVar] then
-            throw LoweringException(
-              s"uplcConstrToBuiltinList: cannot convert with TypeVar element ${elemType.show}. " +
-                  s"This conversion requires concrete element type for Data encoding. " +
-                  s"Stack: ${Thread.currentThread().getStackTrace.take(20).mkString("\n  ")}",
-              pos
-            )
+            val tv = elemType.asInstanceOf[SIRType.TypeVar]
+            // Diagnostic dump for the unresolved-element-type failure.
+            //
+            // The throw means: at this call site, the input's static type is
+            // `List[B]` for some abstract `B` that no env layer concretizes. The
+            // useful question is "what should B be here, given where this call
+            // originated?" — so we dump the source-position chain, the enclosing
+            // lambda binders, the input SumUplcConstr's actual ProdUplcConstr
+            // variants (which carry the *real* fieldReprs/types of the data we
+            // hold), and every env that might mention `B`. CI captures this in
+            // stderr so the next failure tells us the call-site context, not
+            // just the symptom.
+            def fmtTv(t: SIRType): String = t match
+                case v: SIRType.TypeVar =>
+                    s"TypeVar(${v.name}#${v.optId.getOrElse(0L)},kind=${v.kind})"
+                case other => other.show
+            val inSumReprDiag = input.representation match
+                case s: SumCaseClassRepresentation.SumUplcConstr =>
+                    s.variants
+                        .map { case (tag, prod) =>
+                            s"    $tag → fieldReprs=[${prod.fieldReprs.mkString(", ")}]"
+                        }
+                        .mkString("\n")
+                case other => s"  (non-SumUplcConstr: $other)"
+            val filledDiag =
+                if lctx.typeUnifyEnv.filledTypes.isEmpty then "  (empty)"
+                else
+                    lctx.typeUnifyEnv.filledTypes
+                        .map { case (k, v) => s"  ${fmtTv(k)} → ${fmtTv(v)}" }
+                        .mkString("\n")
+            val reprEnvDiag =
+                if lctx.typeVarReprEnv.isEmpty then "  (empty)"
+                else
+                    lctx.typeVarReprEnv
+                        .map { case (k, r) => s"  ${fmtTv(k)} → $r" }
+                        .mkString("\n")
+            val lambdaChainDiag =
+                if lctx.enclosingLambdaParams.isEmpty then "  (empty)"
+                else
+                    lctx.enclosingLambdaParams
+                        .map(p => s"  ${p.name} : ${p.sirType.show}")
+                        .mkString("\n")
+            val msg =
+                s"""uplcConstrToBuiltinList: cannot convert with TypeVar element ${fmtTv(tv)}.
+                   |This conversion requires a concrete element type for Data encoding.
+                   |
+                   |[diagnostic]
+                   |  call-site pos:        ${pos.show}
+                   |  input.sirType:        ${listType.show}
+                   |  input.sirType (dbg):  ${listType.showDebug}
+                   |  rawElemType:          ${fmtTv(rawElemType)}
+                   |  outListRepr:          $outListRepr
+                   |  resolvedOutElemRepr:  $resolvedOutElemRepr
+                   |  inUplcConstrListScope: ${lctx.inUplcConstrListScope}
+                   |
+                   |input.representation variants (real element shape):
+                   |$inSumReprDiag
+                   |
+                   |typeUnifyEnv.filledTypes:
+                   |$filledDiag
+                   |
+                   |typeVarReprEnv:
+                   |$reprEnvDiag
+                   |
+                   |enclosingLambdaParams (innermost first):
+                   |$lambdaChainDiag
+                   |
+                   |Stack (top frames):
+                   |  ${Thread.currentThread().getStackTrace.take(25).mkString("\n  ")}
+                   |""".stripMargin
+            // Mirror to stderr so CI logs preserve the dump even if the
+            // exception message gets truncated downstream.
+            System.err.println(msg)
+            throw LoweringException(msg, pos)
         val inSumRepr = input.representation.asInstanceOf[SumCaseClassRepresentation.SumUplcConstr]
         // Get element repr from the Cons variant (has fields)
         val inElemRepr = inSumRepr.variants.values
