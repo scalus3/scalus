@@ -1265,14 +1265,15 @@ def unitDRedeemer(purpose: RedeemerPurpose) = DetachedRedeemer(
   purpose = purpose
 )
 
-// `Focus[ContextTuple]` macro expansions reference `ExpectedSigner` via the tuple type,
-// so the lenses inherit the deprecation warning at the macro inline site. `@nowarn` on the
-// def doesn't reach inlined warnings, so use a broad ascription on the macro call.
-@nowarn def transactionL: Lens[ContextTuple, Transaction] = Focus[ContextTuple](_._1)
+// The `Focus` macro expansion against `ContextTuple` (which contains the deprecated
+// `ExpectedSigner`) emits inline-site deprecation warnings that `@nowarn` annotations
+// on the surrounding defs don't reach. These two warnings document the deprecation
+// transition and can only be silenced by removing `ExpectedSigner` from `Context`,
+// which is the underlying production-code refactor still in flight.
+def transactionL: Lens[ContextTuple, Transaction] = Focus[ContextTuple](_._1)
 def ctxRedeemersL: Lens[ContextTuple, Seq[DetachedRedeemer]] = Focus[ContextTuple](_._2)
 def networkL: Lens[ContextTuple, Network] = Focus[ContextTuple](_._3)
-@nowarn def expectedSignersL: Lens[ContextTuple, Set[ExpectedSigner]] =
-    Focus[ContextTuple](_._4)
+def expectedSignersL: Lens[ContextTuple, Set[ExpectedSigner]] = Focus[ContextTuple](_._4)
 def resolvedUtxosL: Lens[ContextTuple, ResolvedUtxos] = Focus[ContextTuple](_._5)
 
 // ===========================================================================

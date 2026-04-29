@@ -17,8 +17,10 @@ import scalus.cardano.txbuilder.TransactionBuilder.*
 import scalus.cardano.txbuilder.TransactionBuilderStep.{Mint as _, *}
 import scalus.|>
 
+import scala.annotation.nowarn
 import scala.collection.immutable.SortedMap
 
+@nowarn("cat=deprecation")
 private class TransactionStepsProcessor(private var _ctx: Context) {
 
     /** Transaction builder monad. Retains context at point of failure, if there's any.
@@ -1102,7 +1104,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     // -------------------------------------------------------------------------
 
     private def usePubKeyWitness(expectedSigner: ExpectedSigner): Unit =
-        modify0(Focus[Context](_.expectedSigners).modify(_ + expectedSigner))
+        modify0(ctx => ctx.copy(expectedSigners = ctx.expectedSigners + expectedSigner))
 
     private def useNativeScript(
         nativeScript: ScriptSource[Script.Native]
@@ -1139,7 +1141,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
               .refocus(_.requiredSigners)
               .modify((s: TaggedSortedSet[AddrKeyHash]) => TaggedSortedSet(s.toSet + hash))
         )
-        modify0(Focus[Context](_.expectedSigners).modify(_ + ExpectedSigner(hash)))
+        modify0(ctx => ctx.copy(expectedSigners = ctx.expectedSigners + ExpectedSigner(hash)))
         Ok
     }
 

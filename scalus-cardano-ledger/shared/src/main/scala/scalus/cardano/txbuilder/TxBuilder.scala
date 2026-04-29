@@ -10,6 +10,7 @@ import scalus.cardano.node.{BlockchainReader, UtxoQueryError}
 import scalus.cardano.txbuilder.SomeBuildError
 
 import java.time.Instant
+import scala.annotation.nowarn
 import scala.concurrent.Future
 
 // -----------------------------------------------------------------------------
@@ -196,6 +197,7 @@ object TxBuilderException {
   * @param changeOutputIndex
   *   index of the explicit change output (set by [[changeTo]]), or None for implicit change
   */
+@nowarn("cat=deprecation")
 case class TxBuilder(
     env: CardanoInfo,
     context: TransactionBuilder.Context,

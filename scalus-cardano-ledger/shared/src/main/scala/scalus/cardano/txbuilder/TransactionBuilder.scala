@@ -23,7 +23,7 @@ import scalus.cardano.txbuilder.StepError.*
 import scalus.cardano.txbuilder.TransactionBuilder.Context
 import scalus.|>
 
-import scala.annotation.tailrec
+import scala.annotation.{nowarn, tailrec}
 import scala.util.Try
 
 // Type alias for compatibility - DiffHandler is now a function type in new Scalus API
@@ -617,6 +617,7 @@ object TransactionBuilder {
       *
       * TODO: make a class, remove toTuple()?
       */
+    @nowarn("cat=deprecation")
     case class Context(
         transaction: Transaction,
         redeemers: Seq[DetachedRedeemer],
@@ -869,6 +870,7 @@ object TransactionBuilder {
     }
 
     object Context {
+        @nowarn("cat=deprecation")
         def empty(networkId: Network) = Context(
           transaction = Transaction.empty,
           redeemers = Seq.empty,
