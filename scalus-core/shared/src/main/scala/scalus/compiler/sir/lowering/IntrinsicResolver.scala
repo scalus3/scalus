@@ -922,7 +922,12 @@ object IntrinsicResolver {
             case _                                   => Map.empty
         val afterCrossFilled = filledFromUnify.foldLeft(afterOutput) { case (acc, (tv, t)) =>
             if !acc.contains(tv) then acc + (tv -> t)
-            else if bindingInternalTvs.contains(tv) then acc + (tv -> t) // overwrite stale
+            // After the strip-on-entry above, binding-internal TVs only re-enter `acc` via
+            // the fresh `selfTypeVars`/`outputBindings` folds — both already reflect the
+            // current dispatch. The branch below is a defensive no-op for the typical case
+            // where `outputBindings` and `filledFromUnify` agree on the binding-internal TV;
+            // if they disagree, prefer `filledFromUnify` (the call-site → binding mapping).
+            else if bindingInternalTvs.contains(tv) then acc + (tv -> t)
             else acc // keep call-site
         }
         // Then walk eqClasses: for each TypeVar not yet bound, if any of its equivalents
