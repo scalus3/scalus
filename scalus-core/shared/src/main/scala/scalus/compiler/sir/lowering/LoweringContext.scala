@@ -68,6 +68,21 @@ class LoweringContext(
         : scala.collection.mutable.LinkedHashMap[String, IdentifiableLoweredValue] =
         scala.collection.mutable.LinkedHashMap.empty
 
+    /** Diagnostic toggle: when true, [[lookupCachedHelper]] always returns `None`, forcing every
+      * call site to materialize a fresh helper RHS instead of reusing a cached one. Used to bisect
+      * Heisenbug failures whose root cause is a stale `cachedTopLevelHelpers` entry shared across
+      * dispatches with subtly-different lowering env. Set via `-Dscalus.disable.helper.cache=1`.
+      */
+    private val disableHelperCache: Boolean =
+        System.getProperty("scalus.disable.helper.cache") != null
+
+    /** Cache lookup with a diagnostic disable knob. Call sites should use this instead of
+      * `cachedTopLevelHelpers.get(...)` directly so the disable flag covers them uniformly.
+      */
+    def lookupCachedHelper(key: String): Option[IdentifiableLoweredValue] =
+        if disableHelperCache then None
+        else cachedTopLevelHelpers.get(key)
+
     /** Pending top-level let-rec bindings collected during lowering. After [[Lowering.lowerSIR]]
       * returns the lowered SIR root, the lowering driver wraps it with a chain of let-recs for each
       * entry. Entries are appended by innermost-completing helpers first (helper `+=`s AFTER any

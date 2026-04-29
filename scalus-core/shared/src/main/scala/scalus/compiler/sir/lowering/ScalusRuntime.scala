@@ -682,7 +682,7 @@ object ScalusRuntime {
         val cacheKey =
             s"builtinListToUplcConstr|${listType.show}|${inListRepr.stableKey}|${outSum.stableKey}" +
                 s"|${lctx.captureFingerprint(listType)}"
-        val goVar = lctx.cachedTopLevelHelpers.get(cacheKey) match
+        val goVar = lctx.lookupCachedHelper(cacheKey) match
             case Some(v) =>
                 LoweringContext.traceLetRec("HIT", "builtinListToUplcConstr", cacheKey)
                 v
@@ -899,7 +899,7 @@ object ScalusRuntime {
         val cacheKey =
             s"uplcConstrToBuiltinList|${listType.show}|${inSumRepr.stableKey}|${resolvedOutListRepr.stableKey}" +
                 s"|${lctx.captureFingerprint(listType)}"
-        val goVar = lctx.cachedTopLevelHelpers.get(cacheKey) match
+        val goVar = lctx.lookupCachedHelper(cacheKey) match
             case Some(v) =>
                 LoweringContext.traceLetRec("HIT", "uplcConstrToBuiltinList", cacheKey)
                 v

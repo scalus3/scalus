@@ -852,50 +852,21 @@ object IntrinsicResolver {
             )
           )
         )
-        // Role 2: unify restType (signature after self) with appType to bind output TypeVars
-        val outputBindings: Map[SIRType.TypeVar, SIRType] =
-            SIRUnify.topLevelUnifyType(restType, appType, SIRUnify.Env.empty) match
-                case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
-                case _                                   => Map.empty
-        // Build the final filledTypes map
-        val afterSelf = selfTypeVars.foldLeft(lctx.typeUnifyEnv.filledTypes) { (acc, tv) =>
-            acc + (tv -> annotatedElemType)
-        }
-        val afterOutput = outputBindings.foldLeft(afterSelf) { case (acc, (tv, t)) =>
-            if selfTypeVars.contains(tv) then acc // already bound (role 1 wins)
-            else acc + (tv -> t)
-        }
-        // The plugin-generated SIR for `self.method(args)` carries its OWN TypeVar instances
-        // for the method's generic parameters (e.g., A#87374), distinct from the compiled
-        // intrinsic binding's TypeVars (e.g., A#95442). Unify the call-site function type
-        // with the binding signature to discover the call-site→binding TypeVar mapping, then
-        // propagate the concrete bindings to the call-site TypeVars too.
-        // Unify call-site function type with binding signature. Both sides carry free TypeVars
-        // (call-site's and binding's). SIRUnify puts paired free TypeVars into env.eqTypes
-        // (equivalence sets) rather than filledTypes. We then walk eqTypes: for each call-site
-        // TypeVar, find its equivalent binding TypeVar, and look up the binding's concrete
-        // type in our afterOutput map.
-        val unifyResult =
-            SIRUnify.topLevelUnifyType(callSiteTpStripped, bindingTpStripped, SIRUnify.Env.empty)
-        val eqClasses: Map[SIRType.TypeVar, Set[SIRType.TypeVar]] = unifyResult match
-            case SIRUnify.UnificationSuccess(env, _) => env.eqTypes
-            case _                                   => Map.empty
-        val filledFromUnify: Map[SIRType.TypeVar, SIRType] = unifyResult match
-            case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
-            case _                                   => Map.empty
-        // Propagate filledFromUnify. The compiled intrinsic binding is shared across
-        // dispatches, so its internal TypeVars (e.g. `B#523` for `List$.map`'s `[A, B]`)
-        // keep the same optIds at every call site. A previous dispatch leaves stale
-        // bindings for those TypeVars in `lctx.typeUnifyEnv.filledTypes`; the fresh
-        // unify against this call site's `callSiteTpStripped` rebinds them to the
-        // current site's appType element. We must let the fresh bindings OVERWRITE
-        // the stale carryover for binding-internal TypeVars — otherwise the next
-        // dispatch of the same binding would see e.g. `B#523 → <prev appType element>`
-        // and propagate it through downstream lowering, surfacing as the residual
-        // `LoweringException: cannot convert with TypeVar element B` heisenbug.
-        // Pre-existing call-site TypeVars (not in the binding's signature) keep
-        // their existing bindings — that's correct, the call site's outer code
-        // still references them.
+        // The compiled intrinsic binding is shared across dispatches, so its internal
+        // TypeVars (e.g. `B#523` for `List$.map`'s `[A, B]`) keep the same optIds at
+        // every call site. A previous dispatch may have left bindings for those
+        // TypeVars in `lctx.typeUnifyEnv.filledTypes`. If the current dispatch's
+        // unification fails to produce a fresh binding for one of them (e.g. when
+        // `outputBindings` doesn't cover B because of a signature mismatch), the
+        // stale entry persists and contaminates downstream lowering — including the
+        // `captureFingerprint` of cache keys, where `env=[B#X=u:<stale-type>]` ends
+        // up associated with helpers whose body should have been built under the
+        // current site's actual element type.
+        //
+        // Defense: collect `binding.tp`'s internal TypeVars FIRST, then strip them
+        // from `lctx.typeUnifyEnv.filledTypes` before merging fresh bindings. Each
+        // dispatch starts with a clean slate for binding-internal TVs; pre-existing
+        // call-site TypeVars (not in the binding signature) keep their bindings.
         val bindingInternalTvs =
             scala.collection.mutable.Set.empty[SIRType.TypeVar]
         // Non-allocating walk to collect TypeVars from `binding.tp`. We only need
@@ -919,6 +890,36 @@ object IntrinsicResolver {
                     collectTvs(ref)
             case _ => ()
         collectTvs(binding.tp)
+        // Strip stale binding-internal TypeVars from the lctx env before merging.
+        val cleanedFilledTypes =
+            lctx.typeUnifyEnv.filledTypes -- bindingInternalTvs
+
+        // Role 2: unify restType (signature after self) with appType to bind output TypeVars
+        val outputBindings: Map[SIRType.TypeVar, SIRType] =
+            SIRUnify.topLevelUnifyType(restType, appType, SIRUnify.Env.empty) match
+                case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
+                case _                                   => Map.empty
+        // Build the final filledTypes map starting from the cleaned env.
+        val afterSelf = selfTypeVars.foldLeft(cleanedFilledTypes) { (acc, tv) =>
+            acc + (tv -> annotatedElemType)
+        }
+        val afterOutput = outputBindings.foldLeft(afterSelf) { case (acc, (tv, t)) =>
+            if selfTypeVars.contains(tv) then acc // already bound (role 1 wins)
+            else acc + (tv -> t)
+        }
+        // Unify call-site function type with binding signature. Both sides carry free TypeVars
+        // (call-site's and binding's). SIRUnify puts paired free TypeVars into env.eqTypes
+        // (equivalence sets) rather than filledTypes. We then walk eqTypes: for each call-site
+        // TypeVar, find its equivalent binding TypeVar, and look up the binding's concrete
+        // type in our afterOutput map.
+        val unifyResult =
+            SIRUnify.topLevelUnifyType(callSiteTpStripped, bindingTpStripped, SIRUnify.Env.empty)
+        val eqClasses: Map[SIRType.TypeVar, Set[SIRType.TypeVar]] = unifyResult match
+            case SIRUnify.UnificationSuccess(env, _) => env.eqTypes
+            case _                                   => Map.empty
+        val filledFromUnify: Map[SIRType.TypeVar, SIRType] = unifyResult match
+            case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
+            case _                                   => Map.empty
         val afterCrossFilled = filledFromUnify.foldLeft(afterOutput) { case (acc, (tv, t)) =>
             if !acc.contains(tv) then acc + (tv -> t)
             else if bindingInternalTvs.contains(tv) then acc + (tv -> t) // overwrite stale

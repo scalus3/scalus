@@ -199,7 +199,7 @@ object LoweringEq {
           InOutRepresentationPair(lhsSum, innerFunRepr)
         )
         // Reuse cached helper across emission sites; emit and register on first encounter.
-        val eqFnVar = lctx.cachedTopLevelHelpers.get(typeKey) match
+        val eqFnVar = lctx.lookupCachedHelper(typeKey) match
             case Some(v) =>
                 LoweringContext.traceLetRec("HIT", "sumEq", typeKey)
                 v
