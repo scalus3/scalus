@@ -13,7 +13,7 @@ import scalus.uplc.*
 import scalus.uplc.Term.asTerm
 import scalus.uplc.eval.Result.Success
 import scalus.uplc.eval.{PlutusVM, Result}
-import scalus.{pretty, toUplc, toUplcOptimized, uplc, Ignore}
+import scalus.{toUplc, toUplcOptimized, uplc, Ignore}
 
 import scala.annotation.{nowarn, tailrec}
 import scala.collection.immutable
@@ -405,14 +405,6 @@ class CompilerPluginToSIRTest extends AnyFunSuite with ScalaCheckPropertyChecks:
                   AnE
                 )
         }
-
-        println(s"compiled=${compiled.pretty.render(100)}")
-        println(s"exprected=${expected.pretty.render(100)}")
-        //
-        // SIRUnify.unifySIR(compiled, expected, SIRUnify.Env.empty) match
-        //    case SIRUnify.UnificationSuccess(env, sir) =>
-        //    case SIRUnify.UnificationFailure(path, left, right) =>
-        //        println(s"Unification failure: $path, left=$left, right=$right")
 
         assert(compiled ~=~ expected)
         // val term = compiled.toUplc()
