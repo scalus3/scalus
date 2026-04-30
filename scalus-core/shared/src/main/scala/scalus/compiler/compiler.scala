@@ -27,7 +27,13 @@ case class Options(
       * conversion is emitted between UplcConstr and SumBuiltinList. Useful for diagnosing
       * unexpected Data↔UplcConstr conversions during optimization work.
       */
-    warnListConversions: Boolean = false
+    warnListConversions: Boolean = false,
+    /** When true, suppresses all `LoweringContext.warn` output emitted during SIR lowering (e.g.
+      * the "Eq instance is not provably the structural type-default" advisory and the "Unification
+      * failure" / "casting unrelated types" diagnostics). Use to keep test logs clean when the
+      * warning is a known false positive that the heuristic can't suppress.
+      */
+    noWarn: Boolean = false
 ) {
 
     /** Returns a copy with `addScalusTag` set to `enable`. */

@@ -227,11 +227,15 @@ class EqDerivingTest extends AnyFunSuite {
 
     test("Eq.derived vs manual for case class - budget comparison") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
+        // The custom-named givens (eqManualUnapply etc.) trip the not-provably-default Eq
+        // heuristic in the lowering pass; the warning is informational and not actionable
+        // for these tests, so silence it via `noWarn` to keep test output clean.
         given scalus.compiler.Options = scalus.compiler.Options(
           targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = false,
           optimizeUplc = true,
-          debug = false
+          debug = false,
+          noWarn = true
         )
 
         // Compile using Eq.derived (direct field access)
@@ -313,11 +317,15 @@ class EqDerivingTest extends AnyFunSuite {
         import EqBudgetStatus.{mkDone, mkFailed}
 
         given PlutusVM = PlutusVM.makePlutusV3VM()
+        // The custom-named givens (eqManualUnapply etc.) trip the not-provably-default Eq
+        // heuristic in the lowering pass; the warning is informational and not actionable
+        // for these tests, so silence it via `noWarn` to keep test output clean.
         given scalus.compiler.Options = scalus.compiler.Options(
           targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = false,
           optimizeUplc = true,
-          debug = false
+          debug = false,
+          noWarn = true
         )
 
         // Compare three approaches for Failed variant (2 fields):

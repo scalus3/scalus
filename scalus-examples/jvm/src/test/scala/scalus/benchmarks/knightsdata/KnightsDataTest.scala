@@ -23,7 +23,8 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
       targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
       generateErrorTraces = true,
       optimizeUplc = true,
-      debug = false
+      debug = false,
+      noWarn = true
     )
 
     val printComparison = true

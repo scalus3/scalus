@@ -14,6 +14,7 @@ class SirToUplcV3Lowering(
     representation: LoweredValueRepresentation = TypeVarRepresentation(true),
     debug: Boolean = false,
     warnListConversions: Boolean = false,
+    noWarn: Boolean = false,
     targetLanguage: Language = Language.PlutusV3,
     targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     intrinsicModules: Map[String, Module] = Map.empty,
@@ -130,6 +131,7 @@ class SirToUplcV3Lowering(
           targetProtocolVersion = effectivePV,
           generateErrorTraces = generateErrorTraces,
           warnListConversions = warnListConversions,
+          noWarn = noWarn,
           debug = debug,
           intrinsicModules = intrinsicModules,
           supportModules = supportModules
@@ -155,6 +157,7 @@ object SirToUplcV3Lowering {
           generateErrorTraces = options.generateErrorTraces,
           debug = debug,
           warnListConversions = options.warnListConversions,
+          noWarn = options.noWarn,
           targetLanguage = options.targetLanguage,
           targetProtocolVersion = options.targetProtocolVersion,
           intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,

@@ -15,6 +15,7 @@ class LoweringContext(
     val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
     val generateErrorTraces: Boolean = false,
     val warnListConversions: Boolean = false,
+    val noWarn: Boolean = false,
     /** When true, unannotated `List[_]` / `Option[_]` types dispatch to
       * `SumCaseUplcConstrSirTypeGenerator` (native-Constr form) instead of the default
       * `SumBuiltinList` / `DataConstr` generator. Set by `IntrinsicResolver` for the duration of
@@ -223,7 +224,7 @@ class LoweringContext(
     }
 
     def warn(msg: String, pos: SIRPosition): Unit = {
-        println(s"warning: ${msg} at ${pos.show}")
+        if !noWarn then println(s"warning: ${msg} at ${pos.show}")
     }
 
     def info(msg: String, pos: SIRPosition): Unit = {

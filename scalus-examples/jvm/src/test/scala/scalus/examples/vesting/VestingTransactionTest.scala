@@ -13,6 +13,10 @@ import scalus.utils.await
 
 class VestingTransactionTest extends AnyFunSuite, ScalusTest {
 
+    // Lowering of the prelude's `===` macro-spliced application trips the
+    // not-provably-default Eq heuristic; the warning is a known false positive here.
+    private given scalus.compiler.Options = scalus.compiler.Options.default.copy(noWarn = true)
+
     private given env: CardanoInfo = TestUtil.testEnvironment
     private val contract = VestingContract.compiled.withErrorTraces
 

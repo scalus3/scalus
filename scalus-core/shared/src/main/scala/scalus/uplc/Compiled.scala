@@ -110,6 +110,8 @@ sealed abstract class CompiledPlutus[A](
                   sir = sirToLower,
                   generateErrorTraces = options.generateErrorTraces,
                   debug = options.debug,
+                  warnListConversions = options.warnListConversions,
+                  noWarn = options.noWarn,
                   targetLanguage = language,
                   targetProtocolVersion = options.targetProtocolVersion,
                   intrinsicModules =

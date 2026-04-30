@@ -21,7 +21,9 @@ import scala.annotation.tailrec
 
 class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
-    private given Options = Options.release
+    // The `===` calls go through prelude `Eq` extension methods whose macro-spliced
+    // application trips the not-provably-default Eq heuristic. Silence here.
+    private given Options = Options.release.copy(noWarn = true)
     private val params = CardanoInfo.mainnet.protocolParams
     private val prices = params.executionUnitPrices
 

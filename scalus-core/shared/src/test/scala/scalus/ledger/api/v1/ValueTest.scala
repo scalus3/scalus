@@ -9,9 +9,13 @@ import scalus.cardano.ledger.LedgerToPlutusTranslation
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 
-import scala.annotation.nowarn
-
 class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
+    // The macro-spliced `===` calls trip the not-provably-default Eq heuristic at the
+    // prelude's extension method site; the warning is informational and not actionable
+    // for this test suite, so silence it here.
+    override protected def compilerOptions: scalus.compiler.Options =
+        super.compilerOptions.copy(noWarn = true)
+
     given [T: Arbitrary]: Arbitrary[List[T]] = Arbitrary {
         for
             size <- Gen.choose(0, 10)
@@ -133,16 +137,16 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
     test("unsafeFromList properties") {
         checkEval { (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
+            // Build a strictly-ascending, key-unique reference list by routing through
+            // `SortedMap.fromList(...).toList` rather than `distinct(keyPairEq)+quicksort`.
+            // The latter is broken under the LoweringEq optimization: every `Eq[(A,B)]` is
+            // rewritten to a structural (both-fields) compare, so `distinct` no longer
+            // dedupes by key alone and pairs with the same key but different values survive.
             val validList =
-                list.distinct(using Eq.keyPairEq: @nowarn("cat=deprecation"))
-                    .quicksort(using Ord.keyPairOrd)
+                SortedMap.fromList(list).toList
                     .filterMap { case (cs, tokens) =>
-                        val validTokens = tokens
-                            .distinct(using Eq.keyPairEq: @nowarn("cat=deprecation"))
-                            .quicksort(using Ord.keyPairOrd)
-                            .filter { case (_, value) =>
-                                value !== BigInt(0)
-                            }
+                        val validTokens = SortedMap.fromList(tokens).toList
+                            .filter { case (_, value) => value !== BigInt(0) }
 
                         if validTokens.nonEmpty then Option.Some((cs, validTokens)) else Option.None
                     }
@@ -228,16 +232,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
 
     test("fromStrictlyAscendingListWithNonZeroAmounts properties") {
         checkEval { (list: List[(PolicyId, List[(TokenName, BigInt)])]) =>
+            // Same dedup-via-SortedMap.fromList approach as the unsafeFromList property —
+            // see that test for the rationale.
             val validList =
-                list.distinct(using Eq.keyPairEq: @nowarn("cat=deprecation"))
-                    .quicksort(using Ord.keyPairOrd)
+                SortedMap.fromList(list).toList
                     .filterMap { case (cs, tokens) =>
-                        val validTokens = tokens
-                            .distinct(using Eq.keyPairEq: @nowarn("cat=deprecation"))
-                            .quicksort(using Ord.keyPairOrd)
-                            .filter { case (_, value) =>
-                                value !== BigInt(0)
-                            }
+                        val validTokens = SortedMap.fromList(tokens).toList
+                            .filter { case (_, value) => value !== BigInt(0) }
 
                         if validTokens.nonEmpty then Option.Some((cs, validTokens)) else Option.None
                     }

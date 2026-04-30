@@ -29,6 +29,10 @@ class CrowdfundingScenarioTest extends AnyFunSuite {
     import CrowdfundingScenarioTest.*
     import Scenario.futureToScenarioConversion
 
+    // Lowering of the prelude's `===` macro-spliced application trips the
+    // not-provably-default Eq heuristic; the warning is a known false positive here.
+    private given scalus.compiler.Options = scalus.compiler.Options.default.copy(noWarn = true)
+
     test("explore: campaign invariants hold under non-deterministic actions") {
         val emulator = createEmulator()
         val scenario = async[Scenario] {
