@@ -68,7 +68,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     ): Unit =
         test(label) {
             val res = TransactionBuilder.build(Mainnet, steps)
-            assert(res.map(_.toTuple) == Right(expected))
+            assert(res.map(_.toCtxTuple) == Right(expected))
         }
 
     val pkhUtxo = Utxo(input = input1, output = pkhOutput)
@@ -168,15 +168,14 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
     val spendPkhUtxoStep = TransactionBuilderStep.Spend(pkhUtxo, PubKeyWitness)
     val pubKeyInput1Expected: ContextTuple =
-        Context.empty(Mainnet).toTuple
+        Context.empty(Mainnet).toCtxTuple
             |> transactionL
                 .andThen(txBodyL.refocus(_.inputs))
                 .replace(TaggedSortedSet(input1))
             |> expectedSignersL
                 .modify(
-                  _ + ExpectedSigner(
-                    spendPkhUtxoStep.utxo.output.address.keyHashOption.get.asInstanceOf[AddrKeyHash]
-                  )
+                  _ + spendPkhUtxoStep.utxo.output.address.keyHashOption.get
+                      .asInstanceOf[AddrKeyHash]
                 )
             |> resolvedUtxosL.modify((r: ResolvedUtxos) => ResolvedUtxos(r.utxos + pkhUtxo.toTuple))
 
@@ -297,7 +296,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         ReferenceOutput(utxo = utxoWithScript1ReferenceScript),
         Spend(utxo = script1Utxo, witness = plutusScript1RefWitness)
       ),
-      expected = Context.empty(Mainnet).toTuple
+      expected = Context.empty(Mainnet).toCtxTuple
           |> (transactionL >>> txInputsL)
               .replace(TaggedSortedSet(script1Utxo.input))
           |> (transactionL >>> txReferenceInputsL)
@@ -327,7 +326,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         Spend(utxo = script1Utxo, witness = plutusScript1RefSpentWitness)
       ),
       expected = {
-          val ctx1 = Context.empty(Mainnet).toTuple
+          val ctx1 = Context.empty(Mainnet).toCtxTuple
               |> (transactionL >>> txInputsL)
                   // We spend two inputs: the script1Utxo (at the script address), and the UTxO carrying the reference
                   // script at the Pubkey Address
@@ -337,10 +336,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
               |> expectedSignersL
                   // Add the expected signer for spending the utxo with the script
                   .modify(
-                    _ + ExpectedSigner(
-                      utxoWithScript1ReferenceScript.output.address.keyHashOption.get
-                          .asInstanceOf[AddrKeyHash]
-                    )
+                    _ + utxoWithScript1ReferenceScript.output.address.keyHashOption.get
+                        .asInstanceOf[AddrKeyHash]
                   )
               |> resolvedUtxosL
                   .replace(
@@ -443,8 +440,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
 
         // requiredSigners in tx body should be empty since witnesses don't carry signers
         val obtained =
-            built.toTuple |> transactionL.andThen(txBodyL).refocus(_.requiredSigners).get |> (s =>
-                s.toSet.toSet
+            built.toCtxTuple |> transactionL.andThen(txBodyL).refocus(_.requiredSigners).get |> (
+              s => s.toSet.toSet
             )
 
         assert(obtained == Set.empty)
@@ -563,7 +560,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderSteps(
       label = "Pay #1",
       steps = List(Send(pkhOutput)),
-      expected = Context.empty(Mainnet).toTuple
+      expected = Context.empty(Mainnet).toCtxTuple
           |> transactionL
               .andThen(txBodyL.refocus(_.outputs))
               .replace(IndexedSeq(Sized(pkhOutput)))
@@ -589,7 +586,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           )
         )
       ),
-      expected = Context.empty(Mainnet).toTuple |>
+      expected = Context.empty(Mainnet).toCtxTuple |>
           // replace mint
           transactionL
               .andThen(txBodyL)
@@ -655,7 +652,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       expected =
           // NOTE: In the case of reciprocal mint/burns, we don't strip script witnesses or signatures because
           // we don't currently track the purposes associated with these objects.
-          Context.empty(Mainnet).toTuple
+          Context.empty(Mainnet).toCtxTuple
               |> transactionL
                   .andThen(txWitnessSetL)
                   .refocus(_.plutusV1Scripts)
@@ -668,7 +665,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       expected =
           // NOTE: In the case of reciprocal mint/burns, we don't strip script witnesses or signatures because
           // we don't currently track the purposes associated with these objects.
-          Context.empty(Mainnet).toTuple
+          Context.empty(Mainnet).toCtxTuple
               |> transactionL
                   .andThen(txWitnessSetL)
                   .refocus(_.plutusV1Scripts)
@@ -678,7 +675,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderSteps(
       label = "Monoidal mint with same policy id but different redeemers",
       steps = List(mintScript1(1), mintScript1(1, Data.List(PList(Data.List(PList.Nil))))),
-      expected = Context.empty(Mainnet).toTuple
+      expected = Context.empty(Mainnet).toCtxTuple
           |> (transactionL >>> txBodyL.refocus(_.mint))
               .replace(Some(TxBodyMint(MultiAsset.from((scriptHash1, AssetName.empty, 2L)))))
           |> (transactionL >>> txWitnessSetL)
@@ -713,7 +710,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderSteps(
       label = "Mint/burn monoid",
       steps = List(mintScript1(1), mintScript1(1), mintScript1(-5)),
-      expected = Context.empty(Mainnet).toTuple
+      expected = Context.empty(Mainnet).toCtxTuple
           |> (transactionL >>> txBodyL.refocus(_.mint))
               .replace(Some(TxBodyMint(MultiAsset.from((scriptHash1, AssetName.empty, -3L)))))
           |> (transactionL >>> txWitnessSetL)
@@ -796,7 +793,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     //     val steps = List(SpendOutput(utxo = script1Utxo, witness = Some(plutusScript1RefWitness)))
     //     val built = fromRight(TransactionBuilder.build(Mainnet, steps))
     //     assertEquals(
-    //       obtained = built.toTuple |> resolvedUtxosL.get,
+    //       obtained = built.toCtxTuple |> resolvedUtxosL.get,
     //       Set(script1Utxo, utxoWithScript1ReferenceScript)
     //     )
     // }
@@ -805,11 +802,11 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val steps = List(ReferenceOutput(utxo = script1Utxo))
         val built = fromRight(TransactionBuilder.build(Mainnet, steps))
         assert(
-          (built.toTuple |> resolvedUtxosL.get) == ResolvedUtxos(Map(script1Utxo.toTuple))
+          (built.toCtxTuple |> resolvedUtxosL.get) == ResolvedUtxos(Map(script1Utxo.toTuple))
         )
 
         assert(
-          (built.toTuple |> transactionL.andThen(txBodyL).refocus(_.referenceInputs).get) ==
+          (built.toCtxTuple |> transactionL.andThen(txBodyL).refocus(_.referenceInputs).get) ==
               TaggedSortedSet.from(List(script1Utxo.input))
         )
     }
@@ -822,11 +819,11 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val steps = List(AddCollateral(utxo = pkhUtxo))
         val built = fromRight(TransactionBuilder.build(Mainnet, steps))
         assert(
-          (built.toTuple |> resolvedUtxosL.get) == ResolvedUtxos(Map(pkhUtxo.toTuple))
+          (built.toCtxTuple |> resolvedUtxosL.get) == ResolvedUtxos(Map(pkhUtxo.toTuple))
         )
 
         assert(
-          (built.toTuple |> transactionL.andThen(txBodyL).refocus(_.collateralInputs).get) ==
+          (built.toCtxTuple |> transactionL.andThen(txBodyL).refocus(_.collateralInputs).get) ==
               TaggedSortedSet.from(List(pkhUtxo.input))
         )
     }
@@ -1175,7 +1172,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           )
         )
       ),
-      expected = Context.empty(Mainnet).toTuple |>
+      expected = Context.empty(Mainnet).toCtxTuple |>
           (transactionL >>> txWitnessSetL)
               .refocus(_.plutusV1Scripts)
               .replace(TaggedSortedStrictMap(script1)) |>
@@ -1242,7 +1239,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
     testBuilderSteps(
       label = "ModifyAuxData: id",
       steps = List(ModifyAuxiliaryData(identity)),
-      expected = Context.empty(Mainnet).toTuple
+      expected = Context.empty(Mainnet).toCtxTuple
     )
 
 }
@@ -1265,16 +1262,23 @@ def unitDRedeemer(purpose: RedeemerPurpose) = DetachedRedeemer(
   purpose = purpose
 )
 
-// The `Focus` macro expansion against `ContextTuple` (which contains the deprecated
-// `ExpectedSigner`) emits inline-site deprecation warnings that `@nowarn` annotations
-// on the surrounding defs don't reach. These two warnings document the deprecation
-// transition and can only be silenced by removing `ExpectedSigner` from `Context`,
-// which is the underlying production-code refactor still in flight.
+// `ContextTuple` projects `Context.expectedSigners` down to `Set[AddrKeyHash]` so the
+// test machinery doesn't mention the deprecated `ExpectedSigner` class. Use
+// `Context.toCtxTuple` to build one from a `Context`.
 def transactionL: Lens[ContextTuple, Transaction] = Focus[ContextTuple](_._1)
 def ctxRedeemersL: Lens[ContextTuple, Seq[DetachedRedeemer]] = Focus[ContextTuple](_._2)
 def networkL: Lens[ContextTuple, Network] = Focus[ContextTuple](_._3)
-def expectedSignersL: Lens[ContextTuple, Set[ExpectedSigner]] = Focus[ContextTuple](_._4)
+def expectedSignersL: Lens[ContextTuple, Set[AddrKeyHash]] = Focus[ContextTuple](_._4)
 def resolvedUtxosL: Lens[ContextTuple, ResolvedUtxos] = Focus[ContextTuple](_._5)
+
+extension (c: Context)
+    def toCtxTuple: ContextTuple = (
+      c.transaction,
+      c.redeemers,
+      c.network,
+      c.expectedSigners.map(_.hash),
+      c.resolvedUtxos
+    )
 
 // ===========================================================================
 // Common Test Data
@@ -1360,7 +1364,7 @@ val testnetTransaction: Transaction =
     txBodyL.refocus(_.networkId).replace(Some(0))(anyNetworkTx)
 
 val testnetContext: ContextTuple =
-    Context.empty(Testnet).toTuple |> transactionL.replace(testnetTransaction)
+    Context.empty(Testnet).toCtxTuple |> transactionL.replace(testnetTransaction)
 
 private def fromRight[A, B](e: Either[A, B]): B =
     e match {
@@ -1370,11 +1374,12 @@ private def fromRight[A, B](e: Either[A, B]): B =
 
 // The fields of a Context, to cut down on noise
 // Note: delayedRedeemerSpecs is excluded since it contains lambdas that can't be compared
-@nowarn("cat=deprecation")
+// Note: the fourth slot stores signer hashes directly to avoid mentioning the deprecated
+//       `ExpectedSigner` class in test machinery; use `Context.toCtxTuple` for conversion.
 private type ContextTuple = (
     Transaction,
     Seq[DetachedRedeemer],
     Network,
-    Set[ExpectedSigner],
+    Set[AddrKeyHash],
     ResolvedUtxos
 )
