@@ -118,7 +118,7 @@ object IntrinsicsUplcConstrList {
         )
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def quicksort[@UplcRepr(TypeVar(Transparent)) A](
+    def sort[@UplcRepr(TypeVar(Transparent)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         ord: (A, A) => scalus.cardano.onchain.plutus.prelude.Order
     ): List[A] =
@@ -127,7 +127,7 @@ object IntrinsicsUplcConstrList {
         // (Data) before calling ord — matches the pattern in `contains` for `eq`. Without this,
         // the `Fixed` in ord's signature leaks into downstream representation inference and
         // triggers a Data/native mismatch at runtime.
-        UplcConstrListOperations.quicksort(
+        UplcConstrListOperations.sort(
           self,
           (a: A, b: A) => ord(toDefaultTypeVarRepr(a), toDefaultTypeVarRepr(b))
         )

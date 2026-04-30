@@ -114,11 +114,11 @@ object UplcConstrListOperations {
         go(self)
     }
 
-    def quicksort[@UplcRepr(TypeVar(Unwrapped)) A](
+    def sort[@UplcRepr(TypeVar(Unwrapped)) A](
         self: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
         ord: (A, A) => scalus.cardano.onchain.plutus.prelude.Order
     ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = {
-        // Self-contained quicksort — no calls to other support bindings (append/prepended/
+        // Self-contained sort — no calls to other support bindings (append/prepended/
         // filter) or external prelude methods (`Order.isLess`). All external references
         // avoided so this can be lowered in isolation during eager support-binding init.
         //
@@ -150,9 +150,9 @@ object UplcConstrListOperations {
         qsAux(self, List.Nil)
     }
 
-    /** Local pair type for `quicksort`'s one-pass partition result. Annotated
-      * `@UplcRepr(UplcConstr)` so construction uses native-Constr emission — avoids Data-encoding
-      * the `List[A]` fields for abstract element type `A`.
+    /** Local pair type for `sort`'s one-pass partition result. Annotated `@UplcRepr(UplcConstr)` so
+      * construction uses native-Constr emission — avoids Data-encoding the `List[A]` fields for
+      * abstract element type `A`.
       */
     @UplcRepr(UplcRepresentation.UplcConstr)
     case class Partition[@UplcRepr(TypeVar(Unwrapped)) A_Partition](

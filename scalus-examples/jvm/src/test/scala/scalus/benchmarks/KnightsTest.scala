@@ -72,9 +72,10 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants.
-                // With optimizeUplc=true: mem=139_827_710, steps=27_837_791_939
+                // After sort rewrite: mem=132_915_975, steps=26_318_962_327
+                // Pre-rewrite baseline: mem=139_827_710, steps=27_837_791_939
                 // Pre-annotation baseline: mem=142_291_986, steps=30_322_212_276.
-                ExUnits(memory = 139827710L, steps = 27837791939L)
+                ExUnits(memory = 132915975L, steps = 26318962327L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering

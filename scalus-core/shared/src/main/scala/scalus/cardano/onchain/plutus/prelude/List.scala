@@ -318,26 +318,53 @@ object List {
 
     extension [A: Ord](self: List[A]) {
 
-        /** Sorts the list using the quicksort algorithm.
+        /** Sorts the list in ascending order using the provided `Ord[A]` instance.
           *
-          * This method sorts the elements of the list in ascending order based on the provided
-          * `Ord[A]` instance.
+          * Uses a quicksort variant with single-pass partition and accumulator-style concatenation:
+          * `sortAcc(lst, acc)` computes `sorted(lst) ++ acc` in one recursive descent, so the
+          * combine step is just `Cons` rather than `++`. Compared to the naive double-`filter`
+          * quicksort this halves the per-recursion traversal and avoids the `O(n)` `++` at every
+          * join.
+          *
+          * The UplcConstr representation has its own optimized intrinsic provider at
+          * `scalus.compiler.intrinsics.UplcConstrListOperations.sort` (the same single-pass
+          * accumulator shape). A Data-path intrinsic is a follow-up.
           *
           * @return
           *   A new list containing the elements of the original list sorted in ascending order.
           * @example
           *   {{{
-          *   List(BigInt(3), BigInt(1), BigInt(2)).quicksort === Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
-          *   List.empty[BigInt].quicksort === Nil
+          *   List(BigInt(3), BigInt(1), BigInt(2)).sort === Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+          *   List.empty[BigInt].sort === Nil
           *   }}}
           */
-        def quicksort: List[A] =
-            self match
-                case List.Nil => List.Nil
-                case List.Cons(head, tail) =>
-                    val before = tail.filter { elem => (elem <=> head).isLess }.quicksort
-                    val after = tail.filter { elem => !(elem <=> head).isLess }.quicksort
-                    before ++ after.prepended(head)
+        def sort: List[A] = {
+            // INVESTIGATION body — Tuple2-returning partition currently triggers a runtime
+            // `Case index 2 out of bounds for 1 branches` under cross-test orderings with
+            // `optimizeUplc=false`. Keep this shape until the underlying lowering bug is found.
+            def partition(
+                lst: List[A],
+                pivot: A,
+                before: List[A],
+                after: List[A]
+            ): (List[A], List[A]) = lst match
+                case List.Nil => (before, after)
+                case List.Cons(h, t) =>
+                    if (h <=> pivot).isLess then partition(t, pivot, List.Cons(h, before), after)
+                    else partition(t, pivot, before, List.Cons(h, after))
+
+            def sortAcc(lst: List[A], acc: List[A]): List[A] = lst match
+                case List.Nil => acc
+                case List.Cons(pivot, rest) =>
+                    val parts = partition(rest, pivot, List.Nil, List.Nil)
+                    sortAcc(parts._1, List.Cons(pivot, sortAcc(parts._2, acc)))
+
+            sortAcc(self, List.Nil)
+        }
+
+        /** Alias for [[sort]]. Retained for backward compatibility — new code should prefer `sort`.
+          */
+        inline def quicksort: List[A] = sort
     }
 
     extension [A](self: List[List[A]]) {
