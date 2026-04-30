@@ -143,9 +143,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             // rewritten to a structural (both-fields) compare, so `distinct` no longer
             // dedupes by key alone and pairs with the same key but different values survive.
             val validList =
-                SortedMap.fromList(list).toList
+                SortedMap
+                    .fromList(list)
+                    .toList
                     .filterMap { case (cs, tokens) =>
-                        val validTokens = SortedMap.fromList(tokens).toList
+                        val validTokens = SortedMap
+                            .fromList(tokens)
+                            .toList
                             .filter { case (_, value) => value !== BigInt(0) }
 
                         if validTokens.nonEmpty then Option.Some((cs, validTokens)) else Option.None
@@ -235,9 +239,13 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             // Same dedup-via-SortedMap.fromList approach as the unsafeFromList property —
             // see that test for the rationale.
             val validList =
-                SortedMap.fromList(list).toList
+                SortedMap
+                    .fromList(list)
+                    .toList
                     .filterMap { case (cs, tokens) =>
-                        val validTokens = SortedMap.fromList(tokens).toList
+                        val validTokens = SortedMap
+                            .fromList(tokens)
+                            .toList
                             .filter { case (_, value) => value !== BigInt(0) }
 
                         if validTokens.nonEmpty then Option.Some((cs, validTokens)) else Option.None
