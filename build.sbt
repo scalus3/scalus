@@ -60,7 +60,10 @@ ThisBuild / semanticdbEnabled := true
 // Java version-specific JVM options
 val javaVersion = sys.props("java.specification.version").toInt
 // TEMP: enable diagnostics for cross-test order bug at KnightsTest:475
-ThisBuild / Test / javaOptions ++= Seq("-Dscalus.diag.case.on.builtin=1", "-Dscalus.diag.sort.lower=1")
+ThisBuild / Test / javaOptions ++= Seq(
+  "-Dscalus.diag.case.on.builtin=1",
+  "-Dscalus.diag.sort.lower=1"
+)
 // Enable native access for BLST JNI library (Java 22+)
 ThisBuild / Test / javaOptions ++= (if (javaVersion >= 22) Seq("--enable-native-access=ALL-UNNAMED")
                                     else Nil)
