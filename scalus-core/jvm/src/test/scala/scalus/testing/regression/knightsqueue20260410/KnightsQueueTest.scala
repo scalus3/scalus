@@ -8,7 +8,7 @@ import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.eval.{PlutusVM, Result}
-import scalus.uplc.builtin.Builtins.{multiplyInteger, remainderInteger}
+import scalus.uplc.builtin.Builtins.remainderInteger
 
 /** Minimized reproduction of KnightsTest crash with specialized Queue. */
 @Compile
