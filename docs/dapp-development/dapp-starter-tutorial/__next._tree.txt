@@ -1,5 +1,5 @@
-:HL["/_next/static/chunks/97664fbfea4c54a5.css","style"]
-:HL["/_next/static/chunks/221ce6682042a4f8.css","style"]
-:HL["/_next/static/chunks/59a7e12ca2cc3bcf.css","style"]
+:HL["/_next/static/chunks/0wa23-3x0e3m6.css","style"]
+:HL["/_next/static/chunks/0xomvw0-9r-gw.css","style"]
+:HL["/_next/static/chunks/0.z5hsu8s.gc1.css","style"]
 :HL["/scalus-logo-dark.png","image"]
-0:{"buildId":"iz6SWhsfJGt9FeeFbkBCv","tree":{"name":"","paramType":null,"paramKey":"","hasRuntimePrefetch":false,"slots":{"children":{"name":"docs","paramType":null,"paramKey":"docs","hasRuntimePrefetch":false,"slots":{"children":{"name":"mdxPath","paramType":"oc","paramKey":"dapp-development/dapp-starter-tutorial","hasRuntimePrefetch":false,"slots":{"children":{"name":"__PAGE__","paramType":null,"paramKey":"__PAGE__","hasRuntimePrefetch":false,"slots":null,"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":false}},"isRootLayout":true},"staleTime":300}
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"docs","param":null,"prefetchHints":0,"slots":{"children":{"name":"mdxPath","param":{"type":"oc","key":"dapp-development/dapp-starter-tutorial","siblings":null},"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}}}},"staleTime":300,"buildId":"1hvAqZGg_0Ir2d4Oc2Q63"}

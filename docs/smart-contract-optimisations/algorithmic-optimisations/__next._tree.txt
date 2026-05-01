@@ -1,0 +1,5 @@
+:HL["/_next/static/chunks/0wa23-3x0e3m6.css","style"]
+:HL["/_next/static/chunks/0xomvw0-9r-gw.css","style"]
+:HL["/_next/static/chunks/0.z5hsu8s.gc1.css","style"]
+:HL["/scalus-logo-dark.png","image"]
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"docs","param":null,"prefetchHints":0,"slots":{"children":{"name":"mdxPath","param":{"type":"oc","key":"smart-contract-optimisations/algorithmic-optimisations","siblings":null},"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}}}},"staleTime":300,"buildId":"1hvAqZGg_0Ir2d4Oc2Q63"}
