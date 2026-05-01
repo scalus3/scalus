@@ -1,11 +1,12 @@
 ---
-title: Direct Builtins Usage
-sidebarTitle: Direct Builtins Usage
+title: Low-Level UPLC Builtins and Raw Plutus Data in Scalus
+sidebarTitle: Low-Level Builtins
+description: Drop below high-level prelude types and write Plutus validators using UPLC builtins and raw Plutus Data directly in Scalus — compiled-assembler control over on-chain code.
 ---
 
 import { Callout } from 'nextra/components'
 
-# Direct Builtins Usage
+# Low-Level Builtins
 
 Instead of using high-level prelude types like `ScriptContext` and `List[A]`, you can use builtins and primitive data types (`Data`, `BuiltinList`, `ByteString`) directly inside `compile {}`. This gives you manual control over Data access and makes the resulting Scala code effectively a "compiled assembler" -- it maps almost 1:1 to UPLC builtins.
 
@@ -150,3 +151,8 @@ The `PreimageBudgetComparisonTest` includes additional variants -- signatory ind
 ```bash
 sbtn "scalusExamplesJVM/testOnly scalus.examples.PreimageBudgetComparisonTest"
 ```
+
+## What's Next?
+
+- **[Lowering Backends](/docs/smart-contract-optimisations/lowering-backends)** — control how your remaining high-level types are encoded in UPLC with `@UplcRepr`.
+- **[UPLC Term DSL](/docs/smart-contract-optimisations/uplc-term-dsl)** — go one level deeper and hand-craft the UPLC AST directly when builtins still aren't enough.

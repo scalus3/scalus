@@ -1,11 +1,12 @@
 ---
-title: UPLC optimisations
-sidebarTitle: UPLC optimisations
+title: UPLC Optimiser Pipeline in Scalus
+sidebarTitle: UPLC Optimiser Pipeline
+description: UPLC optimiser passes in Scalus — EtaReduce, Inliner, beta-reduction, constant folding, StrictIf, ForcedBuiltinsExtractor, CaseConstrApply. Reduce script execution costs.
 ---
 
 import { Callout } from 'nextra/components'
 
-# UPLC Optimisations
+# UPLC Optimiser Pipeline
 
 Scalus optimizes Untyped Plutus Core (UPLC) scripts to reduce script size and execution costs. By default, `toUplcOptimized()` and `Options.default` apply the full optimization pipeline automatically.
 
@@ -128,3 +129,9 @@ This pattern works for any closed computation over constants:
 - **Mathematical constants** — compute precision values, powers, or factorials once at compile time
 
 The key insight: if you can express the computation in Scalus (`@Compile` annotated code) and all inputs are constants, it runs at compile time for free.
+
+## What's Next?
+
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** — quantify the impact of each optimiser pass on real transaction fees.
+- **[Deploying Contracts](/docs/smart-contracts/deploy)** — once the optimised script is final, publish it as a reference script UTxO.
+- **[Smart Contract Optimisations](/docs/smart-contract-optimisations)** — back to the index for the full set of techniques.

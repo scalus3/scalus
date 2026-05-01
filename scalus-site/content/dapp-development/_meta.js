@@ -3,6 +3,4 @@ export default {
   'working-with-contract': 'Working with Contract',
   'blockchain-providers': 'Blockchain Providers',
   'protocol-parameters': 'Protocol Parameters',
-  'blueprint-plugin': 'Blueprint Verification',
-  'deploy': 'Deploying Contracts',
 }

@@ -1,0 +1,136 @@
+---
+title: SIR-to-UPLC Lowering Backends in Scalus
+sidebarTitle: Lowering Backends
+description: Choose the right SIR-to-UPLC lowering backend in Scalus — V3 Lowering, Scott Encoding, Sum of Products. Control UPLC type representation with @UplcRepr annotations.
+---
+
+import { Callout } from 'nextra/components'
+
+# Lowering Backends
+
+The Scalus compiler ships with three backends for lowering SIR (Scalus Intermediate Representation) to UPLC. Each one makes a different trade-off between code size, execution cost, and Plutus protocol-version compatibility. The default is **V3 Lowering**; the other two exist mostly for legacy code and for cases where a different on-chain representation is preferred.
+
+## Backend Comparison
+
+| | **V3 Lowering** (default) | **Scott Encoding** | **Sum of Products** |
+|---|---|---|---|
+| Enum value | `SirToUplcV3Lowering` | `ScottEncodingLowering` | `SumOfProductsLowering` |
+| Architecture | Sea-of-nodes, data-flow based | Template-based | Template-based |
+| Data handling | Types stay as `Data` internally (`toData` is a NOOP in most cases) | Scott-encodes constructors as lambdas | Uses PlutusV3 `Constr`/`Case` nodes |
+| Protocol version | PlutusV3+ (Chang) | PlutusV1, V2, V3 | PlutusV3+ |
+| Best for | Most validators (default choice) | Legacy code, PlutusV1/V2 scripts | When `Constr`/`Case` encoding is preferred over `Data` |
+
+## Selecting a Backend
+
+Backend selection happens through the `Options` given:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.cardano.ledger.MajorProtocolVersion
+
+given Options = Options(
+  targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
+  targetProtocolVersion = MajorProtocolVersion.changPV,
+  generateErrorTraces = true,
+  optimizeUplc = true
+)
+```
+
+The `Options.default`, `Options.debug`, `Options.release`, and `Options.vanRossem` presets all use V3 Lowering. To switch to a different backend, build `Options` directly with the `targetLoweringBackend` you want.
+
+## V3 Lowering Backend (Default)
+
+The V3 Lowering Backend uses a sea-of-nodes, data-flow-based architecture. Its defining property is that **most types stay as `Data` internally** -- so `toData` and `fromData` are NOOPs in most cases, and the code never spends CPU on round-tripping between Scala types and Plutus Data.
+
+By default, the backend infers the UPLC representation from the type structure: case classes become `Constr(tag, fields)`, enums use different constructor tags per variant, and so on. Use the `@UplcRepr` annotation to override the default representation when it isn't optimal for your use case.
+
+This backend produces the smallest, fastest scripts for most validators, especially anything that touches the Cardano `ScriptContext` (which is already supplied as `Data` by the ledger).
+
+## Scott Encoding Backend
+
+The Scott Encoding Backend is a **template-based** backend that encodes algebraic data types using Scott encoding -- each constructor becomes a lambda that takes one continuation per branch. A pattern match becomes an application of those continuations.
+
+Unlike V3 Lowering, Scott Encoding does not keep types as `Data` internally. Conversions in and out of `Data` (via `toData`/`fromData`) carry real cost because the entire structure must be reconstructed.
+
+When to use it:
+
+- **Legacy validators on PlutusV1 or V2.** These protocol versions don't support the `Constr`/`Case` UPLC nodes that the V3 backend relies on.
+- **Maintaining existing scripts** whose hash must be preserved on-chain.
+- **Code that doesn't go through `Data`** -- pure computational helpers where the Scott form happens to be smaller than the Constr form.
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.cardano.ledger.MajorProtocolVersion
+
+// Targeting PlutusV2 with Scott encoding
+given Options = Options(
+  targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering,
+  targetProtocolVersion = MajorProtocolVersion.vasilPV
+)
+```
+
+## Sum of Products Backend
+
+The Sum of Products Backend is the other **template-based** backend. It encodes ADTs using PlutusV3's native `Constr` (constructor application) and `Case` (pattern dispatch) UPLC nodes -- the same primitives the on-chain ledger uses for `Data`.
+
+Like Scott Encoding, it doesn't keep types as `Data` internally, so `toData`/`fromData` conversions cost CPU. Unlike Scott Encoding, the resulting UPLC tends to be more compact because `Constr`/`Case` are denser than chained lambdas.
+
+When to use it:
+
+- You want the structural `Constr`/`Case` representation for ADTs but don't want the data-flow rewriting that V3 Lowering applies.
+- You're targeting PlutusV3 and have a measurable workload where Sum of Products produces smaller scripts than V3 Lowering after optimisation. (Always [measure](/docs/smart-contract-optimisations/measuring-performance) -- this is the exception, not the rule.)
+
+```scala mdoc:compile-only copy showLineNumbers
+given Options = Options(
+  targetLoweringBackend = TargetLoweringBackend.SumOfProductsLowering,
+  targetProtocolVersion = MajorProtocolVersion.changPV
+)
+```
+
+## Controlling Type Representation with `@UplcRepr`
+
+Independent of which backend is chosen, the `@UplcRepr` annotation overrides how a particular type is encoded at the UPLC level:
+
+| `UplcRepresentation` | Effect |
+|---|---|
+| `ProductCase` | Multi-field case class as `Constr(tag, [field1, field2, ...])` (default for case classes) |
+| `SumCase` | Enum variants with different constructor tags (default for enums) |
+| `ProductCaseOneElement` | Single-field wrapper unwrapped to just the inner type (eliminates `Constr` overhead) |
+| `Map` | Key-value pairs as a Plutus map |
+| `PackedDataMap` | Compact packed-data map representation |
+| `Data` | Keep as raw `Data`, no structural encoding |
+| `BuiltinArray` | Array-like structure |
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.compiler.annotations.{UplcRepr, UplcRepresentation}
+import scalus.uplc.builtin.ByteString
+
+// Single-field wrapper: unwrapped to just ByteString (no Constr overhead)
+@UplcRepr(UplcRepresentation.ProductCaseOneElement)
+case class PubKeyHash(hash: ByteString)
+
+// Map representation instead of List of pairs
+@UplcRepr(UplcRepresentation.PackedDataMap)
+case class AssocMap[K, V](inner: scalus.cardano.onchain.plutus.prelude.List[(K, V)])
+```
+
+`@UplcRepr` is most useful with the template-based backends (Scott Encoding and Sum of Products), where structural decisions affect every conversion. With V3 Lowering, types already stay as `Data` internally, so `@UplcRepr(UplcRepresentation.Data)` is the de-facto default.
+
+<Callout type="info">
+On the template-based backends, applying `@UplcRepr(UplcRepresentation.Data)` to types that don't need structural access avoids `toData`/`fromData` overhead.
+</Callout>
+
+## Choosing a Backend in Practice
+
+1. **Start with V3 Lowering.** The default works for the vast majority of validators on PlutusV3.
+2. **Drop to Scott Encoding** only when you need PlutusV1/V2 compatibility or are maintaining legacy scripts whose hash must not change.
+3. **Try Sum of Products** only after measuring: if your workload spends a lot of CPU on `Constr`/`Case` operations and V3 Lowering's data-flow rewriting isn't paying off, the template backend may produce a smaller script.
+4. **Apply `@UplcRepr`** per-type once you've chosen a backend, especially on the template-based backends.
+
+## What's Next?
+
+- **[UPLC Term DSL](/docs/smart-contract-optimisations/uplc-term-dsl)** — drop below the lowering backend entirely and hand-craft UPLC validators with full AST control.
+- **[UPLC Optimiser Pipeline](/docs/smart-contract-optimisations/uplc-optimiser-pipeline)** — the optimiser passes that run on whatever the backend produces.
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** — measure the impact of switching backends on real transactions.

@@ -1,7 +1,7 @@
 ---
-title: Blueprint Generation and Script Verification
-sidebarTitle: Blueprint Verification
-description: Generate CIP-57 blueprints, embed them in JARs, and verify on-chain script hashes against published artifacts.
+title: CIP-57 Blueprint Generation and Script Hash Verification in Scalus
+sidebarTitle: Blueprint Generation
+description: Generate CIP-57 Plutus blueprints with the Scalus sbt plugin, embed them in JARs, and verify Cardano script hashes against on-chain deployed contracts.
 ---
 
 # Blueprint Generation and Script Verification
@@ -87,3 +87,8 @@ The `hash` field is the standard Cardano script hash: `blake2b_224(0x03 || compi
 If you have the JAR -- either published or built from source -- you can verify that this hash
 matches what's deployed on-chain. No Scalus installation or JVM required for verification,
 just the JAR and a blake2b implementation.
+
+## What's Next?
+
+- **[Deploying Contracts](/docs/smart-contracts/deploy)** — Publish the compiled contract as a reference script UTxO via Blockfrost
+- **[Working with Contract](/docs/dapp-development/working-with-contract)** — Use the blueprint to drive off-chain code in your dapp

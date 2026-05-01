@@ -4,6 +4,7 @@ export default {
   'multiplatform': 'Multiplatform',
   'language-guide': 'Language Guide',
   'smart-contracts': 'Smart Contracts',
+  'smart-contract-optimisations': 'Advanced Optimisations',
   'transactions': 'Transactions',
   testing: 'Testing',
   'design-patterns': 'Design Patterns',

@@ -26,7 +26,18 @@
 - /docs/smart-contracts/parameterized-validators - Reusable validators with parameters
 - /docs/smart-contracts/plutus-data - Data type conversion
 - /docs/smart-contracts/compiling - Compilation to Plutus Core
-- /docs/smart-contracts/optimisations - Advanced optimizations
+- /docs/smart-contracts/blueprint - Generate CIP-57 blueprints with the Scalus sbt plugin and verify on-chain script hashes
+- /docs/smart-contracts/deploy - Deploy compiled contracts as reference script UTxOs via Blockfrost (preview, preprod, mainnet)
+
+### Smart Contract Optimisations
+- /docs/smart-contract-optimisations - Reduce script size and execution units in Cardano validators
+- /docs/smart-contract-optimisations/measuring-performance - Measure CPU steps, memory, flat size, and transaction fees
+- /docs/smart-contract-optimisations/algorithmic-optimisations - Withdraw-zero, UTxO indexer, transaction-level minting, merkelised validators
+- /docs/smart-contract-optimisations/scala-metaprogramming - Scala 3 inline, loop unrolling, compile-time evaluation, conditional codegen
+- /docs/smart-contract-optimisations/low-level-builtins - Drop to UPLC builtins and raw Plutus Data for compiled-assembler control over on-chain code
+- /docs/smart-contract-optimisations/lowering-backends - V3 Lowering, Scott Encoding, Sum of Products, @UplcRepr
+- /docs/smart-contract-optimisations/uplc-term-dsl - Hand-craft UPLC validators with Plutarch-style Term DSL
+- /docs/smart-contract-optimisations/uplc-optimiser-pipeline - EtaReduce, Inliner, StrictIf, ForcedBuiltinsExtractor, CaseConstrApply
 
 ### Transactions
 - /docs/transactions - Building Cardano transactions

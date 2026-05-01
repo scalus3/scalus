@@ -1,7 +1,7 @@
 ---
-title: UPLC Term DSL
+title: UPLC Term DSL — Plutarch-style Validators in Scala
 sidebarTitle: UPLC Term DSL
-description: Build hand-crafted UPLC validators using Scalus Term DSL -- maximum control over the generated code, similar to Plutarch in Haskell.
+description: Build hand-crafted UPLC validators with the Scalus Term DSL — Plutarch-style direct AST control over lambdas, applications, builtins, force, delay, and case nodes.
 ---
 
 import { Callout } from 'nextra/components'
@@ -79,7 +79,7 @@ Note how `IfThenElse` is a polymorphic builtin that needs two `Force` applicatio
 
 ## Example: PreimageValidator in Term DSL
 
-Here's the same PreimageValidator from the [Optimizing Scala Code](/docs/smart-contracts/optimisations/scala-optimizations) chapter, built entirely with the Term DSL. This targets PlutusV4 and uses `Case` on List and `Case` on Bool for maximum efficiency:
+Here's the same PreimageValidator from the [Low-Level Builtins](/docs/smart-contract-optimisations/low-level-builtins) chapter, built entirely with the Term DSL. This targets PlutusV4 and uses `Case` on List and `Case` on Bool for maximum efficiency:
 
 ```scala mdoc:compile-only copy showLineNumbers
 import scalus.uplc.Term, scalus.uplc.Term.{asTerm, λ}
@@ -241,3 +241,8 @@ val validator = λ { datum =>
 ```
 
 This lets you hand-optimize hot paths while keeping the rest of your validator in high-level Scala.
+
+## What's Next?
+
+- **[UPLC Optimiser Pipeline](/docs/smart-contract-optimisations/uplc-optimiser-pipeline)** — the optimiser passes that run on hand-crafted UPLC fragments, same as compiler-generated ones.
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** — confirm that each hand-rolled term actually beats the compiled version on CPU, memory, and total fee.

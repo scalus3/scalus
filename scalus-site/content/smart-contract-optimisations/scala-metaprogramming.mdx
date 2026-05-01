@@ -1,6 +1,7 @@
 ---
-title: Scala Metaprogramming
+title: Scala Metaprogramming for Plutus Smart Contracts
 sidebarTitle: Scala Metaprogramming
+description: Use Scala 3 inline, inline if, and compile-time evaluation to optimise Plutus smart contracts — loop unrolling, constant folding, conditional code generation.
 ---
 
 import { Callout } from 'nextra/components'
@@ -162,7 +163,7 @@ val uplc = sir.toUplcOptimized()
 // uplc is now just: (Const Integer 354224848179261915075)
 ```
 
-The recursive loop runs during compilation. The final script contains only the constant. This works for any closed function applied to constant arguments -- precomputed lookup tables, derived configuration, hash preimages, mathematical constants. Constant folding is also implemented in the [UPLC Optimizer Pipeline](/docs/smart-contracts/optimisations/uplc), which can fold closed subexpressions at the UPLC level.
+The recursive loop runs during compilation. The final script contains only the constant. This works for any closed function applied to constant arguments -- precomputed lookup tables, derived configuration, hash preimages, mathematical constants. Constant folding is also implemented in the [UPLC Optimiser Pipeline](/docs/smart-contract-optimisations/uplc-optimiser-pipeline), which can fold closed subexpressions at the UPLC level.
 
 ## Conditional Code Generation
 
@@ -184,3 +185,8 @@ val debugScript = compile(validator(using true))
 ```
 
 The `releaseScript` contains no `trace` calls at all -- the conditional code is evaluated during Scala compilation, so there's zero runtime overhead for disabled features.
+
+## What's Next?
+
+- **[Low-Level Builtins](/docs/smart-contract-optimisations/low-level-builtins)** — once the high-level structure is tight, drop to UPLC builtins and raw Plutus Data for further savings.
+- **[UPLC Optimiser Pipeline](/docs/smart-contract-optimisations/uplc-optimiser-pipeline)** — see exactly which optimiser passes pick up the patterns produced by `inline`.

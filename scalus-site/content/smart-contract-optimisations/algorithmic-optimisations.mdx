@@ -1,9 +1,10 @@
 ---
-title: Algorithmic Optimizations
-sidebarTitle: Algorithmic Optimizations
+title: Algorithmic Optimisations for Cardano Validators
+sidebarTitle: Algorithmic Optimisations
+description: Algorithmic patterns for efficient Cardano validators — withdraw-zero stake validator, UTxO indexer, transaction-level minting, merkelised validator splitting.
 ---
 
-# Algorithmic Optimizations
+# Algorithmic Optimisations
 
 Before diving into compiler-level techniques, apply algorithmic optimizations. These give the biggest wins and are backend-agnostic. Scalus provides a library of [Design Patterns](/docs/design-patterns) for common cases:
 
@@ -13,3 +14,9 @@ Before diving into compiler-level techniques, apply algorithmic optimizations. T
 - **[Merkelized Validator](/docs/design-patterns/merkelized-validator)** -- split large validators into smaller pieces, include only the branch you need
 
 See the full `OptimizedPaymentSplitterValidator` example in `scalus-examples/.../paymentsplitter/` for a real-world application of the withdraw-zero pattern.
+
+## What's Next?
+
+- **[Design Patterns](/docs/design-patterns)** — full reference for every pattern listed above, with implementations and trade-offs.
+- **[Scala Metaprogramming](/docs/smart-contract-optimisations/scala-metaprogramming)** — once the algorithm is right, eliminate per-call overhead with `inline` and compile-time evaluation.
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** — quantify the impact of each pattern on real transaction fees.

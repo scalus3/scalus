@@ -1,6 +1,7 @@
 ---
-title: Measuring Performance
+title: Measuring Cardano Smart Contract Performance
 sidebarTitle: Measuring Performance
+description: Measure Cardano smart contract cost in Scalus — CPU steps, memory units, flat-encoded script size, and total transaction fee via direct evaluation and the Emulator.
 ---
 
 import { Callout } from 'nextra/components'
@@ -88,3 +89,8 @@ redeemers.foreach { r =>
 ```
 
 See the [Emulator](/docs/testing/emulator) page for full setup details.
+
+## What's Next?
+
+- **[Algorithmic Optimisations](/docs/smart-contract-optimisations/algorithmic-optimisations)** — start here for the biggest wins; design patterns that reduce on-chain work asymptotically.
+- **[Scala Metaprogramming](/docs/smart-contract-optimisations/scala-metaprogramming)** — once you've measured a hot path, use compile-time evaluation to eliminate it.

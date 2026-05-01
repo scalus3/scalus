@@ -2,7 +2,7 @@
 asIndexPage: true
 title: Cardano Smart Contract Optimisations
 sidebarTitle: Advanced Optimisations
-description: Advanced optimization techniques for Cardano smart contracts. Learn to inspect compiled output, apply general and backend-specific optimizations, and build hand-crafted UPLC validators.
+description: Optimise Cardano smart contracts written in Scala 3. Reduce script size, lower execution units, inspect SIR and UPLC output, apply algorithmic and backend techniques.
 ---
 
 import { Callout } from 'nextra/components'
@@ -191,13 +191,13 @@ Notice how the optimized version:
 
 ## Optimization Techniques
 
-- **[Measuring Performance](/docs/smart-contracts/optimisations/measuring-performance)** -- script evaluation, emulator-based transaction fees
-- **[Algorithmic Optimizations](/docs/smart-contracts/optimisations/algorithmic-optimizations)** -- design patterns for the biggest wins
-- **[Scala Metaprogramming](/docs/smart-contracts/optimisations/inlining)** -- inlining, loop unrolling, constants, compile-time evaluation, conditional compilation
-- **[Direct Builtins Usage](/docs/smart-contracts/optimisations/direct-builtins)** -- manual Data access, script context macros, budget comparison
-- **[Backend-Specific Notes](/docs/smart-contracts/optimisations/backend-notes)** -- `@UplcRepr`, V3 Lowering vs template-based backends
-- **[UPLC Term DSL](/docs/smart-contracts/optimisations/uplc-term-dsl)** -- hand-craft validators with full AST control (Plutarch-style)
-- **[UPLC Optimizer Pipeline](/docs/smart-contracts/optimisations/uplc)** -- apply low-level optimizer passes to reduce execution costs
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** -- script evaluation, emulator-based transaction fees
+- **[Algorithmic Optimisations](/docs/smart-contract-optimisations/algorithmic-optimisations)** -- design patterns for the biggest wins
+- **[Scala Metaprogramming](/docs/smart-contract-optimisations/scala-metaprogramming)** -- inlining, loop unrolling, constants, compile-time evaluation, conditional compilation
+- **[Low-Level Builtins](/docs/smart-contract-optimisations/low-level-builtins)** -- manual Data access, script context macros, budget comparison
+- **[Lowering Backends](/docs/smart-contract-optimisations/lowering-backends)** -- `@UplcRepr`, V3 Lowering vs template-based backends
+- **[UPLC Term DSL](/docs/smart-contract-optimisations/uplc-term-dsl)** -- hand-craft validators with full AST control (Plutarch-style)
+- **[UPLC Optimiser Pipeline](/docs/smart-contract-optimisations/uplc-optimiser-pipeline)** -- apply low-level optimiser passes to reduce execution costs
 
 ## When to Optimize
 
