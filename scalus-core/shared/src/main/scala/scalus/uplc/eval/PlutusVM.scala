@@ -103,14 +103,16 @@ class PlutusVM(
     def evaluateDeBruijnedTerm(
         debruijnedTerm: Term,
         budgetSpender: BudgetSpender = NoBudgetSpender,
-        logger: Logger = NoLogger
+        logger: Logger = NoLogger,
+        tracing: Boolean = false
     ): Term = {
         val cek = new CekMachine(
           machineParams,
           budgetSpender,
           logger,
           builtins.getBuiltinRuntime,
-          caseOnBuiltinsEnabled
+          caseOnBuiltinsEnabled,
+          tracing = tracing
         )
         DeBruijn.fromDeBruijnTerm(cek.evaluateTerm(debruijnedTerm))
     }

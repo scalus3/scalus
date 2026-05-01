@@ -234,7 +234,8 @@ enum Term:
             val result = vm.evaluateDeBruijnedTerm(
               DeBruijn.deBruijnTerm(this),
               spenderLogger,
-              spenderLogger
+              spenderLogger,
+              tracing = true
             )
             Result.Success(
               result,

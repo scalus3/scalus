@@ -1519,18 +1519,6 @@ object LoweredValue {
               inPos
             )
 
-            if Lowering.diagSortLower && Lowering.isKT475Pos(inPos) then
-                System.err.println(
-                  s"[DIAG-SORT-IFTHENELSE] pos=${inPos.show} " +
-                      s"optTargetType=${optTargetType.map(_.show).getOrElse("<none>")} " +
-                      s"resType=${resType.show} " +
-                      s"then.tp=${thenBranch.sirType.show} then.repr=${thenBranch.representation} " +
-                      s"else.tp=${elseBranch.sirType.show} else.repr=${elseBranch.representation} " +
-                      s"thenU.tp=${thenBranchUpcasted.sirType.show} thenU.repr=${thenBranchUpcasted.representation} " +
-                      s"elseU.tp=${elseBranchUpcasted.sirType.show} elseU.repr=${elseBranchUpcasted.representation} " +
-                      s"chosenTargetRepr=$targetRepresentation"
-                )
-
             val thenBranchR = thenBranchUpcasted.toRepresentation(targetRepresentation, inPos)
 
             val elseBranchR = elseBranchUpcasted.toRepresentation(targetRepresentation, inPos)
@@ -2893,18 +2881,6 @@ object LoweredValue {
                             )
                     }
                 }
-        if Lowering.diagSortLower && Lowering.isKT475Pos(pos) then
-            val byRep =
-                nonNothingValues.groupBy(_.representation).map((k, v) => (k, v.length)).toMap
-            val compat = byRep.filter((lw, _) => lw.isCompatibleWithType(targetType))
-            System.err.println(
-              s"[DIAG-SORT-CHOOSEREPR] pos=${pos.show} targetType=${targetType.show} " +
-                  s"valueReprs=${values.map(_.representation).mkString("[", ",", "]")} " +
-                  s"byRep=$byRep " +
-                  s"compatibleWithTarget=$compat " +
-                  s"defaultForTarget=${lctx.typeGenerator(targetType).defaultRepresentation(targetType)} " +
-                  s"chosen=$retval"
-            )
         retval
     }
 

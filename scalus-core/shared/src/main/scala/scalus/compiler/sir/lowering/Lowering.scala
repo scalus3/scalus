@@ -28,17 +28,6 @@ object Lowering {
 
     private lazy val builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
-    /** Diagnostic gate for the cross-test Heisenbug at KnightsTest:475 (Case-index-2-out-of-1
-      * runtime failure). Set via `-Dscalus.diag.sort.lower=1`.
-      */
-    val diagSortLower: Boolean = System.getProperty("scalus.diag.sort.lower") != null
-
-    /** True for source positions in KnightsTest.scala lines 469..480 — the `def descendants` region
-      * whose lowering is suspect.
-      */
-    def isKT475Pos(pos: scalus.compiler.sir.SIRPosition): Boolean =
-        pos.file.endsWith("KnightsTest.scala") && pos.startLine >= 469 && pos.startLine <= 480
-
     /** Patch missing return-position `@UplcRepr` annotation onto `base`'s return type, using
       * `source` (typically the binding's declared DefDef type) as the annotation donor.
       *
@@ -95,13 +84,6 @@ object Lowering {
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
                     then typegens.ConstrDispatcher.dispatchNil(constr, resolvedType, optTargetType)
                     else (lctx.typeGenerator(resolvedType), constr)
-                if Lowering.diagSortLower && Lowering.isKT475Pos(constr.anns.pos) then
-                    System.err.println(
-                      s"[DIAG-SORT-NIL] pos=${constr.anns.pos.show} name=$name " +
-                          s"resolvedType=${resolvedType.show} " +
-                          s"optTargetType=${optTargetType.map(_.show).getOrElse("<none>")} " +
-                          s"chosenGenerator=${typeGenerator.getClass.getSimpleName}"
-                    )
                 typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then

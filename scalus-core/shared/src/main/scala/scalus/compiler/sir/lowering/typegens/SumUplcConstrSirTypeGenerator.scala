@@ -1106,23 +1106,6 @@ object SumUplcConstrSirTypeGenerator {
         inSum: SumUplcConstr,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        // Diagnostic for the runtime "Case index N out of bounds" pattern —
-        // log every sumUplcConstrToDataConstr emission with the input's shape.
-        // Same flag as ProductCaseSirTypeGenerator's (puc, ProdDataList) diag.
-        if ProductCaseSirTypeGenerator.diagPucDataLB then
-            val inputDescr = input match
-                case v: VariableLoweredValue =>
-                    s"VariableLoweredValue(id=${v.id}, name=${v.name}, sirType=${v.sirType.show}, repr=${v.representation})"
-                case other =>
-                    s"${other.getClass.getSimpleName}(sirType=${other.sirType.show}, repr=${other.representation})"
-            System.err.println(
-              s"""[SUM-DATACONSTR-DIAG] sumUplcConstrToDataConstr emission
-                 |  pos:                  ${pos.show}
-                 |  input:                $inputDescr
-                 |  input.sirType (dbg):  ${input.sirType.showDebug}
-                 |  variants.size:        ${inSum.variants.size}
-                 |""".stripMargin
-            )
         val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
         val baseSubst = dataDeclSubst(input.sirType)
         val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>

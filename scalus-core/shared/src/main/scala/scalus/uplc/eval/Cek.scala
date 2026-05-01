@@ -387,18 +387,21 @@ class NonConstrScrutinized(
 abstract class CaseOnBuiltinError(
     msg: String,
     env: CekValEnv,
-    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
-) extends StackTraceMachineError(msg, env, sourcePos)
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty,
+    sourceTrace: Seq[ScalusSourcePos] = Seq.empty
+) extends StackTraceMachineError(msg, env, sourcePos, sourceTrace)
 
 class CaseIndexOutOfBounds(
     val index: BigInt,
     val branchCount: Int,
     env: CekValEnv,
-    sourcePos: ScalusSourcePos = ScalusSourcePos.empty
+    sourcePos: ScalusSourcePos = ScalusSourcePos.empty,
+    sourceTrace: Seq[ScalusSourcePos] = Seq.empty
 ) extends CaseOnBuiltinError(
       s"Case index $index out of bounds for $branchCount branches",
       env,
-      sourcePos
+      sourcePos,
+      sourceTrace
     )
 
 class CaseBoolBranchMissing(
@@ -1222,7 +1225,8 @@ class CekMachine(
                                       i,
                                       cases.size,
                                       env,
-                                      lastSourcePos
+                                      lastSourcePos,
+                                      getSourceTrace
                                     )
                             case Constant.Bool(b) =>
                                 // Bool has exactly 2 constructors (False=0, True=1)
