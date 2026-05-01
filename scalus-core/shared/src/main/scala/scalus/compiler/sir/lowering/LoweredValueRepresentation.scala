@@ -5,6 +5,7 @@ import scalus.compiler.sir.*
 import scalus.uplc.DefaultUni
 
 import scala.annotation.tailrec
+import scala.collection.immutable.SortedMap
 
 /** representation, depends on the type of the value.
   */
@@ -510,7 +511,7 @@ object SumCaseClassRepresentation {
       *   map from constructor tag to its ProdUplcConstr (field representations)
       */
     case class SumUplcConstr(
-        variants: Map[Int, ProductCaseClassRepresentation.ProdUplcConstr]
+        variants: SortedMap[Int, ProductCaseClassRepresentation.ProdUplcConstr]
     ) extends SumCaseClassRepresentation(false, false) {
         override def defaultUni(semanticType: SIRType)(using LoweringContext): DefaultUni =
             DefaultUni.BuiltinValue // Native Constr values stored as BuiltinValue in lists

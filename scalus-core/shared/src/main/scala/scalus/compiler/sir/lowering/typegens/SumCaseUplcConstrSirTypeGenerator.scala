@@ -137,7 +137,9 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         input.representation match
             case prod: ProductCaseClassRepresentation.ProdUplcConstr =>
                 // Use actual variant field reprs, not DataDecl TypeVars
-                val sumRepr = SumCaseClassRepresentation.SumUplcConstr(Map(prod.tag -> prod))
+                val sumRepr = SumCaseClassRepresentation.SumUplcConstr(
+                  scala.collection.immutable.SortedMap(prod.tag -> prod)
+                )
                 TypeRepresentationProxyLoweredValue(input, targetType, sumRepr, pos)
             case _ =>
                 // Non-UplcConstr repr — convert to ProdUplcConstr first, then upcast

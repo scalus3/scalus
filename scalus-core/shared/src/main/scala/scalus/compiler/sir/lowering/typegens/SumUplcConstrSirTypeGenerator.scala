@@ -134,7 +134,8 @@ object SumUplcConstrSirTypeGenerator {
             case SIRType.TypeLambda(_, body)        => return buildSumUplcConstr(body, pos)
             case SIRType.TypeProxy(ref)             => return buildSumUplcConstr(ref, pos)
             case SIRType.Annotated(tp1, _)          => return buildSumUplcConstr(tp1, pos)
-            case _                                  => return SumUplcConstr(Map.empty)
+            case _ =>
+                return SumUplcConstr(scala.collection.immutable.SortedMap.empty)
 
         // Build name-based substitution: TypeVar name → concrete type.
         // Resolve each typeArg through `lctx.typeUnifyEnv` — at call sites like
@@ -156,74 +157,76 @@ object SumUplcConstrSirTypeGenerator {
         // Use a mutable proxy for self-referential fields (e.g., tail: List[A]).
         // After building variants, set proxy.ref to the real SumUplcConstr.
         val selfProxy = SumCaseClassRepresentation.SumReprProxy(null)
-        val variants = constructors.zipWithIndex.map { (constrDecl, idx) =>
-            val fieldReprs = constrDecl.params.map { param =>
-                // Substitute DataDecl TypeVars with concrete type args (name-based)
-                val paramType = param.tp match
-                    case tv: SIRType.TypeVar =>
-                        typeSubstByName.getOrElse(tv.name, tv)
-                    case SIRType.TypeProxy(ref) =>
-                        ref match
-                            case tv: SIRType.TypeVar =>
-                                typeSubstByName.getOrElse(tv.name, param.tp)
-                            case _ => lctx.resolveTypeVarIfNeeded(param.tp)
-                    case _ => lctx.resolveTypeVarIfNeeded(param.tp)
-                // Check for field-level @UplcRepr annotation override
-                SirTypeUplcGenerator
-                    .resolveFieldRepr(param, paramType)
-                    .getOrElse {
-                        val isSelfRef = selfDeclName.exists { sn =>
-                            extractDeclName(paramType).contains(sn)
-                        }
-                        if isSelfRef then selfProxy
-                        else
-                            paramType match
-                                // Preserve passthrough kinds in the field repr:
-                                //   Transparent → Transparent (wildcard)
-                                //   Unwrapped   → Unwrapped (concrete-default form)
-                                //   Fixed       → ERROR. A Fixed (Data-wrapped) TypeVar in
-                                //                 a UplcConstr field is a producer/consumer
-                                //                 mismatch — UplcConstr fields are native
-                                //                 Constr children and shouldn't carry an
-                                //                 abstract Data marker. Caller should resolve
-                                //                 the TypeVar to a concrete type or use
-                                //                 Transparent/Unwrapped.
+        val variants = constructors.zipWithIndex
+            .map { (constrDecl, idx) =>
+                val fieldReprs = constrDecl.params.map { param =>
+                    // Substitute DataDecl TypeVars with concrete type args (name-based)
+                    val paramType = param.tp match
+                        case tv: SIRType.TypeVar =>
+                            typeSubstByName.getOrElse(tv.name, tv)
+                        case SIRType.TypeProxy(ref) =>
+                            ref match
                                 case tv: SIRType.TypeVar =>
-                                    import SIRType.TypeVarKind.*
-                                    tv.kind match
-                                        case Transparent | Unwrapped =>
-                                            TypeVarRepresentation(tv.kind)
-                                        case Fixed =>
-                                            // A Fixed TypeVar in a UplcConstr field means the
-                                            // caller didn't resolve the type param before we got
-                                            // here (e.g. an extension method whose type param is
-                                            // stamped Fixed by the plugin and isn't bound via
-                                            // `typeUnifyEnv` at this call site). Fall back to the
-                                            // type generator's default rep — for a Fixed TypeVar
-                                            // that's `TypeVarRepresentation(Fixed)` (Data-wrapped
-                                            // abstract), matching the pre-guard behavior.
-                                            lctx.typeGenerator(tv).defaultRepresentation(tv)
-                                // Unsubstituted DataDecl TypeVars (e.g., `Option[*]` at a
-                                // constructor call site where Scala inferred `Nothing`/`Any`
-                                // for the type arg) substitute to FreeUnificator via
-                                // `typeSubstByName`. Using `defaultRepresentation(FreeUnificator)
-                                // = TypeVarRepresentation(Fixed)` here labels the field as
-                                // Data-wrapped even when the actual runtime value is native
-                                // Constr — a representation lie. Use Transparent (passthrough)
-                                // so the field takes whatever native repr the value carries.
-                                case SIRType.FreeUnificator =>
-                                    TypeVarRepresentation(SIRType.TypeVarKind.Transparent)
-                                case _ =>
-                                    // Interpretation (a) for `@UplcRepr(UplcConstr)`: nested
-                                    // field reprs are the field type's stable default.
-                                    // `typeGenerator` is now annotation/type-only (no flag),
-                                    // so this is just a direct lookup.
-                                    lctx.typeGenerator(paramType)
-                                        .defaultRepresentation(paramType)
-                    }
+                                    typeSubstByName.getOrElse(tv.name, param.tp)
+                                case _ => lctx.resolveTypeVarIfNeeded(param.tp)
+                        case _ => lctx.resolveTypeVarIfNeeded(param.tp)
+                    // Check for field-level @UplcRepr annotation override
+                    SirTypeUplcGenerator
+                        .resolveFieldRepr(param, paramType)
+                        .getOrElse {
+                            val isSelfRef = selfDeclName.exists { sn =>
+                                extractDeclName(paramType).contains(sn)
+                            }
+                            if isSelfRef then selfProxy
+                            else
+                                paramType match
+                                    // Preserve passthrough kinds in the field repr:
+                                    //   Transparent → Transparent (wildcard)
+                                    //   Unwrapped   → Unwrapped (concrete-default form)
+                                    //   Fixed       → ERROR. A Fixed (Data-wrapped) TypeVar in
+                                    //                 a UplcConstr field is a producer/consumer
+                                    //                 mismatch — UplcConstr fields are native
+                                    //                 Constr children and shouldn't carry an
+                                    //                 abstract Data marker. Caller should resolve
+                                    //                 the TypeVar to a concrete type or use
+                                    //                 Transparent/Unwrapped.
+                                    case tv: SIRType.TypeVar =>
+                                        import SIRType.TypeVarKind.*
+                                        tv.kind match
+                                            case Transparent | Unwrapped =>
+                                                TypeVarRepresentation(tv.kind)
+                                            case Fixed =>
+                                                // A Fixed TypeVar in a UplcConstr field means the
+                                                // caller didn't resolve the type param before we got
+                                                // here (e.g. an extension method whose type param is
+                                                // stamped Fixed by the plugin and isn't bound via
+                                                // `typeUnifyEnv` at this call site). Fall back to the
+                                                // type generator's default rep — for a Fixed TypeVar
+                                                // that's `TypeVarRepresentation(Fixed)` (Data-wrapped
+                                                // abstract), matching the pre-guard behavior.
+                                                lctx.typeGenerator(tv).defaultRepresentation(tv)
+                                    // Unsubstituted DataDecl TypeVars (e.g., `Option[*]` at a
+                                    // constructor call site where Scala inferred `Nothing`/`Any`
+                                    // for the type arg) substitute to FreeUnificator via
+                                    // `typeSubstByName`. Using `defaultRepresentation(FreeUnificator)
+                                    // = TypeVarRepresentation(Fixed)` here labels the field as
+                                    // Data-wrapped even when the actual runtime value is native
+                                    // Constr — a representation lie. Use Transparent (passthrough)
+                                    // so the field takes whatever native repr the value carries.
+                                    case SIRType.FreeUnificator =>
+                                        TypeVarRepresentation(SIRType.TypeVarKind.Transparent)
+                                    case _ =>
+                                        // Interpretation (a) for `@UplcRepr(UplcConstr)`: nested
+                                        // field reprs are the field type's stable default.
+                                        // `typeGenerator` is now annotation/type-only (no flag),
+                                        // so this is just a direct lookup.
+                                        lctx.typeGenerator(paramType)
+                                            .defaultRepresentation(paramType)
+                        }
+                }
+                idx -> ProductCaseClassRepresentation.ProdUplcConstr(idx, fieldReprs)
             }
-            idx -> ProductCaseClassRepresentation.ProdUplcConstr(idx, fieldReprs)
-        }.toMap
+            .to(scala.collection.immutable.SortedMap)
         val result = SumUplcConstr(variants)
         selfProxy.ref = result
         result

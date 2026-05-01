@@ -542,7 +542,9 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             // native-Constr dispatcher scope) flows into code expecting the sum form.
             case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
                 val wrappedRepr =
-                    SumCaseClassRepresentation.SumUplcConstr(Map(puc.tag -> puc))
+                    SumCaseClassRepresentation.SumUplcConstr(
+                      scala.collection.immutable.SortedMap(puc.tag -> puc)
+                    )
                 val wrapped = new RepresentationProxyLoweredValue(input, wrappedRepr, pos)
                 SumUplcConstrSirTypeGenerator.toRepresentation(
                   wrapped,
