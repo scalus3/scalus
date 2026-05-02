@@ -262,9 +262,14 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         )
                     }
                 if pos.show.contains("KnightsTest.scala:475") then
-                    val st = Thread.currentThread().getStackTrace
-                        .drop(2).take(40)
-                        .map(f => s"    ${f.getClassName}.${f.getMethodName}(${f.getFileName}:${f.getLineNumber})")
+                    val st = Thread
+                        .currentThread()
+                        .getStackTrace
+                        .drop(2)
+                        .take(40)
+                        .map(f =>
+                            s"    ${f.getClassName}.${f.getMethodName}(${f.getFileName}:${f.getLineNumber})"
+                        )
                         .mkString("\n")
                     System.err.println(
                       s"[PUC-DL-475] inputType=${input.sirType.show} pucTag=${puc.tag} " +
