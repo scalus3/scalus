@@ -6,12 +6,12 @@ import scalus.compiler.intrinsics.IntrinsicHelpers.{equalsRepr, fromDefaultTypeV
 import scalus.compiler.UplcRepr
 import scalus.compiler.UplcRepresentation
 import scalus.compiler.UplcRepresentation.TypeVar
-import scalus.compiler.UplcRepresentation.TypeVarKind.Transparent
+import scalus.compiler.UplcRepresentation.TypeVarKind.{Transparent, Unwrapped}
 
 /** UplcConstr list intrinsics — thin delegation to UplcConstrListOperations.
   *
   * The IntrinsicResolver dispatches to these when the list has SumUplcConstr representation. Type
-  * parameters are annotated `@UplcRepr(TypeVar(Transparent))`: the inliner substitutes the caller's
+  * parameters are annotated `@UplcRepr(TypeVar(Unwrapped))`: the inliner substitutes the caller's
   * concrete representation at the inlining site. Every `List[_]` / `Option[_]` in the signatures is
   * annotated `@UplcRepr(UplcConstr)` — under the per-signature annotation regime (no
   * `uplcGeneratorPolicy` swap), this is how the dispatcher's inline `self match { ... }` match
@@ -27,20 +27,20 @@ import scalus.compiler.UplcRepresentation.TypeVarKind.Transparent
 @Compile
 object IntrinsicsUplcConstrList {
 
-    def isEmpty[@UplcRepr(TypeVar(Transparent)) A](
+    def isEmpty[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A]
     ): Boolean = self match
         case List.Cons(_, _) => false
         case List.Nil        => true
 
-    def head[@UplcRepr(TypeVar(Transparent)) A](
+    def head[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A]
     ): A = self match
         case List.Cons(h, _) => h
         case List.Nil        => fail()
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def tail[@UplcRepr(TypeVar(Transparent)) A](
+    def tail[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A]
     ): List[A] = self match
         case List.Cons(_, t) => t
@@ -48,8 +48,8 @@ object IntrinsicsUplcConstrList {
 
     @UplcRepr(UplcRepresentation.UplcConstr)
     def map[
-        @UplcRepr(TypeVar(Transparent)) A,
-        @UplcRepr(TypeVar(Transparent)) B
+        @UplcRepr(TypeVar(Unwrapped)) A,
+        @UplcRepr(TypeVar(Unwrapped)) B
     ](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         mapper: A => B
@@ -57,7 +57,7 @@ object IntrinsicsUplcConstrList {
         UplcConstrListOperations.map(self, (item: A) => mapper(fromDefaultTypeVarRepr(item)))
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def filter[@UplcRepr(TypeVar(Transparent)) A](
+    def filter[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         predicate: A => Boolean
     ): List[A] =
@@ -67,8 +67,8 @@ object IntrinsicsUplcConstrList {
         )
 
     def foldLeft[
-        @UplcRepr(TypeVar(Transparent)) A,
-        @UplcRepr(TypeVar(Transparent)) B
+        @UplcRepr(TypeVar(Unwrapped)) A,
+        @UplcRepr(TypeVar(Unwrapped)) B
     ](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         init: B,
@@ -81,8 +81,8 @@ object IntrinsicsUplcConstrList {
         )
 
     def foldRight[
-        @UplcRepr(TypeVar(Transparent)) A,
-        @UplcRepr(TypeVar(Transparent)) B
+        @UplcRepr(TypeVar(Unwrapped)) A,
+        @UplcRepr(TypeVar(Unwrapped)) B
     ](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         init: B,
@@ -95,7 +95,7 @@ object IntrinsicsUplcConstrList {
         )
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def find[@UplcRepr(TypeVar(Transparent)) A](
+    def find[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         predicate: A => Boolean
     ): Option[A] =
@@ -106,8 +106,8 @@ object IntrinsicsUplcConstrList {
 
     @UplcRepr(UplcRepresentation.UplcConstr)
     def filterMap[
-        @UplcRepr(TypeVar(Transparent)) A,
-        @UplcRepr(TypeVar(Transparent)) B
+        @UplcRepr(TypeVar(Unwrapped)) A,
+        @UplcRepr(TypeVar(Unwrapped)) B
     ](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         predicate: A => Option[B]
@@ -118,7 +118,7 @@ object IntrinsicsUplcConstrList {
         )
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def sort[@UplcRepr(TypeVar(Transparent)) A](
+    def sort[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         ord: (A, A) => scalus.cardano.onchain.plutus.prelude.Order
     ): List[A] =
@@ -132,7 +132,7 @@ object IntrinsicsUplcConstrList {
           (a: A, b: A) => ord(toDefaultTypeVarRepr(a), toDefaultTypeVarRepr(b))
         )
 
-    def contains[@UplcRepr(TypeVar(Transparent)) A](
+    def contains[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         elem: A,
         eq: (A, A) => Boolean
@@ -143,54 +143,54 @@ object IntrinsicsUplcConstrList {
           (a: A, b: A) => equalsRepr(a, b)
         )
 
-    def length[@UplcRepr(TypeVar(Transparent)) A](
+    def length[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A]
     ): BigInt =
         UplcConstrListOperations.length(self)
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def reverse[@UplcRepr(TypeVar(Transparent)) A](
+    def reverse[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A]
     ): List[A] =
         UplcConstrListOperations.reverse(self)
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def append[@UplcRepr(TypeVar(Transparent)) A](
+    def append[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         @UplcRepr(UplcRepresentation.UplcConstr) other: List[A]
     ): List[A] =
         UplcConstrListOperations.append(self, other)
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def appendedAll[@UplcRepr(TypeVar(Transparent)) A](
+    def appendedAll[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         @UplcRepr(UplcRepresentation.UplcConstr) other: List[A]
     ): List[A] =
         UplcConstrListOperations.append(self, other)
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def drop[@UplcRepr(TypeVar(Transparent)) A](
+    def drop[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         n: BigInt
     ): List[A] =
         UplcConstrListOperations.drop(self, n)
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def prepended[@UplcRepr(TypeVar(Transparent)) A](
+    def prepended[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         elem: A
     ): List[A] =
         UplcConstrListOperations.prepended(self, elem)
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def dropRight[@UplcRepr(TypeVar(Transparent)) A](
+    def dropRight[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
         n: BigInt
     ): List[A] =
         UplcConstrListOperations.dropRight(self, n)
 
     @UplcRepr(UplcRepresentation.UplcConstr)
-    def init[@UplcRepr(TypeVar(Transparent)) A](
+    def init[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A]
     ): List[A] =
         UplcConstrListOperations.init(self)

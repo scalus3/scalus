@@ -121,18 +121,16 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                   pos
                                 )
                             case concrete =>
-                                // sirType is concrete — convert via the type generator and
-                                // relabel as Unwrapped.
+                                // sirType is concrete — convert via the type generator. Bytes
+                                // are now at concrete `defaultRepresentation`, which IS the
+                                // Unwrapped semantic. Return the converted value directly
+                                // rather than relabeling it as abstract TypeVarRepresentation
+                                // (Unwrapped) — relabeling hides the concrete repr from
+                                // downstream consumers and was a leak path for the
+                                // KnightsTest:475 heisenbug.
                                 val targetRepr =
                                     lctx.typeGenerator(concrete).defaultRepresentation(concrete)
-                                val converted = input.toRepresentation(targetRepr, pos)
-                                if converted.representation == representation then converted
-                                else
-                                    new RepresentationProxyLoweredValue(
-                                      converted,
-                                      representation,
-                                      pos
-                                    )
+                                input.toRepresentation(targetRepr, pos)
                     case _: TypeVarRepresentation =>
                         // TypeVar→TypeVar relabel — wildcard semantics carry through.
                         new RepresentationProxyLoweredValue(input, representation, pos)
@@ -240,24 +238,17 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
 
     /** Dispatch a Fixed-source TypeVar value to a non-TypeVar target representation.
       *
-      * Suspected DEAD CODE: TypeVarSirTypeGenerator is only invoked when `input.sirType` is a
-      * TypeVar; in that case the only sensible targets are other TypeVar reprs (handled inline by
-      * the caller). Concrete reprs as targets here would mean we have a Fixed-labeled value with
-      * TypeVar sirType but the consumer expects a concrete shape — a path that should never trigger
-      * if upstream resolution is correct.
-      *
-      * Kept temporarily with a print so we can enumerate any real call sites; convert to
-      * `throw LoweringException` once we confirm none exist.
+      * This IS reached: with the new policy where Intrinsics annotate `head`/`tail` (and similar
+      * extractors) with `@UplcRepr(TypeVar(Unwrapped))`, a Fixed-labeled value can flow through
+      * lowering points that resolve the TypeVar to a concrete target. The Transparent → Unwrapped
+      * branch returns the converted value directly (no relabel) so the consumer sees the concrete
+      * representation. The Fixed branch routes through this function.
       */
     private def convertAbstractFixedToTarget(
         input: LoweredValue,
         representation: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        println(
-          s"[TODO TypeVarSirTypeGenerator] convertAbstractFixedToTarget invoked at $pos: " +
-              s"sirType=${input.sirType.show} target=$representation"
-        )
         representation match
             case PrimitiveRepresentation.PackedData | SumCaseClassRepresentation.DataData |
                 SumCaseClassRepresentation.DataConstr |

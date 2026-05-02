@@ -193,10 +193,14 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants
                 // + isCompatibleOn TypeVarKind discrimination (session 18).
-                // With optimizeUplc=true: mem=445_174_581, steps=86_329_049_292.
-                // Previous (pre-isCompatibleOn-fix): 550_142_929 / 111_902_743_585.
+                // After KnightsTest:475 heisenbug fix (bindIntrinsicListResolverElementTypeVars1
+                // restType-suffix unification): mem=470_081_489, steps=92_591_878_616.
+                // Pre-fix (deterministic chooseCommonRepresentation tie-break, but B mis-bound
+                // to SolutionEntry instead of ChessSet at descAndNo.quicksort.map):
+                //   mem=445_174_581, steps=86_329_049_292.
+                // Pre-isCompatibleOn-fix: 550_142_929 / 111_902_743_585.
                 // Pre-annotation baseline: mem=447_798_345, steps=96_701_055_855.
-                ExUnits(memory = 445174581L, steps = 86329049292L)
+                ExUnits(memory = 470081489L, steps = 92591878616L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -302,10 +306,14 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 // appendedAll intrinsic + @UplcRepr(UplcConstr) on descendants
                 // + isCompatibleOn TypeVarKind discrimination (session 18).
-                // With optimizeUplc=true: mem=873_898_759, steps=170_137_815_977.
-                // Previous (pre-isCompatibleOn-fix): 1_072_962_493 / 218_211_607_720.
+                // After KnightsTest:475 heisenbug fix (bindIntrinsicListResolverElementTypeVars1
+                // restType-suffix unification): mem=915_159_867, steps=180_393_832_273.
+                // Pre-fix (deterministic chooseCommonRepresentation tie-break, but B mis-bound
+                // to SolutionEntry instead of ChessSet at descAndNo.quicksort.map):
+                //   mem=873_898_759, steps=170_137_815_977.
+                // Pre-isCompatibleOn-fix: 1_072_962_493 / 218_211_607_720.
                 // Pre-annotation baseline: mem=856_547_657, steps=186_040_711_969.
-                ExUnits(memory = 873898759L, steps = 170137815977L)
+                ExUnits(memory = 915159867L, steps = 180393832273L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>

@@ -66,9 +66,12 @@ object IntrinsicResolver {
         // Stamp TypeVars Transparent so native values pass through without implicit Data
         // conversion. HO function arguments (e.g. Eq in contains) are explicitly wrapped with
         // toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
+        //
+        // UplcConstrListOps / UplcConstrOptionOps now carry author-written `@UplcRepr(TypeVar(...))`
+        // annotations (Unwrapped where bytes are at concrete-default form) — bypass blanket
+        // stamping so the source intent is preserved. NativeListOps still uses the legacy path.
         modules.map { (name, module) =>
-            if name == NativeListOps || name == UplcConstrListOps || name == UplcConstrOptionOps
-            then name -> stampTransparent(module)
+            if name == NativeListOps then name -> stampTransparent(module)
             else name -> module
         }
     }
@@ -601,8 +604,17 @@ object IntrinsicResolver {
       * different role (they live in the declaration and are bound to concrete types at use sites).
       */
     private def rewriteIntrinsicExtVarTypeVars(sir: SIR): SIR = {
+        // Only override Fixed (the scalus-plugin's broken default). Preserve author-written
+        // Transparent/Unwrapped on intrinsic-module typeparams so the lowering can act on the
+        // declared semantic ("bytes are at concrete-default form" for Unwrapped, etc.).
         def transparentize(tp: SIRType): SIRType =
-            SIRType.mapTypeVars(tp, _.copy(kind = SIRType.TypeVarKind.Transparent))
+            SIRType.mapTypeVars(
+              tp,
+              tv =>
+                  if tv.kind == SIRType.TypeVarKind.Fixed
+                  then tv.copy(kind = SIRType.TypeVarKind.Transparent)
+                  else tv
+            )
         def goE(e: AnnotatedSIR): AnnotatedSIR = e match
             case ev @ SIR.ExternalVar(moduleName, name, tp, anns)
                 if isIntrinsicDispatchedModule(moduleName) =>
@@ -894,9 +906,21 @@ object IntrinsicResolver {
         val cleanedFilledTypes =
             lctx.typeUnifyEnv.filledTypes -- bindingInternalTvs
 
-        // Role 2: unify restType (signature after self) with appType to bind output TypeVars
+        // Role 2: unify the binding's RESULT type (after stripping all curried Fun layers) with
+        // appType to bind output TypeVars. The fully-applied call-site `appType` represents the
+        // final result, while `restType` may still be a curried function (e.g. `(A→B) → List[B]`
+        // for map after stripping self). Direct `topLevelUnifyType(restType, appType)` would
+        // mismatch shapes and silently return empty bindings — but the eqClasses pass below
+        // would then incorrectly inherit B from A's equivalence class, producing
+        // `B → SolutionEntry` for `descAndNo.quicksort.map { _.board }` (KnightsTest:475
+        // heisenbug). Walk Fun to the result so the unification is structurally sound.
+        def stripFunResult(tp: SIRType): SIRType = tp match
+            case SIRType.Fun(_, out)                   => stripFunResult(out)
+            case SIRType.TypeProxy(ref) if ref ne null => stripFunResult(ref)
+            case other                                 => other
+        val restResult = stripFunResult(restType)
         val outputBindings: Map[SIRType.TypeVar, SIRType] =
-            SIRUnify.topLevelUnifyType(restType, appType, SIRUnify.Env.empty) match
+            SIRUnify.topLevelUnifyType(restResult, appType, SIRUnify.Env.empty) match
                 case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
                 case _                                   => Map.empty
         // Build the final filledTypes map starting from the cleaned env.
