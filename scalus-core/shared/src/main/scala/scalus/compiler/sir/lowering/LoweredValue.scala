@@ -2877,8 +2877,11 @@ object LoweredValue {
                         // Deterministic ordering: by descending count, then by stableKey ascending.
                         // Map iteration order is non-deterministic across JVM runs (TypeProxy
                         // identity-hash + hash-Map iteration), so an unstable tie-break leaks that
-                        // non-determinism into representation choice. See
-                        // docs/local/claude/compiler/branches/knights-475-heisenbug.md.
+                        // non-determinism into representation choice — making lowering output
+                        // depend on identity-hash randomness, which is observable as flaky
+                        // budget assertions and intermittent miscompilations downstream.
+                        // The lexicographic stableKey tie-break here is a stopgap; a principled
+                        // representation preference (UplcConstr > Data) is the planned follow-up.
                         val candidates =
                             compatibleOn.toSeq.sortBy { case (r, c) => (-c, r.stableKey) }
                         candidates

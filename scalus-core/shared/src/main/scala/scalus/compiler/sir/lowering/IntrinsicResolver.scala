@@ -67,9 +67,11 @@ object IntrinsicResolver {
         // conversion. HO function arguments (e.g. Eq in contains) are explicitly wrapped with
         // toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
         //
-        // UplcConstrListOps / UplcConstrOptionOps now carry author-written `@UplcRepr(TypeVar(...))`
-        // annotations (Unwrapped where bytes are at concrete-default form) — bypass blanket
-        // stamping so the source intent is preserved. NativeListOps still uses the legacy path.
+        // UplcConstrListOps and UplcConstrOptionOps carry author-written `@UplcRepr(TypeVar(...))`
+        // annotations and bypass blanket stamping so the source intent is preserved:
+        //   - IntrinsicsUplcConstrList:    `@UplcRepr(TypeVar(Unwrapped))`   (bytes at concrete default)
+        //   - IntrinsicsUplcConstrOption:  `@UplcRepr(TypeVar(Transparent))` (bytes pass through)
+        // NativeListOps still uses the legacy blanket-Transparent path.
         modules.map { (name, module) =>
             if name == NativeListOps then name -> stampTransparent(module)
             else name -> module
@@ -906,19 +908,33 @@ object IntrinsicResolver {
         val cleanedFilledTypes =
             lctx.typeUnifyEnv.filledTypes -- bindingInternalTvs
 
-        // Role 2: unify the binding's RESULT type (after stripping all curried Fun layers) with
-        // appType to bind output TypeVars. The fully-applied call-site `appType` represents the
-        // final result, while `restType` may still be a curried function (e.g. `(A→B) → List[B]`
-        // for map after stripping self). Direct `topLevelUnifyType(restType, appType)` would
-        // mismatch shapes and silently return empty bindings — but the eqClasses pass below
-        // would then incorrectly inherit B from A's equivalence class, producing
-        // `B → SolutionEntry` for `descAndNo.quicksort.map { _.board }` (KnightsTest:475
-        // heisenbug). Walk Fun to the result so the unification is structurally sound.
-        def stripFunResult(tp: SIRType): SIRType = tp match
-            case SIRType.Fun(_, out)                   => stripFunResult(out)
-            case SIRType.TypeProxy(ref) if ref ne null => stripFunResult(ref)
-            case other                                 => other
-        val restResult = stripFunResult(restType)
+        // Role 2: unify the binding's curried result with `appType` to bind output TypeVars.
+        // `appType` may be either the fully-applied result (e.g. `List[ChessSet]` from
+        // `tryResolveFull`) or the still-curried result of a single-step apply (e.g.
+        // `(A→B) → List[B]` from `tryResolve` on a partial application). `restType` is the
+        // binding signature after stripping the self parameter (e.g. `(A→B) → List[B]` for
+        // map). Without depth-aligned stripping, a fully-applied call site with
+        // `appType = List[ChessSet]` against `restType = (A→B) → List[B]` would fail to
+        // unify shapes; the eqClasses pass below would then incorrectly inherit B from A's
+        // equivalence class, producing `B → SolutionEntry` for
+        // `descAndNo.quicksort.map { _.board }` (KnightsTest:475 heisenbug). Conversely, on
+        // the single-step partial-app path, `appType` is *itself* a function type and we
+        // must NOT strip restType past it, or unification fails and binding-internal output
+        // typevars stay unrefreshed. Strip restType's Fun layers down to match appType's
+        // own Fun depth.
+        def funDepth(tp: SIRType): Int = tp match
+            case SIRType.Fun(_, out)                   => 1 + funDepth(out)
+            case SIRType.TypeProxy(ref) if ref ne null => funDepth(ref)
+            case _                                     => 0
+        def stripFunDepth(tp: SIRType, n: Int): SIRType =
+            if n <= 0 then tp
+            else
+                tp match
+                    case SIRType.Fun(_, out)                   => stripFunDepth(out, n - 1)
+                    case SIRType.TypeProxy(ref) if ref ne null => stripFunDepth(ref, n)
+                    case _                                     => tp
+        val toStrip = (funDepth(restType) - funDepth(appType)).max(0)
+        val restResult = stripFunDepth(restType, toStrip)
         val outputBindings: Map[SIRType.TypeVar, SIRType] =
             SIRUnify.topLevelUnifyType(restResult, appType, SIRUnify.Env.empty) match
                 case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
