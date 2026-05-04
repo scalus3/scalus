@@ -1,7 +1,7 @@
 package scalus.utxocells
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.compiler.Options
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData

@@ -1,5 +1,7 @@
 package scalus.compiler.sir.lowering
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatest.Tag
 import scalus.*

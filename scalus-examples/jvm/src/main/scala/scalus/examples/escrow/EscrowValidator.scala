@@ -1,5 +1,7 @@
 package scalus.examples.escrow
 
+import scalus.compiler.Compile
+
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v2.OutputDatum

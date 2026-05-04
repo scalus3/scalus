@@ -1,6 +1,6 @@
 package scalus.examples.auction
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2.OutputDatum

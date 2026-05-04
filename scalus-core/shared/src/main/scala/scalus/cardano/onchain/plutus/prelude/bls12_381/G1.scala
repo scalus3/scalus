@@ -1,5 +1,5 @@
 package scalus.cardano.onchain.plutus.prelude.bls12_381
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, PlatformSpecific}
 import scalus.uplc.builtin.bls12_381.G1Element
 import scalus.uplc.builtin.Builtins.*

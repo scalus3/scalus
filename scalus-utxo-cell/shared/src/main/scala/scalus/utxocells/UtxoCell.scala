@@ -1,7 +1,7 @@
 package scalus.utxocells
 
 import scala.compiletime.summonInline
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{FromData, ToData}

@@ -1,6 +1,6 @@
 package scalus.examples.linkedlist
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{Credential, PolicyId}
 import scalus.cardano.onchain.plutus.v3.*

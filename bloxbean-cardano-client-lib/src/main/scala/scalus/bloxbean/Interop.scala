@@ -69,13 +69,6 @@ object Interop {
                 case c => c
     }
 
-    @deprecated("use ToData.given_ToData_BigInteger", "0.14.1")
-    given ToData[BigInteger] = ToData.given_ToData_BigInteger
-    @deprecated("use ToData.given_ToData_Integer", "0.14.1")
-    given ToData[Integer] = ToData.given_ToData_Integer
-    @deprecated("use ToData.given_ToData_jsLong", "0.14.1")
-    given ToData[java.lang.Long] = ToData.given_ToData_jsLong
-
     given ToData[ProtocolParamUpdate] =
         given ToData[Rational] = (x: Rational) =>
             listData(

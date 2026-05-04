@@ -1,5 +1,7 @@
 package scalus.prelude
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 
 import scalus.*

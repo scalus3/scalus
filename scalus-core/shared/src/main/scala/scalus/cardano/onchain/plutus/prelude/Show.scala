@@ -3,7 +3,8 @@ package scalus.cardano.onchain.plutus.prelude
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString.{fromString, utf8}
 import scalus.uplc.builtin.{BuiltinPair, ByteString, Data}
-import scalus.{Compile, CompileDerivations}
+import scalus.compiler.Compile
+import scalus.CompileDerivations
 
 /** * A typeclass for converting values of type `A` to a `String`.
   *

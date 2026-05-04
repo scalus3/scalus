@@ -1,7 +1,8 @@
 package scalus.uplc.builtin
 
 import scalus.uplc.builtin.Builtins.*
-import scalus.{Compile, CompileDerivations}
+import scalus.compiler.Compile
+import scalus.CompileDerivations
 
 import java.math.BigInteger
 import scala.math.BigInt

@@ -1,5 +1,7 @@
 package scalus.testing.regression.hydrozoa20250804
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.{Data, FromData}
 import scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum

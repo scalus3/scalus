@@ -1,6 +1,6 @@
 package scalus.uplc.builtin.internal
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.*
 
 /** This module exists to make Linker happy about the existence of the internal data representation,

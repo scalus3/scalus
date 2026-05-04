@@ -1,6 +1,6 @@
 package scalus.utxocells
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Data
 import scalus.cardano.onchain.plutus.v1.PolicyId
 import scalus.cardano.onchain.plutus.v3.*

@@ -9,7 +9,7 @@ import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.uplc.PlutusV3
-import scalus.Compile
+import scalus.compiler.Compile
 
 // ============================================================================
 // DATA MODELS

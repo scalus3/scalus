@@ -1,12 +1,12 @@
 package scalus.compiler.intrinsics
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{fail, List, Option}
 import scalus.compiler.intrinsics.IntrinsicHelpers.{equalsRepr, fromDefaultTypeVarRepr, toDefaultTypeVarRepr}
 import scalus.compiler.UplcRepr
 import scalus.compiler.UplcRepresentation
 import scalus.compiler.UplcRepresentation.TypeVar
-import scalus.compiler.UplcRepresentation.TypeVarKind.{Transparent, Unwrapped}
+import scalus.compiler.UplcRepresentation.TypeVarKind.Unwrapped
 
 /** UplcConstr list intrinsics — thin delegation to UplcConstrListOperations.
   *

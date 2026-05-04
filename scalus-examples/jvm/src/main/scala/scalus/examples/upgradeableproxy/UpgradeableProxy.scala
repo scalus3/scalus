@@ -1,5 +1,7 @@
 package scalus.examples.upgradeableproxy
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}

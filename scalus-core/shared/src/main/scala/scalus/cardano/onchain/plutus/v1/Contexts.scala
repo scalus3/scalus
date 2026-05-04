@@ -1,6 +1,6 @@
 package scalus.cardano.onchain.plutus.v1
 
-import scalus.{Compile, Ignore}
+import scalus.compiler.{Compile, Ignore}
 import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.cardano.ledger.{TransactionHash, TransactionInput}
 import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
@@ -169,17 +169,6 @@ object Interval:
       */
     def after(time: PosixTime): Interval =
         Interval(IntervalBound.finiteInclusive(time), IntervalBound.posInf)
-
-    /** Creates an interval that includes all values after (and not including) the given bound. i.e
-      * (lower_bound,+∞]
-      *
-      * @note
-      *   Since Cardano protocol version 9 [[ScriptContext]] always uses inclusive finite lower
-      *   bounds for the validity interval.
-      */
-    @deprecated("Use after instead", "0.14.2")
-    def entirelyAfter(time: PosixTime): Interval =
-        Interval(IntervalBound.finiteExclusive(time), IntervalBound.posInf)
 
     /** Creates an interval that includes all values less than the given bound. i.e [-∞,upper_bound]
       */

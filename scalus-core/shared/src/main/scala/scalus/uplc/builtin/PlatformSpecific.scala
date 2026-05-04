@@ -1,6 +1,6 @@
 package scalus.uplc.builtin
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element, MLResult}
 
 /** Provides access to platform-specific built-in functions.

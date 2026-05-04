@@ -1,6 +1,6 @@
 package scalus.examples.auction
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}

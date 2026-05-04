@@ -1,6 +1,6 @@
 package scalus.cardano.onchain.plutus.crypto.accumulator
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.bls12_381.{G1Element, G2Element}
 import scalus.uplc.builtin.Builtins.*
 import scalus.cardano.onchain.plutus.prelude.*

@@ -15,7 +15,7 @@ import scalus.uplc.eval.PlutusVM
 
 import scala.language.implicitConversions
 
-@scalus.Compile
+@scalus.compiler.Compile
 //@scalus.ScalusDebug(10)
 object ParseScriptInfo {
 

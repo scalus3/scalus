@@ -1,5 +1,7 @@
 package scalus.testing.regression.hydrozoa20250804
 
+import scalus.compiler.Compile
+
 //import com.bloxbean.cardano.client.address.AddressProvider
 //import com.bloxbean.cardano.client.plutus.spec.PlutusV3Script
 //import hydrozoa.infra.{encodeHex, toBB}

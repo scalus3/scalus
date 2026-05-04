@@ -1,6 +1,6 @@
 package scalus.compiler.test
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.compiler.{Ignore, OnChainSubstitute}
 import scalus.uplc.builtin.Data
 

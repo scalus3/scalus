@@ -1,6 +1,6 @@
 package scalus.uplc.builtin
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{Eq, Ord, Order, Show}
 import scalus.utils.Hex.toHex
 

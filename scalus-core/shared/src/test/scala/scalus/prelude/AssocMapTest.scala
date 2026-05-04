@@ -1,5 +1,7 @@
 package scalus.prelude
 
+import scalus.compiler.Compile
+
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List}
 
 import org.scalacheck.Arbitrary

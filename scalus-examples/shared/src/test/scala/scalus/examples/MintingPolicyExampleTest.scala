@@ -179,7 +179,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
 
     test("Minting Policy Validator") {
         // Import the V3 backend configuration from MintingPolicy
-        import MintingPolicy.given scalus.Compiler.Options
+        import MintingPolicy.given scalus.compiler.Options
         val options = summon[scalus.compiler.Options]
 
         // Compile evaledTokens with the same V3 backend
@@ -223,7 +223,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
 
     test("Minting Policy Validator Optimized") {
         // Import SimpleSirToUplcLowering backend from MintingPolicySimpleBackend
-        import MintingPolicySimpleBackend.given scalus.Compiler.Options
+        import MintingPolicySimpleBackend.given scalus.compiler.Options
 
         // Compile evaledTokens with the same SimpleSirToUplcLowering backend
         val evaledTokensSimple =

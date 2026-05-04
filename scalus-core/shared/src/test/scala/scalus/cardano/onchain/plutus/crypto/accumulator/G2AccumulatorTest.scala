@@ -1,7 +1,7 @@
 package scalus.cardano.onchain.plutus.crypto.accumulator
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.cardano.ledger.ExUnits
 import scalus.cardano.onchain.plutus.prelude.List
 import scalus.cardano.onchain.plutus.crypto.accumulator.G2Accumulator.{verifyMembership, verifyNonMembership}

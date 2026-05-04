@@ -1,6 +1,6 @@
 package scalus.testing.regression.hydrozoa20250804
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.v1.Value.{-, zero}
 import scalus.cardano.onchain.plutus.v3.{PolicyId, TokenName, Value}
 import scalus.cardano.onchain.plutus.prelude.List.Cons

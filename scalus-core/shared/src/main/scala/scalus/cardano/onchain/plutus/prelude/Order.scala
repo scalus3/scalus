@@ -1,6 +1,6 @@
 package scalus.cardano.onchain.plutus.prelude
 
-import scalus.Compile
+import scalus.compiler.Compile
 
 enum Order:
     case Less, Equal, Greater

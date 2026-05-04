@@ -386,16 +386,6 @@ object Scenario {
     def snapshotReader: Scenario[BlockchainReader] =
         leaf(s => Done(s, s.emulator.asReader))
 
-    /** Get a read-only [[scalus.cardano.node.BlockchainProvider]] snapshot from the current state.
-      *
-      * @deprecated
-      *   Use [[snapshotReader]] instead. The `submit` method on this provider discards state
-      *   changes which is misleading.
-      */
-    @deprecated("Use snapshotReader instead", "0.14.2")
-    def snapshotProvider: Scenario[BlockchainProvider] =
-        leaf(s => Done(s, s.emulator.asProvider))
-
     /** Sample a value from a ScalaCheck generator using the scenario's RNG.
       *
       * The RNG state is advanced deterministically, ensuring reproducible execution across

@@ -1,5 +1,7 @@
 package scalus.testing.regression.cosmex20250919
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.*
 import scalus.uplc.builtin.Builtins.*

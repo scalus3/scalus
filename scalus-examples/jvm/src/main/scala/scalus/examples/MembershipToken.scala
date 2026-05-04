@@ -1,5 +1,7 @@
 package scalus.examples
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.compiler.Options
 import scalus.uplc.PlutusV3

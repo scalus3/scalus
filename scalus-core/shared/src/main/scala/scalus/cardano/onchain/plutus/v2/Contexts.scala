@@ -1,6 +1,6 @@
 package scalus.cardano.onchain.plutus.v2
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.FromData
 import scalus.uplc.builtin.ToData

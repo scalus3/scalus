@@ -1,5 +1,7 @@
 package scalus.testing.regression.forktree20260312
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.{Data, FromData, ToData}
@@ -41,7 +43,7 @@ class RecursiveEnumDerivedTest extends AnyFunSuite {
     given PlutusVM = PlutusVM.makePlutusV3VM()
 
     test("recursive enum ForkTree with derived FromData/ToData compiles and evaluates") {
-        val compiled = Compiler.compile(ForkTreeValidator.validate)
+        val compiled = scalus.compiler.compile(ForkTreeValidator.validate)
         val uplc = compiled.toUplcOptimized(generateErrorTraces = true)
         // If we get here, compilation succeeded
         assert(uplc != null)

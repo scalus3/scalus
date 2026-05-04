@@ -1,6 +1,6 @@
 package scalus.cardano.onchain.plutus.prelude
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin
 import scalus.uplc.builtin.Builtins.byteStringToInteger
 import scalus.uplc.builtin.Builtins.integerToByteString

@@ -45,21 +45,15 @@ object Plugin {
     val SIR_MODULE_VAL_NAME = "sirModule"
     val SIR_DEPS_VAL_NAME = "sirDeps"
 
-    // Module name for top-level definitions in scalus.compiler package
-    // The file compiler.scala generates a synthetic module named compiler$package
-    // IMPORTANT: We MUST NOT use "scalus.compiler" as a module name because on case-insensitive
-    // filesystems (like macOS), this would conflict with "scalus.Compiler" class file
+    // Module name for top-level definitions in scalus.compiler package.
+    // The file compiler.scala generates a synthetic module named compiler$package.
     val newCompilerModuleName = "scalus.compiler.compiler$package"
 
     def retrieveCompilerOptions(
         posTree: tpd.Tree,
         isCompilerDebug: Boolean
     )(using Context): tpd.Tree = {
-        // Try new package first, fall back to old for backward compatibility
-        // TODO(0.15): Remove scalus.Compiler.Options fallback after removing deprecated API
-        val compilerOptionType =
-            try requiredClassRef("scalus.compiler.Options")
-            catch case _: Exception => requiredClassRef("scalus.Compiler.Options")
+        val compilerOptionType = requiredClassRef("scalus.compiler.Options")
         if !ctx.phase.allowsImplicitSearch then
             println(
               s"ScalusPhase: Implicit search is not allowed in phase ${ctx.phase.phaseName}. "
@@ -80,24 +74,9 @@ object Plugin {
                     )
                     report.warning(s"search result: ${failure.show}")
                 }
-                // Try new package first, fall back to old for backward compatibility
-                // Wrap entirely in try-catch since the module/method might not be available yet
-                // TODO(0.15): Remove scalus.Compiler fallback after removing deprecated API
-                val (scalusCompilerModule, defaultOptionsMethod) = {
-                    try
-                        val mod = requiredModule(newCompilerModuleName)
-                        val method = mod.requiredMethod("defaultOptions")
-                        (mod, method)
-                    catch
-                        case _: Exception =>
-                            // Fall back to old module
-                            val mod = requiredModule("scalus.Compiler")
-                            val method = mod.requiredMethod("defaultOptions")
-                            (mod, method)
-                }
-                tpd.ref(scalusCompilerModule)
-                    .select(defaultOptionsMethod)
-                    .withSpan(posTree.span)
+                val mod = requiredModule(newCompilerModuleName)
+                val method = mod.requiredMethod("defaultOptions")
+                tpd.ref(mod).select(method).withSpan(posTree.span)
         }
 
     }
@@ -135,42 +114,11 @@ class ScalusPreparePhase(debugLevel: Int) extends PluginPhase with IdentityDenot
     }
 
     override def transformApply(tree: tpd.Apply)(using Context): tpd.Tree = {
-        // Support both old (scalus.Compiler) and new (scalus.compiler.package$package) locations
-        // The new module may not exist during compilation of scalus-core itself, so wrap in try-catch
-        // TODO(0.15): Remove old scalus.Compiler symbol handling after removing deprecated API
-        val oldCompilerModule = requiredModule("scalus.Compiler")
-
-        // Try to get new module symbols - wrap entirely in try-catch since the module
-        // might exist but methods might not be available yet during compilation
-        val newCompileSymbol: Option[Symbol] =
-            try Some(requiredModule(Plugin.newCompilerModuleName).requiredMethod("compile"))
-            catch case _: Exception => None
-        val newCompileWithOptionsSymbol: Option[Symbol] =
-            try
-                Some(
-                  requiredModule(Plugin.newCompilerModuleName).requiredMethod("compileWithOptions")
-                )
-            catch case _: Exception => None
-        val newCompileDebugSymbol: Option[Symbol] =
-            try Some(requiredModule(Plugin.newCompilerModuleName).requiredMethod("compileDebug"))
-            catch case _: Exception => None
-        val newCompileDebugWithOptionsSymbol: Option[Symbol] =
-            try
-                Some(
-                  requiredModule(Plugin.newCompilerModuleName).requiredMethod(
-                    "compileDebugWithOptions"
-                  )
-                )
-            catch case _: Exception => None
-
-        val compileSymbol = oldCompilerModule.requiredMethod("compile")
-        val compileWithOptionsSymbol = oldCompilerModule.requiredMethod("compileWithOptions")
-        val compileDebugSymbol = oldCompilerModule.requiredMethod("compileDebug")
-        val compileDebugWithOptionsSymbol =
-            oldCompilerModule.requiredMethod("compileDebugWithOptions")
-
-        def matchesSymbol(sym: Symbol, oldSym: Symbol, newSymOpt: Option[Symbol]): Boolean =
-            sym == oldSym || newSymOpt.contains(sym)
+        val compilerModule = requiredModule(Plugin.newCompilerModuleName)
+        val compileSymbol = compilerModule.requiredMethod("compile")
+        val compileWithOptionsSymbol = compilerModule.requiredMethod("compileWithOptions")
+        val compileDebugSymbol = compilerModule.requiredMethod("compileDebug")
+        val compileDebugWithOptionsSymbol = compilerModule.requiredMethod("compileDebugWithOptions")
 
         // Logging to diagnose transformation issues
         if debugLevel > 0 then
@@ -179,31 +127,24 @@ class ScalusPreparePhase(debugLevel: Int) extends PluginPhase with IdentityDenot
             )
             println(s"  tree.symbol = ${tree.symbol.showFullName}")
             println(s"  compileSymbol = ${compileSymbol.showFullName}")
-            println(s"  newCompileSymbol = ${newCompileSymbol.map(_.showFullName)}")
-            println(s"  tree.symbol == compileSymbol: ${tree.symbol == compileSymbol}")
 
-        if matchesSymbol(tree.symbol, compileSymbol, newCompileSymbol) then
+        if tree.symbol == compileSymbol then
             if debugLevel > 0 then
                 println(
                   s"  -> Transforming compile to compileWithOptions at ${tree.srcPos.sourcePos.source}:${tree.srcPos.line}"
                 )
             val optionsTree = Plugin.retrieveCompilerOptions(tree, isCompilerDebug = false)
             val newArgs = optionsTree :: tree.args
-            // Use new symbols for the transformed call if available, otherwise old
-            val targetSymbol = newCompileWithOptionsSymbol.getOrElse(compileWithOptionsSymbol)
-            val newFun = tpd.ref(targetSymbol).withSpan(tree.fun.span)
+            val newFun = tpd.ref(compileWithOptionsSymbol).withSpan(tree.fun.span)
             cpy.Apply(tree)(fun = newFun, args = newArgs).withSpan(tree.span)
-        else if matchesSymbol(tree.symbol, compileDebugSymbol, newCompileDebugSymbol) then
+        else if tree.symbol == compileDebugSymbol then
             if debugLevel > 0 then
                 println(
                   s"  -> Transforming compileDebug to compileDebugWithOptions at ${tree.srcPos.sourcePos.source}:${tree.srcPos.line}"
                 )
             val optionsTree = Plugin.retrieveCompilerOptions(tree, isCompilerDebug = true)
             val newArgs = optionsTree :: tree.args
-            // Use new symbols for the transformed call if available, otherwise old
-            val targetSymbol =
-                newCompileDebugWithOptionsSymbol.getOrElse(compileDebugWithOptionsSymbol)
-            val newFun = tpd.ref(targetSymbol).withSpan(tree.fun.span)
+            val newFun = tpd.ref(compileDebugWithOptionsSymbol).withSpan(tree.fun.span)
             cpy.Apply(tree)(fun = newFun, args = newArgs).withSpan(tree.span)
         else tree
     }
@@ -317,86 +258,29 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
 
     /** Replaces calls to `compile`, `compileWithOptions`, `compileDebug`, and
       * `compileDebugWithOptions` with a fully linked Flat-encoded [[scalus.compiler.sir.SIR]]
-      * representation. Supports both old (scalus.Compiler) and new (scalus.compiler.package)
-      * locations.
+      * representation.
       */
     override def transformApply(tree: tpd.Apply)(using Context): tpd.Tree =
         try
-            // Support both old (scalus.Compiler) and new (scalus.compiler.package$package) locations
-            // The new module may not exist during compilation of scalus-core itself, so wrap in try-catch
-            // TODO(0.15): Remove old scalus.Compiler symbol handling after removing deprecated API
-            val oldCompilerModule = requiredModule("scalus.Compiler")
-
-            // Try to get new module symbols - wrap entirely in try-catch since the module
-            // might exist but methods might not be available yet during compilation
-            val newCompileSymbol: Option[Symbol] =
-                try Some(requiredModule(Plugin.newCompilerModuleName).requiredMethod("compile"))
-                catch case _: Exception => None
-            val newCompileWithOptionsSymbol: Option[Symbol] =
-                try
-                    Some(
-                      requiredModule(Plugin.newCompilerModuleName).requiredMethod(
-                        "compileWithOptions"
-                      )
-                    )
-                catch case _: Exception => None
-            val newCompileDebugSymbol: Option[Symbol] =
-                try
-                    Some(
-                      requiredModule(Plugin.newCompilerModuleName).requiredMethod("compileDebug")
-                    )
-                catch case _: Exception => None
-            val newCompileDebugWithOptionsSymbol: Option[Symbol] =
-                try
-                    Some(
-                      requiredModule(Plugin.newCompilerModuleName).requiredMethod(
-                        "compileDebugWithOptions"
-                      )
-                    )
-                catch case _: Exception => None
-
-            val compileSymbol = oldCompilerModule.requiredMethod("compile")
-            val compileWithOptionsSymbol = oldCompilerModule.requiredMethod("compileWithOptions")
-            val compileDebugSymbol = oldCompilerModule.requiredMethod("compileDebug")
+            val compilerModule = requiredModule(Plugin.newCompilerModuleName)
+            val compileSymbol = compilerModule.requiredMethod("compile")
+            val compileWithOptionsSymbol = compilerModule.requiredMethod("compileWithOptions")
+            val compileDebugSymbol = compilerModule.requiredMethod("compileDebug")
             val compileDebugWithOptionsSymbol =
-                oldCompilerModule.requiredMethod("compileDebugWithOptions")
+                compilerModule.requiredMethod("compileDebugWithOptions")
+            val compiledModulesSymbol = compilerModule.requiredMethod("compiledModules")
 
-            val compiledModulesSymbol =
-                requiredModule(Plugin.newCompilerModuleName)
-                    .requiredMethod("compiledModules")
-
-            def matchesSymbol(sym: Symbol, oldSym: Symbol, newSymOpt: Option[Symbol]): Boolean =
-                sym == oldSym || newSymOpt.contains(sym)
-
-            if matchesSymbol(tree.fun.symbol, compileWithOptionsSymbol, newCompileWithOptionsSymbol)
-                || matchesSymbol(
-                  tree.fun.symbol,
-                  compileDebugWithOptionsSymbol,
-                  newCompileDebugWithOptionsSymbol
-                )
-                || matchesSymbol(tree.fun.symbol, compileSymbol, newCompileSymbol)
-                || matchesSymbol(tree.fun.symbol, compileDebugSymbol, newCompileDebugSymbol)
+            if tree.fun.symbol == compileWithOptionsSymbol
+                || tree.fun.symbol == compileDebugWithOptionsSymbol
+                || tree.fun.symbol == compileSymbol
+                || tree.fun.symbol == compileDebugSymbol
             then
-                // report.echo(s"transformApply: ${tree.showIndented(2)}")
-
                 val isCompileDebug =
-                    matchesSymbol(
-                      tree.fun.symbol,
-                      compileDebugWithOptionsSymbol,
-                      newCompileDebugWithOptionsSymbol
-                    )
-                        || matchesSymbol(tree.fun.symbol, compileDebugSymbol, newCompileDebugSymbol)
+                    tree.fun.symbol == compileDebugWithOptionsSymbol
+                        || tree.fun.symbol == compileDebugSymbol
                 val isWithOptions =
-                    matchesSymbol(
-                      tree.fun.symbol,
-                      compileWithOptionsSymbol,
-                      newCompileWithOptionsSymbol
-                    )
-                        || matchesSymbol(
-                          tree.fun.symbol,
-                          compileDebugWithOptionsSymbol,
-                          newCompileDebugWithOptionsSymbol
-                        )
+                    tree.fun.symbol == compileWithOptionsSymbol
+                        || tree.fun.symbol == compileDebugWithOptionsSymbol
 
                 val (optionsTree, code) = {
                     if isWithOptions then (tree.args(0), tree.args(1))

@@ -1,5 +1,7 @@
 package scalus.examples
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.*

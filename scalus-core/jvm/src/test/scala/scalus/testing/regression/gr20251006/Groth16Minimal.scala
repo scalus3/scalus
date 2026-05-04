@@ -1,6 +1,6 @@
 package scalus.testing.regression.gr20251006
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.bls12_381.G1Element
 import scalus.uplc.builtin.Data.FromData

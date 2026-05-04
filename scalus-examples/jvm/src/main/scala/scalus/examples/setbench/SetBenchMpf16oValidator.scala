@@ -1,5 +1,7 @@
 package scalus.examples.setbench
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.Data
 import scalus.cardano.onchain.plutus.v1.Value.getLovelace

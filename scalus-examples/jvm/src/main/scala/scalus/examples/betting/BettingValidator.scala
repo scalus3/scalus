@@ -1,5 +1,7 @@
 package scalus.examples.betting
 
+import scalus.compiler.Compile
+
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.FromData

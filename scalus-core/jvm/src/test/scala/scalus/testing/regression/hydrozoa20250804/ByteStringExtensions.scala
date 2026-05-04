@@ -1,5 +1,7 @@
 package scalus.testing.regression.hydrozoa20250804
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.Builtins.{indexByteString, lengthOfByteString, lessThanByteString, lessThanEqualsByteString, sliceByteString}
 import scalus.uplc.builtin.ByteString

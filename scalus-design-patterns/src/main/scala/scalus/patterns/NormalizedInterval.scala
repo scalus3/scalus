@@ -1,6 +1,6 @@
 package scalus.patterns
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v1.*
 import scalus.uplc.builtin.{Builtins, FromData, ToData}

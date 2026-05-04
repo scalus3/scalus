@@ -1,6 +1,6 @@
 package scalus.compiler.intrinsics
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.compiler.UplcRepresentation
 
 /** Intrinsic helper functions for type and representation casts.

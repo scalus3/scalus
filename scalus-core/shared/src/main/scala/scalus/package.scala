@@ -1,15 +1,11 @@
 import org.typelevel.paiges.Doc
-import scalus.cardano.ledger.Language
 import scalus.compiler.Options
 import scalus.compiler.sir.*
 import scalus.utils.Style
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
 import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering}
-import scalus.uplc.{Constant, DeBruijnedProgram, DefaultUni, Program, Term}
-import scalus.uplc.eval.*
+import scalus.uplc.{Constant, DefaultUni, Term}
 import scalus.uplc.transform.V3Optimizer
-
-import scala.annotation.nowarn
 
 package object scalus {
 
@@ -119,106 +115,6 @@ package object scalus {
             retval
         }
 
-    // Extension methods for Program, DeBruijnedProgram, and Term are deprecated.
-    // Use the methods directly on the classes instead. See Program.scala and Term.scala.
-
-    extension (p: Program)
-        @deprecated("Use Program.pretty method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def pretty: Doc = p.pretty
-
-        @deprecated("Use Program.prettyXTerm method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def prettyXTerm: Doc = p.prettyXTerm
-
-        @deprecated("Use Program.show method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def show: String = p.show
-
-        @deprecated("Use Program.showHighlighted method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def showHighlighted: String = p.showHighlighted
-
-        @deprecated("Use Program.writePlutusFile method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def writePlutusFile(path: String, plutusVersion: Language): Unit =
-            p.writePlutusFile(path, plutusVersion)
-
-        @deprecated("Use Program.evaluate method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def evaluate(using vm: PlutusVM): Term = p.evaluate
-
-        @deprecated("Use Program.evaluateDebug method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def evaluateDebug(using vm: PlutusVM): Result = p.evaluateDebug
-
-    extension (p: DeBruijnedProgram)
-        @deprecated("Use DeBruijnedProgram.prettyXTerm method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def prettyXTerm: Doc = p.prettyXTerm
-
-        @deprecated("Use DeBruijnedProgram.show method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def show: String = p.show
-
-        @deprecated("Use DeBruijnedProgram.showHighlighted method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def showHighlighted: String = p.showHighlighted
-
-        @deprecated("Use DeBruijnedProgram.writePlutusFile method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def writePlutusFile(path: String, plutusVersion: Language): Unit =
-            p.writePlutusFile(path, plutusVersion)
-
-        @deprecated("Use DeBruijnedProgram.evaluate method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def evaluate(using vm: PlutusVM): Term = p.evaluate
-
-        @deprecated("Use DeBruijnedProgram.evaluateDebug method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def evaluateDebug(using vm: PlutusVM): Result = p.evaluateDebug
-
     extension (du: DefaultUni) def pretty: Doc = PrettyPrinter.pretty(du)
     extension (c: Constant) def pretty: Doc = PrettyPrinter.pretty(c)
-
-    extension (self: Term)
-        @deprecated("Use Term.pretty method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def pretty: Doc = self.pretty
-
-        @deprecated("Use Term.prettyXTerm method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def prettyXTerm: Doc = self.prettyXTerm
-
-        @deprecated("Use Term.show method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def show: String = self.show
-
-        @deprecated("Use Term.showHighlighted method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def showHighlighted: String = self.showHighlighted
-
-        @deprecated("Use Term.showShort method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def showShort: String = self.showShort
-
-        @deprecated("Use Term.evaluate method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def evaluate(using vm: PlutusVM): Term = self.evaluate
-
-        @deprecated("Use Term.evaluateDebug method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def evaluateDebug(using vm: PlutusVM): Result = self.evaluateDebug
-
-        @deprecated("Use Term.plutusV1 method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def plutusV1: Program = self.plutusV1
-
-        @deprecated("Use Term.plutusV2 method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def plutusV2: Program = self.plutusV2
-
-        @deprecated("Use Term.plutusV3 method instead", "0.14.2")
-        @nowarn("msg=Extension method .* will never be selected")
-        def plutusV3: Program = self.plutusV3
 }

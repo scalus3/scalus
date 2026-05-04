@@ -1,5 +1,7 @@
 package scalus.examples.cape.factorial
 
+import scalus.compiler.Compile
+
 import scalus.*
 
 /** CAPE factorial_naive_recursion scenario.

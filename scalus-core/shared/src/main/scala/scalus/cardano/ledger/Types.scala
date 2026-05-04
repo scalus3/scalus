@@ -595,7 +595,7 @@ object ExUnitPrices {
     /** FromData instance for ExUnitPrices. Decodes from array [priceMemory, priceSteps] */
     given FromData[ExUnitPrices] = (data: Data) => {
         val list = unListData(data)
-        val fromDataInterval = summon[scalus.builtin.FromData[NonNegativeInterval]]
+        val fromDataInterval = summon[scalus.uplc.builtin.FromData[NonNegativeInterval]]
         ExUnitPrices(
           fromDataInterval(list.head),
           fromDataInterval(list.tail.head)

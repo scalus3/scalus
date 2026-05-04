@@ -1,5 +1,7 @@
 package scalus.examples.cape.fibonacci
 
+import scalus.compiler.Compile
+
 import scalus.*
 
 /** CAPE fibonacci_naive_recursion scenario.

@@ -1,6 +1,6 @@
 package scalus.examples.amm
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{PolicyId, TokenName, Value}
 import scalus.cardano.onchain.plutus.v2.OutputDatum

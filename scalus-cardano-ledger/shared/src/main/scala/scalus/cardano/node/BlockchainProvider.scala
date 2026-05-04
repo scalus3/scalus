@@ -6,9 +6,6 @@ import scalus.uplc.builtin.Data
 
 import scala.concurrent.Future
 
-@deprecated("Use BlockchainProvider instead", "0.14.2")
-type Provider = BlockchainProvider
-
 /** Read-only blockchain operations with generic effect type. (TF is for "tagless final" style,
   * often term used in FP literature).
   *
@@ -325,72 +322,7 @@ trait BlockchainProvider extends BlockchainProviderTF[Future] with BlockchainRea
                 }(executionContext)
         }(executionContext)
 
-    /** Find a single UTxO by address and optional filters.
-      *
-      * @deprecated
-      *   Use findUtxos(UtxoQuery) instead
-      */
-    @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
-    def findUtxo(
-        address: Address,
-        transactionId: Option[TransactionHash] = None,
-        datum: Option[DatumOption] = None,
-        minAmount: Option[Coin] = None
-    ): Future[Either[UtxoQueryError, Utxo]] = {
-        findUtxos(address, transactionId, datum, minAmount, None).map { result =>
-            result.flatMap { utxos =>
-                utxos.headOption match
-                    case Some((i, o)) => Right(Utxo(i, o))
-                    case None => Left(UtxoQueryError.NotFound(UtxoSource.FromAddress(address)))
-            }
-        }(executionContext)
-    }
-
-    /** Find UTxOs by address and optional filters.
-      *
-      * @deprecated
-      *   Use findUtxos(UtxoQuery) instead
-      */
-    @deprecated("Use findUtxos(UtxoQuery) instead", "0.14.2")
-    def findUtxos(
-        address: Address,
-        transactionId: Option[TransactionHash] = None,
-        datum: Option[DatumOption] = None,
-        minAmount: Option[Coin] = None,
-        minRequiredTotalAmount: Option[Coin] = None
-    ): Future[Either[UtxoQueryError, Utxos]] = {
-        if minRequiredTotalAmount.exists(_ <= Coin(0)) then
-            return Future.successful(Right(Map.empty))
-
-        // Build source using And combinator when transactionId is provided
-        val source: UtxoSource = transactionId match
-            case Some(txId) => UtxoSource.FromAddress(address) && UtxoSource.FromTransaction(txId)
-            case None       => UtxoSource.FromAddress(address)
-
-        // Build the query
-        var query: UtxoQuery = UtxoQuery(source)
-
-        // Add minRequiredTotalAmount
-        query = minRequiredTotalAmount.fold(query)(amt => query.minTotal(amt))
-
-        // Add datum filter
-        query = datum.fold(query)(d => query && UtxoFilter.HasDatum(d))
-
-        // Add minAmount filter
-        query = minAmount.fold(query)(amt => query && UtxoFilter.MinLovelace(amt))
-
-        findUtxos(query)
-    }
-
 }
-
-/** @deprecated Use [[UtxoQueryWithReader]] instead */
-@deprecated("Use UtxoQueryWithReader instead", "0.14.2")
-type UtxoQueryWithProvider = UtxoQueryWithReader
-
-/** @deprecated Use [[UtxoQueryWithReader]] instead */
-@deprecated("Use UtxoQueryWithReader instead", "0.14.2")
-val UtxoQueryWithProvider = UtxoQueryWithReader
 
 /** Error returned when submitting a transaction fails.
   *
@@ -478,12 +410,6 @@ object SubmitError {
     // Type aliases for backwards compatibility
     type ConnectionError = NetworkSubmitError.ConnectionError
     val ConnectionError = NetworkSubmitError.ConnectionError
-
-    /** @deprecated Use ConnectionError instead */
-    @deprecated("Use ConnectionError instead", "0.14.2")
-    type NetworkError = NetworkSubmitError.ConnectionError
-    @deprecated("Use ConnectionError instead", "0.14.2")
-    val NetworkError = NetworkSubmitError.ConnectionError
 
     type AuthenticationError = NetworkSubmitError.AuthenticationError
     val AuthenticationError = NetworkSubmitError.AuthenticationError

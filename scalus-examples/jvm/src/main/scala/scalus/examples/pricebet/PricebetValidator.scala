@@ -1,6 +1,6 @@
 package scalus.examples.pricebet
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.Data

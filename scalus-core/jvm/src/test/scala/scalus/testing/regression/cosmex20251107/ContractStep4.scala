@@ -1,4 +1,6 @@
 package scalus.testing.regression.cosmex20251107.step4
+
+import scalus.compiler.Compile
 import scalus.*
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.toData

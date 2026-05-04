@@ -1,6 +1,6 @@
 package scalus.compiler.intrinsics
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{fail, Option}
 import scalus.compiler.UplcRepr
 import scalus.compiler.UplcRepresentation

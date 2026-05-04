@@ -1,6 +1,6 @@
 package scalus.compiler.test
 
-import scalus.Compile
+import scalus.compiler.Compile
 
 /** User code that calls SimpleContext trait methods — plugin redirects to SubstOps. */
 @Compile

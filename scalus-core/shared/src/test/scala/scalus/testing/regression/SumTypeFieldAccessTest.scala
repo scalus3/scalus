@@ -1,5 +1,7 @@
 package scalus.testing.regression
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.compile

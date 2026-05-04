@@ -1,5 +1,7 @@
 package scalus.patterns
 
+import scalus.compiler.Compile
+
 import scalus.uplc.builtin.Builtins
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.hex

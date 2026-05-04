@@ -1,6 +1,6 @@
 package scalus.examples.setbench
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.hex
 

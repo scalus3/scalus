@@ -1,5 +1,7 @@
 package scalus.examples.vesting
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{FromData, ToData}

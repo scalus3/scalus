@@ -191,17 +191,6 @@ enum ShelleyPaymentPart {
     def toHex: String = asHash.toString // Assuming Hash28 has proper toString
 }
 
-object ShelleyPaymentPart {
-
-    /** Create from key hash */
-    @deprecated("Use ShelleyPaymentPart.Key(hash) instead", "0.14.2")
-    def keyHash(hash: AddrKeyHash): ShelleyPaymentPart = Key(hash)
-
-    /** Create from script hash */
-    @deprecated("Use ShelleyPaymentPart.Script(hash) instead", "0.14.2")
-    def scriptHash(hash: ScriptHash): ShelleyPaymentPart = Script(hash)
-}
-
 /** The delegation part of a Shelley address - various ways to specify stake credentials */
 enum ShelleyDelegationPart {
     case Key(hash: StakeKeyHash)

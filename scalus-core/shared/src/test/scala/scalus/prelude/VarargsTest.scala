@@ -8,7 +8,7 @@ import scalus.uplc.eval.PlutusVM
 import scalus.uplc.*
 import scalus.uplc.Constant.Integer
 
-@scalus.Compile
+@scalus.compiler.Compile
 object VarargsTestObj {
 
     def pos(args: BigInt*): List[BigInt] = {
@@ -21,7 +21,7 @@ object VarargsTestObj {
 
 }
 
-@scalus.Compile
+@scalus.compiler.Compile
 object VarargsTestObj2 {
 
     def apply(args: BigInt*): BigInt = {

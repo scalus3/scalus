@@ -2,8 +2,8 @@ package scalus.testing.kit
 
 import org.scalacheck.{Arbitrary, Gen}
 import scalus.uplc.builtin.Builtins.{appendByteString, blake2b_224, blake2b_256}
-import scalus.uplc.builtin.{ByteString, Data}
-import scalus.cardano.address.{Address, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
+import scalus.uplc.builtin.ByteString
+import scalus.cardano.address.{ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.ArbitraryInstances.given
 import scalus.cardano.txbuilder.{RedeemerManagement, RedeemerPurpose, TransactionBuilder}
@@ -91,45 +91,6 @@ object TestUtil {
                 )
             Utxo(input, output)
         }
-
-    @deprecated("will be removed", "0.14.2")
-    def getScriptUtxo(tx: Transaction): (TransactionInput, TransactionOutput) = {
-        val (transactionOutput, index) = tx.body.value.outputs.view
-            .map(_.value)
-            .zipWithIndex
-            .find { (transactionOutput, _) => transactionOutput.address.hasScript }
-            .getOrElse(throw new Exception("No script output found in transaction"))
-
-        (TransactionInput(tx.id, index), transactionOutput)
-    }
-
-    @deprecated("will be removed", "0.14.2")
-    def findUtxoByAddressAndDatum(
-        tx: Transaction,
-        address: Address,
-        datum: Option[DatumOption] = None
-    ): Option[(TransactionInput, TransactionOutput)] = {
-        tx.body.value.outputs.view
-            .map(_.value)
-            .zipWithIndex
-            .find { (transactionOutput, _) =>
-                address == transactionOutput.address && (
-                  (datum, transactionOutput.datumOption) match
-                      case (Some(d1), Some(d2)) => d1.contentEquals(d2)
-                      case (None, None)         => true
-                      case _                    => false
-                )
-            }
-            .map { (transactionOutput, index) =>
-                (TransactionInput(tx.id, index), transactionOutput)
-            }
-    }
-
-    @deprecated("Use TransactionOutput.resolveDatum(tx) instead", "0.14.2")
-    def extractDatumFromOutput(
-        tx: Transaction,
-        output: TransactionOutput
-    ): Option[Data] = output.resolveDatum(tx)
 
     extension (tx: Transaction)
         /** Get all script contexts for all Plutus scripts in the transaction.

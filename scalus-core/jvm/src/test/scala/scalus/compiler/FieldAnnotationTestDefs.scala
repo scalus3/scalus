@@ -1,6 +1,6 @@
 package scalus.compiler
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.compiler.UplcRepresentation
 import scalus.uplc.builtin.ByteString
 

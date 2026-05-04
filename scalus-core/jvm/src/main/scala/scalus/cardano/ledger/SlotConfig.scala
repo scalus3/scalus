@@ -32,13 +32,4 @@ object SlotConfig {
       zeroSlot = 86400,
       slotLength = 1000
     )
-
-    @deprecated("Use mainnet instead", "0.14.1")
-    val Mainnet: SlotConfig = mainnet
-
-    @deprecated("Use preview instead", "0.14.1")
-    val Preview: SlotConfig = preview
-
-    @deprecated("Use preprod instead", "0.14.1")
-    val Preprod: SlotConfig = preprod
 }

@@ -182,42 +182,6 @@ object MachineParams {
         fromCostModels(CardanoInfo.mainnet.protocolParams.costModels, language, protocolVersion)
     }
 
-    /** Creates `MachineParams` from a Cardano CLI protocol parameters JSON.
-      *
-      * @param json
-      *   The Cardano CLI protocol parameters JSON
-      * @param plutus
-      *   The plutus version
-      * @return
-      *   The machine parameters
-      */
-    @deprecated("Use fromProtocolParams and ProtocolParams.fromCardanoCliJson instead", "0.14.2")
-    def fromCardanoCliProtocolParamsJson(
-        json: String,
-        plutus: Language
-    ): MachineParams = {
-        val pparams = ProtocolParams.fromCardanoCliJson(json)
-        fromProtocolParams(pparams, plutus)
-    }
-
-    /** Creates `MachineParams` from a Blockfrost protocol parameters JSON.
-      *
-      * @param json
-      *   The Blockfrost protocol parameters JSON
-      * @param plutus
-      *   The plutus version
-      * @return
-      *   The machine parameters
-      */
-    @deprecated("Use fromProtocolParams and ProtocolParams.fromBlockfrostJson instead", "0.14.2")
-    def fromBlockfrostProtocolParamsJson(
-        json: String,
-        plutus: Language
-    ): MachineParams = {
-        val pparams = ProtocolParams.fromBlockfrostJson(json)
-        fromProtocolParams(pparams, plutus)
-    }
-
     /** Creates [[MachineParams]] from a [[scalus.cardano.ledger.ProtocolParams]] and a
       * [[scalus.cardano.ledger.Language]]
       */

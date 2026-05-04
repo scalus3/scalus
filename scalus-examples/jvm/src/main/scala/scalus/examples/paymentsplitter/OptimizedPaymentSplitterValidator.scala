@@ -1,5 +1,7 @@
 package scalus.examples.paymentsplitter
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.Value.*

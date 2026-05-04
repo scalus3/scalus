@@ -1,6 +1,6 @@
 package scalus.utxocells
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.compiler.{Ignore, OnChainSubstitute}
 import scalus.uplc.builtin.ByteString
 import scalus.cardano.onchain.plutus.v1.{Address, PolicyId, PosixTime, PubKeyHash, Value}

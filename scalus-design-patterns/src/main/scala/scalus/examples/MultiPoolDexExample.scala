@@ -1,5 +1,7 @@
 package scalus.examples
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.compiler.Options

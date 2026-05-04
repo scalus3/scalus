@@ -9,9 +9,8 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.Constant
 import scalus.uplc.DefaultFun
 import scalus.uplc.DefaultUni
-import scalus.uplc.Term
 import scalus.utils.Utils
-import scalus.utils.{Pretty, Style as PrettyStyle}
+import scalus.utils.Style as PrettyStyle
 
 /** Pretty printers.
   *
@@ -27,14 +26,6 @@ import scalus.utils.{Pretty, Style as PrettyStyle}
   * }}}
   */
 object PrettyPrinter:
-    /** @deprecated Use scalus.utils.Style instead */
-    @deprecated("Use scalus.utils.Style instead", "0.14.2")
-    type Style = scalus.utils.Style
-
-    /** @deprecated Use scalus.utils.Style instead */
-    @deprecated("Use scalus.utils.Style instead", "0.14.2")
-    val Style = scalus.utils.Style
-
     def inParens(d: Doc): Doc = char('(') + d + char(')')
     def inBraces(d: Doc): Doc = char('{') + d + char('}')
     def inBrackets(d: Doc): Doc = char('[') + d + char(']')
@@ -319,13 +310,3 @@ object PrettyPrinter:
             s"$major.$minor.$patch"
           ) & pretty(p.term, PrettyStyle.Normal)
         )
-
-    /** @deprecated Use Pretty[Term] instance instead */
-    @deprecated("Use Pretty[Term] instance from Term companion object instead", "0.14.2")
-    def pretty(term: Term, style: PrettyStyle): Doc =
-        Pretty[Term].pretty(term, style)
-
-    /** @deprecated Use Pretty[Program] instance instead */
-    @deprecated("Use Pretty[Program] instance from Program companion object instead", "0.14.2")
-    def pretty(program: uplc.Program, style: PrettyStyle): Doc =
-        Pretty[uplc.Program].pretty(program, style)

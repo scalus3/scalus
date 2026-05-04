@@ -1,6 +1,6 @@
 package scalus.cardano.onchain.plutus.v3
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.uplc.builtin
 import scalus.uplc.builtin.Builtins.*

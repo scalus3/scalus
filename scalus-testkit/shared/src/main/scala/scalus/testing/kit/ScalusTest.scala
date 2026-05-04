@@ -3,13 +3,11 @@ package scalus.testing.kit
 import org.scalacheck.Arbitrary
 import org.scalatest.Assertions
 import scalus.*
-import scalus.uplc.builtin.Builtins.blake2b_224
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.ExUnits
 import scalus.cardano.ledger.Transaction
-import scalus.cardano.ledger.TransactionInput
 import scalus.cardano.txbuilder.TxBuilderException
 import scalus.cardano.onchain.plutus.v1.Credential.PubKeyCredential
 import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
@@ -22,17 +20,6 @@ import scalus.compiler.Options
 import scalus.compiler.sir.SIR
 import scalus.uplc.*
 import scalus.uplc.eval.*
-
-@deprecated("Use TestUtil instead", "0.14.2")
-object Mock:
-    def rootKeyHash: ByteString = TestUtil.rootKeyHash
-    def rootTxHash: ByteString = TestUtil.rootTxHash
-    def mockPubKeyHash(variation: BigInt): PubKeyHash = TestUtil.mockPubKeyHash(variation)
-    def mockScriptHash(variation: BigInt): ValidatorHash = TestUtil.mockScriptHash(variation)
-    def mockTxOutRef(variation: BigInt, idx: BigInt): TxOutRef =
-        TestUtil.mockTxOutRef(variation, idx)
-    def mockTxInput(variation: BigInt, idx: BigInt): TransactionInput =
-        TestUtil.mockTxInput(variation, idx)
 
 trait ScalusTest extends ArbitraryInstances, Assertions {
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
@@ -84,9 +71,6 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
         def runWithDebug(scriptContext: ScriptContext): Result =
             val appliedScript = self $ scriptContext.toData
             appliedScript.evaluateDebug
-
-        @deprecated("will be removed", "0.14.2")
-        def hash: ValidatorHash = blake2b_224(ByteString.fromArray(3 +: self.cborEncoded))
 
     protected def random[A: Arbitrary]: A = {
         Arbitrary.arbitrary[A].sample.get

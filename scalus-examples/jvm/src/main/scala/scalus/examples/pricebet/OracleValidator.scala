@@ -1,6 +1,6 @@
 package scalus.examples.pricebet
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.examples.pricebet.MintOracleRedeemer.{Burn, Mint}
 import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}

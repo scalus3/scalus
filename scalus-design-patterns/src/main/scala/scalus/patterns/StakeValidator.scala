@@ -1,5 +1,7 @@
 package scalus.patterns
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.{Credential, Lovelace, Redeemer, ScriptPurpose, TxInfo, ValidatorHash}

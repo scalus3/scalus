@@ -1,5 +1,7 @@
 package scalus
 
+import scalus.compiler.{Compile, Ignore}
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.compile

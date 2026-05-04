@@ -12,7 +12,7 @@ import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.GovernanceActionId
 import scalus.cardano.onchain.plutus.prelude.{asScalus, List, SortedMap}
 
-import scala.annotation.{nowarn, unused}
+import scala.annotation.nowarn
 import scala.collection.mutable
 import scala.math.BigInt
 
@@ -618,21 +618,6 @@ object LedgerToPlutusTranslation {
         )
     }
 
-    /** Build TxInfo for Plutus V1 script contexts.
-      *
-      * @deprecated
-      *   Use getTxInfoV1 without datums parameter. Datums are now extracted from the transaction
-      *   witness set directly.
-      */
-    @deprecated("Use getTxInfoV1 without datums parameter", "0.14.2")
-    def getTxInfoV1(
-        tx: Transaction,
-        @unused datums: collection.Seq[(ByteString, Data)],
-        utxos: Map[TransactionInput, TransactionOutput],
-        slotConfig: SlotConfig,
-        protocolVersion: MajorProtocolVersion
-    ): v1.TxInfo = getTxInfoV1(tx, utxos, slotConfig, protocolVersion)
-
     /** Build TxInfo for Plutus V2 script contexts.
       *
       * V2 TxInfo includes additional fields like reference inputs and an associative map structure
@@ -678,21 +663,6 @@ object LedgerToPlutusTranslation {
           id = v1.TxId(tx.id)
         )
     }
-
-    /** Build TxInfo for Plutus V2 script contexts.
-      *
-      * @deprecated
-      *   Use getTxInfoV2 without datums parameter. Datums are now extracted from the transaction
-      *   witness set directly.
-      */
-    @deprecated("Use getTxInfoV2 without datums parameter", "0.14.2")
-    def getTxInfoV2(
-        tx: Transaction,
-        @unused datums: collection.Seq[(ByteString, Data)],
-        utxos: Map[TransactionInput, TransactionOutput],
-        slotConfig: SlotConfig,
-        protocolVersion: MajorProtocolVersion
-    ): v2.TxInfo = getTxInfoV2(tx, utxos, slotConfig, protocolVersion)
 
     /** Build TxInInfo for Plutus V3 script contexts.
       */
@@ -766,21 +736,6 @@ object LedgerToPlutusTranslation {
               .getOrElse(scalus.cardano.onchain.plutus.prelude.Option.None)
         )
     }
-
-    /** Build TxInfo for Plutus V3 script contexts.
-      *
-      * @deprecated
-      *   Use getTxInfoV3 without datums parameter. Datums are now extracted from the transaction
-      *   witness set directly.
-      */
-    @deprecated("Use getTxInfoV3 without datums parameter", "0.14.2")
-    def getTxInfoV3(
-        tx: Transaction,
-        @unused datums: collection.Seq[(ByteString, Data)],
-        utxos: Map[TransactionInput, TransactionOutput],
-        slotConfig: SlotConfig,
-        protocolVersion: MajorProtocolVersion
-    ): v3.TxInfo = getTxInfoV3(tx, utxos, slotConfig, protocolVersion)
 
     /** Get script purpose for Plutus V1/V2 contexts from redeemer.
       */

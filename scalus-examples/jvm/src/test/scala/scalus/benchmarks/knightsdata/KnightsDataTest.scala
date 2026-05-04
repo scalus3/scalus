@@ -1,5 +1,7 @@
 package scalus.benchmarks.knightsdata
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.{multiplyInteger, remainderInteger}

@@ -6,7 +6,7 @@ import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef, Validator}
 import scalus.cardano.onchain.plutus.{v1, v2}
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.Compile
+import scalus.compiler.Compile
 
 type Preimage = ByteString
 type Secret = ByteString

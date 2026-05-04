@@ -1,6 +1,6 @@
 package scalus.examples.decentralizedidentity
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Builtins.blake2b_224
 import scalus.uplc.builtin.Data.{FromData, ToData}

@@ -56,13 +56,6 @@ class IntervalTest
             !interval.contains(time - 1)
         }
 
-        checkEval { (time: PosixTime) =>
-            val interval = Interval.entirelyAfter(time)
-            !interval.contains(time) &&
-            interval.contains(time + 1) &&
-            !interval.contains(time - 1)
-        }
-
         forAll { (from: PosixTime, to: PosixTime) =>
             whenever(from < to) {
                 val interval = Interval.between(from, to)

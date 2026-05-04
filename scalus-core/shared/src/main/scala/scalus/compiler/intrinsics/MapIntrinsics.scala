@@ -1,6 +1,6 @@
 package scalus.compiler.intrinsics
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, SortedMap}
 import scalus.compiler.UplcRepresentation
 import scalus.compiler.intrinsics.IntrinsicHelpers.*

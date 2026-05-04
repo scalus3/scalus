@@ -1,5 +1,7 @@
 package scalus.examples
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.{ByteString, Data, FromData}
 import scalus.uplc.builtin.ByteString.utf8

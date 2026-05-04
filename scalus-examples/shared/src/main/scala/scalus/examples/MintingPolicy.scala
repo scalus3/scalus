@@ -9,7 +9,7 @@ import scalus.compiler.{compile, Options}
 import scalus.cardano.onchain.plutus.v1.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.prelude.Option.*
-import scalus.{Compile, Ignore}
+import scalus.compiler.{Compile, Ignore}
 
 case class TxInInfoTxOutRefOnly(txInInfoOutRef: TxOutRef)
 

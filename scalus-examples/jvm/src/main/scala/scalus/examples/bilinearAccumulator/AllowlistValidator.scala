@@ -1,6 +1,6 @@
 package scalus.examples.bilinearAccumulator
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.compiler.Options
 import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.{Builtins, ByteString, Data}

@@ -1047,18 +1047,6 @@ object BlockfrostProvider {
     /** Local Yaci DevKit admin API URL */
     val localAdminUrl = "http://localhost:10000/local-cluster/api"
 
-    @deprecated("Use mainnetUrl instead", "0.14.1")
-    val MainnetUrl: String = mainnetUrl
-
-    @deprecated("Use previewUrl instead", "0.14.1")
-    val PreviewUrl: String = previewUrl
-
-    @deprecated("Use preprodUrl instead", "0.14.1")
-    val PreprodUrl: String = preprodUrl
-
-    @deprecated("Use localUrl instead", "0.14.1")
-    val LocalUrl: String = localUrl
-
     def parseUtxos(json: String): Utxos = {
         val utxosArray = ujson.read(json, trace = false).arr.toSeq
         parseUtxoItems(utxosArray)

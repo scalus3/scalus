@@ -81,33 +81,6 @@ case class ImmutableEmulator(
             Future.successful(None)
     }
 
-    /** Create a [[scalus.cardano.node.BlockchainProvider]] snapshot.
-      *
-      * Submit through this provider works but discards the resulting state changes (the provider
-      * cannot update the immutable emulator).
-      *
-      * @deprecated
-      *   Use [[asReader]] instead for read-only access. The `submit` method on this provider
-      *   discards state changes which is misleading.
-      */
-    @deprecated("Use asReader instead", "0.14.2")
-    def asProvider: BlockchainProvider = new BlockchainProvider {
-        override def executionContext: ExecutionContext = ExecutionContext.global
-        override def cardanoInfo: CardanoInfo = ImmutableEmulator.this.cardanoInfo
-        override def fetchLatestParams: Future[ProtocolParams] =
-            Future.successful(env.params)
-        override def submit(
-            transaction: Transaction
-        ): Future[Either[SubmitError, TransactionHash]] =
-            Future.successful(ImmutableEmulator.this.submit(transaction).map(_._1))
-        override def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
-            Future.successful(ImmutableEmulator.this.findUtxos(query))
-        override def currentSlot: Future[SlotNo] =
-            Future.successful(env.slot)
-        def getDatum(datumHash: DataHash): Future[Option[Data]] =
-            Future.successful(None)
-    }
-
     /** Convert to a mutable [[scalus.cardano.node.Emulator]]. */
     def toEmulator: Emulator = {
         val context = Context(env = env, slotConfig = slotConfig, evaluatorMode = evaluatorMode)

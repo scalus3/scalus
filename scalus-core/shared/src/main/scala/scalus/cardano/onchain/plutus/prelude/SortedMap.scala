@@ -1,6 +1,6 @@
 package scalus.cardano.onchain.plutus.prelude
 
-import scalus.{Compile, Ignore}
+import scalus.compiler.{Compile, Ignore}
 import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.fromData

@@ -1,5 +1,7 @@
 package scalus.testing.regression.match20251022
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.compile

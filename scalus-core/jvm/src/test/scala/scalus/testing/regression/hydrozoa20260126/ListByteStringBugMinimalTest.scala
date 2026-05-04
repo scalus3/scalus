@@ -1,5 +1,7 @@
 package scalus.testing.regression.hydrozoa20260126
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Builtins.{bls12_381_G2_add, bls12_381_G2_uncompress}
@@ -56,7 +58,7 @@ class ListByteStringBugMinimalTest extends AnyFunSuite {
         val setup = Setup(items = List(g2Point))
         val data = setup.toData
 
-        val compiled = Compiler.compile(Setup.process)
+        val compiled = scalus.compiler.compile(Setup.process)
         val uplc = compiled.toUplcOptimized(generateErrorTraces = true)
         val applied = uplc $ Term.Const(Constant.Data(data))
 

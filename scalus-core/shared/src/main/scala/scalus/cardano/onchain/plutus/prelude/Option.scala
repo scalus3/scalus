@@ -1,7 +1,7 @@
 package scalus.cardano.onchain.plutus.prelude
 
-import scalus.Compile
-import scalus.Ignore
+import scalus.compiler.Compile
+import scalus.compiler.Ignore
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.builtin.{Data, FromData, ToData}

@@ -1,6 +1,6 @@
 package scalus.examples
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.bls12_381.{G1Element, MLResult}

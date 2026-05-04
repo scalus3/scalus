@@ -191,7 +191,7 @@ trait ArbitraryInstances:
                   "BLS12_381_MlResult is not a valid constant type, it should be used in terms only"
                 )
             case DefaultUni.BuiltinValue =>
-                Gen.const(Constant.BuiltinValue(builtin.BuiltinValue.empty))
+                Gen.const(Constant.BuiltinValue(scalus.uplc.builtin.BuiltinValue.empty))
             case DefaultUni.Apply(_, _) =>
                 // This case should not happen, as we only generate constants for the known types
                 throw new IllegalArgumentException(

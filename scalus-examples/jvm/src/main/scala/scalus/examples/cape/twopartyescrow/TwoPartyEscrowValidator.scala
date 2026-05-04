@@ -1,5 +1,7 @@
 package scalus.examples.cape.twopartyescrow
 
+import scalus.compiler.Compile
+
 import scalus.cardano.onchain
 import scalus.cardano.onchain.plutus
 import scalus.cardano.onchain.plutus.prelude.*

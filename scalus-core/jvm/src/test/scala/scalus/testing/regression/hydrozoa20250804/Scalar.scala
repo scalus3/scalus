@@ -4,7 +4,7 @@ import scalus.uplc.builtin.Builtins.{byteStringToInteger, integerToByteString}
 import scalus.uplc.builtin.ByteString
 import scalus.cardano.onchain.plutus.prelude.{require, Option}
 import scalus.cardano.onchain.plutus.prelude.Option.{None, Some}
-import scalus.Compile
+import scalus.compiler.Compile
 
 import scala.annotation.tailrec
 

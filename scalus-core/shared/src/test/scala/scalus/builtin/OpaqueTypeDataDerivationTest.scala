@@ -1,7 +1,7 @@
 package scalus.builtin
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Data.*
 
 // Opaque type for testing FromData/ToData derivation with opaque type fields

@@ -1,5 +1,7 @@
 package scalus.patterns
 
+import scalus.compiler.Compile
+
 import scalus.*
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.ledger.{Script, ScriptHash}

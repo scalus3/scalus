@@ -1,5 +1,7 @@
 package scalus.testing.regression.booleanor20251105
 
+import scalus.compiler.Compile
+
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data

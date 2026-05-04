@@ -1,5 +1,7 @@
 package scalus.testing.regression
 
+import scalus.compiler.Compile
+
 import scala.language.implicitConversions
 import scalus.*
 import scalus.cardano.onchain.plutus.prelude.*
@@ -53,7 +55,7 @@ class ClausifyMinTest extends AnyFunSuite:
 
     test("fail as foirst argument in branch") {
         import Min202507171.*
-        val sir = Compiler
+        val sir = scalus.compiler
             .compile {
 
                 val x = doClause(Tree.One(BigInt(1)), (List.empty, List.empty))
@@ -69,7 +71,7 @@ class ClausifyMinTest extends AnyFunSuite:
 
     test("insertUniqueOrdered should work") {
         import Min202507172.*
-        val sir = Compiler
+        val sir = scalus.compiler
             .compile {
                 val lrVars: (List[BigInt], List[BigInt]) = (List.single(BigInt(1)), List.empty)
                 List.empty.insertUniqueOrdered(lrVars)

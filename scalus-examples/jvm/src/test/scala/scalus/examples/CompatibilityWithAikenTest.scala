@@ -18,7 +18,7 @@ import scalus.uplc.eval.Result
   */
 case class PaymentSplitterRedeemer(message: String)
 
-@scalus.Compile
+@scalus.compiler.Compile
 object PaymentSplitterRedeemer {
     given ToData[PaymentSplitterRedeemer] = ToData.derived
     given FromData[PaymentSplitterRedeemer] = FromData.derived
@@ -26,7 +26,7 @@ object PaymentSplitterRedeemer {
 
 case class PaymentSplitterDatum(owner: ByteString)
 
-@scalus.Compile
+@scalus.compiler.Compile
 object PaymentSplitterDatum {
     given ToData[PaymentSplitterDatum] = ToData.derived
     given FromData[PaymentSplitterDatum] = FromData.derived

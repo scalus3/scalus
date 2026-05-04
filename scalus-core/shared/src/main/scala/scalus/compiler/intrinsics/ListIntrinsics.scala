@@ -1,6 +1,6 @@
 package scalus.compiler.intrinsics
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{List, PairList}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.compiler.sir.{SIRPosition, SIRType}

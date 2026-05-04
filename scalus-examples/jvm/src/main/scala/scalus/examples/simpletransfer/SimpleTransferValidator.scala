@@ -1,6 +1,6 @@
 package scalus.examples.simpletransfer
 
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.{Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.PubKeyHash
 import scalus.cardano.onchain.plutus.v2.OutputDatum
