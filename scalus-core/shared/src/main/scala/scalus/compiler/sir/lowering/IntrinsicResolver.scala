@@ -63,59 +63,30 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrList",
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption"
         )
-        // Stamp TypeVars Transparent so native values pass through without implicit Data
-        // conversion. HO function arguments (e.g. Eq in contains) are explicitly wrapped with
-        // toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
-        //
-        // UplcConstrListOps and UplcConstrOptionOps carry author-written `@UplcRepr(TypeVar(...))`
-        // annotations and bypass blanket stamping so the source intent is preserved:
+        // All intrinsic modules carry author-written `@UplcRepr(TypeVar(...))` annotations on
+        // their type parameters, so no blanket post-load stamping is needed. HO function
+        // arguments (e.g. Eq in contains) are explicitly wrapped with toDefaultTypeVarRepr in
+        // the intrinsic body to convert to Fixed (Data) repr.
         //   - IntrinsicsUplcConstrList:    `@UplcRepr(TypeVar(Unwrapped))`   (bytes at concrete default)
         //   - IntrinsicsUplcConstrOption:  `@UplcRepr(TypeVar(Transparent))` (bytes pass through)
-        // NativeListOps still uses the legacy blanket-Transparent path.
-        modules.map { (name, module) =>
-            if name == NativeListOps then name -> stampTransparent(module)
-            else name -> module
-        }
-    }
-
-    private def stampTransparent(module: Module): Module = {
-        val transparentDefs = module.defs.map { binding =>
-            val newValue = SIR.mapTypeVars(
-              binding.value,
-              _.copy(kind = SIRType.TypeVarKind.Transparent)
-            )
-            val newTp = SIRType.mapTypeVars(
-              binding.tp,
-              _.copy(kind = SIRType.TypeVarKind.Transparent)
-            )
-            Binding(binding.name, newTp, newValue)
-        }
-        module.copy(defs = transparentDefs)
+        //   - IntrinsicsNativeList:        `@UplcRepr(TypeVar(Transparent))` (bytes pass through)
+        modules
     }
 
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
       * intrinsic modules, these are NOT used for provider substitution.
       *
-      * `UplcConstrListOperations` and `UplcConstrOptionOperations` carry per-typeparam
-      * `@UplcRepr(TypeVar(Transparent))` so their TypeVars come through with author-written kinds,
-      * matching the dispatcher annotations and avoiding the abstract-A `Transparent → Unwrapped`
-      * boundary at standalone-lowered support-op call sites. `NativeListOperations` is still on the
-      * legacy blanket-Transparent path until Phase 4 migrates it.
+      * All support modules carry author-written `@UplcRepr(TypeVar(...))` annotations on their
+      * type parameters, so no blanket post-load stamping is needed. For HO methods that take
+      * pre-compiled functions (like contains with Eq), the dispatcher wraps the HO function with
+      * representation conversion adapters.
       */
     def defaultSupportModules: Map[String, Module] = {
-        val modules = scalus.compiler.compiledModules(
+        scalus.compiler.compiledModules(
           "scalus.compiler.intrinsics.NativeListOperations",
           "scalus.compiler.intrinsics.UplcConstrListOperations",
           "scalus.compiler.intrinsics.UplcConstrOptionOperations"
         )
-        // Skip stamping for modules whose type parameters carry @UplcRepr annotations.
-        // For HO methods that take pre-compiled functions (like contains with Eq), the
-        // dispatcher wraps the HO function with representation conversion adapters.
-        modules.map { (name, module) =>
-            if name == "scalus.compiler.intrinsics.NativeListOperations" then
-                name -> stampTransparent(module)
-            else name -> module
-        }
     }
 
     // Representation name constants for registry lookup
