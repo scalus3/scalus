@@ -2865,14 +2865,25 @@ object LoweredValue {
                 val byRepresentation =
                     nonNothingValues.groupBy(_.representation).map((k, v) => (k, v.length)).toMap
                 val nonErrored = byRepresentation.removed(ErrorRepresentation)
-                if nonErrored.isEmpty then byRepresentation.head._1
+                if nonErrored.isEmpty then
+                    // Deterministic pick when only ErrorRepresentation remains: smallest stableKey.
+                    byRepresentation.keys.minBy(_.stableKey)
                 else {
                     val compatibleOn =
                         nonErrored.filter((lw, c) => lw.isCompatibleWithType(targetType))
                     if compatibleOn.isEmpty
                     then lctx.typeGenerator(targetType).defaultRepresentation(targetType)
                     else {
-                        val candidates = compatibleOn.toSeq.sortBy(-_._2)
+                        // Deterministic ordering: by descending count, then by stableKey ascending.
+                        // Map iteration order is non-deterministic across JVM runs (TypeProxy
+                        // identity-hash + hash-Map iteration), so an unstable tie-break leaks that
+                        // non-determinism into representation choice — making lowering output
+                        // depend on identity-hash randomness, which is observable as flaky
+                        // budget assertions and intermittent miscompilations downstream.
+                        // The lexicographic stableKey tie-break here is a stopgap; a principled
+                        // representation preference (UplcConstr > Data) is the planned follow-up.
+                        val candidates =
+                            compatibleOn.toSeq.sortBy { case (r, c) => (-c, r.stableKey) }
                         candidates
                             .find((r, c) => values.forall(v => r.isCompatibleWithType(v.sirType)))
                             .map(_._1)

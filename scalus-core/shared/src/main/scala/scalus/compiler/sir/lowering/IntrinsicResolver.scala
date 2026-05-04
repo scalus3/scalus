@@ -66,9 +66,14 @@ object IntrinsicResolver {
         // Stamp TypeVars Transparent so native values pass through without implicit Data
         // conversion. HO function arguments (e.g. Eq in contains) are explicitly wrapped with
         // toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
+        //
+        // UplcConstrListOps and UplcConstrOptionOps carry author-written `@UplcRepr(TypeVar(...))`
+        // annotations and bypass blanket stamping so the source intent is preserved:
+        //   - IntrinsicsUplcConstrList:    `@UplcRepr(TypeVar(Unwrapped))`   (bytes at concrete default)
+        //   - IntrinsicsUplcConstrOption:  `@UplcRepr(TypeVar(Transparent))` (bytes pass through)
+        // NativeListOps still uses the legacy blanket-Transparent path.
         modules.map { (name, module) =>
-            if name == NativeListOps || name == UplcConstrListOps || name == UplcConstrOptionOps
-            then name -> stampTransparent(module)
+            if name == NativeListOps then name -> stampTransparent(module)
             else name -> module
         }
     }
@@ -601,8 +606,17 @@ object IntrinsicResolver {
       * different role (they live in the declaration and are bound to concrete types at use sites).
       */
     private def rewriteIntrinsicExtVarTypeVars(sir: SIR): SIR = {
+        // Only override Fixed (the scalus-plugin's broken default). Preserve author-written
+        // Transparent/Unwrapped on intrinsic-module typeparams so the lowering can act on the
+        // declared semantic ("bytes are at concrete-default form" for Unwrapped, etc.).
         def transparentize(tp: SIRType): SIRType =
-            SIRType.mapTypeVars(tp, _.copy(kind = SIRType.TypeVarKind.Transparent))
+            SIRType.mapTypeVars(
+              tp,
+              tv =>
+                  if tv.kind == SIRType.TypeVarKind.Fixed
+                  then tv.copy(kind = SIRType.TypeVarKind.Transparent)
+                  else tv
+            )
         def goE(e: AnnotatedSIR): AnnotatedSIR = e match
             case ev @ SIR.ExternalVar(moduleName, name, tp, anns)
                 if isIntrinsicDispatchedModule(moduleName) =>
@@ -894,9 +908,35 @@ object IntrinsicResolver {
         val cleanedFilledTypes =
             lctx.typeUnifyEnv.filledTypes -- bindingInternalTvs
 
-        // Role 2: unify restType (signature after self) with appType to bind output TypeVars
+        // Role 2: unify the binding's curried result with `appType` to bind output TypeVars.
+        // `appType` may be either the fully-applied result (e.g. `List[ChessSet]` from
+        // `tryResolveFull`) or the still-curried result of a single-step apply (e.g.
+        // `(A→B) → List[B]` from `tryResolve` on a partial application). `restType` is the
+        // binding signature after stripping the self parameter (e.g. `(A→B) → List[B]` for
+        // map). Without depth-aligned stripping, a fully-applied call site with
+        // `appType = List[ChessSet]` against `restType = (A→B) → List[B]` would fail to
+        // unify shapes; the eqClasses pass below would then incorrectly inherit B from A's
+        // equivalence class, producing `B → SolutionEntry` for
+        // `descAndNo.quicksort.map { _.board }` (KnightsTest:475 heisenbug). Conversely, on
+        // the single-step partial-app path, `appType` is *itself* a function type and we
+        // must NOT strip restType past it, or unification fails and binding-internal output
+        // typevars stay unrefreshed. Strip restType's Fun layers down to match appType's
+        // own Fun depth.
+        def funDepth(tp: SIRType): Int = tp match
+            case SIRType.Fun(_, out)                   => 1 + funDepth(out)
+            case SIRType.TypeProxy(ref) if ref ne null => funDepth(ref)
+            case _                                     => 0
+        def stripFunDepth(tp: SIRType, n: Int): SIRType =
+            if n <= 0 then tp
+            else
+                tp match
+                    case SIRType.Fun(_, out)                   => stripFunDepth(out, n - 1)
+                    case SIRType.TypeProxy(ref) if ref ne null => stripFunDepth(ref, n)
+                    case _                                     => tp
+        val toStrip = (funDepth(restType) - funDepth(appType)).max(0)
+        val restResult = stripFunDepth(restType, toStrip)
         val outputBindings: Map[SIRType.TypeVar, SIRType] =
-            SIRUnify.topLevelUnifyType(restType, appType, SIRUnify.Env.empty) match
+            SIRUnify.topLevelUnifyType(restResult, appType, SIRUnify.Env.empty) match
                 case SIRUnify.UnificationSuccess(env, _) => env.filledTypes
                 case _                                   => Map.empty
         // Build the final filledTypes map starting from the cleaned env.

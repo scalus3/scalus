@@ -548,7 +548,21 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 import SIRType.TypeVarKind.*
                 tvr.kind match
                     case Transparent =>
-                        RepresentationProxyLoweredValue(input, representation, pos)
+                        // Transparent passthrough: bytes came in under a TypeVar whose concrete
+                        // shape is determined by the caller's substitution (not by this generator).
+                        // We deliberately do NOT wrap in a Proxy asserting `representation` here:
+                        // a TypeVar(Transparent) value's actual byte shape is unknown to us, and
+                        // relabeling it as e.g. ProdDataList when upstream put a UplcConstr there
+                        // produces silent miscompilations downstream (the original KnightsTest:475
+                        // heisenbug — wrong eqClass inheritance fed a SolutionEntry-shaped repr to
+                        // a ChessSet-encoded value). Callers that ask for a concrete product repr
+                        // against a Transparent TypeVar input must arrange the substitution at the
+                        // dispatcher boundary (typeVarReprEnv) before this point, so that the
+                        // input's `.representation` is already concrete by the time this method
+                        // runs. Returning `input` unchanged is safe for the only remaining cases
+                        // that reach this branch (HO-lambda body lowering inside intrinsics, where
+                        // the outer wrapper handles repr reconciliation).
+                        input
                     case Unwrapped =>
                         // Source bytes are in defaultRepresentation form for input.sirType.
                         val sourceUnderlying = defaultRepresentation(input.sirType)
