@@ -608,15 +608,28 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
       // Removed deprecated 0.14.x members; safe to drop because they shipped deprecated in 0.15.0.
       mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_BigInteger"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_Integer"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_Long"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.LegacyScalusTransactionEvaluator"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.LegacyScalusTransactionEvaluator$"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.bloxbean.ScalusTransactionEvaluator.getCostMdls"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.bloxbean.ScalusTransactionEvaluator.costMdls"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.bloxbean.ScalusTransactionEvaluator.evaluateTx"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.bloxbean.ScalusTransactionEvaluator.evaluateTxWithContexts"),
+        ProblemFilters
+            .exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_BigInteger"),
+        ProblemFilters
+            .exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_Integer"),
+        ProblemFilters
+            .exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_Long"),
+        ProblemFilters
+            .exclude[MissingClassProblem]("scalus.bloxbean.LegacyScalusTransactionEvaluator"),
+        ProblemFilters
+            .exclude[MissingClassProblem]("scalus.bloxbean.LegacyScalusTransactionEvaluator$"),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.bloxbean.ScalusTransactionEvaluator.getCostMdls"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.bloxbean.ScalusTransactionEvaluator.costMdls"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.bloxbean.ScalusTransactionEvaluator.evaluateTx"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.bloxbean.ScalusTransactionEvaluator.evaluateTxWithContexts"
+        ),
       ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
