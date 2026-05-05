@@ -63,23 +63,31 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrList",
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption"
         )
-        // All intrinsic modules carry author-written `@UplcRepr(TypeVar(...))` annotations on
-        // their type parameters, so no blanket post-load stamping is needed. HO function
-        // arguments (e.g. Eq in contains) are explicitly wrapped with toDefaultTypeVarRepr in
-        // the intrinsic body to convert to Fixed (Data) repr.
+        // Intrinsic modules that need a non-default TypeVar kind carry author-written
+        // `@UplcRepr(TypeVar(...))` annotations on their type parameters, so no blanket
+        // post-load stamping is needed. HO function arguments (e.g. Eq in contains) are
+        // explicitly wrapped with toDefaultTypeVarRepr in the intrinsic body to convert to
+        // Fixed (Data) repr.
         //   - IntrinsicsUplcConstrList:    `@UplcRepr(TypeVar(Unwrapped))`   (bytes at concrete default)
         //   - IntrinsicsUplcConstrOption:  `@UplcRepr(TypeVar(Transparent))` (bytes pass through)
         //   - IntrinsicsNativeList:        `@UplcRepr(TypeVar(Transparent))` (bytes pass through)
+        // Other intrinsic modules (e.g. BuiltinListOperations, BuiltinPairListOperations,
+        // SortedMapIntrinsics, AssocMapIntrinsics) load with default `Fixed` TypeVars — they
+        // operate on Data-encoded inputs and don't need passthrough semantics.
         modules
     }
 
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
       * intrinsic modules, these are NOT used for provider substitution.
       *
-      * All support modules carry author-written `@UplcRepr(TypeVar(...))` annotations on their
-      * type parameters, so no blanket post-load stamping is needed. For HO methods that take
-      * pre-compiled functions (like contains with Eq), the dispatcher wraps the HO function with
-      * representation conversion adapters.
+      * Methods that need a non-default TypeVar kind carry author-written
+      * `@UplcRepr(TypeVar(...))` annotations on their type parameters, so no blanket post-load
+      * stamping is needed. `NativeListOperations.find` is intentionally left unannotated (loads
+      * with default `Fixed`) — its `Option.None`/`Option.Some` if-then-else body has a
+      * known interaction with Constr emission that the annotation path doesn't yet handle (see
+      * its scaladoc for details). For HO methods that take pre-compiled functions (like
+      * contains with Eq), the dispatcher wraps the HO function with representation conversion
+      * adapters.
       */
     def defaultSupportModules: Map[String, Module] = {
         scalus.compiler.compiledModules(
