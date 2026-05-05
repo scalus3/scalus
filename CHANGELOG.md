@@ -1,41 +1,88 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 (2026-05-05)
 
 ### Added
 
-- `@UplcRepr` annotation propagation through lambda parameters and return types: function/extension
-  param annotations are honoured in `lvApply`, lambda body repr is pinned to the class-level
-  `@UplcRepr` on the return type, and product-field reprs flow through `IfThenElse`/`Apply`
-  target-type propagation
-- `appendedAll` intrinsic for `UplcConstr` lists — eliminates per-element re-encoding when
-  concatenating two `@UplcRepr(UplcConstr)` lists (used by `Queue` in the Knights benchmark)
-- native `UplcConstr` Option intrinsics — `isDefined`, `isEmpty`, `get`, `getOrElse`, `map`,
-  `flatMap`, `filter`, `exists`, `forall` now have native-Constr code paths
-- type-level `@UplcRepr(UplcConstr)` annotations recognised by SIR generators
-  (`ProductCaseUplcConstrSirTypeGenerator`, `SumCaseUplcConstrSirTypeGenerator`)
+- `@UplcRepr` annotation system for fine-grained UPLC type representation control: opt types into
+  native `UplcConstr` representation, propagate the annotation through lambda parameters/return
+  types, intrinsic return types, `genSelect` field types, and `IfThenElse`/`Apply` target-type
+  propagation; honored by `FromData`/`ToData` derivation
+- native `UplcConstr` intrinsics: equality (`Eq` dispatch via `equalsRepr`), `Option` operations
+  (`isDefined`, `isEmpty`, `get`, `getOrElse`, `map`, `flatMap`, `filter`, `exists`, `forall`),
+  list `appendedAll` (eliminates per-element re-encoding when concatenating
+  `@UplcRepr(UplcConstr)` lists, used by `Queue` in the Knights benchmark)
+- Common Subexpression Elimination (CSE) UPLC optimizer pass — extracts repeated subterms into
+  shared lets with descriptive names (also extracts `Force(Builtin)` and `Force(Force(Builtin))`)
+- Common Context Extraction (CCE) UPLC optimizer pass — generalized to any single-hole position;
+  extracts shared lambdas with descriptive names
+- `Options.uplcOptimizers` for custom optimizer chain configuration
+- CEK machine profiler: per-source-location and per-builtin-function breakdowns plus a state
+  transition matrix; `optimize-contract` skill drives budget optimization workflow
+- `UtxoFlow` framework for multi-transaction off-chain flows (Phase 1): branching, recursion/loop
+  support for local tail-recursive functions, parameterized flows
+  (`DataParameterizedFlowCellValidator`), compile-time checks for async closures and non-tail
+  recursion
+- `CellValidator` with full `UtxoCell` lifecycle: `CellContext`, `TxBuilder` integration,
+  `transitionSpend`/`transitionMint` helpers, hardened against V011/V005/V016/V024 vulnerability
+  patterns; `AuctionCell` reference example; `Factory` pattern for the Cardano UTxO model
+- `scalus-blueprint-plugin` v0.1 — sbt plugin for CIP-57 blueprint generation, with `sbtn deploy`
+  and `sbtn blueprint` commands
+- Scalus plugin and example ejector (`#252`) — eject contract examples into standalone projects
+  with cross-version sbt plugin support
+- recursive auction contract example with `Bind` pattern handling fix
+- agent-based testing model in `scalus-testkit` (`ContractTestActor`)
+- opaque-type support in `FromData`/`ToData` derivation and the compiler plugin; top-level opaque
+  types resolved via `$package` module scanning; `SIRModuleAnnotation` marker trait and
+  `Module.anns` field
+- variadic factory intrinsics for `Map.singleton` and `Map.empty`; `List.unboxedNil[A]` for
+  unboxed empty list creation
+- `Options.noWarn` to silence SIR lowering warnings
+- `MiniBF`-compatible Blockfrost API endpoints; `UtxoSource.FromAsset` in `BlockfrostProvider`
+- emulator preconfig support: pre-initialize from JSON files, allow custom datums, extended JS
+  API (`tick`, `hasTx`, `getDelegation`, `getDatum`, `withState`)
+- `assertEvalWithBudgets` and `PlutusV3.withOptions` for dual-budget testing across modes
+- optional Scalus on-chain identification tag marker (spec + implementation)
+- `DynJson` utility for dot-syntax JSON navigation
 - gated CEK diagnostic assertions for representation/arity mismatches
   (`-Dscalus.assert.apply.data.to.uc=1`): `[APPLY-DATA-TO-NATIVE-UC]`,
   `[APPLY-VCONSTR-ARITY-MISMATCH]`, `[CASE-VCONSTR-ARITY-MISMATCH]`,
   `[CASE-DATA-ARITY-MISMATCH]`
+- documentation: Advanced Optimisations chapter, Authenticated Collections (Merkle Trees, MPF,
+  Bilinear Accumulators) split into static/incremental pages, Ledger Framework architecture,
+  TxBuilder close-out report, unit/property/TDD testing pages, thorough Lottery and Auction
+  example READMEs, Profiling page
 
 ### Changed
 
-- removed `Options.nativeListElements` flag — the type-level `@UplcRepr` machinery now keeps native
-  lists end-to-end, so the dual lowering paths and per-test `if/else` budget snapshots are gone
-- `cachedTopLevelHelpers` cache keys now discriminate by call-site env capture and resolved
-  `TypeVar` bindings (`captureFingerprint(tps)` plus `typeUnifyEnv.filledTypes` rendered via
-  `showDebug`), so two callers with the same SIR shape but different repr environment get
-  separate helpers
-- `pendingTopLevelLetRecs` is scoped per compile unit (no cross-compile leakage); only letrec
+- **BREAKING**: removed deprecated APIs marked `@deprecated` since 0.14.x (including bloxbean
+  CCL APIs); MiMa filters added for the removed surface
+- `SumDataList`/`SumDataPairList` unified into parameterized `SumBuiltinList(elementRepr)`;
+  `SumPairBuiltinList` separated for pair-element lists
+- `PairData` and `ArrayData` aliases removed in favor of parameterized `ProdBuiltinPair(fstRepr,
+  sndRepr)` and `ProdBuiltinArray(elementRepr)` carried throughout the lowering
+- `PairList` intrinsic providers added; `SumDataPairList` head representation fixed
+- forced builtins naming convention updated from `__builtin_Name` to `__Name`
+- `cachedTopLevelHelpers` cache keys discriminate by call-site env capture and resolved `TypeVar`
+  bindings (`captureFingerprint(tps)` plus `typeUnifyEnv.filledTypes`), so two callers with the
+  same SIR shape but different repr environments get separate helpers
+- `pendingTopLevelLetRecs` scoped per compile unit (no cross-compile leakage); only letrec
   bindings reachable from the lowering root are wrapped
 - `stableKey` includes structural repr info to reduce `SumReprProxy` identity leaks across
   `cachedTopLevelHelpers` lookups
-- `ProductCaseUplcConstrSirTypeGenerator.upcastOne` now dispatches on `input.representation`
-  rather than relabeling unconditionally — closes the unsafe-Data-as-UC relabel surface that
-  produced 4-arg native selectors against Data scrutinees
-- `precomputedValues` removed; canonical `genConstrLowered` API hosts the dispatch chain in the
-  generators instead of an outer wrapper
+- `ProductCaseUplcConstrSirTypeGenerator.upcastOne` dispatches on `input.representation` rather
+  than relabeling unconditionally — closes the unsafe-Data-as-UC relabel surface that produced
+  4-arg native selectors against Data scrutinees
+- `genConstrLowered` is the canonical Constr-dispatch API; `precomputedValues` removed and the
+  dispatch chain pushed down into generators
+- `TypeVarKind` simplified to `Transparent`/`Fixed`; `nativeTypeVarRepresentation` and
+  `nativeListElements` flags removed (the `@UplcRepr` machinery keeps native representations
+  end-to-end, eliminating dual lowering paths and per-test `if/else` budget snapshots)
+- `typeProxy` replaced with `typeProxyRepr` for explicit representation control
+- removed `MerklePatriciaForestry` radix-2/64 variants, keeping only the MPF-16 implementation;
+  `Fork.neighborHash` reduced to a single slice+blake2b
+- non-derived `Eq` instances now produce a warning; `Eq.keyPairEq` deprecated
+- `scalus-plugin` published with `CrossVersion.full` to allow per-Scala-version publishing
 
 ### Fixed
 
@@ -47,12 +94,26 @@
   lambda and a `MultiplyInteger Apply LamAbs` runtime crash. Fix: discriminate `TypeVarKind` —
   `Transparent`/`Fixed` stay compatible; `Unwrapped` only when
   `lctx.typeGenerator(tp).defaultRepresentation(tp) == this`
+- KnightsTest:475 heisenbug: output `TypeVar` leak via wrong `eqClass` inheritance and
+  non-deterministic tie-break in `chooseCommonRepresentation`
+- intrinsic binding internal `TypeVar`s no longer leak across dispatches; rebound at unify time
+  rather than stripped on merge-back
 - `Fixed` `TypeVar` in `UplcConstr` fields falls back to default rep instead of leaking abstract
-  Data marker
+  Data marker; `Fixed` `TypeVar` no longer leaks into `ProdBuiltinPair`/`SumUplcConstr`
+  `fieldReprs`
 - representations propagate through `TypeVar` and `FreeUnificator` widenings so structural
   unification doesn't drop the caller's repr context
-- `lowerUnboxedNil` consults `lctx.typeGenerator` for policy consistency
-- `lvApply` preserves `@UplcRepr` param reprs; CSE guarded against partial-builtin helpers
+- `optTargetType` propagates through `IfThenElse` to branches; `lvApply` preserves `@UplcRepr`
+  param reprs; CSE guarded against partial-builtin helpers
+- lazy `Case` branch evaluation in JIT to match CEK semantics
+- CEK and JIT evaluation of Plutus benchmark use-case scripts
+- recursive enum derivation: allow unfilled type proxies in `AppliedType` args
+- non-recursive let bindings scoping; opaque types with type alias returns filter the full inline
+  proxy chain
+- pair pattern variables added to scope in PV11 `genMatchPairData`
+- UTxO query errors propagate as `TxBuilderException.UtxoQueryException`
+- `slotToTime` uses `.toLong` for Scala.js `BigInt` compatibility
+- CI JVM heap capped at 7GB to prevent OOM on GitHub Actions runners
 
 ## 0.16.0 (2026-03-06)
 
