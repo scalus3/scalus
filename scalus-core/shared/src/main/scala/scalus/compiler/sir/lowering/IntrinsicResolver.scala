@@ -80,14 +80,13 @@ object IntrinsicResolver {
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
       * intrinsic modules, these are NOT used for provider substitution.
       *
-      * Methods that need a non-default TypeVar kind carry author-written
-      * `@UplcRepr(TypeVar(...))` annotations on their type parameters, so no blanket post-load
-      * stamping is needed. `NativeListOperations.find` is intentionally left unannotated (loads
-      * with default `Fixed`) — its `Option.None`/`Option.Some` if-then-else body has a
-      * known interaction with Constr emission that the annotation path doesn't yet handle (see
-      * its scaladoc for details). For HO methods that take pre-compiled functions (like
-      * contains with Eq), the dispatcher wraps the HO function with representation conversion
-      * adapters.
+      * Methods that need a non-default TypeVar kind carry author-written `@UplcRepr(TypeVar(...))`
+      * annotations on their type parameters, so no blanket post-load stamping is needed.
+      * `NativeListOperations.find` is intentionally left unannotated (loads with default `Fixed`) —
+      * its `Option.None`/`Option.Some` if-then-else body has a known interaction with Constr
+      * emission that the annotation path doesn't yet handle (see its scaladoc for details). For HO
+      * methods that take pre-compiled functions (like contains with Eq), the dispatcher wraps the
+      * HO function with representation conversion adapters.
       */
     def defaultSupportModules: Map[String, Module] = {
         scalus.compiler.compiledModules(
