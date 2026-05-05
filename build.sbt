@@ -733,6 +733,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // Lucid Evolution and CML for transaction signing
       Compile / npmDependencies += "@lucid-evolution/wallet" -> "0.1.72",
       Compile / npmDependencies += "@anastasia-labs/cardano-multiplatform-lib-nodejs" -> "6.0.2-3",
+      Compile / fullLinkJS / scalaJSLinkerConfig ~= (_.withClosureCompiler(true)),
       // copy scalus.js and scalus.js.map to npm directory for publishing
       prepareNpmPackage := {
           val bundle = (Compile / fullOptJS / webpack).value
