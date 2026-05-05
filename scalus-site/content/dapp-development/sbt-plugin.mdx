@@ -1,14 +1,14 @@
 ---
-title: Deploying Cardano Smart Contracts as Reference Scripts
-sidebarTitle: Deploying Contracts
-description: Deploy compiled Cardano smart contracts as reference script UTxOs with the Scalus sbt plugin and Blockfrost — preview, preprod, and mainnet networks.
+title: Scalus SBT Plugin
+sidebarTitle: SBT Plugin
+description: Embed CIP-57 blueprints in JARs and deploy contracts as reference script UTxOs — all from sbt.
 ---
 
-# Deploying Contracts
+# Scalus SBT Plugin
 
-The `ScalusBlueprintPlugin` provides a `deploy` sbt task that creates a reference script UTxO
-from a `Contract` object. It extracts the compiled script, attaches it to a new UTxO, builds and signs the transaction,
-and submits it via Blockfrost.
+The `ScalusBlueprintPlugin` adds two sbt tasks to your project: `blueprint` for embedding
+[CIP-57](https://cips.cardano.org/cip/CIP-57) blueprint JSON files into JARs, and `deploy`
+for publishing a contract as a reference script UTxO via Blockfrost.
 
 ## Setup
 
@@ -31,7 +31,8 @@ lazy val myProject = (project in file("."))
     )
 ```
 
-Define a `Contract` object with a compiled validator and blueprint:
+The compiler plugin discovers objects extending `Contract` automatically. Each one needs
+a compiled validator and a blueprint:
 
 ```scala copy
 @Compile
@@ -57,7 +58,41 @@ object MyContract extends Contract {
 }
 ```
 
-## Usage
+## Blueprint Generation
+
+When a Cardano smart contract is deployed on-chain, only its script hash is visible. How do
+you verify that a given source code produced that hash?
+
+The verifiable artifact is the **JAR**. The `blueprint` task generates a CIP-57 blueprint JSON
+for every `Contract` in the project and writes it to `META-INF/scalus/blueprints/`. Each
+blueprint contains the `compiledCode` (CBOR hex) and `hash` (script hash), so anyone with the
+JAR, or anyone who can build it from source, can independently confirm the on-chain script
+hash.
+
+```sh copy
+sbt blueprint package
+```
+
+```
+[info] Wrote META-INF/scalus/blueprints/MyContract.json
+```
+
+`sbt package` is the standard sbt command for producing a JAR. A JAR is just a ZIP archive, so
+standard tools work to inspect it:
+
+```sh copy
+unzip -p my-project.jar META-INF/scalus/blueprints/MyContract.json
+```
+
+The `hash` field is the standard Cardano script hash: `blake2b_224(0x03 || compiledCode)`.
+If you have the JAR, you can verify that this hash matches what's deployed on-chain.
+No Scalus installation or JVM required for verification, just the JAR and a blake2b implementation.
+
+## Deploying Contracts
+
+The `deploy` task creates a reference script UTxO from a `Contract` object. It extracts the
+compiled script, attaches it to a new UTxO, builds and signs the transaction, and submits it
+via Blockfrost.
 
 ```sh copy
 sbt "deploy MyContract --network preprod --blockfrost-key <key> --mnemonic '<24 words>' --address <bech32-address>"

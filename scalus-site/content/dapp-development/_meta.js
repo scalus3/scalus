@@ -3,4 +3,5 @@ export default {
   'working-with-contract': 'Working with Contract',
   'blockchain-providers': 'Blockchain Providers',
   'protocol-parameters': 'Protocol Parameters',
+  'sbt-plugin': 'SBT Plugin',
 }
