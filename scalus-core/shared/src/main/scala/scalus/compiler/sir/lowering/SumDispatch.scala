@@ -719,6 +719,70 @@ object SumDispatch {
         lctx.typeGenerator(loweredScrutinee.sirType)
             .genMatch(matchData, loweredScrutinee, optTargetType)
 
+    /** Choose-and-align step for `SumUplcConstr` matches when any branch carries a
+      * `(Sum|Prod)UplcConstr` whose field reprs include a Transparent TypeVar.
+      * Returns `Some((sumRepr, aligned))` when the override fires, `None`
+      * otherwise (caller should defer to its own convergence logic, typically
+      * `LoweredValue.chooseCommonRepresentation`).
+      *
+      * The override fires because Transparent TypeVar fields cannot be folded
+      * to a Data-shaped repr — we must keep a `SumUplcConstr` shape and align
+      * branches structurally. Alignment rule: branches that already are
+      * `(Sum|Prod)UplcConstr` (or `ErrorRepresentation`) stay as-is; others
+      * route through `toRepresentation(sumRepr, pos)` for Data→UplcConstr
+      * conversion.
+      *
+      * The synthesized `SumUplcConstr` uses `buildSumUplcConstr`'s default
+      * variants for tags without a matching branch puc. This forces the right
+      * type-arg substitution and TypeVar-field handling that hand-rolled
+      * `defaultRepresentation` lookups get wrong (DataDecl `A` carries
+      * `Fixed` kind which would leak into downstream inference).
+      *
+      * This is the Phase 3b extraction point. Callers that don't need the
+      * Transparent-UplcConstr override can keep their existing convergence
+      * (e.g. `LoweredValue.chooseCommonRepresentation`).
+      */
+    def transparentSumUplcConstrAlignment(
+        branches: Seq[LoweredValue],
+        resultType: SIRType,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): Option[(SumUplcConstr, Seq[LoweredValue])] = {
+        def hasTransparentFields(repr: LoweredValueRepresentation): Boolean = repr match
+            case puc: ProductCaseClassRepresentation.ProdUplcConstr =>
+                puc.fieldReprs.exists {
+                    case tvr: TypeVarRepresentation => tvr.isBuiltin
+                    case _                          => false
+                }
+            case suc: SumUplcConstr =>
+                suc.variants.values.exists(puc => hasTransparentFields(puc))
+            case _ => false
+        if !branches.exists(b => hasTransparentFields(b.representation)) then None
+        else
+            val branchPucByTag = branches.flatMap { b =>
+                b.representation match
+                    case puc: ProductCaseClassRepresentation.ProdUplcConstr =>
+                        Some(puc.tag -> puc)
+                    case _ => None
+            }.toMap
+            val defaultSumRepr =
+                typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(resultType, pos)
+            val variants = defaultSumRepr.variants.map { case (idx, defaultPuc) =>
+                branchPucByTag.get(idx) match
+                    case Some(puc) => (idx, puc)
+                    case None      => (idx, defaultPuc)
+            }
+            val sumRepr = SumUplcConstr(variants)
+            val aligned = branches.map { branch =>
+                branch.representation match
+                    case _: ProductCaseClassRepresentation.ProdUplcConstr |
+                        _: SumCaseClassRepresentation.SumUplcConstr =>
+                        branch
+                    case ErrorRepresentation => branch
+                    case _                   => branch.toRepresentation(sumRepr, pos)
+            }
+            Some((sumRepr, aligned))
+    }
+
     def genSelect(
         sel: SIR.Select,
         loweredScrutinee: LoweredValue

@@ -456,67 +456,24 @@ object SumUplcConstrSirTypeGenerator {
         val resultType = optTargetType.getOrElse(matchData.tp)
         val branchesUpcasted = branches.map(_.maybeUpcast(resultType, pos))
 
-        // Check if any branch has UplcConstr repr with passthrough TypeVar fields
-        // (Transparent or Unwrapped). If so, branches can't be aligned to DataConstr —
-        // cascade to SumUplcConstr.
-        def hasTransparentFields(repr: LoweredValueRepresentation): Boolean = repr match
-            case puc: ProductCaseClassRepresentation.ProdUplcConstr =>
-                puc.fieldReprs.exists {
-                    case tvr: TypeVarRepresentation => tvr.isBuiltin
-                    case _                          => false
-                }
-            case suc: SumCaseClassRepresentation.SumUplcConstr =>
-                suc.variants.values.exists(puc => hasTransparentFields(puc))
-            case _ => false
-        val hasTransparentUplcConstr =
-            branchesUpcasted.exists(b => hasTransparentFields(b.representation))
-
+        // Phase 3b: the Transparent-UplcConstr override (when any branch carries a
+        // ProdUplcConstr/SumUplcConstr with Transparent TypeVar fields, branches
+        // can't be folded to Data — synthesize a SumUplcConstr from
+        // `buildSumUplcConstr` and align structurally) lives in
+        // `SumDispatch.transparentSumUplcConstrAlignment`. The non-override path
+        // uses `LoweredValue.chooseCommonRepresentation` and uniformly converts
+        // every branch to the chosen repr.
         val (resultRepr, branchesAligned) =
-            if hasTransparentUplcConstr then
-                // Collect ProdUplcConstr from branches by tag
-                val branchPucByTag = branchesUpcasted.flatMap { b =>
-                    b.representation match
-                        case puc: ProductCaseClassRepresentation.ProdUplcConstr =>
-                            Some(puc.tag -> puc)
-                        case _ => None
-                }.toMap
-                // For variants without a matching branch puc, use `buildSumUplcConstr` which
-                // substitutes DataDecl TypeVars with the scrutinee's concrete type args and
-                // forces TypeVar fields to Transparent. Hand-rolling the field reprs via
-                // `defaultRepresentation` on unresolved DataDecl TypeVars would produce
-                // `TypeVarRepresentation(Fixed)` (because List's own `A` carries `Fixed`
-                // kind in the DataDecl), which later leaks into downstream representation
-                // inference and causes Data/native runtime mismatches.
-                val defaultSumRepr = buildSumUplcConstr(resultType)
-                val variants = defaultSumRepr.variants.map { case (idx, defaultPuc) =>
-                    branchPucByTag.get(idx) match
-                        case Some(puc) => (idx, puc)
-                        case None      => (idx, defaultPuc)
+            SumDispatch
+                .transparentSumUplcConstrAlignment(branchesUpcasted, resultType, pos)
+                .getOrElse {
+                    val repr = LoweredValue.chooseCommonRepresentation(
+                      branchesUpcasted,
+                      resultType,
+                      pos
+                    )
+                    (repr, branchesUpcasted.map(_.toRepresentation(repr, pos)))
                 }
-                val sumRepr = SumUplcConstr(variants)
-                // Align each branch: convert DataConstr to SumUplcConstr,
-                // keep ProdUplcConstr as-is (it's already a variant of the sum)
-                val aligned = branchesUpcasted.map { branch =>
-                    branch.representation match
-                        case _: ProductCaseClassRepresentation.ProdUplcConstr |
-                            _: SumCaseClassRepresentation.SumUplcConstr =>
-                            // Already UplcConstr — compatible with SumUplcConstr
-                            branch
-                        case ErrorRepresentation =>
-                            // Error/fail() — keep as-is, always compatible
-                            branch
-                        case _ =>
-                            // DataConstr → SumUplcConstr via toRepresentation chain
-                            branch.toRepresentation(sumRepr, pos)
-                }
-                (sumRepr: LoweredValueRepresentation, aligned)
-            else
-                val repr = LoweredValue.chooseCommonRepresentation(
-                  branchesUpcasted,
-                  resultType,
-                  pos
-                )
-                (repr, branchesUpcasted.map(_.toRepresentation(repr, pos)))
 
         new ComplexLoweredValue(Set.empty, (loweredScrutinee :: branchesAligned.toList)*) {
             override def sirType: SIRType = resultType

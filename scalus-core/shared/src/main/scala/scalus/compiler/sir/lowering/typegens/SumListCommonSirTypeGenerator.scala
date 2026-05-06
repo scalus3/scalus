@@ -539,16 +539,31 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
               throw LoweringException("Cons case is required for list match", matchData.anns.pos)
             )
 
+            // Phase 3b: branch convergence routes through SumDispatch. The
+            // Transparent-UplcConstr override fires when a branch carries
+            // ProdUplcConstr/SumUplcConstr with Transparent TypeVar fields and
+            // synthesizes a SumUplcConstr aligned structurally; otherwise we
+            // fall back to chooseCommonRepresentation + uniform conversion.
             val allBranches = Seq(loweredConsBody) ++ optLoweredNilBody.toSeq
-            val resRepr = LoweredValue.chooseCommonRepresentation(
-              allBranches,
-              resType,
-              matchData.anns.pos
-            )
-            val loweredConsBodyR =
-                loweredConsBody.toRepresentation(resRepr, consCase.get.anns.pos)
+            val (resRepr, alignedBranches) =
+                SumDispatch
+                    .transparentSumUplcConstrAlignment(allBranches, resType, matchData.anns.pos)
+                    .getOrElse {
+                        val repr = LoweredValue.chooseCommonRepresentation(
+                          allBranches,
+                          resType,
+                          matchData.anns.pos
+                        )
+                        val aligned = Seq(
+                          loweredConsBody.toRepresentation(repr, consCase.get.anns.pos)
+                        ) ++ optLoweredNilBody.map(nb =>
+                            nb.toRepresentation(repr, nilCase.get.anns.pos)
+                        )
+                        (repr, aligned)
+                    }
+            val loweredConsBodyR = alignedBranches(0)
             val optLoweredNilBodyR =
-                optLoweredNilBody.map(nb => nb.toRepresentation(resRepr, nilCase.get.anns.pos))
+                if optLoweredNilBody.isDefined then Some(alignedBranches(1)) else None
 
             // For PlutusV4, use Case on list; otherwise use ChooseList builtin
             val retval =
