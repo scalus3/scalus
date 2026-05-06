@@ -45,34 +45,8 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         input: LoweredValue,
         outputRepresentation: LoweredValueRepresentation,
         pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue = {
-        if input.representation.isCompatibleOn(input.sirType, outputRepresentation, pos) then
-            if input.representation == outputRepresentation then input
-            else RepresentationProxyLoweredValue(input, outputRepresentation, pos)
-        else
-            val resolved = input.representation match
-                case tvr: TypeVarRepresentation =>
-                    import SIRType.TypeVarKind.*
-                    tvr.kind match
-                        case Transparent =>
-                            // Pure relabel: Transparent bytes are unknown/passthrough.
-                            val pucRepr = defaultRepresentation(input.sirType)
-                            RepresentationProxyLoweredValue(input, pucRepr, pos)
-                        case Unwrapped =>
-                            // Bytes ARE in concrete-default form (Unwrapped's invariant).
-                            // Use input.toRepresentation so the matrix decides proxy vs
-                            // actual conversion if needed downstream.
-                            input.toRepresentation(defaultRepresentation(input.sirType), pos)
-                        case Fixed =>
-                            // Bytes are Data-wrapped — go via defaultTypeVarReperesentation,
-                            // which is the Data form for this product type.
-                            input.toRepresentation(
-                              defaultTypeVarReperesentation(input.sirType),
-                              pos
-                            )
-                case _ => input
-            ProductCaseSirTypeGenerator.toRepresentation(resolved, outputRepresentation, pos)
-    }
+    )(using lctx: LoweringContext): LoweredValue =
+        ProdDispatch.dispatcherBypass("ProductCaseUplcConstrSirTypeGenerator")
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext

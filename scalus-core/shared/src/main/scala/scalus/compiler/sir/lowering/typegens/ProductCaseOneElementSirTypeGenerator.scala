@@ -3,7 +3,6 @@ package typegens
 
 import org.typelevel.paiges.Doc
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
-import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.{ProdDataConstr, ProdDataList}
 import scalus.compiler.sir.*
 import scalus.uplc.Term
 
@@ -39,91 +38,9 @@ case class ProductCaseOneElementSirTypeGenerator(
         input: LoweredValue,
         representation: LoweredValueRepresentation,
         pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue = {
-        (input.representation, representation) match
-            case (
-                  ProductCaseClassRepresentation.OneElementWrapper(argRepr),
-                  ProductCaseClassRepresentation.OneElementWrapper(newArgRepr)
-                ) =>
-                if argRepr == newArgRepr then input
-                else
-                    val newArg = argLoweredValue(input).toRepresentation(newArgRepr, pos)
-                    new TypeRepresentationProxyLoweredValue(
-                      newArg,
-                      input.sirType,
-                      ProductCaseClassRepresentation.OneElementWrapper(newArgRepr),
-                      input.pos
-                    )
-            case (ProductCaseClassRepresentation.OneElementWrapper(argRepr), ProdDataList) =>
-                val argInData = argLoweredValue(input).toRepresentation(
-                  argGenerator.defaultDataRepresentation(input.sirType),
-                  pos
-                )
-                lvBuiltinApply2(
-                  SIRBuiltins.mkCons,
-                  argInData,
-                  lvDataNil(
-                    pos,
-                    SIRType.List(SIRType.Data.tp),
-                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
-                  ),
-                  input.sirType,
-                  ProdDataList,
-                  pos
-                )
-            case (ProductCaseClassRepresentation.OneElementWrapper(argRepr), ProdDataConstr) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(ProdDataConstr, pos)
-            case (
-                  ProductCaseClassRepresentation.OneElementWrapper(argRepr),
-                  tvr: TypeVarRepresentation
-                ) =>
-                import SIRType.TypeVarKind.*
-                tvr.kind match
-                    case Transparent =>
-                        // Wildcard target — relabel as Transparent.
-                        input
-                    case Unwrapped | Fixed =>
-                        // Underlying form: Unwrapped → defaultRepresentation,
-                        //                  Fixed     → defaultTypeVarReperesentation.
-                        val targetUnderlying = tvr.kind match
-                            case Unwrapped => argGenerator.defaultRepresentation(input.sirType)
-                            case Fixed => argGenerator.defaultTypeVarReperesentation(input.sirType)
-                            case Transparent => argRepr // unreachable
-                        val argValue = argLoweredValue(input)
-                        val convertedArg =
-                            argGenerator.toRepresentation(argValue, targetUnderlying, pos)
-                        new TypeRepresentationProxyLoweredValue(
-                          convertedArg,
-                          input.sirType,
-                          tvr,
-                          pos
-                        )
-            case (
-                  tvr: TypeVarRepresentation,
-                  outRepr @ ProductCaseClassRepresentation.OneElementWrapper(argRepr)
-                ) =>
-                import SIRType.TypeVarKind.*
-                tvr.kind match
-                    case Transparent =>
-                        // Wildcard source — relabel as the wrapper.
-                        new RepresentationProxyLoweredValue(input, representation, pos)
-                    case Unwrapped | Fixed =>
-                        // Source bytes are in the source's underlying form. Extract the
-                        // inner arg (argLoweredValue handles TypeVar input via the
-                        // appropriate default repr), convert to outRepr's argRepr if
-                        // needed, and wrap.
-                        val argValue = argLoweredValue(input)
-                        val convertedArg = argGenerator.toRepresentation(argValue, argRepr, pos)
-                        new TypeRepresentationProxyLoweredValue(
-                          convertedArg,
-                          input.sirType,
-                          outRepr,
-                          pos
-                        )
-            case (_, _) =>
-                ProductCaseSirTypeGenerator.toRepresentation(input, representation, pos)
+    )(using lctx: LoweringContext): LoweredValue =
+        ProdDispatch.dispatcherBypass("ProductCaseOneElementSirTypeGenerator")
 
-    }
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
@@ -273,7 +190,7 @@ case class ProductCaseOneElementSirTypeGenerator(
         }
     }
 
-    private def argLoweredValue(input: LoweredValue)(using LoweringContext): LoweredValue = {
+    private[lowering] def argLoweredValue(input: LoweredValue)(using LoweringContext): LoweredValue = {
         import ProductCaseOneElementSirTypeGenerator.*
         input match {
             case WrappedArg(constr, arg) => arg

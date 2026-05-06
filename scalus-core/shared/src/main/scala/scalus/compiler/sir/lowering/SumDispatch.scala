@@ -37,6 +37,11 @@ object SumDispatch {
                 sumCaseImpl(input, target, pos)
             case listGen: SumListCommonSirTypeGenerator =>
                 sumListCommonImpl(listGen, input, target, pos)
+            case ProductCaseSirTypeGenerator
+                | ProductCaseUplcConstrSirTypeGenerator
+                | ProductCaseUplcOnlySirTypeGenerator
+                | _: ProductCaseOneElementSirTypeGenerator =>
+                ProdDispatch.toRepresentation(input, target, pos)
             case _ =>
                 gen.toRepresentation(input, target, pos)
     }

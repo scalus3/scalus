@@ -37,10 +37,8 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         input: LoweredValue,
         outputRepresentation: LoweredValueRepresentation,
         pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue = {
-        if input.representation == outputRepresentation then input
-        else ProductCaseSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
-    }
+    )(using lctx: LoweringContext): LoweredValue =
+        ProdDispatch.dispatcherBypass("ProductCaseUplcOnlySirTypeGenerator")
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         LoweringContext
