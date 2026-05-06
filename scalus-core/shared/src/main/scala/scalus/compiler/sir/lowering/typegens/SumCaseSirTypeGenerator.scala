@@ -111,58 +111,19 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
     )(using
         lctx: LoweringContext
     ): LoweredValue = {
-        loweredScrutinee.representation match {
-            case DataConstr =>
-                genMatchDataConstr(
-                  matchData,
-                  loweredScrutinee,
-                  optTargetType
-                )
-            case SumBuiltinList(elemRepr) =>
-                new SumBuiltinListSirTypeGenerator(elemRepr)
-                    .genMatch(matchData, loweredScrutinee, optTargetType)
-            case PackedSumDataList =>
-                val elemType = SumBuiltinList
-                    .retrieveListElementType(loweredScrutinee.sirType)
-                    .getOrElse(SIRType.Data.tp)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
-                val listRepr = SumBuiltinList(elemRepr)
-                val unpacked = loweredScrutinee.toRepresentation(listRepr, matchData.anns.pos)
-                val unpackedVar = lvNewLazyIdVar(
-                  lctx.uniqueVarName("_unpacked"),
-                  loweredScrutinee.sirType,
-                  listRepr,
-                  unpacked,
-                  matchData.anns.pos
-                )
-                new SumBuiltinListSirTypeGenerator(elemRepr)
-                    .genMatch(matchData, unpackedVar, optTargetType)
-            case _: SumUplcConstr =>
-                SumUplcConstrSirTypeGenerator.genMatchUplcConstr(
-                  matchData,
-                  loweredScrutinee,
-                  optTargetType
-                )
-            case TypeVarRepresentation(_) =>
-                // When we have TypeVarRepresentation, convert to the proper representation
-                // for the scrutinee's actual type and recurse
-                val gen = lctx.typeGenerator(loweredScrutinee.sirType)
-                val properRepresentation =
-                    gen.defaultTypeVarReperesentation(loweredScrutinee.sirType)
-
-                val scrutineeWithProperRepr = TypeRepresentationProxyLoweredValue(
-                  loweredScrutinee,
-                  loweredScrutinee.sirType,
-                  properRepresentation,
-                  matchData.anns.pos
-                )
-                genMatch(matchData, scrutineeWithProperRepr, optTargetType)
+        // Per-repr dispatch lives in `SumDispatch.genMatch` (Phase 4a). The recognized
+        // reprs route there directly; unrecognized reprs would loop through
+        // `SumDispatch`'s typegen-fallback back into this method, so we throw
+        // explicitly to keep the failure mode visible.
+        loweredScrutinee.representation match
+            case DataConstr | _: SumBuiltinList | PackedSumDataList | _: SumUplcConstr |
+                _: TypeVarRepresentation =>
+                SumDispatch.genMatch(matchData, loweredScrutinee, optTargetType)
             case _ =>
                 throw LoweringException(
                   s"Unsupported representation ${loweredScrutinee.representation} for match expression",
                   matchData.anns.pos
                 )
-        }
 
     }
 
