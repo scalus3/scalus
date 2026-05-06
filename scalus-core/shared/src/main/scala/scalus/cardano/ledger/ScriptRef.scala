@@ -52,4 +52,6 @@ object ScriptRef:
                   ctr("PlutusV2", style) + inParens(text(s.toHex))
               case Script.PlutusV3(s) =>
                   ctr("PlutusV3", style) + inParens(text(s.toHex))
+              case Script.PlutusV4(s) =>
+                  ctr("PlutusV4", style) + inParens(text(s.toHex))
     )

@@ -143,6 +143,10 @@ object PlutusScriptEvaluator {
                     case _: Script.PlutusV3 =>
                         val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
                         v3.ScriptContext(txInfoV3, redeemer.data, scriptInfo)
+                    case _: Script.PlutusV4 =>
+                        throw new NotImplementedError(
+                          "Plutus V4 (Dijkstra) script evaluation is not yet implemented"
+                        )
                 redeemer -> context
         }.toMap
     }
@@ -406,6 +410,11 @@ object PlutusScriptEvaluator {
                             case ps: Script.PlutusV3 =>
                                 evalPlutusV3Script(tx, txInfoV3, redeemer, ps, datum, debugScripts)
 
+                            case _: Script.PlutusV4 =>
+                                throw new NotImplementedError(
+                                  "Plutus V4 (Dijkstra) script evaluation is not yet implemented"
+                                )
+
                         val cost = result._1.budget
                         log.debug(s"Evaluation result: $result")
 
@@ -662,6 +671,10 @@ object PlutusScriptEvaluator {
                             case _: Script.PlutusV1 => plutusV1VM
                             case _: Script.PlutusV2 => plutusV2VM
                             case _: Script.PlutusV3 => plutusV3VM
+                            case _: Script.PlutusV4 =>
+                                throw new NotImplementedError(
+                                  "Plutus V4 (Dijkstra) script evaluation is not yet implemented"
+                                )
                         val replaySpender = CountingBudgetSpender()
                         val replayLogger = Log()
                         var replayFailed = false

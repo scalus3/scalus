@@ -1170,6 +1170,13 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                             .modify(s =>
                                 TaggedSortedStrictMap(s.toSortedMap.updated(v3.scriptHash, v3))
                             )
+                    // PlutusV4 (Dijkstra) needs a `plutusV4Scripts` witness-set field that
+                    // tracks the upcoming CDDL update; that ships with the on-chain tx
+                    // wire-format work, not in this Script ADT-only PR.
+                    case _: Script.PlutusV4 =>
+                        throw new NotImplementedError(
+                          "Plutus V4 (Dijkstra) tx-builder support is not yet implemented"
+                        )
                 }
                 modify0(f)
             // Script should already be attached, see [[assertAttachedScriptExists]]

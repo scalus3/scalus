@@ -319,6 +319,7 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
           arbitrary[Script.PlutusV1],
           arbitrary[Script.PlutusV2],
           arbitrary[Script.PlutusV3],
+          arbitrary[Script.PlutusV4],
         )
     }
     given Arbitrary[ScriptRef] = autoDerived
@@ -518,6 +519,11 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
     given Arbitrary[Script.PlutusV3] = Arbitrary {
         for bytes <- genByteStringOfN(32)
         yield Script.PlutusV3(bytes)
+    }
+
+    given Arbitrary[Script.PlutusV4] = Arbitrary {
+        for bytes <- genByteStringOfN(32)
+        yield Script.PlutusV4(bytes)
     }
 
     given [A: Arbitrary]: Arbitrary[TaggedOrderedSet[A]] = Arbitrary(
