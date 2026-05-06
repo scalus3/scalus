@@ -79,12 +79,23 @@ object Lowering {
                 // type-correct Nil emission). Other Constr forms dispatch by their
                 // resolved type; the chosen generator's `genConstrLowered` then handles
                 // any context-driven delegation (see `ConstrDispatcher`).
-                val (typeGenerator, effectiveConstr) =
-                    if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
+                val isNil =
+                    name == SIRType.List.NilConstr.name
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
+                val (typeGenerator, effectiveConstr) =
+                    if isNil
                     then typegens.ConstrDispatcher.dispatchNil(constr, resolvedType, optTargetType)
                     else (lctx.typeGenerator(resolvedType), constr)
-                typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
+                // Nil's pre-resolved generator stays inline because dispatchNil already picked
+                // the right typegen for the target type; other constructors route through the
+                // appropriate dispatcher.
+                if isNil then
+                    typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
+                else if SIRType.isSum(resolvedType) then
+                    SumDispatch.genConstr(effectiveConstr, loweredArgs, optTargetType)
+                else if SIRType.isProd(resolvedType) then
+                    ProdDispatch.genConstr(effectiveConstr, loweredArgs, optTargetType)
+                else typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
                     lctx.log(
@@ -119,15 +130,18 @@ object Lowering {
                         )
                         Some(SIRType.Annotated(rhsType, uplcConstrAnns))
                     else optTargetType
-                // Use representation-aware dispatch: if scrutinee has SumUplcConstr repr,
-                // use Case-based genMatch instead of the default type generator's match.
+                // Representation-aware dispatch: SumUplcConstr scrutinees use Case-based
+                // genMatch directly; otherwise route Sum scrutinees through SumDispatch.
                 val retval = loweredScrutinee.representation match
                     case _: SumCaseClassRepresentation.SumUplcConstr =>
                         typegens.SumUplcConstrSirTypeGenerator
                             .genMatchUplcConstr(sirMatch, loweredScrutinee, effectiveTarget)
                     case _ =>
-                        lctx.typeGenerator(loweredScrutinee.sirType)
-                            .genMatch(sirMatch, loweredScrutinee, effectiveTarget)
+                        if SIRType.isSum(loweredScrutinee.sirType) then
+                            SumDispatch.genMatch(sirMatch, loweredScrutinee, effectiveTarget)
+                        else
+                            lctx.typeGenerator(loweredScrutinee.sirType)
+                                .genMatch(sirMatch, loweredScrutinee, effectiveTarget)
                 if lctx.debug then
                     lctx.log(
                       s"Lowered match: ${sir.pretty.render(100)}\n" +
@@ -340,8 +354,17 @@ object Lowering {
                                 )
                     case _ =>
                 }
-                val generator = lctx.typeGenerator(loweredScrutinee.sirType)
-                val retval = generator.genSelect(sel, loweredScrutinee)
+                // Sum scrutinees route to SumDispatch (handles list/option intrinsic
+                // accessors like head/tail/isNull/length); Prod scrutinees to ProdDispatch
+                // (ordinary case-class field access). See sum-prod-dispatch-design.md §3.5.
+                val retval =
+                    if SIRType.isSum(loweredScrutinee.sirType) then
+                        SumDispatch.genSelect(sel, loweredScrutinee)
+                    else if SIRType.isProd(loweredScrutinee.sirType) then
+                        ProdDispatch.genSelect(sel, loweredScrutinee)
+                    else
+                        lctx.typeGenerator(loweredScrutinee.sirType)
+                            .genSelect(sel, loweredScrutinee)
                 if lctx.debug then {
                     lctx.log(
                       s"Lowered SIR.Select: ${sir.pretty.render(100)}\n" +

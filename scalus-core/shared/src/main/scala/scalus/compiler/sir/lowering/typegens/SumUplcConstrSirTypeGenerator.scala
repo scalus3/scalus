@@ -507,7 +507,7 @@ object SumUplcConstrSirTypeGenerator {
                             branch
                         case _ =>
                             // DataConstr → SumUplcConstr via toRepresentation chain
-                            SumCaseSirTypeGenerator.toRepresentation(branch, sumRepr, pos)
+                            branch.toRepresentation(sumRepr, pos)
                 }
                 (sumRepr: LoweredValueRepresentation, aligned)
             else

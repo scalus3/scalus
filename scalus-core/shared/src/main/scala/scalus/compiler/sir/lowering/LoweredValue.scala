@@ -57,6 +57,13 @@ trait LoweredValue {
     def representation: LoweredValueRepresentation
 
     /** Convert this value to the given representation.
+      *
+      * Routes through `SumDispatch.toRepresentation`, which inspects the source value's
+      * actual typegen and dispatches accordingly (Sum-side typegens go through the
+      * centralized `toRepresentationImpl` helpers; non-Sum typegens fall back to their
+      * direct `toRepresentation`). We can't split by `SIRType.isSum/isProd` here because
+      * sum-shaped *constructors* have `CaseClass` SIR types (e.g. `List.Cons` is a
+      * `CaseClass` whose typegen is `SumBuiltinList`).
       */
     def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(using
         lctx: LoweringContext
@@ -65,13 +72,13 @@ trait LoweredValue {
         else if LoweredValue.isTransparentTypeVarTarget(representation) then this
         else if this.representation.isCompatibleOn(sirType, representation, pos) then
             RepresentationProxyLoweredValue(this, representation, pos)
-        else lctx.typeGenerator(sirType).toRepresentation(this, representation, pos)
+        else SumDispatch.toRepresentation(this, representation, pos)
     }
 
     def upcastOne(targetType: SIRType, pos: SIRPosition)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValue =
-        summon[LoweringContext].typeGenerator(sirType).upcastOne(this, targetType, pos)
+        SumDispatch.upcastOne(this, targetType, pos)
 
     /** Upcast the value to the target type if needed.
       *
@@ -402,9 +409,8 @@ class VariableLoweredValue(
                 case Some(depVar) =>
                     depVar
                 case None =>
-                    val retval = summon[LoweringContext]
-                        .typeGenerator(sirType)
-                        .toRepresentation(this, representation, pos)
+                    // Same routing rationale as the trait's `toRepresentation` above.
+                    val retval = SumDispatch.toRepresentation(this, representation, pos)
                     val depId = lctx.uniqueVarName(name + "r")
                     val depVar = DependendVariableLoweredValue(
                       depId,
@@ -515,9 +521,8 @@ case class DependendVariableLoweredValue(
                 case Some(depVar) =>
                     depVar
                 case None =>
-                    val newRepr = summon[LoweringContext]
-                        .typeGenerator(sirType)
-                        .toRepresentation(this, representation, pos)
+                    // Same routing rationale as the trait's `toRepresentation` above.
+                    val newRepr = SumDispatch.toRepresentation(this, representation, pos)
                     val newId = summon[LoweringContext].uniqueVarName(name + "r")
                     val newDepVar = DependendVariableLoweredValue(
                       newId,

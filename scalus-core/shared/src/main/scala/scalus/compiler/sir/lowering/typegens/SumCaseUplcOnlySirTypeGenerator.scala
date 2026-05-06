@@ -30,9 +30,8 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         input: LoweredValue,
         representation: LoweredValueRepresentation,
         pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue = {
-        SumCaseSirTypeGenerator.toRepresentation(input, representation, pos)
-    }
+    )(using lctx: LoweringContext): LoweredValue =
+        SumDispatch.dispatcherBypass("SumCaseUplcOnlySirTypeGenerator")
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         LoweringContext

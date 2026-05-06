@@ -84,13 +84,13 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         if input.representation == representation then return input
 
         // First try to resolve TypeVar via filledTypes — if concrete, dispatch to that
-        // type's generator which knows the actual shape.
+        // type's generator which knows the actual shape. Route through
+        // `LoweredValue.toRepresentation` so Sum/Prod sources flow through
+        // SumDispatch/ProdDispatch instead of bypassing them.
         val resolvedOpt = makeResolvedProxy(input, pos)
         if resolvedOpt.isDefined then
             val resolved = resolvedOpt.get
-            return lctx
-                .typeGenerator(resolved.sirType)
-                .toRepresentation(resolved, representation, pos)
+            return resolved.toRepresentation(representation, pos)
 
         // Source is an unresolved TypeVar. Dispatch by its kind.
         val srcKind = input.representation match
@@ -266,8 +266,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                 new RepresentationProxyLoweredValue(input, representation, pos)
             case sbl @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
                 val r1 = input.toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
-                new SumBuiltinListSirTypeGenerator(elemRepr)
-                    .toRepresentation(r1, representation, pos)
+                r1.toRepresentation(representation, pos)
             case spl @ SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
                 input
                     .toRepresentation(SumCaseClassRepresentation.SumDataAssocMap, pos)
