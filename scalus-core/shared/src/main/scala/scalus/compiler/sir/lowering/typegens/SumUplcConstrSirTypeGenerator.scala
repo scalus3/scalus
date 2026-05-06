@@ -437,11 +437,31 @@ object SumUplcConstrSirTypeGenerator {
         loweredScrutinee: LoweredValue,
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
+        val (scaffolding, branches) =
+            emitMatchConditionUplcConstr(matchData, loweredScrutinee, optTargetType)
+        SumDispatch.assembleMatch(
+          scaffolding,
+          branches,
+          optTargetType,
+          matchData.tp,
+          matchData.anns.pos
+        )
+    }
+
+    /** The scrutinee-repr-driven half of `genMatchUplcConstr` (Phase 4b): lower
+      * each case body in the scope of the variant's field bindings, return the
+      * `Term.Case` scaffolding plus the unaligned branch values. The result
+      * repr is decided by `SumDispatch.assembleMatch`, not here.
+      */
+    private def emitMatchConditionUplcConstr(
+        matchData: SIR.Match,
+        loweredScrutinee: LoweredValue,
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): (SumDispatch.MatchScaffolding, Seq[LoweredValue]) = {
         val prevScope = lctx.scope
         val orderedCases =
             SumCaseSirTypeGenerator.prepareCases(matchData, loweredScrutinee)
         val pos = matchData.anns.pos
-
         val branches = orderedCases.map { preparedCase =>
             genMatchUplcConstrCase(
               preparedCase.sirCase,
@@ -450,51 +470,50 @@ object SumUplcConstrSirTypeGenerator {
               preparedCase.constrIndex.getOrElse(-1)
             )
         }
-
         lctx.scope = prevScope
+        (uplcConstrScaffolding(loweredScrutinee, pos), branches)
+    }
 
-        val resultType = optTargetType.getOrElse(matchData.tp)
-        val branchesUpcasted = branches.map(_.maybeUpcast(resultType, pos))
+    /** `Term.Case`-based scaffolding: assembles a `ComplexLoweredValue` whose
+      * term is `Term.Case(scrutinee, branches)`. Branch order matches the
+      * SumUplcConstr tag order (set by `prepareCases` in
+      * `emitMatchConditionUplcConstr`).
+      */
+    private def uplcConstrScaffolding(
+        scrutinee: LoweredValue,
+        matchPos: SIRPosition
+    ): SumDispatch.MatchScaffolding = new SumDispatch.MatchScaffolding {
+        override def assemble(
+            branches: Seq[LoweredValue],
+            targetRepr: LoweredValueRepresentation,
+            resultType: SIRType,
+            pos: SIRPosition
+        )(using LoweringContext): LoweredValue = {
+            val branchesList = branches.toList
+            new ComplexLoweredValue(Set.empty, (scrutinee :: branchesList)*) {
+                override def sirType: SIRType = resultType
+                override def representation: LoweredValueRepresentation = targetRepr
+                override def pos: SIRPosition = matchPos
 
-        // Branch convergence: Transparent-UplcConstr override (when branches carry
-        // `(Sum|Prod)UplcConstr` with Transparent TypeVar fields, fields can't be
-        // folded to Data — synthesize a SumUplcConstr and align structurally) lives
-        // in `SumDispatch.transparentSumUplcConstrAlignment`; otherwise fall back to
-        // `chooseCommonRepresentation` + uniform conversion.
-        val (resultRepr, branchesAligned) =
-            SumDispatch
-                .transparentSumUplcConstrAlignment(branchesUpcasted, resultType, pos)
-                .getOrElse {
-                    val repr = LoweredValue.chooseCommonRepresentation(
-                      branchesUpcasted,
-                      resultType,
-                      pos
+                override def termInternal(gctx: TermGenerationContext): Term =
+                    Term.Case(
+                      scrutinee.termWithNeededVars(gctx),
+                      branchesList.map(_.termWithNeededVars(gctx)),
+                      UplcAnnotation(matchPos)
                     )
-                    (repr, branchesUpcasted.map(_.toRepresentation(repr, pos)))
+
+                override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+                    import Doc.*
+                    val branchDocs = branchesList.zipWithIndex.map { (b, i) =>
+                        line + text(s"$i ->") + (lineOrSpace + b.docRef(ctx)).nested(2)
+                    }
+                    ((text("case") + space + scrutinee.docRef(ctx) + space + text("of"))
+                        + branchDocs.foldLeft(empty)(_ + _.grouped)).aligned
                 }
 
-        new ComplexLoweredValue(Set.empty, (loweredScrutinee :: branchesAligned.toList)*) {
-            override def sirType: SIRType = resultType
-            override def representation: LoweredValueRepresentation = resultRepr
-            override def pos: SIRPosition = matchData.anns.pos
-
-            override def termInternal(gctx: TermGenerationContext): Term =
-                Term.Case(
-                  loweredScrutinee.termWithNeededVars(gctx),
-                  branchesAligned.map(_.termWithNeededVars(gctx)).toList,
-                  UplcAnnotation(matchData.anns.pos)
-                )
-
-            override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
-                import Doc.*
-                val branchDocs = branchesAligned.zipWithIndex.map { (b, i) =>
-                    line + text(s"$i ->") + (lineOrSpace + b.docRef(ctx)).nested(2)
-                }
-                ((text("case") + space + loweredScrutinee.docRef(ctx) + space + text("of"))
-                    + branchDocs.foldLeft(empty)(_ + _.grouped)).aligned
+                override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc =
+                    docDef(ctx)
             }
-
-            override def docRef(ctx: LoweredValue.PrettyPrintingContext): Doc = docDef(ctx)
         }
     }
 

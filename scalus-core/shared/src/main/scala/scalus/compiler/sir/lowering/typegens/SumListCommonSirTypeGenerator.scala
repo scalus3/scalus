@@ -537,63 +537,73 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
             val loweredConsBody = optLoweredConsBody.getOrElse(
               throw LoweringException("Cons case is required for list match", matchData.anns.pos)
             )
+            val nilBranchPresent = optLoweredNilBody.isDefined
+            val branches = Seq(loweredConsBody) ++ optLoweredNilBody.toSeq
+            val scaffolding = builtinListScaffolding(
+              listInput,
+              consHead,
+              consTail,
+              nilBranchPresent,
+              useCaseOnList,
+              matchData.anns.pos
+            )
+            SumDispatch.assembleMatch(
+              scaffolding,
+              branches,
+              optTargetType,
+              matchData.tp,
+              matchData.anns.pos
+            )
+    }
 
-            // Branch convergence: when any branch carries a Transparent-TypeVar
-            // ProdUplcConstr/SumUplcConstr, `transparentSumUplcConstrAlignment`
-            // synthesizes a SumUplcConstr-aligned set; otherwise fall back to
-            // `chooseCommonRepresentation` + uniform conversion.
-            val allBranches = Seq(loweredConsBody) ++ optLoweredNilBody.toSeq
-            val (resRepr, alignedBranches) =
-                SumDispatch
-                    .transparentSumUplcConstrAlignment(allBranches, resType, matchData.anns.pos)
-                    .getOrElse {
-                        val repr = LoweredValue.chooseCommonRepresentation(
-                          allBranches,
-                          resType,
-                          matchData.anns.pos
-                        )
-                        val aligned = Seq(
-                          loweredConsBody.toRepresentation(repr, consCase.get.anns.pos)
-                        ) ++ optLoweredNilBody.map(nb =>
-                            nb.toRepresentation(repr, nilCase.get.anns.pos)
-                        )
-                        (repr, aligned)
-                    }
-            val loweredConsBodyR = alignedBranches(0)
-            val optLoweredNilBodyR =
-                if optLoweredNilBody.isDefined then Some(alignedBranches(1)) else None
-
-            // For PlutusV4, use Case on list; otherwise use ChooseList builtin
-            val retval =
-                if useCaseOnList then
-                    CaseListLoweredValue(
-                      listInput,
-                      consHead,
-                      consTail,
-                      loweredConsBodyR,
-                      optLoweredNilBodyR,
-                      resType,
-                      resRepr,
-                      matchData.anns.pos
+    /** `Case`-on-list (V4) / `ChooseList` (V3) scaffolding. The cons-head/tail
+      * bindings and the lifted scrutinee var are captured at condition time;
+      * `assemble` receives aligned branches plus the chosen target repr.
+      */
+    private def builtinListScaffolding(
+        listInput: IdentifiableLoweredValue,
+        consHead: IdentifiableLoweredValue,
+        consTail: IdentifiableLoweredValue,
+        nilBranchPresent: Boolean,
+        useCaseOnList: Boolean,
+        matchPos: SIRPosition
+    ): SumDispatch.MatchScaffolding = new SumDispatch.MatchScaffolding {
+        override def assemble(
+            branches: Seq[LoweredValue],
+            targetRepr: LoweredValueRepresentation,
+            resultType: SIRType,
+            pos: SIRPosition
+        )(using LoweringContext): LoweredValue = {
+            val consBody = branches(0)
+            val optNilBody = if nilBranchPresent then Some(branches(1)) else None
+            if useCaseOnList then
+                CaseListLoweredValue(
+                  listInput,
+                  consHead,
+                  consTail,
+                  consBody,
+                  optNilBody,
+                  resultType,
+                  targetRepr,
+                  matchPos
+                )
+            else
+                ChooseListLoweredValue(
+                  listInput,
+                  consHead,
+                  consTail,
+                  consBody,
+                  optNilBody.getOrElse(
+                    throw LoweringException(
+                      "Nil case is required for ChooseList (V3). Use @unchecked only with targetProtocolVersion >= vanRossemPV",
+                      matchPos
                     )
-                else
-                    ChooseListLoweredValue(
-                      listInput,
-                      consHead,
-                      consTail,
-                      loweredConsBodyR,
-                      optLoweredNilBodyR.getOrElse(
-                        throw LoweringException(
-                          "Nil case is required for ChooseList (V3). Use @unchecked only with targetProtocolVersion >= vanRossemPV",
-                          matchData.anns.pos
-                        )
-                      ),
-                      resType,
-                      resRepr,
-                      matchData.anns.pos
-                    )
-
-            retval
+                  ),
+                  resultType,
+                  targetRepr,
+                  matchPos
+                )
+        }
     }
 
 }

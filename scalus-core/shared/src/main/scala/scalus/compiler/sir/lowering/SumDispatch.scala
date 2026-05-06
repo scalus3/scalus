@@ -842,6 +842,54 @@ object SumDispatch {
             Some((sumRepr, aligned))
     }
 
+    /** The scrutinee-repr-driven half of a sum match. A `MatchScaffolding`
+      * captures the Case-builtin shape and any pre-bound state derived from the
+      * scrutinee (e.g. an unpacked field-list var, a tag binding) — but it does
+      * NOT decide the result repr. `assembleMatch` calls `assemble` once it has
+      * the aligned branches and the chosen target repr.
+      *
+      * One scaffolding implementation per scrutinee repr (`Term.Case` for
+      * UplcConstr, `CaseListLoweredValue` for SumBuiltinList, …). The trait
+      * stays small so future per-repr emitters can implement it without
+      * pulling in the assembly machinery.
+      */
+    trait MatchScaffolding {
+        def assemble(
+            branches: Seq[LoweredValue],
+            targetRepr: LoweredValueRepresentation,
+            resultType: SIRType,
+            pos: SIRPosition
+        )(using LoweringContext): LoweredValue
+    }
+
+    /** Branch-driven assembly. Universal across scrutinee reprs: upcasts each
+      * branch to the result type, runs the Phase-3b
+      * `transparentSumUplcConstrAlignment` override (or
+      * `chooseCommonRepresentation` as fallback) to pick the result repr, and
+      * asks the scaffolding to assemble the final value.
+      */
+    def assembleMatch(
+        scaffolding: MatchScaffolding,
+        branches: Seq[LoweredValue],
+        optTargetType: Option[SIRType],
+        matchTp: SIRType,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        val resultType = optTargetType.getOrElse(matchTp)
+        val branchesUpcasted = branches.map(_.maybeUpcast(resultType, pos))
+        val (resultRepr, aligned) =
+            transparentSumUplcConstrAlignment(branchesUpcasted, resultType, pos)
+                .getOrElse {
+                    val repr = LoweredValue.chooseCommonRepresentation(
+                      branchesUpcasted,
+                      resultType,
+                      pos
+                    )
+                    (repr, branchesUpcasted.map(_.toRepresentation(repr, pos)))
+                }
+        scaffolding.assemble(aligned, resultRepr, resultType, pos)
+    }
+
     def genSelect(
         sel: SIR.Select,
         loweredScrutinee: LoweredValue
