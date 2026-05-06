@@ -91,18 +91,17 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        // Context-driven delegation (see ConstrDispatcher).
-        ConstrDispatcher.shouldDelegateToUplcConstr(constr, loweredArgs, optTargetType) match
-            case Some(other) if other ne this =>
-                other.genConstrLowered(constr, loweredArgs, optTargetType)
-            case _ =>
-                val caseClassType = constr.data.constrType(constr.name)
-                lctx.typeGenerator(caseClassType)
-                    .genConstrLowered(
-                      constr.copy(tp = caseClassType),
-                      loweredArgs,
-                      optTargetType
-                    )
+        // Repr-routing decisions (see ConstrDispatcher.shouldDelegateToUplcConstr) live in
+        // SumDispatch.chooseConstrOutputRepr now. By the time we land here, the dispatcher
+        // already picked SumCaseSirTypeGenerator for this constr; we just dive into the
+        // concrete CaseClass typegen.
+        val caseClassType = constr.data.constrType(constr.name)
+        lctx.typeGenerator(caseClassType)
+            .genConstrLowered(
+              constr.copy(tp = caseClassType),
+              loweredArgs,
+              optTargetType
+            )
     }
 
     override def genMatch(

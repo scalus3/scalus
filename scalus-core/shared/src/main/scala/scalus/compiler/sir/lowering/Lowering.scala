@@ -76,15 +76,17 @@ object Lowering {
                     case _ => constr.args.map(arg => lctx.lower(arg))
                 // Nil with target type carries special dispatch (the constr's declared
                 // tp is `List[Nothing]` — we need to honor the caller's target type for
-                // type-correct Nil emission). Other Constr forms dispatch by their
-                // resolved type; the chosen generator's `genConstrLowered` then handles
-                // any context-driven delegation (see `ConstrDispatcher`).
+                // type-correct Nil emission). `SumDispatch.dispatchNil` also folds in
+                // the `inUplcConstrListScope` rerouting that used to live in the
+                // typegen-internal `ConstrDispatcher.shouldDelegateToUplcConstr` rule
+                // #4. Non-Nil Constr forms route through `SumDispatch.genConstr` /
+                // `ProdDispatch.genConstr`, which call `chooseConstrOutputRepr`.
                 val isNil =
                     name == SIRType.List.NilConstr.name
                         || name == typegens.SumListCommonSirTypeGenerator.PairNilName
                 val (typeGenerator, effectiveConstr) =
                     if isNil
-                    then typegens.ConstrDispatcher.dispatchNil(constr, resolvedType, optTargetType)
+                    then SumDispatch.dispatchNil(constr, resolvedType, optTargetType)
                     else (lctx.typeGenerator(resolvedType), constr)
                 // Nil's pre-resolved generator stays inline because dispatchNil already picked
                 // the right typegen for the target type; other constructors route through the

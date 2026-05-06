@@ -618,9 +618,10 @@ object ProdDispatch {
         constr: SIR.Constr,
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
-    )(using lctx: LoweringContext): LoweredValue =
-        lctx.typeGenerator(lctx.resolveTypeVarIfNeeded(constr.tp))
-            .genConstrLowered(constr, loweredArgs, optTargetType)
+    )(using lctx: LoweringContext): LoweredValue = {
+        val gen = SumDispatch.chooseConstrOutputRepr(constr, loweredArgs, optTargetType)
+        gen.genConstrLowered(constr, loweredArgs, optTargetType)
+    }
 
     def genSelect(
         sel: SIR.Select,
