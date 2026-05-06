@@ -629,6 +629,61 @@ object ProdDispatch {
     )(using lctx: LoweringContext): LoweredValue =
         lctx.typeGenerator(loweredScrutinee.sirType).genSelect(sel, loweredScrutinee)
 
+    /** Representation-aware dispatch for product-typed `genMatch`. Mirror of
+      * `SumDispatch.genMatch`:
+      *
+      *   - `(Prod|Sum)UplcConstr` → tag-ordered Case via `genMatchUplcConstr`.
+      *   - `ProdDataList` / `ProdDataConstr` / `PackedDataList` / `PairIntDataList`
+      *     → `ProductCaseSirTypeGenerator.genMatchDataList` (Data-shape extraction
+      *     via `unConstrData` + `headList`/`tailList`, or just field projection).
+      *   - `ProdBuiltinPair(_, _)` → `ProductCaseSirTypeGenerator.genMatchPairData`
+      *     (`Case` on Pair for V4+, `fstPair`/`sndPair` for V1-V3).
+      *   - `OneElementWrapper(_)` → fall through to the per-type
+      *     `ProductCaseOneElementSirTypeGenerator` instance — its `genMatch`
+      *     captures argType-specific binding extraction.
+      *   - `TypeVarRepresentation(_)` → relabel to the type's
+      *     `defaultTypeVarRepresentation` and recurse.
+      *   - everything else → fall back to the type-keyed typegen's `genMatch`.
+      *
+      * Pre-Phase-4c-step-2 this dispatch was inlined in
+      * `ProductCaseUplcConstrSirTypeGenerator.genMatch` and
+      * `ProductCaseSirTypeGenerator.genMatch`; consolidating it here mirrors
+      * Phase 4a on the Sum side.
+      */
+    def genMatch(
+        matchData: SIR.Match,
+        loweredScrutinee: LoweredValue,
+        optTargetType: Option[SIRType]
+    )(using lctx: LoweringContext): LoweredValue = {
+        loweredScrutinee.representation match
+            case _: ProdUplcConstr | _: SumCaseClassRepresentation.SumUplcConstr =>
+                typegens.SumUplcConstrSirTypeGenerator
+                    .genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
+            case ProdDataList | ProdDataConstr | PackedDataList | PairIntDataList =>
+                typegens.ProductCaseSirTypeGenerator
+                    .genMatchDataList(matchData, loweredScrutinee, optTargetType)
+            case _: ProdBuiltinPair =>
+                typegens.ProductCaseSirTypeGenerator
+                    .genMatchPairData(matchData, loweredScrutinee, optTargetType)
+            case _: OneElementWrapper =>
+                lctx.typeGenerator(loweredScrutinee.sirType)
+                    .genMatch(matchData, loweredScrutinee, optTargetType)
+            case TypeVarRepresentation(_) =>
+                val gen = lctx.typeGenerator(loweredScrutinee.sirType)
+                val properRepresentation =
+                    gen.defaultTypeVarReperesentation(loweredScrutinee.sirType)
+                val scrutineeWithProperRepr = TypeRepresentationProxyLoweredValue(
+                  loweredScrutinee,
+                  loweredScrutinee.sirType,
+                  properRepresentation,
+                  matchData.anns.pos
+                )
+                genMatch(matchData, scrutineeWithProperRepr, optTargetType)
+            case _ =>
+                lctx.typeGenerator(loweredScrutinee.sirType)
+                    .genMatch(matchData, loweredScrutinee, optTargetType)
+    }
+
     def upcastOne(
         input: LoweredValue,
         targetType: SIRType,

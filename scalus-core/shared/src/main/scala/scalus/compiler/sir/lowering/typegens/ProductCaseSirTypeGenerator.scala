@@ -263,13 +263,22 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     )(using
         LoweringContext
     ): LoweredValue = {
+        // Per-repr dispatch lives in `ProdDispatch.genMatch` (Phase 4c step 2). The
+        // recognized reprs route there directly; unrecognized reprs would loop through
+        // `ProdDispatch`'s typegen-fallback back into this method, so we throw
+        // explicitly to keep the failure mode visible. Mirror of
+        // `SumCaseSirTypeGenerator.genMatch`.
         loweredScrutinee.representation match
-            case ProdDataList | PackedDataList | ProdDataConstr | PairIntDataList =>
-                genMatchDataList(matchData, loweredScrutinee, optTargetType)
-            case _: ProductCaseClassRepresentation.ProdBuiltinPair =>
-                genMatchPairData(matchData, loweredScrutinee, optTargetType)
+            case ProdDataList | PackedDataList | ProdDataConstr | PairIntDataList |
+                _: ProductCaseClassRepresentation.ProdBuiltinPair |
+                _: ProductCaseClassRepresentation.ProdUplcConstr |
+                _: SumCaseClassRepresentation.SumUplcConstr | _: TypeVarRepresentation =>
+                ProdDispatch.genMatch(matchData, loweredScrutinee, optTargetType)
             case _ =>
-                genMatchDataList(matchData, loweredScrutinee, optTargetType)
+                throw LoweringException(
+                  s"Unsupported representation ${loweredScrutinee.representation} for match expression",
+                  matchData.anns.pos
+                )
     }
 
     def selectMatchCase(

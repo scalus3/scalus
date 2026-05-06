@@ -132,13 +132,19 @@ object Lowering {
                         )
                         Some(SIRType.Annotated(rhsType, uplcConstrAnns))
                     else optTargetType
-                // `SumDispatch.genMatch` handles representation-aware routing for sum
-                // scrutinees (SumUplcConstr → Case-based genMatchUplcConstr; other
-                // reprs → repr-specific emitter). Non-sum scrutinees go through the
-                // type-keyed typegen.
+                // `SumDispatch.genMatch` / `ProdDispatch.genMatch` handle
+                // representation-aware routing per scrutinee class:
+                //   - sum scrutinees: SumUplcConstr → Case-based genMatchUplcConstr;
+                //     DataConstr / SumBuiltinList / PackedSumDataList → repr-specific emitter.
+                //   - prod scrutinees: ProdUplcConstr / SumUplcConstr → genMatchUplcConstr;
+                //     ProdDataList / ProdDataConstr / PackedDataList → genMatchDataList;
+                //     ProdBuiltinPair → genMatchPairData.
+                // Other types fall back to the type-keyed typegen.
                 val retval =
                     if SIRType.isSum(loweredScrutinee.sirType) then
                         SumDispatch.genMatch(sirMatch, loweredScrutinee, effectiveTarget)
+                    else if SIRType.isProd(loweredScrutinee.sirType) then
+                        ProdDispatch.genMatch(sirMatch, loweredScrutinee, effectiveTarget)
                     else
                         lctx.typeGenerator(loweredScrutinee.sirType)
                             .genMatch(sirMatch, loweredScrutinee, effectiveTarget)

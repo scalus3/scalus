@@ -134,8 +134,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         matchData: SIR.Match,
         loweredScrutinee: LoweredValue,
         optTargetType: Option[SIRType]
-    )(using LoweringContext): LoweredValue = {
-        SumUplcConstrSirTypeGenerator.genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
-    }
+    )(using LoweringContext): LoweredValue =
+        ProdDispatch.genMatch(matchData, loweredScrutinee, optTargetType)
 
 }

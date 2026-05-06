@@ -110,16 +110,6 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         loweredScrutinee: LoweredValue,
         optTargetType: Option[SIRType]
     )(using LoweringContext): LoweredValue =
-        loweredScrutinee.representation match
-            case _: ProductCaseClassRepresentation.ProdUplcConstr |
-                _: SumCaseClassRepresentation.SumUplcConstr =>
-                SumUplcConstrSirTypeGenerator.genMatchUplcConstr(
-                  matchData,
-                  loweredScrutinee,
-                  optTargetType
-                )
-            case _ =>
-                // Data-based repr — delegate to SumCaseSirTypeGenerator for DataConstr matching
-                SumCaseSirTypeGenerator.genMatch(matchData, loweredScrutinee, optTargetType)
+        ProdDispatch.genMatch(matchData, loweredScrutinee, optTargetType)
 
 }
