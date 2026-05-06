@@ -75,6 +75,16 @@ trait PlutusScriptEvaluator {
 
 object PlutusScriptEvaluator {
 
+    /** Reject a Plutus V4 script with a non-fatal `UnsupportedOperationException`. Plutus V4
+      * (Dijkstra) evaluation, context building, and diagnostic replay are all out of scope until
+      * the upstream `plutus-core` V4 work lands; this helper centralises the rejection so all
+      * three V4 dispatch sites share one message and one exception type.
+      */
+    private def unsupportedV4: Nothing =
+        throw new UnsupportedOperationException(
+          "Plutus V4 (Dijkstra) script evaluation is not yet implemented"
+        )
+
     /** Build all script contexts for Plutus scripts in a transaction without evaluation.
       *
       * This method extracts all Plutus script redeemers from a transaction and builds their
@@ -95,6 +105,8 @@ object PlutusScriptEvaluator {
       *   Map from Redeemer to ScriptContext (union type: v1 | v2 | v3)
       * @throws java.lang.IllegalStateException
       *   if script resolution fails or required data is missing
+      * @throws java.lang.UnsupportedOperationException
+      *   if any redeemer's script is `Script.PlutusV4` — V4 evaluation is not yet implemented
       */
     def buildScriptContexts(
         tx: Transaction,
@@ -143,10 +155,7 @@ object PlutusScriptEvaluator {
                     case _: Script.PlutusV3 =>
                         val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
                         v3.ScriptContext(txInfoV3, redeemer.data, scriptInfo)
-                    case _: Script.PlutusV4 =>
-                        throw new NotImplementedError(
-                          "Plutus V4 (Dijkstra) script evaluation is not yet implemented"
-                        )
+                    case _: Script.PlutusV4 => unsupportedV4
                 redeemer -> context
         }.toMap
     }
@@ -410,10 +419,7 @@ object PlutusScriptEvaluator {
                             case ps: Script.PlutusV3 =>
                                 evalPlutusV3Script(tx, txInfoV3, redeemer, ps, datum, debugScripts)
 
-                            case _: Script.PlutusV4 =>
-                                throw new NotImplementedError(
-                                  "Plutus V4 (Dijkstra) script evaluation is not yet implemented"
-                                )
+                            case _: Script.PlutusV4 => unsupportedV4
 
                         val cost = result._1.budget
                         log.debug(s"Evaluation result: $result")
@@ -671,10 +677,7 @@ object PlutusScriptEvaluator {
                             case _: Script.PlutusV1 => plutusV1VM
                             case _: Script.PlutusV2 => plutusV2VM
                             case _: Script.PlutusV3 => plutusV3VM
-                            case _: Script.PlutusV4 =>
-                                throw new NotImplementedError(
-                                  "Plutus V4 (Dijkstra) script evaluation is not yet implemented"
-                                )
+                            case _: Script.PlutusV4 => unsupportedV4
                         val replaySpender = CountingBudgetSpender()
                         val replayLogger = Log()
                         var replayFailed = false

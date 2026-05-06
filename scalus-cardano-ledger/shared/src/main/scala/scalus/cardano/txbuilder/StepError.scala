@@ -255,4 +255,15 @@ object StepError {
         override def explain: String =
             s"Deferred step resolution failed: ${cause.getMessage}"
     }
+
+    /** A step referenced a Plutus script whose language version the builder cannot yet attach to
+      * the witness set. Currently emitted only for `Language.PlutusV4` (Dijkstra), which needs the
+      * upcoming `plutusV4Scripts` witness-set field; the error gives callers a typed signal
+      * instead of a raw exception escaping the step processor.
+      */
+    case class UnsupportedPlutusVersion(language: Language, step: TransactionBuilderStep)
+        extends StepError {
+        override def explain: String =
+            s"Plutus $language scripts are not yet supported by the transaction builder."
+    }
 }
