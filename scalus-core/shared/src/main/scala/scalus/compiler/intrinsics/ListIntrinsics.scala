@@ -116,9 +116,27 @@ object NativeListReprRules {
     /** foldRight: same as foldLeft */
     val foldRightRule: ReprRule = foldLeftRule
 
-    /** find: List[A] → Option[A] */
-    val findRule: ReprRule = (outTp, _, lctx) =>
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+    /** find: List[A] → (A → Boolean) → Option[A]. For non-PackedData (native-element) sources,
+      * declare `SumUplcConstr Option` so callers stay in native flow; otherwise fall back to the
+      * type's default. The dispatcher converts at the boundary (one element max).
+      */
+    val findRule: ReprRule = (outTp, inRepr, lctx) =>
+        def optionRepr(optTp: SIRType): LoweredValueRepresentation =
+            inRepr match
+                case SumCaseClassRepresentation.SumBuiltinList(elemRepr)
+                    if !elemRepr.isPackedData =>
+                    typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(optTp)(using lctx)
+                case _ =>
+                    lctx.typeGenerator(optTp).defaultRepresentation(optTp)(using lctx)
+        outTp match
+            case SIRType.Fun(argTp, retTp) =>
+                val predicateRepr =
+                    lctx.typeGenerator(argTp).defaultRepresentation(argTp)(using lctx)
+                LambdaRepresentation(
+                  outTp,
+                  InOutRepresentationPair(predicateRepr, optionRepr(retTp))
+                )
+            case _ => optionRepr(outTp)
 
     /** contains: List[A] → A → Eq[A] → Boolean */
     val containsRule: ReprRule = (outTp, _, lctx) =>

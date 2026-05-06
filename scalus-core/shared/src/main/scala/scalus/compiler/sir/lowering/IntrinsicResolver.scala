@@ -324,7 +324,26 @@ object IntrinsicResolver {
                                             lctx.typeUnifyEnv.copy(filledTypes = merged)
                                         lctx.typeVarReprEnv = savedReprEnv
                                         allocatedKeys.foreach(lctx.argCache.remove)
-                                Some(lowered)
+                                // Apply rule only when the body's natural output and rule's
+                                // declared output are in different repr families — same-family
+                                // pairs (e.g. SumUplcConstr with Unwrapped vs concrete-default
+                                // element reprs) are runtime-equivalent and a `toRepresentation`
+                                // would just emit a redundant spine rewriter.
+                                val ruleApplied = bestReprRules.get(methodName) match
+                                    case Some(rule) =>
+                                        val outputRepr =
+                                            rule(appType, firstEffective.representation, lctx)
+                                        if reprsShareOuterFamily(
+                                              lowered.representation,
+                                              outputRepr
+                                            )
+                                        then lowered
+                                        else lowered.toRepresentation(outputRepr, pos)
+                                    case None => lowered
+                                Some(
+                                  RepresentationAnnotatedTypeProxyLoweredValue
+                                      .wrapIfAnnotated(ruleApplied, pos)
+                                )
                             }
                         }
     }
@@ -456,108 +475,24 @@ object IntrinsicResolver {
                                             lctx.typeUnifyEnv.copy(filledTypes = merged)
                                         lctx.typeVarReprEnv = savedReprEnv
                                 } finally lctx.argCache.remove(allocatedKey)
-                            val annotateReturnType = propagateReturnAnnotation
-                            // If the inlined body's sirType has free TypeVars (not bound by
-                            // any inner TypeLambda), wrap them with an outer TypeLambda. The
-                            // result of currying `map[A,B](self)` is conceptually
-                            // `[B] =>> (A→B) → List[B]` but the inlined body drops the wrapper.
-                            // Without it, downstream `lvApply.reprFun` short-circuits
-                            // (`collectPolyOrFun` returns `typeVars=Nil`) so it can't substitute
-                            // the actual mapper's output repr into the result list's element
-                            // repr — `Transparent` TypeVar reprs leak instead.
-                            def collectFreeTypeVars(tp: SIRType): scala.List[SIRType.TypeVar] = {
-                                val seen =
-                                    new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
-                                val acc =
-                                    scala.collection.mutable.LinkedHashSet[SIRType.TypeVar]()
-                                def go(t: SIRType, bound: Set[SIRType.TypeVar]): Unit =
-                                    t match
-                                        case tv: SIRType.TypeVar =>
-                                            if !bound.contains(tv) then acc += tv
-                                        case SIRType.TypeLambda(ps, body) =>
-                                            go(body, bound ++ ps)
-                                        case SIRType.Fun(in, out) =>
-                                            go(in, bound); go(out, bound)
-                                        case SIRType.CaseClass(_, args, parent) =>
-                                            args.foreach(go(_, bound))
-                                            parent.foreach(go(_, bound))
-                                        case SIRType.SumCaseClass(_, args) =>
-                                            args.foreach(go(_, bound))
-                                        case SIRType.Annotated(t1, _) => go(t1, bound)
-                                        case SIRType.TypeProxy(ref) =>
-                                            if ref != null && !seen.containsKey(t) then {
-                                                seen.put(t.asInstanceOf[SIRType.TypeProxy], true)
-                                                go(ref, bound)
-                                            }
-                                        case _ => // primitives, FreeUnificator, TypeNothing
-                                go(tp, Set.empty)
-                                acc.toList
-                            }
-                            def restoreTypeLambdaWrapper(base: SIRType): SIRType = {
-                                val frees = collectFreeTypeVars(base)
-                                if frees.isEmpty then base
-                                else SIRType.TypeLambda(frees, base)
-                            }
-                            val annotatedBase = effectiveArg.sirType match
-                                case SIRType.Annotated(_, anns) if anns.data.contains("uplcRepr") =>
-                                    annotateReturnType(lowered.sirType, anns)
-                                case _ => lowered.sirType
-                            val outputSirType =
-                                restoreTypeLambdaWrapper(annotatedBase)
-                            // Rebuild LambdaRepresentation so its `funTp` carries the outer
-                            // TypeLambda — `reprFun` at downstream applies needs it to see
-                            // the bound TypeVars and substitute their reprs.
-                            val wrappedRepr = lowered.representation match
-                                case lr: LambdaRepresentation if outputSirType ne lowered.sirType =>
-                                    LambdaRepresentation(
-                                      outputSirType,
-                                      lr.canonicalRepresentationPair
-                                    )
-                                case other => other
-                            // Apply repr rule to set correct output representation
-                            bestReprRules.get(methodName) match
+                            // Real byte-level conversion + representation-derived annotation +
+                            // outer TypeLambda restoration. Both proxies derive their fields
+                            // from `origin`, so neither label can drift from emitted bytes.
+                            val ruleApplied = bestReprRules.get(methodName) match
                                 case Some(rule) =>
                                     val outputRepr =
                                         rule(appType, effectiveArg.representation, lctx)
-                                    if lowered.representation == outputRepr
-                                        && outputSirType == lowered.sirType
+                                    if reprsShareOuterFamily(
+                                          lowered.representation,
+                                          outputRepr
+                                        )
                                     then lowered
-                                    else
-                                        new BaseRepresentationProxyLoweredValue(
-                                          lowered,
-                                          outputRepr,
-                                          pos
-                                        ) {
-                                            override def sirType: SIRType = outputSirType
-                                            override def termInternal(
-                                                gctx: TermGenerationContext
-                                            ): Term =
-                                                lowered.termInternal(gctx)
-                                            override def docDef(
-                                                ctx: LoweredValue.PrettyPrintingContext
-                                            ): Doc =
-                                                lowered.docRef(ctx)
-                                        }
-                                case None =>
-                                    if outputSirType == lowered.sirType
-                                        && (wrappedRepr eq lowered.representation)
-                                    then lowered
-                                    else
-                                        new BaseRepresentationProxyLoweredValue(
-                                          lowered,
-                                          wrappedRepr,
-                                          pos
-                                        ) {
-                                            override def sirType: SIRType = outputSirType
-                                            override def termInternal(
-                                                gctx: TermGenerationContext
-                                            ): Term =
-                                                lowered.termInternal(gctx)
-                                            override def docDef(
-                                                ctx: LoweredValue.PrettyPrintingContext
-                                            ): Doc =
-                                                lowered.docRef(ctx)
-                                        }
+                                    else lowered.toRepresentation(outputRepr, pos)
+                                case None => lowered
+                            val annotated =
+                                RepresentationAnnotatedTypeProxyLoweredValue
+                                    .wrapIfAnnotated(ruleApplied, pos)
+                            OuterTypeLambdaWrappedLoweredValue.wrapIfNeeded(annotated, pos)
                         }
     }
 
@@ -623,6 +558,42 @@ object IntrinsicResolver {
             case a: AnnotatedSIR      => goE(a)
         go(sir)
     }
+
+    /** True when both reprs share top-level spine kind, regardless of nested field-repr
+      * differences. Skips `toRepresentation` when source and target are runtime-equivalent (e.g.
+      * SumUplcConstr with `TypeVarRepresentation(Unwrapped)` element reprs aliasing the concrete
+      * default).
+      */
+    private def reprsShareOuterFamily(
+        a: LoweredValueRepresentation,
+        b: LoweredValueRepresentation
+    ): Boolean = (a, b) match
+        case (
+              _: SumCaseClassRepresentation.SumUplcConstr,
+              _: SumCaseClassRepresentation.SumUplcConstr
+            ) =>
+            true
+        case (
+              _: SumCaseClassRepresentation.SumBuiltinList,
+              _: SumCaseClassRepresentation.SumBuiltinList
+            ) =>
+            true
+        case (
+              _: SumCaseClassRepresentation.SumPairBuiltinList,
+              _: SumCaseClassRepresentation.SumPairBuiltinList
+            ) =>
+            true
+        case (
+              _: ProductCaseClassRepresentation.ProdUplcConstr,
+              _: ProductCaseClassRepresentation.ProdUplcConstr
+            ) =>
+            true
+        case (
+              _: ProductCaseClassRepresentation.ProdBuiltinPair,
+              _: ProductCaseClassRepresentation.ProdBuiltinPair
+            ) =>
+            true
+        case _ => a == b
 
     /** All representation names that match a given representation, most specific first. */
     private def representationNames(repr: LoweredValueRepresentation): List[String] = repr match
