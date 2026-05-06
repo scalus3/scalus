@@ -626,7 +626,8 @@ object SumDispatch {
         resolvedType match
             case SIRType.CaseClass(_, typeArgs, Some(parent)) =>
                 val substitutedParent = parent match
-                    case SIRType.TypeLambda(params, body) if params.length == typeArgs.length =>
+                    case SIRType.TypeLambda(params, body)
+                        if typeArgs.nonEmpty && params.length == typeArgs.length =>
                         SIRType.substitute(body, params.zip(typeArgs).toMap, Map.empty)
                     case _ => parent
                 val parentGen = lctx.typeGenerator(substitutedParent)
@@ -638,7 +639,7 @@ object SumDispatch {
         // 2. List.Cons + tail has SumUplcConstr repr.
         resolvedType match
             case SIRType.CaseClass(cd, _, Some(_))
-                if cd.name.endsWith("List$.Cons") && loweredArgs.length >= 2 =>
+                if cd.name == SIRType.List.Cons.name && loweredArgs.length >= 2 =>
                 loweredArgs.last.representation match
                     case _: SumUplcConstr => return typegens.SumCaseUplcConstrSirTypeGenerator
                     case _                =>
@@ -665,40 +666,41 @@ object SumDispatch {
         lctx.typeGenerator(resolvedType)
     }
 
-    /** Pick the type generator for a `Nil` constructor with the lowering context's
-      * hints. Equivalent to `lctx.typeGenerator(target-or-resolved-type)` plus the
-      * `inUplcConstrListScope` override. Returns `(generator, effective-constr)` —
-      * `effective-constr` carries `targetType` as its `tp` when an `optTargetType`
-      * is supplied (so the generator sees the right type info for type-correct
-      * Nil emission). The `inUplcConstrListScope` flag overrides the static-type
-      * choice for List/Option results so a Nil produced inside an UplcConstr-scoped
-      * intrinsic body emits as `SumUplcConstr` even when the surrounding target
-      * type is unannotated — this is the same effect the typegen-internal
-      * `ConstrDispatcher.shouldDelegateToUplcConstr` rule #4 used to apply (and
-      * which we lose by routing `Nil` straight to `typeGenerator.genConstrLowered`
-      * from `Lowering.lowerSIR`, bypassing `chooseConstrOutputRepr`).
+    /** Pick the type generator for a `Nil` constructor.
+      *
+      * `Lowering.lowerSIR` routes `Nil` straight to `typeGenerator.genConstrLowered`,
+      * bypassing `chooseConstrOutputRepr`. So this path also has to apply the
+      * `inUplcConstrListScope` override (the rule that, pre-Phase-3a, the typegen-
+      * internal `ConstrDispatcher.shouldDelegateToUplcConstr` rule #4 supplied);
+      * without it, a Nil produced inside an UplcConstr-scoped intrinsic body whose
+      * surrounding target type is unannotated `List[A]` would emerge as
+      * `SumBuiltinList`, desyncing from match-branch `SumUplcConstr` reprs.
+      *
+      * Returns `(generator, effective-constr)`: `effective-constr` rewrites
+      * `constr.tp` to `targetType` when one is supplied so the generator sees the
+      * right type info for type-correct Nil emission.
       */
     def dispatchNil(
         constr: SIR.Constr,
         resolvedType: SIRType,
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): (typegens.SirTypeUplcGenerator, SIR.Constr) = {
+        def overrideForListScope(
+            tp: SIRType,
+            fallback: typegens.SirTypeUplcGenerator
+        ): typegens.SirTypeUplcGenerator =
+            if fallback == typegens.SumCaseUplcConstrSirTypeGenerator then fallback
+            else if lctx.inUplcConstrListScope && IntrinsicResolver.isUplcConstrListOrOption(tp)
+            then typegens.SumCaseUplcConstrSirTypeGenerator
+            else fallback
         optTargetType match
             case Some(targetType) =>
-                val byTarget = lctx.typeGenerator(targetType)
-                val gen =
-                    if byTarget == typegens.SumCaseUplcConstrSirTypeGenerator then byTarget
-                    else if lctx.inUplcConstrListScope &&
-                        IntrinsicResolver.isUplcConstrListOrOption(targetType)
-                    then typegens.SumCaseUplcConstrSirTypeGenerator
-                    else byTarget
-                (gen, constr.copy(tp = targetType))
+                val gen = overrideForListScope(targetType, lctx.typeGenerator(targetType))
+                val effective =
+                    if constr.tp eq targetType then constr else constr.copy(tp = targetType)
+                (gen, effective)
             case None =>
-                val gen =
-                    if lctx.inUplcConstrListScope &&
-                        IntrinsicResolver.isUplcConstrListOrOption(resolvedType)
-                    then typegens.SumCaseUplcConstrSirTypeGenerator
-                    else lctx.typeGenerator(resolvedType)
+                val gen = overrideForListScope(resolvedType, lctx.typeGenerator(resolvedType))
                 (gen, constr)
     }
 
@@ -722,25 +724,20 @@ object SumDispatch {
     /** Choose-and-align step for `SumUplcConstr` matches when any branch carries a
       * `(Sum|Prod)UplcConstr` whose field reprs include a Transparent TypeVar.
       * Returns `Some((sumRepr, aligned))` when the override fires, `None`
-      * otherwise (caller should defer to its own convergence logic, typically
+      * otherwise (caller should fall back to its own convergence — typically
       * `LoweredValue.chooseCommonRepresentation`).
       *
       * The override fires because Transparent TypeVar fields cannot be folded
       * to a Data-shaped repr — we must keep a `SumUplcConstr` shape and align
-      * branches structurally. Alignment rule: branches that already are
-      * `(Sum|Prod)UplcConstr` (or `ErrorRepresentation`) stay as-is; others
-      * route through `toRepresentation(sumRepr, pos)` for Data→UplcConstr
-      * conversion.
+      * branches structurally. Alignment: `(Sum|Prod)UplcConstr` branches and
+      * `ErrorRepresentation` stay as-is; others route through
+      * `toRepresentation(sumRepr, pos)` for Data→UplcConstr conversion.
       *
       * The synthesized `SumUplcConstr` uses `buildSumUplcConstr`'s default
-      * variants for tags without a matching branch puc. This forces the right
-      * type-arg substitution and TypeVar-field handling that hand-rolled
-      * `defaultRepresentation` lookups get wrong (DataDecl `A` carries
-      * `Fixed` kind which would leak into downstream inference).
-      *
-      * This is the Phase 3b extraction point. Callers that don't need the
-      * Transparent-UplcConstr override can keep their existing convergence
-      * (e.g. `LoweredValue.chooseCommonRepresentation`).
+      * variants for tags without a matching branch puc; hand-rolled
+      * `defaultRepresentation` lookups would produce `TypeVarRepresentation(Fixed)`
+      * (because the DataDecl's `A` carries `Fixed` kind), which then leaks into
+      * downstream inference and surfaces as `Fixed → Unwrapped` aborts.
       */
     def transparentSumUplcConstrAlignment(
         branches: Seq[LoweredValue],
@@ -790,20 +787,18 @@ object SumDispatch {
         lctx.typeGenerator(loweredScrutinee.sirType).genSelect(sel, loweredScrutinee)
 
     /** Pick the parent-sum repr that an `upcastOne` from `input` to `targetType`
-      * should produce. Centralizes the "preserve concrete vs coerce to default"
-      * decision that previously lived in each typegen's `upcastOne` body:
+      * should produce — the "preserve concrete vs coerce to default" decision:
       *
       *   - `ProdUplcConstr` input → overlay the variant onto
       *     `buildSumUplcConstr(targetType)` so concrete field reprs (e.g.
-      *     `Unwrapped` element types that may differ from the type's abstract
-      *     defaults) survive the upcast. Avoids a Data round-trip that would
-      *     fail for abstract TypeVar fields in isolation.
-      *   - `SumUplcConstr` input → keep the refined variant set as-is. The
-      *     input's repr already names the parent sum; rebuilding from
-      *     `buildSumUplcConstr` would over-specify.
+      *     `Unwrapped` element types that differ from the DataDecl's abstract
+      *     defaults) survive the upcast. Avoids a Data round-trip that fails
+      *     for abstract TypeVar fields in isolation. Fires unconditionally;
+      *     don't gate on target's default repr.
+      *   - `SumUplcConstr` input → keep the refined variant set as-is.
       *   - Same-shape sum input (`SumBuiltinList`, `SumPairBuiltinList`,
       *     `PackedSumDataList`, `SumDataAssocMap`) → keep input's
-      *     parameterization (e.g. preserve element repr).
+      *     parameterization (preserves element repr).
       *   - Otherwise → target's default repr.
       *
       * Returns the parent-sum repr only. Each emitter still chooses the
@@ -824,12 +819,6 @@ object SumDispatch {
                   pos
                 )
         (input.representation, targetSum) match
-            // ProdUplcConstr input → always overlay onto buildSumUplcConstr (even when
-            // the target's static default is a Data-shaped sum). The input's UPLC bytes
-            // are already `Constr(tag, fields)` with concrete field reprs the puc carries;
-            // overlaying preserves those reprs without a Data round-trip that would fail
-            // for abstract TypeVar fields. Matches `ProductCaseSirTypeGenerator.upcastOne`'s
-            // unconditional pre-Phase-3c behavior.
             case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
                 val baseSum =
                     typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType, pos)

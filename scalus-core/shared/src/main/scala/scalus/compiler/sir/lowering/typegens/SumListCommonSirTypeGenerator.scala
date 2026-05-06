@@ -102,8 +102,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
         import SumListCommonSirTypeGenerator.*
-        // Routing decisions live in SumDispatch.chooseConstrOutputRepr now (see
-        // ConstrDispatcher.shouldDelegateToUplcConstr for the original rules).
+        // Routing decisions live in `SumDispatch.chooseConstrOutputRepr`.
         constr.name match
             case SIRType.List.NilConstr.name | SIRType.BuiltinList.Nil.name | PairNilName =>
                 genNil(constr.tp, constr.anns.pos)
@@ -539,11 +538,10 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
               throw LoweringException("Cons case is required for list match", matchData.anns.pos)
             )
 
-            // Phase 3b: branch convergence routes through SumDispatch. The
-            // Transparent-UplcConstr override fires when a branch carries
-            // ProdUplcConstr/SumUplcConstr with Transparent TypeVar fields and
-            // synthesizes a SumUplcConstr aligned structurally; otherwise we
-            // fall back to chooseCommonRepresentation + uniform conversion.
+            // Branch convergence: when any branch carries a Transparent-TypeVar
+            // ProdUplcConstr/SumUplcConstr, `transparentSumUplcConstrAlignment`
+            // synthesizes a SumUplcConstr-aligned set; otherwise fall back to
+            // `chooseCommonRepresentation` + uniform conversion.
             val allBranches = Seq(loweredConsBody) ++ optLoweredNilBody.toSeq
             val (resRepr, alignedBranches) =
                 SumDispatch

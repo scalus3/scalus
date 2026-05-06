@@ -91,10 +91,10 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        // Repr-routing decisions (see ConstrDispatcher.shouldDelegateToUplcConstr) live in
-        // SumDispatch.chooseConstrOutputRepr now. By the time we land here, the dispatcher
-        // already picked SumCaseSirTypeGenerator for this constr; we just dive into the
-        // concrete CaseClass typegen.
+        // Routing decisions (parent-default check, tail-repr propagation,
+        // `@UplcRepr(UplcConstr)` annotation, `inUplcConstrListScope`) live in
+        // `SumDispatch.chooseConstrOutputRepr`. By the time we land here, the
+        // dispatcher already routed the constr to this generator.
         val caseClassType = constr.data.constrType(constr.name)
         lctx.typeGenerator(caseClassType)
             .genConstrLowered(

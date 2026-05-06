@@ -48,14 +48,13 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        // Variant-only `SumUplcConstr` (no overlay on `buildSumUplcConstr`) is
+        // Single-entry `SumUplcConstr` (no overlay on `buildSumUplcConstr`) is
         // load-bearing here: downstream `genMatchUplcConstr.hasTransparentFields`
-        // walks `variants.values`. If we put all the type-derived default variants
-        // in (as the general `chooseUpcastOutputRepr` overlay does), default
-        // variants that carry Transparent TypeVar fields (e.g. List.Cons's `head`)
-        // would fire the transparent-branch override even when the input is a
-        // concrete-shape `Nil`. Phase 3c's `chooseUpcastOutputRepr` is therefore
-        // used only by emitters whose pre-existing logic already used the overlay.
+        // walks `variants.values`, so adding type-derived default variants (whose
+        // fields carry Transparent TypeVar reprs from the DataDecl, e.g.
+        // `List.Cons.head`) would fire the transparent-branch override even for
+        // concrete-shape inputs like `Nil`. Hence we don't route through
+        // `SumDispatch.chooseUpcastOutputRepr`.
         input.representation match
             case prod: ProductCaseClassRepresentation.ProdUplcConstr =>
                 val sumRepr = SumCaseClassRepresentation.SumUplcConstr(

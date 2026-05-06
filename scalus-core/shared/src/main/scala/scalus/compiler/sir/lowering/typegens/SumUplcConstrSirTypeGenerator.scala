@@ -456,13 +456,11 @@ object SumUplcConstrSirTypeGenerator {
         val resultType = optTargetType.getOrElse(matchData.tp)
         val branchesUpcasted = branches.map(_.maybeUpcast(resultType, pos))
 
-        // Phase 3b: the Transparent-UplcConstr override (when any branch carries a
-        // ProdUplcConstr/SumUplcConstr with Transparent TypeVar fields, branches
-        // can't be folded to Data — synthesize a SumUplcConstr from
-        // `buildSumUplcConstr` and align structurally) lives in
-        // `SumDispatch.transparentSumUplcConstrAlignment`. The non-override path
-        // uses `LoweredValue.chooseCommonRepresentation` and uniformly converts
-        // every branch to the chosen repr.
+        // Branch convergence: Transparent-UplcConstr override (when branches carry
+        // `(Sum|Prod)UplcConstr` with Transparent TypeVar fields, fields can't be
+        // folded to Data — synthesize a SumUplcConstr and align structurally) lives
+        // in `SumDispatch.transparentSumUplcConstrAlignment`; otherwise fall back to
+        // `chooseCommonRepresentation` + uniform conversion.
         val (resultRepr, branchesAligned) =
             SumDispatch
                 .transparentSumUplcConstrAlignment(branchesUpcasted, resultType, pos)

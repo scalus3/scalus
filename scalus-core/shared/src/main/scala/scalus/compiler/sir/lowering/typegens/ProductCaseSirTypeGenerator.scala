@@ -73,13 +73,11 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        // INPUT-repr-first dispatch: if input is already `ProdUplcConstr`, its UPLC bytes
-        // are already `Constr(tag, fields)` — exactly the shape of a `SumUplcConstr` value.
-        // The Phase 3c `chooseUpcastOutputRepr` overlays the input's actual puc onto
-        // `buildSumUplcConstr(targetType)` so concrete field-repr refinements (e.g.
-        // `Unwrapped` reprs that differ from the type's abstract defaults) survive the
-        // upcast without a Data round-trip that would fail for abstract TypeVar fields
-        // in isolation.
+        // INPUT-repr-first dispatch: when input is `ProdUplcConstr`, its UPLC bytes are
+        // already `Constr(tag, fields)`. `SumDispatch.chooseUpcastOutputRepr` overlays
+        // the input's actual puc onto `buildSumUplcConstr(targetType)` so concrete
+        // field-repr refinements survive without a Data round-trip that would fail for
+        // abstract TypeVar fields in isolation.
         input.representation match
             case _: ProductCaseClassRepresentation.ProdUplcConstr =>
                 val outRepr = SumDispatch.chooseUpcastOutputRepr(input, targetType, pos)
@@ -101,7 +99,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         pos
                       )
                     )
-                if constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Cons" || constrDecl.name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
+                if constrDecl.name == SIRType.List.Cons.name
+                    || constrDecl.name == SIRType.List.NilConstr.name
                 then
                     val inputR = input.toRepresentation(ProdDataList, pos)
                     new TypeRepresentationProxyLoweredValue(
@@ -143,11 +142,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        // Repr-routing decisions live in ProdDispatch.genConstr →
-        // SumDispatch.chooseConstrOutputRepr now (see ConstrDispatcher for the original
-        // rules). The remaining decision here is structural: if any argument carries a
-        // Transparent TypeVar repr or a non-Data-convertible payload, fall back to the
-        // native UplcConstr emission.
+        // Repr-routing decisions live in `SumDispatch.chooseConstrOutputRepr`. The
+        // remaining decision here is structural: a Transparent TypeVar arg or a
+        // non-Data-convertible payload forces native UplcConstr emission.
         if hasTransparentTypeVarArgs(loweredArgs) then
             genConstrUplcConstr(constr, loweredArgs)
         else

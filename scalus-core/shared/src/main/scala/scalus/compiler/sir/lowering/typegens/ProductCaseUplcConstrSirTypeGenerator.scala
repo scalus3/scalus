@@ -58,17 +58,14 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         // relabel would lie about the byte layout: downstream `genSelect`/`genMatch` on the
         // upcasted value would emit native-UC selectors against Data.Constr bytes, surfacing
         // as `MultiplyInteger Apply LamAbs` runtime crashes (4-arg case branch on a 2-field
-        // CEK Data.Constr scrutinee). Mirror the dispatch in
-        // `SumCaseUplcConstrSirTypeGenerator.upcastOne`: only relabel when input is already
-        // UC-shaped; otherwise convert to UC first.
+        // CEK Data.Constr scrutinee). Mirror `SumCaseUplcConstrSirTypeGenerator.upcastOne`:
+        // only relabel when input is already UC-shaped; otherwise convert to UC first.
         //
-        // Phase 3c note: this emitter does NOT overlay the input's puc on
-        // `buildSumUplcConstr` (unlike `ProductCaseSirTypeGenerator`). Doing so would leak
-        // the per-variant defaults (which carry `TypeVar(Fixed)` field reprs from the
-        // DataDecl) into downstream conversions; the field-by-field translation in
-        // `SumUplcConstrSirTypeGenerator.toRepresentation`'s `dataListVar → variant fields`
-        // path then asks for `Fixed → Unwrapped` and aborts. So we keep the type-derived
-        // `buildSumUplcConstr` repr without overlay.
+        // We deliberately use the un-overlaid `buildSumUplcConstr(targetType)` rather than
+        // `SumDispatch.chooseUpcastOutputRepr`. The overlay would leak per-variant defaults
+        // (which carry `TypeVar(Fixed)` field reprs from the DataDecl) into the
+        // `SumUplcConstrSirTypeGenerator.toRepresentation` `dataListVar → variant fields`
+        // path, surfacing as `Fixed → Unwrapped` aborts.
         input.representation match
             case _: ProductCaseClassRepresentation.ProdUplcConstr |
                 _: SumCaseClassRepresentation.SumUplcConstr =>
