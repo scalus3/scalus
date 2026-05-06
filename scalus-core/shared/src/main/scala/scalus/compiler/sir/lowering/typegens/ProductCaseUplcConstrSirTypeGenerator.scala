@@ -61,6 +61,14 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         // CEK Data.Constr scrutinee). Mirror the dispatch in
         // `SumCaseUplcConstrSirTypeGenerator.upcastOne`: only relabel when input is already
         // UC-shaped; otherwise convert to UC first.
+        //
+        // Phase 3c note: this emitter does NOT overlay the input's puc on
+        // `buildSumUplcConstr` (unlike `ProductCaseSirTypeGenerator`). Doing so would leak
+        // the per-variant defaults (which carry `TypeVar(Fixed)` field reprs from the
+        // DataDecl) into downstream conversions; the field-by-field translation in
+        // `SumUplcConstrSirTypeGenerator.toRepresentation`'s `dataListVar → variant fields`
+        // path then asks for `Fixed → Unwrapped` and aborts. So we keep the type-derived
+        // `buildSumUplcConstr` repr without overlay.
         input.representation match
             case _: ProductCaseClassRepresentation.ProdUplcConstr |
                 _: SumCaseClassRepresentation.SumUplcConstr =>

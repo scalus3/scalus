@@ -48,15 +48,21 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
+        // Variant-only `SumUplcConstr` (no overlay on `buildSumUplcConstr`) is
+        // load-bearing here: downstream `genMatchUplcConstr.hasTransparentFields`
+        // walks `variants.values`. If we put all the type-derived default variants
+        // in (as the general `chooseUpcastOutputRepr` overlay does), default
+        // variants that carry Transparent TypeVar fields (e.g. List.Cons's `head`)
+        // would fire the transparent-branch override even when the input is a
+        // concrete-shape `Nil`. Phase 3c's `chooseUpcastOutputRepr` is therefore
+        // used only by emitters whose pre-existing logic already used the overlay.
         input.representation match
             case prod: ProductCaseClassRepresentation.ProdUplcConstr =>
-                // Use actual variant field reprs, not DataDecl TypeVars
                 val sumRepr = SumCaseClassRepresentation.SumUplcConstr(
                   scala.collection.immutable.SortedMap(prod.tag -> prod)
                 )
                 TypeRepresentationProxyLoweredValue(input, targetType, sumRepr, pos)
             case _ =>
-                // Non-UplcConstr repr — convert to ProdUplcConstr first, then upcast
                 val targetSum = SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
                 val constrIndex =
                     ProductCaseSirTypeGenerator.retrieveConstrIndex(input.sirType, pos)

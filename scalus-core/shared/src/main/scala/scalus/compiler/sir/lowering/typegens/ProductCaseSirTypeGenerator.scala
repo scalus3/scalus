@@ -75,26 +75,15 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValue = {
         // INPUT-repr-first dispatch: if input is already `ProdUplcConstr`, its UPLC bytes
         // are already `Constr(tag, fields)` — exactly the shape of a `SumUplcConstr` value.
-        // Upcasting to the parent sum is a zero-cost relabel: build target's SumUplcConstr
-        // using the TYPE's defaults for the OTHER variants, but keep the input's actual
-        // ProdUplcConstr entry at its own tag. This preserves field-repr refinements the
-        // input carries (e.g. concrete Unwrapped reprs that may differ from the type's
-        // abstract defaults) and avoids Data round-trips that would fail for abstract
-        // TypeVar fields in isolation.
+        // The Phase 3c `chooseUpcastOutputRepr` overlays the input's actual puc onto
+        // `buildSumUplcConstr(targetType)` so concrete field-repr refinements (e.g.
+        // `Unwrapped` reprs that differ from the type's abstract defaults) survive the
+        // upcast without a Data round-trip that would fail for abstract TypeVar fields
+        // in isolation.
         input.representation match
-            case puc: ProductCaseClassRepresentation.ProdUplcConstr =>
-                val baseSum =
-                    typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
-                val targetSum =
-                    SumCaseClassRepresentation.SumUplcConstr(
-                      baseSum.variants.updated(puc.tag, puc)
-                    )
-                return new TypeRepresentationProxyLoweredValue(
-                  input,
-                  targetType,
-                  targetSum,
-                  pos
-                )
+            case _: ProductCaseClassRepresentation.ProdUplcConstr =>
+                val outRepr = SumDispatch.chooseUpcastOutputRepr(input, targetType, pos)
+                return new TypeRepresentationProxyLoweredValue(input, targetType, outRepr, pos)
             case _ => // fall through to target-default-based dispatch
         val targetTypeGenerator = lctx.typeGenerator(targetType)
         targetTypeGenerator.defaultRepresentation(targetType) match {

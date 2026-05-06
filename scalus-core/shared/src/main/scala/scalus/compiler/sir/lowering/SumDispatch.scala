@@ -789,6 +789,59 @@ object SumDispatch {
     )(using lctx: LoweringContext): LoweredValue =
         lctx.typeGenerator(loweredScrutinee.sirType).genSelect(sel, loweredScrutinee)
 
+    /** Pick the parent-sum repr that an `upcastOne` from `input` to `targetType`
+      * should produce. Centralizes the "preserve concrete vs coerce to default"
+      * decision that previously lived in each typegen's `upcastOne` body:
+      *
+      *   - `ProdUplcConstr` input → overlay the variant onto
+      *     `buildSumUplcConstr(targetType)` so concrete field reprs (e.g.
+      *     `Unwrapped` element types that may differ from the type's abstract
+      *     defaults) survive the upcast. Avoids a Data round-trip that would
+      *     fail for abstract TypeVar fields in isolation.
+      *   - `SumUplcConstr` input → keep the refined variant set as-is. The
+      *     input's repr already names the parent sum; rebuilding from
+      *     `buildSumUplcConstr` would over-specify.
+      *   - Same-shape sum input (`SumBuiltinList`, `SumPairBuiltinList`,
+      *     `PackedSumDataList`, `SumDataAssocMap`) → keep input's
+      *     parameterization (e.g. preserve element repr).
+      *   - Otherwise → target's default repr.
+      *
+      * Returns the parent-sum repr only. Each emitter still chooses the
+      * matching byte-level conversion (`ProdDataList → SumBuiltinList`,
+      * `ProdDataConstr → DataConstr`, etc.) before relabeling.
+      */
+    def chooseUpcastOutputRepr(
+        input: LoweredValue,
+        targetType: SIRType,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): SumCaseClassRepresentation = {
+        val targetDefault = lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+        val targetSum = targetDefault match
+            case s: SumCaseClassRepresentation => s
+            case other =>
+                throw LoweringException(
+                  s"chooseUpcastOutputRepr: target ${targetType.show} default repr is not a SumCaseClassRepresentation: $other",
+                  pos
+                )
+        (input.representation, targetSum) match
+            // ProdUplcConstr input → always overlay onto buildSumUplcConstr (even when
+            // the target's static default is a Data-shaped sum). The input's UPLC bytes
+            // are already `Constr(tag, fields)` with concrete field reprs the puc carries;
+            // overlaying preserves those reprs without a Data round-trip that would fail
+            // for abstract TypeVar fields. Matches `ProductCaseSirTypeGenerator.upcastOne`'s
+            // unconditional pre-Phase-3c behavior.
+            case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
+                val baseSum =
+                    typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType, pos)
+                SumUplcConstr(baseSum.variants.updated(puc.tag, puc))
+            case (suc: SumUplcConstr, _: SumUplcConstr) => suc
+            case (suc: SumBuiltinList, _: SumBuiltinList) => suc
+            case (suc: SumPairBuiltinList, _: SumPairBuiltinList) => suc
+            case (PackedSumDataList, PackedSumDataList) => PackedSumDataList
+            case (SumDataAssocMap, SumDataAssocMap) => SumDataAssocMap
+            case _ => targetSum
+    }
+
     def upcastOne(
         input: LoweredValue,
         targetType: SIRType,
