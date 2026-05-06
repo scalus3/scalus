@@ -77,8 +77,8 @@ object PlutusScriptEvaluator {
 
     /** Reject a Plutus V4 script with a non-fatal `UnsupportedOperationException`. Plutus V4
       * (Dijkstra) evaluation, context building, and diagnostic replay are all out of scope until
-      * the upstream `plutus-core` V4 work lands; this helper centralises the rejection so all
-      * three V4 dispatch sites share one message and one exception type.
+      * the upstream `plutus-core` V4 work lands; this helper centralises the rejection so all three
+      * V4 dispatch sites share one message and one exception type.
       */
     private def unsupportedV4: Nothing =
         throw new UnsupportedOperationException(

@@ -258,8 +258,8 @@ object StepError {
 
     /** A step referenced a Plutus script whose language version the builder cannot yet attach to
       * the witness set. Currently emitted only for `Language.PlutusV4` (Dijkstra), which needs the
-      * upcoming `plutusV4Scripts` witness-set field; the error gives callers a typed signal
-      * instead of a raw exception escaping the step processor.
+      * upcoming `plutusV4Scripts` witness-set field; the error gives callers a typed signal instead
+      * of a raw exception escaping the step processor.
       */
     case class UnsupportedPlutusVersion(language: Language, step: TransactionBuilderStep)
         extends StepError {
