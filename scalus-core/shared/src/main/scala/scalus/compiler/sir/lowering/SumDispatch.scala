@@ -713,13 +713,75 @@ object SumDispatch {
         gen.genConstrLowered(constr, loweredArgs, optTargetType)
     }
 
+    /** Representation-aware dispatch for sum-typed `genMatch`. The Case-builtin
+      * shape varies by `loweredScrutinee.representation`:
+      *
+      *   - `SumUplcConstr` → tag-ordered Case via `genMatchUplcConstr` (the
+      *     scrutinee's UPLC bytes are already a `Constr(tag, fields)` so
+      *     branches index by tag directly).
+      *   - `DataConstr` → Data-shape Case in `SumCaseSirTypeGenerator.
+      *     genMatchDataConstr` (unConstrData → tag/field-list → if/else
+      *     chain, or `Case` on integer for V4+).
+      *   - `SumBuiltinList(elemRepr)` → caseList-ordered Case via the
+      *     element-repr-parameterized `SumBuiltinListSirTypeGenerator.genMatch`.
+      *   - `PackedSumDataList` → unpack to `SumBuiltinList(<elem-default>)`,
+      *     bind a fresh var, recurse.
+      *   - `TypeVarRepresentation(_)` → relabel to the type's
+      *     `defaultTypeVarRepresentation` and recurse.
+      *   - everything else → fall back to the type-keyed typegen's `genMatch`
+      *     (same routing as before this dispatcher existed).
+      *
+      * Pre-Phase-4 this match lived inside `SumCaseSirTypeGenerator.genMatch`
+      * and the `SumUplcConstr` short-circuit lived in `Lowering.lowerSIR`;
+      * routing them through the dispatcher consolidates the choice.
+      */
     def genMatch(
         matchData: SIR.Match,
         loweredScrutinee: LoweredValue,
         optTargetType: Option[SIRType]
-    )(using lctx: LoweringContext): LoweredValue =
-        lctx.typeGenerator(loweredScrutinee.sirType)
-            .genMatch(matchData, loweredScrutinee, optTargetType)
+    )(using lctx: LoweringContext): LoweredValue = {
+        import SumCaseClassRepresentation.*
+        loweredScrutinee.representation match
+            case _: SumUplcConstr =>
+                typegens.SumUplcConstrSirTypeGenerator
+                    .genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
+            case DataConstr =>
+                typegens.SumCaseSirTypeGenerator
+                    .genMatchDataConstr(matchData, loweredScrutinee, optTargetType)
+            case SumBuiltinList(elemRepr) =>
+                new typegens.SumBuiltinListSirTypeGenerator(elemRepr)
+                    .genMatch(matchData, loweredScrutinee, optTargetType)
+            case PackedSumDataList =>
+                val elemType = SumBuiltinList
+                    .retrieveListElementType(loweredScrutinee.sirType)
+                    .getOrElse(SIRType.Data.tp)
+                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val listRepr = SumBuiltinList(elemRepr)
+                val unpacked = loweredScrutinee.toRepresentation(listRepr, matchData.anns.pos)
+                val unpackedVar = lvNewLazyIdVar(
+                  lctx.uniqueVarName("_unpacked"),
+                  loweredScrutinee.sirType,
+                  listRepr,
+                  unpacked,
+                  matchData.anns.pos
+                )
+                new typegens.SumBuiltinListSirTypeGenerator(elemRepr)
+                    .genMatch(matchData, unpackedVar, optTargetType)
+            case TypeVarRepresentation(_) =>
+                val gen = lctx.typeGenerator(loweredScrutinee.sirType)
+                val properRepresentation =
+                    gen.defaultTypeVarReperesentation(loweredScrutinee.sirType)
+                val scrutineeWithProperRepr = TypeRepresentationProxyLoweredValue(
+                  loweredScrutinee,
+                  loweredScrutinee.sirType,
+                  properRepresentation,
+                  matchData.anns.pos
+                )
+                genMatch(matchData, scrutineeWithProperRepr, optTargetType)
+            case _ =>
+                lctx.typeGenerator(loweredScrutinee.sirType)
+                    .genMatch(matchData, loweredScrutinee, optTargetType)
+    }
 
     /** Choose-and-align step for `SumUplcConstr` matches when any branch carries a
       * `(Sum|Prod)UplcConstr` whose field reprs include a Transparent TypeVar.
