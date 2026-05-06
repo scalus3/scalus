@@ -201,6 +201,13 @@ class PrettyTest extends AnyFunSuite {
         assert(result.startsWith("PlutusV3("))
     }
 
+    test("Pretty[Script] PlutusV4") {
+        val scriptBytes = ByteString.fromHex("4e4d0100003322222005")
+        val script: Script = Script.PlutusV4(scriptBytes)
+        val result = script.show
+        assert(result.startsWith("PlutusV4("))
+    }
+
     // === VKeyWitness Tests ===
 
     test("Pretty[VKeyWitness] shows vkey hash") {

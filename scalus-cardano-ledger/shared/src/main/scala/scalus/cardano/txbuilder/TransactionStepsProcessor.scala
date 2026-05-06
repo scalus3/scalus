@@ -247,7 +247,7 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           plutus.scriptSource,
                           spend
                         )
-                        _ = usePlutusScript(plutus.scriptSource)
+                        _ <- usePlutusScript(plutus.scriptSource, spend)
 
                         detachedRedeemer = DetachedRedeemer(
                           DelayedRedeemerPlaceholder,
@@ -979,8 +979,8 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                           cred,
                           step
                         )
+                        _ <- usePlutusScript(witness.scriptSource, step)
                     } yield {
-                        usePlutusScript(witness.scriptSource)
                         val purpose = credAction match {
                             case Operation.Withdraw(stakeAddress) =>
                                 RedeemerPurpose.ForReward(RewardAccount(stakeAddress))
@@ -1146,34 +1146,48 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
     }
 
     private def usePlutusScript(
-        plutusScript: ScriptSource[PlutusScript]
-    ): Unit = {
+        plutusScript: ScriptSource[PlutusScript],
+        step: TransactionBuilderStep
+    ): Result[Unit] = {
         plutusScript match {
             case ScriptSource.PlutusScriptValue(ps: PlutusScript) =>
                 // Add the script value to the appropriate field
-                val f = ps match {
+                ps match {
                     case v1: Script.PlutusV1 =>
-                        unsafeCtxWitnessL
-                            .refocus(_.plutusV1Scripts)
-                            .modify(s =>
-                                TaggedSortedStrictMap(s.toSortedMap.updated(v1.scriptHash, v1))
-                            )
+                        modify0(
+                          unsafeCtxWitnessL
+                              .refocus(_.plutusV1Scripts)
+                              .modify(s =>
+                                  TaggedSortedStrictMap(s.toSortedMap.updated(v1.scriptHash, v1))
+                              )
+                        )
+                        Ok
                     case v2: Script.PlutusV2 =>
-                        unsafeCtxWitnessL
-                            .refocus(_.plutusV2Scripts)
-                            .modify(s =>
-                                TaggedSortedStrictMap(s.toSortedMap.updated(v2.scriptHash, v2))
-                            )
+                        modify0(
+                          unsafeCtxWitnessL
+                              .refocus(_.plutusV2Scripts)
+                              .modify(s =>
+                                  TaggedSortedStrictMap(s.toSortedMap.updated(v2.scriptHash, v2))
+                              )
+                        )
+                        Ok
                     case v3: Script.PlutusV3 =>
-                        unsafeCtxWitnessL
-                            .refocus(_.plutusV3Scripts)
-                            .modify(s =>
-                                TaggedSortedStrictMap(s.toSortedMap.updated(v3.scriptHash, v3))
-                            )
+                        modify0(
+                          unsafeCtxWitnessL
+                              .refocus(_.plutusV3Scripts)
+                              .modify(s =>
+                                  TaggedSortedStrictMap(s.toSortedMap.updated(v3.scriptHash, v3))
+                              )
+                        )
+                        Ok
+                    // PlutusV4 (Dijkstra) needs a `plutusV4Scripts` witness-set field that
+                    // tracks the upcoming CDDL update; that ships with the on-chain tx
+                    // wire-format work, not in this Script ADT-only PR.
+                    case _: Script.PlutusV4 =>
+                        Left(StepError.UnsupportedPlutusVersion(Language.PlutusV4, step))
                 }
-                modify0(f)
             // Script should already be attached, see [[assertAttachedScriptExists]]
-            case ScriptSource.PlutusScriptAttached => ()
+            case ScriptSource.PlutusScriptAttached => Ok
         }
     }
 

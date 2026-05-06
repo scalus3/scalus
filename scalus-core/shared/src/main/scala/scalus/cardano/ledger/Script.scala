@@ -143,6 +143,28 @@ object Script {
         }
     }
 
+    /** Plutus V4 script (introduced in the Dijkstra hard fork). */
+    @key(4) final case class PlutusV4(override val script: ByteString) extends PlutusScript
+        derives Codec {
+
+        /** Get the script hash for this Plutus V4 script */
+        @transient lazy val scriptHash: ScriptHash = Hash(
+          platform.blake2b_224(ByteString.unsafeFromArray(4 +: script.bytes))
+        )
+
+        def language: Language = Language.PlutusV4
+    }
+
+    object PlutusV4 {
+
+        /** Create from an in-memory Program, caching it to preserve source annotations. */
+        def apply(program: Program): PlutusV4 = {
+            val s = new PlutusV4(program.cborByteString)
+            s._cachedProgram = program
+            s
+        }
+    }
+
     given Codec[Script] = deriveCodec
 
     import Doc.*
@@ -157,10 +179,12 @@ object Script {
                 case Script.PlutusV1(_) => text("PlutusV1") + hashDoc
                 case Script.PlutusV2(_) => text("PlutusV2") + hashDoc
                 case Script.PlutusV3(_) => text("PlutusV3") + hashDoc
+                case Script.PlutusV4(_) => text("PlutusV4") + hashDoc
 
     // Variant instances delegate to the main Pretty[Script]
     given Pretty[Script.Native] = (a, style) => prettyScript.pretty(a, style)
     given Pretty[Script.PlutusV1] = (a, style) => prettyScript.pretty(a, style)
     given Pretty[Script.PlutusV2] = (a, style) => prettyScript.pretty(a, style)
     given Pretty[Script.PlutusV3] = (a, style) => prettyScript.pretty(a, style)
+    given Pretty[Script.PlutusV4] = (a, style) => prettyScript.pretty(a, style)
 }
