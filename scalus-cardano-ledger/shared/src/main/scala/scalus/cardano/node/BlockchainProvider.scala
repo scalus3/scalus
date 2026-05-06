@@ -41,6 +41,69 @@ trait BlockchainReaderTF[F[_]] {
       *   the current status of the transaction
       */
     def checkTransaction(txHash: TransactionHash): F[TransactionStatus]
+
+    /** Query UTxOs using a lambda DSL.
+      *
+      * Translates the lambda to a [[UtxoQuery]] at compile time and returns a builder that can be
+      * further configured before execution. Effect-polymorphic — the resulting `.execute()` returns
+      * the reader's own `F[Either[UtxoQueryError, Utxos]]`, so the same call shape works on
+      * Future-typed providers (Blockfrost, JS) and direct-style providers (ox `Id`).
+      *
+      * Example:
+      * {{{
+      * // Simple query — execute immediately
+      * reader.queryUtxos { u =>
+      *   u.output.address == myAddress
+      * }.execute()
+      *
+      * // With pagination and minimum total
+      * reader.queryUtxos { u =>
+      *   u.output.address == myAddress && u.output.value.hasAsset(policyId, assetName)
+      * }.minTotal(Coin.ada(100)).limit(10).execute()
+      * }}}
+      *
+      * Supported expressions:
+      *   - `u.output.address == addr` — query by address
+      *   - `u.input.transactionId == txId` — query by transaction
+      *   - `u.output.value.hasAsset(policyId, assetName)` — query/filter by asset
+      *   - `u.output.value.coin >= amount` — filter by minimum lovelace
+      *   - `u.output.hasDatumHash(hash)` — filter by datum hash
+      *   - `&&` — AND combination
+      *   - `||` — OR combination
+      *
+      * @param f
+      *   Lambda expression from Utxo to Boolean
+      * @return
+      *   A [[UtxoQueryWithReaderTF]] builder over this reader's effect type
+      */
+    inline def queryUtxos(inline f: Utxo => Boolean): UtxoQueryWithReaderTF[F] =
+        UtxoQueryWithReaderTF[F](this, UtxoQueryMacros.buildQuery(f))
+}
+
+/** A query builder that combines a [[BlockchainReaderTF]] with a [[UtxoQuery]]. Effect-polymorphic
+  * — `.execute()` returns the reader's own `F[Either[UtxoQueryError, Utxos]]`.
+  *
+  * @param reader
+  *   The reader to execute the query against
+  * @param query
+  *   The query to execute
+  */
+case class UtxoQueryWithReaderTF[F[_]](reader: BlockchainReaderTF[F], query: UtxoQuery) {
+
+    /** Limit the number of results */
+    def limit(n: Int): UtxoQueryWithReaderTF[F] = copy(query = query.limit(n))
+
+    /** Skip the first n results */
+    def skip(n: Int): UtxoQueryWithReaderTF[F] = copy(query = query.skip(n))
+
+    /** Set minimum required total lovelace amount (early termination optimization).
+      *
+      * The query will stop fetching UTxOs once the accumulated lovelace reaches this amount.
+      */
+    def minTotal(amount: Coin): UtxoQueryWithReaderTF[F] = copy(query = query.minTotal(amount))
+
+    /** Execute the query and return the results in the reader's effect type. */
+    def execute(): F[Either[UtxoQueryError, Utxos]] = reader.findUtxos(query)
 }
 
 /** Trait for blockchain providers with generic effect type. (TF is for "tagless final" style, often
@@ -196,68 +259,6 @@ trait BlockchainReader extends BlockchainReaderTF[Future] {
             case Left(_)  => TransactionStatus.NotFound
         }(executionContext)
 
-    /** Query UTxOs using lambda DSL.
-      *
-      * This method translates a lambda expression to a UtxoQuery at compile time and returns a
-      * builder that can be further configured before execution.
-      *
-      * Example:
-      * {{{
-      * // Simple query - execute immediately
-      * reader.queryUtxos { u =>
-      *   u.output.address == myAddress
-      * }.execute()
-      *
-      * // With pagination and minimum total
-      * reader.queryUtxos { u =>
-      *   u.output.address == myAddress && u.output.value.hasAsset(policyId, assetName)
-      * }.minTotal(Coin.ada(100)).limit(10).execute()
-      * }}}
-      *
-      * Supported expressions:
-      *   - `u.output.address == addr` - query by address
-      *   - `u.input.transactionId == txId` - query by transaction
-      *   - `u.output.value.hasAsset(policyId, assetName)` - query/filter by asset
-      *   - `u.output.value.coin >= amount` - filter by minimum lovelace
-      *   - `u.output.hasDatumHash(hash)` - filter by datum hash
-      *   - `&&` - AND combination
-      *   - `||` - OR combination
-      *
-      * @param f
-      *   Lambda expression from Utxo to Boolean
-      * @return
-      *   A UtxoQueryWithReader builder that can be configured and executed
-      */
-    inline def queryUtxos(inline f: Utxo => Boolean): UtxoQueryWithReader =
-        UtxoQueryWithReader(this, UtxoQueryMacros.buildQuery(f))
-}
-
-/** A query builder that combines a BlockchainReader with a UtxoQuery.
-  *
-  * Allows chaining configuration methods before executing the query.
-  *
-  * @param reader
-  *   The reader to execute the query against
-  * @param query
-  *   The query to execute
-  */
-case class UtxoQueryWithReader(reader: BlockchainReader, query: UtxoQuery) {
-
-    /** Limit the number of results */
-    def limit(n: Int): UtxoQueryWithReader = copy(query = query.limit(n))
-
-    /** Skip the first n results */
-    def skip(n: Int): UtxoQueryWithReader = copy(query = query.skip(n))
-
-    /** Set minimum required total lovelace amount (early termination optimization).
-      *
-      * The query will stop fetching UTxOs once the accumulated lovelace reaches this amount.
-      */
-    def minTotal(amount: Coin): UtxoQueryWithReader = copy(query = query.minTotal(amount))
-
-    /** Execute the query and return the results */
-    def execute(): Future[Either[UtxoQueryError, Utxos]] =
-        reader.findUtxos(query)
 }
 
 /** Provider for Cardano blockchain operations.
@@ -283,7 +284,7 @@ trait BlockchainProvider extends BlockchainProviderTF[Future] with BlockchainRea
     // - findUtxo(input: TransactionInput) (default impl)
     // - findUtxos(inputs: Set[TransactionInput]) (default impl)
     // - findUtxos(address: Address) (default impl)
-    // - queryUtxos (returns UtxoQueryWithReader)
+    // - queryUtxos (returns UtxoQueryWithReaderTF[Future])
 
     def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]]
 
