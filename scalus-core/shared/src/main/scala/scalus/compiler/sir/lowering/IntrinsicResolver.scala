@@ -63,59 +63,37 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrList",
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption"
         )
-        // Stamp TypeVars Transparent so native values pass through without implicit Data
-        // conversion. HO function arguments (e.g. Eq in contains) are explicitly wrapped with
-        // toDefaultTypeVarRepr in the intrinsic body to convert to Fixed (Data) repr.
-        //
-        // UplcConstrListOps and UplcConstrOptionOps carry author-written `@UplcRepr(TypeVar(...))`
-        // annotations and bypass blanket stamping so the source intent is preserved:
+        // Intrinsic modules that need a non-default TypeVar kind carry author-written
+        // `@UplcRepr(TypeVar(...))` annotations on their type parameters, so no blanket
+        // post-load stamping is needed. HO function arguments (e.g. Eq in contains) are
+        // explicitly wrapped with toDefaultTypeVarRepr in the intrinsic body to convert to
+        // Fixed (Data) repr.
         //   - IntrinsicsUplcConstrList:    `@UplcRepr(TypeVar(Unwrapped))`   (bytes at concrete default)
         //   - IntrinsicsUplcConstrOption:  `@UplcRepr(TypeVar(Transparent))` (bytes pass through)
-        // NativeListOps still uses the legacy blanket-Transparent path.
-        modules.map { (name, module) =>
-            if name == NativeListOps then name -> stampTransparent(module)
-            else name -> module
-        }
-    }
-
-    private def stampTransparent(module: Module): Module = {
-        val transparentDefs = module.defs.map { binding =>
-            val newValue = SIR.mapTypeVars(
-              binding.value,
-              _.copy(kind = SIRType.TypeVarKind.Transparent)
-            )
-            val newTp = SIRType.mapTypeVars(
-              binding.tp,
-              _.copy(kind = SIRType.TypeVarKind.Transparent)
-            )
-            Binding(binding.name, newTp, newValue)
-        }
-        module.copy(defs = transparentDefs)
+        //   - IntrinsicsNativeList:        `@UplcRepr(TypeVar(Transparent))` (bytes pass through)
+        // Other intrinsic modules (e.g. BuiltinListOperations, BuiltinPairListOperations,
+        // SortedMapIntrinsics, AssocMapIntrinsics) load with default `Fixed` TypeVars — they
+        // operate on Data-encoded inputs and don't need passthrough semantics.
+        modules
     }
 
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
       * intrinsic modules, these are NOT used for provider substitution.
       *
-      * `UplcConstrListOperations` and `UplcConstrOptionOperations` carry per-typeparam
-      * `@UplcRepr(TypeVar(Transparent))` so their TypeVars come through with author-written kinds,
-      * matching the dispatcher annotations and avoiding the abstract-A `Transparent → Unwrapped`
-      * boundary at standalone-lowered support-op call sites. `NativeListOperations` is still on the
-      * legacy blanket-Transparent path until Phase 4 migrates it.
+      * Methods that need a non-default TypeVar kind carry author-written `@UplcRepr(TypeVar(...))`
+      * annotations on their type parameters, so no blanket post-load stamping is needed.
+      * `NativeListOperations.find` is intentionally left unannotated (loads with default `Fixed`) —
+      * its `Option.None`/`Option.Some` if-then-else body has a known interaction with Constr
+      * emission that the annotation path doesn't yet handle (see its scaladoc for details). For HO
+      * methods that take pre-compiled functions (like contains with Eq), the dispatcher wraps the
+      * HO function with representation conversion adapters.
       */
     def defaultSupportModules: Map[String, Module] = {
-        val modules = scalus.compiler.compiledModules(
+        scalus.compiler.compiledModules(
           "scalus.compiler.intrinsics.NativeListOperations",
           "scalus.compiler.intrinsics.UplcConstrListOperations",
           "scalus.compiler.intrinsics.UplcConstrOptionOperations"
         )
-        // Skip stamping for modules whose type parameters carry @UplcRepr annotations.
-        // For HO methods that take pre-compiled functions (like contains with Eq), the
-        // dispatcher wraps the HO function with representation conversion adapters.
-        modules.map { (name, module) =>
-            if name == "scalus.compiler.intrinsics.NativeListOperations" then
-                name -> stampTransparent(module)
-            else name -> module
-        }
     }
 
     // Representation name constants for registry lookup
@@ -346,7 +324,26 @@ object IntrinsicResolver {
                                             lctx.typeUnifyEnv.copy(filledTypes = merged)
                                         lctx.typeVarReprEnv = savedReprEnv
                                         allocatedKeys.foreach(lctx.argCache.remove)
-                                Some(lowered)
+                                // Apply rule only when the body's natural output and rule's
+                                // declared output are in different repr families — same-family
+                                // pairs (e.g. SumUplcConstr with Unwrapped vs concrete-default
+                                // element reprs) are runtime-equivalent and a `toRepresentation`
+                                // would just emit a redundant spine rewriter.
+                                val ruleApplied = bestReprRules.get(methodName) match
+                                    case Some(rule) =>
+                                        val outputRepr =
+                                            rule(appType, firstEffective.representation, lctx)
+                                        if reprsShareOuterFamily(
+                                              lowered.representation,
+                                              outputRepr
+                                            )
+                                        then lowered
+                                        else lowered.toRepresentation(outputRepr, pos)
+                                    case None => lowered
+                                Some(
+                                  RepresentationAnnotatedTypeProxyLoweredValue
+                                      .wrapIfAnnotated(ruleApplied, pos)
+                                )
                             }
                         }
     }
@@ -478,108 +475,24 @@ object IntrinsicResolver {
                                             lctx.typeUnifyEnv.copy(filledTypes = merged)
                                         lctx.typeVarReprEnv = savedReprEnv
                                 } finally lctx.argCache.remove(allocatedKey)
-                            val annotateReturnType = propagateReturnAnnotation
-                            // If the inlined body's sirType has free TypeVars (not bound by
-                            // any inner TypeLambda), wrap them with an outer TypeLambda. The
-                            // result of currying `map[A,B](self)` is conceptually
-                            // `[B] =>> (A→B) → List[B]` but the inlined body drops the wrapper.
-                            // Without it, downstream `lvApply.reprFun` short-circuits
-                            // (`collectPolyOrFun` returns `typeVars=Nil`) so it can't substitute
-                            // the actual mapper's output repr into the result list's element
-                            // repr — `Transparent` TypeVar reprs leak instead.
-                            def collectFreeTypeVars(tp: SIRType): scala.List[SIRType.TypeVar] = {
-                                val seen =
-                                    new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
-                                val acc =
-                                    scala.collection.mutable.LinkedHashSet[SIRType.TypeVar]()
-                                def go(t: SIRType, bound: Set[SIRType.TypeVar]): Unit =
-                                    t match
-                                        case tv: SIRType.TypeVar =>
-                                            if !bound.contains(tv) then acc += tv
-                                        case SIRType.TypeLambda(ps, body) =>
-                                            go(body, bound ++ ps)
-                                        case SIRType.Fun(in, out) =>
-                                            go(in, bound); go(out, bound)
-                                        case SIRType.CaseClass(_, args, parent) =>
-                                            args.foreach(go(_, bound))
-                                            parent.foreach(go(_, bound))
-                                        case SIRType.SumCaseClass(_, args) =>
-                                            args.foreach(go(_, bound))
-                                        case SIRType.Annotated(t1, _) => go(t1, bound)
-                                        case SIRType.TypeProxy(ref) =>
-                                            if ref != null && !seen.containsKey(t) then {
-                                                seen.put(t.asInstanceOf[SIRType.TypeProxy], true)
-                                                go(ref, bound)
-                                            }
-                                        case _ => // primitives, FreeUnificator, TypeNothing
-                                go(tp, Set.empty)
-                                acc.toList
-                            }
-                            def restoreTypeLambdaWrapper(base: SIRType): SIRType = {
-                                val frees = collectFreeTypeVars(base)
-                                if frees.isEmpty then base
-                                else SIRType.TypeLambda(frees, base)
-                            }
-                            val annotatedBase = effectiveArg.sirType match
-                                case SIRType.Annotated(_, anns) if anns.data.contains("uplcRepr") =>
-                                    annotateReturnType(lowered.sirType, anns)
-                                case _ => lowered.sirType
-                            val outputSirType =
-                                restoreTypeLambdaWrapper(annotatedBase)
-                            // Rebuild LambdaRepresentation so its `funTp` carries the outer
-                            // TypeLambda — `reprFun` at downstream applies needs it to see
-                            // the bound TypeVars and substitute their reprs.
-                            val wrappedRepr = lowered.representation match
-                                case lr: LambdaRepresentation if outputSirType ne lowered.sirType =>
-                                    LambdaRepresentation(
-                                      outputSirType,
-                                      lr.canonicalRepresentationPair
-                                    )
-                                case other => other
-                            // Apply repr rule to set correct output representation
-                            bestReprRules.get(methodName) match
+                            // Real byte-level conversion + representation-derived annotation +
+                            // outer TypeLambda restoration. Both proxies derive their fields
+                            // from `origin`, so neither label can drift from emitted bytes.
+                            val ruleApplied = bestReprRules.get(methodName) match
                                 case Some(rule) =>
                                     val outputRepr =
                                         rule(appType, effectiveArg.representation, lctx)
-                                    if lowered.representation == outputRepr
-                                        && outputSirType == lowered.sirType
+                                    if reprsShareOuterFamily(
+                                          lowered.representation,
+                                          outputRepr
+                                        )
                                     then lowered
-                                    else
-                                        new BaseRepresentationProxyLoweredValue(
-                                          lowered,
-                                          outputRepr,
-                                          pos
-                                        ) {
-                                            override def sirType: SIRType = outputSirType
-                                            override def termInternal(
-                                                gctx: TermGenerationContext
-                                            ): Term =
-                                                lowered.termInternal(gctx)
-                                            override def docDef(
-                                                ctx: LoweredValue.PrettyPrintingContext
-                                            ): Doc =
-                                                lowered.docRef(ctx)
-                                        }
-                                case None =>
-                                    if outputSirType == lowered.sirType
-                                        && (wrappedRepr eq lowered.representation)
-                                    then lowered
-                                    else
-                                        new BaseRepresentationProxyLoweredValue(
-                                          lowered,
-                                          wrappedRepr,
-                                          pos
-                                        ) {
-                                            override def sirType: SIRType = outputSirType
-                                            override def termInternal(
-                                                gctx: TermGenerationContext
-                                            ): Term =
-                                                lowered.termInternal(gctx)
-                                            override def docDef(
-                                                ctx: LoweredValue.PrettyPrintingContext
-                                            ): Doc =
-                                                lowered.docRef(ctx)
-                                        }
+                                    else lowered.toRepresentation(outputRepr, pos)
+                                case None => lowered
+                            val annotated =
+                                RepresentationAnnotatedTypeProxyLoweredValue
+                                    .wrapIfAnnotated(ruleApplied, pos)
+                            OuterTypeLambdaWrappedLoweredValue.wrapIfNeeded(annotated, pos)
                         }
     }
 
@@ -645,6 +558,42 @@ object IntrinsicResolver {
             case a: AnnotatedSIR      => goE(a)
         go(sir)
     }
+
+    /** True when both reprs share top-level spine kind, regardless of nested field-repr
+      * differences. Skips `toRepresentation` when source and target are runtime-equivalent (e.g.
+      * SumUplcConstr with `TypeVarRepresentation(Unwrapped)` element reprs aliasing the concrete
+      * default).
+      */
+    private def reprsShareOuterFamily(
+        a: LoweredValueRepresentation,
+        b: LoweredValueRepresentation
+    ): Boolean = (a, b) match
+        case (
+              _: SumCaseClassRepresentation.SumUplcConstr,
+              _: SumCaseClassRepresentation.SumUplcConstr
+            ) =>
+            true
+        case (
+              _: SumCaseClassRepresentation.SumBuiltinList,
+              _: SumCaseClassRepresentation.SumBuiltinList
+            ) =>
+            true
+        case (
+              _: SumCaseClassRepresentation.SumPairBuiltinList,
+              _: SumCaseClassRepresentation.SumPairBuiltinList
+            ) =>
+            true
+        case (
+              _: ProductCaseClassRepresentation.ProdUplcConstr,
+              _: ProductCaseClassRepresentation.ProdUplcConstr
+            ) =>
+            true
+        case (
+              _: ProductCaseClassRepresentation.ProdBuiltinPair,
+              _: ProductCaseClassRepresentation.ProdBuiltinPair
+            ) =>
+            true
+        case _ => a == b
 
     /** All representation names that match a given representation, most specific first. */
     private def representationNames(repr: LoweredValueRepresentation): List[String] = repr match
