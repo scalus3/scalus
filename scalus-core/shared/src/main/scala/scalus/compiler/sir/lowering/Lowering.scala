@@ -137,7 +137,7 @@ object Lowering {
                 //   - sum scrutinees: SumUplcConstr → Case-based genMatchUplcConstr;
                 //     DataConstr / SumBuiltinList / PackedSumDataList → repr-specific emitter.
                 //   - prod scrutinees: ProdUplcConstr / SumUplcConstr → genMatchUplcConstr;
-                //     ProdDataList / ProdDataConstr / PackedDataList → genMatchDataList;
+                //     ProdDataList / ProdDataConstr / PackedDataList → ProdDataListEmitter.genMatch;
                 //     ProdBuiltinPair → ProdBuiltinPairEmitter.genMatch.
                 // Other types fall back to the type-keyed typegen.
                 val retval =

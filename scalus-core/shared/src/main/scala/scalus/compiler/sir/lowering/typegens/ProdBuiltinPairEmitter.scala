@@ -14,7 +14,7 @@ import scalus.uplc.Term
   * them in scope, and lowers the case body.
   *
   * Constr emission for `ProdBuiltinPair` flows through
-  * `ProductCaseSirTypeGenerator.genConstrLowered` → `genConstrDataConstr`
+  * `ProductCaseSirTypeGenerator.genConstrLowered` → `ProdDataListEmitter.genConstr`
   * → conversions in `ProdDispatch`; only the `Match` path is per-emitter logic.
   */
 object ProdBuiltinPairEmitter {
