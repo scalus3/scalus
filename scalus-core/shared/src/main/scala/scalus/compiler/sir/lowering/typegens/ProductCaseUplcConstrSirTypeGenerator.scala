@@ -112,4 +112,35 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     )(using LoweringContext): LoweredValue =
         ProdDispatch.genMatch(matchData, loweredScrutinee, optTargetType)
 
+    /** Outbound conversions from a `@UplcRepr(UplcConstr)` product (Phase 5).
+      * Resolves TypeVar inputs to the type's concrete repr, then delegates to
+      * `ProductCaseSirTypeGenerator.emitConvert` for the actual conversion.
+      */
+    def emitConvert(
+        input: LoweredValue,
+        outputRepresentation: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        if input.representation.isCompatibleOn(input.sirType, outputRepresentation, pos) then
+            if input.representation == outputRepresentation then input
+            else RepresentationProxyLoweredValue(input, outputRepresentation, pos)
+        else
+            val resolved = input.representation match
+                case tvr: TypeVarRepresentation =>
+                    import SIRType.TypeVarKind.*
+                    tvr.kind match
+                        case Transparent =>
+                            val pucRepr = defaultRepresentation(input.sirType)
+                            RepresentationProxyLoweredValue(input, pucRepr, pos)
+                        case Unwrapped =>
+                            input.toRepresentation(defaultRepresentation(input.sirType), pos)
+                        case Fixed =>
+                            input.toRepresentation(
+                              defaultTypeVarReperesentation(input.sirType),
+                              pos
+                            )
+                case _ => input
+            ProductCaseSirTypeGenerator.emitConvert(resolved, outputRepresentation, pos)
+    }
+
 }

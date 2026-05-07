@@ -220,6 +220,85 @@ case class OneElementWrapperEmitter(
         }
     }
 
+    /** Outbound conversions from a `OneElementWrapper(_)` value (Phase 5).
+      * The inner value is extracted via `argLoweredValue` and converted using
+      * `argGenerator`'s default-repr lookups. Falls through to
+      * `ProductCaseSirTypeGenerator.emitConvert` for non-wrapper-source pairs.
+      */
+    def emitConvert(
+        input: LoweredValue,
+        representation: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        import ProductCaseClassRepresentation.*
+        (input.representation, representation) match
+            case (OneElementWrapper(argRepr), OneElementWrapper(newArgRepr)) =>
+                if argRepr == newArgRepr then input
+                else
+                    val newArg = argLoweredValue(input).toRepresentation(newArgRepr, pos)
+                    new TypeRepresentationProxyLoweredValue(
+                      newArg,
+                      input.sirType,
+                      OneElementWrapper(newArgRepr),
+                      input.pos
+                    )
+            case (OneElementWrapper(argRepr), ProdDataList) =>
+                val argInData = argLoweredValue(input).toRepresentation(
+                  argGenerator.defaultDataRepresentation(input.sirType),
+                  pos
+                )
+                lvBuiltinApply2(
+                  SIRBuiltins.mkCons,
+                  argInData,
+                  lvDataNil(
+                    pos,
+                    SIRType.List(SIRType.Data.tp),
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
+                  ),
+                  input.sirType,
+                  ProdDataList,
+                  pos
+                )
+            case (OneElementWrapper(argRepr), ProdDataConstr) =>
+                input.toRepresentation(ProdDataList, pos).toRepresentation(ProdDataConstr, pos)
+            case (OneElementWrapper(argRepr), tvr: TypeVarRepresentation) =>
+                import SIRType.TypeVarKind.*
+                tvr.kind match
+                    case Transparent =>
+                        input
+                    case Unwrapped | Fixed =>
+                        val targetUnderlying = tvr.kind match
+                            case Unwrapped =>
+                                argGenerator.defaultRepresentation(input.sirType)
+                            case Fixed =>
+                                argGenerator.defaultTypeVarReperesentation(input.sirType)
+                            case Transparent => argRepr // unreachable
+                        val argValue = argLoweredValue(input)
+                        val convertedArg = argValue.toRepresentation(targetUnderlying, pos)
+                        new TypeRepresentationProxyLoweredValue(
+                          convertedArg,
+                          input.sirType,
+                          tvr,
+                          pos
+                        )
+            case (tvr: TypeVarRepresentation, outRepr @ OneElementWrapper(argRepr)) =>
+                import SIRType.TypeVarKind.*
+                tvr.kind match
+                    case Transparent =>
+                        new RepresentationProxyLoweredValue(input, representation, pos)
+                    case Unwrapped | Fixed =>
+                        val argValue = argLoweredValue(input)
+                        val convertedArg = argValue.toRepresentation(argRepr, pos)
+                        new TypeRepresentationProxyLoweredValue(
+                          convertedArg,
+                          input.sirType,
+                          outRepr,
+                          pos
+                        )
+            case (_, _) =>
+                ProductCaseSirTypeGenerator.emitConvert(input, representation, pos)
+    }
+
 }
 
 object OneElementWrapperEmitter {
