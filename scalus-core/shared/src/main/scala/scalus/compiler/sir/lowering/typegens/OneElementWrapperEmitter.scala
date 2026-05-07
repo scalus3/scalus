@@ -242,7 +242,7 @@ case class OneElementWrapperEmitter(
                       OneElementWrapper(newArgRepr),
                       input.pos
                     )
-            case (OneElementWrapper(argRepr), ProdDataList) =>
+            case (OneElementWrapper(_), ProdDataList) =>
                 val argInData = argLoweredValue(input).toRepresentation(
                   argGenerator.defaultDataRepresentation(input.sirType),
                   pos
@@ -259,20 +259,18 @@ case class OneElementWrapperEmitter(
                   ProdDataList,
                   pos
                 )
-            case (OneElementWrapper(argRepr), ProdDataConstr) =>
+            case (OneElementWrapper(_), ProdDataConstr) =>
                 input.toRepresentation(ProdDataList, pos).toRepresentation(ProdDataConstr, pos)
-            case (OneElementWrapper(argRepr), tvr: TypeVarRepresentation) =>
+            case (OneElementWrapper(_), tvr: TypeVarRepresentation) =>
                 import SIRType.TypeVarKind.*
                 tvr.kind match
                     case Transparent =>
                         input
                     case Unwrapped | Fixed =>
-                        val targetUnderlying = tvr.kind match
-                            case Unwrapped =>
+                        val targetUnderlying =
+                            if tvr.kind == Unwrapped then
                                 argGenerator.defaultRepresentation(input.sirType)
-                            case Fixed =>
-                                argGenerator.defaultTypeVarReperesentation(input.sirType)
-                            case Transparent => argRepr // unreachable
+                            else argGenerator.defaultTypeVarReperesentation(input.sirType)
                         val argValue = argLoweredValue(input)
                         val convertedArg = argValue.toRepresentation(targetUnderlying, pos)
                         new TypeRepresentationProxyLoweredValue(

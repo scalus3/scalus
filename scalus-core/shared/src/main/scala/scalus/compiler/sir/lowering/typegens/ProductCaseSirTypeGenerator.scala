@@ -269,11 +269,10 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
     }
 
-    /** Outbound conversions for plain product values (Phase 5). Body lifted
-      * from `ProdDispatch.prodCaseImpl`. Handles `ProdDataList` /
-      * `ProdDataConstr` / `PackedDataList` / `ProdUplcConstr` /
-      * `ProdBuiltinPair` / `OneElementWrapper` sources via direct emission or
-      * two-hop chains.
+    /** Outbound conversions for plain product values. Handles
+      * `ProdDataList` / `ProdDataConstr` / `PackedDataList` /
+      * `ProdUplcConstr` / `ProdBuiltinPair` / `OneElementWrapper` sources via
+      * direct emission or two-hop chains.
       */
     def emitConvert(
         input: LoweredValue,
@@ -536,7 +535,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
                     }
                 }
-            case (OneElementWrapper(internalInputRep), _) =>
+            case (OneElementWrapper(_), _) =>
                 // in theory never bin here, but let's delegate
                 val generator = lctx.typeGenerator(input.sirType)
                 generator match
