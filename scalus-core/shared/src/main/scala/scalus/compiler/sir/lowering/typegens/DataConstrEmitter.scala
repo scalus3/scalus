@@ -24,7 +24,7 @@ import scala.collection.mutable
   * `retrieveDataDecl` stay here as shared helpers because `SumUplcConstrEmitter` and
   * `ProductCaseSirTypeGenerator` both reuse them.
   */
-object  DataConstrEmitter extends SirTypeUplcGenerator {
+object DataConstrEmitter extends SirTypeUplcGenerator {
 
     import SumCaseClassRepresentation.*
 
