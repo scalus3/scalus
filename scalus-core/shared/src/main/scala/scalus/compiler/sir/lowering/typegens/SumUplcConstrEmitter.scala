@@ -715,7 +715,7 @@ object SumUplcConstrEmitter {
                   tvr: TypeVarRepresentation,
                   _: SumUplcConstr | _: SumCaseClassRepresentation.SumBuiltinList
                 ) =>
-                bridgeFromTypeVar(input, tvr, representation, pos)
+                TypeVarEmitter.bridgeFromKind(input, tvr, representation, pos)
             // UplcConstr/ProdUplcConstr → TypeVarRepresentation: dispatch by target kind
             case (
                   _: SumUplcConstr | _: ProductCaseClassRepresentation.ProdUplcConstr,
@@ -1122,52 +1122,6 @@ object SumUplcConstrEmitter {
                 )
             case None =>
                 new RepresentationProxyLoweredValue(input, outSum, pos)
-    }
-
-    /** Convert a TypeVar-labeled value to a concrete UplcConstr-family target.
-      * Shared by the `(TypeVar, SumUplcConstr)` and `(TypeVar, SumBuiltinList)`
-      * arms — both have identical kind-driven dispatch shapes.
-      */
-    private def bridgeFromTypeVar(
-        input: LoweredValue,
-        tvr: TypeVarRepresentation,
-        target: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue = {
-        import SIRType.TypeVarKind.*
-        tvr.kind match
-            case Transparent =>
-                RepresentationProxyLoweredValue(input, target, pos)
-            case Unwrapped =>
-                val typeGen = lctx.typeGenerator(input.sirType)
-                val sourceUnderlying = typeGen.defaultRepresentation(input.sirType)
-                sourceUnderlying match
-                    case _: TypeVarRepresentation =>
-                        throw LoweringException(
-                          s"Cannot convert unresolved Unwrapped TypeVar to $target " +
-                              s"for ${input.sirType.show}",
-                          pos
-                        )
-                    case _ =>
-                        val r0 = new RepresentationProxyLoweredValue(
-                          input,
-                          sourceUnderlying,
-                          pos
-                        )
-                        r0.toRepresentation(target, pos)
-            case Fixed =>
-                val typeGen = lctx.typeGenerator(input.sirType)
-                val tvRepr = typeGen.defaultTypeVarReperesentation(input.sirType)
-                tvRepr match
-                    case _: TypeVarRepresentation =>
-                        throw LoweringException(
-                          s"Cannot convert unresolved Fixed TypeVar to $target for ${input.sirType.show}. " +
-                              s"TypeVar repr=$tvr, defaultTypeVarRepr=$tvRepr",
-                          pos
-                        )
-                    case _ =>
-                        val r0 = input.toRepresentation(tvRepr, pos)
-                        r0.toRepresentation(target, pos)
     }
 
 }
