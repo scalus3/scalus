@@ -636,7 +636,7 @@ object ProdDispatch {
       *   - `ProdDataList` / `ProdDataConstr` / `PackedDataList` / `PairIntDataList`
       *     → `ProductCaseSirTypeGenerator.genMatchDataList` (Data-shape extraction
       *     via `unConstrData` + `headList`/`tailList`, or just field projection).
-      *   - `ProdBuiltinPair(_, _)` → `ProductCaseSirTypeGenerator.genMatchPairData`
+      *   - `ProdBuiltinPair(_, _)` → `ProdBuiltinPairEmitter.genMatch`
       *     (`Case` on Pair for V4+, `fstPair`/`sndPair` for V1-V3).
       *   - `OneElementWrapper(_)` → fall through to the per-type
       *     `ProductCaseOneElementSirTypeGenerator` instance — its `genMatch`
@@ -663,8 +663,8 @@ object ProdDispatch {
                 typegens.ProductCaseSirTypeGenerator
                     .genMatchDataList(matchData, loweredScrutinee, optTargetType)
             case _: ProdBuiltinPair =>
-                typegens.ProductCaseSirTypeGenerator
-                    .genMatchPairData(matchData, loweredScrutinee, optTargetType)
+                typegens.ProdBuiltinPairEmitter
+                    .genMatch(matchData, loweredScrutinee, optTargetType)
             case _: OneElementWrapper =>
                 lctx.typeGenerator(loweredScrutinee.sirType)
                     .genMatch(matchData, loweredScrutinee, optTargetType)

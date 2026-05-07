@@ -138,7 +138,7 @@ object Lowering {
                 //     DataConstr / SumBuiltinList / PackedSumDataList → repr-specific emitter.
                 //   - prod scrutinees: ProdUplcConstr / SumUplcConstr → genMatchUplcConstr;
                 //     ProdDataList / ProdDataConstr / PackedDataList → genMatchDataList;
-                //     ProdBuiltinPair → genMatchPairData.
+                //     ProdBuiltinPair → ProdBuiltinPairEmitter.genMatch.
                 // Other types fall back to the type-keyed typegen.
                 val retval =
                     if SIRType.isSum(loweredScrutinee.sirType) then
