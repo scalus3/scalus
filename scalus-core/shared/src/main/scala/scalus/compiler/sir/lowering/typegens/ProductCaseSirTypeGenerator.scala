@@ -267,7 +267,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         // recognized reprs route there directly; unrecognized reprs would loop through
         // `ProdDispatch`'s typegen-fallback back into this method, so we throw
         // explicitly to keep the failure mode visible. Mirror of
-        // `SumCaseSirTypeGenerator.genMatch`.
+        // `DataConstrEmitter.genMatch`.
         loweredScrutinee.representation match
             case ProdDataList | PackedDataList | ProdDataConstr | PairIntDataList |
                 _: ProductCaseClassRepresentation.ProdBuiltinPair |
@@ -359,7 +359,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                           matchData.anns.pos
                         )
                         (v, true)
-                SumCaseSirTypeGenerator.genMatchDataConstrCase(
+                DataConstrEmitter.genMatchDataConstrCase(
                   matchCase,
                   dataList,
                   optTargetType,

@@ -7,7 +7,26 @@ import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
 import scala.collection.mutable
 
-object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
+/** DataConstr representation emitter for sum case-class types.
+  *
+  * Owns the DataConstr-specific emission shapes for a Scala 3 sum (sealed-trait
+  * + case-class hierarchy lowered to Cardano `Constr(tag, [field-data, ...])`):
+  *
+  *   - `genConstrLowered`: forwards to the variant case-class's own typegen
+  *     (variants live as Prod types that know how to assemble their own bytes).
+  *   - `genMatchDataConstr` / `genMatchDataConstrCase`: tag/field extraction via
+  *     `unConstrData`, with `lvCaseInteger` (V4+) or if-then-else chain (V3) for
+  *     branch dispatch.
+  *   - `upcastOne`: synthesizes a parent-sum Constr by reusing the child's
+  *     bytes under the parent's variant tag.
+  *
+  * Pre-Phase-4c-step-3 this was named `SumCaseSirTypeGenerator`; the rename
+  * aligns terminology with the design doc (per-repr emitters at §3.2).
+  * `prepareCases`, `findConstructors`, and `retrieveDataDecl` stay here as
+  * shared helpers because `SumUplcConstrSirTypeGenerator` and
+  * `ProductCaseSirTypeGenerator` both reuse them.
+  */
+object DataConstrEmitter extends SirTypeUplcGenerator {
 
     import SumCaseClassRepresentation.*
 
@@ -35,7 +54,7 @@ object SumCaseSirTypeGenerator extends SirTypeUplcGenerator {
         representation: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue =
-        SumDispatch.dispatcherBypass("SumCaseSirTypeGenerator")
+        SumDispatch.dispatcherBypass("DataConstrEmitter")
 
     override def upcastOne(
         input: LoweredValue,

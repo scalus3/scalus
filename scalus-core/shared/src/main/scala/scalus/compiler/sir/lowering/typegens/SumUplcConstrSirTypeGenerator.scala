@@ -460,7 +460,7 @@ object SumUplcConstrSirTypeGenerator {
     )(using lctx: LoweringContext): (SumDispatch.MatchScaffolding, Seq[LoweredValue]) = {
         val prevScope = lctx.scope
         val orderedCases =
-            SumCaseSirTypeGenerator.prepareCases(matchData, loweredScrutinee)
+            DataConstrEmitter.prepareCases(matchData, loweredScrutinee)
         val pos = matchData.anns.pos
         val branches = orderedCases.map { preparedCase =>
             genMatchUplcConstrCase(
@@ -848,7 +848,7 @@ object SumUplcConstrSirTypeGenerator {
 
         val baseSubst = dataDeclSubst(input.sirType)
         def makeBranches(recCall: Option[LoweredValue]): Seq[LoweredValue] = {
-            val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
+            val constructors = DataConstrEmitter.findConstructors(input.sirType, pos)
             constructors.zipWithIndex.map { (constrDecl, idx) =>
                 val inPuc = inSum.variants.getOrElse(
                   idx,
@@ -1013,7 +1013,7 @@ object SumUplcConstrSirTypeGenerator {
         // `TypeVarSirTypeGenerator.convertAbstractFixedToTarget` — a pure relabel that leaves
         // Data-shape bytes under a native-shape label.
         val baseSubst = dataDeclSubst(input.sirType)
-        val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
+        val constructors = DataConstrEmitter.findConstructors(input.sirType, pos)
         val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>
             val constrSubst = constrSubstFor(input.sirType, constrDecl, baseSubst)
             def substParamTp(paramTp: SIRType): SIRType =
@@ -1083,7 +1083,7 @@ object SumUplcConstrSirTypeGenerator {
         inSum: SumUplcConstr,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val constructors = SumCaseSirTypeGenerator.findConstructors(input.sirType, pos)
+        val constructors = DataConstrEmitter.findConstructors(input.sirType, pos)
         val baseSubst = dataDeclSubst(input.sirType)
         val branches = constructors.zipWithIndex.map { (constrDecl, idx) =>
             val constrSubst = constrSubstFor(input.sirType, constrDecl, baseSubst)

@@ -225,7 +225,7 @@ object SirTypeUplcGenerator {
     )(using lctx: LoweringContext): SirTypeUplcGenerator =
         encoded match {
             case "ProductCase" => ProductCaseSirTypeGenerator
-            case "SumCase"     => SumCaseSirTypeGenerator
+            case "SumCase"     => DataConstrEmitter
             case "SumDataList" =>
                 new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData)
             case "SumPairDataList"       => SumPairBuiltinListSirTypeGenerator
@@ -304,7 +304,7 @@ object SirTypeUplcGenerator {
                         else if decl.name == SIRType.BuiltinList.name then
                             if isPair(typeArgs.head) then SumPairBuiltinListSirTypeGenerator
                             else new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head))
-                        else if !containsFun(tp, trace) then SumCaseSirTypeGenerator
+                        else if !containsFun(tp, trace) then DataConstrEmitter
                         else SumCaseUplcOnlySirTypeGenerator
                     }
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>

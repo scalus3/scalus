@@ -29,7 +29,7 @@ object SumDispatch {
     )(using lctx: LoweringContext): LoweredValue = {
         val gen = lctx.typeGenerator(input.sirType)
         gen match
-            case SumCaseSirTypeGenerator =>
+            case DataConstrEmitter =>
                 sumCaseImpl(input, target, pos)
             case SumCaseUplcConstrSirTypeGenerator =>
                 sumCaseUplcConstrImpl(input, target, pos)
@@ -126,7 +126,7 @@ object SumDispatch {
                         // Source bytes are in defaultRepresentation form. Relabel as that
                         // underlying repr, then convert.
                         val sourceUnderlying =
-                            SumCaseSirTypeGenerator.defaultRepresentation(input.sirType)
+                            DataConstrEmitter.defaultRepresentation(input.sirType)
                         val r0 = RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
                         sumCaseImpl(r0, representation, pos)
                     case Fixed =>
@@ -139,7 +139,7 @@ object SumDispatch {
                     case Unwrapped   =>
                         // Convert input to defaultRepresentation form, then relabel as Unwrapped.
                         val targetUnderlying =
-                            SumCaseSirTypeGenerator.defaultRepresentation(input.sirType)
+                            DataConstrEmitter.defaultRepresentation(input.sirType)
                         val converted = input.toRepresentation(targetUnderlying, pos)
                         new RepresentationProxyLoweredValue(converted, outTvr, pos)
                     case Fixed =>
@@ -719,7 +719,7 @@ object SumDispatch {
       *   - `SumUplcConstr` → tag-ordered Case via `genMatchUplcConstr` (the
       *     scrutinee's UPLC bytes are already a `Constr(tag, fields)` so
       *     branches index by tag directly).
-      *   - `DataConstr` → Data-shape Case in `SumCaseSirTypeGenerator.
+      *   - `DataConstr` → Data-shape Case in `DataConstrEmitter.
       *     genMatchDataConstr` (unConstrData → tag/field-list → if/else
       *     chain, or `Case` on integer for V4+).
       *   - `SumBuiltinList(elemRepr)` → caseList-ordered Case via the
@@ -731,9 +731,10 @@ object SumDispatch {
       *   - everything else → fall back to the type-keyed typegen's `genMatch`
       *     (same routing as before this dispatcher existed).
       *
-      * Pre-Phase-4 this match lived inside `SumCaseSirTypeGenerator.genMatch`
-      * and the `SumUplcConstr` short-circuit lived in `Lowering.lowerSIR`;
-      * routing them through the dispatcher consolidates the choice.
+      * Pre-Phase-4 this match lived inside `DataConstrEmitter.genMatch` (formerly
+      * `SumCaseSirTypeGenerator`) and the `SumUplcConstr` short-circuit lived in
+      * `Lowering.lowerSIR`; routing them through the dispatcher consolidates the
+      * choice.
       */
     def genMatch(
         matchData: SIR.Match,
@@ -746,7 +747,7 @@ object SumDispatch {
                 typegens.SumUplcConstrSirTypeGenerator
                     .genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
             case DataConstr =>
-                typegens.SumCaseSirTypeGenerator
+                typegens.DataConstrEmitter
                     .genMatchDataConstr(matchData, loweredScrutinee, optTargetType)
             case SumBuiltinList(elemRepr) =>
                 new typegens.SumBuiltinListSirTypeGenerator(elemRepr)
