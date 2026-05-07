@@ -493,29 +493,44 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
                 )
     }
 
-    /** Outbound conversions from a `DataConstr`-shaped value (Phase 5).
-      *
-      * `input.representation` is `DataConstr`. Targets the dispatcher delegates
-      * here are: identity, `PairIntDataList` (atomic — `unConstrData`),
-      * `SumBuiltinList(_)` / `PackedSumDataList` / `SumUplcConstr(_)` (two-hop
-      * via `PairIntDataList`). All other targets stay in
-      * `SumDispatch.sumCaseImpl` (TypeVar-source/target handling, etc).
+    /** Outbound conversion graph from a `DataConstr`-shaped value. Identity,
+      * `Via(PairIntDataList)` two-hops, and one direct atomic
+      * (`unConstrData` → `PairIntDataList`).
+      */
+    def outboundStep(target: LoweredValueRepresentation): Option[ConversionStep] =
+        target match {
+            case DataConstr =>
+                Some(ConversionStep.Identity)
+            case PairIntDataList =>
+                Some(ConversionStep.Atomic(unConstrDataAtomic))
+            case _: SumBuiltinList | PackedSumDataList | _: SumUplcConstr =>
+                Some(ConversionStep.Via(PairIntDataList))
+            case _ =>
+                None
+        }
+
+    private val unConstrDataAtomic: ConversionStep.AtomicEmit =
+        new ConversionStep.AtomicEmit {
+            def emit(
+                input: LoweredValue,
+                target: LoweredValueRepresentation,
+                pos: SIRPosition
+            )(using LoweringContext): LoweredValue =
+                lvBuiltinApply(SIRBuiltins.unConstrData, input, input.sirType, target, pos)
+        }
+
+    /** Convert from a `DataConstr` source to `target`. TypeVar-source/target
+      * handling lives in `SumDispatch.sumCaseImpl`; only the targets listed
+      * in `outboundStep` reach this method.
       */
     def emitConvert(
         input: LoweredValue,
         target: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue =
-        target match
-            case DataConstr =>
-                input
-            case PairIntDataList =>
-                lvBuiltinApply(SIRBuiltins.unConstrData, input, input.sirType, PairIntDataList, pos)
-            case _: SumBuiltinList | PackedSumDataList | _: SumUplcConstr =>
-                input
-                    .toRepresentation(PairIntDataList, pos)
-                    .toRepresentation(target, pos)
-            case _ =>
+        outboundStep(target) match
+            case Some(step) => ConversionStep(step, input, target, pos)
+            case None =>
                 throw LoweringException(
                   s"DataConstrEmitter.emitConvert: unsupported target $target for ${input.sirType.show}",
                   pos
