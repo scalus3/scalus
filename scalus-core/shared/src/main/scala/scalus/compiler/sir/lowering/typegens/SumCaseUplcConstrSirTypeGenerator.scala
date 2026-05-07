@@ -2,6 +2,8 @@ package scalus.compiler.sir.lowering
 package typegens
 
 import scalus.compiler.sir.*
+import scalus.compiler.sir.lowering.LoweredValue.Builder.*
+import scalus.compiler.sir.lowering.SumCaseClassRepresentation.*
 
 /** Type generator for sum types (enums) annotated with @UplcRepr(UplcConstr).
   *
@@ -143,6 +145,74 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                 val targetRepr = defaultRepresentation(loweredScrutinee.sirType)
                 loweredScrutinee.toRepresentation(targetRepr, matchData.anns.pos)
         SumDispatch.genMatch(matchData, effectiveScrutinee, optTargetType)
+    }
+
+    /** Outbound conversions from a sum value whose static type carries
+      * `@UplcRepr(UplcConstr)` (Phase 5). Body lifted from
+      * `SumDispatch.sumCaseUplcConstrImpl`; mostly delegations to other
+      * emitters, with TypeVar-kind handling specific to this typegen's
+      * `defaultRepresentation` / `defaultTypeVarReperesentation`.
+      */
+    def emitConvert(
+        input: LoweredValue,
+        representation: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        (input.representation, representation) match
+            case (a, b) if a == b => input
+            case (a, b) if a.isCompatibleOn(input.sirType, b, pos) =>
+                RepresentationProxyLoweredValue(input, representation, pos)
+            // SumBuiltinList → DataConstr: listData(input) → PackedSumDataList → DataConstr
+            case (SumBuiltinList(elemRepr), DataConstr) =>
+                val asPackedList = new SumBuiltinListEmitter(elemRepr)
+                    .emitConvert(input, PackedSumDataList, pos)
+                lvBuiltinApply(SIRBuiltins.listData, asPackedList, input.sirType, DataConstr, pos)
+            // SumBuiltinList input → delegate to list-shape impl
+            case (SumBuiltinList(elemRepr), _) =>
+                new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
+            // PackedSumDataList input → delegate to list-shape impl
+            case (PackedSumDataList, _) =>
+                new SumBuiltinListEmitter(PrimitiveRepresentation.PackedData)
+                    .emitConvert(input, representation, pos)
+            // DataConstr/PairIntDataList → SumBuiltinList/PackedSumDataList/PairIntDataList:
+            // delegate to sumCaseImpl which handles these without BuiltinList type hack
+            case (DataConstr, _: SumBuiltinList) | (DataConstr, PackedSumDataList) |
+                (DataConstr, PairIntDataList) | (PairIntDataList, _: SumBuiltinList) |
+                (PairIntDataList, PackedSumDataList) =>
+                SumDispatch.sumCaseImpl(input, representation, pos)
+            // TypeVar source: dispatch by kind
+            case (inTvr: TypeVarRepresentation, _) =>
+                import SIRType.TypeVarKind.*
+                inTvr.kind match
+                    case Transparent =>
+                        SumUplcConstrEmitter.emitConvert(input, representation, pos)
+                    case Unwrapped =>
+                        val sourceUnderlying = defaultRepresentation(input.sirType)
+                        val r0 = RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
+                        emitConvert(r0, representation, pos)
+                    case Fixed =>
+                        SumUplcConstrEmitter.emitConvert(input, representation, pos)
+            // TypeVar target: dispatch by kind
+            case (_, outTvr: TypeVarRepresentation) =>
+                import SIRType.TypeVarKind.*
+                outTvr.kind match
+                    case Transparent => input
+                    case Unwrapped =>
+                        val targetUnderlying = defaultRepresentation(input.sirType)
+                        val converted = input.toRepresentation(targetUnderlying, pos)
+                        new RepresentationProxyLoweredValue(converted, outTvr, pos)
+                    case Fixed =>
+                        val targetUnderlying = defaultTypeVarReperesentation(input.sirType)
+                        val converted = input.toRepresentation(targetUnderlying, pos)
+                        new RepresentationProxyLoweredValue(converted, outTvr, pos)
+            // SumUplcConstr, DataConstr, PairIntDataList → SumUplcConstrEmitter
+            case (_: SumUplcConstr, _) | (DataConstr, _) | (PairIntDataList, _) =>
+                SumUplcConstrEmitter.emitConvert(input, representation, pos)
+            case (inRepr, outRepr) =>
+                throw LoweringException(
+                  s"SumCaseUplcConstr unhandled conversion $inRepr → $outRepr for ${input.sirType.show}",
+                  pos
+                )
     }
 
 }
