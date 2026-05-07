@@ -10,27 +10,23 @@ import scalus.uplc.{Term, UplcAnnotation}
   * `Constr(tag, [t1, t2, ...])` emission for product values.
   *
   * Owns:
-  *   - `genConstr`: adopts each argument to its target field representation
-  *     (canonical LambdaRepresentation for function fields; the
-  *     `@UplcRepr`-annotated repr for annotated fields; the field type's
-  *     natural repr when the type itself carries a class-level `@UplcRepr`),
-  *     then assembles a `Term.Constr`-shaped `LoweredValue` tagged with the
+  *   - `genConstr`: adopts each argument to its target field representation (canonical
+  *     LambdaRepresentation for function fields; the `@UplcRepr`-annotated repr for annotated
+  *     fields; the field type's natural repr when the type itself carries a class-level
+  *     `@UplcRepr`), then assembles a `Term.Constr`-shaped `LoweredValue` tagged with the
   *     constructor's index.
-  *   - `hasClassLevelUplcRepr` (private helper): unwraps `Annotated` /
-  *     `TypeLambda` / `TypeProxy` and returns true when the underlying
-  *     `(CaseClass | SumCaseClass).decl.annotations` carry the `uplcRepr` key.
+  *   - `hasClassLevelUplcRepr` (private helper): unwraps `Annotated` / `TypeLambda` / `TypeProxy`
+  *     and returns true when the underlying `(CaseClass | SumCaseClass).decl.annotations` carry the
+  *     `uplcRepr` key.
   *
   * Called from:
-  *   - `ProductCaseSirTypeGenerator.genConstrLowered` (Data-vs-UplcConstr
-  *     dispatcher);
-  *   - `ProductCaseUplcOnlySirTypeGenerator`,
-  *     `ProductCaseUplcConstrSirTypeGenerator`,
-  *     `SumCaseUplcConstrSirTypeGenerator`,
-  *     `SumCaseUplcOnlySirTypeGenerator` — all with the same
+  *   - `ProductCaseSirTypeGenerator.genConstrLowered` (Data-vs-UplcConstr dispatcher);
+  *   - `ProductCaseUplcOnlySirTypeGenerator`, `ProductCaseUplcConstrSirTypeGenerator`,
+  *     `SumCaseUplcConstrSirTypeGenerator`, `SumCaseUplcOnlySirTypeGenerator` — all with the same
   *     `(constr, loweredArgs)` signature.
   *
-  * Constructor-handling helpers (`retrieveConstrIndex`, `retrieveConstrDecl`)
-  * still live on `ProductCaseSirTypeGenerator`; called cross-class from here.
+  * Constructor-handling helpers (`retrieveConstrIndex`, `retrieveConstrDecl`) still live on
+  * `ProductCaseSirTypeGenerator`; called cross-class from here.
   */
 object ProdUplcConstrEmitter {
 
@@ -112,8 +108,8 @@ object ProdUplcConstrEmitter {
     }
 
     /** Returns true if `tp` (or any unwrapped form) carries a class-level `@UplcRepr` annotation in
-      * its constrDecl. Used by `genConstr` to decide whether the field's static type pins a specific
-      * repr that arg.repr must conform to.
+      * its constrDecl. Used by `genConstr` to decide whether the field's static type pins a
+      * specific repr that arg.repr must conform to.
       */
     private def hasClassLevelUplcRepr(tp: SIRType): Boolean = tp match
         case SIRType.CaseClass(decl, _, _)         => decl.annotations.data.contains("uplcRepr")

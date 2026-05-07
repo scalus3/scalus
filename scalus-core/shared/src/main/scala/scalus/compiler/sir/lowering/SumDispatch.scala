@@ -4,18 +4,17 @@ import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.typegens.*
 
-/** Dispatch layer for sum-typed operations. Single entry point for Sum-side
-  * `toRepresentation`; per-typegen overrides throw `dispatcherBypass` to
-  * surface any caller that bypassed this object. See
-  * `docs/local/claude/compiler/sum-prod-dispatch-design.md`.
+/** Dispatch layer for sum-typed operations. Single entry point for Sum-side `toRepresentation`;
+  * per-typegen overrides throw `dispatcherBypass` to surface any caller that bypassed this object.
+  * See `docs/local/claude/compiler/sum-prod-dispatch-design.md`.
   */
 object SumDispatch {
 
     import SumCaseClassRepresentation.*
 
-    /** Throw used by Sum typegens' `toRepresentation` overrides to assert that
-      * dispatch goes through this object. Centralized so the message format
-      * stays consistent and the four call sites are one-liners.
+    /** Throw used by Sum typegens' `toRepresentation` overrides to assert that dispatch goes
+      * through this object. Centralized so the message format stays consistent and the four call
+      * sites are one-liners.
       */
     def dispatcherBypass(genName: String): Nothing =
         throw new IllegalStateException(
@@ -37,22 +36,19 @@ object SumDispatch {
                 sumCaseImpl(input, target, pos)
             case listGen: SumListEmitterCommon =>
                 listGen.emitConvert(input, target, pos)
-            case ProductCaseSirTypeGenerator
-                | ProductCaseUplcConstrSirTypeGenerator
-                | ProductCaseUplcOnlySirTypeGenerator
-                | _: OneElementWrapperEmitter =>
+            case ProductCaseSirTypeGenerator | ProductCaseUplcConstrSirTypeGenerator |
+                ProductCaseUplcOnlySirTypeGenerator | _: OneElementWrapperEmitter =>
                 ProdDispatch.toRepresentation(input, target, pos)
             case _ =>
                 gen.toRepresentation(input, target, pos)
     }
 
-    /** Plain sum-class source path: handles DataConstr / PairIntDataList /
-      * SumBuiltinList / PackedSumDataList sources, delegating to
-      * `SumUplcConstrEmitter` for native-UplcConstr cases and to
-      * `SumListEmitterCommon.emitConvert` for list-shape conversions.
+    /** Plain sum-class source path: handles DataConstr / PairIntDataList / SumBuiltinList /
+      * PackedSumDataList sources, delegating to `SumUplcConstrEmitter` for native-UplcConstr cases
+      * and to `SumListEmitterCommon.emitConvert` for list-shape conversions.
       *
-      * Package-private so `SumCaseUplcConstrSirTypeGenerator.emitConvert` can
-      * delegate cross-typegen arms here (Phase 5 step 4).
+      * Package-private so `SumCaseUplcConstrSirTypeGenerator.emitConvert` can delegate
+      * cross-typegen arms here (Phase 5 step 4).
       */
     private[lowering] def sumCaseImpl(
         input: LoweredValue,
@@ -129,9 +125,9 @@ object SumDispatch {
         }
     }
 
-    /** Choose the typegen that should emit this `Constr`, considering both the
-      * static type and surrounding-arg/context cues. Centralizes the four rules
-      * formerly in `ConstrDispatcher.shouldDelegateToUplcConstr`:
+    /** Choose the typegen that should emit this `Constr`, considering both the static type and
+      * surrounding-arg/context cues. Centralizes the four rules formerly in
+      * `ConstrDispatcher.shouldDelegateToUplcConstr`:
       *
       *   1. Parent sum's default representation is `SumUplcConstr`.
       *   2. `List.Cons` whose tail's actual representation is `SumUplcConstr`.
@@ -193,17 +189,17 @@ object SumDispatch {
 
     /** Pick the type generator for a `Nil` constructor.
       *
-      * `Lowering.lowerSIR` routes `Nil` straight to `typeGenerator.genConstrLowered`,
-      * bypassing `chooseConstrOutputRepr`. So this path also has to apply the
-      * `inUplcConstrListScope` override (the rule that, pre-Phase-3a, the typegen-
-      * internal `ConstrDispatcher.shouldDelegateToUplcConstr` rule #4 supplied);
-      * without it, a Nil produced inside an UplcConstr-scoped intrinsic body whose
-      * surrounding target type is unannotated `List[A]` would emerge as
-      * `SumBuiltinList`, desyncing from match-branch `SumUplcConstr` reprs.
+      * `Lowering.lowerSIR` routes `Nil` straight to `typeGenerator.genConstrLowered`, bypassing
+      * `chooseConstrOutputRepr`. So this path also has to apply the `inUplcConstrListScope`
+      * override (the rule that, pre-Phase-3a, the typegen- internal
+      * `ConstrDispatcher.shouldDelegateToUplcConstr` rule #4 supplied); without it, a Nil produced
+      * inside an UplcConstr-scoped intrinsic body whose surrounding target type is unannotated
+      * `List[A]` would emerge as `SumBuiltinList`, desyncing from match-branch `SumUplcConstr`
+      * reprs.
       *
-      * Returns `(generator, effective-constr)`: `effective-constr` rewrites
-      * `constr.tp` to `targetType` when one is supplied so the generator sees the
-      * right type info for type-correct Nil emission.
+      * Returns `(generator, effective-constr)`: `effective-constr` rewrites `constr.tp` to
+      * `targetType` when one is supplied so the generator sees the right type info for type-correct
+      * Nil emission.
       */
     def dispatchNil(
         constr: SIR.Constr,
@@ -238,28 +234,25 @@ object SumDispatch {
         gen.genConstrLowered(constr, loweredArgs, optTargetType)
     }
 
-    /** Representation-aware dispatch for sum-typed `genMatch`. The Case-builtin
-      * shape varies by `loweredScrutinee.representation`:
+    /** Representation-aware dispatch for sum-typed `genMatch`. The Case-builtin shape varies by
+      * `loweredScrutinee.representation`:
       *
-      *   - `SumUplcConstr` → tag-ordered Case via `genMatchUplcConstr` (the
-      *     scrutinee's UPLC bytes are already a `Constr(tag, fields)` so
-      *     branches index by tag directly).
-      *   - `DataConstr` → Data-shape Case in `DataConstrEmitter.
-      *     genMatchDataConstr` (unConstrData → tag/field-list → if/else
-      *     chain, or `Case` on integer for V4+).
-      *   - `SumBuiltinList(elemRepr)` → caseList-ordered Case via the
-      *     element-repr-parameterized `SumBuiltinListEmitter.genMatch`.
-      *   - `PackedSumDataList` → unpack to `SumBuiltinList(<elem-default>)`,
-      *     bind a fresh var, recurse.
-      *   - `TypeVarRepresentation(_)` → relabel to the type's
-      *     `defaultTypeVarRepresentation` and recurse.
-      *   - everything else → fall back to the type-keyed typegen's `genMatch`
-      *     (same routing as before this dispatcher existed).
+      *   - `SumUplcConstr` → tag-ordered Case via `genMatchUplcConstr` (the scrutinee's UPLC bytes
+      *     are already a `Constr(tag, fields)` so branches index by tag directly).
+      *   - `DataConstr` → Data-shape Case in `DataConstrEmitter. genMatchDataConstr` (unConstrData
+      *     → tag/field-list → if/else chain, or `Case` on integer for V4+).
+      *   - `SumBuiltinList(elemRepr)` → caseList-ordered Case via the element-repr-parameterized
+      *     `SumBuiltinListEmitter.genMatch`.
+      *   - `PackedSumDataList` → unpack to `SumBuiltinList(<elem-default>)`, bind a fresh var,
+      *     recurse.
+      *   - `TypeVarRepresentation(_)` → relabel to the type's `defaultTypeVarRepresentation` and
+      *     recurse.
+      *   - everything else → fall back to the type-keyed typegen's `genMatch` (same routing as
+      *     before this dispatcher existed).
       *
       * Pre-Phase-4 this match lived inside `DataConstrEmitter.genMatch` (formerly
       * `SumCaseSirTypeGenerator`) and the `SumUplcConstr` short-circuit lived in
-      * `Lowering.lowerSIR`; routing them through the dispatcher consolidates the
-      * choice.
+      * `Lowering.lowerSIR`; routing them through the dispatcher consolidates the choice.
       */
     def genMatch(
         matchData: SIR.Match,
@@ -310,22 +303,19 @@ object SumDispatch {
     }
 
     /** Choose-and-align step for `SumUplcConstr` matches when any branch carries a
-      * `(Sum|Prod)UplcConstr` whose field reprs include a Transparent TypeVar.
-      * Returns `Some((sumRepr, aligned))` when the override fires, `None`
-      * otherwise (caller should fall back to its own convergence — typically
-      * `LoweredValue.chooseCommonRepresentation`).
+      * `(Sum|Prod)UplcConstr` whose field reprs include a Transparent TypeVar. Returns
+      * `Some((sumRepr, aligned))` when the override fires, `None` otherwise (caller should fall
+      * back to its own convergence — typically `LoweredValue.chooseCommonRepresentation`).
       *
-      * The override fires because Transparent TypeVar fields cannot be folded
-      * to a Data-shaped repr — we must keep a `SumUplcConstr` shape and align
-      * branches structurally. Alignment: `(Sum|Prod)UplcConstr` branches and
-      * `ErrorRepresentation` stay as-is; others route through
+      * The override fires because Transparent TypeVar fields cannot be folded to a Data-shaped repr
+      * — we must keep a `SumUplcConstr` shape and align branches structurally. Alignment:
+      * `(Sum|Prod)UplcConstr` branches and `ErrorRepresentation` stay as-is; others route through
       * `toRepresentation(sumRepr, pos)` for Data→UplcConstr conversion.
       *
-      * The synthesized `SumUplcConstr` uses `buildSumUplcConstr`'s default
-      * variants for tags without a matching branch puc; hand-rolled
-      * `defaultRepresentation` lookups would produce `TypeVarRepresentation(Fixed)`
-      * (because the DataDecl's `A` carries `Fixed` kind), which then leaks into
-      * downstream inference and surfaces as `Fixed → Unwrapped` aborts.
+      * The synthesized `SumUplcConstr` uses `buildSumUplcConstr`'s default variants for tags
+      * without a matching branch puc; hand-rolled `defaultRepresentation` lookups would produce
+      * `TypeVarRepresentation(Fixed)` (because the DataDecl's `A` carries `Fixed` kind), which then
+      * leaks into downstream inference and surfaces as `Fixed → Unwrapped` aborts.
       */
     def transparentSumUplcConstrAlignment(
         branches: Seq[LoweredValue],
@@ -368,16 +358,14 @@ object SumDispatch {
             Some((sumRepr, aligned))
     }
 
-    /** The scrutinee-repr-driven half of a sum match. A `MatchScaffolding`
-      * captures the Case-builtin shape and any pre-bound state derived from the
-      * scrutinee (e.g. an unpacked field-list var, a tag binding) — but it does
-      * NOT decide the result repr. `assembleMatch` calls `assemble` once it has
-      * the aligned branches and the chosen target repr.
+    /** The scrutinee-repr-driven half of a sum match. A `MatchScaffolding` captures the
+      * Case-builtin shape and any pre-bound state derived from the scrutinee (e.g. an unpacked
+      * field-list var, a tag binding) — but it does NOT decide the result repr. `assembleMatch`
+      * calls `assemble` once it has the aligned branches and the chosen target repr.
       *
-      * One scaffolding implementation per scrutinee repr (`Term.Case` for
-      * UplcConstr, `CaseListLoweredValue` for SumBuiltinList, …). The trait
-      * stays small so future per-repr emitters can implement it without
-      * pulling in the assembly machinery.
+      * One scaffolding implementation per scrutinee repr (`Term.Case` for UplcConstr,
+      * `CaseListLoweredValue` for SumBuiltinList, …). The trait stays small so future per-repr
+      * emitters can implement it without pulling in the assembly machinery.
       */
     trait MatchScaffolding {
         def assemble(
@@ -388,11 +376,10 @@ object SumDispatch {
         )(using LoweringContext): LoweredValue
     }
 
-    /** Branch-driven assembly. Universal across scrutinee reprs: upcasts each
-      * branch to the result type, runs the Phase-3b
-      * `transparentSumUplcConstrAlignment` override (or
-      * `chooseCommonRepresentation` as fallback) to pick the result repr, and
-      * asks the scaffolding to assemble the final value.
+    /** Branch-driven assembly. Universal across scrutinee reprs: upcasts each branch to the result
+      * type, runs the Phase-3b `transparentSumUplcConstrAlignment` override (or
+      * `chooseCommonRepresentation` as fallback) to pick the result repr, and asks the scaffolding
+      * to assemble the final value.
       */
     def assembleMatch(
         scaffolding: MatchScaffolding,
@@ -422,24 +409,21 @@ object SumDispatch {
     )(using lctx: LoweringContext): LoweredValue =
         lctx.typeGenerator(loweredScrutinee.sirType).genSelect(sel, loweredScrutinee)
 
-    /** Pick the parent-sum repr that an `upcastOne` from `input` to `targetType`
-      * should produce — the "preserve concrete vs coerce to default" decision:
+    /** Pick the parent-sum repr that an `upcastOne` from `input` to `targetType` should produce —
+      * the "preserve concrete vs coerce to default" decision:
       *
-      *   - `ProdUplcConstr` input → overlay the variant onto
-      *     `buildSumUplcConstr(targetType)` so concrete field reprs (e.g.
-      *     `Unwrapped` element types that differ from the DataDecl's abstract
-      *     defaults) survive the upcast. Avoids a Data round-trip that fails
-      *     for abstract TypeVar fields in isolation. Fires unconditionally;
-      *     don't gate on target's default repr.
+      *   - `ProdUplcConstr` input → overlay the variant onto `buildSumUplcConstr(targetType)` so
+      *     concrete field reprs (e.g. `Unwrapped` element types that differ from the DataDecl's
+      *     abstract defaults) survive the upcast. Avoids a Data round-trip that fails for abstract
+      *     TypeVar fields in isolation. Fires unconditionally; don't gate on target's default repr.
       *   - `SumUplcConstr` input → keep the refined variant set as-is.
-      *   - Same-shape sum input (`SumBuiltinList`, `SumPairBuiltinList`,
-      *     `PackedSumDataList`, `SumDataAssocMap`) → keep input's
-      *     parameterization (preserves element repr).
+      *   - Same-shape sum input (`SumBuiltinList`, `SumPairBuiltinList`, `PackedSumDataList`,
+      *     `SumDataAssocMap`) → keep input's parameterization (preserves element repr).
       *   - Otherwise → target's default repr.
       *
-      * Returns the parent-sum repr only. Each emitter still chooses the
-      * matching byte-level conversion (`ProdDataList → SumBuiltinList`,
-      * `ProdDataConstr → DataConstr`, etc.) before relabeling.
+      * Returns the parent-sum repr only. Each emitter still chooses the matching byte-level
+      * conversion (`ProdDataList → SumBuiltinList`, `ProdDataConstr → DataConstr`, etc.) before
+      * relabeling.
       */
     def chooseUpcastOutputRepr(
         input: LoweredValue,
@@ -459,12 +443,12 @@ object SumDispatch {
                 val baseSum =
                     typegens.SumUplcConstrEmitter.buildSumUplcConstr(targetType, pos)
                 SumUplcConstr(baseSum.variants.updated(puc.tag, puc))
-            case (suc: SumUplcConstr, _: SumUplcConstr) => suc
-            case (suc: SumBuiltinList, _: SumBuiltinList) => suc
+            case (suc: SumUplcConstr, _: SumUplcConstr)           => suc
+            case (suc: SumBuiltinList, _: SumBuiltinList)         => suc
             case (suc: SumPairBuiltinList, _: SumPairBuiltinList) => suc
-            case (PackedSumDataList, PackedSumDataList) => PackedSumDataList
-            case (SumDataAssocMap, SumDataAssocMap) => SumDataAssocMap
-            case _ => targetSum
+            case (PackedSumDataList, PackedSumDataList)           => PackedSumDataList
+            case (SumDataAssocMap, SumDataAssocMap)               => SumDataAssocMap
+            case _                                                => targetSum
     }
 
     def upcastOne(

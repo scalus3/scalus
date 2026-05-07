@@ -3,32 +3,29 @@ package typegens
 
 import scalus.compiler.sir.*
 
-/** Cross-cutting helper for `TypeVarRepresentation` source values (Phase 5,
-  * design §3.6). A value carrying `TypeVarRepresentation(kind)` has bytes in
-  * *some* concrete repr's form; which form depends on `kind` and the value's
-  * underlying SIR type:
+/** Cross-cutting helper for `TypeVarRepresentation` source values (Phase 5, design §3.6). A value
+  * carrying `TypeVarRepresentation(kind)` has bytes in *some* concrete repr's form; which form
+  * depends on `kind` and the value's underlying SIR type:
   *
-  *   - `Transparent` — passthrough; bytes are in whatever form the source
-  *     produced. Conversion to a concrete target relabels the value as the
-  *     target repr.
-  *   - `Unwrapped` — bytes are in `tp.defaultRepresentation` form. Conversion
-  *     relabels as that underlying repr first, then delegates back to the
-  *     dispatcher to convert to the target.
-  *   - `Fixed` — bytes are in `tp.defaultTypeVarReperesentation` form (the
-  *     type's natural Data-shaped form). Conversion converts to that
-  *     underlying repr first, then routes to the target.
+  *   - `Transparent` — passthrough; bytes are in whatever form the source produced. Conversion to a
+  *     concrete target relabels the value as the target repr.
+  *   - `Unwrapped` — bytes are in `tp.defaultRepresentation` form. Conversion relabels as that
+  *     underlying repr first, then delegates back to the dispatcher to convert to the target.
+  *   - `Fixed` — bytes are in `tp.defaultTypeVarReperesentation` form (the type's natural
+  *     Data-shaped form). Conversion converts to that underlying repr first, then routes to the
+  *     target.
   *
-  * `bridgeFromKind` is shared by callers on the Sum side
-  * (`SumDispatch.sumCaseImpl`, `SumListEmitterCommon.emitConvert`,
-  * `SumUplcConstrEmitter.emitConvert`); each site previously open-coded the
-  * same kind dispatch with slightly different hardcoded underlying reprs that
-  * already aligned with `lctx.typeGenerator(input.sirType).default*`.
+  * `bridgeFromKind` is currently called from `SumUplcConstrEmitter.emitConvert`.
+  * `SumDispatch.sumCaseImpl` and `SumListEmitterCommon.emitConvert` still open-code an equivalent
+  * kind dispatch (with hardcoded underlying reprs that happen to align with
+  * `lctx.typeGenerator(input.sirType).default*` for their reachable typegens); those sites should
+  * migrate after a per-arm semantic audit.
   */
 object TypeVarEmitter {
 
-    /** Convert a TypeVar-labeled value to a concrete `target` repr. The
-      * underlying-repr lookups go through the input's typegen so the helper
-      * works for `DataConstrEmitter`, `SumListEmitterCommon`, etc.
+    /** Convert a TypeVar-labeled value to a concrete `target` repr. The underlying-repr lookups go
+      * through the input's typegen so the helper works for `DataConstrEmitter`,
+      * `SumListEmitterCommon`, etc.
       */
     def bridgeFromKind(
         input: LoweredValue,
@@ -39,6 +36,9 @@ object TypeVarEmitter {
         import SIRType.TypeVarKind.*
         tvr.kind match
             case Transparent =>
+                // Skip the proxy when input is already in target form. The pre-extraction
+                // call sites (e.g. SumUplcConstrEmitter's removed local helper) always wrapped;
+                // dropping the no-op wrapper is a strict simplification.
                 if input.representation == target then input
                 else new RepresentationProxyLoweredValue(input, target, pos)
             case Unwrapped =>
@@ -65,6 +65,11 @@ object TypeVarEmitter {
                           pos
                         )
                     case _ =>
+                        // Same identity short-circuit as Transparent: if input already claims the
+                        // target repr, skip the round-trip through fixedUnderlying. The pre-
+                        // extraction Fixed arms always routed through fixedUnderlying; this
+                        // matches the SumListEmitterCommon precedent of guarding against the
+                        // round-trip when source==target.
                         if input.representation == target then input
                         else
                             val r0 = input.toRepresentation(fixedUnderlying, pos)

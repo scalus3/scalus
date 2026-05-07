@@ -10,10 +10,10 @@ import scalus.uplc.{Constant, Term}
 
 /** Tests for BuiltinArray lowering in case classes.
   *
-  * BuiltinArray now has a dedicated ProdBuiltinArrayEmitter that handles conversion to/from
-  * Data representation. When stored in a case class, BuiltinArray is converted to Data.List by
-  * iterating through the array elements using indexArray. When extracted, it's converted back to
-  * BuiltinArray using listToArray.
+  * BuiltinArray now has a dedicated ProdBuiltinArrayEmitter that handles conversion to/from Data
+  * representation. When stored in a case class, BuiltinArray is converted to Data.List by iterating
+  * through the array elements using indexArray. When extracted, it's converted back to BuiltinArray
+  * using listToArray.
   */
 class BuiltinArrayLoweringTest extends AnyFunSuite {
 

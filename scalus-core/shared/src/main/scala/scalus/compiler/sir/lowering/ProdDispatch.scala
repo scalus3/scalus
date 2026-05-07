@@ -4,16 +4,15 @@ import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.typegens.*
 
 /** Dispatch layer for product-typed operations. Single entry point for Prod-side
-  * `toRepresentation`; per-typegen overrides throw `dispatcherBypass` to
-  * surface any caller that bypassed this object. See
-  * `docs/local/claude/compiler/sum-prod-dispatch-design.md`.
+  * `toRepresentation`; per-typegen overrides throw `dispatcherBypass` to surface any caller that
+  * bypassed this object. See `docs/local/claude/compiler/sum-prod-dispatch-design.md`.
   */
 object ProdDispatch {
 
     import ProductCaseClassRepresentation.*
 
-    /** Throw used by Prod typegens' `toRepresentation` overrides to assert that
-      * dispatch goes through this object.
+    /** Throw used by Prod typegens' `toRepresentation` overrides to assert that dispatch goes
+      * through this object.
       */
     def dispatcherBypass(genName: String): Nothing =
         throw new IllegalStateException(
@@ -60,22 +59,20 @@ object ProdDispatch {
       * `SumDispatch.genMatch`:
       *
       *   - `(Prod|Sum)UplcConstr` → tag-ordered Case via `genMatchUplcConstr`.
-      *   - `ProdDataList` / `ProdDataConstr` / `PackedDataList` / `PairIntDataList`
-      *     → `ProdDataListEmitter.genMatch` (Data-shape extraction via
-      *     `unConstrData` + `headList`/`tailList`, or just field projection).
-      *   - `ProdBuiltinPair(_, _)` → `ProdBuiltinPairEmitter.genMatch`
-      *     (`Case` on Pair for V4+, `fstPair`/`sndPair` for V1-V3).
-      *   - `OneElementWrapper(_)` → fall through to the per-type
-      *     `OneElementWrapperEmitter` instance — its `genMatch`
-      *     captures argType-specific binding extraction.
-      *   - `TypeVarRepresentation(_)` → relabel to the type's
-      *     `defaultTypeVarRepresentation` and recurse.
+      *   - `ProdDataList` / `ProdDataConstr` / `PackedDataList` / `PairIntDataList` →
+      *     `ProdDataListEmitter.genMatch` (Data-shape extraction via `unConstrData` +
+      *     `headList`/`tailList`, or just field projection).
+      *   - `ProdBuiltinPair(_, _)` → `ProdBuiltinPairEmitter.genMatch` (`Case` on Pair for V4+,
+      *     `fstPair`/`sndPair` for V1-V3).
+      *   - `OneElementWrapper(_)` → fall through to the per-type `OneElementWrapperEmitter`
+      *     instance — its `genMatch` captures argType-specific binding extraction.
+      *   - `TypeVarRepresentation(_)` → relabel to the type's `defaultTypeVarRepresentation` and
+      *     recurse.
       *   - everything else → fall back to the type-keyed typegen's `genMatch`.
       *
       * Pre-Phase-4c-step-2 this dispatch was inlined in
-      * `ProductCaseUplcConstrSirTypeGenerator.genMatch` and
-      * `ProductCaseSirTypeGenerator.genMatch`; consolidating it here mirrors
-      * Phase 4a on the Sum side.
+      * `ProductCaseUplcConstrSirTypeGenerator.genMatch` and `ProductCaseSirTypeGenerator.genMatch`;
+      * consolidating it here mirrors Phase 4a on the Sum side.
       */
     def genMatch(
         matchData: SIR.Match,

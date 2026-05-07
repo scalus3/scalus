@@ -10,29 +10,26 @@ import scalus.uplc.Term
 
 import scala.util.control.NonFatal
 
-/** Emitter for `ProductCaseClassRepresentation.ProdDataList` and the wider
-  * Data-shape product family (`ProdDataConstr`, `PackedDataList`,
-  * `PairIntDataList`) — they all share the `unConstrData`/`headList`/`tailList`
-  * extraction pattern and converge on `ProdDataList` for `Match`.
+/** Emitter for `ProductCaseClassRepresentation.ProdDataList` and the wider Data-shape product
+  * family (`ProdDataConstr`, `PackedDataList`, `PairIntDataList`) — they all share the
+  * `unConstrData`/`headList`/`tailList` extraction pattern and converge on `ProdDataList` for
+  * `Match`.
   *
   * Owns:
   *   - `genConstr` (Data-list-shaped Constr emission).
   *   - `genSelect` (field projection through `ProdDataList`).
-  *   - `genMatch` (single-constructor extraction; multi-case input is shrunk
-  *     via `selectMatchCase`, then handed to
-  *     `DataConstrEmitter.genMatchDataConstrCase` for the actual binding +
-  *     body lowering).
+  *   - `genMatch` (single-constructor extraction; multi-case input is shrunk via `selectMatchCase`,
+  *     then handed to `DataConstrEmitter.genMatchDataConstrCase` for the actual binding + body
+  *     lowering).
   *
-  * Constructor-handling helpers (`retrieveConstrDecl`, `retrieveConstrIndex`,
-  * `selectMatchCase`) still live on `ProductCaseSirTypeGenerator` during the
-  * Phase 4c migration — they're shared with `ProdBuiltinPairEmitter` and
-  * several Sum-side typegens.
+  * Constructor-handling helpers (`retrieveConstrDecl`, `retrieveConstrIndex`, `selectMatchCase`)
+  * still live on `ProductCaseSirTypeGenerator` during the Phase 4c migration — they're shared with
+  * `ProdBuiltinPairEmitter` and several Sum-side typegens.
   */
 object ProdDataListEmitter {
 
-    /** Data-list-shaped Constr emission: convert each arg to its data form,
-      * fold into a `mkCons` chain, wrap as a `ProdDataList`-tagged value
-      * carrying `constr.tp` as the SIR type.
+    /** Data-list-shaped Constr emission: convert each arg to its data form, fold into a `mkCons`
+      * chain, wrap as a `ProdDataList`-tagged value carrying `constr.tp` as the SIR type.
       */
     def genConstr(
         constr: SIR.Constr,
@@ -99,10 +96,9 @@ object ProdDataListEmitter {
         retval
     }
 
-    /** Field projection on a Data-shape product: convert the scrutinee to
-      * `ProdDataList`, then walk to the chosen field via `dropList` (V4+,
-      * fieldIdx ≥ 2) or chained `tailList` (V1-V3 / fieldIdx < 2), and read
-      * with `headList`.
+    /** Field projection on a Data-shape product: convert the scrutinee to `ProdDataList`, then walk
+      * to the chosen field via `dropList` (V4+, fieldIdx ≥ 2) or chained `tailList` (V1-V3 /
+      * fieldIdx < 2), and read with `headList`.
       */
     def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
@@ -198,12 +194,11 @@ object ProdDataListEmitter {
         ScopeBracketsLoweredValue(scopeVars, body)
     }
 
-    /** Match emission on a Data-shape product scrutinee. For >1-case input the
-      * applicable case is selected via
-      * `ProductCaseSirTypeGenerator.selectMatchCase` and the rest are statically
+    /** Match emission on a Data-shape product scrutinee. For >1-case input the applicable case is
+      * selected via `ProductCaseSirTypeGenerator.selectMatchCase` and the rest are statically
       * dropped (info-logged). Single-case input flows directly to
-      * `DataConstrEmitter.genMatchDataConstrCase`, which owns the actual
-      * field-extraction + body-lowering inside the Data list scope.
+      * `DataConstrEmitter.genMatchDataConstrCase`, which owns the actual field-extraction +
+      * body-lowering inside the Data list scope.
       */
     def genMatch(
         matchData: SIR.Match,

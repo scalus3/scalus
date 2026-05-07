@@ -41,7 +41,6 @@ case class OneElementWrapperEmitter(
     )(using lctx: LoweringContext): LoweredValue =
         ProdDispatch.dispatcherBypass("OneElementWrapperEmitter")
 
-
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
@@ -190,7 +189,9 @@ case class OneElementWrapperEmitter(
         }
     }
 
-    private[lowering] def argLoweredValue(input: LoweredValue)(using LoweringContext): LoweredValue = {
+    private[lowering] def argLoweredValue(
+        input: LoweredValue
+    )(using LoweringContext): LoweredValue = {
         import OneElementWrapperEmitter.*
         input match {
             case WrappedArg(constr, arg) => arg
@@ -220,10 +221,9 @@ case class OneElementWrapperEmitter(
         }
     }
 
-    /** Outbound conversions from a `OneElementWrapper(_)` value (Phase 5).
-      * The inner value is extracted via `argLoweredValue` and converted using
-      * `argGenerator`'s default-repr lookups. Falls through to
-      * `ProductCaseSirTypeGenerator.emitConvert` for non-wrapper-source pairs.
+    /** Outbound conversions from a `OneElementWrapper(_)` value (Phase 5). The inner value is
+      * extracted via `argLoweredValue` and converted using `argGenerator`'s default-repr lookups.
+      * Falls through to `ProductCaseSirTypeGenerator.emitConvert` for non-wrapper-source pairs.
       */
     def emitConvert(
         input: LoweredValue,

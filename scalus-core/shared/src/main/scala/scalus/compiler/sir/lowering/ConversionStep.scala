@@ -2,10 +2,9 @@ package scalus.compiler.sir.lowering
 
 import scalus.compiler.sir.SIRPosition
 
-/** A step in the (sourceRepr, targetRepr) conversion graph. Each emitter that
-  * declares its outbound conversions via `outboundStep(target)` returns a
-  * step describing how to convert from the emitter's owned source repr to the
-  * given target.
+/** A step in the (sourceRepr, targetRepr) conversion graph. Each emitter that declares its outbound
+  * conversions via `outboundStep(target)` returns a step describing how to convert from the
+  * emitter's owned source repr to the given target.
   *
   * See `docs/local/claude/compiler/sum-prod-dispatch-design.md` §3.3 / Phase 5.
   */
@@ -16,19 +15,20 @@ object ConversionStep {
     /** `target == source.representation` — return the input unchanged. */
     case object Identity extends ConversionStep
 
-    /** Direct one-hop conversion. The `emit` runs against the source value to
-      * produce the converted `LoweredValue` in the target repr.
+    /** Direct one-hop conversion. The `emit` runs against the source value to produce the converted
+      * `LoweredValue` in the target repr.
       */
     final case class Atomic(emit: AtomicEmit) extends ConversionStep
 
-    /** Two-hop conversion via an intermediate repr: source → intermediate →
-      * target. The dispatcher recurses through `LoweredValue.toRepresentation`.
+    /** Two-hop conversion via an intermediate repr: source → intermediate → target. The dispatcher
+      * recurses through `LoweredValue.toRepresentation`.
       */
     final case class Via(intermediate: LoweredValueRepresentation) extends ConversionStep
 
-    /** SAM trait carrying the `using LoweringContext` requirement. Lets call
-      * sites write `Atomic((input, target, pos) => ...)`-style lambdas while
-      * preserving the implicit-context plumbing. */
+    /** SAM trait carrying the `using LoweringContext` requirement. Lets call sites write
+      * `Atomic((input, target, pos) => ...)`-style lambdas while preserving the implicit-context
+      * plumbing.
+      */
     trait AtomicEmit {
         def emit(
             input: LoweredValue,

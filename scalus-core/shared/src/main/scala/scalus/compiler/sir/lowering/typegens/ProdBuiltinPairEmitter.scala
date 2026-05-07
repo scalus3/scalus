@@ -9,13 +9,13 @@ import scalus.uplc.Term
 
 /** Emitter for `ProductCaseClassRepresentation.ProdBuiltinPair(_, _)` scrutinees.
   *
-  * Owns the `Match` shape for a value already in `BuiltinPair` form: extracts the
-  * two components via `Case` on Pair (V4+) or `fstPair`/`sndPair` (V1-V3), binds
-  * them in scope, and lowers the case body.
+  * Owns the `Match` shape for a value already in `BuiltinPair` form: extracts the two components
+  * via `Case` on Pair (V4+) or `fstPair`/`sndPair` (V1-V3), binds them in scope, and lowers the
+  * case body.
   *
   * Constr emission for `ProdBuiltinPair` flows through
-  * `ProductCaseSirTypeGenerator.genConstrLowered` → `ProdDataListEmitter.genConstr`
-  * → conversions in `ProdDispatch`; only the `Match` path is per-emitter logic.
+  * `ProductCaseSirTypeGenerator.genConstrLowered` → `ProdDataListEmitter.genConstr` → conversions
+  * in `ProdDispatch`; only the `Match` path is per-emitter logic.
   */
 object ProdBuiltinPairEmitter {
 

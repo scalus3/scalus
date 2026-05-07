@@ -9,24 +9,22 @@ import scala.collection.mutable
 
 /** DataConstr representation emitter for sum case-class types.
   *
-  * Owns the DataConstr-specific emission shapes for a Scala 3 sum (sealed-trait
-  * + case-class hierarchy lowered to Cardano `Constr(tag, [field-data, ...])`):
+  * Owns the DataConstr-specific emission shapes for a Scala 3 sum (sealed-trait + case-class
+  * hierarchy lowered to Cardano `Constr(tag, [field-data, ...])`):
   *
-  *   - `genConstrLowered`: forwards to the variant case-class's own typegen
-  *     (variants live as Prod types that know how to assemble their own bytes).
-  *   - `genMatchDataConstr` / `genMatchDataConstrCase`: tag/field extraction via
-  *     `unConstrData`, with `lvCaseInteger` (V4+) or if-then-else chain (V3) for
-  *     branch dispatch.
-  *   - `upcastOne`: synthesizes a parent-sum Constr by reusing the child's
-  *     bytes under the parent's variant tag.
+  *   - `genConstrLowered`: forwards to the variant case-class's own typegen (variants live as Prod
+  *     types that know how to assemble their own bytes).
+  *   - `genMatchDataConstr` / `genMatchDataConstrCase`: tag/field extraction via `unConstrData`,
+  *     with `lvCaseInteger` (V4+) or if-then-else chain (V3) for branch dispatch.
+  *   - `upcastOne`: synthesizes a parent-sum Constr by reusing the child's bytes under the parent's
+  *     variant tag.
   *
-  * Pre-Phase-4c-step-3 this was named `SumCaseSirTypeGenerator`; the rename
-  * aligns terminology with the design doc (per-repr emitters at §3.2).
-  * `prepareCases`, `findConstructors`, and `retrieveDataDecl` stay here as
-  * shared helpers because `SumUplcConstrEmitter` and
+  * Pre-Phase-4c-step-3 this was named `SumCaseSirTypeGenerator`; the rename aligns terminology with
+  * the design doc (per-repr emitters at §3.2). `prepareCases`, `findConstructors`, and
+  * `retrieveDataDecl` stay here as shared helpers because `SumUplcConstrEmitter` and
   * `ProductCaseSirTypeGenerator` both reuse them.
   */
-object DataConstrEmitter extends SirTypeUplcGenerator {
+object  DataConstrEmitter extends SirTypeUplcGenerator {
 
     import SumCaseClassRepresentation.*
 
@@ -493,18 +491,21 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
                 )
     }
 
-    /** Outbound conversion graph from a `DataConstr`-shaped value. Identity,
-      * `Via(PairIntDataList)` two-hops, and one direct atomic
-      * (`unConstrData` → `PairIntDataList`).
+    /** Outbound conversion graph from a `DataConstr`-shaped value. Each row pairs the expected
+      * source representation with the conversion step. The source repr is `DataConstr` for every
+      * row here; the pair shape is what `ConversionStep`-using emitters declare per design §3.3, so
+      * a future graph walker can read the table without asking the emitter who owns it.
       */
-    def outboundStep(target: LoweredValueRepresentation): Option[ConversionStep] =
+    def outboundStep(
+        target: LoweredValueRepresentation
+    ): Option[(LoweredValueRepresentation, ConversionStep)] =
         target match {
             case DataConstr =>
-                Some(ConversionStep.Identity)
+                Some((DataConstr, ConversionStep.Identity))
             case PairIntDataList =>
-                Some(ConversionStep.Atomic(unConstrDataAtomic))
+                Some((DataConstr, ConversionStep.Atomic(unConstrDataAtomic)))
             case _: SumBuiltinList | PackedSumDataList | _: SumUplcConstr =>
-                Some(ConversionStep.Via(PairIntDataList))
+                Some((DataConstr, ConversionStep.Via(PairIntDataList)))
             case _ =>
                 None
         }
@@ -519,9 +520,10 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
                 lvBuiltinApply(SIRBuiltins.unConstrData, input, input.sirType, target, pos)
         }
 
-    /** Convert from a `DataConstr` source to `target`. TypeVar-source/target
-      * handling lives in `SumDispatch.sumCaseImpl`; only the targets listed
-      * in `outboundStep` reach this method.
+    /** Convert from a `DataConstr` source to `target`. TypeVar-source/target handling lives in
+      * `SumDispatch.sumCaseImpl`; only the targets listed in `outboundStep` reach this method. The
+      * source-repr check enforces the declared row's invariant — `input.representation` must equal
+      * the table's source.
       */
     def emitConvert(
         input: LoweredValue,
@@ -529,7 +531,12 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue =
         outboundStep(target) match
-            case Some(step) => ConversionStep(step, input, target, pos)
+            case Some((expectedSrc, step)) =>
+                require(
+                  input.representation == expectedSrc,
+                  s"DataConstrEmitter.emitConvert: expected source $expectedSrc, got ${input.representation} for ${input.sirType.show}"
+                )
+                ConversionStep(step, input, target, pos)
             case None =>
                 throw LoweringException(
                   s"DataConstrEmitter.emitConvert: unsupported target $target for ${input.sirType.show}",

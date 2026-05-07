@@ -58,12 +58,12 @@ trait LoweredValue {
 
     /** Convert this value to the given representation.
       *
-      * Routes through `SumDispatch.toRepresentation`, which inspects the source value's
-      * actual typegen and dispatches accordingly (Sum-side typegens go through the
-      * centralized `toRepresentationImpl` helpers; non-Sum typegens fall back to their
-      * direct `toRepresentation`). We can't split by `SIRType.isSum/isProd` here because
-      * sum-shaped *constructors* have `CaseClass` SIR types (e.g. `List.Cons` is a
-      * `CaseClass` whose typegen is `SumBuiltinList`).
+      * Routes through `SumDispatch.toRepresentation`, which inspects the source value's actual
+      * typegen and dispatches accordingly (Sum-side typegens go through the centralized
+      * `toRepresentationImpl` helpers; non-Sum typegens fall back to their direct
+      * `toRepresentation`). We can't split by `SIRType.isSum/isProd` here because sum-shaped
+      * *constructors* have `CaseClass` SIR types (e.g. `List.Cons` is a `CaseClass` whose typegen
+      * is `SumBuiltinList`).
       */
     def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(using
         lctx: LoweringContext
@@ -2367,15 +2367,20 @@ object LoweredValue {
             newVar
         }
 
-        /** If `lv` is already identifiable, return it unchanged with `false`.
-          * Otherwise wrap it in a fresh lazy let-binding (`lvNewLazyIdVar`)
-          * with `nameHint` (uniqued), `tp`, and `repr`, returning the new
-          * identifiable plus `true` to signal the caller that it must add the
+        /** If `lv` is already identifiable, return it unchanged with `false`. Otherwise wrap it in
+          * a fresh lazy let-binding (`lvNewLazyIdVar`) with `nameHint` (uniqued), `tp`, and `repr`,
+          * returning the new identifiable plus `true` to signal the caller that it must add the
           * binding to scope (e.g., via `ScopeBracketsLoweredValue`).
           *
-          * `tp` / `repr` are passed explicitly because some callers wrap the
-          * result of a `toRepresentation` conversion whose runtime type/repr
-          * differs from the source value's stored ones.
+          * `tp` / `repr` are passed explicitly because some callers wrap the result of a
+          * `toRepresentation` conversion whose runtime type/repr differs from the source value's
+          * stored ones.
+          *
+          * Note: when `lv` is already identifiable, `tp` and `repr` are ignored — the existing
+          * binding's stored shape is returned as-is. Callers that pass values different from
+          * `lv.sirType` / `lv.representation` must already have ensured the existing binding's
+          * shape matches what they need; otherwise the identifiable branch would silently mask a
+          * mismatch.
           */
         def lvAsIdentifiable(
             lv: LoweredValue,

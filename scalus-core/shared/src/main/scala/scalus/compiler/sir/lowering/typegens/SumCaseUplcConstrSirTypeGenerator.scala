@@ -147,11 +147,10 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         SumDispatch.genMatch(matchData, effectiveScrutinee, optTargetType)
     }
 
-    /** Outbound conversions from a sum value whose static type carries
-      * `@UplcRepr(UplcConstr)` (Phase 5). Body lifted from
-      * `SumDispatch.sumCaseUplcConstrImpl`; mostly delegations to other
-      * emitters, with TypeVar-kind handling specific to this typegen's
-      * `defaultRepresentation` / `defaultTypeVarReperesentation`.
+    /** Outbound conversions from a sum value whose static type carries `@UplcRepr(UplcConstr)`
+      * (Phase 5). Body lifted from `SumDispatch.sumCaseUplcConstrImpl`; mostly delegations to other
+      * emitters, with TypeVar-kind handling specific to this typegen's `defaultRepresentation` /
+      * `defaultTypeVarReperesentation`.
       */
     def emitConvert(
         input: LoweredValue,

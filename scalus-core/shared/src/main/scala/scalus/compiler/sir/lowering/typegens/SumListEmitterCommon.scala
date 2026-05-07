@@ -556,9 +556,9 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
             )
     }
 
-    /** `Case`-on-list (V4) / `ChooseList` (V3) scaffolding. The cons-head/tail
-      * bindings and the lifted scrutinee var are captured at condition time;
-      * `assemble` receives aligned branches plus the chosen target repr.
+    /** `Case`-on-list (V4) / `ChooseList` (V3) scaffolding. The cons-head/tail bindings and the
+      * lifted scrutinee var are captured at condition time; `assemble` receives aligned branches
+      * plus the chosen target repr.
       */
     private def builtinListScaffolding(
         listInput: IdentifiableLoweredValue,
@@ -606,15 +606,14 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
         }
     }
 
-    /** Outbound conversions from a list-shaped value (Phase 5). The receiver
-      * `this` is the source emitter — `SumBuiltinListEmitter(elemRepr)` for
-      * cons-list sources, `SumPairBuiltinListEmitter` for pair-list sources.
+    /** Outbound conversions from a list-shaped value (Phase 5). The receiver `this` is the source
+      * emitter — `SumBuiltinListEmitter(elemRepr)` for cons-list sources,
+      * `SumPairBuiltinListEmitter` for pair-list sources.
       *
-      * Body lifted from `SumDispatch.sumListCommonImpl`: the previous `gen`
-      * parameter is now `this`. Targets covered: SumBuiltinList variants,
-      * PackedSumDataList, SumPairBuiltinList variants, SumDataAssocMap, plus
-      * cross-class delegations for `SumUplcConstr` / `ProdUplcConstr` /
-      * `SumReprProxy` and the `PairIntDataList` rebuild path.
+      * Body lifted from `SumDispatch.sumListCommonImpl`: the previous `gen` parameter is now
+      * `this`. Targets covered: SumBuiltinList variants, PackedSumDataList, SumPairBuiltinList
+      * variants, SumDataAssocMap, plus cross-class delegations for `SumUplcConstr` /
+      * `ProdUplcConstr` / `SumReprProxy` and the `PairIntDataList` rebuild path.
       */
     def emitConvert(
         input: LoweredValue,
@@ -677,7 +676,10 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                 input
                     .toRepresentation(SumBuiltinList(elemRepr), pos)
                     .toRepresentation(outputRepresentation, pos)
-            case (SumBuiltinList(PrimitiveRepresentation.Constant), tv @ TypeVarRepresentation(kind)) =>
+            case (
+                  SumBuiltinList(PrimitiveRepresentation.Constant),
+                  tv @ TypeVarRepresentation(kind)
+                ) =>
                 import SIRType.TypeVarKind.*
                 kind match
                     case Transparent =>
@@ -688,7 +690,10 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                         input
                             .toRepresentation(PackedSumDataList, pos)
                             .toRepresentation(tv, pos)
-            case (tv @ TypeVarRepresentation(kind), SumBuiltinList(PrimitiveRepresentation.Constant)) =>
+            case (
+                  tv @ TypeVarRepresentation(kind),
+                  SumBuiltinList(PrimitiveRepresentation.Constant)
+                ) =>
                 import SIRType.TypeVarKind.*
                 kind match
                     case Transparent =>

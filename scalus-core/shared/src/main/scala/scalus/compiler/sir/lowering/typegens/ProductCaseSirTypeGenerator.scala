@@ -147,8 +147,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
             ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
         else
             val argTypeGens = loweredArgs.map(_.sirType).map(lctx.typeGenerator)
-            val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall {
-                case (arg, typeGen) => typeGen.canBeConvertedToData(arg.sirType)
+            val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
+                typeGen.canBeConvertedToData(arg.sirType)
             }
             if !canBeConvertedToData then ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
             else ProdDataListEmitter.genConstr(constr, loweredArgs, argTypeGens)
@@ -269,9 +269,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
     }
 
-    /** Outbound conversions for plain product values. Handles
-      * `ProdDataList` / `ProdDataConstr` / `PackedDataList` /
-      * `ProdUplcConstr` / `ProdBuiltinPair` / `OneElementWrapper` sources via
+    /** Outbound conversions for plain product values. Handles `ProdDataList` / `ProdDataConstr` /
+      * `PackedDataList` / `ProdUplcConstr` / `ProdBuiltinPair` / `OneElementWrapper` sources via
       * direct emission or two-hop chains.
       */
     def emitConvert(
@@ -338,7 +337,13 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 lvBuiltinApply(SIRBuiltins.headList, input, input.sirType, outRep, pos)
             case (ProdDataList, outPair @ ProdBuiltinPair(fstRepr, sndRepr)) =>
                 val (inputIdv, addToScoped) =
-                    lvAsIdentifiable(input, "dl_to_pair_input", input.sirType, input.representation, pos)
+                    lvAsIdentifiable(
+                      input,
+                      "dl_to_pair_input",
+                      input.sirType,
+                      input.representation,
+                      pos
+                    )
                 val head =
                     lvBuiltinApply(SIRBuiltins.headList, inputIdv, input.sirType, fstRepr, pos)
                 val headTail = lvBuiltinApply(
@@ -535,7 +540,13 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     val (fstType, sndType) =
                         ProdBuiltinPair.extractPairComponentTypes(input.sirType)
                     val (inputIdv, inputIdvAdded) =
-                        lvAsIdentifiable(input, "pair_conv_input", input.sirType, input.representation, pos)
+                        lvAsIdentifiable(
+                          input,
+                          "pair_conv_input",
+                          input.sirType,
+                          input.representation,
+                          pos
+                        )
                     val fst = lvBuiltinApply(SIRBuiltins.fstPair, inputIdv, fstType, inFst, pos)
                     val snd = lvBuiltinApply(SIRBuiltins.sndPair, inputIdv, sndType, inSnd, pos)
                     val convertedFst = fst.toRepresentation(outFst, pos)
@@ -554,7 +565,13 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val (fstType, sndType) =
                     ProdBuiltinPair.extractPairComponentTypes(input.sirType)
                 val (inputIdv, _) =
-                    lvAsIdentifiable(input, "pair_to_dl_input", input.sirType, input.representation, pos)
+                    lvAsIdentifiable(
+                      input,
+                      "pair_to_dl_input",
+                      input.sirType,
+                      input.representation,
+                      pos
+                    )
                 if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
                     // For PlutusV4: use Case on Pair
                     val frsVarId = lctx.uniqueVarName("pair_frs")

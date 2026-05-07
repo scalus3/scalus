@@ -36,12 +36,14 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        // Mirror of `SumCaseUplcConstrSirTypeGenerator.upcastOne`: a child
-        // variant in `ProdUplcConstr` form becomes a single-entry
-        // `SumUplcConstr` parent. Single-entry (no overlay) is load-bearing —
-        // see the `hasTransparentFields` note in the sibling typegen. Already-
-        // sum values just relabel. `canBeConvertedToData = false` here so
-        // there's no Data-shaped fallback: anything else is a bug.
+        // The `ProdUplcConstr` arm mirrors
+        // `SumCaseUplcConstrSirTypeGenerator.upcastOne`: a child variant becomes a
+        // single-entry `SumUplcConstr` parent. Single-entry (no overlay) is
+        // load-bearing — see the `hasTransparentFields` note in the sibling
+        // typegen. Already-sum values just relabel. Unlike the Data-compatible
+        // sibling, `canBeConvertedToData = false` here so there is no
+        // constrIndex-driven Data-shaped fallback recursion; anything other than
+        // ProdUplcConstr / SumUplcConstr is a bug.
         input.representation match
             case prod: ProductCaseClassRepresentation.ProdUplcConstr =>
                 val sumRepr = SumCaseClassRepresentation.SumUplcConstr(

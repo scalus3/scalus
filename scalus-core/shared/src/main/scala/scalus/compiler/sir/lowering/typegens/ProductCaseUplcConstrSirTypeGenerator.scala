@@ -112,8 +112,8 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     )(using LoweringContext): LoweredValue =
         ProdDispatch.genMatch(matchData, loweredScrutinee, optTargetType)
 
-    /** Outbound conversions from a `@UplcRepr(UplcConstr)` product (Phase 5).
-      * Resolves TypeVar inputs to the type's concrete repr, then delegates to
+    /** Outbound conversions from a `@UplcRepr(UplcConstr)` product (Phase 5). Resolves TypeVar
+      * inputs to the type's concrete repr, then delegates to
       * `ProductCaseSirTypeGenerator.emitConvert` for the actual conversion.
       */
     def emitConvert(

@@ -448,10 +448,10 @@ object SumUplcConstrEmitter {
         )
     }
 
-    /** The scrutinee-repr-driven half of `genMatchUplcConstr` (Phase 4b): lower
-      * each case body in the scope of the variant's field bindings, return the
-      * `Term.Case` scaffolding plus the unaligned branch values. The result
-      * repr is decided by `SumDispatch.assembleMatch`, not here.
+    /** The scrutinee-repr-driven half of `genMatchUplcConstr` (Phase 4b): lower each case body in
+      * the scope of the variant's field bindings, return the `Term.Case` scaffolding plus the
+      * unaligned branch values. The result repr is decided by `SumDispatch.assembleMatch`, not
+      * here.
       */
     private def emitMatchConditionUplcConstr(
         matchData: SIR.Match,
@@ -474,10 +474,9 @@ object SumUplcConstrEmitter {
         (uplcConstrScaffolding(loweredScrutinee, pos), branches)
     }
 
-    /** `Term.Case`-based scaffolding: assembles a `ComplexLoweredValue` whose
-      * term is `Term.Case(scrutinee, branches)`. Branch order matches the
-      * SumUplcConstr tag order (set by `prepareCases` in
-      * `emitMatchConditionUplcConstr`).
+    /** `Term.Case`-based scaffolding: assembles a `ComplexLoweredValue` whose term is
+      * `Term.Case(scrutinee, branches)`. Branch order matches the SumUplcConstr tag order (set by
+      * `prepareCases` in `emitMatchConditionUplcConstr`).
       */
     private def uplcConstrScaffolding(
         scrutinee: LoweredValue,
