@@ -228,7 +228,7 @@ object SirTypeUplcGenerator {
             case "SumCase"     => DataConstrEmitter
             case "SumDataList" =>
                 new SumBuiltinListEmitter(PrimitiveRepresentation.PackedData)
-            case "SumPairDataList"       => SumPairBuiltinListSirTypeGenerator
+            case "SumPairDataList"       => SumPairBuiltinListEmitter
             case "PackedDataMap"         => PackedDataMapEmitter
             case "Data"                  => SIRTypeUplcDataGenerator
             case "BuiltinArray"          => ProdBuiltinArrayEmitter
@@ -287,8 +287,8 @@ object SirTypeUplcGenerator {
                         // Existing structural logic
                         val trace = new IdentityHashMap[SIRType, SIRType]()
                         if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
-                        else if decl.name == SumListCommonSirTypeGenerator.PairListDataDeclName then
-                            if !containsFun(tp, trace) then SumPairBuiltinListSirTypeGenerator
+                        else if decl.name == SumListEmitterCommon.PairListDataDeclName then
+                            if !containsFun(tp, trace) then SumPairBuiltinListEmitter
                             else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
                             if !containsFun(tp, trace) then {
@@ -298,11 +298,11 @@ object SirTypeUplcGenerator {
                                         _: SumCaseClassRepresentation.SumUplcConstr =>
                                         SumCaseUplcConstrSirTypeGenerator
                                     case _ if isPair(typeArgs.head) =>
-                                        SumPairBuiltinListSirTypeGenerator
+                                        SumPairBuiltinListEmitter
                                     case _ => new SumBuiltinListEmitter(elemRepr)
                             } else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == SIRType.BuiltinList.name then
-                            if isPair(typeArgs.head) then SumPairBuiltinListSirTypeGenerator
+                            if isPair(typeArgs.head) then SumPairBuiltinListEmitter
                             else new SumBuiltinListEmitter(elementReprFor(typeArgs.head))
                         else if !containsFun(tp, trace) then DataConstrEmitter
                         else SumCaseUplcOnlySirTypeGenerator
@@ -394,22 +394,22 @@ object SirTypeUplcGenerator {
     )(using lctx: LoweringContext): Option[SirTypeUplcGenerator] = {
         if constrDecl.name == SIRType.List.NilConstr.name || constrDecl.name == SIRType.List.Cons.name
             || constrDecl.name == SIRType.BuiltinList.Nil.name || constrDecl.name == SIRType.BuiltinList.Cons.name
-            || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
+            || constrDecl.name == SumListEmitterCommon.PairNilName || constrDecl.name == SumListEmitterCommon.PairConsName
         then
             val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
             if hasFun then Some(SumCaseUplcOnlySirTypeGenerator)
-            else if constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
-                || constrDecl.name == SumListCommonSirTypeGenerator.PairConsName
-            then Some(SumPairBuiltinListSirTypeGenerator)
+            else if constrDecl.name == SumListEmitterCommon.PairNilName
+                || constrDecl.name == SumListEmitterCommon.PairConsName
+            then Some(SumPairBuiltinListEmitter)
             else if (constrDecl.name == SIRType.List.Cons.name || constrDecl.name == SIRType.BuiltinList.Cons.name) && isPair(
                   typeArgs.head
                 )
-            then Some(SumPairBuiltinListSirTypeGenerator)
+            then Some(SumPairBuiltinListEmitter)
             else if typeArgs.nonEmpty && typeArgs.head != SIRType.TypeNothing then
                 Some(new SumBuiltinListEmitter(elementReprFor(typeArgs.head)))
             else if constrDecl.name == SIRType.List.NilConstr.name
                 || constrDecl.name == SIRType.BuiltinList.Nil.name
-                || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
+                || constrDecl.name == SumListEmitterCommon.PairNilName
             then
                 Some(
                   new SumBuiltinListEmitter(

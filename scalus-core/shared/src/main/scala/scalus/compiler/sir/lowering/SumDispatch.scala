@@ -35,7 +35,7 @@ object SumDispatch {
                 sumCaseUplcConstrImpl(input, target, pos)
             case SumCaseUplcOnlySirTypeGenerator =>
                 sumCaseImpl(input, target, pos)
-            case listGen: SumListCommonSirTypeGenerator =>
+            case listGen: SumListEmitterCommon =>
                 sumListCommonImpl(listGen, input, target, pos)
             case ProductCaseSirTypeGenerator
                 | ProductCaseUplcConstrSirTypeGenerator
@@ -245,7 +245,7 @@ object SumDispatch {
       * the dispatcher can call them statically.
       */
     private def sumListCommonImpl(
-        gen: SumListCommonSirTypeGenerator,
+        gen: SumListEmitterCommon,
         input: LoweredValue,
         outputRepresentation: LoweredValueRepresentation,
         pos: SIRPosition
@@ -548,7 +548,7 @@ object SumDispatch {
             if isPairOut then SumPairBuiltinList.fromElementType(elemType, pos)
             else SumBuiltinList(resolvedOut)
         val outNil =
-            if isPairOut then SumPairBuiltinListSirTypeGenerator.genNil(outListType, pos)
+            if isPairOut then SumPairBuiltinListEmitter.genNil(outListType, pos)
             else new SumBuiltinListEmitter(resolvedOut).genNil(outListType, pos)
         val convFn = lvLamAbs(
           "elem",

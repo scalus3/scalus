@@ -83,7 +83,7 @@ object Lowering {
                 // `ProdDispatch.genConstr`, which call `chooseConstrOutputRepr`.
                 val isNil =
                     name == SIRType.List.NilConstr.name
-                        || name == typegens.SumListCommonSirTypeGenerator.PairNilName
+                        || name == typegens.SumListEmitterCommon.PairNilName
                 val (typeGenerator, effectiveConstr) =
                     if isNil
                     then SumDispatch.dispatchNil(constr, resolvedType, optTargetType)

@@ -6,7 +6,7 @@ import scalus.compiler.sir.*
 /** Generator for BuiltinList[BuiltinPair[Data,Data]] — pair lists. Uses SumPairBuiltinList
   * representation, serialized via mapData/unMapData.
   */
-object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator {
+object SumPairBuiltinListEmitter extends SumListEmitterCommon {
 
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
@@ -69,7 +69,7 @@ object SumPairBuiltinListSirTypeGenerator extends SumListCommonSirTypeGenerator 
                 ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valueRepr)
             case other =>
                 throw LoweringException(
-                  s"SumPairBuiltinListSirTypeGenerator.genNil: expected SumPairBuiltinList but got $other",
+                  s"SumPairBuiltinListEmitter.genNil: expected SumPairBuiltinList but got $other",
                   pos
                 )
         val elemUni = pairRepr.defaultUni(elemType)

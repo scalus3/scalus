@@ -10,7 +10,7 @@ import scala.util.control.NonFatal
 /** handle next cases: scalus.cardano.onchain.plutus.prelude.List[A]
   * scalus.uplc.builtin.BuiltinList[A] scalus.cardano.onchain.plutus.prelude.PairList[A, B]
   */
-trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
+trait SumListEmitterCommon extends SirTypeUplcGenerator {
 
     def defaultListRepresentation(tp: SIRType, pos: SIRPosition)(using
         LoweringContext
@@ -33,7 +33,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         outputRepresentation: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue =
-        SumDispatch.dispatcherBypass("SumListCommonSirTypeGenerator")
+        SumDispatch.dispatcherBypass("SumListEmitterCommon")
 
     override def upcastOne(
         input: LoweredValue,
@@ -101,7 +101,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        import SumListCommonSirTypeGenerator.*
+        import SumListEmitterCommon.*
         // Routing decisions live in `SumDispatch.chooseConstrOutputRepr`.
         constr.name match
             case SIRType.List.NilConstr.name | SIRType.BuiltinList.Nil.name | PairNilName =>
@@ -178,7 +178,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
     }
 
     def isNilType(tp: SIRType): Boolean = {
-        import SumListCommonSirTypeGenerator.*
+        import SumListEmitterCommon.*
         SIRType.retrieveConstrDecl(tp) match {
             case Left(r) => false
             case Right(constrDecl) =>
@@ -255,7 +255,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
     }
 
     def retrieveElementType(tp: SIRType, pos: SIRPosition)(using lctx: LoweringContext): SIRType = {
-        import SumListCommonSirTypeGenerator.*
+        import SumListEmitterCommon.*
         tp match {
             case SIRType.SumCaseClass(decl, typeArgs) =>
                 if decl.name == PairListDataDeclName then
@@ -343,7 +343,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
                 )
             case _ =>
         // Nil, Cons
-        import SumListCommonSirTypeGenerator.*
+        import SumListEmitterCommon.*
         var optNilCase: Option[SIR.Case] = None
         var optConsCase: Option[SIR.Case] = None
         var optWildcardCase: Option[SIR.Case] = None
@@ -608,7 +608,7 @@ trait SumListCommonSirTypeGenerator extends SirTypeUplcGenerator {
 
 }
 
-object SumListCommonSirTypeGenerator {
+object SumListEmitterCommon {
     val PairListDataDeclName = SIRType.PairList.DataDeclName
     val PairNilName = SIRType.PairList.PairNilName
     val PairConsName = SIRType.PairList.PairConsName
