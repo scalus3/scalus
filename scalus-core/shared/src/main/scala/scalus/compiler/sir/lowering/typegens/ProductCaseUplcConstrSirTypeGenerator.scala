@@ -23,7 +23,7 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
             SirTypeUplcGenerator
                 .resolveFieldRepr(param, paramType)
                 .getOrElse(
-                  lctx.typeGenerator(paramType).defaultRepresentation(paramType)
+                  SirTypeUplcGenerator.defaultRepresentation(paramType)
                 )
         }
         ProductCaseClassRepresentation.ProdUplcConstr(constrIndex, fieldReprs)

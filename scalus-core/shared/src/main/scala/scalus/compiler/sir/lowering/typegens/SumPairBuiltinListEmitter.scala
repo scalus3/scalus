@@ -47,8 +47,8 @@ object SumPairBuiltinListEmitter extends SumListEmitterCommon {
         then
             val (fstType, sndType) =
                 ProductCaseClassRepresentation.ProdBuiltinPair.extractPairComponentTypes(tp)
-            val fstRepr = lctx.typeGenerator(fstType).defaultDataRepresentation(fstType)
-            val sndRepr = lctx.typeGenerator(sndType).defaultDataRepresentation(sndType)
+            val fstRepr = SirTypeUplcGenerator.defaultDataRepresentation(fstType)
+            val sndRepr = SirTypeUplcGenerator.defaultDataRepresentation(sndType)
             ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
         else
             throw LoweringException(

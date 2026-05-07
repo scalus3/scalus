@@ -204,7 +204,7 @@ object SumUplcConstrEmitter {
                                                 // type generator's default rep — for a Fixed TypeVar
                                                 // that's `TypeVarRepresentation(Fixed)` (Data-wrapped
                                                 // abstract), matching the pre-guard behavior.
-                                                lctx.typeGenerator(tv).defaultRepresentation(tv)
+                                                SirTypeUplcGenerator.defaultRepresentation(tv)
                                     // Unsubstituted DataDecl TypeVars (e.g., `Option[*]` at a
                                     // constructor call site where Scala inferred `Nothing`/`Any`
                                     // for the type arg) substitute to FreeUnificator via
@@ -254,7 +254,7 @@ object SumUplcConstrEmitter {
         val consVariant = scrutineeRepr.variants.values.find(_.fieldReprs.nonEmpty)
         val elemRepr = consVariant
             .map(_.fieldReprs.head)
-            .getOrElse(lctx.typeGenerator(elemType).defaultRepresentation(elemType))
+            .getOrElse(SirTypeUplcGenerator.defaultRepresentation(elemType))
         val tailRepr = consVariant
             .flatMap(_.fieldReprs.lift(1))
             .getOrElse(scrutineeRepr)
@@ -560,7 +560,7 @@ object SumUplcConstrEmitter {
                         val tp0 = lctx.resolveTypeVarIfNeeded(typeBinding.tp)
                         val fieldRepr = variantFieldReprs match
                             case Some(reprs) if fieldIdx < reprs.size => reprs(fieldIdx)
-                            case _ => lctx.typeGenerator(tp0).defaultRepresentation(tp0)
+                            case _ => SirTypeUplcGenerator.defaultRepresentation(tp0)
                         val tp = fieldRepr match
                             case _: SumCaseClassRepresentation.SumReprProxy
                                 if scrutineeUplcReprAnns.isDefined &&
@@ -672,7 +672,7 @@ object SumUplcConstrEmitter {
                 val elemType = SumCaseClassRepresentation.SumBuiltinList
                     .retrieveListElementType(input.sirType)
                     .getOrElse(SIRType.Data.tp)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val builtinListRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
                 val asBuiltinList = input.toRepresentation(builtinListRepr, pos)
                 LoweredValue.Builder.lvBuiltinApply(
@@ -687,7 +687,7 @@ object SumUplcConstrEmitter {
                 val elemType = SumCaseClassRepresentation.SumBuiltinList
                     .retrieveListElementType(input.sirType)
                     .getOrElse(SIRType.Data.tp)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
                 val builtinListType = SIRType.BuiltinList(elemType)
                 val asBuiltinList = LoweredValue.Builder.lvBuiltinApply(
@@ -957,14 +957,14 @@ object SumUplcConstrEmitter {
                 idx,
                 constrDecl.params.map { p =>
                     val tp = lctx.resolveTypeVarIfNeeded(substParamTp(p.tp))
-                    lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                    SirTypeUplcGenerator.defaultDataRepresentation(tp)
                 }
               )
             )
             var currentList: LoweredValue = dataListVar
             val fields = constrDecl.params.zip(variantRepr.fieldReprs).map { (param, fieldRepr) =>
                 val tp = lctx.resolveTypeVarIfNeeded(substParamTp(param.tp))
-                val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                val dataRepr = SirTypeUplcGenerator.defaultDataRepresentation(tp)
                 val head = lvBuiltinApply(SIRBuiltins.headList, currentList, tp, dataRepr, pos)
                 currentList = lvBuiltinApply(
                   SIRBuiltins.tailList,
@@ -1028,7 +1028,7 @@ object SumUplcConstrEmitter {
                 idx,
                 constrDecl.params.map { p =>
                     val tp = lctx.resolveTypeVarIfNeeded(substParamTp(p.tp))
-                    lctx.typeGenerator(tp).defaultRepresentation(tp)
+                    SirTypeUplcGenerator.defaultRepresentation(tp)
                 }
               )
             )
@@ -1046,7 +1046,7 @@ object SumUplcConstrEmitter {
             val dataList = fieldVars.zip(constrDecl.params).foldRight(dataListNil: LoweredValue) {
                 case ((fv, param), acc) =>
                     val tp = lctx.resolveTypeVarIfNeeded(substParamTp(param.tp))
-                    val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                    val dataRepr = SirTypeUplcGenerator.defaultDataRepresentation(tp)
                     val asData = fv.toRepresentation(dataRepr, pos)
                     lvBuiltinApply2(
                       SIRBuiltins.mkCons,

@@ -188,7 +188,7 @@ object ProdDataListEmitter {
           SIRBuiltins.headList,
           selHeadList,
           sel.tp,
-          lctx.typeGenerator(sel.tp).defaultDataRepresentation(sel.tp),
+          SirTypeUplcGenerator.defaultDataRepresentation(sel.tp),
           sel.anns.pos
         )
         ScopeBracketsLoweredValue(scopeVars, body)

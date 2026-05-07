@@ -299,7 +299,7 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
         )
 
         val dataListElemRepr =
-            lctx.typeGenerator(SIRType.Data.tp).defaultDataRepresentation(SIRType.Data.tp)
+            SirTypeUplcGenerator.defaultDataRepresentation(SIRType.Data.tp)
         val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(dataListElemRepr)
         val dataListVarId = lctx.uniqueVarName("_match_datalist")
         val dataListVar = lvNewLazyIdVar(
@@ -417,7 +417,7 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
                     val prevId = currentTail.id
                     val tp = lctx.resolveTypeVarIfNeeded(tp0)
                     val tpDataRepresentation =
-                        lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                        SirTypeUplcGenerator.defaultDataRepresentation(tp)
                     val bindedVar = lvNewLazyNamedVar(
                       name,
                       tp,

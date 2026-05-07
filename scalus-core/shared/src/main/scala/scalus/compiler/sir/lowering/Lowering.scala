@@ -290,7 +290,7 @@ object Lowering {
                 }
                 val retval = lvLamAbs(
                   param,
-                  lctx.typeGenerator(param.tp).defaultRepresentation(param.tp),
+                  typegens.SirTypeUplcGenerator.defaultRepresentation(param.tp),
                   _id => {
                       val loweredBody = summon[LoweringContext].lower(term, optTermTargetType)
                       // If there's a target return type, try to upcast the body
@@ -563,7 +563,7 @@ object Lowering {
                             // annotation directly.
                             val rhsRepTp = mergeReturnAnnotation(rhs.tp, tp)
                             val rhsRepr =
-                                lctx.typeGenerator(rhsRepTp).defaultRepresentation(rhsRepTp)
+                                typegens.SirTypeUplcGenerator.defaultRepresentation(rhsRepTp)
                             val newVar = VariableLoweredValue(
                               id = lctx.uniqueVarName(name),
                               name = name,
@@ -670,7 +670,7 @@ object Lowering {
                           )
                         )
         val elemRepr =
-            lctx.typeGenerator(elemType).defaultRepresentation(elemType)
+            typegens.SirTypeUplcGenerator.defaultRepresentation(elemType)
         elemRepr match
             case _: SumCaseClassRepresentation.SumUplcConstr |
                 _: ProductCaseClassRepresentation.ProdUplcConstr =>
@@ -1044,7 +1044,7 @@ object Lowering {
             override def sirType: SIRType = app.tp
             override def pos: SIRPosition = app.anns.pos
             override def representation: LoweredValueRepresentation =
-                lctx.typeGenerator(app.tp).defaultDataRepresentation(app.tp)
+                typegens.SirTypeUplcGenerator.defaultDataRepresentation(app.tp)
             override def termInternal(gctx: TermGenerationContext): Term =
                 data.termInternal(gctx)
 
@@ -1131,7 +1131,7 @@ object Lowering {
         val value = lctx
             .lower(app.arg)
             .toRepresentation(
-              lctx.typeGenerator(app.arg.tp).defaultDataRepresentation(app.arg.tp),
+              typegens.SirTypeUplcGenerator.defaultDataRepresentation(app.arg.tp),
               app.anns.pos
             )
         new ProxyLoweredValue(value) {

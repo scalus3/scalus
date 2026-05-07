@@ -29,9 +29,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         ProductCaseClassRepresentation.ProdBuiltinPair
                             .extractPairComponentTypes(tp)
                     val fstRepr =
-                        loweringContext.typeGenerator(fstType).defaultRepresentation(fstType)
+                        SirTypeUplcGenerator.defaultRepresentation(fstType)
                     val sndRepr =
-                        loweringContext.typeGenerator(sndType).defaultRepresentation(sndType)
+                        SirTypeUplcGenerator.defaultRepresentation(sndType)
                     ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr)
                 } else if constrDecl.name == SIRType.Tuple2.name
                 then { // here we can change and see tests.
@@ -305,7 +305,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 var currentList: LoweredValue = inputIdv
                 val fields = constrDecl.params.zip(puc.fieldReprs).map { (param, fieldRepr) =>
                     val tp = lctx.resolveTypeVarIfNeeded(param.tp)
-                    val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                    val dataRepr = SirTypeUplcGenerator.defaultDataRepresentation(tp)
                     val head = lvBuiltinApply(SIRBuiltins.headList, currentList, tp, dataRepr, pos)
                     currentList = lvBuiltinApply(
                       SIRBuiltins.tailList,
@@ -423,7 +423,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val dataListNil = lvDataDataListNil(pos)
                 val dataList = fieldVars.zip(fieldTypes).foldRight(dataListNil: LoweredValue) {
                     case ((fv, tp), acc) =>
-                        val dataRepr = lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                        val dataRepr = SirTypeUplcGenerator.defaultDataRepresentation(tp)
                         lvBuiltinApply2(
                           SIRBuiltins.mkCons,
                           fv.toRepresentation(dataRepr, pos),
@@ -590,8 +590,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                       representation = inSnd,
                       optRhs = None
                     )
-                    val frsDataRepr = lctx.typeGenerator(fstType).defaultDataRepresentation(fstType)
-                    val sndDataRepr = lctx.typeGenerator(sndType).defaultDataRepresentation(sndType)
+                    val frsDataRepr = SirTypeUplcGenerator.defaultDataRepresentation(fstType)
+                    val sndDataRepr = SirTypeUplcGenerator.defaultDataRepresentation(sndType)
                     val frsData = frsVar.toRepresentation(frsDataRepr, pos)
                     val sndData = sndVar.toRepresentation(sndDataRepr, pos)
                     val consSndNil = lvBuiltinApply2(
@@ -615,8 +615,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     // For V1-V3: use fstPair/sndPair builtins
                     val frs = lvBuiltinApply(SIRBuiltins.fstPair, inputIdv, fstType, inFst, pos)
                     val snd = lvBuiltinApply(SIRBuiltins.sndPair, inputIdv, sndType, inSnd, pos)
-                    val frsDataRepr = lctx.typeGenerator(fstType).defaultDataRepresentation(fstType)
-                    val sndDataRepr = lctx.typeGenerator(sndType).defaultDataRepresentation(sndType)
+                    val frsDataRepr = SirTypeUplcGenerator.defaultDataRepresentation(fstType)
+                    val sndDataRepr = SirTypeUplcGenerator.defaultDataRepresentation(sndType)
                     val frsData = frs.toRepresentation(frsDataRepr, pos)
                     val sndData = snd.toRepresentation(sndDataRepr, pos)
                     val consSndNil = lvBuiltinApply2(

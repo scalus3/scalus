@@ -164,9 +164,9 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
         (input.sirType, targetType) match {
             case (SIRType.Fun(inType1, outType1), SIRType.Fun(inType2, outType2)) =>
                 val argName = lctx.uniqueVarName("upcast_arg")
-                val inRepr2 = lctx.typeGenerator(inType2).defaultRepresentation(inType2)
-                val outRepr2 = lctx.typeGenerator(outType2).defaultRepresentation(outType2)
-                val outRepr1 = lctx.typeGenerator(outType1).defaultRepresentation(outType1)
+                val inRepr2 = SirTypeUplcGenerator.defaultRepresentation(inType2)
+                val outRepr2 = SirTypeUplcGenerator.defaultRepresentation(outType2)
+                val outRepr1 = SirTypeUplcGenerator.defaultRepresentation(outType1)
 
                 lvLamAbs(
                   argName,

@@ -129,7 +129,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                 // downstream consumers and was a leak path for the
                                 // KnightsTest:475 heisenbug.
                                 val targetRepr =
-                                    lctx.typeGenerator(concrete).defaultRepresentation(concrete)
+                                    SirTypeUplcGenerator.defaultRepresentation(concrete)
                                 input.toRepresentation(targetRepr, pos)
                     case _: TypeVarRepresentation =>
                         // TypeVar→TypeVar relabel — wildcard semantics carry through.
@@ -164,7 +164,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                             case concrete =>
                                 // input.sirType is concrete — defer to its generator.
                                 val sourceRepr =
-                                    lctx.typeGenerator(concrete).defaultRepresentation(concrete)
+                                    SirTypeUplcGenerator.defaultRepresentation(concrete)
                                 val viaSource =
                                     new RepresentationProxyLoweredValue(input, sourceRepr, pos)
                                 viaSource.toRepresentation(concreteTarget, pos)
@@ -293,7 +293,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                             )
                         val tp1 = constrDecl.params.head.tp
                         val inrepr =
-                            lctx.typeGenerator(tp1).defaultTypeVarReperesentation(tp1)
+                            SirTypeUplcGenerator.defaultTypeVarReperesentation(tp1)
                         val r1 = input.toRepresentation(inrepr, pos)
                         new RepresentationProxyLoweredValue(r1, representation, pos)
             case PrimitiveRepresentation.Constant =>

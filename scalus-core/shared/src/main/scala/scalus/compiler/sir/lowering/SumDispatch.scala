@@ -67,7 +67,7 @@ object SumDispatch {
             case (PairIntDataList, SumBuiltinList(_)) | (PairIntDataList, PackedSumDataList) =>
                 val elemType =
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
             // PairIntDataList → SumUplcConstr: delegate
             case (PairIntDataList, _: SumUplcConstr) =>
@@ -81,7 +81,7 @@ object SumDispatch {
             case (PackedSumDataList, _) =>
                 val elemType =
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
             // All SumUplcConstr source/target conversions delegate to SumUplcConstrEmitter
             case (_: SumUplcConstr, _) =>
@@ -274,7 +274,7 @@ object SumDispatch {
                 val elemType = SumBuiltinList
                     .retrieveListElementType(loweredScrutinee.sirType)
                     .getOrElse(SIRType.Data.tp)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val listRepr = SumBuiltinList(elemRepr)
                 val unpacked = loweredScrutinee.toRepresentation(listRepr, matchData.anns.pos)
                 val unpackedVar = lvNewLazyIdVar(
@@ -430,7 +430,7 @@ object SumDispatch {
         targetType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): SumCaseClassRepresentation = {
-        val targetDefault = lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+        val targetDefault = typegens.SirTypeUplcGenerator.defaultRepresentation(targetType)
         val targetSum = targetDefault match
             case s: SumCaseClassRepresentation => s
             case other =>

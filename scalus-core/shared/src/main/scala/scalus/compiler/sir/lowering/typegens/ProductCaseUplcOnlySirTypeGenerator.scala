@@ -15,7 +15,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(tp, SIRPosition.empty)
         val fieldReprs = constrDecl.params.map { param =>
             val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
-            lctx.typeGenerator(paramType).defaultRepresentation(paramType)
+            SirTypeUplcGenerator.defaultRepresentation(paramType)
         }
         ProductCaseClassRepresentation.ProdUplcConstr(constrIndex, fieldReprs)
     }

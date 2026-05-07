@@ -61,8 +61,8 @@ object ProdBuiltinPairEmitter {
         val argsMapping = constrDecl.typeParams.zip(typeArgs).toMap
         val frsTp = SIRType.substitute(constrDecl.params.head.tp, argsMapping, Map.empty)
         val sndTp = SIRType.substitute(constrDecl.params.tail.head.tp, argsMapping, Map.empty)
-        val frsRepr = lctx.typeGenerator(frsTp).defaultDataRepresentation(frsTp)
-        val sndRepr = lctx.typeGenerator(sndTp).defaultDataRepresentation(sndTp)
+        val frsRepr = SirTypeUplcGenerator.defaultDataRepresentation(frsTp)
+        val sndRepr = SirTypeUplcGenerator.defaultDataRepresentation(sndTp)
 
         if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
             // For PlutusV4: use Case on Pair - frs and snd are lambda parameters

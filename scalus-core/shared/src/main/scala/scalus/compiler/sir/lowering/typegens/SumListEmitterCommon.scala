@@ -216,7 +216,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                 (loweredScrutinee, sbl, er)
             case _ =>
                 val elemType = retrieveElementType(loweredScrutinee.sirType, sel.anns.pos)
-                val er = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val er = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val lr = SumCaseClassRepresentation.SumBuiltinList(er)
                 (loweredScrutinee.toRepresentation(lr, sel.anns.pos), lr, er)
         sel.field match {
@@ -666,13 +666,13 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
             // === SumBuiltinList(Constant) special cases ===
             case (SumBuiltinList(PrimitiveRepresentation.Constant), PackedSumDataList) =>
                 val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 input
                     .toRepresentation(SumBuiltinList(elemRepr), pos)
                     .toRepresentation(PackedSumDataList, pos)
             case (PackedSumDataList, SumBuiltinList(PrimitiveRepresentation.Constant)) =>
                 val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 input
                     .toRepresentation(SumBuiltinList(elemRepr), pos)
                     .toRepresentation(outputRepresentation, pos)
@@ -712,7 +712,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                         input
                     else
                         val elemRepr =
-                            lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                            SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                         input.toRepresentation(SumBuiltinList(elemRepr), pos)
                 lvBuiltinApply(
                   SIRBuiltins.listData,
@@ -747,7 +747,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
             // === PackedSumDataList conversions ===
             case (PackedSumDataList, out @ SumBuiltinList(_)) =>
                 val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val dataListRepr = SumBuiltinList(elemRepr)
                 val asDataList =
                     lvBuiltinApply(SIRBuiltins.unListData, input, input.sirType, dataListRepr, pos)
@@ -757,7 +757,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                 input
             case (PackedSumDataList, SumDataAssocMap) =>
                 val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val pairRepr = SumPairBuiltinList.fromElementType(elemType, pos)
                 input
                     .toRepresentation(SumBuiltinList(elemRepr), pos)
@@ -765,7 +765,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                     .toRepresentation(SumDataAssocMap, pos)
             case (PackedSumDataList, out @ SumPairBuiltinList(_, _)) =>
                 val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 input
                     .toRepresentation(SumBuiltinList(elemRepr), pos)
                     .toRepresentation(out, pos)
@@ -777,7 +777,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
             case (SumPairBuiltinList(_, _), PackedSumDataList) =>
                 val elemType = retrieveElementType(input.sirType, pos)
                 val dataElemRepr =
-                    lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+                    SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 input
                     .toRepresentation(SumBuiltinList(dataElemRepr), pos)
                     .toRepresentation(PackedSumDataList, pos)

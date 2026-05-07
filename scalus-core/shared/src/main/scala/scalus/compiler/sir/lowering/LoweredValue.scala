@@ -151,7 +151,7 @@ trait LoweredValue {
                 // become Data. Route through the type's generator (FunSirTypeGenerator for
                 // Fun targets, TypeVarSirTypeGenerator for bare FreeUnificator) which knows
                 // how to emit the proper conversion.
-                val targetRepr = lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+                val targetRepr = typegens.SirTypeUplcGenerator.defaultRepresentation(targetType)
                 if structurallyUpcasted.representation == targetRepr then structurallyUpcasted
                 else if structurallyUpcasted.representation
                         .isCompatibleOn(targetType, targetRepr, pos)
@@ -2905,7 +2905,7 @@ object LoweredValue {
                     val compatibleOn =
                         nonErrored.filter((lw, c) => lw.isCompatibleWithType(targetType))
                     if compatibleOn.isEmpty
-                    then lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+                    then typegens.SirTypeUplcGenerator.defaultRepresentation(targetType)
                     else {
                         // Deterministic ordering: by descending count, then by stableKey ascending.
                         // Map iteration order is non-deterministic across JVM runs (TypeProxy
@@ -2921,7 +2921,7 @@ object LoweredValue {
                             .find((r, c) => values.forall(v => r.isCompatibleWithType(v.sirType)))
                             .map(_._1)
                             .getOrElse(
-                              lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+                              typegens.SirTypeUplcGenerator.defaultRepresentation(targetType)
                             )
                     }
                 }

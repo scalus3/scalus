@@ -41,7 +41,7 @@ class SirToUplcV3Lowering(
             }
         val targetRepresentation = {
             if representation == TypeVarRepresentation(true) then
-                lctx.typeGenerator(v1.sirType).defaultRepresentation(v1.sirType)
+                typegens.SirTypeUplcGenerator.defaultRepresentation(v1.sirType)
             else representation
         }
         val retV = v1.toRepresentation(targetRepresentation, v1.pos)

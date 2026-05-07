@@ -131,7 +131,7 @@ object RepresentationAnnotatedTypeProxyLoweredValue {
         encodeReprAsAnnotationValue(tp, repr, pos).flatMap { sir =>
             // No override needed when repr already matches the type's natural default.
             val typeDefault =
-                try Some(lctx.typeGenerator(tp).defaultRepresentation(tp)(using lctx))
+                try Some(typegens.SirTypeUplcGenerator.defaultRepresentation(tp)(using lctx))
                 catch case NonFatal(_) => None
             if typeDefault.contains(repr) then None
             else

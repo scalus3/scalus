@@ -23,7 +23,7 @@ object ProdBuiltinArrayEmitter extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): ProductCaseClassRepresentation.ProdBuiltinArray = {
         val elemType = extractElemType(tp)
-        val elemRepr = lctx.typeGenerator(elemType).defaultRepresentation(elemType)
+        val elemRepr = SirTypeUplcGenerator.defaultRepresentation(elemType)
         ProductCaseClassRepresentation.ProdBuiltinArray(elemRepr)
     }
 

@@ -185,7 +185,7 @@ object SumCaseClassRepresentation {
                             // and cause `MultiplyInteger Apply LamAbs`-style residual
                             // lambdas at runtime when downstream genSelect emits a
                             // native-arity Case branch on the Data scrutinee.
-                            lctx.typeGenerator(tp).defaultRepresentation(tp) == this
+                            typegens.SirTypeUplcGenerator.defaultRepresentation(tp) == this
                 case other => false
             }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
@@ -427,7 +427,7 @@ object SumCaseClassRepresentation {
                         case SIRType.TypeNothing | SIRType.FreeUnificator =>
                             TypeVarRepresentation(false)
                         case _: SIRType.TypeVar => TypeVarRepresentation(false)
-                        case _ => lctx.typeGenerator(tp).defaultDataRepresentation(tp)
+                        case _ => typegens.SirTypeUplcGenerator.defaultDataRepresentation(tp)
                     SumPairBuiltinList(reprForType(keyType), reprForType(valueType))
                 case SIRType.TypeLambda(_, body) =>
                     fromElementType(body, pos)
@@ -600,7 +600,7 @@ object SumCaseClassRepresentation {
                             val fieldType =
                                 SIRType.substitute(param.tp, typeSubst, Map.empty)
                             val defaultRepr =
-                                lctx.typeGenerator(fieldType).defaultRepresentation(fieldType)
+                                typegens.SirTypeUplcGenerator.defaultRepresentation(fieldType)
                             fr == defaultRepr || fr.stableKey == defaultRepr.stableKey
                         }
             }
@@ -791,7 +791,7 @@ object ProductCaseClassRepresentation {
                             // defaultRepresentation form. Compatible only when tp's
                             // default IS this Data form — see DataConstr.isCompatibleOn
                             // for the full rationale.
-                            lctx.typeGenerator(tp).defaultRepresentation(tp) == this
+                            typegens.SirTypeUplcGenerator.defaultRepresentation(tp) == this
                 case other => false
             }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =
@@ -850,7 +850,7 @@ object ProductCaseClassRepresentation {
                 case tvr: TypeVarRepresentation =>
                     if tvr.isBuiltin then true
                     else
-                        val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp)
+                        val resolved = typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(tp)
                         resolved.isCompatibleOn(tp, this, pos)
                 case _ => false
             }
@@ -970,7 +970,7 @@ object ProductCaseClassRepresentation {
                 typeParams.zip(typeArgs.map(lctx.resolveTypeVarIfNeeded)).toMap
             fieldReprs.zip(constrDecl.params).forall { case (fr, param) =>
                 val fieldType = SIRType.substitute(param.tp, typeSubst, Map.empty)
-                val defaultRepr = lctx.typeGenerator(fieldType).defaultRepresentation(fieldType)
+                val defaultRepr = typegens.SirTypeUplcGenerator.defaultRepresentation(fieldType)
                 fr == defaultRepr || fr.stableKey == defaultRepr.stableKey
             }
         }
@@ -1018,7 +1018,7 @@ object ProductCaseClassRepresentation {
                 case tvr: TypeVarRepresentation =>
                     if tvr.isBuiltin then true
                     else
-                        val resolved = lctx.typeGenerator(tp).defaultTypeVarReperesentation(tp)
+                        val resolved = typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(tp)
                         resolved.isCompatibleOn(tp, this, pos)
                 case _ => false
             }
@@ -1313,7 +1313,7 @@ case class LambdaRepresentation(
                 case tv: SIRType.TypeVar if tv.isBuiltin && reprSubstitutes.contains(tv) =>
                     reprSubstitutes(tv)
                 case tv: SIRType.TypeVar if !tv.isBuiltin =>
-                    lctx.typeGenerator(argumentType).defaultTypeVarReperesentation(argumentType)
+                    typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(argumentType)
                 case SIRType.Fun(defIn, defOut) =>
                     (argumentType, declaredRepr) match
                         case (SIRType.Fun(argIn, argOut), lr: LambdaRepresentation) =>
@@ -1352,7 +1352,7 @@ case class LambdaRepresentation(
                 case _ =>
                     declaredRepr match
                         case tvr: TypeVarRepresentation if tvr.isBuiltin =>
-                            lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
+                            typegens.SirTypeUplcGenerator.defaultRepresentation(argumentType)
                         case tvr: TypeVarRepresentation if !tvr.isBuiltin =>
                             lctx.typeGenerator(argumentType)
                                 .defaultTypeVarReperesentation(argumentType)
@@ -1368,7 +1368,7 @@ case class LambdaRepresentation(
                               suc,
                               reprSubstitutes
                             ).getOrElse(
-                              lctx.typeGenerator(argumentType).defaultRepresentation(argumentType)
+                              typegens.SirTypeUplcGenerator.defaultRepresentation(argumentType)
                             )
                         case other =>
                             val result = lctx
@@ -1687,7 +1687,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
                         val concrete = lctx.resolveTypeVarIfNeeded(tp)
                         repr.isCompatibleOn(
                           concrete,
-                          lctx.typeGenerator(concrete).defaultRepresentation(concrete),
+                          typegens.SirTypeUplcGenerator.defaultRepresentation(concrete),
                           pos
                         )
                     case TypeVarKind.Fixed =>
@@ -1695,7 +1695,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
                         val concrete = lctx.resolveTypeVarIfNeeded(tp)
                         repr.isCompatibleOn(
                           concrete,
-                          lctx.typeGenerator(concrete).defaultTypeVarReperesentation(concrete),
+                          typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(concrete),
                           pos
                         )
 

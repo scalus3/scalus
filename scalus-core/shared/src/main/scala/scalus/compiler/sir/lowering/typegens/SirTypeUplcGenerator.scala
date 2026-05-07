@@ -100,13 +100,25 @@ trait SirTypeUplcGenerator {
 
 object SirTypeUplcGenerator {
 
-    /** Static façade for `lctx.typeGenerator(tp).canBeConvertedToData(tp)` (Phase 6). Lets callers
-      * stop reaching into the per-type generator instance for this question; future commits can
-      * replace the implementation (e.g., direct type-class dispatch) without touching the
-      * call sites.
+    /** Static façades for `lctx.typeGenerator(tp).foo(tp)` (Phase 6). Let callers stop reaching
+      * into the per-type generator instance; future commits can replace the implementation (e.g.,
+      * direct type-class dispatch) without touching the call sites.
       */
     def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean =
         apply(tp).canBeConvertedToData(tp)
+
+    def defaultRepresentation(tp: SIRType)(using lctx: LoweringContext): LoweredValueRepresentation =
+        apply(tp).defaultRepresentation(tp)
+
+    def defaultDataRepresentation(tp: SIRType)(using
+        lctx: LoweringContext
+    ): LoweredValueRepresentation =
+        apply(tp).defaultDataRepresentation(tp)
+
+    def defaultTypeVarReperesentation(tp: SIRType)(using
+        lctx: LoweringContext
+    ): LoweredValueRepresentation =
+        apply(tp).defaultTypeVarReperesentation(tp)
 
     /** Extracts the uplcRepr annotation value from AnnotationsDecl. */
     private def getUplcReprAnnotation(anns: AnnotationsDecl): Option[String] =
@@ -208,7 +220,7 @@ object SirTypeUplcGenerator {
                     SumCaseUplcConstrSirTypeGenerator.defaultRepresentation(fieldType)
                 else ProductCaseUplcConstrSirTypeGenerator.defaultRepresentation(fieldType)
             case "Data" =>
-                lctx.typeGenerator(fieldType).defaultDataRepresentation(fieldType)
+                SirTypeUplcGenerator.defaultDataRepresentation(fieldType)
             case "DataData" =>
                 SumCaseClassRepresentation.DataData
             case "DataConstr" =>
@@ -217,7 +229,7 @@ object SirTypeUplcGenerator {
                 PrimitiveRepresentation.Constant
             case _ =>
                 // Fallback: use the type's own generator
-                lctx.typeGenerator(fieldType).defaultRepresentation(fieldType)
+                SirTypeUplcGenerator.defaultRepresentation(fieldType)
     }
 
     /** Resolves the encoded UplcRepresentation string to the appropriate generator.

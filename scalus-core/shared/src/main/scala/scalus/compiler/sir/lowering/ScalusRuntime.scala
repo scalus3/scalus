@@ -291,7 +291,7 @@ object ScalusRuntime {
 
         val helperName = name + "_helper"
         val elemType = SIRType.Data.tp
-        val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+        val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
         val listRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
         // Helper type: BuiltinArray[Data] -> Integer -> Integer -> BuiltinList[Data]
         val helperType =
@@ -794,9 +794,9 @@ object ScalusRuntime {
         // Resolve target element repr: TypeVarRepresentation(Fixed) → defaultTypeVarRepresentation
         val resolvedOutElemRepr = outElemRepr match
             case tvr: TypeVarRepresentation if !tvr.isBuiltin =>
-                lctx.typeGenerator(elemType).defaultTypeVarReperesentation(elemType)
+                typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(elemType)
             case tvr: TypeVarRepresentation if tvr.isBuiltin =>
-                lctx.typeGenerator(elemType).defaultRepresentation(elemType)
+                typegens.SirTypeUplcGenerator.defaultRepresentation(elemType)
             case other => other
         val resolvedOutListRepr = SumCaseClassRepresentation.SumBuiltinList(resolvedOutElemRepr)
         if elemType.isInstanceOf[SIRType.TypeVar] then
