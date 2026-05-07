@@ -81,7 +81,7 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        // `genConstrUplcConstr` needs a CaseClass tp. After `dispatchNil` `constr.tp` may be a
+        // `ProdUplcConstrEmitter.genConstr` needs a CaseClass tp. After `dispatchNil` `constr.tp` may be a
         // sum target (possibly `Annotated`) carrying caller-supplied substituted args — preserve
         // them as the rebuilt CaseClass's parent rather than dropping them via the static
         // `decl.constrType(name)` lookup (which would substitute back to abstract decl typevars).
@@ -90,7 +90,7 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
             else if SIRType.isSum(constr.tp) then
                 preservedParentCaseClassForm(constr.tp, constr.data, constr.name)
             else constr.data.constrType(constr.name)
-        ProductCaseSirTypeGenerator.genConstrUplcConstr(
+        ProdUplcConstrEmitter.genConstr(
           constr.copy(tp = effectiveTp),
           loweredArgs
         )

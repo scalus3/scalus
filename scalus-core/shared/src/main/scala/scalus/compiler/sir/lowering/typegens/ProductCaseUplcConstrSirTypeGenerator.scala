@@ -85,7 +85,7 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using LoweringContext): LoweredValue =
-        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr, loweredArgs)
+        ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
