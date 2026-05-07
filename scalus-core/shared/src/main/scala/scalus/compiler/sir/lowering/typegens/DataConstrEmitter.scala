@@ -493,4 +493,32 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
                 )
     }
 
+    /** Outbound conversions from a `DataConstr`-shaped value (Phase 5).
+      *
+      * `input.representation` is `DataConstr`. Targets the dispatcher delegates
+      * here are: identity, `PairIntDataList` (atomic — `unConstrData`),
+      * `SumBuiltinList(_)` / `PackedSumDataList` / `SumUplcConstr(_)` (two-hop
+      * via `PairIntDataList`). All other targets stay in
+      * `SumDispatch.sumCaseImpl` (TypeVar-source/target handling, etc).
+      */
+    def emitConvert(
+        input: LoweredValue,
+        target: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue =
+        target match
+            case DataConstr =>
+                input
+            case PairIntDataList =>
+                lvBuiltinApply(SIRBuiltins.unConstrData, input, input.sirType, PairIntDataList, pos)
+            case _: SumBuiltinList | PackedSumDataList | _: SumUplcConstr =>
+                input
+                    .toRepresentation(PairIntDataList, pos)
+                    .toRepresentation(target, pos)
+            case _ =>
+                throw LoweringException(
+                  s"DataConstrEmitter.emitConvert: unsupported target $target for ${input.sirType.show}",
+                  pos
+                )
+
 }

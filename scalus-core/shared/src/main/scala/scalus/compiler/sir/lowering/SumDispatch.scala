@@ -57,24 +57,13 @@ object SumDispatch {
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
         (input.representation, representation) match {
-            case (DataConstr, DataConstr) =>
-                input
-            case (DataConstr, PairIntDataList) =>
-                lvBuiltinApply(SIRBuiltins.unConstrData, input, input.sirType, PairIntDataList, pos)
-            case (DataConstr, SumBuiltinList(elementRepr)) =>
-                // DataConstr → SumBuiltinList: go through PairIntDataList
-                input
-                    .toRepresentation(PairIntDataList, pos)
-                    .toRepresentation(SumBuiltinList(elementRepr), pos)
-            case (DataConstr, PackedSumDataList) =>
-                input
-                    .toRepresentation(PairIntDataList, pos)
-                    .toRepresentation(PackedSumDataList, pos)
-            case (DataConstr, SumUplcConstr(_)) =>
-                // DataConstr → SumUplcConstr: go through PairIntDataList
-                input
-                    .toRepresentation(PairIntDataList, pos)
-                    .toRepresentation(representation, pos)
+            // === DataConstr source: delegate to DataConstrEmitter (Phase 5) ===
+            case (
+                  DataConstr,
+                  DataConstr | PairIntDataList | _: SumBuiltinList | PackedSumDataList |
+                  _: SumUplcConstr
+                ) =>
+                DataConstrEmitter.emitConvert(input, representation, pos)
             // === PairIntDataList → list reprs: delegate to list generator ===
             case (PairIntDataList, SumBuiltinList(_)) | (PairIntDataList, PackedSumDataList) =>
                 val elemType =
