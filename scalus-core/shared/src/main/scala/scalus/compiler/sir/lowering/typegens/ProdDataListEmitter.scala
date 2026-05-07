@@ -16,8 +16,7 @@ import scala.util.control.NonFatal
   * extraction pattern and converge on `ProdDataList` for `Match`.
   *
   * Owns:
-  *   - `genConstr` (Data-list-shaped Constr emission — formerly
-  *     `ProductCaseSirTypeGenerator.genConstrDataConstr`).
+  *   - `genConstr` (Data-list-shaped Constr emission).
   *   - `genSelect` (field projection through `ProdDataList`).
   *   - `genMatch` (single-constructor extraction; multi-case input is shrunk
   *     via `selectMatchCase`, then handed to

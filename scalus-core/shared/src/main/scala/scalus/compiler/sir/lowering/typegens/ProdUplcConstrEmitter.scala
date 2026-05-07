@@ -10,13 +10,12 @@ import scalus.uplc.{Term, UplcAnnotation}
   * `Constr(tag, [t1, t2, ...])` emission for product values.
   *
   * Owns:
-  *   - `genConstr` (was `ProductCaseSirTypeGenerator.genConstrUplcConstr`):
-  *     adopts each argument to its target field representation (canonical
-  *     LambdaRepresentation for function fields; the `@UplcRepr`-annotated
-  *     repr for annotated fields; the field type's natural repr when the
-  *     type itself carries a class-level `@UplcRepr`), then assembles a
-  *     `Term.Constr`-shaped `LoweredValue` tagged with the constructor's
-  *     index.
+  *   - `genConstr`: adopts each argument to its target field representation
+  *     (canonical LambdaRepresentation for function fields; the
+  *     `@UplcRepr`-annotated repr for annotated fields; the field type's
+  *     natural repr when the type itself carries a class-level `@UplcRepr`),
+  *     then assembles a `Term.Constr`-shaped `LoweredValue` tagged with the
+  *     constructor's index.
   *   - `hasClassLevelUplcRepr` (private helper): unwraps `Annotated` /
   *     `TypeLambda` / `TypeProxy` and returns true when the underlying
   *     `(CaseClass | SumCaseClass).decl.annotations` carry the `uplcRepr` key.
