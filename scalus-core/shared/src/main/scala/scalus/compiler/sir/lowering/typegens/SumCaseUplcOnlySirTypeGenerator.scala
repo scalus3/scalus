@@ -34,8 +34,28 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         SumDispatch.dispatcherBypass("SumCaseUplcOnlySirTypeGenerator")
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
-        LoweringContext
-    ): LoweredValue = ???
+        lctx: LoweringContext
+    ): LoweredValue = {
+        // Mirror of `SumCaseUplcConstrSirTypeGenerator.upcastOne`: a child
+        // variant in `ProdUplcConstr` form becomes a single-entry
+        // `SumUplcConstr` parent. Single-entry (no overlay) is load-bearing —
+        // see the `hasTransparentFields` note in the sibling typegen. Already-
+        // sum values just relabel. `canBeConvertedToData = false` here so
+        // there's no Data-shaped fallback: anything else is a bug.
+        input.representation match
+            case prod: ProductCaseClassRepresentation.ProdUplcConstr =>
+                val sumRepr = SumCaseClassRepresentation.SumUplcConstr(
+                  scala.collection.immutable.SortedMap(prod.tag -> prod)
+                )
+                TypeRepresentationProxyLoweredValue(input, targetType, sumRepr, pos)
+            case sum: SumCaseClassRepresentation.SumUplcConstr =>
+                TypeRepresentationProxyLoweredValue(input, targetType, sum, pos)
+            case other =>
+                throw LoweringException(
+                  s"SumCaseUplcOnlySirTypeGenerator.upcastOne: expected ProdUplcConstr or SumUplcConstr representation, got $other for ${input.sirType.show}",
+                  pos
+                )
+    }
 
     override def genConstrLowered(
         constr: SIR.Constr,
