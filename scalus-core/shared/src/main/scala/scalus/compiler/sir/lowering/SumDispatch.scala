@@ -40,7 +40,7 @@ object SumDispatch {
             case ProductCaseSirTypeGenerator
                 | ProductCaseUplcConstrSirTypeGenerator
                 | ProductCaseUplcOnlySirTypeGenerator
-                | _: ProductCaseOneElementSirTypeGenerator =>
+                | _: OneElementWrapperEmitter =>
                 ProdDispatch.toRepresentation(input, target, pos)
             case _ =>
                 gen.toRepresentation(input, target, pos)
@@ -81,7 +81,7 @@ object SumDispatch {
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
                 val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 sumListCommonImpl(
-                  new SumBuiltinListSirTypeGenerator(elemRepr),
+                  new SumBuiltinListEmitter(elemRepr),
                   input,
                   representation,
                   pos
@@ -92,7 +92,7 @@ object SumDispatch {
             // All SumBuiltinList source conversions delegate to list-shape impl
             case (SumBuiltinList(inElemRepr), _) =>
                 sumListCommonImpl(
-                  new SumBuiltinListSirTypeGenerator(inElemRepr),
+                  new SumBuiltinListEmitter(inElemRepr),
                   input,
                   representation,
                   pos
@@ -105,7 +105,7 @@ object SumDispatch {
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
                 val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 sumListCommonImpl(
-                  new SumBuiltinListSirTypeGenerator(elemRepr),
+                  new SumBuiltinListEmitter(elemRepr),
                   input,
                   representation,
                   pos
@@ -167,7 +167,7 @@ object SumDispatch {
             // SumBuiltinList → DataConstr: listData(input) → PackedSumDataList → DataConstr
             case (SumBuiltinList(elemRepr), DataConstr) =>
                 val asPackedList = sumListCommonImpl(
-                  new SumBuiltinListSirTypeGenerator(elemRepr),
+                  new SumBuiltinListEmitter(elemRepr),
                   input,
                   PackedSumDataList,
                   pos
@@ -176,7 +176,7 @@ object SumDispatch {
             // SumBuiltinList input → delegate to list-shape impl
             case (SumBuiltinList(elemRepr), _) =>
                 sumListCommonImpl(
-                  new SumBuiltinListSirTypeGenerator(elemRepr),
+                  new SumBuiltinListEmitter(elemRepr),
                   input,
                   representation,
                   pos
@@ -184,7 +184,7 @@ object SumDispatch {
             // PackedSumDataList input → delegate to list-shape impl
             case (PackedSumDataList, _) =>
                 sumListCommonImpl(
-                  new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData),
+                  new SumBuiltinListEmitter(PrimitiveRepresentation.PackedData),
                   input,
                   representation,
                   pos
@@ -549,7 +549,7 @@ object SumDispatch {
             else SumBuiltinList(resolvedOut)
         val outNil =
             if isPairOut then SumPairBuiltinListSirTypeGenerator.genNil(outListType, pos)
-            else new SumBuiltinListSirTypeGenerator(resolvedOut).genNil(outListType, pos)
+            else new SumBuiltinListEmitter(resolvedOut).genNil(outListType, pos)
         val convFn = lvLamAbs(
           "elem",
           elemType,
@@ -723,7 +723,7 @@ object SumDispatch {
       *     genMatchDataConstr` (unConstrData → tag/field-list → if/else
       *     chain, or `Case` on integer for V4+).
       *   - `SumBuiltinList(elemRepr)` → caseList-ordered Case via the
-      *     element-repr-parameterized `SumBuiltinListSirTypeGenerator.genMatch`.
+      *     element-repr-parameterized `SumBuiltinListEmitter.genMatch`.
       *   - `PackedSumDataList` → unpack to `SumBuiltinList(<elem-default>)`,
       *     bind a fresh var, recurse.
       *   - `TypeVarRepresentation(_)` → relabel to the type's
@@ -750,7 +750,7 @@ object SumDispatch {
                 typegens.DataConstrEmitter
                     .genMatchDataConstr(matchData, loweredScrutinee, optTargetType)
             case SumBuiltinList(elemRepr) =>
-                new typegens.SumBuiltinListSirTypeGenerator(elemRepr)
+                new typegens.SumBuiltinListEmitter(elemRepr)
                     .genMatch(matchData, loweredScrutinee, optTargetType)
             case PackedSumDataList =>
                 val elemType = SumBuiltinList
@@ -766,7 +766,7 @@ object SumDispatch {
                   unpacked,
                   matchData.anns.pos
                 )
-                new typegens.SumBuiltinListSirTypeGenerator(elemRepr)
+                new typegens.SumBuiltinListEmitter(elemRepr)
                     .genMatch(matchData, unpackedVar, optTargetType)
             case TypeVarRepresentation(_) =>
                 val gen = lctx.typeGenerator(loweredScrutinee.sirType)

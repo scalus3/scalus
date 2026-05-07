@@ -39,7 +39,7 @@ object ProdDispatch {
                 // Original ProductCaseUplcOnly body: identity → input, otherwise delegate to ProdCase.
                 if input.representation == target then input
                 else prodCaseImpl(input, target, pos)
-            case oneElement: ProductCaseOneElementSirTypeGenerator =>
+            case oneElement: OneElementWrapperEmitter =>
                 prodCaseOneElementImpl(oneElement, input, target, pos)
             case _ =>
                 gen.toRepresentation(input, target, pos)
@@ -315,7 +315,7 @@ object ProdDispatch {
                 // in theory never bin here, but let's delegate
                 val generator = lctx.typeGenerator(input.sirType)
                 generator match
-                    case oneElement: ProductCaseOneElementSirTypeGenerator =>
+                    case oneElement: OneElementWrapperEmitter =>
                         prodCaseOneElementImpl(oneElement, input, representation, pos)
                     case _ =>
                         throw LoweringException(
@@ -541,7 +541,7 @@ object ProdDispatch {
       * lookups.
       */
     private def prodCaseOneElementImpl(
-        gen: ProductCaseOneElementSirTypeGenerator,
+        gen: OneElementWrapperEmitter,
         input: LoweredValue,
         representation: LoweredValueRepresentation,
         pos: SIRPosition
@@ -639,7 +639,7 @@ object ProdDispatch {
       *   - `ProdBuiltinPair(_, _)` → `ProdBuiltinPairEmitter.genMatch`
       *     (`Case` on Pair for V4+, `fstPair`/`sndPair` for V1-V3).
       *   - `OneElementWrapper(_)` → fall through to the per-type
-      *     `ProductCaseOneElementSirTypeGenerator` instance — its `genMatch`
+      *     `OneElementWrapperEmitter` instance — its `genMatch`
       *     captures argType-specific binding extraction.
       *   - `TypeVarRepresentation(_)` → relabel to the type's
       *     `defaultTypeVarRepresentation` and recurse.

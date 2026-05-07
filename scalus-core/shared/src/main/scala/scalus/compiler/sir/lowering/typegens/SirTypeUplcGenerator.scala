@@ -227,11 +227,11 @@ object SirTypeUplcGenerator {
             case "ProductCase" => ProductCaseSirTypeGenerator
             case "SumCase"     => DataConstrEmitter
             case "SumDataList" =>
-                new SumBuiltinListSirTypeGenerator(PrimitiveRepresentation.PackedData)
+                new SumBuiltinListEmitter(PrimitiveRepresentation.PackedData)
             case "SumPairDataList"       => SumPairBuiltinListSirTypeGenerator
-            case "PackedDataMap"         => MapSirTypeGenerator
+            case "PackedDataMap"         => PackedDataMapEmitter
             case "Data"                  => SIRTypeUplcDataGenerator
-            case "BuiltinArray"          => BuiltinArraySirTypeGenerator
+            case "BuiltinArray"          => ProdBuiltinArrayEmitter
             case "ProductCaseOneElement" =>
                 // Derive inner type from first constructor parameter
                 val paramType = SIRType.substitute(
@@ -240,7 +240,7 @@ object SirTypeUplcGenerator {
                   Map.empty
                 )
                 val innerGenerator = SirTypeUplcGenerator(paramType, debug)
-                ProductCaseOneElementSirTypeGenerator(innerGenerator)
+                OneElementWrapperEmitter(innerGenerator)
             case "UplcConstr" =>
                 if isSum then SumCaseUplcConstrSirTypeGenerator
                 else ProductCaseUplcConstrSirTypeGenerator
@@ -299,11 +299,11 @@ object SirTypeUplcGenerator {
                                         SumCaseUplcConstrSirTypeGenerator
                                     case _ if isPair(typeArgs.head) =>
                                         SumPairBuiltinListSirTypeGenerator
-                                    case _ => new SumBuiltinListSirTypeGenerator(elemRepr)
+                                    case _ => new SumBuiltinListEmitter(elemRepr)
                             } else SumCaseUplcOnlySirTypeGenerator
                         else if decl.name == SIRType.BuiltinList.name then
                             if isPair(typeArgs.head) then SumPairBuiltinListSirTypeGenerator
-                            else new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head))
+                            else new SumBuiltinListEmitter(elementReprFor(typeArgs.head))
                         else if !containsFun(tp, trace) then DataConstrEmitter
                         else SumCaseUplcOnlySirTypeGenerator
                     }
@@ -317,7 +317,7 @@ object SirTypeUplcGenerator {
                 then SIRTypeUplcDataGenerator
                 // BuiltinArray has its own generator for proper Data conversion
                 else if constrDecl.name == SIRType.BuiltinArray.name
-                then BuiltinArraySirTypeGenerator
+                then ProdBuiltinArrayEmitter
                 else
                     // 1. Non-trivial structural constraints (can't be expressed by annotations)
                     resolveWithConstraints(constrDecl, typeArgs)
@@ -406,13 +406,13 @@ object SirTypeUplcGenerator {
                 )
             then Some(SumPairBuiltinListSirTypeGenerator)
             else if typeArgs.nonEmpty && typeArgs.head != SIRType.TypeNothing then
-                Some(new SumBuiltinListSirTypeGenerator(elementReprFor(typeArgs.head)))
+                Some(new SumBuiltinListEmitter(elementReprFor(typeArgs.head)))
             else if constrDecl.name == SIRType.List.NilConstr.name
                 || constrDecl.name == SIRType.BuiltinList.Nil.name
                 || constrDecl.name == SumListCommonSirTypeGenerator.PairNilName
             then
                 Some(
-                  new SumBuiltinListSirTypeGenerator(
+                  new SumBuiltinListEmitter(
                     TypeVarRepresentation(SIRType.TypeVarKind.Fixed)
                   )
                 )

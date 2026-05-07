@@ -8,7 +8,7 @@ import scalus.uplc.Constant
 /** Parameterized list type generator for BuiltinList[X] where X is not BuiltinPair. For pair lists,
   * use SumPairBuiltinListSirTypeGenerator instead.
   */
-class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation)
+class SumBuiltinListEmitter(val elementRepr: LoweredValueRepresentation)
     extends SumListCommonSirTypeGenerator {
 
     // Cached to avoid repeated case class allocation in hot path

@@ -6,7 +6,7 @@ import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 import scalus.uplc.Term
 
-case class ProductCaseOneElementSirTypeGenerator(
+case class OneElementWrapperEmitter(
     argGenerator: SirTypeUplcGenerator,
 ) extends SirTypeUplcGenerator {
 
@@ -39,7 +39,7 @@ case class ProductCaseOneElementSirTypeGenerator(
         representation: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue =
-        ProdDispatch.dispatcherBypass("ProductCaseOneElementSirTypeGenerator")
+        ProdDispatch.dispatcherBypass("OneElementWrapperEmitter")
 
 
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
@@ -110,7 +110,7 @@ case class ProductCaseOneElementSirTypeGenerator(
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        import ProductCaseOneElementSirTypeGenerator.*
+        import OneElementWrapperEmitter.*
         if loweredArgs.size != 1 then
             throw LoweringException(
               s"Expected one argument for product case class, got ${loweredArgs.size}",
@@ -122,7 +122,7 @@ case class ProductCaseOneElementSirTypeGenerator(
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        import ProductCaseOneElementSirTypeGenerator.*
+        import OneElementWrapperEmitter.*
         val sirCaseClass = retrieveCaseClassSirType(loweredScrutinee.sirType, loweredScrutinee.pos)
         val name = sirCaseClass.constrDecl.params.head.name
         if sel.field != name then
@@ -143,7 +143,7 @@ case class ProductCaseOneElementSirTypeGenerator(
     )(using
         lctx: LoweringContext
     ): LoweredValue = {
-        import ProductCaseOneElementSirTypeGenerator.*
+        import OneElementWrapperEmitter.*
         val sirCaseClass = retrieveCaseClassSirType(loweredScrutinee.sirType, loweredScrutinee.pos)
         val name = sirCaseClass.constrDecl.params.head.name
         matchData.cases match {
@@ -191,7 +191,7 @@ case class ProductCaseOneElementSirTypeGenerator(
     }
 
     private[lowering] def argLoweredValue(input: LoweredValue)(using LoweringContext): LoweredValue = {
-        import ProductCaseOneElementSirTypeGenerator.*
+        import OneElementWrapperEmitter.*
         input match {
             case WrappedArg(constr, arg) => arg
             case other =>
@@ -222,7 +222,7 @@ case class ProductCaseOneElementSirTypeGenerator(
 
 }
 
-object ProductCaseOneElementSirTypeGenerator {
+object OneElementWrapperEmitter {
 
     case class WrappedArg(constr: SIR.Constr, arg: LoweredValue) extends ProxyLoweredValue(arg) {
 
