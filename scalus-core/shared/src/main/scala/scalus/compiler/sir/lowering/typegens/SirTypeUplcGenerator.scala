@@ -118,6 +118,25 @@ object SirTypeUplcGenerator {
     ): LoweredValueRepresentation =
         apply(tp).defaultTypeVarReperesentation(tp)
 
+    def upcastOne(
+        input: LoweredValue,
+        targetType: SIRType,
+        pos: SIRPosition
+    )(using LoweringContext): LoweredValue =
+        apply(input.sirType).upcastOne(input, targetType, pos)
+
+    def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
+        LoweringContext
+    ): LoweredValue =
+        apply(loweredScrutinee.sirType).genSelect(sel, loweredScrutinee)
+
+    def genMatch(
+        matchData: SIR.Match,
+        loweredScrutinee: LoweredValue,
+        optTargetType: Option[SIRType]
+    )(using LoweringContext): LoweredValue =
+        apply(loweredScrutinee.sirType).genMatch(matchData, loweredScrutinee, optTargetType)
+
     /** Extracts the uplcRepr annotation value from AnnotationsDecl. */
     private def getUplcReprAnnotation(anns: AnnotationsDecl): Option[String] =
         anns.data.get("uplcRepr").collect {

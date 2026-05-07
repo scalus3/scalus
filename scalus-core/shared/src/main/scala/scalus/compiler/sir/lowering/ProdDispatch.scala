@@ -53,7 +53,7 @@ object ProdDispatch {
         sel: SIR.Select,
         loweredScrutinee: LoweredValue
     )(using lctx: LoweringContext): LoweredValue =
-        lctx.typeGenerator(loweredScrutinee.sirType).genSelect(sel, loweredScrutinee)
+        typegens.SirTypeUplcGenerator.genSelect(sel, loweredScrutinee)
 
     /** Representation-aware dispatch for product-typed `genMatch`. Mirror of
       * `SumDispatch.genMatch`:
@@ -113,6 +113,6 @@ object ProdDispatch {
         targetType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue =
-        lctx.typeGenerator(input.sirType).upcastOne(input, targetType, pos)
+        typegens.SirTypeUplcGenerator.upcastOne(input, targetType, pos)
 
 }

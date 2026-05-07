@@ -407,7 +407,7 @@ object SumDispatch {
         sel: SIR.Select,
         loweredScrutinee: LoweredValue
     )(using lctx: LoweringContext): LoweredValue =
-        lctx.typeGenerator(loweredScrutinee.sirType).genSelect(sel, loweredScrutinee)
+        typegens.SirTypeUplcGenerator.genSelect(sel, loweredScrutinee)
 
     /** Pick the parent-sum repr that an `upcastOne` from `input` to `targetType` should produce —
       * the "preserve concrete vs coerce to default" decision:
@@ -456,6 +456,6 @@ object SumDispatch {
         targetType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue =
-        lctx.typeGenerator(input.sirType).upcastOne(input, targetType, pos)
+        typegens.SirTypeUplcGenerator.upcastOne(input, targetType, pos)
 
 }

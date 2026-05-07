@@ -322,7 +322,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         makeResolvedProxy(input, pos)
-            .map(input1 => lctx.typeGenerator(input1.sirType).upcastOne(input1, targetType, pos))
+            .map(input1 => SirTypeUplcGenerator.upcastOne(input1, targetType, pos))
             .getOrElse(
               throw LoweringException(
                 s"TypeVarSirTypeGenerator does not support upcasting, got $targetType",
@@ -360,7 +360,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         makeResolvedProxy(loweredScrutinee, sel.anns.pos)
-            .map(input => lctx.typeGenerator(input.sirType).genSelect(sel, input))
+            .map(input => SirTypeUplcGenerator.genSelect(sel, input))
             .getOrElse(
               throw LoweringException(
                 s"Can't select on unresolved type variable ${loweredScrutinee.sirType.show}",
@@ -378,7 +378,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValue = {
         makeResolvedProxy(loweredScrutinee, matchData.anns.pos)
             .map(input =>
-                lctx.typeGenerator(input.sirType).genMatch(matchData, input, optTargetType)
+                SirTypeUplcGenerator.genMatch(matchData, input, optTargetType)
             )
             .getOrElse(
               throw LoweringException(
