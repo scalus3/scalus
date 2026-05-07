@@ -104,19 +104,17 @@ object SirTypeUplcGenerator {
       * into the per-type generator instance; future commits can replace the implementation (e.g.,
       * direct type-class dispatch) without touching the call sites.
       */
-    def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean =
+    def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean =
         apply(tp).canBeConvertedToData(tp)
 
-    def defaultRepresentation(tp: SIRType)(using lctx: LoweringContext): LoweredValueRepresentation =
+    def defaultRepresentation(tp: SIRType)(using LoweringContext): LoweredValueRepresentation =
         apply(tp).defaultRepresentation(tp)
 
-    def defaultDataRepresentation(tp: SIRType)(using
-        lctx: LoweringContext
-    ): LoweredValueRepresentation =
+    def defaultDataRepresentation(tp: SIRType)(using LoweringContext): LoweredValueRepresentation =
         apply(tp).defaultDataRepresentation(tp)
 
     def defaultTypeVarReperesentation(tp: SIRType)(using
-        lctx: LoweringContext
+        LoweringContext
     ): LoweredValueRepresentation =
         apply(tp).defaultTypeVarReperesentation(tp)
 

@@ -850,7 +850,8 @@ object ProductCaseClassRepresentation {
                 case tvr: TypeVarRepresentation =>
                     if tvr.isBuiltin then true
                     else
-                        val resolved = typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(tp)
+                        val resolved =
+                            typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(tp)
                         resolved.isCompatibleOn(tp, this, pos)
                 case _ => false
             }
@@ -1018,7 +1019,8 @@ object ProductCaseClassRepresentation {
                 case tvr: TypeVarRepresentation =>
                     if tvr.isBuiltin then true
                     else
-                        val resolved = typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(tp)
+                        val resolved =
+                            typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(tp)
                         resolved.isCompatibleOn(tp, this, pos)
                 case _ => false
             }
