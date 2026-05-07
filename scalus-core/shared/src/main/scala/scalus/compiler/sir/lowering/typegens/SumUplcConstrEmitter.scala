@@ -18,7 +18,7 @@ import scalus.uplc.{Term, UplcAnnotation}
   *   - Types with function/BLS fields (canBeConvertedToData = false)
   *   - Data-compatible types annotated with @UplcRepr("UplcConstr") (canBeConvertedToData = true)
   */
-object SumUplcConstrSirTypeGenerator {
+object SumUplcConstrEmitter {
 
     /** A Case-branch-body lambda wrapper used inside UplcConstr pattern matching. Represents
       * `λfieldVar. inner` where `inner` is the branch's body. Unlike a plain `ComplexLoweredValue`
@@ -594,10 +594,10 @@ object SumUplcConstrSirTypeGenerator {
                 throw LoweringException(s"Unexpected pattern in UplcConstr match: $other", pos)
     }
 
-    // ===================== toRepresentation =====================
+    // ===================== emitConvert =====================
 
-    /** Handle all UplcConstr-related representation conversions. */
-    def toRepresentation(
+    /** Handle all UplcConstr-related representation conversions (Phase 5). */
+    def emitConvert(
         input: LoweredValue,
         representation: LoweredValueRepresentation,
         pos: SIRPosition
@@ -605,7 +605,7 @@ object SumUplcConstrSirTypeGenerator {
         // Unwrap SumReprProxy — recurse with the underlying repr
         input.representation match
             case proxy: SumCaseClassRepresentation.SumReprProxy =>
-                return toRepresentation(
+                return emitConvert(
                   RepresentationProxyLoweredValue(input, proxy.ref, pos),
                   representation,
                   pos
@@ -613,7 +613,7 @@ object SumUplcConstrSirTypeGenerator {
             case _ =>
         representation match
             case proxy: SumCaseClassRepresentation.SumReprProxy =>
-                return toRepresentation(input, proxy.ref, pos)
+                return emitConvert(input, proxy.ref, pos)
             case _ =>
         (input.representation, representation) match
             // PairIntDataList → SumUplcConstr: tag dispatch + per-field rebuild
@@ -803,7 +803,7 @@ object SumUplcConstrSirTypeGenerator {
                             .toRepresentation(tvRepr, pos)
             case _ =>
                 throw LoweringException(
-                  s"SumUplcConstrSirTypeGenerator: unsupported conversion from ${input.representation} to $representation for ${input.sirType.show}",
+                  s"SumUplcConstrEmitter: unsupported conversion from ${input.representation} to $representation for ${input.sirType.show}",
                   pos
                 )
     }

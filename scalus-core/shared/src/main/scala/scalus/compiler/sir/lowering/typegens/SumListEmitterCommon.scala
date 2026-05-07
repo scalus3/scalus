@@ -209,7 +209,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
         loweredScrutinee.representation match
             case _: SumCaseClassRepresentation.SumUplcConstr |
                 _: SumCaseClassRepresentation.SumReprProxy =>
-                return SumUplcConstrSirTypeGenerator.genSelectUplcConstr(sel, loweredScrutinee)
+                return SumUplcConstrEmitter.genSelectUplcConstr(sel, loweredScrutinee)
             case _ =>
         val (scrutineeReady, listRepr, elemRepr) = loweredScrutinee.representation match
             case sbl @ SumCaseClassRepresentation.SumBuiltinList(er) =>
@@ -336,7 +336,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
         loweredScrutinee.representation match
             case _: SumCaseClassRepresentation.SumUplcConstr |
                 _: SumCaseClassRepresentation.SumReprProxy =>
-                return SumUplcConstrSirTypeGenerator.genMatchUplcConstr(
+                return SumUplcConstrEmitter.genMatchUplcConstr(
                   matchData,
                   loweredScrutinee,
                   optTargetType
@@ -867,21 +867,21 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                             r0.toRepresentation(outputRepresentation, pos)
             // SumReprProxy: unwrap and delegate
             case (_: SumReprProxy, _) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+                SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)
             case (_, _: SumReprProxy) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+                SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)
             // SumUplcConstr → anything: delegate
             case (_: SumUplcConstr, _) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+                SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)
             // anything → SumUplcConstr: delegate
             case (_, _: SumUplcConstr) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
+                SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)
             // ProdUplcConstr value at a sum-list-type site: wrap as singleton SumUplcConstr
             case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
                 val wrappedRepr =
                     SumUplcConstr(scala.collection.immutable.SortedMap(puc.tag -> puc))
                 val wrapped = new RepresentationProxyLoweredValue(input, wrappedRepr, pos)
-                SumUplcConstrSirTypeGenerator.toRepresentation(
+                SumUplcConstrEmitter.emitConvert(
                   wrapped,
                   outputRepresentation,
                   pos

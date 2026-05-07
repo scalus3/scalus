@@ -48,7 +48,7 @@ object SumDispatch {
 
     /** Plain sum-class source path: handles DataConstr / PairIntDataList /
       * SumBuiltinList / PackedSumDataList sources, delegating to
-      * `SumUplcConstrSirTypeGenerator` for native-UplcConstr cases and to
+      * `SumUplcConstrEmitter` for native-UplcConstr cases and to
       * `SumListEmitterCommon.emitConvert` for list-shape conversions.
       */
     private def sumCaseImpl(
@@ -72,7 +72,7 @@ object SumDispatch {
                 new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
             // PairIntDataList → SumUplcConstr: delegate
             case (PairIntDataList, _: SumUplcConstr) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+                SumUplcConstrEmitter.emitConvert(input, representation, pos)
             // All SumBuiltinList source conversions delegate to list-shape impl
             case (SumBuiltinList(inElemRepr), _) =>
                 new SumBuiltinListEmitter(inElemRepr).emitConvert(input, representation, pos)
@@ -84,13 +84,13 @@ object SumDispatch {
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
                 val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
                 new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
-            // All SumUplcConstr source/target conversions delegate to SumUplcConstrSirTypeGenerator
+            // All SumUplcConstr source/target conversions delegate to SumUplcConstrEmitter
             case (_: SumUplcConstr, _) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+                SumUplcConstrEmitter.emitConvert(input, representation, pos)
             case (_, _: SumUplcConstr) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+                SumUplcConstrEmitter.emitConvert(input, representation, pos)
             case (_: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+                SumUplcConstrEmitter.emitConvert(input, representation, pos)
             case (inTvr: TypeVarRepresentation, _) =>
                 import SIRType.TypeVarKind.*
                 inTvr.kind match
@@ -127,7 +127,7 @@ object SumDispatch {
     }
 
     /** `@UplcRepr(UplcConstr)` sum source path. Mostly forwards to `sumCaseImpl`
-      * or `SumUplcConstrSirTypeGenerator` depending on (input, target) shape.
+      * or `SumUplcConstrEmitter` depending on (input, target) shape.
       */
     private def sumCaseUplcConstrImpl(
         input: LoweredValue,
@@ -161,14 +161,14 @@ object SumDispatch {
                 import SIRType.TypeVarKind.*
                 inTvr.kind match
                     case Transparent =>
-                        SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+                        SumUplcConstrEmitter.emitConvert(input, representation, pos)
                     case Unwrapped =>
                         val sourceUnderlying =
                             SumCaseUplcConstrSirTypeGenerator.defaultRepresentation(input.sirType)
                         val r0 = RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
                         sumCaseUplcConstrImpl(r0, representation, pos)
                     case Fixed =>
-                        SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+                        SumUplcConstrEmitter.emitConvert(input, representation, pos)
             // TypeVar target: dispatch by kind
             case (_, outTvr: TypeVarRepresentation) =>
                 import SIRType.TypeVarKind.*
@@ -185,9 +185,9 @@ object SumDispatch {
                                 .defaultTypeVarReperesentation(input.sirType)
                         val converted = input.toRepresentation(targetUnderlying, pos)
                         new RepresentationProxyLoweredValue(converted, outTvr, pos)
-            // SumUplcConstr, DataConstr, PairIntDataList → SumUplcConstrSirTypeGenerator
+            // SumUplcConstr, DataConstr, PairIntDataList → SumUplcConstrEmitter
             case (_: SumUplcConstr, _) | (DataConstr, _) | (PairIntDataList, _) =>
-                SumUplcConstrSirTypeGenerator.toRepresentation(input, representation, pos)
+                SumUplcConstrEmitter.emitConvert(input, representation, pos)
             case (inRepr, outRepr) =>
                 throw LoweringException(
                   s"SumCaseUplcConstr unhandled conversion $inRepr → $outRepr for ${input.sirType.show}",
@@ -335,7 +335,7 @@ object SumDispatch {
         import SumCaseClassRepresentation.*
         loweredScrutinee.representation match
             case _: SumUplcConstr =>
-                typegens.SumUplcConstrSirTypeGenerator
+                typegens.SumUplcConstrEmitter
                     .genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
             case DataConstr =>
                 typegens.DataConstrEmitter
@@ -416,7 +416,7 @@ object SumDispatch {
                     case _ => None
             }.toMap
             val defaultSumRepr =
-                typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(resultType, pos)
+                typegens.SumUplcConstrEmitter.buildSumUplcConstr(resultType, pos)
             val variants = defaultSumRepr.variants.map { case (idx, defaultPuc) =>
                 branchPucByTag.get(idx) match
                     case Some(puc) => (idx, puc)
@@ -523,7 +523,7 @@ object SumDispatch {
         (input.representation, targetSum) match
             case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
                 val baseSum =
-                    typegens.SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType, pos)
+                    typegens.SumUplcConstrEmitter.buildSumUplcConstr(targetType, pos)
                 SumUplcConstr(baseSum.variants.updated(puc.tag, puc))
             case (suc: SumUplcConstr, _: SumUplcConstr) => suc
             case (suc: SumBuiltinList, _: SumBuiltinList) => suc

@@ -8,12 +8,12 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumUplcConstrSirTypeGenerator.buildSumUplcConstr(tp)
+        SumUplcConstrEmitter.buildSumUplcConstr(tp)
 
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumUplcConstrSirTypeGenerator.buildSumUplcConstr(tp)
+        SumUplcConstrEmitter.buildSumUplcConstr(tp)
 
     // TODO: set position in LoweringContext
     override def defaultTypeVarReperesentation(
@@ -61,7 +61,7 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
     )(using
         lctx: LoweringContext
     ): LoweredValue = {
-        SumUplcConstrSirTypeGenerator.genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
+        SumUplcConstrEmitter.genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
     }
 
 }

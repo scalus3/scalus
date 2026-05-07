@@ -15,7 +15,7 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumUplcConstrSirTypeGenerator.buildSumUplcConstr(tp)
+        SumUplcConstrEmitter.buildSumUplcConstr(tp)
 
     private def isListType(tp: SIRType): Boolean =
         SIRType.retrieveDataDecl(tp) match
@@ -62,7 +62,7 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                 )
                 TypeRepresentationProxyLoweredValue(input, targetType, sumRepr, pos)
             case _ =>
-                val targetSum = SumUplcConstrSirTypeGenerator.buildSumUplcConstr(targetType)
+                val targetSum = SumUplcConstrEmitter.buildSumUplcConstr(targetType)
                 val constrIndex =
                     ProductCaseSirTypeGenerator.retrieveConstrIndex(input.sirType, pos)
                 targetSum.variants.get(constrIndex) match

@@ -657,7 +657,7 @@ object ProdDispatch {
     )(using lctx: LoweringContext): LoweredValue = {
         loweredScrutinee.representation match
             case _: ProdUplcConstr | _: SumCaseClassRepresentation.SumUplcConstr =>
-                typegens.SumUplcConstrSirTypeGenerator
+                typegens.SumUplcConstrEmitter
                     .genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
             case ProdDataList | ProdDataConstr | PackedDataList | PairIntDataList =>
                 typegens.ProdDataListEmitter

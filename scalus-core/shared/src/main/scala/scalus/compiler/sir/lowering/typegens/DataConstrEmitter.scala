@@ -23,7 +23,7 @@ import scala.collection.mutable
   * Pre-Phase-4c-step-3 this was named `SumCaseSirTypeGenerator`; the rename
   * aligns terminology with the design doc (per-repr emitters at §3.2).
   * `prepareCases`, `findConstructors`, and `retrieveDataDecl` stay here as
-  * shared helpers because `SumUplcConstrSirTypeGenerator` and
+  * shared helpers because `SumUplcConstrEmitter` and
   * `ProductCaseSirTypeGenerator` both reuse them.
   */
 object DataConstrEmitter extends SirTypeUplcGenerator {
@@ -463,7 +463,7 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
         ScopeBracketsLoweredValue(scopedVars, body)
     }
 
-    // genMatchUplcConstr and genMatchUplcConstrCase moved to SumUplcConstrSirTypeGenerator
+    // genMatchUplcConstr and genMatchUplcConstrCase moved to SumUplcConstrEmitter
 
     def findConstructors(sirType: SIRType, pos: SIRPosition): Seq[ConstrDecl] = {
         sirType match

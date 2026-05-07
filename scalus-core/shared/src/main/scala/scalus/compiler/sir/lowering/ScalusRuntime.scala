@@ -5,7 +5,7 @@ import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 import scalus.uplc.{Term, UplcAnnotation}
-import scalus.compiler.sir.lowering.typegens.SumUplcConstrSirTypeGenerator
+import scalus.compiler.sir.lowering.typegens.SumUplcConstrEmitter
 
 object ScalusRuntime {
 
@@ -917,7 +917,7 @@ object ScalusRuntime {
                   listType,
                   inSumRepr,
                   lst => {
-                      SumUplcConstrSirTypeGenerator.genMatchUplcConstrDirect(
+                      SumUplcConstrEmitter.genMatchUplcConstrDirect(
                         lst,
                         inSumRepr,
                         listType,
