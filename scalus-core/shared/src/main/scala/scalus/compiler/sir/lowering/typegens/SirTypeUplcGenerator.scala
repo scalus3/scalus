@@ -100,6 +100,14 @@ trait SirTypeUplcGenerator {
 
 object SirTypeUplcGenerator {
 
+    /** Static façade for `lctx.typeGenerator(tp).canBeConvertedToData(tp)` (Phase 6). Lets callers
+      * stop reaching into the per-type generator instance for this question; future commits can
+      * replace the implementation (e.g., direct type-class dispatch) without touching the
+      * call sites.
+      */
+    def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean =
+        apply(tp).canBeConvertedToData(tp)
+
     /** Extracts the uplcRepr annotation value from AnnotationsDecl. */
     private def getUplcReprAnnotation(anns: AnnotationsDecl): Option[String] =
         anns.data.get("uplcRepr").collect {

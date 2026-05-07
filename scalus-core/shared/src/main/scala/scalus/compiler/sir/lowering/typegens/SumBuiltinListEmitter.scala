@@ -40,7 +40,7 @@ class SumBuiltinListEmitter(val elementRepr: LoweredValueRepresentation)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         val elemType = retrieveElementType(tp, SIRPosition.empty)
-        lctx.typeGenerator(elemType).canBeConvertedToData(elemType)
+        SirTypeUplcGenerator.canBeConvertedToData(elemType)
     }
 
     override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue =

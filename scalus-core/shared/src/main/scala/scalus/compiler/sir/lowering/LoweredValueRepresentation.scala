@@ -491,7 +491,7 @@ object SumCaseClassRepresentation {
                     else
                         SumBuiltinList.retrieveListElementType(tp) match
                             case Some(elemType) =>
-                                lctx.typeGenerator(elemType).canBeConvertedToData(elemType)
+                                typegens.SirTypeUplcGenerator.canBeConvertedToData(elemType)
                             case None => true
         }
         override def uplcType(semanticType: SIRType)(using LoweringContext): SIRType =

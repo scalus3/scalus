@@ -62,7 +62,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             case tv: SIRType.TypeVar =>
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(resolvedType) =>
-                        lctx.typeGenerator(resolvedType).canBeConvertedToData(resolvedType)
+                        SirTypeUplcGenerator.canBeConvertedToData(resolvedType)
                     case None =>
                         // for now we assume that type variable can be converted to data
                         // TODO: change when we will implement all representations.

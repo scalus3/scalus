@@ -41,13 +41,13 @@ object ProdBuiltinArrayEmitter extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValueRepresentation =
         val elemType = extractElemType(tp)
-        if lctx.typeGenerator(elemType).canBeConvertedToData(elemType) then
+        if SirTypeUplcGenerator.canBeConvertedToData(elemType) then
             ProductCaseClassRepresentation.PackedArrayAsList
         else arrayRepr(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         val elemType = extractElemType(tp)
-        lctx.typeGenerator(elemType).canBeConvertedToData(elemType)
+        SirTypeUplcGenerator.canBeConvertedToData(elemType)
     }
 
     override def toRepresentation(
