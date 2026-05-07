@@ -40,20 +40,13 @@ object ProdBuiltinPairEmitter {
           loweredScrutinee,
           constrDecl
         )
-        val (matchVal, addMatchValToScope) = loweredScrutinee match
-            case idv: IdentifiableLoweredValue =>
-                (idv, false)
-            case other =>
-                (
-                  lvNewLazyIdVar(
-                    lctx.uniqueVarName("match_pair_data"),
-                    SIRType.List(SIRType.Data.tp),
-                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
-                    other,
-                    matchData.anns.pos
-                  ),
-                  true
-                )
+        val (matchVal, addMatchValToScope) = lvAsIdentifiable(
+          loweredScrutinee,
+          "match_pair_data",
+          SIRType.List(SIRType.Data.tp),
+          SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+          matchData.anns.pos
+        )
         val (frsName, sndName) = myCase.pattern match {
             case SIR.Pattern.Constr(constr, bindings, typeParamsBindinsg) =>
                 (bindings.head, bindings.tail.head)

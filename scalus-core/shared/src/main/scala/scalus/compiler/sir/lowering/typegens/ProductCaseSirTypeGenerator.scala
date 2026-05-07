@@ -301,16 +301,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val constrDecl = retrieveConstrDecl(input.sirType, pos)
                 val dataListRepr =
                     SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
-                val inputIdv = input match
-                    case idv: IdentifiableLoweredValue => idv
-                    case other =>
-                        lvNewLazyIdVar(
-                          lctx.uniqueVarName("dl_to_uc"),
-                          input.sirType,
-                          ProdDataList,
-                          other,
-                          pos
-                        )
+                val (inputIdv, inputIdvAdded) =
+                    lvAsIdentifiable(input, "dl_to_uc", input.sirType, ProdDataList, pos)
                 var currentList: LoweredValue = inputIdv
                 val fields = constrDecl.params.zip(puc.fieldReprs).map { (param, fieldRepr) =>
                     val tp = lctx.resolveTypeVarIfNeeded(param.tp)
@@ -340,23 +332,13 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         Doc.text("DataList→UplcConstr")
                     override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
                 }
-                if inputIdv ne input then ScopeBracketsLoweredValue(Set(inputIdv), result)
+                if inputIdvAdded then ScopeBracketsLoweredValue(Set(inputIdv), result)
                 else result
             case (ProdDataList, outRep @ OneElementWrapper(_)) =>
                 lvBuiltinApply(SIRBuiltins.headList, input, input.sirType, outRep, pos)
             case (ProdDataList, outPair @ ProdBuiltinPair(fstRepr, sndRepr)) =>
-                val (inputIdv, addToScoped) = input match
-                    case idv: IdentifiableLoweredValue => (idv, false)
-                    case other =>
-                        val id = lctx.uniqueVarName("dl_to_pair_input")
-                        val v = lvNewLazyIdVar(
-                          id,
-                          input.sirType,
-                          input.representation,
-                          other,
-                          pos
-                        )
-                        (v, true)
+                val (inputIdv, addToScoped) =
+                    lvAsIdentifiable(input, "dl_to_pair_input", input.sirType, input.representation, pos)
                 val head =
                     lvBuiltinApply(SIRBuiltins.headList, inputIdv, input.sirType, fstRepr, pos)
                 val headTail = lvBuiltinApply(
@@ -552,16 +534,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     // Convert component-wise: extract fst/snd in input reprs, convert to output reprs, rebuild
                     val (fstType, sndType) =
                         ProdBuiltinPair.extractPairComponentTypes(input.sirType)
-                    val inputIdv = input match
-                        case idv: IdentifiableLoweredValue => idv
-                        case other =>
-                            lvNewLazyIdVar(
-                              lctx.uniqueVarName("pair_conv_input"),
-                              input.sirType,
-                              input.representation,
-                              other,
-                              pos
-                            )
+                    val (inputIdv, inputIdvAdded) =
+                        lvAsIdentifiable(input, "pair_conv_input", input.sirType, input.representation, pos)
                     val fst = lvBuiltinApply(SIRBuiltins.fstPair, inputIdv, fstType, inFst, pos)
                     val snd = lvBuiltinApply(SIRBuiltins.sndPair, inputIdv, sndType, inSnd, pos)
                     val convertedFst = fst.toRepresentation(outFst, pos)
@@ -574,21 +548,13 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                       outPair,
                       pos
                     )
-                    if inputIdv ne input then ScopeBracketsLoweredValue(Set(inputIdv), body)
+                    if inputIdvAdded then ScopeBracketsLoweredValue(Set(inputIdv), body)
                     else body
             case (ProdBuiltinPair(inFst, inSnd), ProdDataList) =>
                 val (fstType, sndType) =
                     ProdBuiltinPair.extractPairComponentTypes(input.sirType)
-                val inputIdv = input match
-                    case idv: IdentifiableLoweredValue => idv
-                    case other =>
-                        lvNewLazyIdVar(
-                          lctx.uniqueVarName("pair_to_dl_input"),
-                          input.sirType,
-                          input.representation,
-                          other,
-                          pos
-                        )
+                val (inputIdv, _) =
+                    lvAsIdentifiable(input, "pair_to_dl_input", input.sirType, input.representation, pos)
                 if lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then {
                     // For PlutusV4: use Case on Pair
                     val frsVarId = lctx.uniqueVarName("pair_frs")

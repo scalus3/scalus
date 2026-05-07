@@ -236,22 +236,18 @@ object ProdDataListEmitter {
                         val argsTypes = constrDecl.params.map(_.tp)
                         // TODO: add typeArgs to env ?
                         oneCase.copy(pattern = SIR.Pattern.Constr(constrDecl, argsNames, argsTypes))
-                val (dataList, addToScope) = loweredScrutinee.toRepresentation(
-                  ProductCaseClassRepresentation.ProdDataList,
-                  loweredScrutinee.pos
-                ) match
-                    case idv: IdentifiableLoweredValue => (idv, false)
-                    case other =>
-                        val v = lvNewLazyIdVar(
-                          lctx.uniqueVarName("_match_data_list"),
-                          SIRType.List(SIRType.Data.tp),
-                          SumCaseClassRepresentation.SumBuiltinList(
-                            SumCaseClassRepresentation.DataData
-                          ),
-                          other,
-                          matchData.anns.pos
-                        )
-                        (v, true)
+                val (dataList, addToScope) = lvAsIdentifiable(
+                  loweredScrutinee.toRepresentation(
+                    ProductCaseClassRepresentation.ProdDataList,
+                    loweredScrutinee.pos
+                  ),
+                  "_match_data_list",
+                  SIRType.List(SIRType.Data.tp),
+                  SumCaseClassRepresentation.SumBuiltinList(
+                    SumCaseClassRepresentation.DataData
+                  ),
+                  matchData.anns.pos
+                )
                 DataConstrEmitter.genMatchDataConstrCase(
                   matchCase,
                   dataList,

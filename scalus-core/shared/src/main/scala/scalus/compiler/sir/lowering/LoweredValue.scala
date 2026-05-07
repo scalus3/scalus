@@ -2367,6 +2367,29 @@ object LoweredValue {
             newVar
         }
 
+        /** If `lv` is already identifiable, return it unchanged with `false`.
+          * Otherwise wrap it in a fresh lazy let-binding (`lvNewLazyIdVar`)
+          * with `nameHint` (uniqued), `tp`, and `repr`, returning the new
+          * identifiable plus `true` to signal the caller that it must add the
+          * binding to scope (e.g., via `ScopeBracketsLoweredValue`).
+          *
+          * `tp` / `repr` are passed explicitly because some callers wrap the
+          * result of a `toRepresentation` conversion whose runtime type/repr
+          * differs from the source value's stored ones.
+          */
+        def lvAsIdentifiable(
+            lv: LoweredValue,
+            nameHint: String,
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using lctx: LoweringContext): (IdentifiableLoweredValue, Boolean) =
+            lv match
+                case idv: IdentifiableLoweredValue =>
+                    (idv, false)
+                case other =>
+                    (lvNewLazyIdVar(lctx.uniqueVarName(nameHint), tp, repr, other, pos), true)
+
         def lvBuiltinApply(
             fun: SIR.Builtin,
             arg: LoweredValue,
