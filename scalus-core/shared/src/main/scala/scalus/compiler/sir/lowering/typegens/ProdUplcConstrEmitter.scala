@@ -20,13 +20,12 @@ import scalus.uplc.{Term, UplcAnnotation}
   *     `uplcRepr` key.
   *
   * Called from:
-  *   - `ProductCaseSirTypeGenerator.genConstrLowered` (Data-vs-UplcConstr dispatcher);
-  *   - `ProductCaseUplcOnlySirTypeGenerator`, `ProductCaseUplcConstrSirTypeGenerator`,
-  *     `SumCaseUplcConstrSirTypeGenerator`, `SumCaseUplcOnlySirTypeGenerator` — all with the same
-  *     `(constr, loweredArgs)` signature.
+  *   - `ProductCaseEmitter.genConstrLowered` (Data-vs-UplcConstr dispatcher);
+  *   - `ProductCaseUplcOnlyEmitter`, `ProductCaseUplcConstrEmitter`, `SumCaseUplcConstrEmitter`,
+  *     `SumCaseUplcOnlyEmitter` — all with the same `(constr, loweredArgs)` signature.
   *
   * Constructor-handling helpers (`retrieveConstrIndex`, `retrieveConstrDecl`) still live on
-  * `ProductCaseSirTypeGenerator`; called cross-class from here.
+  * `ProductCaseEmitter`; called cross-class from here.
   */
 object ProdUplcConstrEmitter {
 
@@ -37,9 +36,9 @@ object ProdUplcConstrEmitter {
         lctx: LoweringContext
     ): LoweredValue = {
         val constrIndex =
-            ProductCaseSirTypeGenerator.retrieveConstrIndex(constr.tp, constr.anns.pos)
+            ProductCaseEmitter.retrieveConstrIndex(constr.tp, constr.anns.pos)
         val constrDecl =
-            ProductCaseSirTypeGenerator.retrieveConstrDecl(constr.tp, constr.anns.pos)
+            ProductCaseEmitter.retrieveConstrDecl(constr.tp, constr.anns.pos)
 
         // Adopt fields: convert each argument to the target field representation.
         // For function fields: canonical LambdaRepresentation.

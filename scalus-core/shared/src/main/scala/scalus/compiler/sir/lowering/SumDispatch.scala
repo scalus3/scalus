@@ -23,14 +23,14 @@ object SumDispatch {
         gen match
             case DataConstrEmitter =>
                 sumCaseImpl(input, target, pos)
-            case SumCaseUplcConstrSirTypeGenerator =>
-                SumCaseUplcConstrSirTypeGenerator.emitConvert(input, target, pos)
-            case SumCaseUplcOnlySirTypeGenerator =>
+            case SumCaseUplcConstrEmitter =>
+                SumCaseUplcConstrEmitter.emitConvert(input, target, pos)
+            case SumCaseUplcOnlyEmitter =>
                 sumCaseImpl(input, target, pos)
             case listGen: SumListEmitterCommon =>
                 listGen.emitConvert(input, target, pos)
-            case ProductCaseSirTypeGenerator | ProductCaseUplcConstrSirTypeGenerator |
-                ProductCaseUplcOnlySirTypeGenerator | _: OneElementWrapperEmitter =>
+            case ProductCaseEmitter | ProductCaseUplcConstrEmitter | ProductCaseUplcOnlyEmitter |
+                _: OneElementWrapperEmitter =>
                 ProdDispatch.toRepresentation(input, target, pos)
             case converting: typegens.SirTypeUplcConvertingGenerator =>
                 converting.toRepresentation(input, target, pos)
@@ -47,8 +47,8 @@ object SumDispatch {
       * PackedSumDataList sources, delegating to `SumUplcConstrEmitter` for native-UplcConstr cases
       * and to `SumListEmitterCommon.emitConvert` for list-shape conversions.
       *
-      * Package-private so `SumCaseUplcConstrSirTypeGenerator.emitConvert` can delegate
-      * cross-typegen arms here (Phase 5 step 4).
+      * Package-private so `SumCaseUplcConstrEmitter.emitConvert` can delegate cross-typegen arms
+      * here (Phase 5 step 4).
       */
     private[lowering] def sumCaseImpl(
         input: LoweredValue,
@@ -150,7 +150,7 @@ object SumDispatch {
             case SIRType.CaseClass(cd, _, Some(_))
                 if cd.name == SIRType.List.Cons.name && loweredArgs.length >= 2 =>
                 loweredArgs.last.representation match
-                    case _: SumUplcConstr => return typegens.SumCaseUplcConstrSirTypeGenerator
+                    case _: SumUplcConstr => return typegens.SumCaseUplcConstrEmitter
                     case _                =>
             case _ =>
 
@@ -161,7 +161,7 @@ object SumDispatch {
                 IntrinsicResolver.isUplcConstrListOrOption(inner)
             case _ => false
         }
-        if targetUsesUplcConstr then return typegens.SumCaseUplcConstrSirTypeGenerator
+        if targetUsesUplcConstr then return typegens.SumCaseUplcConstrEmitter
 
         // 4. inUplcConstrListScope flag + this constr's parent sum is List/Option.
         val parentIsListOrOption = resolvedType match
@@ -170,7 +170,7 @@ object SumDispatch {
             case _ =>
                 IntrinsicResolver.isUplcConstrListOrOption(resolvedType)
         if lctx.inUplcConstrListScope && parentIsListOrOption then
-            return typegens.SumCaseUplcConstrSirTypeGenerator
+            return typegens.SumCaseUplcConstrEmitter
 
         typegens.SirTypeUplcGenerator(resolvedType)
     }
@@ -198,9 +198,9 @@ object SumDispatch {
             tp: SIRType,
             fallback: typegens.SirTypeUplcGenerator
         ): typegens.SirTypeUplcGenerator =
-            if fallback == typegens.SumCaseUplcConstrSirTypeGenerator then fallback
+            if fallback == typegens.SumCaseUplcConstrEmitter then fallback
             else if lctx.inUplcConstrListScope && IntrinsicResolver.isUplcConstrListOrOption(tp)
-            then typegens.SumCaseUplcConstrSirTypeGenerator
+            then typegens.SumCaseUplcConstrEmitter
             else fallback
         optTargetType match
             case Some(targetType) =>

@@ -5,18 +5,18 @@ import scalus.compiler.sir.*
 
 /** Type generator for product case classes annotated with @UplcRepr(UplcConstr).
   *
-  * Like ProductCaseUplcOnlySirTypeGenerator but for Data-compatible types:
+  * Like ProductCaseUplcOnlyEmitter but for Data-compatible types:
   *   - canBeConvertedToData = true
   *   - defaultDataRepresentation returns DataConstr
   *   - defaultTypeVarRepresentation returns DataConstr
   */
-object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
+object ProductCaseUplcConstrEmitter extends SirTypeUplcGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation = {
-        val constrIndex = ProductCaseSirTypeGenerator.retrieveConstrIndex(tp, SIRPosition.empty)
-        val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(tp, SIRPosition.empty)
+        val constrIndex = ProductCaseEmitter.retrieveConstrIndex(tp, SIRPosition.empty)
+        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(tp, SIRPosition.empty)
         val fieldReprs = constrDecl.params.map { param =>
             val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
             // Check for field-level @UplcRepr annotation override
@@ -51,7 +51,7 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         // relabel would lie about the byte layout: downstream `genSelect`/`genMatch` on the
         // upcasted value would emit native-UC selectors against Data.Constr bytes, surfacing
         // as `MultiplyInteger Apply LamAbs` runtime crashes (4-arg case branch on a 2-field
-        // CEK Data.Constr scrutinee). Mirror `SumCaseUplcConstrSirTypeGenerator.upcastOne`:
+        // CEK Data.Constr scrutinee). Mirror `SumCaseUplcConstrEmitter.upcastOne`:
         // only relabel when input is already UC-shaped; otherwise convert to UC first.
         //
         // We deliberately use the un-overlaid `buildSumUplcConstr(targetType)` rather than
@@ -86,17 +86,17 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         loweredScrutinee.representation match
             case _: ProductCaseClassRepresentation.ProdUplcConstr |
                 _: SumCaseClassRepresentation.SumUplcConstr =>
-                ProductCaseUplcOnlySirTypeGenerator.genSelect(sel, loweredScrutinee)
+                ProductCaseUplcOnlyEmitter.genSelect(sel, loweredScrutinee)
             case tvr: TypeVarRepresentation if tvr.isBuiltin =>
                 // Transparent TypeVar — value is native Constr at runtime.
                 // Resolve to ProdUplcConstr for the concrete type, then use UplcConstr select.
                 val pucRepr = defaultRepresentation(loweredScrutinee.sirType)
                 val resolved =
                     RepresentationProxyLoweredValue(loweredScrutinee, pucRepr, sel.anns.pos)
-                ProductCaseUplcOnlySirTypeGenerator.genSelect(sel, resolved)
+                ProductCaseUplcOnlyEmitter.genSelect(sel, resolved)
             case _ =>
                 // Data-based repr (ProdDataConstr, TypeVar(Fixed), etc.) — use Data extraction
-                ProductCaseSirTypeGenerator.genSelect(sel, loweredScrutinee)
+                ProductCaseEmitter.genSelect(sel, loweredScrutinee)
 
     override def genMatch(
         matchData: SIR.Match,
@@ -106,8 +106,8 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
         ProdDispatch.genMatch(matchData, loweredScrutinee, optTargetType)
 
     /** Outbound conversions from a `@UplcRepr(UplcConstr)` product (Phase 5). Resolves TypeVar
-      * inputs to the type's concrete repr, then delegates to
-      * `ProductCaseSirTypeGenerator.emitConvert` for the actual conversion.
+      * inputs to the type's concrete repr, then delegates to `ProductCaseEmitter.emitConvert` for
+      * the actual conversion.
       */
     def emitConvert(
         input: LoweredValue,
@@ -133,7 +133,7 @@ object ProductCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                               pos
                             )
                 case _ => input
-            ProductCaseSirTypeGenerator.emitConvert(resolved, outputRepresentation, pos)
+            ProductCaseEmitter.emitConvert(resolved, outputRepresentation, pos)
     }
 
 }

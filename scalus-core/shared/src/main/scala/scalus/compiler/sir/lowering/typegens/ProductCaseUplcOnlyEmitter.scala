@@ -6,13 +6,13 @@ import scalus.compiler.sir.*
 /** Type generator for product case classes that cannot be converted to Data (contain functions or
   * BLS elements). Uses UplcConstr representation.
   */
-object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
+object ProductCaseUplcOnlyEmitter extends SirTypeUplcGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation = {
-        val constrIndex = ProductCaseSirTypeGenerator.retrieveConstrIndex(tp, SIRPosition.empty)
-        val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(tp, SIRPosition.empty)
+        val constrIndex = ProductCaseEmitter.retrieveConstrIndex(tp, SIRPosition.empty)
+        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(tp, SIRPosition.empty)
         val fieldReprs = constrDecl.params.map { param =>
             val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
             SirTypeUplcGenerator.defaultRepresentation(paramType)
@@ -52,7 +52,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         import scalus.uplc.{Term, UplcAnnotation}
 
         val pos = sel.anns.pos
-        val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(
+        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(
           loweredScrutinee.sirType,
           pos
         )
@@ -64,7 +64,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         val puc = loweredScrutinee.representation match
             case p: ProductCaseClassRepresentation.ProdUplcConstr => p
             case s: SumCaseClassRepresentation.SumUplcConstr =>
-                val constrIndex = ProductCaseSirTypeGenerator.retrieveConstrIndex(
+                val constrIndex = ProductCaseEmitter.retrieveConstrIndex(
                   loweredScrutinee.sirType,
                   pos
                 )

@@ -3,7 +3,7 @@ package typegens
 
 import scalus.compiler.sir.*
 
-object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
+object SumCaseUplcOnlyEmitter extends SirTypeUplcGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
@@ -30,7 +30,7 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         // The `ProdUplcConstr` arm mirrors
-        // `SumCaseUplcConstrSirTypeGenerator.upcastOne`: a child variant becomes a
+        // `SumCaseUplcConstrEmitter.upcastOne`: a child variant becomes a
         // single-entry `SumUplcConstr` parent. Single-entry (no overlay) is
         // load-bearing — see the `hasTransparentFields` note in the sibling
         // typegen. Already-sum values just relabel. Unlike the Data-compatible
@@ -47,7 +47,7 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
                 TypeRepresentationProxyLoweredValue(input, targetType, sum, pos)
             case other =>
                 throw LoweringException(
-                  s"SumCaseUplcOnlySirTypeGenerator.upcastOne: expected ProdUplcConstr or SumUplcConstr representation, got $other for ${input.sirType.show}",
+                  s"SumCaseUplcOnlyEmitter.upcastOne: expected ProdUplcConstr or SumUplcConstr representation, got $other for ${input.sirType.show}",
                   pos
                 )
     }
@@ -64,7 +64,7 @@ object SumCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         throw LoweringException(
-          s"SumCaseUplcOnlySirTypeGenerator does not support select",
+          s"SumCaseUplcOnlyEmitter does not support select",
           sel.anns.pos
         )
     }

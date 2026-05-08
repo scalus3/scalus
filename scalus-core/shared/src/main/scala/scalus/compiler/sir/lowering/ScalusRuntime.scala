@@ -33,7 +33,7 @@ object ScalusRuntime {
       *
       * For bindings in the `UplcConstrListOperations` / `UplcConstrOptionOperations` modules we
       * lower under `inUplcConstrListScope = true` so inner `List.Cons(...)` / `Option.Some(...)` /
-      * `List.Nil` / `Option.None` emissions pick `SumCaseUplcConstrSirTypeGenerator`.
+      * `List.Nil` / `Option.None` emissions pick `SumCaseUplcConstrEmitter`.
       */
     def initSupportBindings(lctx: LoweringContext): Unit = {
         val nativeConstrModules = Set(

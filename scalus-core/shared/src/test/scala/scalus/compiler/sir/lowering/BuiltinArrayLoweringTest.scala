@@ -106,7 +106,7 @@ class BuiltinArrayLoweringTest extends AnyFunSuite {
         info(s"BuiltinArray[Data] generator: ${generator.getClass.getSimpleName}")
         info(s"BuiltinArray[Data] default representation: $defaultRepr")
 
-        // The generator falls through to ProductCaseSirTypeGenerator
+        // The generator falls through to ProductCaseEmitter
         // which gives ProdDataList representation - this is incorrect for arrays.
         // A proper implementation would need a dedicated ProdBuiltinArrayEmitter
         // that uses a native array representation (similar to how BuiltinList uses SumDataList).

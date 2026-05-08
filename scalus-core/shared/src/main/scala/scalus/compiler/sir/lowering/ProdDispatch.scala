@@ -19,14 +19,14 @@ object ProdDispatch {
     )(using lctx: LoweringContext): LoweredValue = {
         val gen = typegens.SirTypeUplcGenerator(input.sirType)
         gen match
-            case ProductCaseSirTypeGenerator =>
-                ProductCaseSirTypeGenerator.emitConvert(input, target, pos)
-            case ProductCaseUplcConstrSirTypeGenerator =>
-                ProductCaseUplcConstrSirTypeGenerator.emitConvert(input, target, pos)
-            case ProductCaseUplcOnlySirTypeGenerator =>
+            case ProductCaseEmitter =>
+                ProductCaseEmitter.emitConvert(input, target, pos)
+            case ProductCaseUplcConstrEmitter =>
+                ProductCaseUplcConstrEmitter.emitConvert(input, target, pos)
+            case ProductCaseUplcOnlyEmitter =>
                 // Original ProductCaseUplcOnly body: identity → input, otherwise delegate to ProdCase.
                 if input.representation == target then input
-                else ProductCaseSirTypeGenerator.emitConvert(input, target, pos)
+                else ProductCaseEmitter.emitConvert(input, target, pos)
             case oneElement: OneElementWrapperEmitter =>
                 oneElement.emitConvert(input, target, pos)
             case converting: typegens.SirTypeUplcConvertingGenerator =>
@@ -70,9 +70,8 @@ object ProdDispatch {
       *     recurse.
       *   - everything else → fall back to the type-keyed typegen's `genMatch`.
       *
-      * Pre-Phase-4c-step-2 this dispatch was inlined in
-      * `ProductCaseUplcConstrSirTypeGenerator.genMatch` and `ProductCaseSirTypeGenerator.genMatch`;
-      * consolidating it here mirrors Phase 4a on the Sum side.
+      * Pre-Phase-4c-step-2 this dispatch was inlined in `ProductCaseUplcConstrEmitter.genMatch` and
+      * `ProductCaseEmitter.genMatch`; consolidating it here mirrors Phase 4a on the Sum side.
       */
     def genMatch(
         matchData: SIR.Match,

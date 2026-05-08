@@ -15,11 +15,11 @@ class LoweringContext(
     val generateErrorTraces: Boolean = false,
     val warnListConversions: Boolean = false,
     val noWarn: Boolean = false,
-    /** When true, unannotated `List[_]` / `Option[_]` types dispatch to
-      * `SumCaseUplcConstrSirTypeGenerator` (native-Constr form) instead of the default
-      * `SumBuiltinList` / `DataConstr` generator. Set by `IntrinsicResolver` for the duration of
-      * lowering a dispatcher/support-op body that operates on native-Constr lists/options. Saved
-      * and restored around each swap, mirroring `typeUnifyEnv` / `typeVarReprEnv`.
+    /** When true, unannotated `List[_]` / `Option[_]` types dispatch to `SumCaseUplcConstrEmitter`
+      * (native-Constr form) instead of the default `SumBuiltinList` / `DataConstr` generator. Set
+      * by `IntrinsicResolver` for the duration of lowering a dispatcher/support-op body that
+      * operates on native-Constr lists/options. Saved and restored around each swap, mirroring
+      * `typeUnifyEnv` / `typeVarReprEnv`.
       */
     var inUplcConstrListScope: Boolean = false,
     var typeUnifyEnv: SIRUnify.Env = SIRUnify.Env.empty,

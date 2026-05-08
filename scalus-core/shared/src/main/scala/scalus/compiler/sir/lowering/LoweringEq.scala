@@ -216,7 +216,7 @@ object LoweringEq {
         val lhsSum: SumCaseClassRepresentation.SumUplcConstr = lhs.representation match
             case s: SumCaseClassRepresentation.SumUplcConstr => s
             case _ =>
-                val gen = typegens.SumCaseUplcConstrSirTypeGenerator
+                val gen = typegens.SumCaseUplcConstrEmitter
                 val tgt = gen.defaultRepresentation(knownType) match
                     case s: SumCaseClassRepresentation.SumUplcConstr => s
                     case _ =>
@@ -450,7 +450,7 @@ object LoweringEq {
         knownType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val constrDecl = typegens.ProductCaseSirTypeGenerator.retrieveConstrDecl(knownType, pos)
+        val constrDecl = typegens.ProductCaseEmitter.retrieveConstrDecl(knownType, pos)
         val fields = constrDecl.params
         if fields.isEmpty then
             // No fields: always equal (same type, same tag)

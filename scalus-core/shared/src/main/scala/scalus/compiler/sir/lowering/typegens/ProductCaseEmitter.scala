@@ -10,7 +10,7 @@ import scalus.uplc.{Term, UplcAnnotation}
 
 /** Product with one element without parent, represented as an element.
   */
-object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
+object ProductCaseEmitter extends SirTypeUplcGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         loweringContext: LoweringContext

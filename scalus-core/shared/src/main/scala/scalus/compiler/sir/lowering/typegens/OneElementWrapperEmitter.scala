@@ -217,8 +217,8 @@ case class OneElementWrapperEmitter(
     /** Convert a `OneElementWrapper(_)` source to `target`. The handled targets cover the wrapper's
       * direct outbound moves (rewrap with a different argRepr, materialize as `ProdDataList`, route
       * via `ProdDataList` for `ProdDataConstr`, relabel-as-target for TypeVar). Other source-target
-      * pairs fall through to `ProductCaseSirTypeGenerator.emitConvert`; source TypeVar bytes route
-      * through `bridgeFromKind`.
+      * pairs fall through to `ProductCaseEmitter.emitConvert`; source TypeVar bytes route through
+      * `bridgeFromKind`.
       */
     def emitConvert(
         input: LoweredValue,
@@ -281,7 +281,7 @@ case class OneElementWrapperEmitter(
                 // open-coded, via a slightly longer proxy chain.
                 TypeVarEmitter.bridgeFromKind(input, tvr, representation, pos)
             case _ =>
-                ProductCaseSirTypeGenerator.emitConvert(input, representation, pos)
+                ProductCaseEmitter.emitConvert(input, representation, pos)
     }
 
 }

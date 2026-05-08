@@ -13,9 +13,9 @@ import scalus.uplc.Term
   * via `Case` on Pair (V4+) or `fstPair`/`sndPair` (V1-V3), binds them in scope, and lowers the
   * case body.
   *
-  * Constr emission for `ProdBuiltinPair` flows through
-  * `ProductCaseSirTypeGenerator.genConstrLowered` → `ProdDataListEmitter.genConstr` → conversions
-  * in `ProdDispatch`; only the `Match` path is per-emitter logic.
+  * Constr emission for `ProdBuiltinPair` flows through `ProductCaseEmitter.genConstrLowered` →
+  * `ProdDataListEmitter.genConstr` → conversions in `ProdDispatch`; only the `Match` path is
+  * per-emitter logic.
   */
 object ProdBuiltinPairEmitter {
 
@@ -35,7 +35,7 @@ object ProdBuiltinPairEmitter {
                 matchData.anns.pos
               )
             )
-        val myCase = ProductCaseSirTypeGenerator.selectMatchCase(
+        val myCase = ProductCaseEmitter.selectMatchCase(
           matchData,
           loweredScrutinee,
           constrDecl

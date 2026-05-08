@@ -233,8 +233,8 @@ object SirTypeUplcGenerator {
             case SIR.Const(scalus.uplc.Constant.String(name), _, _) =>
                 name match
                     case "UplcConstr" =>
-                        if SIRType.isSum(tp) then SumCaseUplcConstrSirTypeGenerator
-                        else ProductCaseUplcConstrSirTypeGenerator
+                        if SIRType.isSum(tp) then SumCaseUplcConstrEmitter
+                        else ProductCaseUplcConstrEmitter
                     case "Data" => SIRTypeUplcDataGenerator
                     case _      => SirTypeUplcGenerator(tp, debug)
             case _ =>
@@ -250,8 +250,8 @@ object SirTypeUplcGenerator {
             case "UplcConstr" =>
                 // Use UplcConstr generator's defaultRepresentation for this type
                 if SIRType.isSum(fieldType) then
-                    SumCaseUplcConstrSirTypeGenerator.defaultRepresentation(fieldType)
-                else ProductCaseUplcConstrSirTypeGenerator.defaultRepresentation(fieldType)
+                    SumCaseUplcConstrEmitter.defaultRepresentation(fieldType)
+                else ProductCaseUplcConstrEmitter.defaultRepresentation(fieldType)
             case "Data" =>
                 SirTypeUplcGenerator.defaultDataRepresentation(fieldType)
             case "DataData" =>
@@ -277,7 +277,7 @@ object SirTypeUplcGenerator {
         isSum: Boolean = false
     )(using lctx: LoweringContext): SirTypeUplcGenerator =
         encoded match {
-            case "ProductCase" => ProductCaseSirTypeGenerator
+            case "ProductCase" => ProductCaseEmitter
             case "SumCase"     => DataConstrEmitter
             case "SumDataList" =>
                 new SumBuiltinListEmitter(PrimitiveRepresentation.PackedData)
@@ -295,8 +295,8 @@ object SirTypeUplcGenerator {
                 val innerGenerator = SirTypeUplcGenerator(paramType, debug)
                 OneElementWrapperEmitter(innerGenerator)
             case "UplcConstr" =>
-                if isSum then SumCaseUplcConstrSirTypeGenerator
-                else ProductCaseUplcConstrSirTypeGenerator
+                if isSum then SumCaseUplcConstrEmitter
+                else ProductCaseUplcConstrEmitter
             case other =>
                 throw IllegalArgumentException(s"Unknown UplcRepresentation: $other")
         }
@@ -342,23 +342,23 @@ object SirTypeUplcGenerator {
                         if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
                         else if decl.name == SumListEmitterCommon.PairListDataDeclName then
                             if !containsFun(tp, trace) then SumPairBuiltinListEmitter
-                            else SumCaseUplcOnlySirTypeGenerator
+                            else SumCaseUplcOnlyEmitter
                         else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
                             if !containsFun(tp, trace) then {
                                 val elemRepr = elementReprFor(typeArgs.head)
                                 elemRepr match
                                     case _: ProductCaseClassRepresentation.ProdUplcConstr |
                                         _: SumCaseClassRepresentation.SumUplcConstr =>
-                                        SumCaseUplcConstrSirTypeGenerator
+                                        SumCaseUplcConstrEmitter
                                     case _ if isPair(typeArgs.head) =>
                                         SumPairBuiltinListEmitter
                                     case _ => new SumBuiltinListEmitter(elemRepr)
-                            } else SumCaseUplcOnlySirTypeGenerator
+                            } else SumCaseUplcOnlyEmitter
                         else if decl.name == SIRType.BuiltinList.name then
                             if isPair(typeArgs.head) then SumPairBuiltinListEmitter
                             else new SumBuiltinListEmitter(elementReprFor(typeArgs.head))
                         else if !containsFun(tp, trace) then DataConstrEmitter
-                        else SumCaseUplcOnlySirTypeGenerator
+                        else SumCaseUplcOnlyEmitter
                     }
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>
                 // Data constructors are handled by SIRTypeUplcDataGenerator
@@ -450,7 +450,7 @@ object SirTypeUplcGenerator {
             || constrDecl.name == SumListEmitterCommon.PairNilName || constrDecl.name == SumListEmitterCommon.PairConsName
         then
             val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
-            if hasFun then Some(SumCaseUplcOnlySirTypeGenerator)
+            if hasFun then Some(SumCaseUplcOnlyEmitter)
             else if constrDecl.name == SumListEmitterCommon.PairNilName
                 || constrDecl.name == SumListEmitterCommon.PairConsName
             then Some(SumPairBuiltinListEmitter)
@@ -482,8 +482,8 @@ object SirTypeUplcGenerator {
         constrDecl: ConstrDecl
     ): SirTypeUplcGenerator =
         val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
-        if hasFun then ProductCaseUplcOnlySirTypeGenerator
-        else ProductCaseSirTypeGenerator
+        if hasFun then ProductCaseUplcOnlyEmitter
+        else ProductCaseEmitter
 
     def isPairOrTuple2(tp: SIRType): Boolean =
         ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(tp)

@@ -80,7 +80,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                 upcastOne(alignedInput, effectiveTargetType, pos)
             case _: ProductCaseClassRepresentation.ProdUplcConstr =>
                 // UplcConstr product → delegate to SumCaseUplcConstr upcast
-                SumCaseUplcConstrSirTypeGenerator.upcastOne(input, targetType, pos)
+                SumCaseUplcConstrEmitter.upcastOne(input, targetType, pos)
             case _ =>
                 throw LoweringException(
                   s"Unexpected representation ${input.representation.show} for List upcast from ${input.sirType.show} to ${targetType.show}",

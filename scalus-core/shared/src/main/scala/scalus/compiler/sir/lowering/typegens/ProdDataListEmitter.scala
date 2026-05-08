@@ -23,7 +23,7 @@ import scala.util.control.NonFatal
   *     lowering).
   *
   * Constructor-handling helpers (`retrieveConstrDecl`, `retrieveConstrIndex`, `selectMatchCase`)
-  * still live on `ProductCaseSirTypeGenerator` during the Phase 4c migration — they're shared with
+  * still live on `ProductCaseEmitter` during the Phase 4c migration — they're shared with
   * `ProdBuiltinPairEmitter` and several Sum-side typegens.
   */
 object ProdDataListEmitter {
@@ -119,7 +119,7 @@ object ProdDataListEmitter {
                   true
                 )
         val list0id = list0.id
-        val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(
+        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(
           loweredScrutinee.sirType,
           sel.anns.pos
         )
@@ -195,8 +195,8 @@ object ProdDataListEmitter {
     }
 
     /** Match emission on a Data-shape product scrutinee. For >1-case input the applicable case is
-      * selected via `ProductCaseSirTypeGenerator.selectMatchCase` and the rest are statically
-      * dropped (info-logged). Single-case input flows directly to
+      * selected via `ProductCaseEmitter.selectMatchCase` and the rest are statically dropped
+      * (info-logged). Single-case input flows directly to
       * `DataConstrEmitter.genMatchDataConstrCase`, which owns the actual field-extraction +
       * body-lowering inside the Data list scope.
       */
@@ -207,7 +207,7 @@ object ProdDataListEmitter {
     )(using
         lctx: LoweringContext
     ): LoweredValue = {
-        val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(
+        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(
           loweredScrutinee.sirType,
           matchData.anns.pos
         )
@@ -250,7 +250,7 @@ object ProdDataListEmitter {
                   addToScope
                 )
             case _ =>
-                val myCase = ProductCaseSirTypeGenerator.selectMatchCase(
+                val myCase = ProductCaseEmitter.selectMatchCase(
                   matchData,
                   loweredScrutinee,
                   constrDecl
