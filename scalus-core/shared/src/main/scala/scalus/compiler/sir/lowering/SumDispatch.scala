@@ -99,28 +99,12 @@ object SumDispatch {
                 // strictly more correct than mislabelling UC bytes as Data.
                 typegens.TypeVarEmitter.bridgeFromKind(input, inTvr, representation, pos)
             case (_, outTvr: TypeVarRepresentation) =>
-                import SIRType.TypeVarKind.*
-                outTvr.kind match
-                    case Transparent => input
-                    case Unwrapped   =>
-                        // Phase 5: convert input to the type's defaultRepresentation form, then
-                        // relabel as Unwrapped. Replaces hardcoded `DataConstrEmitter.
-                        // defaultRepresentation`; equivalent for DataConstrEmitter-handled types,
-                        // correct for SumCaseUplcOnly types (which need SumUplcConstr instead).
-                        val targetUnderlying =
-                            typegens.SirTypeUplcGenerator.defaultRepresentation(input.sirType)
-                        val converted = input.toRepresentation(targetUnderlying, pos)
-                        new RepresentationProxyLoweredValue(converted, outTvr, pos)
-                    case Fixed =>
-                        // Phase 5: convert via the type's defaultTypeVarReperesentation rather
-                        // than hardcoded `DataConstr`. For DataConstrEmitter types this is
-                        // `DataConstr` (unchanged); for SumCaseUplcOnly types this throws clearly
-                        // ("Type variables with lambdas are not supported in sum cases yet"),
-                        // surfacing the inconsistency at conversion time instead of letting
-                        // mislabelled Data conversions silently corrupt downstream bytes.
-                        val targetUnderlying = typegens.SirTypeUplcGenerator
-                            .defaultTypeVarReperesentation(input.sirType)
-                        sumCaseImpl(input, targetUnderlying, pos)
+                // Phase 5 canonicalization: Unwrapped/Fixed go through bridgeToKind (always
+                // relabels as target). The Fixed arm previously recursed sumCaseImpl with the
+                // concrete underlying repr and returned a value WITHOUT the TypeVar relabel —
+                // see design doc. Transparent stays open-coded as `input`.
+                if outTvr.kind == SIRType.TypeVarKind.Transparent then input
+                else typegens.TypeVarEmitter.bridgeToKind(input, outTvr, pos)
             case (_, _) =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $representation",

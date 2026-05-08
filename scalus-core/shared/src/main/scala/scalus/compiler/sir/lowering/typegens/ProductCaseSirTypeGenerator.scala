@@ -669,19 +669,12 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     case Fixed =>
                         viaProdDataConstr(input, representation, pos)
             case (_, tvr: TypeVarRepresentation) =>
-                import SIRType.TypeVarKind.*
-                tvr.kind match
-                    case Transparent => input
-                    case Unwrapped   =>
-                        // Need bytes in the type's actual defaultRepresentation form before
-                        // relabeling. Dispatch via the type's own generator (e.g. for a
-                        // @UplcRepr(UplcConstr) Point, the default is ProdUplcConstr, NOT
-                        // this generator's Data-backed ProdDataList).
-                        val targetUnderlying =
-                            SirTypeUplcGenerator.defaultRepresentation(input.sirType)
-                        val converted = input.toRepresentation(targetUnderlying, pos)
-                        new RepresentationProxyLoweredValue(converted, tvr, pos)
-                    case Fixed => emitConvert(input, ProdDataConstr, pos)
+                // Phase 5 canonicalization: Unwrapped/Fixed go through bridgeToKind (always
+                // relabels as target). The Fixed arm previously recursed with `ProdDataConstr`
+                // target and returned the result WITHOUT the TypeVar relabel — see design doc.
+                // Transparent stays open-coded as `input`.
+                if tvr.kind == SIRType.TypeVarKind.Transparent then input
+                else TypeVarEmitter.bridgeToKind(input, tvr, pos)
             case _ =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $representation",

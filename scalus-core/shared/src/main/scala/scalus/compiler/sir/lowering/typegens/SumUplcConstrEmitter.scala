@@ -713,19 +713,13 @@ object SumUplcConstrEmitter {
                   _: SumUplcConstr | _: ProductCaseClassRepresentation.ProdUplcConstr,
                   tvr: TypeVarRepresentation
                 ) =>
-                import SIRType.TypeVarKind.*
-                tvr.kind match
-                    case Transparent => input
-                    case Unwrapped =>
-                        val targetUnderlying =
-                            SirTypeUplcGenerator.defaultRepresentation(input.sirType)
-                        val converted = input.toRepresentation(targetUnderlying, pos)
-                        new RepresentationProxyLoweredValue(converted, tvr, pos)
-                    case Fixed =>
-                        val tvRepr =
-                            SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
-                        input
-                            .toRepresentation(tvRepr, pos)
+                // Phase 5 Fixed canonicalization: Unwrapped/Fixed go through bridgeToKind
+                // (canonical "always relabel as target"). The Fixed arm previously skipped the
+                // relabel and returned a value with concrete repr — see the design doc for the
+                // audit. Transparent stays open-coded as `input` (no relabel) because that is
+                // the current semantics across most sum-side emitters.
+                if tvr.kind == SIRType.TypeVarKind.Transparent then input
+                else TypeVarEmitter.bridgeToKind(input, tvr, pos)
             case _ =>
                 throw LoweringException(
                   s"SumUplcConstrEmitter: unsupported conversion from ${input.representation} to $representation for ${input.sirType.show}",

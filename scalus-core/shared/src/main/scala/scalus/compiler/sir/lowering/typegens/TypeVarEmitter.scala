@@ -20,12 +20,12 @@ import scalus.compiler.sir.*
   * `SumListEmitterCommon.emitConvert`.
   *
   * The companion `bridgeToKind` handles the symmetric case — concrete source, TypeVar target.
-  * Canonical contract: `result.representation == target`. The bytes are converted to the type's
-  * default form for the target's kind, then relabeled. Some emitters (notably
-  * `SumDispatch.sumCaseImpl`'s Fixed arm and `SumUplcConstrEmitter`'s Fixed arm) historically skip
-  * the relabel and return a value with the concrete repr — this is an inconsistency we'd like to
-  * remove, but migrating those sites changes downstream `.representation` checks and needs
-  * case-by-case auditing, so they remain open-coded for now.
+  * Canonical contract: `result.representation` reflects the actual byte shape (concrete repr the
+  * bytes were converted to), NOT the requested TypeVar `target` — symmetric to `bridgeFromKind`,
+  * which also returns a concrete-repr value rather than wrapping a TypeVar label. Downstream
+  * consumers that need the TypeVar label can wrap explicitly. This convention preserves the "honest
+  * about byte shape" invariant: `.representation` always reflects what the bytes actually are,
+  * never an abstract claim that may not match.
   */
 object TypeVarEmitter {
 
@@ -82,15 +82,20 @@ object TypeVarEmitter {
                             r0.toRepresentation(target, pos)
     }
 
-    /** Convert a concrete-repr value to a TypeVar `target`. Mirror of `bridgeFromKind` for the
-      * symmetric direction. The result's representation is always the requested `target` —
-      * Unwrapped/Fixed convert the bytes to the type's default form before relabeling; Transparent
-      * just relabels (caller declared "any-shape acceptable").
+    /** Convert a concrete-repr value to a TypeVar `target`. Symmetric mirror of `bridgeFromKind`:
+      * just as `bridgeFromKind` resolves a TypeVar source to a concrete-repr value (no
+      * pretend-it's-still-TypeVar wrapping), `bridgeToKind` returns a value whose bytes are in the
+      * type's default form for the target's kind, *without* relabeling as `target`.
       *
-      * "Always relabel" is the canonical contract chosen for this helper. Several existing emitters
-      * skip the relabel for Transparent (returning input unchanged) and/or Fixed (returning a value
-      * with concrete repr); those sites stay open-coded until the downstream
-      * `.representation`-checking call sites are audited and the canonical contract is rolled out.
+      *   - `Transparent` — bytes are whatever the source produced (caller declared "any-shape");
+      *     pass through unchanged.
+      *   - `Unwrapped` — convert to the type's `defaultRepresentation` form.
+      *   - `Fixed` — convert to the type's `defaultTypeVarReperesentation` (Data) form.
+      *
+      * The "no relabel" choice (chosen 2026-05-08 after testing both variants) matches
+      * `bridgeFromKind`'s convention: result's representation reflects the actual byte shape, not
+      * the abstract TypeVar label the caller asked for. Downstream consumers that need the TypeVar
+      * label can wrap explicitly.
       */
     def bridgeToKind(
         input: LoweredValue,
@@ -99,21 +104,15 @@ object TypeVarEmitter {
     )(using lctx: LoweringContext): LoweredValue = {
         import SIRType.TypeVarKind.*
         target.kind match
-            case Transparent =>
-                if input.representation == target then input
-                else new RepresentationProxyLoweredValue(input, target, pos)
+            case Transparent => input
             case Unwrapped =>
                 val targetUnderlying =
                     SirTypeUplcGenerator.defaultRepresentation(input.sirType)
-                val converted = input.toRepresentation(targetUnderlying, pos)
-                if converted.representation == target then converted
-                else new RepresentationProxyLoweredValue(converted, target, pos)
+                input.toRepresentation(targetUnderlying, pos)
             case Fixed =>
                 val targetUnderlying =
                     SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
-                val converted = input.toRepresentation(targetUnderlying, pos)
-                if converted.representation == target then converted
-                else new RepresentationProxyLoweredValue(converted, target, pos)
+                input.toRepresentation(targetUnderlying, pos)
     }
 
 }
