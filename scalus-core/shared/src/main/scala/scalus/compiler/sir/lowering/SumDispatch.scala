@@ -91,32 +91,36 @@ object SumDispatch {
             case (_: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
                 SumUplcConstrEmitter.emitConvert(input, representation, pos)
             case (inTvr: TypeVarRepresentation, _) =>
-                import SIRType.TypeVarKind.*
-                inTvr.kind match
-                    case Transparent =>
-                        RepresentationProxyLoweredValue(input, representation, pos)
-                    case Unwrapped =>
-                        // Source bytes are in defaultRepresentation form. Relabel as that
-                        // underlying repr, then convert.
-                        val sourceUnderlying =
-                            DataConstrEmitter.defaultRepresentation(input.sirType)
-                        val r0 = RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
-                        sumCaseImpl(r0, representation, pos)
-                    case Fixed =>
-                        val r0 = RepresentationProxyLoweredValue(input, DataConstr, pos)
-                        sumCaseImpl(r0, representation, pos)
+                // Phase 5: source TypeVar dispatch via shared helper. Replaces hardcoded
+                // `DataConstr` with `SirTypeUplcGenerator.default*(input.sirType)`. For
+                // DataConstrEmitter-handled types these match `DataConstr`; for
+                // SumCaseUplcOnly-handled types the helper resolves to `SumUplcConstr`
+                // (defaultRepresentation) or throws (defaultTypeVarReperesentation), which is
+                // strictly more correct than mislabelling UC bytes as Data.
+                typegens.TypeVarEmitter.bridgeFromKind(input, inTvr, representation, pos)
             case (_, outTvr: TypeVarRepresentation) =>
                 import SIRType.TypeVarKind.*
                 outTvr.kind match
                     case Transparent => input
                     case Unwrapped   =>
-                        // Convert input to defaultRepresentation form, then relabel as Unwrapped.
+                        // Phase 5: convert input to the type's defaultRepresentation form, then
+                        // relabel as Unwrapped. Replaces hardcoded `DataConstrEmitter.
+                        // defaultRepresentation`; equivalent for DataConstrEmitter-handled types,
+                        // correct for SumCaseUplcOnly types (which need SumUplcConstr instead).
                         val targetUnderlying =
-                            DataConstrEmitter.defaultRepresentation(input.sirType)
+                            typegens.SirTypeUplcGenerator.defaultRepresentation(input.sirType)
                         val converted = input.toRepresentation(targetUnderlying, pos)
                         new RepresentationProxyLoweredValue(converted, outTvr, pos)
                     case Fixed =>
-                        sumCaseImpl(input, DataConstr, pos)
+                        // Phase 5: convert via the type's defaultTypeVarReperesentation rather
+                        // than hardcoded `DataConstr`. For DataConstrEmitter types this is
+                        // `DataConstr` (unchanged); for SumCaseUplcOnly types this throws clearly
+                        // ("Type variables with lambdas are not supported in sum cases yet"),
+                        // surfacing the inconsistency at conversion time instead of letting
+                        // mislabelled Data conversions silently corrupt downstream bytes.
+                        val targetUnderlying = typegens.SirTypeUplcGenerator
+                            .defaultTypeVarReperesentation(input.sirType)
+                        sumCaseImpl(input, targetUnderlying, pos)
             case (_, _) =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $representation",

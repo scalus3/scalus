@@ -15,11 +15,11 @@ import scalus.compiler.sir.*
   *     Data-shaped form). Conversion converts to that underlying repr first, then routes to the
   *     target.
   *
-  * `bridgeFromKind` is currently called from `SumUplcConstrEmitter.emitConvert`.
-  * `SumDispatch.sumCaseImpl` and `SumListEmitterCommon.emitConvert` still open-code an equivalent
-  * kind dispatch (with hardcoded underlying reprs that happen to align with
-  * `SirTypeUplcGenerator.default*` for their reachable typegens); those sites should migrate after
-  * a per-arm semantic audit.
+  * `bridgeFromKind` is currently called from `SumUplcConstrEmitter.emitConvert`,
+  * `SumDispatch.sumCaseImpl`, and `OneElementWrapperEmitter.emitConvert`. `SumListEmitterCommon.
+  * emitConvert` still open-codes an equivalent kind dispatch (with hardcoded underlying reprs that
+  * happen to align with `SirTypeUplcGenerator.default*` for its reachable typegens); migration
+  * pending a per-arm semantic audit.
   */
 object TypeVarEmitter {
 

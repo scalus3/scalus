@@ -279,20 +279,15 @@ case class OneElementWrapperEmitter(
                           tvr,
                           pos
                         )
-            case (tvr: TypeVarRepresentation, outRepr @ OneElementWrapper(argRepr)) =>
-                import SIRType.TypeVarKind.*
-                tvr.kind match
-                    case Transparent =>
-                        new RepresentationProxyLoweredValue(input, representation, pos)
-                    case Unwrapped | Fixed =>
-                        val argValue = argLoweredValue(input)
-                        val convertedArg = argValue.toRepresentation(argRepr, pos)
-                        new TypeRepresentationProxyLoweredValue(
-                          convertedArg,
-                          input.sirType,
-                          outRepr,
-                          pos
-                        )
+            case (tvr: TypeVarRepresentation, _: OneElementWrapper) =>
+                // Phase 5: source TypeVar dispatch via shared helper. The Transparent arm relabels
+                // unchanged; Unwrapped/Fixed arms relabel as the input type's defaultRepresentation
+                // (= OneElementWrapper(argGenerator.defaultRepresentation(tp))) and recurse — which
+                // lands in the (OneElementWrapper, OneElementWrapper) arm above, extracting the arg
+                // via `argLoweredValue` and converting to the target's argRepr. This reaches the
+                // same final shape as the previous open-coded path (argLoweredValue + direct
+                // toRepresentation(argRepr) + wrap), via a slightly longer proxy chain.
+                TypeVarEmitter.bridgeFromKind(input, tvr, representation, pos)
             case (_, _) =>
                 ProductCaseSirTypeGenerator.emitConvert(input, representation, pos)
     }
