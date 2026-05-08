@@ -218,10 +218,7 @@ object SumUplcConstrEmitter {
                                     case _ =>
                                         // Interpretation (a) for `@UplcRepr(UplcConstr)`: nested
                                         // field reprs are the field type's stable default.
-                                        // `typeGenerator` is now annotation/type-only (no flag),
-                                        // so this is just a direct lookup.
-                                        lctx.typeGenerator(paramType)
-                                            .defaultRepresentation(paramType)
+                                        SirTypeUplcGenerator.defaultRepresentation(paramType)
                         }
                 }
                 idx -> ProductCaseClassRepresentation.ProdUplcConstr(idx, fieldReprs)
@@ -724,13 +721,13 @@ object SumUplcConstrEmitter {
                 tvr.kind match
                     case Transparent => input
                     case Unwrapped =>
-                        val typeGen = lctx.typeGenerator(input.sirType)
-                        val targetUnderlying = typeGen.defaultRepresentation(input.sirType)
+                        val targetUnderlying =
+                            SirTypeUplcGenerator.defaultRepresentation(input.sirType)
                         val converted = input.toRepresentation(targetUnderlying, pos)
                         new RepresentationProxyLoweredValue(converted, tvr, pos)
                     case Fixed =>
-                        val typeGen = lctx.typeGenerator(input.sirType)
-                        val tvRepr = typeGen.defaultTypeVarReperesentation(input.sirType)
+                        val tvRepr =
+                            SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
                         input
                             .toRepresentation(tvRepr, pos)
             case _ =>

@@ -1,7 +1,6 @@
 package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
-import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.compiler.sir.*
 
 import scala.collection.mutable.Map as MutableMap
@@ -115,23 +114,6 @@ class LoweringContext(
 
     def lower(sir: SIR, optTargetType: Option[SIRType] = None): LoweredValue = {
         Lowering.lowerSIR(sir, optTargetType)(using this)
-    }
-
-    /** Return the UPLC type generator for `sirType`, based purely on the type (and its
-      * annotations).
-      *
-      * Previously this consulted `inUplcConstrListScope` to route unannotated `List[_]` /
-      * `Option[_]` into `SumCaseUplcConstrSirTypeGenerator` inside dispatcher/support-op bodies.
-      * Now that every native-Constr intrinsic signature carries a type-level
-      * `@UplcRepr(UplcConstr)` annotation (which `SIRTyper.sirTypeInEnv` propagates into the SIR
-      * type), the routing is entirely annotation-driven and this function does not need the flag.
-      *
-      * `inUplcConstrListScope` survives only in `IntrinsicResolver.tryResolve` to select the
-      * native-Constr provider binding when dispatching through a support module.
-      */
-    def typeGenerator(sirType: SIRType): SirTypeUplcGenerator = {
-        given LoweringContext = this
-        SirTypeUplcGenerator(sirType, debugLevel > 30)
     }
 
     /** If this is typevariable, try get the value from context, else leave it as is.

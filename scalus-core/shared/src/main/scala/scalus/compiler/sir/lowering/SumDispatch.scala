@@ -26,7 +26,7 @@ object SumDispatch {
         target: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val gen = lctx.typeGenerator(input.sirType)
+        val gen = typegens.SirTypeUplcGenerator(input.sirType)
         gen match
             case DataConstrEmitter =>
                 sumCaseImpl(input, target, pos)
@@ -151,7 +151,7 @@ object SumDispatch {
                         if typeArgs.nonEmpty && params.length == typeArgs.length =>
                         SIRType.substitute(body, params.zip(typeArgs).toMap, Map.empty)
                     case _ => parent
-                val parentGen = lctx.typeGenerator(substitutedParent)
+                val parentGen = typegens.SirTypeUplcGenerator(substitutedParent)
                 parentGen.defaultRepresentation(substitutedParent) match
                     case _: SumUplcConstr => return parentGen
                     case _                =>
@@ -184,7 +184,7 @@ object SumDispatch {
         if lctx.inUplcConstrListScope && parentIsListOrOption then
             return typegens.SumCaseUplcConstrSirTypeGenerator
 
-        lctx.typeGenerator(resolvedType)
+        typegens.SirTypeUplcGenerator(resolvedType)
     }
 
     /** Pick the type generator for a `Nil` constructor.
@@ -216,12 +216,14 @@ object SumDispatch {
             else fallback
         optTargetType match
             case Some(targetType) =>
-                val gen = overrideForListScope(targetType, lctx.typeGenerator(targetType))
+                val gen =
+                    overrideForListScope(targetType, typegens.SirTypeUplcGenerator(targetType))
                 val effective =
                     if constr.tp eq targetType then constr else constr.copy(tp = targetType)
                 (gen, effective)
             case None =>
-                val gen = overrideForListScope(resolvedType, lctx.typeGenerator(resolvedType))
+                val gen =
+                    overrideForListScope(resolvedType, typegens.SirTypeUplcGenerator(resolvedType))
                 (gen, constr)
     }
 
@@ -287,9 +289,9 @@ object SumDispatch {
                 new typegens.SumBuiltinListEmitter(elemRepr)
                     .genMatch(matchData, unpackedVar, optTargetType)
             case TypeVarRepresentation(_) =>
-                val gen = lctx.typeGenerator(loweredScrutinee.sirType)
                 val properRepresentation =
-                    gen.defaultTypeVarReperesentation(loweredScrutinee.sirType)
+                    typegens.SirTypeUplcGenerator
+                        .defaultTypeVarReperesentation(loweredScrutinee.sirType)
                 val scrutineeWithProperRepr = TypeRepresentationProxyLoweredValue(
                   loweredScrutinee,
                   loweredScrutinee.sirType,
@@ -298,7 +300,7 @@ object SumDispatch {
                 )
                 genMatch(matchData, scrutineeWithProperRepr, optTargetType)
             case _ =>
-                lctx.typeGenerator(loweredScrutinee.sirType)
+                typegens.SirTypeUplcGenerator
                     .genMatch(matchData, loweredScrutinee, optTargetType)
     }
 

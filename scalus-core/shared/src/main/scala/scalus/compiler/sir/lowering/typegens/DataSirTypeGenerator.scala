@@ -279,8 +279,8 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
 
                     case _ =>
                         // For I, B, List - use TypeProxy, toRepresentation handles unpacking
-                        val fieldTypeGen = lctx.typeGenerator(sel.tp)
-                        val fieldRepr = fieldTypeGen.defaultDataRepresentation(sel.tp)
+                        val fieldRepr =
+                            SirTypeUplcGenerator.defaultDataRepresentation(sel.tp)
                         TypeRepresentationProxyLoweredValue(
                           loweredScrutinee,
                           sel.tp,

@@ -55,7 +55,7 @@ object ProdDataListEmitter {
                     )
                     println(s"typeGen = ${typeGen}")
                     println(
-                      s"defaultTypeGen(${arg.sirType.show}) = ${lctx.typeGenerator(arg.sirType)}"
+                      s"defaultTypeGen(${arg.sirType.show}) = ${SirTypeUplcGenerator(arg.sirType)}"
                     )
                     println(
                       s"arg created from: ${constr.anns.pos.file}:${constr.anns.pos.startLine + 1}"

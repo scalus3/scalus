@@ -300,7 +300,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                 val r1 = input.toRepresentation(PrimitiveRepresentation.PackedData, pos)
                 input.sirType match
                     case p: SIRType.Primitive =>
-                        lctx.typeGenerator(p)
+                        SirTypeUplcGenerator(p)
                             .toRepresentation(r1, PrimitiveRepresentation.Constant, pos)
                     case _ =>
                         throw LoweringException(
@@ -340,7 +340,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             case tv: SIRType.TypeVar =>
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(tp1) =>
-                        lctx.typeGenerator(tp1)
+                        SirTypeUplcGenerator(tp1)
                             .genConstrLowered(constr, loweredArgs, optTargetType)
                     case None =>
                         throw LoweringException(
@@ -377,9 +377,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         makeResolvedProxy(loweredScrutinee, matchData.anns.pos)
-            .map(input =>
-                SirTypeUplcGenerator.genMatch(matchData, input, optTargetType)
-            )
+            .map(input => SirTypeUplcGenerator.genMatch(matchData, input, optTargetType))
             .getOrElse(
               throw LoweringException(
                 s"TypeVarSirTypeGenerator does not support match",
@@ -396,7 +394,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             case tv: SIRType.TypeVar =>
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(resolvedType) =>
-                        val gen = lctx.typeGenerator(resolvedType)
+                        val gen = SirTypeUplcGenerator(resolvedType)
                         // Pick the proxy's repr from the value's ACTUAL repr kind, not from
                         // `tv.isBuiltin` (a static TypeVar-declaration property). The input's
                         // bytes are determined by the upstream conversion that produced this

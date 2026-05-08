@@ -108,8 +108,8 @@ object LoweredValueRepresentation {
                 SIRType.BLS12_381_MlResult | SIRType.BuiltinValue =>
                 PrimitiveRepresentation.Constant
             case SIRType.Fun(in, out) =>
-                val inRepresentation = lc.typeGenerator(in).defaultRepresentation(in)
-                val outRepresentation = lc.typeGenerator(out).defaultRepresentation(out)
+                val inRepresentation = typegens.SirTypeUplcGenerator.defaultRepresentation(in)
+                val outRepresentation = typegens.SirTypeUplcGenerator.defaultRepresentation(out)
                 LambdaRepresentation(
                   tp,
                   InOutRepresentationPair(inRepresentation, outRepresentation)
@@ -1356,7 +1356,7 @@ case class LambdaRepresentation(
                         case tvr: TypeVarRepresentation if tvr.isBuiltin =>
                             typegens.SirTypeUplcGenerator.defaultRepresentation(argumentType)
                         case tvr: TypeVarRepresentation if !tvr.isBuiltin =>
-                            lctx.typeGenerator(argumentType)
+                            typegens.SirTypeUplcGenerator
                                 .defaultTypeVarReperesentation(argumentType)
                         case suc: SumCaseClassRepresentation.SumUplcConstr =>
                             // Try to substitute element reprs from `reprSubstitutes`
@@ -1373,10 +1373,7 @@ case class LambdaRepresentation(
                               typegens.SirTypeUplcGenerator.defaultRepresentation(argumentType)
                             )
                         case other =>
-                            val result = lctx
-                                .typeGenerator(argumentType)
-                                .defaultRepresentation(argumentType)
-                            result
+                            typegens.SirTypeUplcGenerator.defaultRepresentation(argumentType)
 
         resolve(declaredParamType, argumentType, declaredRepr)
     }
@@ -1679,7 +1676,7 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
                                     case other =>
                                         repr.isCompatibleOn(
                                           concrete,
-                                          lctx.typeGenerator(concrete)
+                                          typegens.SirTypeUplcGenerator
                                               .defaultRepresentation(concrete),
                                           pos
                                         )
@@ -1707,10 +1704,12 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
         semanticType match
             case _: SIRType.TypeVar | SIRType.FreeUnificator => semanticType
             case _ =>
-                val gen = lctx.typeGenerator(semanticType)
                 val resolved =
-                    if isBuiltin then gen.defaultRepresentation(semanticType)
-                    else gen.defaultTypeVarReperesentation(semanticType)
+                    if isBuiltin then
+                        typegens.SirTypeUplcGenerator.defaultRepresentation(semanticType)
+                    else
+                        typegens.SirTypeUplcGenerator
+                            .defaultTypeVarReperesentation(semanticType)
                 resolved.uplcType(semanticType)
 
     override def defaultUni(semanticType: SIRType)(using lctx: LoweringContext): DefaultUni =
@@ -1718,16 +1717,19 @@ case class TypeVarRepresentation(kind: SIRType.TypeVarKind) extends LoweredValue
             case tv: SIRType.TypeVar =>
                 lctx.tryResolveTypeVar(tv) match
                     case Some(resolved) =>
-                        val gen = lctx.typeGenerator(resolved)
-                        gen.defaultRepresentation(resolved).defaultUni(resolved)
+                        typegens.SirTypeUplcGenerator
+                            .defaultRepresentation(resolved)
+                            .defaultUni(resolved)
                     case None =>
                         DefaultUni.Data
             case SIRType.FreeUnificator => DefaultUni.Data
             case _ =>
-                val gen = lctx.typeGenerator(semanticType)
                 val resolved =
-                    if isBuiltin then gen.defaultRepresentation(semanticType)
-                    else gen.defaultTypeVarReperesentation(semanticType)
+                    if isBuiltin then
+                        typegens.SirTypeUplcGenerator.defaultRepresentation(semanticType)
+                    else
+                        typegens.SirTypeUplcGenerator
+                            .defaultTypeVarReperesentation(semanticType)
                 resolved.defaultUni(semanticType)
 
     override def doc: Doc = {

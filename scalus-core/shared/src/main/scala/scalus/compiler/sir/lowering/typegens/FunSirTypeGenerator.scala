@@ -24,8 +24,8 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
                 LambdaRepresentation(
                   tp,
                   InOutRepresentationPair(
-                    lctx.typeGenerator(input).defaultRepresentation(nInput),
-                    lctx.typeGenerator(output).defaultRepresentation(nOutput)
+                    SirTypeUplcGenerator(input).defaultRepresentation(nInput),
+                    SirTypeUplcGenerator(output).defaultRepresentation(nOutput)
                   )
                 )
 

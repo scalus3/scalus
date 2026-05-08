@@ -39,20 +39,22 @@ object ListReprRules {
                 val (keyType, valueType) =
                     SumCaseClassRepresentation.SumPairBuiltinList.extractKeyValueTypes(outTp)
                 val expectedKeyRepr =
-                    lctx.typeGenerator(keyType).defaultDataRepresentation(keyType)(using lctx)
+                    typegens.SirTypeUplcGenerator
+                        .defaultDataRepresentation(keyType)(using lctx)
                 val expectedValueRepr =
-                    lctx.typeGenerator(valueType).defaultDataRepresentation(valueType)(using lctx)
+                    typegens.SirTypeUplcGenerator
+                        .defaultDataRepresentation(valueType)(using lctx)
                 if keyRepr.isCompatibleOn(keyType, expectedKeyRepr, SIRPosition.empty)(using lctx)
                     && valueRepr.isCompatibleOn(valueType, expectedValueRepr, SIRPosition.empty)(
                       using lctx
                     )
                 then ProductCaseClassRepresentation.ProdBuiltinPair(keyRepr, valueRepr)
-                else lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
-            case _ => lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+                else typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
+            case _ => typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
 
     /** isEmpty: List[A] -> Boolean */
     val isEmptyRule: ReprRule = (outTp, _, lctx) =>
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+        typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
 
     /** head: List[A] -> A */
     val headRule: ReprRule = (outTp, inRepr, lctx) => elemRepr(inRepr, outTp, lctx)
@@ -104,14 +106,14 @@ object NativeListReprRules {
       * defaultRepresentation which handles Fun types correctly.
       */
     val mapRule: ReprRule = (outTp, inRepr, lctx) =>
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+        typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
 
     val filterRule: ReprRule = (outTp, inRepr, lctx) =>
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+        typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
 
     /** foldLeft: List[A] → B — output depends on return type */
     val foldLeftRule: ReprRule = (outTp, _, lctx) =>
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+        typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
 
     /** foldRight: same as foldLeft */
     val foldRightRule: ReprRule = foldLeftRule
@@ -127,11 +129,11 @@ object NativeListReprRules {
                     if !elemRepr.isPackedData =>
                     typegens.SumUplcConstrEmitter.buildSumUplcConstr(optTp)(using lctx)
                 case _ =>
-                    lctx.typeGenerator(optTp).defaultRepresentation(optTp)(using lctx)
+                    typegens.SirTypeUplcGenerator.defaultRepresentation(optTp)(using lctx)
         outTp match
             case SIRType.Fun(argTp, retTp) =>
                 val predicateRepr =
-                    lctx.typeGenerator(argTp).defaultRepresentation(argTp)(using lctx)
+                    typegens.SirTypeUplcGenerator.defaultRepresentation(argTp)(using lctx)
                 LambdaRepresentation(
                   outTp,
                   InOutRepresentationPair(predicateRepr, optionRepr(retTp))
@@ -140,7 +142,7 @@ object NativeListReprRules {
 
     /** contains: List[A] → A → Eq[A] → Boolean */
     val containsRule: ReprRule = (outTp, _, lctx) =>
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+        typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
 
     val rules: Map[String, ReprRule] = Map(
       "isEmpty" -> isEmptyRule,
@@ -165,7 +167,7 @@ object UplcConstrListReprRules {
 
     /** For operations returning a scalar type (not a list). */
     val scalarRule: ReprRule = (outTp, _, lctx) =>
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)(using lctx)
+        typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
 
     /** For operations returning the same list type as the input. Walks curried Fun types,
       * preserving inRepr in the final return position.
@@ -179,7 +181,7 @@ object UplcConstrListReprRules {
             case SIRType.TypeLambda(_, body) => sameListReturnRepr(body, inRepr, lctx)
             case SIRType.Fun(argTp, retTp) =>
                 val argRepr =
-                    lctx.typeGenerator(argTp).defaultRepresentation(argTp)(using lctx)
+                    typegens.SirTypeUplcGenerator.defaultRepresentation(argTp)(using lctx)
                 val retRepr = sameListReturnRepr(retTp, inRepr, lctx)
                 LambdaRepresentation(outTp, InOutRepresentationPair(argRepr, retRepr))
             case _ => inRepr

@@ -423,10 +423,8 @@ object LoweringEq {
         rhs: LoweredValue,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val lhsGen = lctx.typeGenerator(lhs.sirType)
-        val rhsGen = lctx.typeGenerator(rhs.sirType)
-        val lhsDataRepr = lhsGen.defaultDataRepresentation(lhs.sirType)
-        val rhsDataRepr = rhsGen.defaultDataRepresentation(rhs.sirType)
+        val lhsDataRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(lhs.sirType)
+        val rhsDataRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(rhs.sirType)
         val lhsData = lhs.toRepresentation(lhsDataRepr, pos)
         val rhsData = rhs.toRepresentation(rhsDataRepr, pos)
         lvBuiltinApply2(
@@ -458,7 +456,7 @@ object LoweringEq {
             // No fields: always equal (same type, same tag)
             lvBoolConstant(true, pos)
         else
-            val gen = lctx.typeGenerator(knownType)
+            val gen = typegens.SirTypeUplcGenerator(knownType)
             val fieldComparisons = fields.map { param =>
                 val sel = SIR.Select(
                   SIR.Var("_eq_lhs", knownType, AnnotationsDecl(pos)),

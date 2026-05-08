@@ -220,10 +220,10 @@ object SirTypeUplcGenerator {
                         if SIRType.isSum(tp) then SumCaseUplcConstrSirTypeGenerator
                         else ProductCaseUplcConstrSirTypeGenerator
                     case "Data" => SIRTypeUplcDataGenerator
-                    case _      => lctx.typeGenerator(tp)
+                    case _      => SirTypeUplcGenerator(tp, debug)
             case _ =>
                 // Parameterized annotations (SumBuiltinList etc.) — fall back to inner type
-                lctx.typeGenerator(tp)
+                SirTypeUplcGenerator(tp, debug)
     }
 
     /** Resolve a type-level repr name to a concrete LoweredValueRepresentation for a given type. */

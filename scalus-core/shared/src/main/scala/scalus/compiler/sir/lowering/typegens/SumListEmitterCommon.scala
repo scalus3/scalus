@@ -639,9 +639,9 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                 ): LoweredValueRepresentation =
                     repr match
                         case tvr: TypeVarRepresentation =>
-                            val elemGen = lctx.typeGenerator(elemType)
-                            if !tvr.isPackedData then elemGen.defaultRepresentation(elemType)
-                            else elemGen.defaultTypeVarReperesentation(elemType)
+                            if !tvr.isPackedData then
+                                SirTypeUplcGenerator.defaultRepresentation(elemType)
+                            else SirTypeUplcGenerator.defaultTypeVarReperesentation(elemType)
                         case other => other
                 val resolvedIn = resolveElementRepr(inElemRepr)
                 val resolvedOut = resolveElementRepr(outElemRepr)

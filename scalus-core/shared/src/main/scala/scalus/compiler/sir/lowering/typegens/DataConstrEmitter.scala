@@ -113,7 +113,7 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
         // `SumDispatch.chooseConstrOutputRepr`. By the time we land here, the
         // dispatcher already routed the constr to this generator.
         val caseClassType = constr.data.constrType(constr.name)
-        lctx.typeGenerator(caseClassType)
+        SirTypeUplcGenerator(caseClassType)
             .genConstrLowered(
               constr.copy(tp = caseClassType),
               loweredArgs,

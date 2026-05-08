@@ -24,7 +24,7 @@ object ProdDispatch {
         target: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val gen = lctx.typeGenerator(input.sirType)
+        val gen = typegens.SirTypeUplcGenerator(input.sirType)
         gen match
             case ProductCaseSirTypeGenerator =>
                 ProductCaseSirTypeGenerator.emitConvert(input, target, pos)
@@ -90,12 +90,12 @@ object ProdDispatch {
                 typegens.ProdBuiltinPairEmitter
                     .genMatch(matchData, loweredScrutinee, optTargetType)
             case _: OneElementWrapper =>
-                lctx.typeGenerator(loweredScrutinee.sirType)
+                typegens.SirTypeUplcGenerator
                     .genMatch(matchData, loweredScrutinee, optTargetType)
             case TypeVarRepresentation(_) =>
-                val gen = lctx.typeGenerator(loweredScrutinee.sirType)
                 val properRepresentation =
-                    gen.defaultTypeVarReperesentation(loweredScrutinee.sirType)
+                    typegens.SirTypeUplcGenerator
+                        .defaultTypeVarReperesentation(loweredScrutinee.sirType)
                 val scrutineeWithProperRepr = TypeRepresentationProxyLoweredValue(
                   loweredScrutinee,
                   loweredScrutinee.sirType,
@@ -104,7 +104,7 @@ object ProdDispatch {
                 )
                 genMatch(matchData, scrutineeWithProperRepr, optTargetType)
             case _ =>
-                lctx.typeGenerator(loweredScrutinee.sirType)
+                typegens.SirTypeUplcGenerator
                     .genMatch(matchData, loweredScrutinee, optTargetType)
     }
 

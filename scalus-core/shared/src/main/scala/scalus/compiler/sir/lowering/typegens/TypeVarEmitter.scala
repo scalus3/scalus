@@ -18,8 +18,8 @@ import scalus.compiler.sir.*
   * `bridgeFromKind` is currently called from `SumUplcConstrEmitter.emitConvert`.
   * `SumDispatch.sumCaseImpl` and `SumListEmitterCommon.emitConvert` still open-code an equivalent
   * kind dispatch (with hardcoded underlying reprs that happen to align with
-  * `lctx.typeGenerator(input.sirType).default*` for their reachable typegens); those sites should
-  * migrate after a per-arm semantic audit.
+  * `SirTypeUplcGenerator.default*` for their reachable typegens); those sites should migrate after
+  * a per-arm semantic audit.
   */
 object TypeVarEmitter {
 
@@ -42,8 +42,8 @@ object TypeVarEmitter {
                 if input.representation == target then input
                 else new RepresentationProxyLoweredValue(input, target, pos)
             case Unwrapped =>
-                val typeGen = lctx.typeGenerator(input.sirType)
-                val sourceUnderlying = typeGen.defaultRepresentation(input.sirType)
+                val sourceUnderlying =
+                    SirTypeUplcGenerator.defaultRepresentation(input.sirType)
                 sourceUnderlying match
                     case _: TypeVarRepresentation =>
                         throw LoweringException(
@@ -55,8 +55,8 @@ object TypeVarEmitter {
                         val r0 = new RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
                         r0.toRepresentation(target, pos)
             case Fixed =>
-                val typeGen = lctx.typeGenerator(input.sirType)
-                val fixedUnderlying = typeGen.defaultTypeVarReperesentation(input.sirType)
+                val fixedUnderlying =
+                    SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
                 fixedUnderlying match
                     case _: TypeVarRepresentation =>
                         throw LoweringException(

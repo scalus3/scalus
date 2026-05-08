@@ -81,8 +81,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 val outRepr = SumDispatch.chooseUpcastOutputRepr(input, targetType, pos)
                 return new TypeRepresentationProxyLoweredValue(input, targetType, outRepr, pos)
             case _ => // fall through to target-default-based dispatch
-        val targetTypeGenerator = lctx.typeGenerator(targetType)
-        targetTypeGenerator.defaultRepresentation(targetType) match {
+        SirTypeUplcGenerator.defaultRepresentation(targetType) match {
             case targetListRepr @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
                 if !elemRepr.isDataCentric then
                     throw LoweringException(
@@ -146,7 +145,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         if hasTransparentTypeVarArgs(loweredArgs) then
             ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
         else
-            val argTypeGens = loweredArgs.map(_.sirType).map(lctx.typeGenerator)
+            val argTypeGens = loweredArgs.map(_.sirType).map(SirTypeUplcGenerator.apply(_))
             val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
                 typeGen.canBeConvertedToData(arg.sirType)
             }
@@ -524,7 +523,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 }
             case (OneElementWrapper(_), _) =>
                 // in theory never bin here, but let's delegate
-                val generator = lctx.typeGenerator(input.sirType)
+                val generator = SirTypeUplcGenerator(input.sirType)
                 generator match
                     case oneElement: OneElementWrapperEmitter =>
                         oneElement.emitConvert(input, representation, pos)
@@ -648,9 +647,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                             .toRepresentation(targetUnderlying, pos)
                             .toRepresentation(representation, pos)
                     case Fixed =>
-                        val typeVarRepr = lctx
-                            .typeGenerator(input.sirType)
-                            .defaultTypeVarReperesentation(input.sirType)
+                        val typeVarRepr =
+                            SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
                         input
                             .toRepresentation(typeVarRepr, pos)
                             .toRepresentation(representation, pos)
@@ -690,9 +688,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         // relabeling. Dispatch via the type's own generator (e.g. for a
                         // @UplcRepr(UplcConstr) Point, the default is ProdUplcConstr, NOT
                         // this generator's Data-backed ProdDataList).
-                        val targetUnderlying = lctx
-                            .typeGenerator(input.sirType)
-                            .defaultRepresentation(input.sirType)
+                        val targetUnderlying =
+                            SirTypeUplcGenerator.defaultRepresentation(input.sirType)
                         val converted = input.toRepresentation(targetUnderlying, pos)
                         new RepresentationProxyLoweredValue(converted, tvr, pos)
                     case Fixed => emitConvert(input, ProdDataConstr, pos)

@@ -26,14 +26,14 @@ object UplcConstrOptionReprRules {
                     case Some(puc: ProductCaseClassRepresentation.ProdUplcConstr)
                         if puc.fieldReprs.nonEmpty =>
                         puc.fieldReprs.head
-                    case _ => lctx.typeGenerator(outTp).defaultRepresentation(outTp)
-            case _ => lctx.typeGenerator(outTp).defaultRepresentation(outTp)
+                    case _ => typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)
+            case _ => typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)
     }
 
     /** For operations returning a scalar (Boolean, etc.): use the output type's default repr. */
     val scalarRule: ReprRule = (outTp, _, lctx) =>
         given LoweringContext = lctx
-        lctx.typeGenerator(outTp).defaultRepresentation(outTp)
+        typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)
 
     /** For `get`: Option[A] -> A. Returns the Some's stored field repr. */
     val getRule: ReprRule = (outTp, inRepr, lctx) => someFieldRepr(inRepr, outTp, lctx)

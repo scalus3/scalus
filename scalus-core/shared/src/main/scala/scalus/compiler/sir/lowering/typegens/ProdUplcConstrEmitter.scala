@@ -70,9 +70,8 @@ object ProdUplcConstrEmitter {
                         // unannotated types, keep the arg's actual repr — that
                         // preserves existing behavior for plain product fields.
                         if hasClassLevelUplcRepr(paramType) then
-                            val targetRepr = lctx
-                                .typeGenerator(paramType)
-                                .defaultRepresentation(paramType)
+                            val targetRepr =
+                                SirTypeUplcGenerator.defaultRepresentation(paramType)
                             arg.maybeUpcast(paramType, constr.anns.pos)
                                 .toRepresentation(targetRepr, constr.anns.pos)
                         else arg
