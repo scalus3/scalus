@@ -1461,6 +1461,23 @@ object LoweredValue {
       */
     object Builder {
 
+        /** Convert `input` to `target` via a static `intermediate` repr — i.e.,
+          * `input.toRepresentation(intermediate, pos).toRepresentation(target, pos)`. Replaces
+          * per-emitter `viaXxx` helpers (Phase 5).
+          *
+          * For intermediates that depend on `input.sirType` (e.g.
+          * `SumBuiltinList(defaultDataRep(elemType))`), keep the per-emitter helper since the
+          * intermediate computation needs sirType context — this `via` only wraps the static case.
+          */
+        def via(
+            intermediate: LoweredValueRepresentation
+        )(
+            input: LoweredValue,
+            target: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): LoweredValue =
+            input.toRepresentation(intermediate, pos).toRepresentation(target, pos)
+
         def lvIfThenElse(
             cond: LoweredValue,
             thenBranch: LoweredValue,

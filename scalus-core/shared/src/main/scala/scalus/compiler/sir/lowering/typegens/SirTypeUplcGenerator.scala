@@ -29,14 +29,6 @@ trait SirTypeUplcGenerator {
         lctx: LoweringContext
     ): Boolean
 
-    def toRepresentation(
-        input: LoweredValue,
-        representation: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using
-        lctx: LoweringContext
-    ): LoweredValue
-
     def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValue
@@ -95,6 +87,30 @@ trait SirTypeUplcGenerator {
                 case tvr: TypeVarRepresentation => tvr.isBuiltin
                 case _                          => false
         }
+
+}
+
+/** Sub-trait for typegens that know how to convert their values to other representations directly —
+  * i.e., types whose conversion logic doesn't go through `SumDispatch` / `ProdDispatch`. Examples:
+  * primitives (Integer, ByteString, ...), Data, Fun, TypeVar, Unit, BLS curve elements,
+  * BuiltinValue, BuiltinArray, PackedDataMap.
+  *
+  * Sum and Prod typegens (DataConstrEmitter, SumCaseUplcConstr*, ProductCase*, OneElementWrapper,
+  * SumListEmitter*) extend the base `SirTypeUplcGenerator` *without* this sub-trait — their
+  * conversions are owned by `SumDispatch.toRepresentation` / `ProdDispatch.toRepresentation` and
+  * exposed via per-emitter `emitConvert` methods. Calling `toRepresentation` on those typegens
+  * directly is a compile-time error (no method to call), making the "concentrate Sum/Prod
+  * conversion in dispatchers" architectural rule machine-checked.
+  */
+trait SirTypeUplcConvertingGenerator extends SirTypeUplcGenerator {
+
+    def toRepresentation(
+        input: LoweredValue,
+        representation: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using
+        lctx: LoweringContext
+    ): LoweredValue
 
 }
 

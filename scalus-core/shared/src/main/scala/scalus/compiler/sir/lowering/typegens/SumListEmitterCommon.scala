@@ -28,13 +28,6 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = true
 
-    override def toRepresentation(
-        input: LoweredValue,
-        outputRepresentation: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        SumDispatch.dispatcherBypass("SumListEmitterCommon")
-
     override def upcastOne(
         input: LoweredValue,
         targetType: SIRType,

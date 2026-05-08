@@ -5,21 +5,14 @@ import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.typegens.*
 
 /** Dispatch layer for sum-typed operations. Single entry point for Sum-side `toRepresentation`;
-  * per-typegen overrides throw `dispatcherBypass` to surface any caller that bypassed this object.
-  * See `docs/local/claude/compiler/sum-prod-dispatch-design.md`.
+  * routing typegens (DataConstrEmitter, SumCaseUplcConstr*, SumListEmitterCommon subclasses, plus
+  * the Prod typegens that delegate via ProdDispatch) extend the base `SirTypeUplcGenerator` only —
+  * they don't have `toRepresentation` at all, so direct calls are compile-time errors. See
+  * `docs/local/claude/compiler/sum-prod-dispatch-design.md`.
   */
 object SumDispatch {
 
     import SumCaseClassRepresentation.*
-
-    /** Throw used by Sum typegens' `toRepresentation` overrides to assert that dispatch goes
-      * through this object. Centralized so the message format stays consistent and the four call
-      * sites are one-liners.
-      */
-    def dispatcherBypass(genName: String): Nothing =
-        throw new IllegalStateException(
-          s"$genName.toRepresentation called directly — dispatch via SumDispatch.toRepresentation"
-        )
 
     def toRepresentation(
         input: LoweredValue,
@@ -39,8 +32,15 @@ object SumDispatch {
             case ProductCaseSirTypeGenerator | ProductCaseUplcConstrSirTypeGenerator |
                 ProductCaseUplcOnlySirTypeGenerator | _: OneElementWrapperEmitter =>
                 ProdDispatch.toRepresentation(input, target, pos)
-            case _ =>
-                gen.toRepresentation(input, target, pos)
+            case converting: typegens.SirTypeUplcConvertingGenerator =>
+                converting.toRepresentation(input, target, pos)
+            case other =>
+                throw new IllegalStateException(
+                  s"SumDispatch.toRepresentation: typegen ${other.getClass.getSimpleName} for " +
+                      s"${input.sirType.show} doesn't extend SirTypeUplcConvertingGenerator and " +
+                      s"isn't a routing case here. This is a bug in the dispatch table — either " +
+                      s"add a routing case or have the typegen extend SirTypeUplcConvertingGenerator."
+                )
     }
 
     /** Plain sum-class source path: handles DataConstr / PairIntDataList / SumBuiltinList /

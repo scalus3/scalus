@@ -620,7 +620,7 @@ object SumUplcConstrEmitter {
                 sumUplcConstrToDataConstr(input, inSum, pos)
             // SumUplcConstr → PairIntDataList: go through DataConstr
             case (_: SumUplcConstr, PairIntDataList) =>
-                viaDataConstr(input, PairIntDataList, pos)
+                via(DataConstr)(input, PairIntDataList, pos)
             // SumUplcConstr → SumUplcConstr
             case (inSum: SumUplcConstr, outSum: SumUplcConstr) =>
                 if inSum.isCompatibleOn(input.sirType, outSum, pos) then
@@ -701,7 +701,7 @@ object SumUplcConstrEmitter {
                 prodUplcConstrToSumUplcConstr(input, inProd, outSum, pos)
             // DataConstr → SumUplcConstr: go through PairIntDataList
             case (DataConstr, _: SumUplcConstr) =>
-                viaPairIntDataList(input, representation, pos)
+                via(PairIntDataList)(input, representation, pos)
             // TypeVarRepresentation → SumUplcConstr/SumBuiltinList: dispatch by source kind
             case (
                   tvr: TypeVarRepresentation,
@@ -1109,26 +1109,5 @@ object SumUplcConstrEmitter {
             case None =>
                 new RepresentationProxyLoweredValue(input, outSum, pos)
     }
-
-    /** Convert via the `DataConstr` intermediate. Used for `SumUplcConstr → PairIntDataList` where
-      * the bytes need to be in `Constr`-of-Data form before unpacking to `(tag, fieldList)`.
-      */
-    private def viaDataConstr(
-        input: LoweredValue,
-        target: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        input.toRepresentation(DataConstr, pos).toRepresentation(target, pos)
-
-    /** Convert via the `PairIntDataList` intermediate. Used for `DataConstr → SumUplcConstr` where
-      * the input is unpacked to `(tag, fieldList)` before being rebuilt as native `Constr(tag,
-      * fields)` per-variant.
-      */
-    private def viaPairIntDataList(
-        input: LoweredValue,
-        target: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        input.toRepresentation(PairIntDataList, pos).toRepresentation(target, pos)
 
 }

@@ -34,13 +34,6 @@ case class OneElementWrapperEmitter(
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean =
         argGenerator.canBeConvertedToData(tp)
 
-    override def toRepresentation(
-        input: LoweredValue,
-        representation: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        ProdDispatch.dispatcherBypass("OneElementWrapperEmitter")
-
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {

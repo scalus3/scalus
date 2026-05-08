@@ -8,7 +8,7 @@ import scalus.uplc.Term
 
 /** Representation is data in pack. Used like Product with have one element wibt name 'toList'
   */
-object PackedDataMapEmitter extends SirTypeUplcGenerator {
+object PackedDataMapEmitter extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext

@@ -40,13 +40,6 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = true
 
-    override def toRepresentation(
-        input: LoweredValue,
-        representation: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        SumDispatch.dispatcherBypass("SumCaseUplcConstrSirTypeGenerator")
-
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {

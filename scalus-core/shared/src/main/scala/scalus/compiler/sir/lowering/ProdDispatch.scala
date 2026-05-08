@@ -4,20 +4,13 @@ import scalus.compiler.sir.*
 import scalus.compiler.sir.lowering.typegens.*
 
 /** Dispatch layer for product-typed operations. Single entry point for Prod-side
-  * `toRepresentation`; per-typegen overrides throw `dispatcherBypass` to surface any caller that
-  * bypassed this object. See `docs/local/claude/compiler/sum-prod-dispatch-design.md`.
+  * `toRepresentation`. Routing typegens (ProductCase*, OneElementWrapperEmitter) extend the base
+  * `SirTypeUplcGenerator` only — they don't have `toRepresentation` at all, so direct calls are
+  * compile-time errors. See `docs/local/claude/compiler/sum-prod-dispatch-design.md`.
   */
 object ProdDispatch {
 
     import ProductCaseClassRepresentation.*
-
-    /** Throw used by Prod typegens' `toRepresentation` overrides to assert that dispatch goes
-      * through this object.
-      */
-    def dispatcherBypass(genName: String): Nothing =
-        throw new IllegalStateException(
-          s"$genName.toRepresentation called directly — dispatch via ProdDispatch.toRepresentation"
-        )
 
     def toRepresentation(
         input: LoweredValue,
@@ -36,8 +29,15 @@ object ProdDispatch {
                 else ProductCaseSirTypeGenerator.emitConvert(input, target, pos)
             case oneElement: OneElementWrapperEmitter =>
                 oneElement.emitConvert(input, target, pos)
-            case _ =>
-                gen.toRepresentation(input, target, pos)
+            case converting: typegens.SirTypeUplcConvertingGenerator =>
+                converting.toRepresentation(input, target, pos)
+            case other =>
+                throw new IllegalStateException(
+                  s"ProdDispatch.toRepresentation: typegen ${other.getClass.getSimpleName} for " +
+                      s"${input.sirType.show} doesn't extend SirTypeUplcConvertingGenerator and " +
+                      s"isn't a routing case here. This is a bug in the dispatch table — either " +
+                      s"add a routing case or have the typegen extend SirTypeUplcConvertingGenerator."
+                )
     }
 
     def genConstr(

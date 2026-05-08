@@ -4,7 +4,7 @@ package typegens
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
-object FunSirTypeGenerator extends SirTypeUplcGenerator {
+object FunSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(
         tp: SIRType

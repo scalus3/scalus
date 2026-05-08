@@ -8,7 +8,7 @@ import scalus.compiler.sir.lowering.PrimitiveRepresentation
 import scalus.uplc.Constant
 import scalus.uplc.builtin.Data.toData
 
-trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
+trait PrimitiveSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     def defaultRepresentation(tp: SIRType)(using LoweringContext): LoweredValueRepresentation =
         PrimitiveRepresentation.Constant
@@ -832,7 +832,7 @@ object BLS12_381_G2_SirTypeGenerator extends PrimitiveSirTypeGenerator {
 
 }
 
-object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcGenerator {
+object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         lctx: LoweringContext

@@ -33,13 +33,6 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
     override def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = false
 
-    override def toRepresentation(
-        input: LoweredValue,
-        outputRepresentation: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        ProdDispatch.dispatcherBypass("ProductCaseUplcOnlySirTypeGenerator")
-
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValue = {

@@ -16,7 +16,7 @@ import scalus.compiler.sir.SIR.Pattern
   *
   * Pattern matching on Data requires PlutusV4's Case on Data instruction.
   */
-object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
+object SIRTypeUplcDataGenerator extends SirTypeUplcConvertingGenerator {
     import LoweredValue.Builder.*
 
     override def defaultRepresentation(tp: SIRType)(using

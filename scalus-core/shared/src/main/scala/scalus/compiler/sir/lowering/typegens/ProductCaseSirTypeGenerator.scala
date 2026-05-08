@@ -61,13 +61,6 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
         true
     }
 
-    override def toRepresentation(
-        input: LoweredValue,
-        representation: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        ProdDispatch.dispatcherBypass("ProductCaseSirTypeGenerator")
-
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         lctx: LoweringContext
     ): LoweredValue = {
@@ -292,7 +285,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
             case (ProdDataList, PairIntDataList) =>
-                viaProdDataConstr(input, PairIntDataList, pos)
+                via(ProdDataConstr)(input, PairIntDataList, pos)
             case (ProdDataList, puc: ProdUplcConstr) =>
                 // ProdDataList → ProdUplcConstr: extract each field via headList/tailList,
                 // convert from Data to native repr, build Term.Constr(tag, [fields])
@@ -370,7 +363,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 input
             case (PackedDataList, _: ProdUplcConstr) | (PackedDataList, OneElementWrapper(_)) |
                 (PackedDataList, _: ProdBuiltinPair) =>
-                viaProdDataList(input, representation, pos)
+                via(ProdDataList)(input, representation, pos)
             case (ProdDataConstr, ProdDataList) =>
                 val pairIntDataList = lvBuiltinApply(
                   SIRBuiltins.unConstrData,
@@ -387,7 +380,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
             case (ProdDataConstr, PackedDataList) =>
-                viaProdDataList(input, PackedDataList, pos)
+                via(ProdDataList)(input, PackedDataList, pos)
             case (ProdDataConstr, ProdDataConstr) =>
                 input
             case (ProdDataConstr, PairIntDataList) =>
@@ -399,7 +392,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
             case (ProdDataConstr, _: ProdUplcConstr) | (ProdDataConstr, _: ProdBuiltinPair) =>
-                viaProdDataList(input, representation, pos)
+                via(ProdDataList)(input, representation, pos)
             case (puc: ProdUplcConstr, ProdDataList) =>
                 val constrDecl = retrieveConstrDecl(input.sirType, pos)
                 val fieldNames =
@@ -453,7 +446,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 }
             case (_: ProdUplcConstr, PackedDataList) | (_: ProdUplcConstr, ProdDataConstr) |
                 (_: ProdUplcConstr, PairIntDataList) =>
-                viaProdDataList(input, representation, pos)
+                via(ProdDataList)(input, representation, pos)
             case (inPuc: ProdUplcConstr, outPuc: ProdUplcConstr) =>
                 if inPuc == outPuc then input
                 else {
@@ -635,7 +628,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 if tvr.kind == SIRType.TypeVarKind.Transparent then input
                 else TypeVarEmitter.bridgeToKind(input, tvr, pos)
             case (_: ProdBuiltinPair, _) =>
-                viaProdDataList(input, representation, pos)
+                via(ProdDataList)(input, representation, pos)
             case (_: TypeVarRepresentation, ProdDataConstr) =>
                 RepresentationProxyLoweredValue(input, representation, pos)
             case (tvr: TypeVarRepresentation, _) =>
@@ -657,7 +650,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         new RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
                             .toRepresentation(representation, pos)
                     case Fixed =>
-                        viaProdDataConstr(input, representation, pos)
+                        via(ProdDataConstr)(input, representation, pos)
             case (_, tvr: TypeVarRepresentation) =>
                 // Phase 5 canonicalization: Unwrapped/Fixed go through bridgeToKind (always
                 // relabels as target). The Fixed arm previously recursed with `ProdDataConstr`
@@ -672,28 +665,5 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
         }
     }
-
-    /** Convert via the `ProdDataList` intermediate. The product-side analogue of
-      * `SumListEmitterCommon.viaDataList`: many product reprs reach a target through ProdDataList
-      * (the flat list-of-Data form). Extracted so the bodies of the (PackedDataList, *) /
-      * (ProdDataConstr, *) / (ProdUplcConstr, *) / (ProdBuiltinPair, *) cases stay one-line.
-      */
-    private def viaProdDataList(
-        input: LoweredValue,
-        target: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        input.toRepresentation(ProdDataList, pos).toRepresentation(target, pos)
-
-    /** Convert via the `ProdDataConstr` intermediate. Used for ProdDataList → PairIntDataList and
-      * source-TypeVar Fixed conversions where the bytes need to be in `Constr`-of-Data form before
-      * the second hop.
-      */
-    private def viaProdDataConstr(
-        input: LoweredValue,
-        target: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
-        input.toRepresentation(ProdDataConstr, pos).toRepresentation(target, pos)
 
 }

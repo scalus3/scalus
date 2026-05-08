@@ -12,7 +12,7 @@ import scalus.compiler.sir.*
   * Default representation: ProdBuiltinArray(elementRepr) (native UPLC array) Data representation:
   * PackedArrayAsList (Data.List)
   */
-object ProdBuiltinArrayEmitter extends SirTypeUplcGenerator {
+object ProdBuiltinArrayEmitter extends SirTypeUplcConvertingGenerator {
 
     private def extractElemType(tp: SIRType): SIRType =
         ProductCaseClassRepresentation.ProdBuiltinArray

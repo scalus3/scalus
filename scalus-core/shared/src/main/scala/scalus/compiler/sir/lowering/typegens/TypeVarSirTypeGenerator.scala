@@ -7,7 +7,7 @@ import scalus.compiler.sir.*
 /** We assume that type variable can be converted to data, and it is impossible to do something
   * meaningful with it in the UPLC, except pass the value as an argument in unchanged form.
   */
-object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
+object TypeVarSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(
         tp: SIRType
@@ -300,8 +300,18 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                 val r1 = input.toRepresentation(PrimitiveRepresentation.PackedData, pos)
                 input.sirType match
                     case p: SIRType.Primitive =>
-                        SirTypeUplcGenerator(p)
-                            .toRepresentation(r1, PrimitiveRepresentation.Constant, pos)
+                        SirTypeUplcGenerator(p) match
+                            case converting: SirTypeUplcConvertingGenerator =>
+                                converting.toRepresentation(
+                                  r1,
+                                  PrimitiveRepresentation.Constant,
+                                  pos
+                                )
+                            case other =>
+                                throw LoweringException(
+                                  s"TypeVarSirTypeGenerator: expected primitive typegen for ${p.show}, got ${other.getClass.getSimpleName}",
+                                  pos
+                                )
                     case _ =>
                         throw LoweringException(
                           s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",

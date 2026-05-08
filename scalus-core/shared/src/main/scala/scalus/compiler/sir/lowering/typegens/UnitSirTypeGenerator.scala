@@ -3,7 +3,7 @@ package typegens
 
 import scalus.compiler.sir.*
 
-object UnitSirTypeGenerator extends SirTypeUplcGenerator {
+object UnitSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext

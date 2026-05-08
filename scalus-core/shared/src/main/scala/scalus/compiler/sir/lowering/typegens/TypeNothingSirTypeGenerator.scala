@@ -5,7 +5,7 @@ import scalus.compiler.sir.*
 
 /** throw error on any attempt.
   */
-object TypeNothingSirTypeGenerator extends SirTypeUplcGenerator {
+object TypeNothingSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
