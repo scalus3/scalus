@@ -665,17 +665,9 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                     )
             // === SumBuiltinList(Constant) special cases ===
             case (SumBuiltinList(PrimitiveRepresentation.Constant), PackedSumDataList) =>
-                val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
-                input
-                    .toRepresentation(SumBuiltinList(elemRepr), pos)
-                    .toRepresentation(PackedSumDataList, pos)
+                viaDataList(input, PackedSumDataList, pos)
             case (PackedSumDataList, SumBuiltinList(PrimitiveRepresentation.Constant)) =>
-                val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
-                input
-                    .toRepresentation(SumBuiltinList(elemRepr), pos)
-                    .toRepresentation(outputRepresentation, pos)
+                viaDataList(input, outputRepresentation, pos)
             case (
                   SumBuiltinList(PrimitiveRepresentation.Constant),
                   tv @ TypeVarRepresentation(kind)
@@ -739,11 +731,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                     else convertBuiltinList(input, elemType, inElemRepr, outElemRepr, out, pos)
             // === SumBuiltinList → SumDataAssocMap (go through SumPairBuiltinList) ===
             case (SumBuiltinList(_), SumDataAssocMap) =>
-                val elemType = retrieveElementType(input.sirType, pos)
-                val pairRepr = SumPairBuiltinList.fromElementType(elemType, pos)
-                input
-                    .toRepresentation(pairRepr, pos)
-                    .toRepresentation(SumDataAssocMap, pos)
+                viaPairBuiltinList(input, SumDataAssocMap, pos)
             // === PackedSumDataList conversions ===
             case (PackedSumDataList, out @ SumBuiltinList(_)) =>
                 val elemType = retrieveElementType(input.sirType, pos)
@@ -756,31 +744,16 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
             case (PackedSumDataList, PackedSumDataList) =>
                 input
             case (PackedSumDataList, SumDataAssocMap) =>
-                val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
-                val pairRepr = SumPairBuiltinList.fromElementType(elemType, pos)
-                input
-                    .toRepresentation(SumBuiltinList(elemRepr), pos)
-                    .toRepresentation(pairRepr, pos)
-                    .toRepresentation(SumDataAssocMap, pos)
+                viaDataList(input, SumDataAssocMap, pos)
             case (PackedSumDataList, out @ SumPairBuiltinList(_, _)) =>
-                val elemType = retrieveElementType(input.sirType, pos)
-                val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
-                input
-                    .toRepresentation(SumBuiltinList(elemRepr), pos)
-                    .toRepresentation(out, pos)
+                viaDataList(input, out, pos)
             // === SumPairBuiltinList conversions ===
             case (SumPairBuiltinList(_, _), SumPairBuiltinList(_, _)) =>
                 input
             case (SumPairBuiltinList(_, _), SumDataAssocMap) =>
                 lvBuiltinApply(SIRBuiltins.mapData, input, input.sirType, SumDataAssocMap, pos)
             case (SumPairBuiltinList(_, _), PackedSumDataList) =>
-                val elemType = retrieveElementType(input.sirType, pos)
-                val dataElemRepr =
-                    SirTypeUplcGenerator.defaultDataRepresentation(elemType)
-                input
-                    .toRepresentation(SumBuiltinList(dataElemRepr), pos)
-                    .toRepresentation(PackedSumDataList, pos)
+                viaDataList(input, PackedSumDataList, pos)
             case (
                   SumPairBuiltinList(inKeyRepr, inValueRepr),
                   out @ SumBuiltinList(outElemRepr)
@@ -800,11 +773,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                 val pairRepr = SumPairBuiltinList.fromElementType(elemType, pos)
                 lvBuiltinApply(SIRBuiltins.unMapData, input, input.sirType, pairRepr, pos)
             case (SumDataAssocMap, _) =>
-                val elemType = retrieveElementType(input.sirType, pos)
-                val pairRepr = SumPairBuiltinList.fromElementType(elemType, pos)
-                input
-                    .toRepresentation(pairRepr, pos)
-                    .toRepresentation(outputRepresentation, pos)
+                viaPairBuiltinList(input, outputRepresentation, pos)
             // === PairIntDataList for list-typed values (suspicious — DataConstr should
             //     not exist for List types per design, but PairIntDataList is its
             //     unpacked form. Probe with logging if hit during refactor).
@@ -963,6 +932,36 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
         )
         if outputRepresentation == outListRepr then result
         else RepresentationProxyLoweredValue(result, outputRepresentation, pos)
+    }
+
+    /** Convert via the input's `SumBuiltinList(defaultDataRepresentation(elemType))` intermediate.
+      * Several conversion arms in `emitConvert` route through this Data-form list — extracting it
+      * keeps the body declarative.
+      */
+    private def viaDataList(
+        input: LoweredValue,
+        target: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        val elemType = retrieveElementType(input.sirType, pos)
+        val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
+        input
+            .toRepresentation(SumCaseClassRepresentation.SumBuiltinList(elemRepr), pos)
+            .toRepresentation(target, pos)
+    }
+
+    /** Convert via the input's `SumPairBuiltinList(defaultDataReprs)` intermediate. The natural
+      * pair-form for Data-key/Data-value conversions; used as the bridge between map-shaped Sum
+      * reprs.
+      */
+    private def viaPairBuiltinList(
+        input: LoweredValue,
+        target: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        val elemType = retrieveElementType(input.sirType, pos)
+        val pairRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(elemType, pos)
+        input.toRepresentation(pairRepr, pos).toRepresentation(target, pos)
     }
 
     private def hasConstantOrTypeVar(
