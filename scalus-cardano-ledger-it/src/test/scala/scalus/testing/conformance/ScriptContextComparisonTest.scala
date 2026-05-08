@@ -51,11 +51,11 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
 
             // Load protocol params - first try explicit pparamsHash, then fall back to searching
             val paramsOpt = vector.pparamsHash
-                .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                .flatMap(hash => ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash))
                 .orElse(
-                  ConwayProtocolParams
+                  ConwayProtocolParamsFixtures
                       .extractPparamsHash(vector.oldLedgerState, pparamsDir)
-                      .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                      .flatMap(hash => ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash))
                 )
                 .map(_.toProtocolParams)
 
@@ -191,11 +191,11 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
             val utxos = state.utxos
 
             val paramsOpt = vector.pparamsHash
-                .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                .flatMap(hash => ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash))
                 .orElse(
-                  ConwayProtocolParams
+                  ConwayProtocolParamsFixtures
                       .extractPparamsHash(vector.oldLedgerState, pparamsDir)
-                      .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                      .flatMap(hash => ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash))
                 )
                 .map(_.toProtocolParams)
 
@@ -269,11 +269,11 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
             val utxos = state.utxos
 
             val paramsOpt = vector.pparamsHash
-                .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                .flatMap(hash => ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash))
                 .orElse(
-                  ConwayProtocolParams
+                  ConwayProtocolParamsFixtures
                       .extractPparamsHash(vector.oldLedgerState, pparamsDir)
-                      .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                      .flatMap(hash => ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash))
                 )
                 .map(_.toProtocolParams)
 
