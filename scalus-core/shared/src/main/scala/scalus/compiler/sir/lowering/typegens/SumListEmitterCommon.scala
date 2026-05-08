@@ -841,35 +841,34 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                     .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
             case (_, tv: TypeVarRepresentation) =>
+                // Phase 5: target TypeVar dispatch via SirTypeUplcGenerator.default* lookups.
+                // For SumBuiltinListEmitter types these resolve to PackedSumDataList (unchanged
+                // behavior); for SumPairBuiltinListEmitter / PackedDataMapEmitter types the
+                // hardcoded PackedSumDataList was wrong (their natural Data forms are
+                // SumDataAssocMap / PackedDataMap respectively) — these lookups produce the
+                // correct underlying repr.
                 import SIRType.TypeVarKind.*
                 tv.kind match
                     case Transparent =>
                         new RepresentationProxyLoweredValue(input, tv, pos)
                     case Unwrapped =>
-                        val targetUnderlying = defaultRepresentation(input.sirType)
+                        val targetUnderlying =
+                            SirTypeUplcGenerator.defaultRepresentation(input.sirType)
                         val converted = input.toRepresentation(targetUnderlying, pos)
                         new RepresentationProxyLoweredValue(converted, tv, pos)
                     case Fixed =>
-                        val inputAsData = input.toRepresentation(PackedSumDataList, pos)
+                        val targetUnderlying =
+                            SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
+                        val inputAsData = input.toRepresentation(targetUnderlying, pos)
                         new RepresentationProxyLoweredValue(inputAsData, tv, pos)
             case (tv: TypeVarRepresentation, _) =>
-                import SIRType.TypeVarKind.*
-                tv.kind match
-                    case Transparent =>
-                        new RepresentationProxyLoweredValue(input, outputRepresentation, pos)
-                    case Unwrapped =>
-                        val sourceUnderlying = defaultRepresentation(input.sirType)
-                        val r0 = new RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
-                        r0.toRepresentation(outputRepresentation, pos)
-                    case Fixed =>
-                        if input.representation == outputRepresentation then input
-                        else
-                            val r0 = new RepresentationProxyLoweredValue(
-                              input,
-                              PackedSumDataList,
-                              pos
-                            )
-                            r0.toRepresentation(outputRepresentation, pos)
+                // Phase 5: source TypeVar dispatch via shared helper. Resolves the type's
+                // underlying default through `SirTypeUplcGenerator.default*` rather than the
+                // trait's polymorphic call (same for the typegens that reach this branch) and
+                // replaces the hardcoded `PackedSumDataList` Fixed underlying with each typegen's
+                // own `defaultTypeVarReperesentation` (correct for SumPairBuiltinList /
+                // PackedDataMap types whose Fixed bytes are NOT in `PackedSumDataList` form).
+                TypeVarEmitter.bridgeFromKind(input, tv, outputRepresentation, pos)
             // SumReprProxy: unwrap and delegate
             case (_: SumReprProxy, _) =>
                 SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)

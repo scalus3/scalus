@@ -16,10 +16,8 @@ import scalus.compiler.sir.*
   *     target.
   *
   * `bridgeFromKind` is currently called from `SumUplcConstrEmitter.emitConvert`,
-  * `SumDispatch.sumCaseImpl`, and `OneElementWrapperEmitter.emitConvert`. `SumListEmitterCommon.
-  * emitConvert` still open-codes an equivalent kind dispatch (with hardcoded underlying reprs that
-  * happen to align with `SirTypeUplcGenerator.default*` for its reachable typegens); migration
-  * pending a per-arm semantic audit.
+  * `SumDispatch.sumCaseImpl`, `OneElementWrapperEmitter.emitConvert`, and
+  * `SumListEmitterCommon.emitConvert`.
   */
 object TypeVarEmitter {
 
