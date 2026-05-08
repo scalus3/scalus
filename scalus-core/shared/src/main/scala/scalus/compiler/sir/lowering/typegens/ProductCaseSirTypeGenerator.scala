@@ -292,7 +292,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
             case (ProdDataList, PairIntDataList) =>
-                emitConvert(input, ProdDataConstr, pos).toRepresentation(PairIntDataList, pos)
+                viaProdDataConstr(input, PairIntDataList, pos)
             case (ProdDataList, puc: ProdUplcConstr) =>
                 // ProdDataList → ProdUplcConstr: extract each field via headList/tailList,
                 // convert from Data to native repr, build Term.Constr(tag, [fields])
@@ -368,12 +368,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 lvBuiltinApply(SIRBuiltins.unListData, input, input.sirType, ProdDataList, pos)
             case (PackedDataList, PackedDataList) =>
                 input
-            case (PackedDataList, puc: ProdUplcConstr) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(puc, pos)
-            case (PackedDataList, outputRep @ OneElementWrapper(_)) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(outputRep, pos)
-            case (PackedDataList, outPair: ProdBuiltinPair) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(outPair, pos)
+            case (PackedDataList, _: ProdUplcConstr) | (PackedDataList, OneElementWrapper(_)) |
+                (PackedDataList, _: ProdBuiltinPair) =>
+                viaProdDataList(input, representation, pos)
             case (ProdDataConstr, ProdDataList) =>
                 val pairIntDataList = lvBuiltinApply(
                   SIRBuiltins.unConstrData,
@@ -390,7 +387,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   pos
                 )
             case (ProdDataConstr, PackedDataList) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(PackedDataList, pos)
+                viaProdDataList(input, PackedDataList, pos)
             case (ProdDataConstr, ProdDataConstr) =>
                 input
             case (ProdDataConstr, PairIntDataList) =>
@@ -401,10 +398,8 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                   PairIntDataList,
                   pos
                 )
-            case (ProdDataConstr, puc: ProdUplcConstr) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(puc, pos)
-            case (ProdDataConstr, outPair: ProdBuiltinPair) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(outPair, pos)
+            case (ProdDataConstr, _: ProdUplcConstr) | (ProdDataConstr, _: ProdBuiltinPair) =>
+                viaProdDataList(input, representation, pos)
             case (puc: ProdUplcConstr, ProdDataList) =>
                 val constrDecl = retrieveConstrDecl(input.sirType, pos)
                 val fieldNames =
@@ -456,12 +451,9 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         Doc.text("UplcConstr→DataList(") + input.docRef(ctx) + Doc.text(")")
                     override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
                 }
-            case (_: ProdUplcConstr, PackedDataList) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(PackedDataList, pos)
-            case (_: ProdUplcConstr, ProdDataConstr) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(ProdDataConstr, pos)
-            case (_: ProdUplcConstr, PairIntDataList) =>
-                input.toRepresentation(ProdDataList, pos).toRepresentation(PairIntDataList, pos)
+            case (_: ProdUplcConstr, PackedDataList) | (_: ProdUplcConstr, ProdDataConstr) |
+                (_: ProdUplcConstr, PairIntDataList) =>
+                viaProdDataList(input, representation, pos)
             case (inPuc: ProdUplcConstr, outPuc: ProdUplcConstr) =>
                 if inPuc == outPuc then input
                 else {
@@ -653,9 +645,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                             .toRepresentation(typeVarRepr, pos)
                             .toRepresentation(representation, pos)
             case (_: ProdBuiltinPair, _) =>
-                input
-                    .toRepresentation(ProdDataList, pos)
-                    .toRepresentation(representation, pos)
+                viaProdDataList(input, representation, pos)
             case (_: TypeVarRepresentation, ProdDataConstr) =>
                 RepresentationProxyLoweredValue(input, representation, pos)
             case (tvr: TypeVarRepresentation, _) =>
@@ -677,8 +667,7 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                         new RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
                             .toRepresentation(representation, pos)
                     case Fixed =>
-                        val inputDataConstr = input.toRepresentation(ProdDataConstr, pos)
-                        inputDataConstr.toRepresentation(representation, pos)
+                        viaProdDataConstr(input, representation, pos)
             case (_, tvr: TypeVarRepresentation) =>
                 import SIRType.TypeVarKind.*
                 tvr.kind match
@@ -700,5 +689,28 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                 )
         }
     }
+
+    /** Convert via the `ProdDataList` intermediate. The product-side analogue of
+      * `SumListEmitterCommon.viaDataList`: many product reprs reach a target through ProdDataList
+      * (the flat list-of-Data form). Extracted so the bodies of the (PackedDataList, *) /
+      * (ProdDataConstr, *) / (ProdUplcConstr, *) / (ProdBuiltinPair, *) cases stay one-line.
+      */
+    private def viaProdDataList(
+        input: LoweredValue,
+        target: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue =
+        input.toRepresentation(ProdDataList, pos).toRepresentation(target, pos)
+
+    /** Convert via the `ProdDataConstr` intermediate. Used for ProdDataList → PairIntDataList and
+      * source-TypeVar Fixed conversions where the bytes need to be in `Constr`-of-Data form before
+      * the second hop.
+      */
+    private def viaProdDataConstr(
+        input: LoweredValue,
+        target: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue =
+        input.toRepresentation(ProdDataConstr, pos).toRepresentation(target, pos)
 
 }
