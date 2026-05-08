@@ -491,24 +491,20 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
                 )
     }
 
-    /** Outbound conversion graph from a `DataConstr`-shaped value. Each row pairs the expected
-      * source representation with the conversion step. The source repr is `DataConstr` for every
-      * row here; the pair shape is what `ConversionStep`-using emitters declare per design §3.3, so
-      * a future graph walker can read the table without asking the emitter who owns it.
+    /** Outbound conversion graph from a `DataConstr`-shaped value. The owned source repr is always
+      * `DataConstr`; `emitConvert` enforces that invariant before consulting the table. Returns
+      * `None` for unhandled targets (caller should treat that as a hard error since this emitter is
+      * reached only via `SumDispatch.sumCaseImpl`'s explicit fan-out).
+      *
+      * Aligned with `OneElementWrapperEmitter.outboundStep`'s `Option[ConversionStep]` shape so a
+      * future graph walker can iterate emitters uniformly.
       */
-    def outboundStep(
-        target: LoweredValueRepresentation
-    ): Option[(LoweredValueRepresentation, ConversionStep)] =
-        target match {
-            case DataConstr =>
-                Some((DataConstr, ConversionStep.Identity))
-            case PairIntDataList =>
-                Some((DataConstr, ConversionStep.Atomic(unConstrDataAtomic)))
-            case _: SumBuiltinList | PackedSumDataList | _: SumUplcConstr =>
-                Some((DataConstr, ConversionStep.Via(PairIntDataList)))
-            case _ =>
-                None
-        }
+    def outboundStep(target: LoweredValueRepresentation): Option[ConversionStep] = target match
+        case DataConstr      => Some(ConversionStep.Identity)
+        case PairIntDataList => Some(ConversionStep.Atomic(unConstrDataAtomic))
+        case _: SumBuiltinList | PackedSumDataList | _: SumUplcConstr =>
+            Some(ConversionStep.Via(PairIntDataList))
+        case _ => None
 
     private val unConstrDataAtomic: ConversionStep.AtomicEmit =
         new ConversionStep.AtomicEmit {
@@ -521,26 +517,24 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
         }
 
     /** Convert from a `DataConstr` source to `target`. TypeVar-source/target handling lives in
-      * `SumDispatch.sumCaseImpl`; only the targets listed in `outboundStep` reach this method. The
-      * source-repr check enforces the declared row's invariant — `input.representation` must equal
-      * the table's source.
+      * `SumDispatch.sumCaseImpl`; only the targets listed in `outboundStep` reach this method.
       */
     def emitConvert(
         input: LoweredValue,
         target: LoweredValueRepresentation,
         pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue =
+    )(using lctx: LoweringContext): LoweredValue = {
+        require(
+          input.representation == DataConstr,
+          s"DataConstrEmitter.emitConvert: expected source DataConstr, got ${input.representation} for ${input.sirType.show}"
+        )
         outboundStep(target) match
-            case Some((expectedSrc, step)) =>
-                require(
-                  input.representation == expectedSrc,
-                  s"DataConstrEmitter.emitConvert: expected source $expectedSrc, got ${input.representation} for ${input.sirType.show}"
-                )
-                ConversionStep(step, input, target, pos)
+            case Some(step) => ConversionStep(step, input, target, pos)
             case None =>
                 throw LoweringException(
                   s"DataConstrEmitter.emitConvert: unsupported target $target for ${input.sirType.show}",
                   pos
                 )
+    }
 
 }
