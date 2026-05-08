@@ -221,46 +221,22 @@ case class OneElementWrapperEmitter(
         }
     }
 
-    /** Outbound conversion graph from a `OneElementWrapper(_)` value (Phase 5).
-      *
-      * Returns `Some(step)` for every target this emitter handles directly; `None` indicates the
-      * source-target pair should fall through to `ProductCaseSirTypeGenerator.emitConvert`. The
-      * caller (this emitter's `emitConvert`) is responsible for verifying that
-      * `input.representation` is `OneElementWrapper(_)` before dispatching through the table.
+    /** Convert a `OneElementWrapper(_)` source to `target`. The handled targets cover the wrapper's
+      * direct outbound moves (rewrap with a different argRepr, materialize as `ProdDataList`, route
+      * via `ProdDataList` for `ProdDataConstr`, relabel-as-target for TypeVar). Other source-target
+      * pairs fall through to `ProductCaseSirTypeGenerator.emitConvert`; source TypeVar bytes route
+      * through `bridgeFromKind`.
       */
-    private def outboundStep(
-        target: LoweredValueRepresentation
-    ): Option[ConversionStep] = {
-        import ProductCaseClassRepresentation.*
-        target match
-            case _: OneElementWrapper =>
-                Some(ConversionStep.Atomic(rewrapAtomic))
-            case ProdDataList =>
-                Some(ConversionStep.Atomic(toProdDataListAtomic))
-            case ProdDataConstr =>
-                Some(ConversionStep.Via(ProdDataList))
-            case _: TypeVarRepresentation =>
-                Some(ConversionStep.Atomic(toTypeVarAtomic))
-            case _ => None
-    }
-
-    private val rewrapAtomic: ConversionStep.AtomicEmit = new ConversionStep.AtomicEmit {
-        def emit(
-            input: LoweredValue,
-            target: LoweredValueRepresentation,
-            pos: SIRPosition
-        )(using LoweringContext): LoweredValue = {
-            import ProductCaseClassRepresentation.OneElementWrapper
-            val newArgRepr = target match
-                case OneElementWrapper(r) => r
-                case other =>
-                    throw LoweringException(
-                      s"OneElementWrapperEmitter.rewrapAtomic: unexpected target $other",
-                      pos
-                    )
-            input.representation match
-                case OneElementWrapper(argRepr) if argRepr == newArgRepr => input
-                case _ =>
+    def emitConvert(
+        input: LoweredValue,
+        representation: LoweredValueRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        import ProductCaseClassRepresentation.{OneElementWrapper, ProdDataList, ProdDataConstr}
+        (input.representation, representation) match
+            case (OneElementWrapper(argRepr), OneElementWrapper(newArgRepr)) =>
+                if argRepr == newArgRepr then input
+                else
                     val newArg = argLoweredValue(input).toRepresentation(newArgRepr, pos)
                     new TypeRepresentationProxyLoweredValue(
                       newArg,
@@ -268,79 +244,48 @@ case class OneElementWrapperEmitter(
                       OneElementWrapper(newArgRepr),
                       input.pos
                     )
-        }
-    }
-
-    private val toProdDataListAtomic: ConversionStep.AtomicEmit = new ConversionStep.AtomicEmit {
-        def emit(
-            input: LoweredValue,
-            target: LoweredValueRepresentation,
-            pos: SIRPosition
-        )(using LoweringContext): LoweredValue = {
-            import ProductCaseClassRepresentation.ProdDataList
-            val argInData = argLoweredValue(input).toRepresentation(
-              argGenerator.defaultDataRepresentation(input.sirType),
-              pos
-            )
-            lvBuiltinApply2(
-              SIRBuiltins.mkCons,
-              argInData,
-              lvDataNil(
-                pos,
-                SIRType.List(SIRType.Data.tp),
-                SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
-              ),
-              input.sirType,
-              ProdDataList,
-              pos
-            )
-        }
-    }
-
-    private val toTypeVarAtomic: ConversionStep.AtomicEmit = new ConversionStep.AtomicEmit {
-        def emit(
-            input: LoweredValue,
-            target: LoweredValueRepresentation,
-            pos: SIRPosition
-        )(using LoweringContext): LoweredValue = {
-            val tvr = target match
-                case t: TypeVarRepresentation => t
-                case other =>
-                    throw LoweringException(
-                      s"OneElementWrapperEmitter.toTypeVarAtomic: unexpected target $other",
-                      pos
-                    )
-            import SIRType.TypeVarKind.*
-            tvr.kind match
-                case Transparent => input
-                case Unwrapped | Fixed =>
-                    val targetUnderlying =
-                        if tvr.kind == Unwrapped then
-                            argGenerator.defaultRepresentation(input.sirType)
-                        else argGenerator.defaultTypeVarReperesentation(input.sirType)
-                    val argValue = argLoweredValue(input)
-                    val convertedArg = argValue.toRepresentation(targetUnderlying, pos)
-                    new TypeRepresentationProxyLoweredValue(
-                      convertedArg,
-                      input.sirType,
-                      tvr,
-                      pos
-                    )
-        }
-    }
-
-    def emitConvert(
-        input: LoweredValue,
-        representation: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue = {
-        import ProductCaseClassRepresentation.OneElementWrapper
-        input.representation match
-            case _: OneElementWrapper =>
-                outboundStep(representation) match
-                    case Some(step) => ConversionStep(step, input, representation, pos)
-                    case None => ProductCaseSirTypeGenerator.emitConvert(input, representation, pos)
-            case tvr: TypeVarRepresentation =>
+            case (_: OneElementWrapper, ProdDataList) =>
+                val argInData = argLoweredValue(input).toRepresentation(
+                  argGenerator.defaultDataRepresentation(input.sirType),
+                  pos
+                )
+                lvBuiltinApply2(
+                  SIRBuiltins.mkCons,
+                  argInData,
+                  lvDataNil(
+                    pos,
+                    SIRType.List(SIRType.Data.tp),
+                    SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData)
+                  ),
+                  input.sirType,
+                  ProdDataList,
+                  pos
+                )
+            case (_: OneElementWrapper, ProdDataConstr) =>
+                input.toRepresentation(ProdDataList, pos).toRepresentation(ProdDataConstr, pos)
+            case (_: OneElementWrapper, tvr: TypeVarRepresentation) =>
+                import SIRType.TypeVarKind.*
+                tvr.kind match
+                    case Transparent => input
+                    case Unwrapped | Fixed =>
+                        val targetUnderlying =
+                            if tvr.kind == Unwrapped then
+                                argGenerator.defaultRepresentation(input.sirType)
+                            else argGenerator.defaultTypeVarReperesentation(input.sirType)
+                        val argValue = argLoweredValue(input)
+                        val convertedArg = argValue.toRepresentation(targetUnderlying, pos)
+                        new TypeRepresentationProxyLoweredValue(
+                          convertedArg,
+                          input.sirType,
+                          tvr,
+                          pos
+                        )
+            case (tvr: TypeVarRepresentation, _: OneElementWrapper) =>
+                // Source TypeVar dispatch via shared helper. Transparent relabels; Unwrapped/Fixed
+                // relabel as the input type's defaultRepresentation (= OneElementWrapper(arg's
+                // default)) and recurse — landing in the (OneElementWrapper, OneElementWrapper)
+                // arm above. Same final shape as if we'd extracted the arg + converted + wrapped
+                // open-coded, via a slightly longer proxy chain.
                 TypeVarEmitter.bridgeFromKind(input, tvr, representation, pos)
             case _ =>
                 ProductCaseSirTypeGenerator.emitConvert(input, representation, pos)
