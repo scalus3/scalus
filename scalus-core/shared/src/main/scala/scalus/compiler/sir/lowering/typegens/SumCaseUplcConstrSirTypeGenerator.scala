@@ -191,19 +191,11 @@ object SumCaseUplcConstrSirTypeGenerator extends SirTypeUplcGenerator {
                         emitConvert(r0, representation, pos)
                     case Fixed =>
                         SumUplcConstrEmitter.emitConvert(input, representation, pos)
-            // TypeVar target: dispatch by kind
+            // TypeVar target: dispatch via canonical no-relabel bridgeToKind (Transparent stays
+            // open-coded as `input`).
             case (_, outTvr: TypeVarRepresentation) =>
-                import SIRType.TypeVarKind.*
-                outTvr.kind match
-                    case Transparent => input
-                    case Unwrapped =>
-                        val targetUnderlying = defaultRepresentation(input.sirType)
-                        val converted = input.toRepresentation(targetUnderlying, pos)
-                        new RepresentationProxyLoweredValue(converted, outTvr, pos)
-                    case Fixed =>
-                        val targetUnderlying = defaultTypeVarReperesentation(input.sirType)
-                        val converted = input.toRepresentation(targetUnderlying, pos)
-                        new RepresentationProxyLoweredValue(converted, outTvr, pos)
+                if outTvr.kind == SIRType.TypeVarKind.Transparent then input
+                else TypeVarEmitter.bridgeToKind(input, outTvr, pos)
             // SumUplcConstr, DataConstr, PairIntDataList → SumUplcConstrEmitter
             case (_: SumUplcConstr, _) | (DataConstr, _) | (PairIntDataList, _) =>
                 SumUplcConstrEmitter.emitConvert(input, representation, pos)

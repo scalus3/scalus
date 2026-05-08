@@ -629,21 +629,11 @@ object ProductCaseSirTypeGenerator extends SirTypeUplcGenerator {
                     retval
                 }
             case (_: ProdBuiltinPair, tvr: TypeVarRepresentation) =>
-                import SIRType.TypeVarKind.*
-                tvr.kind match
-                    case Transparent =>
-                        RepresentationProxyLoweredValue(input, representation, pos)
-                    case Unwrapped =>
-                        val targetUnderlying = defaultRepresentation(input.sirType)
-                        input
-                            .toRepresentation(targetUnderlying, pos)
-                            .toRepresentation(representation, pos)
-                    case Fixed =>
-                        val typeVarRepr =
-                            SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
-                        input
-                            .toRepresentation(typeVarRepr, pos)
-                            .toRepresentation(representation, pos)
+                // Phase 5: target TypeVar dispatch via bridgeToKind (canonical no-relabel).
+                // Transparent stays open-coded as `input` — matches the convention used at the
+                // catch-all (_, tvr) arm below.
+                if tvr.kind == SIRType.TypeVarKind.Transparent then input
+                else TypeVarEmitter.bridgeToKind(input, tvr, pos)
             case (_: ProdBuiltinPair, _) =>
                 viaProdDataList(input, representation, pos)
             case (_: TypeVarRepresentation, ProdDataConstr) =>
