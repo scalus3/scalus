@@ -810,26 +810,9 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                     .toRepresentation(outputRepresentation, pos)
             // === TypeVarRepresentation ===
             case (_, tv: TypeVarRepresentation) =>
-                // Phase 5: target TypeVar dispatch via SirTypeUplcGenerator.default* lookups.
-                // For SumBuiltinListEmitter types these resolve to PackedSumDataList (unchanged
-                // behavior); for SumPairBuiltinListEmitter / PackedDataMapEmitter types the
-                // hardcoded PackedSumDataList was wrong (their natural Data forms are
-                // SumDataAssocMap / PackedDataMap respectively) — these lookups produce the
-                // correct underlying repr.
-                import SIRType.TypeVarKind.*
-                tv.kind match
-                    case Transparent =>
-                        new RepresentationProxyLoweredValue(input, tv, pos)
-                    case Unwrapped =>
-                        val targetUnderlying =
-                            SirTypeUplcGenerator.defaultRepresentation(input.sirType)
-                        val converted = input.toRepresentation(targetUnderlying, pos)
-                        new RepresentationProxyLoweredValue(converted, tv, pos)
-                    case Fixed =>
-                        val targetUnderlying =
-                            SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
-                        val inputAsData = input.toRepresentation(targetUnderlying, pos)
-                        new RepresentationProxyLoweredValue(inputAsData, tv, pos)
+                // Phase 5: target TypeVar dispatch via shared helper. SumListEmitterCommon was
+                // already always-relabel for all three kinds, so this is a drop-in replacement.
+                TypeVarEmitter.bridgeToKind(input, tv, pos)
             case (tv: TypeVarRepresentation, _) =>
                 // Phase 5: source TypeVar dispatch via shared helper. Resolves the type's
                 // underlying default through `SirTypeUplcGenerator.default*` rather than the

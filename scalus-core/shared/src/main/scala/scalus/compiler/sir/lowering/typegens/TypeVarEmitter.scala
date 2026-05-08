@@ -18,6 +18,14 @@ import scalus.compiler.sir.*
   * `bridgeFromKind` is currently called from `SumUplcConstrEmitter.emitConvert`,
   * `SumDispatch.sumCaseImpl`, `OneElementWrapperEmitter.emitConvert`, and
   * `SumListEmitterCommon.emitConvert`.
+  *
+  * The companion `bridgeToKind` handles the symmetric case — concrete source, TypeVar target.
+  * Canonical contract: `result.representation == target`. The bytes are converted to the type's
+  * default form for the target's kind, then relabeled. Some emitters (notably
+  * `SumDispatch.sumCaseImpl`'s Fixed arm and `SumUplcConstrEmitter`'s Fixed arm) historically skip
+  * the relabel and return a value with the concrete repr — this is an inconsistency we'd like to
+  * remove, but migrating those sites changes downstream `.representation` checks and needs
+  * case-by-case auditing, so they remain open-coded for now.
   */
 object TypeVarEmitter {
 
@@ -72,6 +80,40 @@ object TypeVarEmitter {
                         else
                             val r0 = input.toRepresentation(fixedUnderlying, pos)
                             r0.toRepresentation(target, pos)
+    }
+
+    /** Convert a concrete-repr value to a TypeVar `target`. Mirror of `bridgeFromKind` for the
+      * symmetric direction. The result's representation is always the requested `target` —
+      * Unwrapped/Fixed convert the bytes to the type's default form before relabeling; Transparent
+      * just relabels (caller declared "any-shape acceptable").
+      *
+      * "Always relabel" is the canonical contract chosen for this helper. Several existing emitters
+      * skip the relabel for Transparent (returning input unchanged) and/or Fixed (returning a value
+      * with concrete repr); those sites stay open-coded until the downstream
+      * `.representation`-checking call sites are audited and the canonical contract is rolled out.
+      */
+    def bridgeToKind(
+        input: LoweredValue,
+        target: TypeVarRepresentation,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        import SIRType.TypeVarKind.*
+        target.kind match
+            case Transparent =>
+                if input.representation == target then input
+                else new RepresentationProxyLoweredValue(input, target, pos)
+            case Unwrapped =>
+                val targetUnderlying =
+                    SirTypeUplcGenerator.defaultRepresentation(input.sirType)
+                val converted = input.toRepresentation(targetUnderlying, pos)
+                if converted.representation == target then converted
+                else new RepresentationProxyLoweredValue(converted, target, pos)
+            case Fixed =>
+                val targetUnderlying =
+                    SirTypeUplcGenerator.defaultTypeVarReperesentation(input.sirType)
+                val converted = input.toRepresentation(targetUnderlying, pos)
+                if converted.representation == target then converted
+                else new RepresentationProxyLoweredValue(converted, target, pos)
     }
 
 }
