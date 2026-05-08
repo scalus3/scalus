@@ -235,7 +235,7 @@ object SirTypeUplcGenerator {
                     case "UplcConstr" =>
                         if SIRType.isSum(tp) then SumCaseUplcConstrEmitter
                         else ProductCaseUplcConstrEmitter
-                    case "Data" => SIRTypeUplcDataGenerator
+                    case "Data" => DataSirTypeGenerator
                     case _      => SirTypeUplcGenerator(tp, debug)
             case _ =>
                 // Parameterized annotations (SumBuiltinList etc.) — fall back to inner type
@@ -283,7 +283,7 @@ object SirTypeUplcGenerator {
                 new SumBuiltinListEmitter(PrimitiveRepresentation.PackedData)
             case "SumPairDataList"       => SumPairBuiltinListEmitter
             case "PackedDataMap"         => PackedDataMapEmitter
-            case "Data"                  => SIRTypeUplcDataGenerator
+            case "Data"                  => DataSirTypeGenerator
             case "BuiltinArray"          => ProdBuiltinArrayEmitter
             case "ProductCaseOneElement" =>
                 // Derive inner type from first constructor parameter
@@ -306,13 +306,13 @@ object SirTypeUplcGenerator {
     ): SirTypeUplcGenerator = {
         val retval = tp match
             case SIRType.Boolean =>
-                SIRTypeUplcBooleanGenerator
+                BooleanSirTypeGenerator
             case SIRType.Integer =>
-                SIRTypeUplcIntegerGenerator
+                IntegerSirTypeGenerator
             case SIRType.ByteString =>
-                SIRTypeUplcByteStringGenerator
+                ByteStringSirTypeGenerator
             case SIRType.String =>
-                SIRTypeUplcStringGenerator
+                StringSirTypeGenerator
             case SIRType.Unit =>
                 UnitSirTypeGenerator
             case SIRType.SumCaseClass(decl, typeArgs) =>
@@ -339,7 +339,7 @@ object SirTypeUplcGenerator {
                     .getOrElse {
                         // Existing structural logic
                         val trace = new IdentityHashMap[SIRType, SIRType]()
-                        if decl.name == SIRType.Data.name then SIRTypeUplcDataGenerator
+                        if decl.name == SIRType.Data.name then DataSirTypeGenerator
                         else if decl.name == SumListEmitterCommon.PairListDataDeclName then
                             if !containsFun(tp, trace) then SumPairBuiltinListEmitter
                             else SumCaseUplcOnlyEmitter
@@ -361,13 +361,13 @@ object SirTypeUplcGenerator {
                         else SumCaseUplcOnlyEmitter
                     }
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>
-                // Data constructors are handled by SIRTypeUplcDataGenerator
+                // Data constructors are handled by DataSirTypeGenerator
                 if constrDecl.name == SIRType.Data.Constr.name
                     || constrDecl.name == SIRType.Data.Map.name
                     || constrDecl.name == SIRType.Data.List.name
                     || constrDecl.name == SIRType.Data.I.name
                     || constrDecl.name == SIRType.Data.B.name
-                then SIRTypeUplcDataGenerator
+                then DataSirTypeGenerator
                 // BuiltinArray has its own generator for proper Data conversion
                 else if constrDecl.name == SIRType.BuiltinArray.name
                 then ProdBuiltinArrayEmitter
