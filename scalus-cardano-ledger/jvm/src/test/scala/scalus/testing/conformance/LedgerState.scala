@@ -623,7 +623,7 @@ object ConwayProtocolParamsFixtures:
         if matchingHashes.size == 1 then return Some(matchingHashes.head)
 
         val hashesWithVersion = matchingHashes.flatMap { hash =>
-            loadFromHash(pparamsDir, hash).map(pp => (hash, pp.protocolVersionMajor))
+            loadFromHash(pparamsDir, hash).map(pp => (hash, pp.protocolVersion.major))
         }
 
         hashesWithVersion
