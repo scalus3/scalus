@@ -11,7 +11,7 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.15.0"
+val scalusStableVersion = "0.17.0"
 val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
