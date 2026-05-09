@@ -23,7 +23,7 @@ val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.19.0"
 val borerVersion = "1.16.2"
 val slf4jVersion = "2.0.17"
-val magnoliaVersion = "1.3.18"
+val magnoliaVersion = "1.3.20"
 val pprintVersion = "0.9.6"
 val monocleVersion = "3.3.0"
 
