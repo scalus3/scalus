@@ -127,10 +127,10 @@ object ConwayProtocolParams:
     given Decoder[ConwayProtocolParams] with
         def read(r: Reader): ConwayProtocolParams =
             val size = r.readArrayHeader()
-            require(
-              size >= ConwayPParamsArity,
-              s"Expected at least $ConwayPParamsArity elements, got $size"
-            )
+            if size < ConwayPParamsArity then
+                r.validationFailure(
+                  s"Expected at least $ConwayPParamsArity elements for Conway PParams, got $size"
+                )
 
             val minFeeA = r.readLong()
             val minFeeB = r.readLong()
