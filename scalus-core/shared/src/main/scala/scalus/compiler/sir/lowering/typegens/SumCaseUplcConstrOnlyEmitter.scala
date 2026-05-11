@@ -10,14 +10,14 @@ object SumCaseUplcConstrOnlyEmitter extends SumCaseUplcConstrCommon {
     ): LoweredValueRepresentation =
         SumUplcConstrOps.buildSumUplcConstr(tp)
 
-    // TODO: set position in LoweringContext
+    /** No Data form exists (lambdas can't be Data); the Fixed-TypeVar shape is the same as the
+      * default — `SumUplcConstr`. `bridgeFromKind` then handles all kinds correctly without
+      * special-casing.
+      */
     override def defaultTypeVarReperesentation(
         tp: SIRType
     )(using LoweringContext): LoweredValueRepresentation =
-        throw LoweringException(
-          "Type variables with lambdas are not supported in sum cases yet",
-          SIRPosition.empty
-        )
+        SumUplcConstrOps.buildSumUplcConstr(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = false
 
