@@ -5,7 +5,7 @@ import scalus.compiler.sir.*
 
 /** Type generator for product case classes annotated with @UplcRepr(UplcConstr).
   *
-  * Like ProductCaseUplcOnlyEmitter but for Data-compatible types:
+  * Like ProductCaseUplcConstrOnlyEmitter but for Data-compatible types:
   *   - canBeConvertedToData = true
   *   - defaultDataRepresentation returns DataConstr
   *   - defaultTypeVarRepresentation returns DataConstr
@@ -86,14 +86,14 @@ object ProductCaseUplcConstrEmitter extends SirTypeUplcGenerator {
         loweredScrutinee.representation match
             case _: ProductCaseClassRepresentation.ProdUplcConstr |
                 _: SumCaseClassRepresentation.SumUplcConstr =>
-                ProductCaseUplcOnlyEmitter.genSelect(sel, loweredScrutinee)
+                ProductCaseUplcConstrOnlyEmitter.genSelect(sel, loweredScrutinee)
             case tvr: TypeVarRepresentation if tvr.isBuiltin =>
                 // Transparent TypeVar — value is native Constr at runtime.
                 // Resolve to ProdUplcConstr for the concrete type, then use UplcConstr select.
                 val pucRepr = defaultRepresentation(loweredScrutinee.sirType)
                 val resolved =
                     RepresentationProxyLoweredValue(loweredScrutinee, pucRepr, sel.anns.pos)
-                ProductCaseUplcOnlyEmitter.genSelect(sel, resolved)
+                ProductCaseUplcConstrOnlyEmitter.genSelect(sel, resolved)
             case _ =>
                 // Data-based repr (ProdDataConstr, TypeVar(Fixed), etc.) — use Data extraction
                 ProductCaseEmitter.genSelect(sel, loweredScrutinee)

@@ -342,7 +342,7 @@ object SirTypeUplcGenerator {
                         if decl.name == SIRType.Data.name then DataSirTypeGenerator
                         else if decl.name == SumListEmitterCommon.PairListDataDeclName then
                             if !containsFun(tp, trace) then SumPairBuiltinListEmitter
-                            else SumCaseUplcOnlyEmitter
+                            else SumCaseUplcConstrOnlyEmitter
                         else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
                             if !containsFun(tp, trace) then {
                                 val elemRepr = elementReprFor(typeArgs.head)
@@ -353,12 +353,12 @@ object SirTypeUplcGenerator {
                                     case _ if isPair(typeArgs.head) =>
                                         SumPairBuiltinListEmitter
                                     case _ => new SumBuiltinListEmitter(elemRepr)
-                            } else SumCaseUplcOnlyEmitter
+                            } else SumCaseUplcConstrOnlyEmitter
                         else if decl.name == SIRType.BuiltinList.name then
                             if isPair(typeArgs.head) then SumPairBuiltinListEmitter
                             else new SumBuiltinListEmitter(elementReprFor(typeArgs.head))
                         else if !containsFun(tp, trace) then DataConstrEmitter
-                        else SumCaseUplcOnlyEmitter
+                        else SumCaseUplcConstrOnlyEmitter
                     }
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>
                 // Data constructors are handled by DataSirTypeGenerator
@@ -450,7 +450,7 @@ object SirTypeUplcGenerator {
             || constrDecl.name == SumListEmitterCommon.PairNilName || constrDecl.name == SumListEmitterCommon.PairConsName
         then
             val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
-            if hasFun then Some(SumCaseUplcOnlyEmitter)
+            if hasFun then Some(SumCaseUplcConstrOnlyEmitter)
             else if constrDecl.name == SumListEmitterCommon.PairNilName
                 || constrDecl.name == SumListEmitterCommon.PairConsName
             then Some(SumPairBuiltinListEmitter)
@@ -477,12 +477,13 @@ object SirTypeUplcGenerator {
         else None
     }
 
-    /** Basic structural inference: ProductCase or ProductCaseUplcOnly based on containsFun. */
+    /** Basic structural inference: ProductCase or ProductCaseUplcConstrOnly based on containsFun.
+      */
     private def resolveBasicStructural(
         constrDecl: ConstrDecl
     ): SirTypeUplcGenerator =
         val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
-        if hasFun then ProductCaseUplcOnlyEmitter
+        if hasFun then ProductCaseUplcConstrOnlyEmitter
         else ProductCaseEmitter
 
     def isPairOrTuple2(tp: SIRType): Boolean =

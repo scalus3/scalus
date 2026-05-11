@@ -21,8 +21,9 @@ import scalus.uplc.{Term, UplcAnnotation}
   *
   * Called from:
   *   - `ProductCaseEmitter.genConstrLowered` (Data-vs-UplcConstr dispatcher);
-  *   - `ProductCaseUplcOnlyEmitter`, `ProductCaseUplcConstrEmitter`, `SumCaseUplcConstrEmitter`,
-  *     `SumCaseUplcOnlyEmitter` — all with the same `(constr, loweredArgs)` signature.
+  *   - `ProductCaseUplcConstrOnlyEmitter`, `ProductCaseUplcConstrEmitter`,
+  *     `SumCaseUplcConstrEmitter`, `SumCaseUplcConstrOnlyEmitter` — all with the same
+  *     `(constr, loweredArgs)` signature.
   *
   * Constructor-handling helpers (`retrieveConstrIndex`, `retrieveConstrDecl`) still live on
   * `ProductCaseEmitter`; called cross-class from here.

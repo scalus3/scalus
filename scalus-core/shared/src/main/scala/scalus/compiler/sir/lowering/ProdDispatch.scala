@@ -23,8 +23,8 @@ object ProdDispatch {
                 ProductCaseEmitter.emitConvert(input, target, pos)
             case ProductCaseUplcConstrEmitter =>
                 ProductCaseUplcConstrEmitter.emitConvert(input, target, pos)
-            case ProductCaseUplcOnlyEmitter =>
-                // Original ProductCaseUplcOnly body: identity → input, otherwise delegate to ProdCase.
+            case ProductCaseUplcConstrOnlyEmitter =>
+                // Original ProductCaseUplcConstrOnly body: identity → input, otherwise delegate to ProdCase.
                 if input.representation == target then input
                 else ProductCaseEmitter.emitConvert(input, target, pos)
             case oneElement: OneElementWrapperEmitter =>

@@ -427,7 +427,7 @@ object SumUplcConstrEmitter {
     def genSelectUplcConstr(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         LoweringContext
     ): LoweredValue =
-        ProductCaseUplcOnlyEmitter.genSelect(sel, loweredScrutinee)
+        ProductCaseUplcConstrOnlyEmitter.genSelect(sel, loweredScrutinee)
 
     def genMatchUplcConstr(
         matchData: SIR.Match,

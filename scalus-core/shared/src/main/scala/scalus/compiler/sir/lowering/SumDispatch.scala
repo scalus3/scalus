@@ -25,12 +25,12 @@ object SumDispatch {
                 sumCaseImpl(input, target, pos)
             case SumCaseUplcConstrEmitter =>
                 SumCaseUplcConstrEmitter.emitConvert(input, target, pos)
-            case SumCaseUplcOnlyEmitter =>
+            case SumCaseUplcConstrOnlyEmitter =>
                 sumCaseImpl(input, target, pos)
             case listGen: SumListEmitterCommon =>
                 listGen.emitConvert(input, target, pos)
-            case ProductCaseEmitter | ProductCaseUplcConstrEmitter | ProductCaseUplcOnlyEmitter |
-                _: OneElementWrapperEmitter =>
+            case ProductCaseEmitter | ProductCaseUplcConstrEmitter |
+                ProductCaseUplcConstrOnlyEmitter | _: OneElementWrapperEmitter =>
                 ProdDispatch.toRepresentation(input, target, pos)
             case converting: typegens.SirTypeUplcConvertingGenerator =>
                 converting.toRepresentation(input, target, pos)
@@ -94,7 +94,7 @@ object SumDispatch {
                 // Phase 5: source TypeVar dispatch via shared helper. Replaces hardcoded
                 // `DataConstr` with `SirTypeUplcGenerator.default*(input.sirType)`. For
                 // DataConstrEmitter-handled types these match `DataConstr`; for
-                // SumCaseUplcOnly-handled types the helper resolves to `SumUplcConstr`
+                // SumCaseUplcConstrOnly-handled types the helper resolves to `SumUplcConstr`
                 // (defaultRepresentation) or throws (defaultTypeVarReperesentation), which is
                 // strictly more correct than mislabelling UC bytes as Data.
                 typegens.TypeVarEmitter.bridgeFromKind(input, inTvr, representation, pos)

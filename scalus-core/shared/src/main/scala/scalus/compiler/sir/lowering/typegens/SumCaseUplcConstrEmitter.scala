@@ -7,17 +7,12 @@ import scalus.compiler.sir.lowering.SumCaseClassRepresentation.*
 
 /** Type generator for sum types (enums) annotated with @UplcRepr(UplcConstr).
   *
-  * Like SumCaseUplcOnlyEmitter but for Data-compatible types:
+  * Like SumCaseUplcConstrOnlyEmitter but for Data-compatible types:
   *   - canBeConvertedToData = true
   *   - defaultDataRepresentation returns DataConstr
   *   - defaultTypeVarRepresentation returns DataConstr
   */
-object SumCaseUplcConstrEmitter extends SirTypeUplcGenerator {
-
-    override def defaultRepresentation(tp: SIRType)(using
-        LoweringContext
-    ): LoweredValueRepresentation =
-        SumUplcConstrEmitter.buildSumUplcConstr(tp)
+object SumCaseUplcConstrEmitter extends SumCaseUplcConstrCommon {
 
     private def isListType(tp: SIRType): Boolean =
         SIRType.retrieveDataDecl(tp) match
@@ -40,35 +35,26 @@ object SumCaseUplcConstrEmitter extends SirTypeUplcGenerator {
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = true
 
-    override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
-        lctx: LoweringContext
-    ): LoweredValue = {
-        // Single-entry `SumUplcConstr` (no overlay on `buildSumUplcConstr`) is
-        // load-bearing here: downstream `genMatchUplcConstr.hasTransparentFields`
-        // walks `variants.values`, so adding type-derived default variants (whose
-        // fields carry Transparent TypeVar reprs from the DataDecl, e.g.
-        // `List.Cons.head`) would fire the transparent-branch override even for
-        // concrete-shape inputs like `Nil`. Hence we don't route through
-        // `SumDispatch.chooseUpcastOutputRepr`.
-        input.representation match
-            case prod: ProductCaseClassRepresentation.ProdUplcConstr =>
-                val sumRepr = SumCaseClassRepresentation.SumUplcConstr(
-                  scala.collection.immutable.SortedMap(prod.tag -> prod)
+    /** Data-shaped fallback: route via the target sum's matching variant by `constrIndex`, then
+      * recurse so the base's `ProdUplcConstr` arm wraps it into a single-entry `SumUplcConstr`.
+      */
+    override protected def upcastOneOther(
+        input: LoweredValue,
+        targetType: SIRType,
+        pos: SIRPosition
+    )(using lctx: LoweringContext): LoweredValue = {
+        val targetSum = SumUplcConstrEmitter.buildSumUplcConstr(targetType)
+        val constrIndex =
+            ProductCaseEmitter.retrieveConstrIndex(input.sirType, pos)
+        targetSum.variants.get(constrIndex) match
+            case Some(targetProd) =>
+                val converted = input.toRepresentation(targetProd, pos)
+                upcastOne(converted, targetType, pos)
+            case None =>
+                throw LoweringException(
+                  s"SumCaseUplcConstrEmitter.upcastOne: variant $constrIndex not found in target ${targetType.show}",
+                  pos
                 )
-                TypeRepresentationProxyLoweredValue(input, targetType, sumRepr, pos)
-            case _ =>
-                val targetSum = SumUplcConstrEmitter.buildSumUplcConstr(targetType)
-                val constrIndex =
-                    ProductCaseEmitter.retrieveConstrIndex(input.sirType, pos)
-                targetSum.variants.get(constrIndex) match
-                    case Some(targetProd) =>
-                        val converted = input.toRepresentation(targetProd, pos)
-                        upcastOne(converted, targetType, pos)
-                    case None =>
-                        throw LoweringException(
-                          s"SumCaseUplcConstrEmitter.upcastOne: variant $constrIndex not found in target ${targetType.show}",
-                          pos
-                        )
     }
 
     override def genConstrLowered(
@@ -109,7 +95,7 @@ object SumCaseUplcConstrEmitter extends SirTypeUplcGenerator {
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        ProductCaseUplcOnlyEmitter.genSelect(sel, loweredScrutinee)
+        ProductCaseUplcConstrOnlyEmitter.genSelect(sel, loweredScrutinee)
     }
 
     override def genMatch(

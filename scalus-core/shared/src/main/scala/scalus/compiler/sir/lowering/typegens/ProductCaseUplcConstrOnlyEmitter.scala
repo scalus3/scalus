@@ -6,7 +6,7 @@ import scalus.compiler.sir.*
 /** Type generator for product case classes that cannot be converted to Data (contain functions or
   * BLS elements). Uses UplcConstr representation.
   */
-object ProductCaseUplcOnlyEmitter extends SirTypeUplcGenerator {
+object ProductCaseUplcConstrOnlyEmitter extends SirTypeUplcGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         lctx: LoweringContext
