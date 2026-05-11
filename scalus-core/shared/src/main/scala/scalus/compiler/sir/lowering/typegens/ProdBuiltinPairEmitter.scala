@@ -43,8 +43,8 @@ object ProdBuiltinPairEmitter {
         val (matchVal, addMatchValToScope) = lvAsIdentifiable(
           loweredScrutinee,
           "match_pair_data",
-          SIRType.List(SIRType.Data.tp),
-          SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+          loweredScrutinee.sirType,
+          loweredScrutinee.representation,
           matchData.anns.pos
         )
         val (frsName, sndName) = myCase.pattern match {
@@ -82,12 +82,20 @@ object ProdBuiltinPairEmitter {
               representation = sndRepr,
               optRhs = None // lambda parameter, not derived from builtin
             )
-            // Add pair element vars to scope so the body can reference them
+            // Add pair element vars to scope so the body can reference them, then restore the
+            // previous scope so these match-local bindings don't leak to siblings. The returned
+            // LoweredValue still references frsVar/sndVar via lvCasePair, so they're emitted
+            // correctly by termWithNeededVars.
+            val prevScope = lctx.scope
             lctx.scope = lctx.scope.addAll(scala.collection.immutable.List(frsVar, sndVar))
             val lwBody = lctx.lower(myCase.body, optTargetType)
+            lctx.scope = prevScope
             lvCasePair(matchVal, frsVar, sndVar, lwBody, matchData.anns.pos)
         } else {
-            // For V1-V3: use fstPair/sndPair builtins
+            // For V1-V3: use fstPair/sndPair builtins. lvNewLazyNamedVar mutates lctx.scope —
+            // save/restore around body lowering so the frs/snd bindings don't leak; they remain
+            // referenced from the returned MatchPairDataLoweredValue.
+            val prevScope = lctx.scope
             val frs = lvNewLazyNamedVar(
               frsName,
               frsTp,
@@ -103,6 +111,7 @@ object ProdBuiltinPairEmitter {
               myCase.anns.pos
             )
             val lwBody = lctx.lower(myCase.body, optTargetType)
+            lctx.scope = prevScope
             MatchPairDataLoweredValue(
               frs,
               snd,

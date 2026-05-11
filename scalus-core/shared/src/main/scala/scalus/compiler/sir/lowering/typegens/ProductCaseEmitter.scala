@@ -40,7 +40,7 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
                     ProductCaseClassRepresentation.ProdDataList
                 } else ProductCaseClassRepresentation.ProdDataList
             case _ =>
-                // impossinle
+                // impossible
                 ProductCaseClassRepresentation.ProdDataList
         }
     }
@@ -652,10 +652,9 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
                     case Fixed =>
                         via(ProdDataConstr)(input, representation, pos)
             case (_, tvr: TypeVarRepresentation) =>
-                // Phase 5 canonicalization: Unwrapped/Fixed go through bridgeToKind (always
-                // relabels as target). The Fixed arm previously recursed with `ProdDataConstr`
-                // target and returned the result WITHOUT the TypeVar relabel — see design doc.
-                // Transparent stays open-coded as `input`.
+                // Phase 5 canonicalization: Unwrapped/Fixed go through bridgeToKind, which
+                // returns a value whose repr reflects the actual byte shape (no TypeVar relabel
+                // on the result) — see design doc §3.6. Transparent stays open-coded as `input`.
                 if tvr.kind == SIRType.TypeVarKind.Transparent then input
                 else TypeVarEmitter.bridgeToKind(input, tvr, pos)
             case _ =>

@@ -99,10 +99,9 @@ object SumDispatch {
                 // strictly more correct than mislabelling UC bytes as Data.
                 typegens.TypeVarEmitter.bridgeFromKind(input, inTvr, representation, pos)
             case (_, outTvr: TypeVarRepresentation) =>
-                // Phase 5 canonicalization: Unwrapped/Fixed go through bridgeToKind (always
-                // relabels as target). The Fixed arm previously recursed sumCaseImpl with the
-                // concrete underlying repr and returned a value WITHOUT the TypeVar relabel —
-                // see design doc. Transparent stays open-coded as `input`.
+                // Phase 5 canonicalization: Unwrapped/Fixed go through bridgeToKind, which
+                // returns a value whose repr reflects the actual byte shape (no TypeVar relabel
+                // on the result) — see design doc §3.6. Transparent stays open-coded as `input`.
                 if outTvr.kind == SIRType.TypeVarKind.Transparent then input
                 else typegens.TypeVarEmitter.bridgeToKind(input, outTvr, pos)
             case (_, _) =>
