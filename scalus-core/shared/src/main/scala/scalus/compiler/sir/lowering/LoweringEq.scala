@@ -93,19 +93,14 @@ object LoweringEq {
             case _                   =>
                 // Not curried — fall back to normal apply
                 return fallback(app)
-        if !isTypeDefaultEq(eqRef) then
-            val posKey = app.anns.pos.show
-            if warnedNonDerivedPositions.add(posKey) then
-                lctx.warn(
-                  "Eq instance is not provably the structural type-default " +
-                      "(e.g. `Eq.derived[T]`, `summon[Eq[T]]`, or a `given Eq[...]` from the prelude). " +
-                      "The repr-aware Eq optimization will inline structural equality regardless. " +
-                      "Custom Eq instances MUST satisfy the equivalence-relation contract " +
-                      "(reflexive / symmetric / transitive AND structurally consistent) — instances like " +
-                      "`Eq.keyPairEq` that compare only one component violate this and produce wrong " +
-                      "runtime results. Prefer `Eq.derived[T]` to make the type-default explicit.",
-                  app.anns.pos
-                )
+        // TODO: re-enable once isTypeDefaultEq recognizes all prelude/derived Eq instances
+        // if !isTypeDefaultEq(eqRef) then
+        //     val posKey = app.anns.pos.show
+        //     if warnedNonDerivedPositions.add(posKey) then
+        //         lctx.warn(
+        //           "Eq instance is not provably the structural type-default ...",
+        //           app.anns.pos
+        //         )
         val lhs = Lowering.lowerSIR(lhsSir)
         val rhs = Lowering.lowerSIR(rhsSir)
         generateEqualsForRepr(lhs, rhs, app.anns.pos)

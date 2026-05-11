@@ -1069,7 +1069,7 @@ object AuctionTestKitTest {
           TxId(oneShotUtxo.input.transactionId),
           BigInt(oneShotUtxo.input.index)
         )
-        val factory = AuctionFactory(emulator, withErrorTraces = true)
+        val factory = AuctionTransactionFactory(emulator, withErrorTraces = true)
         val instance = factory.createInstance(oneShot)
 
         val appliedContract = AuctionContract.withErrorTraces.apply(Data.toData(oneShot))

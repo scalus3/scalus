@@ -125,7 +125,7 @@ object AuctionValidatorTest extends ScalusTest {
           TxId(oneShotUtxo.input.transactionId),
           BigInt(oneShotUtxo.input.index)
         )
-        val factory = AuctionFactory(provider, withErrorTraces = true)
+        val factory = AuctionTransactionFactory(provider, withErrorTraces = true)
         (factory.createInstance(oneShot), oneShotUtxo)
     }
 

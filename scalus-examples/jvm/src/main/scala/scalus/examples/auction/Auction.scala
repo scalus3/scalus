@@ -473,7 +473,7 @@ lazy val AuctionContract: PlutusV3[Data => Data => Unit] =
   * @param withErrorTraces
   *   If true, include error traces for debugging (default: false for production)
   */
-class AuctionFactory(provider: BlockchainProvider, withErrorTraces: Boolean = false) {
+class AuctionTransactionFactory(provider: BlockchainProvider, withErrorTraces: Boolean = false) {
 
     private val baseContract =
         if withErrorTraces then AuctionContract.withErrorTraces else AuctionContract
