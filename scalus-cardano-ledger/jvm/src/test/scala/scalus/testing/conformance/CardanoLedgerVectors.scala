@@ -43,11 +43,15 @@ object CardanoLedgerVectors {
             val params =
                 if useParams then
                     vector.pparamsHash
-                        .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                        .flatMap(hash =>
+                            ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash)
+                        )
                         .orElse(
-                          ConwayProtocolParams
+                          ConwayProtocolParamsFixtures
                               .extractPparamsHash(vector.oldLedgerState, pparamsDir)
-                              .flatMap(hash => ConwayProtocolParams.loadFromHash(pparamsDir, hash))
+                              .flatMap(hash =>
+                                  ConwayProtocolParamsFixtures.loadFromHash(pparamsDir, hash)
+                              )
                         )
                         .map(_.toProtocolParams)
                 else None
