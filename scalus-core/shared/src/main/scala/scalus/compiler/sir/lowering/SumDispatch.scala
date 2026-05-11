@@ -21,11 +21,7 @@ object SumDispatch {
     )(using lctx: LoweringContext): LoweredValue = {
         val gen = typegens.SirTypeUplcGenerator(input.sirType)
         gen match
-            case DataConstrEmitter =>
-                sumCaseImpl(input, target, pos)
-            case SumCaseUplcConstrEmitter =>
-                SumCaseUplcConstrEmitter.emitConvert(input, target, pos)
-            case SumCaseUplcConstrOnlyEmitter =>
+            case DataConstrEmitter | SumCaseUplcConstrEmitter | SumCaseUplcConstrOnlyEmitter =>
                 sumCaseImpl(input, target, pos)
             case listGen: SumListEmitterCommon =>
                 listGen.emitConvert(input, target, pos)
@@ -47,14 +43,21 @@ object SumDispatch {
       * PackedSumDataList sources, delegating to `SumUplcConstrOps` for native-UplcConstr cases and
       * to `SumListEmitterCommon.emitConvert` for list-shape conversions.
       *
-      * Package-private so `SumCaseUplcConstrEmitter.emitConvert` can delegate cross-typegen arms
-      * here (Phase 5 step 4).
+      * Single entry point for all sum-side typegens (DataConstrEmitter, SumCaseUplcConstrEmitter,
+      * SumCaseUplcConstrOnlyEmitter) — the per-typegen `emitConvert` was collapsed into this method
+      * once their TypeVar handling was shown equivalent (both end at `bridgeFromKind`).
       */
     private[lowering] def sumCaseImpl(
         input: LoweredValue,
         representation: LoweredValueRepresentation,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
+        // Cheap front-of-method shortcuts: identical reprs and structurally-compatible reprs
+        // (e.g. SumUplcConstr variants compatible on this type) — applied here so all sum-side
+        // callers (DataConstrEmitter, ConstrOnly, and Emitter via delegation) benefit uniformly.
+        if input.representation == representation then return input
+        if input.representation.isCompatibleOn(input.sirType, representation, pos) then
+            return RepresentationProxyLoweredValue(input, representation, pos)
         (input.representation, representation) match {
             // === DataConstr source: delegate to DataConstrEmitter (Phase 5) ===
             case (
