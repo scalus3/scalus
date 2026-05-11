@@ -345,7 +345,7 @@ object LoweringEq {
                 baseType,
                 lhsSum,
                 b =>
-                    typegens.SumUplcConstrEmitter.genMatchUplcConstrAllVariants(
+                    typegens.SumUplcConstrOps.genMatchUplcConstrAllVariants(
                       a,
                       lhsSum,
                       baseType,
@@ -353,7 +353,7 @@ object LoweringEq {
                       PrimitiveRepresentation.Constant,
                       pos,
                       (aTag, aFields) =>
-                          typegens.SumUplcConstrEmitter
+                          typegens.SumUplcConstrOps
                               .genMatchUplcConstrAllVariants(
                                 b,
                                 lhsSum,

@@ -57,19 +57,19 @@ object ProductCaseUplcConstrEmitter extends SirTypeUplcGenerator {
         // We deliberately use the un-overlaid `buildSumUplcConstr(targetType)` rather than
         // `SumDispatch.chooseUpcastOutputRepr`. The overlay would leak per-variant defaults
         // (which carry `TypeVar(Fixed)` field reprs from the DataDecl) into the
-        // `SumUplcConstrEmitter.emitConvert` `dataListVar → variant fields`
+        // `SumUplcConstrOps.emitConvert` `dataListVar → variant fields`
         // path, surfacing as `Fixed → Unwrapped` aborts.
         input.representation match
             case _: ProductCaseClassRepresentation.ProdUplcConstr |
                 _: SumCaseClassRepresentation.SumUplcConstr =>
                 val targetSumRepr =
-                    typegens.SumUplcConstrEmitter.buildSumUplcConstr(targetType)
+                    typegens.SumUplcConstrOps.buildSumUplcConstr(targetType)
                 TypeRepresentationProxyLoweredValue(input, targetType, targetSumRepr, pos)
             case _ =>
                 val ucRepr = defaultRepresentation(input.sirType)
                 val converted = input.toRepresentation(ucRepr, pos)
                 val targetSumRepr =
-                    typegens.SumUplcConstrEmitter.buildSumUplcConstr(targetType)
+                    typegens.SumUplcConstrOps.buildSumUplcConstr(targetType)
                 TypeRepresentationProxyLoweredValue(converted, targetType, targetSumRepr, pos)
     }
 
@@ -78,7 +78,7 @@ object ProductCaseUplcConstrEmitter extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using LoweringContext): LoweredValue =
-        ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
+        ProdUplcConstrOps.genConstr(constr, loweredArgs)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext

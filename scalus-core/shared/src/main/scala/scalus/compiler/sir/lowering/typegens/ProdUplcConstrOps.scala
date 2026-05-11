@@ -28,7 +28,7 @@ import scalus.uplc.{Term, UplcAnnotation}
   * Constructor-handling helpers (`retrieveConstrIndex`, `retrieveConstrDecl`) still live on
   * `ProductCaseEmitter`; called cross-class from here.
   */
-object ProdUplcConstrEmitter {
+object ProdUplcConstrOps {
 
     def genConstr(
         constr: SIR.Constr,

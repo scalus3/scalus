@@ -126,7 +126,7 @@ object ProdBuiltinArrayEmitter extends SirTypeUplcConvertingGenerator {
                 // routed through `arrayRepr(input.sirType)` first; bridgeToKind goes via
                 // `SirTypeUplcGenerator.defaultRepresentation(input.sirType)` (which equals
                 // `arrayRepr(_)` for BuiltinArray types) — no behavior change.
-                TypeVarEmitter.bridgeToKind(input, tv, pos)
+                TypeVarOps.bridgeToKind(input, tv, pos)
 
             case (tv: TypeVarRepresentation, _) =>
                 import SIRType.TypeVarKind.*

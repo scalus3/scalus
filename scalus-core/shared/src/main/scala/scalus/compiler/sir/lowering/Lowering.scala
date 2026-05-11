@@ -137,8 +137,8 @@ object Lowering {
                 //   - sum scrutinees: SumUplcConstr → Case-based genMatchUplcConstr;
                 //     DataConstr / SumBuiltinList / PackedSumDataList → repr-specific emitter.
                 //   - prod scrutinees: ProdUplcConstr / SumUplcConstr → genMatchUplcConstr;
-                //     ProdDataList / ProdDataConstr / PackedDataList → ProdDataListEmitter.genMatch;
-                //     ProdBuiltinPair → ProdBuiltinPairEmitter.genMatch.
+                //     ProdDataList / ProdDataConstr / PackedDataList → ProdDataListOps.genMatch;
+                //     ProdBuiltinPair → ProdBuiltinPairOps.genMatch.
                 // Other types fall back to the type-keyed typegen.
                 val retval =
                     if SIRType.isSum(loweredScrutinee.sirType) then

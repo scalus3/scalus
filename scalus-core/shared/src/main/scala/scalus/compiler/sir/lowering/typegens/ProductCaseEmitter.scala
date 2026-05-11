@@ -136,14 +136,14 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
         // remaining decision here is structural: a Transparent TypeVar arg or a
         // non-Data-convertible payload forces native UplcConstr emission.
         if hasTransparentTypeVarArgs(loweredArgs) then
-            ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
+            ProdUplcConstrOps.genConstr(constr, loweredArgs)
         else
             val argTypeGens = loweredArgs.map(_.sirType).map(SirTypeUplcGenerator.apply(_))
             val canBeConvertedToData = loweredArgs.zip(argTypeGens).forall { case (arg, typeGen) =>
                 typeGen.canBeConvertedToData(arg.sirType)
             }
-            if !canBeConvertedToData then ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
-            else ProdDataListEmitter.genConstr(constr, loweredArgs, argTypeGens)
+            if !canBeConvertedToData then ProdUplcConstrOps.genConstr(constr, loweredArgs)
+            else ProdDataListOps.genConstr(constr, loweredArgs, argTypeGens)
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
@@ -151,7 +151,7 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
     ): LoweredValue = {
         // use data for now
         // TODO: optimize
-        ProdDataListEmitter.genSelect(sel, loweredScrutinee)
+        ProdDataListOps.genSelect(sel, loweredScrutinee)
     }
 
     override def genMatch(
@@ -626,7 +626,7 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
                 // Transparent stays open-coded as `input` — matches the convention used at the
                 // catch-all (_, tvr) arm below.
                 if tvr.kind == SIRType.TypeVarKind.Transparent then input
-                else TypeVarEmitter.bridgeToKind(input, tvr, pos)
+                else TypeVarOps.bridgeToKind(input, tvr, pos)
             case (_: ProdBuiltinPair, _) =>
                 via(ProdDataList)(input, representation, pos)
             case (_: TypeVarRepresentation, ProdDataConstr) =>
@@ -656,7 +656,7 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
                 // returns a value whose repr reflects the actual byte shape (no TypeVar relabel
                 // on the result) — see design doc §3.6. Transparent stays open-coded as `input`.
                 if tvr.kind == SIRType.TypeVarKind.Transparent then input
-                else TypeVarEmitter.bridgeToKind(input, tvr, pos)
+                else TypeVarOps.bridgeToKind(input, tvr, pos)
             case _ =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $representation",

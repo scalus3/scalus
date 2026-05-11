@@ -18,7 +18,7 @@ import scalus.uplc.{Term, UplcAnnotation}
   *   - Types with function/BLS fields (canBeConvertedToData = false)
   *   - Data-compatible types annotated with @UplcRepr("UplcConstr") (canBeConvertedToData = true)
   */
-object SumUplcConstrEmitter {
+object SumUplcConstrOps {
 
     /** A Case-branch-body lambda wrapper used inside UplcConstr pattern matching. Represents
       * `λfieldVar. inner` where `inner` is the branch's body. Unlike a plain `ComplexLoweredValue`
@@ -707,7 +707,7 @@ object SumUplcConstrEmitter {
                   tvr: TypeVarRepresentation,
                   _: SumUplcConstr | _: SumCaseClassRepresentation.SumBuiltinList
                 ) =>
-                TypeVarEmitter.bridgeFromKind(input, tvr, representation, pos)
+                TypeVarOps.bridgeFromKind(input, tvr, representation, pos)
             // UplcConstr/ProdUplcConstr → TypeVarRepresentation: dispatch by target kind
             case (
                   _: SumUplcConstr | _: ProductCaseClassRepresentation.ProdUplcConstr,
@@ -719,10 +719,10 @@ object SumUplcConstrEmitter {
                 // audit. Transparent stays open-coded as `input` (no relabel) because that is
                 // the current semantics across most sum-side emitters.
                 if tvr.kind == SIRType.TypeVarKind.Transparent then input
-                else TypeVarEmitter.bridgeToKind(input, tvr, pos)
+                else TypeVarOps.bridgeToKind(input, tvr, pos)
             case _ =>
                 throw LoweringException(
-                  s"SumUplcConstrEmitter: unsupported conversion from ${input.representation} to $representation for ${input.sirType.show}",
+                  s"SumUplcConstrOps: unsupported conversion from ${input.representation} to $representation for ${input.sirType.show}",
                   pos
                 )
     }

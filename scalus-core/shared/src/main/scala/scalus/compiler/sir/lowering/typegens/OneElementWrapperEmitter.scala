@@ -279,7 +279,7 @@ case class OneElementWrapperEmitter(
                 // default)) and recurse — landing in the (OneElementWrapper, OneElementWrapper)
                 // arm above. Same final shape as if we'd extracted the arg + converted + wrapped
                 // open-coded, via a slightly longer proxy chain.
-                TypeVarEmitter.bridgeFromKind(input, tvr, representation, pos)
+                TypeVarOps.bridgeFromKind(input, tvr, representation, pos)
             case _ =>
                 ProductCaseEmitter.emitConvert(input, representation, pos)
     }

@@ -8,7 +8,7 @@ object SumCaseUplcConstrOnlyEmitter extends SumCaseUplcConstrCommon {
     override def defaultDataRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumUplcConstrEmitter.buildSumUplcConstr(tp)
+        SumUplcConstrOps.buildSumUplcConstr(tp)
 
     // TODO: set position in LoweringContext
     override def defaultTypeVarReperesentation(
@@ -43,7 +43,7 @@ object SumCaseUplcConstrOnlyEmitter extends SumCaseUplcConstrCommon {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
+        ProdUplcConstrOps.genConstr(constr, loweredArgs)
     }
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
@@ -62,7 +62,7 @@ object SumCaseUplcConstrOnlyEmitter extends SumCaseUplcConstrCommon {
     )(using
         lctx: LoweringContext
     ): LoweredValue = {
-        SumUplcConstrEmitter.genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
+        SumUplcConstrOps.genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
     }
 
 }

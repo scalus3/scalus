@@ -44,8 +44,8 @@ object SumDispatch {
     }
 
     /** Plain sum-class source path: handles DataConstr / PairIntDataList / SumBuiltinList /
-      * PackedSumDataList sources, delegating to `SumUplcConstrEmitter` for native-UplcConstr cases
-      * and to `SumListEmitterCommon.emitConvert` for list-shape conversions.
+      * PackedSumDataList sources, delegating to `SumUplcConstrOps` for native-UplcConstr cases and
+      * to `SumListEmitterCommon.emitConvert` for list-shape conversions.
       *
       * Package-private so `SumCaseUplcConstrEmitter.emitConvert` can delegate cross-typegen arms
       * here (Phase 5 step 4).
@@ -71,7 +71,7 @@ object SumDispatch {
                 new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
             // PairIntDataList → SumUplcConstr: delegate
             case (PairIntDataList, _: SumUplcConstr) =>
-                SumUplcConstrEmitter.emitConvert(input, representation, pos)
+                SumUplcConstrOps.emitConvert(input, representation, pos)
             // All SumBuiltinList source conversions delegate to list-shape impl
             case (SumBuiltinList(inElemRepr), _) =>
                 new SumBuiltinListEmitter(inElemRepr).emitConvert(input, representation, pos)
@@ -83,13 +83,13 @@ object SumDispatch {
                     SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
                 val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
-            // All SumUplcConstr source/target conversions delegate to SumUplcConstrEmitter
+            // All SumUplcConstr source/target conversions delegate to SumUplcConstrOps
             case (_: SumUplcConstr, _) =>
-                SumUplcConstrEmitter.emitConvert(input, representation, pos)
+                SumUplcConstrOps.emitConvert(input, representation, pos)
             case (_, _: SumUplcConstr) =>
-                SumUplcConstrEmitter.emitConvert(input, representation, pos)
+                SumUplcConstrOps.emitConvert(input, representation, pos)
             case (_: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
-                SumUplcConstrEmitter.emitConvert(input, representation, pos)
+                SumUplcConstrOps.emitConvert(input, representation, pos)
             case (inTvr: TypeVarRepresentation, _) =>
                 // Phase 5: source TypeVar dispatch via shared helper. Replaces hardcoded
                 // `DataConstr` with `SirTypeUplcGenerator.default*(input.sirType)`. For
@@ -97,13 +97,13 @@ object SumDispatch {
                 // SumCaseUplcConstrOnly-handled types the helper resolves to `SumUplcConstr`
                 // (defaultRepresentation) or throws (defaultTypeVarReperesentation), which is
                 // strictly more correct than mislabelling UC bytes as Data.
-                typegens.TypeVarEmitter.bridgeFromKind(input, inTvr, representation, pos)
+                typegens.TypeVarOps.bridgeFromKind(input, inTvr, representation, pos)
             case (_, outTvr: TypeVarRepresentation) =>
                 // Phase 5 canonicalization: Unwrapped/Fixed go through bridgeToKind, which
                 // returns a value whose repr reflects the actual byte shape (no TypeVar relabel
                 // on the result) — see design doc §3.6. Transparent stays open-coded as `input`.
                 if outTvr.kind == SIRType.TypeVarKind.Transparent then input
-                else typegens.TypeVarEmitter.bridgeToKind(input, outTvr, pos)
+                else typegens.TypeVarOps.bridgeToKind(input, outTvr, pos)
             case (_, _) =>
                 throw LoweringException(
                   s"Unsupported conversion for ${input.sirType.show} from ${input.representation} to $representation",
@@ -251,7 +251,7 @@ object SumDispatch {
         import SumCaseClassRepresentation.*
         loweredScrutinee.representation match
             case _: SumUplcConstr =>
-                typegens.SumUplcConstrEmitter
+                typegens.SumUplcConstrOps
                     .genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
             case DataConstr =>
                 typegens.DataConstrEmitter
@@ -329,7 +329,7 @@ object SumDispatch {
                     case _ => None
             }.toMap
             val defaultSumRepr =
-                typegens.SumUplcConstrEmitter.buildSumUplcConstr(resultType, pos)
+                typegens.SumUplcConstrOps.buildSumUplcConstr(resultType, pos)
             val variants = defaultSumRepr.variants.map { case (idx, defaultPuc) =>
                 branchPucByTag.get(idx) match
                     case Some(puc) => (idx, puc)
@@ -430,7 +430,7 @@ object SumDispatch {
         (input.representation, targetSum) match
             case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
                 val baseSum =
-                    typegens.SumUplcConstrEmitter.buildSumUplcConstr(targetType, pos)
+                    typegens.SumUplcConstrOps.buildSumUplcConstr(targetType, pos)
                 SumUplcConstr(baseSum.variants.updated(puc.tag, puc))
             case (suc: SumUplcConstr, _: SumUplcConstr)           => suc
             case (suc: SumBuiltinList, _: SumBuiltinList)         => suc

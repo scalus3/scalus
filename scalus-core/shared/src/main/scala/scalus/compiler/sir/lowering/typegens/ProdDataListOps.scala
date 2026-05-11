@@ -24,9 +24,9 @@ import scala.util.control.NonFatal
   *
   * Constructor-handling helpers (`retrieveConstrDecl`, `retrieveConstrIndex`, `selectMatchCase`)
   * still live on `ProductCaseEmitter` during the Phase 4c migration — they're shared with
-  * `ProdBuiltinPairEmitter` and several Sum-side typegens.
+  * `ProdBuiltinPairOps` and several Sum-side typegens.
   */
-object ProdDataListEmitter {
+object ProdDataListOps {
 
     /** Data-list-shaped Constr emission: convert each arg to its data form, fold into a `mkCons`
       * chain, wrap as a `ProdDataList`-tagged value carrying `constr.tp` as the SIR type.

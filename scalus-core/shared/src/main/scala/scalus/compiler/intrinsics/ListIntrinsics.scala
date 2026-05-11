@@ -127,7 +127,7 @@ object NativeListReprRules {
             inRepr match
                 case SumCaseClassRepresentation.SumBuiltinList(elemRepr)
                     if !elemRepr.isPackedData =>
-                    typegens.SumUplcConstrEmitter.buildSumUplcConstr(optTp)(using lctx)
+                    typegens.SumUplcConstrOps.buildSumUplcConstr(optTp)(using lctx)
                 case _ =>
                     typegens.SirTypeUplcGenerator.defaultRepresentation(optTp)(using lctx)
         outTp match

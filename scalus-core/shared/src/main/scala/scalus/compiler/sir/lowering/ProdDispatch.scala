@@ -60,9 +60,9 @@ object ProdDispatch {
       *
       *   - `(Prod|Sum)UplcConstr` → tag-ordered Case via `genMatchUplcConstr`.
       *   - `ProdDataList` / `ProdDataConstr` / `PackedDataList` / `PairIntDataList` →
-      *     `ProdDataListEmitter.genMatch` (Data-shape extraction via `unConstrData` +
+      *     `ProdDataListOps.genMatch` (Data-shape extraction via `unConstrData` +
       *     `headList`/`tailList`, or just field projection).
-      *   - `ProdBuiltinPair(_, _)` → `ProdBuiltinPairEmitter.genMatch` (`Case` on Pair for V4+,
+      *   - `ProdBuiltinPair(_, _)` → `ProdBuiltinPairOps.genMatch` (`Case` on Pair for V4+,
       *     `fstPair`/`sndPair` for V1-V3).
       *   - `OneElementWrapper(_)` → fall through to the per-type `OneElementWrapperEmitter`
       *     instance — its `genMatch` captures argType-specific binding extraction.
@@ -80,13 +80,13 @@ object ProdDispatch {
     )(using lctx: LoweringContext): LoweredValue = {
         loweredScrutinee.representation match
             case _: ProdUplcConstr | _: SumCaseClassRepresentation.SumUplcConstr =>
-                typegens.SumUplcConstrEmitter
+                typegens.SumUplcConstrOps
                     .genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
             case ProdDataList | ProdDataConstr | PackedDataList | PairIntDataList =>
-                typegens.ProdDataListEmitter
+                typegens.ProdDataListOps
                     .genMatch(matchData, loweredScrutinee, optTargetType)
             case _: ProdBuiltinPair =>
-                typegens.ProdBuiltinPairEmitter
+                typegens.ProdBuiltinPairOps
                     .genMatch(matchData, loweredScrutinee, optTargetType)
             case _: OneElementWrapper =>
                 typegens.SirTypeUplcGenerator

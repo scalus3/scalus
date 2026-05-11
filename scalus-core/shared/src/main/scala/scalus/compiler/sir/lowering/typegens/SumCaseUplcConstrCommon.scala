@@ -17,7 +17,7 @@ trait SumCaseUplcConstrCommon extends SirTypeUplcGenerator {
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
     ): LoweredValueRepresentation =
-        SumUplcConstrEmitter.buildSumUplcConstr(tp)
+        SumUplcConstrOps.buildSumUplcConstr(tp)
 
     /** Template method: `ProdUplcConstr` is always lifted into a single-entry `SumUplcConstr`
       * parent; everything else is delegated to `upcastOneOther`.

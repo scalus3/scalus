@@ -15,7 +15,7 @@ import scalus.compiler.sir.*
   *     Data-shaped form). Conversion converts to that underlying repr first, then routes to the
   *     target.
   *
-  * `bridgeFromKind` is currently called from `SumUplcConstrEmitter.emitConvert`,
+  * `bridgeFromKind` is currently called from `SumUplcConstrOps.emitConvert`,
   * `SumDispatch.sumCaseImpl`, `OneElementWrapperEmitter.emitConvert`, and
   * `SumListEmitterCommon.emitConvert`.
   *
@@ -27,7 +27,7 @@ import scalus.compiler.sir.*
   * about byte shape" invariant: `.representation` always reflects what the bytes actually are,
   * never an abstract claim that may not match.
   */
-object TypeVarEmitter {
+object TypeVarOps {
 
     /** Convert a TypeVar-labeled value to a concrete `target` repr. The underlying-repr lookups go
       * through the input's typegen so the helper works for `DataConstrEmitter`,
@@ -43,7 +43,7 @@ object TypeVarEmitter {
         tvr.kind match
             case Transparent =>
                 // Skip the proxy when input is already in target form. The pre-extraction
-                // call sites (e.g. SumUplcConstrEmitter's removed local helper) always wrapped;
+                // call sites (e.g. SumUplcConstrOps's removed local helper) always wrapped;
                 // dropping the no-op wrapper is a strict simplification.
                 if input.representation == target then input
                 else new RepresentationProxyLoweredValue(input, target, pos)

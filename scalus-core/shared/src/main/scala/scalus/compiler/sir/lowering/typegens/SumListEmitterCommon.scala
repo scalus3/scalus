@@ -202,7 +202,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
         loweredScrutinee.representation match
             case _: SumCaseClassRepresentation.SumUplcConstr |
                 _: SumCaseClassRepresentation.SumReprProxy =>
-                return SumUplcConstrEmitter.genSelectUplcConstr(sel, loweredScrutinee)
+                return SumUplcConstrOps.genSelectUplcConstr(sel, loweredScrutinee)
             case _ =>
         val (scrutineeReady, listRepr, elemRepr) = loweredScrutinee.representation match
             case sbl @ SumCaseClassRepresentation.SumBuiltinList(er) =>
@@ -329,7 +329,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
         loweredScrutinee.representation match
             case _: SumCaseClassRepresentation.SumUplcConstr |
                 _: SumCaseClassRepresentation.SumReprProxy =>
-                return SumUplcConstrEmitter.genMatchUplcConstr(
+                return SumUplcConstrOps.genMatchUplcConstr(
                   matchData,
                   loweredScrutinee,
                   optTargetType
@@ -805,7 +805,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
             case (_, tv: TypeVarRepresentation) =>
                 // Phase 5: target TypeVar dispatch via shared helper. SumListEmitterCommon was
                 // already always-relabel for all three kinds, so this is a drop-in replacement.
-                TypeVarEmitter.bridgeToKind(input, tv, pos)
+                TypeVarOps.bridgeToKind(input, tv, pos)
             case (tv: TypeVarRepresentation, _) =>
                 // Phase 5: source TypeVar dispatch via shared helper. Resolves the type's
                 // underlying default through `SirTypeUplcGenerator.default*` rather than the
@@ -813,24 +813,24 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                 // replaces the hardcoded `PackedSumDataList` Fixed underlying with each typegen's
                 // own `defaultTypeVarReperesentation` (correct for SumPairBuiltinList /
                 // PackedDataMap types whose Fixed bytes are NOT in `PackedSumDataList` form).
-                TypeVarEmitter.bridgeFromKind(input, tv, outputRepresentation, pos)
+                TypeVarOps.bridgeFromKind(input, tv, outputRepresentation, pos)
             // SumReprProxy: unwrap and delegate
             case (_: SumReprProxy, _) =>
-                SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)
+                SumUplcConstrOps.emitConvert(input, outputRepresentation, pos)
             case (_, _: SumReprProxy) =>
-                SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)
+                SumUplcConstrOps.emitConvert(input, outputRepresentation, pos)
             // SumUplcConstr → anything: delegate
             case (_: SumUplcConstr, _) =>
-                SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)
+                SumUplcConstrOps.emitConvert(input, outputRepresentation, pos)
             // anything → SumUplcConstr: delegate
             case (_, _: SumUplcConstr) =>
-                SumUplcConstrEmitter.emitConvert(input, outputRepresentation, pos)
+                SumUplcConstrOps.emitConvert(input, outputRepresentation, pos)
             // ProdUplcConstr value at a sum-list-type site: wrap as singleton SumUplcConstr
             case (puc: ProductCaseClassRepresentation.ProdUplcConstr, _) =>
                 val wrappedRepr =
                     SumUplcConstr(scala.collection.immutable.SortedMap(puc.tag -> puc))
                 val wrapped = new RepresentationProxyLoweredValue(input, wrappedRepr, pos)
-                SumUplcConstrEmitter.emitConvert(
+                SumUplcConstrOps.emitConvert(
                   wrapped,
                   outputRepresentation,
                   pos

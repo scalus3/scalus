@@ -14,10 +14,10 @@ import scalus.uplc.Term
   * case body.
   *
   * Constr emission for `ProdBuiltinPair` flows through `ProductCaseEmitter.genConstrLowered` →
-  * `ProdDataListEmitter.genConstr` → conversions in `ProdDispatch`; only the `Match` path is
+  * `ProdDataListOps.genConstr` → conversions in `ProdDispatch`; only the `Match` path is
   * per-emitter logic.
   */
-object ProdBuiltinPairEmitter {
+object ProdBuiltinPairOps {
 
     /** Match emission for a `ProdBuiltinPair` scrutinee. */
     def genMatch(

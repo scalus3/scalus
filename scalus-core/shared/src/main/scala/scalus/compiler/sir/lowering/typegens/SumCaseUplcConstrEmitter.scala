@@ -43,7 +43,7 @@ object SumCaseUplcConstrEmitter extends SumCaseUplcConstrCommon {
         targetType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val targetSum = SumUplcConstrEmitter.buildSumUplcConstr(targetType)
+        val targetSum = SumUplcConstrOps.buildSumUplcConstr(targetType)
         val constrIndex =
             ProductCaseEmitter.retrieveConstrIndex(input.sirType, pos)
         targetSum.variants.get(constrIndex) match
@@ -62,7 +62,7 @@ object SumCaseUplcConstrEmitter extends SumCaseUplcConstrCommon {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        // `ProdUplcConstrEmitter.genConstr` needs a CaseClass tp. After `dispatchNil` `constr.tp` may be a
+        // `ProdUplcConstrOps.genConstr` needs a CaseClass tp. After `dispatchNil` `constr.tp` may be a
         // sum target (possibly `Annotated`) carrying caller-supplied substituted args — preserve
         // them as the rebuilt CaseClass's parent rather than dropping them via the static
         // `decl.constrType(name)` lookup (which would substitute back to abstract decl typevars).
@@ -71,7 +71,7 @@ object SumCaseUplcConstrEmitter extends SumCaseUplcConstrCommon {
             else if SIRType.isSum(constr.tp) then
                 preservedParentCaseClassForm(constr.tp, constr.data, constr.name)
             else constr.data.constrType(constr.name)
-        ProdUplcConstrEmitter.genConstr(
+        ProdUplcConstrOps.genConstr(
           constr.copy(tp = effectiveTp),
           loweredArgs
         )
@@ -163,21 +163,21 @@ object SumCaseUplcConstrEmitter extends SumCaseUplcConstrCommon {
                 import SIRType.TypeVarKind.*
                 inTvr.kind match
                     case Transparent =>
-                        SumUplcConstrEmitter.emitConvert(input, representation, pos)
+                        SumUplcConstrOps.emitConvert(input, representation, pos)
                     case Unwrapped =>
                         val sourceUnderlying = defaultRepresentation(input.sirType)
                         val r0 = RepresentationProxyLoweredValue(input, sourceUnderlying, pos)
                         emitConvert(r0, representation, pos)
                     case Fixed =>
-                        SumUplcConstrEmitter.emitConvert(input, representation, pos)
+                        SumUplcConstrOps.emitConvert(input, representation, pos)
             // TypeVar target: dispatch via canonical no-relabel bridgeToKind (Transparent stays
             // open-coded as `input`).
             case (_, outTvr: TypeVarRepresentation) =>
                 if outTvr.kind == SIRType.TypeVarKind.Transparent then input
-                else TypeVarEmitter.bridgeToKind(input, outTvr, pos)
-            // SumUplcConstr, DataConstr, PairIntDataList → SumUplcConstrEmitter
+                else TypeVarOps.bridgeToKind(input, outTvr, pos)
+            // SumUplcConstr, DataConstr, PairIntDataList → SumUplcConstrOps
             case (_: SumUplcConstr, _) | (DataConstr, _) | (PairIntDataList, _) =>
-                SumUplcConstrEmitter.emitConvert(input, representation, pos)
+                SumUplcConstrOps.emitConvert(input, representation, pos)
             case (inRepr, outRepr) =>
                 throw LoweringException(
                   s"SumCaseUplcConstr unhandled conversion $inRepr → $outRepr for ${input.sirType.show}",
