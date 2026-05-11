@@ -9,5 +9,7 @@ class MLResult(private[builtin] val value: PT):
         case that: MLResult => value.is_equal(that.value)
         case _              => false
 
+    override def hashCode(): Int = java.util.Arrays.hashCode(value.to_bendian())
+
 object MLResult:
     def apply(value: PT): MLResult = new MLResult(value)

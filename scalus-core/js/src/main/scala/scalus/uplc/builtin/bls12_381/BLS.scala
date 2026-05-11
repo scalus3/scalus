@@ -90,6 +90,7 @@ private[bls12_381] object BLS:
     object GT:
         def isEquals(lhs: GT, rhs: GT): Boolean = bls12_381.fields.gtModule.isEquals(lhs, rhs)
         def multiply(lhs: GT, rhs: GT): GT = bls12_381.fields.gtModule.multiply(lhs, rhs)
+        def toBytes(value: GT): Uint8Array = bls12_381.fields.gtModule.toBytes(value)
 
     @js.native
     trait Fields extends js.Object:
@@ -102,4 +103,5 @@ private[bls12_381] object BLS:
         def isEquals(lhs: GT, rhs: GT): Boolean = js.native
         @JSName("mul")
         def multiply(lhs: GT, rhs: GT): GT = js.native
+        def toBytes(value: GT): Uint8Array = js.native
 end BLS
