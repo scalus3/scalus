@@ -1,5 +1,6 @@
 package scalus.cardano.ledger
 
+import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 
@@ -122,3 +123,39 @@ class NonNegativeIntervalTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         // Large GCD
         val large = NonNegativeInterval.reduce(1000000000, 1000000000)
         assert(large == NonNegativeInterval(1, 1))
+
+    test("equals and hashCode agree on equivalent fractions"):
+        val a = NonNegativeInterval(2, 4)
+        val b = NonNegativeInterval(1, 2)
+        assert(a == b)
+        assert(a.hashCode == b.hashCode)
+        assert(Set(a).contains(b))
+        assert(Map(a -> "half").get(b).contains("half"))
+
+    test("equals and hashCode work across many fraction reductions"):
+        val numerator = Gen.chooseNum(0L, 1_000_000_000L)
+        val denominator = Gen.chooseNum(1L, 1_000_000_000L)
+        val factor = Gen.chooseNum(1L, 1_000_000L)
+        forAll(numerator, denominator, factor) { (n, d, k) =>
+            val a = NonNegativeInterval(n, d)
+            val b = NonNegativeInterval(n * k, d * k)
+            assert(a == b)
+            assert(a.hashCode == b.hashCode)
+        }
+
+    test("unapply destructures into raw numerator/denominator"):
+        NonNegativeInterval(2, 4) match
+            case NonNegativeInterval(n, d) =>
+                assert(n == 2L && d == 4L)
+            case _ => fail("unapply returned None")
+
+    test("unapply on null returns None"):
+        val nullInterval: NonNegativeInterval = null
+        assert(NonNegativeInterval.unapply(nullInterval).isEmpty)
+
+    test("copy preserves raw numerator/denominator"):
+        val original = NonNegativeInterval(2, 4)
+        val copied = original.copy()
+        assert(copied.numerator == 2L && copied.denominator == 4L)
+        val newDenom = original.copy(denominator = 8)
+        assert(newDenom.numerator == 2L && newDenom.denominator == 8L)

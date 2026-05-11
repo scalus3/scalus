@@ -17,7 +17,7 @@ import scala.annotation.tailrec
   * @param denominator
   *   The denominator of the fraction (positive)
   */
-case class NonNegativeInterval(numerator: Long, denominator: Long) {
+final class NonNegativeInterval(val numerator: Long, val denominator: Long) {
     // Validate constraints
     require(numerator >= 0, "Numerator must be non-negative")
     require(denominator > 0, "Denominator must be positive")
@@ -31,6 +31,19 @@ case class NonNegativeInterval(numerator: Long, denominator: Long) {
             case _ => false
         }
     }
+
+    override def hashCode(): Int = {
+        val r = this.reduce
+        (r.numerator, r.denominator).hashCode()
+    }
+
+    override def toString: String = s"NonNegativeInterval($numerator,$denominator)"
+
+    def copy(
+        numerator: Long = this.numerator,
+        denominator: Long = this.denominator
+    ): NonNegativeInterval =
+        new NonNegativeInterval(numerator, denominator)
 
     /** Multiplication operation with Int.
       *
@@ -194,6 +207,13 @@ case class NonNegativeInterval(numerator: Long, denominator: Long) {
 }
 
 object NonNegativeInterval {
+    def apply(numerator: Long, denominator: Long): NonNegativeInterval =
+        new NonNegativeInterval(numerator, denominator)
+
+    def unapply(x: NonNegativeInterval): Option[(Long, Long)] =
+        if x eq null then None
+        else Some((x.numerator, x.denominator))
+
     val zero: NonNegativeInterval = NonNegativeInterval(0, 1)
 
     def reduce(numerator: Long, denominator: Long): NonNegativeInterval = {
