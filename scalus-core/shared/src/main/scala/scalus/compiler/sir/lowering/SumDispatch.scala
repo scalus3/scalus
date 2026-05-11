@@ -68,8 +68,7 @@ object SumDispatch {
                 DataConstrEmitter.emitConvert(input, representation, pos)
             // === PairIntDataList → list reprs: delegate to list generator ===
             case (PairIntDataList, SumBuiltinList(_)) | (PairIntDataList, PackedSumDataList) =>
-                val elemType =
-                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
+                val elemType = listElementTypeOrThrow(input, representation, pos)
                 val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
             // PairIntDataList → SumUplcConstr: delegate
@@ -82,8 +81,7 @@ object SumDispatch {
                 input
             // All other PackedSumDataList source conversions delegate to list-shape impl
             case (PackedSumDataList, _) =>
-                val elemType =
-                    SumBuiltinList.retrieveListElementType(input.sirType).getOrElse(SIRType.Data.tp)
+                val elemType = listElementTypeOrThrow(input, representation, pos)
                 val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 new SumBuiltinListEmitter(elemRepr).emitConvert(input, representation, pos)
             // All SumUplcConstr source/target conversions delegate to SumUplcConstrOps
@@ -114,6 +112,24 @@ object SumDispatch {
                 )
         }
     }
+
+    /** Extract the list element type from a list-shape source. The PairIntDataList /
+      * PackedSumDataList source arms above operate on list-typed values; if the static type isn't a
+      * list, the conversion is structurally invalid — throw rather than silently substituting
+      * `Data.tp` (which would mask the bug and produce wrong-shape conversions downstream).
+      */
+    private def listElementTypeOrThrow(
+        input: LoweredValue,
+        target: LoweredValueRepresentation,
+        pos: SIRPosition
+    ): SIRType =
+        SumBuiltinList.retrieveListElementType(input.sirType).getOrElse {
+            throw LoweringException(
+              s"sumCaseImpl: list-shape source ${input.representation} → $target requires a " +
+                  s"list-typed input, got ${input.sirType.show}",
+              pos
+            )
+        }
 
     /** Choose the typegen that should emit this `Constr`, considering both the static type and
       * surrounding-arg/context cues. Centralizes the four rules formerly in
