@@ -317,6 +317,38 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       },
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      // NonNegativeInterval: converted from case class to regular class so a custom
+      // hashCode matching the reduce-based equals could be supplied without the
+      // case-class machinery falling out of step (issue #272).
+      mimaBinaryIssueFilters ++= Seq(
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.NonNegativeInterval"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.NonNegativeInterval$"),
+        ProblemFilters
+            .exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.NonNegativeInterval._1"),
+        ProblemFilters
+            .exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.NonNegativeInterval._2"),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.NonNegativeInterval.canEqual"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.NonNegativeInterval.productArity"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.NonNegativeInterval.productPrefix"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.NonNegativeInterval.productElement"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.NonNegativeInterval.productElementName"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.NonNegativeInterval.fromProduct"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.NonNegativeInterval.unapply"
+        ),
+      ),
 
       // enable when debug compilation of tests
       Test / scalacOptions += "-color:never",
