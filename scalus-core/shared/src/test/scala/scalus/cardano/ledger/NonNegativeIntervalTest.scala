@@ -144,8 +144,14 @@ class NonNegativeIntervalTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         }
 
     test("unapply destructures into raw numerator/denominator"):
-        val NonNegativeInterval(n, d) = NonNegativeInterval(2, 4)
-        assert(n == 2L && d == 4L)
+        NonNegativeInterval(2, 4) match
+            case NonNegativeInterval(n, d) =>
+                assert(n == 2L && d == 4L)
+            case _ => fail("unapply returned None")
+
+    test("unapply on null returns None"):
+        val nullInterval: NonNegativeInterval = null
+        assert(NonNegativeInterval.unapply(nullInterval).isEmpty)
 
     test("copy preserves raw numerator/denominator"):
         val original = NonNegativeInterval(2, 4)

@@ -17,7 +17,7 @@ import scala.annotation.tailrec
   * @param denominator
   *   The denominator of the fraction (positive)
   */
-class NonNegativeInterval(val numerator: Long, val denominator: Long) {
+final class NonNegativeInterval(val numerator: Long, val denominator: Long) {
     // Validate constraints
     require(numerator >= 0, "Numerator must be non-negative")
     require(denominator > 0, "Denominator must be positive")
@@ -210,8 +210,9 @@ object NonNegativeInterval {
     def apply(numerator: Long, denominator: Long): NonNegativeInterval =
         new NonNegativeInterval(numerator, denominator)
 
-    def unapply(x: NonNegativeInterval): Some[(Long, Long)] =
-        Some((x.numerator, x.denominator))
+    def unapply(x: NonNegativeInterval): Option[(Long, Long)] =
+        if x eq null then None
+        else Some((x.numerator, x.denominator))
 
     val zero: NonNegativeInterval = NonNegativeInterval(0, 1)
 

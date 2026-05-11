@@ -321,6 +321,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // hashCode matching the reduce-based equals could be supplied without the
       // case-class machinery falling out of step (issue #272).
       mimaBinaryIssueFilters ++= Seq(
+        ProblemFilters.exclude[FinalClassProblem]("scalus.cardano.ledger.NonNegativeInterval"),
         ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.NonNegativeInterval"),
         ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.NonNegativeInterval$"),
         ProblemFilters
