@@ -6,10 +6,10 @@ import scalus.compiler.sir.*
 import scalus.uplc.Constant
 
 /** Parameterized list type generator for BuiltinList[X] where X is not BuiltinPair. For pair lists,
-  * use SumPairBuiltinListSirTypeGenerator instead.
+  * use SumPairBuiltinListEmitter instead.
   */
-class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation)
-    extends SumListCommonSirTypeGenerator {
+class SumBuiltinListEmitter(val elementRepr: LoweredValueRepresentation)
+    extends SumListEmitterCommon {
 
     // Cached to avoid repeated case class allocation in hot path
     private val listRepr: LoweredValueRepresentation =
@@ -40,7 +40,7 @@ class SumBuiltinListSirTypeGenerator(val elementRepr: LoweredValueRepresentation
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         val elemType = retrieveElementType(tp, SIRPosition.empty)
-        lctx.typeGenerator(elemType).canBeConvertedToData(elemType)
+        SirTypeUplcGenerator.canBeConvertedToData(elemType)
     }
 
     override def genNil(resType: SIRType, pos: SIRPosition)(using LoweringContext): LoweredValue =

@@ -8,7 +8,7 @@ import scalus.compiler.sir.lowering.PrimitiveRepresentation
 import scalus.uplc.Constant
 import scalus.uplc.builtin.Data.toData
 
-trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
+trait PrimitiveSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     def defaultRepresentation(tp: SIRType)(using LoweringContext): LoweredValueRepresentation =
         PrimitiveRepresentation.Constant
@@ -129,7 +129,7 @@ trait PrimitiveSirTypeGenerator extends SirTypeUplcGenerator {
 
 }
 
-object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
+object BooleanSirTypeGenerator extends PrimitiveSirTypeGenerator {
 
     /** Boolean represented in data as Constr 0 [] and Constr 1 [] (see definition in plutus:
       * https://github.com/IntersectMBO/plutus/blob/master/plutus-tx/src/PlutusTx/IsData/Instances.hs#L24C1-L25C1)
@@ -390,7 +390,7 @@ object SIRTypeUplcBooleanGenerator extends PrimitiveSirTypeGenerator {
 
 }
 
-object SIRTypeUplcIntegerGenerator extends PrimitiveSirTypeGenerator {
+object IntegerSirTypeGenerator extends PrimitiveSirTypeGenerator {
 
     override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
@@ -545,7 +545,7 @@ object SIRTypeUplcIntegerGenerator extends PrimitiveSirTypeGenerator {
 
 }
 
-object SIRTypeUplcByteStringGenerator extends PrimitiveSirTypeGenerator {
+object ByteStringSirTypeGenerator extends PrimitiveSirTypeGenerator {
 
     override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
@@ -640,7 +640,7 @@ object SIRTypeUplcByteStringGenerator extends PrimitiveSirTypeGenerator {
 
 }
 
-object SIRTypeUplcStringGenerator extends PrimitiveSirTypeGenerator {
+object StringSirTypeGenerator extends PrimitiveSirTypeGenerator {
 
     override def uplcToDataValue(input: LoweredValue, pos: SIRPosition)(using
         LoweringContext
@@ -832,7 +832,7 @@ object BLS12_381_G2_SirTypeGenerator extends PrimitiveSirTypeGenerator {
 
 }
 
-object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcGenerator {
+object BLS12_381_MLResultSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         lctx: LoweringContext

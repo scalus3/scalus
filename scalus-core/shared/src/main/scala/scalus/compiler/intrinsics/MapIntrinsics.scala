@@ -70,10 +70,10 @@ object MapReprRules {
         given LoweringContext = lctx
         outTp match
             case SIRType.Fun(argTp, _) =>
-                val tg = lctx.typeGenerator(argTp)
                 val inRepr =
-                    if tg.canBeConvertedToData(argTp) then tg.defaultDataRepresentation(argTp)
-                    else tg.defaultRepresentation(argTp)
+                    if typegens.SirTypeUplcGenerator.canBeConvertedToData(argTp) then
+                        typegens.SirTypeUplcGenerator.defaultDataRepresentation(argTp)
+                    else typegens.SirTypeUplcGenerator.defaultRepresentation(argTp)
                 LambdaRepresentation(
                   outTp,
                   InOutRepresentationPair(inRepr, ProductCaseClassRepresentation.PackedDataMap)
@@ -83,8 +83,8 @@ object MapReprRules {
     /** Convert first arg (key) to default data representation — map keys are always Data. */
     val singletonArgConvert: ArgReprConvertRule = (argTp, _, lctx) =>
         given LoweringContext = lctx
-        val tg = lctx.typeGenerator(argTp)
-        if tg.canBeConvertedToData(argTp) then Some(tg.defaultDataRepresentation(argTp))
+        if typegens.SirTypeUplcGenerator.canBeConvertedToData(argTp) then
+            Some(typegens.SirTypeUplcGenerator.defaultDataRepresentation(argTp))
         else None
 
     /** empty: Unit -> Map[K, V] — handled through Apply-based factory intrinsic */

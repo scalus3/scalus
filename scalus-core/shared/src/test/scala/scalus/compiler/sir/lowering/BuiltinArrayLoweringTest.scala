@@ -10,10 +10,10 @@ import scalus.uplc.{Constant, Term}
 
 /** Tests for BuiltinArray lowering in case classes.
   *
-  * BuiltinArray now has a dedicated BuiltinArraySirTypeGenerator that handles conversion to/from
-  * Data representation. When stored in a case class, BuiltinArray is converted to Data.List by
-  * iterating through the array elements using indexArray. When extracted, it's converted back to
-  * BuiltinArray using listToArray.
+  * BuiltinArray now has a dedicated ProdBuiltinArrayEmitter that handles conversion to/from Data
+  * representation. When stored in a case class, BuiltinArray is converted to Data.List by iterating
+  * through the array elements using indexArray. When extracted, it's converted back to BuiltinArray
+  * using listToArray.
   */
 class BuiltinArrayLoweringTest extends AnyFunSuite {
 
@@ -106,9 +106,9 @@ class BuiltinArrayLoweringTest extends AnyFunSuite {
         info(s"BuiltinArray[Data] generator: ${generator.getClass.getSimpleName}")
         info(s"BuiltinArray[Data] default representation: $defaultRepr")
 
-        // The generator falls through to ProductCaseSirTypeGenerator
+        // The generator falls through to ProductCaseEmitter
         // which gives ProdDataList representation - this is incorrect for arrays.
-        // A proper implementation would need a dedicated BuiltinArraySirTypeGenerator
+        // A proper implementation would need a dedicated ProdBuiltinArrayEmitter
         // that uses a native array representation (similar to how BuiltinList uses SumDataList).
     }
 

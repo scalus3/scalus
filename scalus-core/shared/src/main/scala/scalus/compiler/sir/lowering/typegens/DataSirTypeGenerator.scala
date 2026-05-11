@@ -16,7 +16,7 @@ import scalus.compiler.sir.SIR.Pattern
   *
   * Pattern matching on Data requires PlutusV4's Case on Data instruction.
   */
-object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
+object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
     import LoweredValue.Builder.*
 
     override def defaultRepresentation(tp: SIRType)(using
@@ -279,8 +279,8 @@ object SIRTypeUplcDataGenerator extends SirTypeUplcGenerator {
 
                     case _ =>
                         // For I, B, List - use TypeProxy, toRepresentation handles unpacking
-                        val fieldTypeGen = lctx.typeGenerator(sel.tp)
-                        val fieldRepr = fieldTypeGen.defaultDataRepresentation(sel.tp)
+                        val fieldRepr =
+                            SirTypeUplcGenerator.defaultDataRepresentation(sel.tp)
                         TypeRepresentationProxyLoweredValue(
                           loweredScrutinee,
                           sel.tp,

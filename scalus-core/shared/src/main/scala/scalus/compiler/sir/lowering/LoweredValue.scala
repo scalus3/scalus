@@ -57,6 +57,13 @@ trait LoweredValue {
     def representation: LoweredValueRepresentation
 
     /** Convert this value to the given representation.
+      *
+      * Routes through `SumDispatch.toRepresentation`, which inspects the source value's actual
+      * typegen and dispatches accordingly (Sum-side typegens go through the centralized
+      * `toRepresentationImpl` helpers; non-Sum typegens fall back to their direct
+      * `toRepresentation`). We can't split by `SIRType.isSum/isProd` here because sum-shaped
+      * *constructors* have `CaseClass` SIR types (e.g. `List.Cons` is a `CaseClass` whose typegen
+      * is `SumBuiltinList`).
       */
     def toRepresentation(representation: LoweredValueRepresentation, pos: SIRPosition)(using
         lctx: LoweringContext
@@ -65,13 +72,13 @@ trait LoweredValue {
         else if LoweredValue.isTransparentTypeVarTarget(representation) then this
         else if this.representation.isCompatibleOn(sirType, representation, pos) then
             RepresentationProxyLoweredValue(this, representation, pos)
-        else lctx.typeGenerator(sirType).toRepresentation(this, representation, pos)
+        else SumDispatch.toRepresentation(this, representation, pos)
     }
 
     def upcastOne(targetType: SIRType, pos: SIRPosition)(using
-        LoweringContext
+        lctx: LoweringContext
     ): LoweredValue =
-        summon[LoweringContext].typeGenerator(sirType).upcastOne(this, targetType, pos)
+        SumDispatch.upcastOne(this, targetType, pos)
 
     /** Upcast the value to the target type if needed.
       *
@@ -144,7 +151,7 @@ trait LoweredValue {
                 // become Data. Route through the type's generator (FunSirTypeGenerator for
                 // Fun targets, TypeVarSirTypeGenerator for bare FreeUnificator) which knows
                 // how to emit the proper conversion.
-                val targetRepr = lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+                val targetRepr = typegens.SirTypeUplcGenerator.defaultRepresentation(targetType)
                 if structurallyUpcasted.representation == targetRepr then structurallyUpcasted
                 else if structurallyUpcasted.representation
                         .isCompatibleOn(targetType, targetRepr, pos)
@@ -402,9 +409,8 @@ class VariableLoweredValue(
                 case Some(depVar) =>
                     depVar
                 case None =>
-                    val retval = summon[LoweringContext]
-                        .typeGenerator(sirType)
-                        .toRepresentation(this, representation, pos)
+                    // Same routing rationale as the trait's `toRepresentation` above.
+                    val retval = SumDispatch.toRepresentation(this, representation, pos)
                     val depId = lctx.uniqueVarName(name + "r")
                     val depVar = DependendVariableLoweredValue(
                       depId,
@@ -515,9 +521,8 @@ case class DependendVariableLoweredValue(
                 case Some(depVar) =>
                     depVar
                 case None =>
-                    val newRepr = summon[LoweringContext]
-                        .typeGenerator(sirType)
-                        .toRepresentation(this, representation, pos)
+                    // Same routing rationale as the trait's `toRepresentation` above.
+                    val newRepr = SumDispatch.toRepresentation(this, representation, pos)
                     val newId = summon[LoweringContext].uniqueVarName(name + "r")
                     val newDepVar = DependendVariableLoweredValue(
                       newId,
@@ -1456,6 +1461,23 @@ object LoweredValue {
       */
     object Builder {
 
+        /** Convert `input` to `target` via a static `intermediate` repr — i.e.,
+          * `input.toRepresentation(intermediate, pos).toRepresentation(target, pos)`. Replaces
+          * per-emitter `viaXxx` helpers (Phase 5).
+          *
+          * For intermediates that depend on `input.sirType` (e.g.
+          * `SumBuiltinList(defaultDataRep(elemType))`), keep the per-emitter helper since the
+          * intermediate computation needs sirType context — this `via` only wraps the static case.
+          */
+        def via(
+            intermediate: LoweredValueRepresentation
+        )(
+            input: LoweredValue,
+            target: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using LoweringContext): LoweredValue =
+            input.toRepresentation(intermediate, pos).toRepresentation(target, pos)
+
         def lvIfThenElse(
             cond: LoweredValue,
             thenBranch: LoweredValue,
@@ -1967,7 +1989,7 @@ object LoweredValue {
                             case Fixed                   => gen.defaultTypeVarReperesentation(tp)
                     resolvedArgType match
                         case tv1: SIRType.TypeVar =>
-                            val targetArgGen = lctx.typeGenerator(targetArgType)
+                            val targetArgGen = typegens.SirTypeUplcGenerator(targetArgType)
                             val targetArgRepr = reprFor(targetArgGen, targetArgType)
                             // Don't silently relabel: ask the value to convert to the target
                             // repr. If arg.representation's kind disagrees with targetArgRepr
@@ -1983,7 +2005,7 @@ object LoweredValue {
                             )
                             (argTyped, true)
                         case other =>
-                            val gen = lctx.typeGenerator(other)
+                            val gen = typegens.SirTypeUplcGenerator(other)
                             val targetArgRepr = reprFor(gen, other)
                             // Same rule as above: convert, don't relabel. With `other`
                             // concrete the generator can emit real unwrap/wrap builtins.
@@ -2362,6 +2384,34 @@ object LoweredValue {
             newVar
         }
 
+        /** If `lv` is already identifiable, return it unchanged with `false`. Otherwise wrap it in
+          * a fresh lazy let-binding (`lvNewLazyIdVar`) with `nameHint` (uniqued), `tp`, and `repr`,
+          * returning the new identifiable plus `true` to signal the caller that it must add the
+          * binding to scope (e.g., via `ScopeBracketsLoweredValue`).
+          *
+          * `tp` / `repr` are passed explicitly because some callers wrap the result of a
+          * `toRepresentation` conversion whose runtime type/repr differs from the source value's
+          * stored ones.
+          *
+          * Note: when `lv` is already identifiable, `tp` and `repr` are ignored — the existing
+          * binding's stored shape is returned as-is. Callers that pass values different from
+          * `lv.sirType` / `lv.representation` must already have ensured the existing binding's
+          * shape matches what they need; otherwise the identifiable branch would silently mask a
+          * mismatch.
+          */
+        def lvAsIdentifiable(
+            lv: LoweredValue,
+            nameHint: String,
+            tp: SIRType,
+            repr: LoweredValueRepresentation,
+            pos: SIRPosition
+        )(using lctx: LoweringContext): (IdentifiableLoweredValue, Boolean) =
+            lv match
+                case idv: IdentifiableLoweredValue =>
+                    (idv, false)
+                case other =>
+                    (lvNewLazyIdVar(lctx.uniqueVarName(nameHint), tp, repr, other, pos), true)
+
         def lvBuiltinApply(
             fun: SIR.Builtin,
             arg: LoweredValue,
@@ -2522,15 +2572,16 @@ object LoweredValue {
                 }
                 val (tvRepr, resultRepr) =
                     if changeRepresentation then
-                        val valueGen = lctx.typeGenerator(value.sirType)
                         val converted = value.toRepresentation(
-                          valueGen.defaultTypeVarReperesentation(value.sirType),
+                          typegens.SirTypeUplcGenerator
+                              .defaultTypeVarReperesentation(value.sirType),
                           inPos
                         )
                         // Use target type's default TypeVar representation for the result
                         // DataConstr and ProdDataConstr are compatible representations
-                        val targetGen = lctx.typeGenerator(targetType)
-                        val targetTypeVarRepr = targetGen.defaultTypeVarReperesentation(targetType)
+                        val targetTypeVarRepr =
+                            typegens.SirTypeUplcGenerator
+                                .defaultTypeVarReperesentation(targetType)
                         // When casting Data to a native list representation
                         // (e.g., DataData → SumBuiltinList(Constant)), perform actual
                         // conversion so list elements are unwrapped from Data to native.
@@ -2554,8 +2605,8 @@ object LoweredValue {
             // typeProxy means zero-cost view change — just change type and representation metadata,
             // no UPLC conversion code generated
             if isTypeProxy then {
-                val targetGen = lctx.typeGenerator(targetType)
-                val targetRepr = targetGen.defaultTypeVarReperesentation(targetType)
+                val targetRepr =
+                    typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(targetType)
                 new TypeRepresentationProxyLoweredValue(expr, targetType, targetRepr, inPos)
             } else {
 
@@ -2872,7 +2923,7 @@ object LoweredValue {
                     val compatibleOn =
                         nonErrored.filter((lw, c) => lw.isCompatibleWithType(targetType))
                     if compatibleOn.isEmpty
-                    then lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+                    then typegens.SirTypeUplcGenerator.defaultRepresentation(targetType)
                     else {
                         // Deterministic ordering: by descending count, then by stableKey ascending.
                         // Map iteration order is non-deterministic across JVM runs (TypeProxy
@@ -2888,7 +2939,7 @@ object LoweredValue {
                             .find((r, c) => values.forall(v => r.isCompatibleWithType(v.sirType)))
                             .map(_._1)
                             .getOrElse(
-                              lctx.typeGenerator(targetType).defaultRepresentation(targetType)
+                              typegens.SirTypeUplcGenerator.defaultRepresentation(targetType)
                             )
                     }
                 }

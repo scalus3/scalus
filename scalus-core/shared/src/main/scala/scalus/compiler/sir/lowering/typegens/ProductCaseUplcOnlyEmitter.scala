@@ -6,16 +6,16 @@ import scalus.compiler.sir.*
 /** Type generator for product case classes that cannot be converted to Data (contain functions or
   * BLS elements). Uses UplcConstr representation.
   */
-object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
+object ProductCaseUplcOnlyEmitter extends SirTypeUplcGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         lctx: LoweringContext
     ): LoweredValueRepresentation = {
-        val constrIndex = ProductCaseSirTypeGenerator.retrieveConstrIndex(tp, SIRPosition.empty)
-        val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(tp, SIRPosition.empty)
+        val constrIndex = ProductCaseEmitter.retrieveConstrIndex(tp, SIRPosition.empty)
+        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(tp, SIRPosition.empty)
         val fieldReprs = constrDecl.params.map { param =>
             val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
-            lctx.typeGenerator(paramType).defaultRepresentation(paramType)
+            SirTypeUplcGenerator.defaultRepresentation(paramType)
         }
         ProductCaseClassRepresentation.ProdUplcConstr(constrIndex, fieldReprs)
     }
@@ -33,15 +33,6 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
 
     override def canBeConvertedToData(tp: SIRType)(using LoweringContext): Boolean = false
 
-    override def toRepresentation(
-        input: LoweredValue,
-        outputRepresentation: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): LoweredValue = {
-        if input.representation == outputRepresentation then input
-        else ProductCaseSirTypeGenerator.toRepresentation(input, outputRepresentation, pos)
-    }
-
     override def upcastOne(input: LoweredValue, targetType: SIRType, pos: SIRPosition)(using
         LoweringContext
     ): LoweredValue = {
@@ -53,7 +44,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using LoweringContext): LoweredValue =
-        ProductCaseSirTypeGenerator.genConstrUplcConstr(constr, loweredArgs)
+        ProdUplcConstrEmitter.genConstr(constr, loweredArgs)
 
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
@@ -61,7 +52,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         import scalus.uplc.{Term, UplcAnnotation}
 
         val pos = sel.anns.pos
-        val constrDecl = ProductCaseSirTypeGenerator.retrieveConstrDecl(
+        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(
           loweredScrutinee.sirType,
           pos
         )
@@ -73,7 +64,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         val puc = loweredScrutinee.representation match
             case p: ProductCaseClassRepresentation.ProdUplcConstr => p
             case s: SumCaseClassRepresentation.SumUplcConstr =>
-                val constrIndex = ProductCaseSirTypeGenerator.retrieveConstrIndex(
+                val constrIndex = ProductCaseEmitter.retrieveConstrIndex(
                   loweredScrutinee.sirType,
                   pos
                 )
@@ -136,8 +127,7 @@ object ProductCaseUplcOnlySirTypeGenerator extends SirTypeUplcGenerator {
         matchData: SIR.Match,
         loweredScrutinee: LoweredValue,
         optTargetType: Option[SIRType]
-    )(using LoweringContext): LoweredValue = {
-        SumUplcConstrSirTypeGenerator.genMatchUplcConstr(matchData, loweredScrutinee, optTargetType)
-    }
+    )(using LoweringContext): LoweredValue =
+        ProdDispatch.genMatch(matchData, loweredScrutinee, optTargetType)
 
 }

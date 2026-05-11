@@ -7,7 +7,7 @@ import scalus.compiler.sir.*
 /** We assume that type variable can be converted to data, and it is impossible to do something
   * meaningful with it in the UPLC, except pass the value as an argument in unchanged form.
   */
-object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
+object TypeVarSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(
         tp: SIRType
@@ -62,7 +62,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             case tv: SIRType.TypeVar =>
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(resolvedType) =>
-                        lctx.typeGenerator(resolvedType).canBeConvertedToData(resolvedType)
+                        SirTypeUplcGenerator.canBeConvertedToData(resolvedType)
                     case None =>
                         // for now we assume that type variable can be converted to data
                         // TODO: change when we will implement all representations.
@@ -84,13 +84,13 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         if input.representation == representation then return input
 
         // First try to resolve TypeVar via filledTypes — if concrete, dispatch to that
-        // type's generator which knows the actual shape.
+        // type's generator which knows the actual shape. Route through
+        // `LoweredValue.toRepresentation` so Sum/Prod sources flow through
+        // SumDispatch/ProdDispatch instead of bypassing them.
         val resolvedOpt = makeResolvedProxy(input, pos)
         if resolvedOpt.isDefined then
             val resolved = resolvedOpt.get
-            return lctx
-                .typeGenerator(resolved.sirType)
-                .toRepresentation(resolved, representation, pos)
+            return resolved.toRepresentation(representation, pos)
 
         // Source is an unresolved TypeVar. Dispatch by its kind.
         val srcKind = input.representation match
@@ -129,7 +129,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                                 // downstream consumers and was a leak path for the
                                 // KnightsTest:475 heisenbug.
                                 val targetRepr =
-                                    lctx.typeGenerator(concrete).defaultRepresentation(concrete)
+                                    SirTypeUplcGenerator.defaultRepresentation(concrete)
                                 input.toRepresentation(targetRepr, pos)
                     case _: TypeVarRepresentation =>
                         // TypeVar→TypeVar relabel — wildcard semantics carry through.
@@ -164,7 +164,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                             case concrete =>
                                 // input.sirType is concrete — defer to its generator.
                                 val sourceRepr =
-                                    lctx.typeGenerator(concrete).defaultRepresentation(concrete)
+                                    SirTypeUplcGenerator.defaultRepresentation(concrete)
                                 val viaSource =
                                     new RepresentationProxyLoweredValue(input, sourceRepr, pos)
                                 viaSource.toRepresentation(concreteTarget, pos)
@@ -266,8 +266,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                 new RepresentationProxyLoweredValue(input, representation, pos)
             case sbl @ SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
                 val r1 = input.toRepresentation(SumCaseClassRepresentation.PackedSumDataList, pos)
-                new SumBuiltinListSirTypeGenerator(elemRepr)
-                    .toRepresentation(r1, representation, pos)
+                r1.toRepresentation(representation, pos)
             case spl @ SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
                 input
                     .toRepresentation(SumCaseClassRepresentation.SumDataAssocMap, pos)
@@ -294,15 +293,25 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
                             )
                         val tp1 = constrDecl.params.head.tp
                         val inrepr =
-                            lctx.typeGenerator(tp1).defaultTypeVarReperesentation(tp1)
+                            SirTypeUplcGenerator.defaultTypeVarReperesentation(tp1)
                         val r1 = input.toRepresentation(inrepr, pos)
                         new RepresentationProxyLoweredValue(r1, representation, pos)
             case PrimitiveRepresentation.Constant =>
                 val r1 = input.toRepresentation(PrimitiveRepresentation.PackedData, pos)
                 input.sirType match
                     case p: SIRType.Primitive =>
-                        lctx.typeGenerator(p)
-                            .toRepresentation(r1, PrimitiveRepresentation.Constant, pos)
+                        SirTypeUplcGenerator(p) match
+                            case converting: SirTypeUplcConvertingGenerator =>
+                                converting.toRepresentation(
+                                  r1,
+                                  PrimitiveRepresentation.Constant,
+                                  pos
+                                )
+                            case other =>
+                                throw LoweringException(
+                                  s"TypeVarSirTypeGenerator: expected primitive typegen for ${p.show}, got ${other.getClass.getSimpleName}",
+                                  pos
+                                )
                     case _ =>
                         throw LoweringException(
                           s"TypeVarSirTypeGenerator can't convert from ${input.sirType.show} to $representation",
@@ -323,7 +332,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         makeResolvedProxy(input, pos)
-            .map(input1 => lctx.typeGenerator(input1.sirType).upcastOne(input1, targetType, pos))
+            .map(input1 => SirTypeUplcGenerator.upcastOne(input1, targetType, pos))
             .getOrElse(
               throw LoweringException(
                 s"TypeVarSirTypeGenerator does not support upcasting, got $targetType",
@@ -341,7 +350,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             case tv: SIRType.TypeVar =>
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(tp1) =>
-                        lctx.typeGenerator(tp1)
+                        SirTypeUplcGenerator(tp1)
                             .genConstrLowered(constr, loweredArgs, optTargetType)
                     case None =>
                         throw LoweringException(
@@ -361,7 +370,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         makeResolvedProxy(loweredScrutinee, sel.anns.pos)
-            .map(input => lctx.typeGenerator(input.sirType).genSelect(sel, input))
+            .map(input => SirTypeUplcGenerator.genSelect(sel, input))
             .getOrElse(
               throw LoweringException(
                 s"Can't select on unresolved type variable ${loweredScrutinee.sirType.show}",
@@ -378,9 +387,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValue = {
         makeResolvedProxy(loweredScrutinee, matchData.anns.pos)
-            .map(input =>
-                lctx.typeGenerator(input.sirType).genMatch(matchData, input, optTargetType)
-            )
+            .map(input => SirTypeUplcGenerator.genMatch(matchData, input, optTargetType))
             .getOrElse(
               throw LoweringException(
                 s"TypeVarSirTypeGenerator does not support match",
@@ -397,7 +404,7 @@ object TypeVarSirTypeGenerator extends SirTypeUplcGenerator {
             case tv: SIRType.TypeVar =>
                 lctx.typeUnifyEnv.filledTypes.get(tv) match
                     case Some(resolvedType) =>
-                        val gen = lctx.typeGenerator(resolvedType)
+                        val gen = SirTypeUplcGenerator(resolvedType)
                         // Pick the proxy's repr from the value's ACTUAL repr kind, not from
                         // `tv.isBuiltin` (a static TypeVar-declaration property). The input's
                         // bytes are determined by the upstream conversion that produced this

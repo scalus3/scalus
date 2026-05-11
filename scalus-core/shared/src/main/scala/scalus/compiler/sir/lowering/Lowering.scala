@@ -76,15 +76,28 @@ object Lowering {
                     case _ => constr.args.map(arg => lctx.lower(arg))
                 // Nil with target type carries special dispatch (the constr's declared
                 // tp is `List[Nothing]` — we need to honor the caller's target type for
-                // type-correct Nil emission). Other Constr forms dispatch by their
-                // resolved type; the chosen generator's `genConstrLowered` then handles
-                // any context-driven delegation (see `ConstrDispatcher`).
+                // type-correct Nil emission). `SumDispatch.dispatchNil` also folds in
+                // the `inUplcConstrListScope` rerouting that used to live in the
+                // typegen-internal `ConstrDispatcher.shouldDelegateToUplcConstr` rule
+                // #4. Non-Nil Constr forms route through `SumDispatch.genConstr` /
+                // `ProdDispatch.genConstr`, which call `chooseConstrOutputRepr`.
+                val isNil =
+                    name == SIRType.List.NilConstr.name
+                        || name == typegens.SumListEmitterCommon.PairNilName
                 val (typeGenerator, effectiveConstr) =
-                    if name == "scalus.cardano.onchain.plutus.prelude.List$.Nil"
-                        || name == typegens.SumListCommonSirTypeGenerator.PairNilName
-                    then typegens.ConstrDispatcher.dispatchNil(constr, resolvedType, optTargetType)
-                    else (lctx.typeGenerator(resolvedType), constr)
-                typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
+                    if isNil
+                    then SumDispatch.dispatchNil(constr, resolvedType, optTargetType)
+                    else (typegens.SirTypeUplcGenerator(resolvedType), constr)
+                // Nil's pre-resolved generator stays inline because dispatchNil already picked
+                // the right typegen for the target type; other constructors route through the
+                // appropriate dispatcher.
+                if isNil then
+                    typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
+                else if SIRType.isSum(resolvedType) then
+                    SumDispatch.genConstr(effectiveConstr, loweredArgs, optTargetType)
+                else if SIRType.isProd(resolvedType) then
+                    ProdDispatch.genConstr(effectiveConstr, loweredArgs, optTargetType)
+                else typeGenerator.genConstrLowered(effectiveConstr, loweredArgs, optTargetType)
             case sirMatch @ SIR.Match(scrutinee, cases, rhsType, anns) =>
                 if lctx.debug then
                     lctx.log(
@@ -119,14 +132,21 @@ object Lowering {
                         )
                         Some(SIRType.Annotated(rhsType, uplcConstrAnns))
                     else optTargetType
-                // Use representation-aware dispatch: if scrutinee has SumUplcConstr repr,
-                // use Case-based genMatch instead of the default type generator's match.
-                val retval = loweredScrutinee.representation match
-                    case _: SumCaseClassRepresentation.SumUplcConstr =>
-                        typegens.SumUplcConstrSirTypeGenerator
-                            .genMatchUplcConstr(sirMatch, loweredScrutinee, effectiveTarget)
-                    case _ =>
-                        lctx.typeGenerator(loweredScrutinee.sirType)
+                // `SumDispatch.genMatch` / `ProdDispatch.genMatch` handle
+                // representation-aware routing per scrutinee class:
+                //   - sum scrutinees: SumUplcConstr → Case-based genMatchUplcConstr;
+                //     DataConstr / SumBuiltinList / PackedSumDataList → repr-specific emitter.
+                //   - prod scrutinees: ProdUplcConstr / SumUplcConstr → genMatchUplcConstr;
+                //     ProdDataList / ProdDataConstr / PackedDataList → ProdDataListEmitter.genMatch;
+                //     ProdBuiltinPair → ProdBuiltinPairEmitter.genMatch.
+                // Other types fall back to the type-keyed typegen.
+                val retval =
+                    if SIRType.isSum(loweredScrutinee.sirType) then
+                        SumDispatch.genMatch(sirMatch, loweredScrutinee, effectiveTarget)
+                    else if SIRType.isProd(loweredScrutinee.sirType) then
+                        ProdDispatch.genMatch(sirMatch, loweredScrutinee, effectiveTarget)
+                    else
+                        typegens.SirTypeUplcGenerator
                             .genMatch(sirMatch, loweredScrutinee, effectiveTarget)
                 if lctx.debug then
                     lctx.log(
@@ -157,12 +177,12 @@ object Lowering {
                                 // if this is type variable, try to resolve it
                                 lctx.tryResolveTypeVar(tv) match
                                     case Some(resolvedType) =>
-                                        val gen = lctx.typeGenerator(resolvedType)
                                         val representation = value.representation match
                                             case tvr: TypeVarRepresentation if tvr.isBuiltin =>
                                                 tvr
                                             case _: TypeVarRepresentation =>
-                                                gen.defaultTypeVarReperesentation(resolvedType)
+                                                typegens.SirTypeUplcGenerator
+                                                    .defaultTypeVarReperesentation(resolvedType)
                                             case concrete =>
                                                 concrete
                                         TypeRepresentationProxyLoweredValue(
@@ -270,7 +290,7 @@ object Lowering {
                 }
                 val retval = lvLamAbs(
                   param,
-                  lctx.typeGenerator(param.tp).defaultRepresentation(param.tp),
+                  typegens.SirTypeUplcGenerator.defaultRepresentation(param.tp),
                   _id => {
                       val loweredBody = summon[LoweringContext].lower(term, optTermTargetType)
                       // If there's a target return type, try to upcast the body
@@ -296,9 +316,9 @@ object Lowering {
                               //       applied to Data.Constr scrutinees at runtime).
                               val result =
                                   if hasUplcReprPin(targetType) then
-                                      val targetGen =
-                                          summon[LoweringContext].typeGenerator(targetType)
-                                      val targetRepr = targetGen.defaultRepresentation(targetType)
+                                      val targetRepr =
+                                          typegens.SirTypeUplcGenerator
+                                              .defaultRepresentation(targetType)
                                       upcasted.toRepresentation(targetRepr, anns.pos)
                                   else upcasted
                               if lctx.debug then
@@ -340,8 +360,17 @@ object Lowering {
                                 )
                     case _ =>
                 }
-                val generator = lctx.typeGenerator(loweredScrutinee.sirType)
-                val retval = generator.genSelect(sel, loweredScrutinee)
+                // Sum scrutinees route to SumDispatch (handles list/option intrinsic
+                // accessors like head/tail/isNull/length); Prod scrutinees to ProdDispatch
+                // (ordinary case-class field access). See sum-prod-dispatch-design.md §3.5.
+                val retval =
+                    if SIRType.isSum(loweredScrutinee.sirType) then
+                        SumDispatch.genSelect(sel, loweredScrutinee)
+                    else if SIRType.isProd(loweredScrutinee.sirType) then
+                        ProdDispatch.genSelect(sel, loweredScrutinee)
+                    else
+                        typegens.SirTypeUplcGenerator
+                            .genSelect(sel, loweredScrutinee)
                 if lctx.debug then {
                     lctx.log(
                       s"Lowered SIR.Select: ${sir.pretty.render(100)}\n" +
@@ -534,7 +563,7 @@ object Lowering {
                             // annotation directly.
                             val rhsRepTp = mergeReturnAnnotation(rhs.tp, tp)
                             val rhsRepr =
-                                lctx.typeGenerator(rhsRepTp).defaultRepresentation(rhsRepTp)
+                                typegens.SirTypeUplcGenerator.defaultRepresentation(rhsRepTp)
                             val newVar = VariableLoweredValue(
                               id = lctx.uniqueVarName(name),
                               name = name,
@@ -641,7 +670,7 @@ object Lowering {
                           )
                         )
         val elemRepr =
-            lctx.typeGenerator(elemType).defaultRepresentation(elemType)
+            typegens.SirTypeUplcGenerator.defaultRepresentation(elemType)
         elemRepr match
             case _: SumCaseClassRepresentation.SumUplcConstr |
                 _: ProductCaseClassRepresentation.ProdUplcConstr =>
@@ -716,8 +745,7 @@ object Lowering {
     )(using lctx: LoweringContext): LoweredValue = {
         val loweredArg = lowerSIR(app.arg)
         val tp = app.tp
-        val gen = lctx.typeGenerator(tp)
-        val targetRepr = gen.defaultTypeVarReperesentation(tp)
+        val targetRepr = typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(tp)
         // Force the conversion into a named variable so it's included in UPLC output.
         // Without this, DependendVariableLoweredValue may not emit conversion code.
         val converted = loweredArg.toRepresentation(targetRepr, app.anns.pos)
@@ -741,8 +769,7 @@ object Lowering {
         // (a no-op), while we need the concrete type's generator (e.g., ProdUplcConstr for
         // @UplcRepr(UplcConstr) types).
         val tp = lctx.resolveTypeVarIfNeeded(app.tp)
-        val gen = lctx.typeGenerator(tp)
-        val targetRepr = gen.defaultRepresentation(tp)
+        val targetRepr = typegens.SirTypeUplcGenerator.defaultRepresentation(tp)
         if lctx.debug then
             lctx.log(
               s"[fromDefaultTypeVarRepr] app.tp=${app.tp.show}, resolved tp=${tp.show}, loweredArg.repr=${loweredArg.representation}, targetRepr=$targetRepr"
@@ -1015,7 +1042,7 @@ object Lowering {
             override def sirType: SIRType = app.tp
             override def pos: SIRPosition = app.anns.pos
             override def representation: LoweredValueRepresentation =
-                lctx.typeGenerator(app.tp).defaultDataRepresentation(app.tp)
+                typegens.SirTypeUplcGenerator.defaultDataRepresentation(app.tp)
             override def termInternal(gctx: TermGenerationContext): Term =
                 data.termInternal(gctx)
 
@@ -1102,7 +1129,7 @@ object Lowering {
         val value = lctx
             .lower(app.arg)
             .toRepresentation(
-              lctx.typeGenerator(app.arg.tp).defaultDataRepresentation(app.arg.tp),
+              typegens.SirTypeUplcGenerator.defaultDataRepresentation(app.arg.tp),
               app.anns.pos
             )
         new ProxyLoweredValue(value) {

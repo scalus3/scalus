@@ -4,7 +4,7 @@ package typegens
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 
-object FunSirTypeGenerator extends SirTypeUplcGenerator {
+object FunSirTypeGenerator extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(
         tp: SIRType
@@ -24,8 +24,8 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
                 LambdaRepresentation(
                   tp,
                   InOutRepresentationPair(
-                    lctx.typeGenerator(input).defaultRepresentation(nInput),
-                    lctx.typeGenerator(output).defaultRepresentation(nOutput)
+                    SirTypeUplcGenerator(input).defaultRepresentation(nInput),
+                    SirTypeUplcGenerator(output).defaultRepresentation(nOutput)
                   )
                 )
 
@@ -164,9 +164,9 @@ object FunSirTypeGenerator extends SirTypeUplcGenerator {
         (input.sirType, targetType) match {
             case (SIRType.Fun(inType1, outType1), SIRType.Fun(inType2, outType2)) =>
                 val argName = lctx.uniqueVarName("upcast_arg")
-                val inRepr2 = lctx.typeGenerator(inType2).defaultRepresentation(inType2)
-                val outRepr2 = lctx.typeGenerator(outType2).defaultRepresentation(outType2)
-                val outRepr1 = lctx.typeGenerator(outType1).defaultRepresentation(outType1)
+                val inRepr2 = SirTypeUplcGenerator.defaultRepresentation(inType2)
+                val outRepr2 = SirTypeUplcGenerator.defaultRepresentation(outType2)
+                val outRepr1 = SirTypeUplcGenerator.defaultRepresentation(outType1)
 
                 lvLamAbs(
                   argName,

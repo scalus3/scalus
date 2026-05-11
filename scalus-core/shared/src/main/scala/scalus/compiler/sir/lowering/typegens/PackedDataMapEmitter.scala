@@ -8,7 +8,7 @@ import scalus.uplc.Term
 
 /** Representation is data in pack. Used like Product with have one element wibt name 'toList'
   */
-object MapSirTypeGenerator extends SirTypeUplcGenerator {
+object PackedDataMapEmitter extends SirTypeUplcConvertingGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         LoweringContext
@@ -98,7 +98,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
             )
         else
             throw LoweringException(
-              s"MapSirTypeGenerator.genConstr: invalid constructor ${constr.name}",
+              s"PackedDataMapEmitter.genConstr: invalid constructor ${constr.name}",
               constr.anns.pos
             )
     }
@@ -116,7 +116,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
             )
         else
             throw LoweringException(
-              s"MapSirTypeGenerator.genSelect: invalid select ${sel.field} (expected 'toList')",
+              s"PackedDataMapEmitter.genSelect: invalid select ${sel.field} (expected 'toList')",
               sel.anns.pos
             )
     }
@@ -157,7 +157,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
     ): LoweredValue = {
         if matchData.cases.length != 1 then
             throw LoweringException(
-              s"MapSirTypeGenerator.genMatch: invalid match on Map, expected one case, got ${matchData.cases.length}",
+              s"PackedDataMapEmitter.genMatch: invalid match on Map, expected one case, got ${matchData.cases.length}",
               matchData.anns.pos
             )
         val loweredScrutineeR = loweredScrutinee.toRepresentation(
@@ -227,7 +227,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
                         SIRType.List(pairType)
                     case _ =>
                         throw LoweringException(
-                          s"MapSirTypeGenerator.retrieveListType: expected List, got $tp",
+                          s"PackedDataMapEmitter.retrieveListType: expected List, got $tp",
                           SIRPosition.empty
                         )
             case SIRType.TypeLambda(params, body) =>
@@ -236,7 +236,7 @@ object MapSirTypeGenerator extends SirTypeUplcGenerator {
                 retrieveListType(ref)
             case _ =>
                 throw LoweringException(
-                  s"MapSirTypeGenerator.retrieveListType: expected List, got $tp",
+                  s"PackedDataMapEmitter.retrieveListType: expected List, got $tp",
                   SIRPosition.empty
                 )
     }

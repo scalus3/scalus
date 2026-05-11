@@ -216,7 +216,7 @@ object LoweringEq {
         val lhsSum: SumCaseClassRepresentation.SumUplcConstr = lhs.representation match
             case s: SumCaseClassRepresentation.SumUplcConstr => s
             case _ =>
-                val gen = typegens.SumCaseUplcConstrSirTypeGenerator
+                val gen = typegens.SumCaseUplcConstrEmitter
                 val tgt = gen.defaultRepresentation(knownType) match
                     case s: SumCaseClassRepresentation.SumUplcConstr => s
                     case _ =>
@@ -345,7 +345,7 @@ object LoweringEq {
                 baseType,
                 lhsSum,
                 b =>
-                    typegens.SumUplcConstrSirTypeGenerator.genMatchUplcConstrAllVariants(
+                    typegens.SumUplcConstrEmitter.genMatchUplcConstrAllVariants(
                       a,
                       lhsSum,
                       baseType,
@@ -353,7 +353,7 @@ object LoweringEq {
                       PrimitiveRepresentation.Constant,
                       pos,
                       (aTag, aFields) =>
-                          typegens.SumUplcConstrSirTypeGenerator
+                          typegens.SumUplcConstrEmitter
                               .genMatchUplcConstrAllVariants(
                                 b,
                                 lhsSum,
@@ -423,10 +423,8 @@ object LoweringEq {
         rhs: LoweredValue,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val lhsGen = lctx.typeGenerator(lhs.sirType)
-        val rhsGen = lctx.typeGenerator(rhs.sirType)
-        val lhsDataRepr = lhsGen.defaultDataRepresentation(lhs.sirType)
-        val rhsDataRepr = rhsGen.defaultDataRepresentation(rhs.sirType)
+        val lhsDataRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(lhs.sirType)
+        val rhsDataRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(rhs.sirType)
         val lhsData = lhs.toRepresentation(lhsDataRepr, pos)
         val rhsData = rhs.toRepresentation(rhsDataRepr, pos)
         lvBuiltinApply2(
@@ -452,13 +450,13 @@ object LoweringEq {
         knownType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): LoweredValue = {
-        val constrDecl = typegens.ProductCaseSirTypeGenerator.retrieveConstrDecl(knownType, pos)
+        val constrDecl = typegens.ProductCaseEmitter.retrieveConstrDecl(knownType, pos)
         val fields = constrDecl.params
         if fields.isEmpty then
             // No fields: always equal (same type, same tag)
             lvBoolConstant(true, pos)
         else
-            val gen = lctx.typeGenerator(knownType)
+            val gen = typegens.SirTypeUplcGenerator(knownType)
             val fieldComparisons = fields.map { param =>
                 val sel = SIR.Select(
                   SIR.Var("_eq_lhs", knownType, AnnotationsDecl(pos)),

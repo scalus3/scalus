@@ -5,7 +5,7 @@ import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
 import scalus.uplc.{Term, UplcAnnotation}
-import scalus.compiler.sir.lowering.typegens.SumUplcConstrSirTypeGenerator
+import scalus.compiler.sir.lowering.typegens.SumUplcConstrEmitter
 
 object ScalusRuntime {
 
@@ -33,7 +33,7 @@ object ScalusRuntime {
       *
       * For bindings in the `UplcConstrListOperations` / `UplcConstrOptionOperations` modules we
       * lower under `inUplcConstrListScope = true` so inner `List.Cons(...)` / `Option.Some(...)` /
-      * `List.Nil` / `Option.None` emissions pick `SumCaseUplcConstrSirTypeGenerator`.
+      * `List.Nil` / `Option.None` emissions pick `SumCaseUplcConstrEmitter`.
       */
     def initSupportBindings(lctx: LoweringContext): Unit = {
         val nativeConstrModules = Set(
@@ -291,7 +291,7 @@ object ScalusRuntime {
 
         val helperName = name + "_helper"
         val elemType = SIRType.Data.tp
-        val elemRepr = lctx.typeGenerator(elemType).defaultDataRepresentation(elemType)
+        val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
         val listRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
         // Helper type: BuiltinArray[Data] -> Integer -> Integer -> BuiltinList[Data]
         val helperType =
@@ -794,9 +794,9 @@ object ScalusRuntime {
         // Resolve target element repr: TypeVarRepresentation(Fixed) → defaultTypeVarRepresentation
         val resolvedOutElemRepr = outElemRepr match
             case tvr: TypeVarRepresentation if !tvr.isBuiltin =>
-                lctx.typeGenerator(elemType).defaultTypeVarReperesentation(elemType)
+                typegens.SirTypeUplcGenerator.defaultTypeVarReperesentation(elemType)
             case tvr: TypeVarRepresentation if tvr.isBuiltin =>
-                lctx.typeGenerator(elemType).defaultRepresentation(elemType)
+                typegens.SirTypeUplcGenerator.defaultRepresentation(elemType)
             case other => other
         val resolvedOutListRepr = SumCaseClassRepresentation.SumBuiltinList(resolvedOutElemRepr)
         if elemType.isInstanceOf[SIRType.TypeVar] then
@@ -917,7 +917,7 @@ object ScalusRuntime {
                   listType,
                   inSumRepr,
                   lst => {
-                      SumUplcConstrSirTypeGenerator.genMatchUplcConstrDirect(
+                      SumUplcConstrEmitter.genMatchUplcConstrDirect(
                         lst,
                         inSumRepr,
                         listType,

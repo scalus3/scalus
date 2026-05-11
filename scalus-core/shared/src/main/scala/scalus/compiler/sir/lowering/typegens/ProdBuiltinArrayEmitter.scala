@@ -12,7 +12,7 @@ import scalus.compiler.sir.*
   * Default representation: ProdBuiltinArray(elementRepr) (native UPLC array) Data representation:
   * PackedArrayAsList (Data.List)
   */
-object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
+object ProdBuiltinArrayEmitter extends SirTypeUplcConvertingGenerator {
 
     private def extractElemType(tp: SIRType): SIRType =
         ProductCaseClassRepresentation.ProdBuiltinArray
@@ -23,7 +23,7 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): ProductCaseClassRepresentation.ProdBuiltinArray = {
         val elemType = extractElemType(tp)
-        val elemRepr = lctx.typeGenerator(elemType).defaultRepresentation(elemType)
+        val elemRepr = SirTypeUplcGenerator.defaultRepresentation(elemType)
         ProductCaseClassRepresentation.ProdBuiltinArray(elemRepr)
     }
 
@@ -41,13 +41,13 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
         lctx: LoweringContext
     ): LoweredValueRepresentation =
         val elemType = extractElemType(tp)
-        if lctx.typeGenerator(elemType).canBeConvertedToData(elemType) then
+        if SirTypeUplcGenerator.canBeConvertedToData(elemType) then
             ProductCaseClassRepresentation.PackedArrayAsList
         else arrayRepr(tp)
 
     override def canBeConvertedToData(tp: SIRType)(using lctx: LoweringContext): Boolean = {
         val elemType = extractElemType(tp)
-        lctx.typeGenerator(elemType).canBeConvertedToData(elemType)
+        SirTypeUplcGenerator.canBeConvertedToData(elemType)
     }
 
     override def toRepresentation(
@@ -121,22 +121,12 @@ object BuiltinArraySirTypeGenerator extends SirTypeUplcGenerator {
 
             // TypeVar handling — three distinct kinds, each with its own conversion path
             case (_, tv: TypeVarRepresentation) =>
-                import SIRType.TypeVarKind.*
-                tv.kind match
-                    case Transparent =>
-                        // Wildcard target — convert to array form first, then relabel
-                        val r0 = input.toRepresentation(arrayRepr(input.sirType), pos)
-                        RepresentationProxyLoweredValue(r0, tv, pos)
-                    case Unwrapped =>
-                        // Concrete-default form — convert to defaultRepresentation, then relabel
-                        val targetRepr = defaultRepresentation(input.sirType)
-                        val r0 = input.toRepresentation(targetRepr, pos)
-                        RepresentationProxyLoweredValue(r0, tv, pos)
-                    case Fixed =>
-                        // Data-wrapped form — convert to defaultTypeVarReperesentation, then relabel
-                        val typeVarRepr = defaultTypeVarReperesentation(input.sirType)
-                        val r1 = input.toRepresentation(typeVarRepr, pos)
-                        new RepresentationProxyLoweredValue(r1, tv, pos)
+                // Phase 5: target TypeVar dispatch via shared helper. ProdBuiltinArrayEmitter
+                // was already always-relabel for all three kinds. The Transparent arm previously
+                // routed through `arrayRepr(input.sirType)` first; bridgeToKind goes via
+                // `SirTypeUplcGenerator.defaultRepresentation(input.sirType)` (which equals
+                // `arrayRepr(_)` for BuiltinArray types) — no behavior change.
+                TypeVarEmitter.bridgeToKind(input, tv, pos)
 
             case (tv: TypeVarRepresentation, _) =>
                 import SIRType.TypeVarKind.*
