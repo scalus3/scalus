@@ -575,18 +575,23 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
     }
     given Arbitrary[VotingProcedure] = autoDerived
 
-    given Arbitrary[VotingProcedures] = {
-        given Arbitrary[SortedMap[GovActionId, VotingProcedure]] = Arbitrary {
-            genMapOfSizeFromArbitrary[GovActionId, VotingProcedure](1, 4).map(map =>
-                SortedMap.from(map)
-            )
-        }
+    given arbVotingProcedureMap: Arbitrary[SortedMap[GovActionId, VotingProcedure]] = Arbitrary {
+        genMapOfSizeFromArbitrary[GovActionId, VotingProcedure](1, 4).map(map =>
+            SortedMap.from(map)
+        )
+    }
 
-        Arbitrary {
-            genMapOfSizeFromArbitrary[Voter, SortedMap[GovActionId, VotingProcedure]](1, 4).map(
-              map => VotingProcedures(SortedMap.from(map))
-            )
-        }
+    given arbVotingProceduresMap
+        : Arbitrary[SortedMap[Voter, SortedMap[GovActionId, VotingProcedure]]] = Arbitrary {
+        genMapOfSizeFromArbitrary[Voter, SortedMap[GovActionId, VotingProcedure]](1, 4).map(map =>
+            SortedMap.from(map)
+        )
+    }
+
+    given Arbitrary[VotingProcedures] = Arbitrary {
+        arbitrary[SortedMap[Voter, SortedMap[GovActionId, VotingProcedure]]].map(
+          VotingProcedures.apply
+        )
     }
 
     given Arbitrary[PoolVotingThresholds] = autoDerived

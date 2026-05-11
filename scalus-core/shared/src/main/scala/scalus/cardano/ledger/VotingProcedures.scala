@@ -13,7 +13,7 @@ import scala.collection.immutable.SortedMap
   *   Map from voters to maps of governance action IDs to voting procedures
   */
 case class VotingProcedures(procedures: SortedMap[Voter, SortedMap[GovActionId, VotingProcedure]]) {
-    require(procedures.nonEmpty, "VotingProcedures can be empty")
+    require(procedures.nonEmpty, "VotingProcedures cannot be empty")
 
     /** Checks if there are any voting procedures.
       *
