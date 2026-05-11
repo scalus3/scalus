@@ -13,6 +13,8 @@ class G1Element(private[builtin] val value: P1):
         case that: G1Element => value.is_equal(that.value)
         case _               => false
 
+    override def hashCode(): Int = java.util.Arrays.hashCode(value.compress())
+
     // TODO: check if this is correct
     override def toString: String = s"0x${Hex.bytesToHex(value.compress())}"
 

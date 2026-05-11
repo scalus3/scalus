@@ -129,4 +129,30 @@ class BLS12_381BuiltinsTest extends AnyFunSuite {
             g2"deadbeef" // only 4 bytes, not 96
         }
     }
+
+    test("G1Element equals/hashCode are consistent for equal points") {
+        val a = bls12_381_G1_uncompress(bls12_381_G1_compressed_generator)
+        val b = bls12_381_G1_uncompress(bls12_381_G1_compressed_generator)
+        assert(a == b)
+        assert(a.hashCode == b.hashCode)
+        assert(Set(a).contains(b))
+    }
+
+    test("G2Element equals/hashCode are consistent for equal points") {
+        val a = bls12_381_G2_uncompress(bls12_381_G2_compressed_generator)
+        val b = bls12_381_G2_uncompress(bls12_381_G2_compressed_generator)
+        assert(a == b)
+        assert(a.hashCode == b.hashCode)
+        assert(Set(a).contains(b))
+    }
+
+    test("MLResult equals/hashCode are consistent for equal points") {
+        val g1Elem = bls12_381_G1_uncompress(bls12_381_G1_compressed_generator)
+        val g2Elem = bls12_381_G2_uncompress(bls12_381_G2_compressed_generator)
+        val a = bls12_381_millerLoop(g1Elem, g2Elem)
+        val b = bls12_381_millerLoop(g1Elem, g2Elem)
+        assert(a == b)
+        assert(a.hashCode == b.hashCode)
+        assert(Set(a).contains(b))
+    }
 }

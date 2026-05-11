@@ -13,6 +13,8 @@ class G2Element(private[builtin] val value: P2):
         case that: G2Element => value.is_equal(that.value)
         case _               => false
 
+    override def hashCode(): Int = java.util.Arrays.hashCode(value.compress())
+
     override def toString: String = s"0x${Hex.bytesToHex(value.compress())}"
 
 object G2Element extends G2ElementOffchainApi:
