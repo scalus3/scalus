@@ -106,6 +106,28 @@ object ProdUplcConstrOps {
         loweredValue
     }
 
+    /** Builds the `ProdUplcConstr` repr for product type `tp` by mapping each constructor parameter
+      * to its field-level repr. When `honorFieldAnnotations` is true (Data-compatible emitter),
+      * field-level `@UplcRepr` annotations override the parameter type's natural repr; otherwise
+      * (non-Data emitter) the natural repr is used unconditionally.
+      */
+    def buildProdUplcConstrRepr(
+        tp: SIRType,
+        honorFieldAnnotations: Boolean
+    )(using lctx: LoweringContext): ProdUplcConstr = {
+        val constrIndex = ProductCaseEmitter.retrieveConstrIndex(tp, SIRPosition.empty)
+        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(tp, SIRPosition.empty)
+        val fieldReprs = constrDecl.params.map { param =>
+            val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
+            if honorFieldAnnotations then
+                SirTypeUplcGenerator
+                    .resolveFieldRepr(param, paramType)
+                    .getOrElse(SirTypeUplcGenerator.defaultRepresentation(paramType))
+            else SirTypeUplcGenerator.defaultRepresentation(paramType)
+        }
+        ProdUplcConstr(constrIndex, fieldReprs)
+    }
+
     /** Returns true if `tp` (or any unwrapped form) carries a class-level `@UplcRepr` annotation in
       * its constrDecl. Used by `genConstr` to decide whether the field's static type pins a
       * specific repr that arg.repr must conform to.

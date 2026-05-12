@@ -10,15 +10,8 @@ object ProductCaseUplcConstrOnlyEmitter extends SirTypeUplcGenerator {
 
     override def defaultRepresentation(tp: SIRType)(using
         lctx: LoweringContext
-    ): LoweredValueRepresentation = {
-        val constrIndex = ProductCaseEmitter.retrieveConstrIndex(tp, SIRPosition.empty)
-        val constrDecl = ProductCaseEmitter.retrieveConstrDecl(tp, SIRPosition.empty)
-        val fieldReprs = constrDecl.params.map { param =>
-            val paramType = lctx.resolveTypeVarIfNeeded(param.tp)
-            SirTypeUplcGenerator.defaultRepresentation(paramType)
-        }
-        ProductCaseClassRepresentation.ProdUplcConstr(constrIndex, fieldReprs)
-    }
+    ): LoweredValueRepresentation =
+        ProdUplcConstrOps.buildProdUplcConstrRepr(tp, honorFieldAnnotations = false)
 
     override def defaultDataRepresentation(
         tp: SIRType
