@@ -824,8 +824,8 @@ lazy val scalusSbtPlugin = project
     .settings(
       name := "scalus-sbt-plugin",
       sbtPlugin := true,
-      scalaVersion := "2.12.21",
-      crossScalaVersions := Seq("2.12.21"),
+      scalaVersion := "2.13.18",
+      crossScalaVersions := Seq("2.13.18"),
       scalacOptions ++= Seq("-deprecation", "-feature"),
     )
 
