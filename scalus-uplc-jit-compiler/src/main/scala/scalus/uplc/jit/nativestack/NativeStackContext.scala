@@ -21,6 +21,6 @@ class NativeStackContext {
 
 object NativeStackContext {
 
-    val MAX_STACK_DEPTH = 1000
+    final val MAX_STACK_DEPTH = 25000
 
 }
