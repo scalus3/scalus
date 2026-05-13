@@ -245,8 +245,7 @@ object SumUplcConstrOps {
         consBody: (IdentifiableLoweredValue, IdentifiableLoweredValue) => LoweredValue
     )(using lctx: LoweringContext): LoweredValue = {
         val elemType = SumCaseClassRepresentation.SumBuiltinList
-            .retrieveListElementType(listType)
-            .getOrElse(SIRType.Data.tp)
+            .retrieveListElementTypeOrThrow(listType, pos, "genMatchUplcConstrDirect")
         // Get element and tail reprs from Cons variant
         val consVariant = scrutineeRepr.variants.values.find(_.fieldReprs.nonEmpty)
         val elemRepr = consVariant
@@ -638,8 +637,11 @@ object SumUplcConstrOps {
                 // the actual head value's sirType even when the field repr is a
                 // Transparent TypeVar left over from intrinsic-body lowering.
                 val elemTypeRaw = SumCaseClassRepresentation.SumBuiltinList
-                    .retrieveListElementType(input.sirType)
-                    .getOrElse(SIRType.Data.tp)
+                    .retrieveListElementTypeOrThrow(
+                      input.sirType,
+                      pos,
+                      "SumUplcConstr → SumBuiltinList"
+                    )
                 // If element type is a TypeVar, try to resolve via lctx.filledTypes first;
                 // only treat it as "unresolved Fixed" if it's still a non-passthrough
                 // TypeVar. Passthrough TypeVars (Transparent/Unwrapped) have passthrough
@@ -665,8 +667,11 @@ object SumUplcConstrOps {
             // SumUplcConstr → PackedSumDataList: go through SumBuiltinList → listData
             case (_: SumUplcConstr, PackedSumDataList) =>
                 val elemType = SumCaseClassRepresentation.SumBuiltinList
-                    .retrieveListElementType(input.sirType)
-                    .getOrElse(SIRType.Data.tp)
+                    .retrieveListElementTypeOrThrow(
+                      input.sirType,
+                      pos,
+                      "SumUplcConstr → PackedSumDataList"
+                    )
                 val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val builtinListRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
                 val asBuiltinList = input.toRepresentation(builtinListRepr, pos)
@@ -680,8 +685,11 @@ object SumUplcConstrOps {
             // PackedSumDataList → SumUplcConstr: unListData → builtinListToUplcConstr
             case (PackedSumDataList, outSum: SumUplcConstr) =>
                 val elemType = SumCaseClassRepresentation.SumBuiltinList
-                    .retrieveListElementType(input.sirType)
-                    .getOrElse(SIRType.Data.tp)
+                    .retrieveListElementTypeOrThrow(
+                      input.sirType,
+                      pos,
+                      "PackedSumDataList → SumUplcConstr"
+                    )
                 val elemRepr = SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val dataListRepr = SumCaseClassRepresentation.SumBuiltinList(elemRepr)
                 val builtinListType = SIRType.BuiltinList(elemType)

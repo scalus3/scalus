@@ -1089,8 +1089,11 @@ object Lowering {
             // toSortedMap / toAssocMap: convert to SumPairBuiltinList then apply mapData
             val argType = app.arg.tp
             val elemType = SumCaseClassRepresentation.SumBuiltinList
-                .retrieveListElementType(argType)
-                .getOrElse(SIRType.Data.tp)
+                .retrieveListElementTypeOrThrow(
+                  argType,
+                  app.anns.pos,
+                  "lowerPairListConversion (toMap arg)"
+                )
             val pairListRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
               elemType,
               app.anns.pos
@@ -1106,8 +1109,11 @@ object Lowering {
         else
             // toList / toPairList: repr conversion only
             val elemType = SumCaseClassRepresentation.SumBuiltinList
-                .retrieveListElementType(app.tp)
-                .getOrElse(SIRType.Data.tp)
+                .retrieveListElementTypeOrThrow(
+                  app.tp,
+                  app.anns.pos,
+                  "lowerPairListConversion (toList target)"
+                )
             val pairListRepr = SumCaseClassRepresentation.SumPairBuiltinList.fromElementType(
               elemType,
               app.anns.pos

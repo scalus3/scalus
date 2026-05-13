@@ -324,6 +324,23 @@ object SumCaseClassRepresentation {
                 case _ =>
                     None
         }
+
+        /** Throwing variant for call sites whose invariant says `tp` must be list-shaped (e.g. the
+          * caller has just asserted `isPairListConversion`, or it's converting from a
+          * `SumBuiltinList`-shaped source). Silent `getOrElse(SIRType.Data.tp)` masks the bug — the
+          * wrong elem type then drives downstream conversions in the wrong shape.
+          */
+        def retrieveListElementTypeOrThrow(
+            tp: SIRType,
+            pos: SIRPosition,
+            context: String
+        ): SIRType =
+            retrieveListElementType(tp).getOrElse {
+                throw LoweringException(
+                  s"$context: requires a list-typed input, got ${tp.show}",
+                  pos
+                )
+            }
     }
 
     /** Representation for pair lists (BuiltinList[BuiltinPair[K,V]]). Serialized via

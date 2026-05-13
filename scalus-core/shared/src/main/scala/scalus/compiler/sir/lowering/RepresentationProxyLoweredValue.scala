@@ -196,12 +196,13 @@ object RepresentationAnnotatedTypeProxyLoweredValue {
             case PrimitiveRepresentation.PackedData =>
                 Some(stringSentinel("PackedData"))
             case SumCaseClassRepresentation.SumBuiltinList(elemRepr) =>
-                val elemTp = SumCaseClassRepresentation.SumBuiltinList
+                SumCaseClassRepresentation.SumBuiltinList
                     .retrieveListElementType(tp)
-                    .getOrElse(SIRType.Data.tp)
-                encodeReprAsAnnotationValue(elemTp, elemRepr, pos).map { argSir =>
-                    constrSir("SumBuiltinList", scala.List(argSir))
-                }
+                    .flatMap { elemTp =>
+                        encodeReprAsAnnotationValue(elemTp, elemRepr, pos).map { argSir =>
+                            constrSir("SumBuiltinList", scala.List(argSir))
+                        }
+                    }
             case ProductCaseClassRepresentation.ProdBuiltinPair(fstRepr, sndRepr) =>
                 val (fstTp, sndTp) =
                     ProductCaseClassRepresentation.ProdBuiltinPair

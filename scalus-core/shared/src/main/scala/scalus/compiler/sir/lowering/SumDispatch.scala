@@ -115,21 +115,18 @@ object SumDispatch {
 
     /** Extract the list element type from a list-shape source. The PairIntDataList /
       * PackedSumDataList source arms above operate on list-typed values; if the static type isn't a
-      * list, the conversion is structurally invalid — throw rather than silently substituting
-      * `Data.tp` (which would mask the bug and produce wrong-shape conversions downstream).
+      * list, the conversion is structurally invalid — delegate to the centralized throwing helper.
       */
     private def listElementTypeOrThrow(
         input: LoweredValue,
         target: LoweredValueRepresentation,
         pos: SIRPosition
     ): SIRType =
-        SumBuiltinList.retrieveListElementType(input.sirType).getOrElse {
-            throw LoweringException(
-              s"sumCaseImpl: list-shape source ${input.representation} → $target requires a " +
-                  s"list-typed input, got ${input.sirType.show}",
-              pos
-            )
-        }
+        SumBuiltinList.retrieveListElementTypeOrThrow(
+          input.sirType,
+          pos,
+          s"sumCaseImpl: list-shape source ${input.representation} → $target"
+        )
 
     /** Choose the typegen that should emit this `Constr`, considering both the static type and
       * surrounding-arg/context cues. Centralizes the rules formerly in

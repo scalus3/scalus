@@ -202,8 +202,11 @@ object SirTypeUplcGenerator {
                 shortName match
                     case "SumBuiltinList" if args.size == 1 =>
                         val elemType = SumCaseClassRepresentation.SumBuiltinList
-                            .retrieveListElementType(fieldType)
-                            .getOrElse(SIRType.Data.tp)
+                            .retrieveListElementTypeOrThrow(
+                              fieldType,
+                              SIRPosition.empty,
+                              "@UplcRepr(SumBuiltinList) annotation"
+                            )
                         val elemRepr = resolveReprAnnotation(args.head, elemType)
                         SumCaseClassRepresentation.SumBuiltinList(elemRepr)
                     case "ProdBuiltinPair" if args.size == 2 =>

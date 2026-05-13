@@ -778,8 +778,7 @@ object ScalusRuntime {
             )
         val listType = input.sirType
         val rawElemType = SumCaseClassRepresentation.SumBuiltinList
-            .retrieveListElementType(listType)
-            .getOrElse(SIRType.Data.tp)
+            .retrieveListElementTypeOrThrow(listType, pos, "uplcConstrToBuiltinList")
         // If the input's static type carries an abstract `TypeVar` element (e.g.
         // `List[B]` from a generic intrinsic-binding that hasn't been alpha-renamed
         // at the call site), try to resolve it from `lctx.typeUnifyEnv.filledTypes`
