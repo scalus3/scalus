@@ -67,7 +67,7 @@ case class OneElementWrapperEmitter(
             )
         }
 
-        val constrIndexConstant = lvIntConstant(3, pos)
+        val constrIndexConstant = lvIntConstant(constrIndex, pos)
         val argValueIn = argLoweredValue(input)
         val argValue = argValueIn.toRepresentation(
           argGenerator.defaultDataRepresentation(argValueIn.sirType),
