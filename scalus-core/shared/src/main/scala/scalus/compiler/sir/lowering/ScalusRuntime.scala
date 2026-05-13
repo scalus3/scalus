@@ -682,82 +682,74 @@ object ScalusRuntime {
         val cacheKey =
             s"builtinListToUplcConstr|${listType.show}|${inListRepr.stableKey}|${outSum.stableKey}" +
                 s"|${lctx.captureFingerprint(listType)}"
-        val goVar = lctx.lookupCachedHelper(cacheKey) match
-            case Some(v) =>
-                LoweringContext.traceLetRec("HIT", "builtinListToUplcConstr", cacheKey)
-                v
-            case None =>
-                val id = lctx.uniqueVarName(BUILTIN_LIST_TO_UPLC_CONSTR_NAME)
-                val v = new VariableLoweredValue(
-                  id = id,
-                  name = id,
-                  sir = SIR.Var(id, goType, AnnotationsDecl(pos)),
-                  representation = goRepr
-                )
-                // Register early so recursive references inside the rhs see this var.
-                lctx.cachedTopLevelHelpers(cacheKey) = v
-                val rhs = lvLamAbs(
-                  "lst",
-                  inListType,
-                  inListRepr,
-                  lst =>
-                      lvMatchList(
-                        lst,
-                        nilVal,
-                        (head, tail) => {
-                            val convertedHead =
-                                if inElemRepr == outElemRepr then head
-                                else head.toRepresentation(outElemRepr, pos)
-                            val recCall = lvApplyDirect(
-                              v,
-                              tail,
-                              listType,
-                              outSum,
-                              pos
-                            )
-                            new ComplexLoweredValue(
-                              Set.empty,
-                              convertedHead,
-                              recCall
-                            ) {
-                                override def sirType: SIRType = listType
-                                override def representation: LoweredValueRepresentation = outSum
-                                override def pos: SIRPosition = AnnotationsDecl.empty.pos
-                                override def termInternal(gctx: TermGenerationContext): Term =
-                                    Term.Constr(
-                                      scalus.cardano.ledger.Word64(1L),
-                                      scala.List(
-                                        convertedHead.termWithNeededVars(gctx),
-                                        recCall.termWithNeededVars(gctx)
-                                      ),
-                                      UplcAnnotation(AnnotationsDecl.empty.pos)
-                                    )
-                                override def docDef(
-                                    ctx: LoweredValue.PrettyPrintingContext
-                                ): Doc =
-                                    Doc.text("Constr(1, ") +
-                                        convertedHead.docRef(ctx) +
-                                        Doc.text(", ") +
-                                        recCall.docRef(ctx) +
-                                        Doc.text(")")
-                                override def docRef(
-                                    ctx: LoweredValue.PrettyPrintingContext
-                                ): Doc =
-                                    docDef(ctx)
-                            }
-                        },
-                        inListType,
-                        elemType,
-                        inListRepr,
-                        inElemRepr,
-                        listType,
-                        outSum
-                      ),
-                  pos
-                )
-                lctx.pendingTopLevelLetRecs += ((v, rhs))
-                LoweringContext.traceLetRec("ADD", "builtinListToUplcConstr", cacheKey)
-                v
+        val goVar = lctx.defineCachedTopLevelHelper(
+          cacheKey,
+          BUILTIN_LIST_TO_UPLC_CONSTR_NAME,
+          goType,
+          goRepr,
+          "builtinListToUplcConstr",
+          pos
+        ) { v =>
+            lvLamAbs(
+              "lst",
+              inListType,
+              inListRepr,
+              lst =>
+                  lvMatchList(
+                    lst,
+                    nilVal,
+                    (head, tail) => {
+                        val convertedHead =
+                            if inElemRepr == outElemRepr then head
+                            else head.toRepresentation(outElemRepr, pos)
+                        val recCall = lvApplyDirect(
+                          v,
+                          tail,
+                          listType,
+                          outSum,
+                          pos
+                        )
+                        new ComplexLoweredValue(
+                          Set.empty,
+                          convertedHead,
+                          recCall
+                        ) {
+                            override def sirType: SIRType = listType
+                            override def representation: LoweredValueRepresentation = outSum
+                            override def pos: SIRPosition = AnnotationsDecl.empty.pos
+                            override def termInternal(gctx: TermGenerationContext): Term =
+                                Term.Constr(
+                                  scalus.cardano.ledger.Word64(1L),
+                                  scala.List(
+                                    convertedHead.termWithNeededVars(gctx),
+                                    recCall.termWithNeededVars(gctx)
+                                  ),
+                                  UplcAnnotation(AnnotationsDecl.empty.pos)
+                                )
+                            override def docDef(
+                                ctx: LoweredValue.PrettyPrintingContext
+                            ): Doc =
+                                Doc.text("Constr(1, ") +
+                                    convertedHead.docRef(ctx) +
+                                    Doc.text(", ") +
+                                    recCall.docRef(ctx) +
+                                    Doc.text(")")
+                            override def docRef(
+                                ctx: LoweredValue.PrettyPrintingContext
+                            ): Doc =
+                                docDef(ctx)
+                        }
+                    },
+                    inListType,
+                    elemType,
+                    inListRepr,
+                    inElemRepr,
+                    listType,
+                    outSum
+                  ),
+              pos
+            )
+        }
         lctx.zCombinatorNeeded = true
         lvApplyDirect(goVar, input, listType, outSum, pos)
     }
@@ -898,59 +890,52 @@ object ScalusRuntime {
         val cacheKey =
             s"uplcConstrToBuiltinList|${listType.show}|${inSumRepr.stableKey}|${resolvedOutListRepr.stableKey}" +
                 s"|${lctx.captureFingerprint(listType)}"
-        val goVar = lctx.lookupCachedHelper(cacheKey) match
-            case Some(v) =>
-                LoweringContext.traceLetRec("HIT", "uplcConstrToBuiltinList", cacheKey)
-                v
-            case None =>
-                val id = lctx.uniqueVarName("$uplcConstrToBuiltinList")
-                val v = new VariableLoweredValue(
-                  id = id,
-                  name = id,
-                  sir = SIR.Var(id, goType, AnnotationsDecl(pos)),
-                  representation = goRepr
-                )
-                lctx.cachedTopLevelHelpers(cacheKey) = v
-                val rhs = lvLamAbs(
-                  "lst",
-                  listType,
-                  inSumRepr,
-                  lst => {
-                      SumUplcConstrOps.genMatchUplcConstrDirect(
-                        lst,
-                        inSumRepr,
-                        listType,
-                        listType,
-                        resolvedOutListRepr,
-                        pos,
-                        nilBody = outNil,
-                        consBody = (head, tail) => {
-                            val convertedHead =
-                                if inElemRepr == resolvedOutElemRepr then head
-                                else head.toRepresentation(resolvedOutElemRepr, pos)
-                            val recCall = lvApplyDirect(
-                              v,
-                              tail,
-                              listType,
-                              resolvedOutListRepr,
-                              pos
-                            )
-                            lvBuiltinApply2(
-                              SIRBuiltins.mkCons,
-                              convertedHead,
-                              recCall,
-                              listType,
-                              resolvedOutListRepr,
-                              pos
-                            )
-                        }
-                      )
-                  },
-                  pos
-                )
-                lctx.pendingTopLevelLetRecs += ((v, rhs))
-                LoweringContext.traceLetRec("ADD", "uplcConstrToBuiltinList", cacheKey)
-                v
+        val goVar = lctx.defineCachedTopLevelHelper(
+          cacheKey,
+          "$uplcConstrToBuiltinList",
+          goType,
+          goRepr,
+          "uplcConstrToBuiltinList",
+          pos
+        ) { v =>
+            lvLamAbs(
+              "lst",
+              listType,
+              inSumRepr,
+              lst => {
+                  SumUplcConstrOps.genMatchUplcConstrDirect(
+                    lst,
+                    inSumRepr,
+                    listType,
+                    listType,
+                    resolvedOutListRepr,
+                    pos,
+                    nilBody = outNil,
+                    consBody = (head, tail) => {
+                        val convertedHead =
+                            if inElemRepr == resolvedOutElemRepr then head
+                            else head.toRepresentation(resolvedOutElemRepr, pos)
+                        val recCall = lvApplyDirect(
+                          v,
+                          tail,
+                          listType,
+                          resolvedOutListRepr,
+                          pos
+                        )
+                        lvBuiltinApply2(
+                          SIRBuiltins.mkCons,
+                          convertedHead,
+                          recCall,
+                          listType,
+                          resolvedOutListRepr,
+                          pos
+                        )
+                    }
+                  )
+              },
+              pos
+            )
+        }
         lctx.zCombinatorNeeded = true
         lvApplyDirect(goVar, input, listType, resolvedOutListRepr, pos)
     }

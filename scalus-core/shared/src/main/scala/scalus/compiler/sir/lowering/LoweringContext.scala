@@ -94,6 +94,48 @@ class LoweringContext(
       (IdentifiableLoweredValue, LoweredValue)
     ] = scala.collection.mutable.ArrayBuffer.empty
 
+    /** Define a top-level recursive helper or reuse a previously-cached one for the same key.
+      *
+      * The recipe — shared by `ScalusRuntime.builtinListToUplcConstr`,
+      * `ScalusRuntime.uplcConstrToBuiltinList`, and `LoweringEq.createSumEqHelper` — is:
+      *
+      *   1. Look up `cacheKey` in [[cachedTopLevelHelpers]]. On hit, return the cached var.
+      *   2. On miss, allocate a fresh `VariableLoweredValue` from `funType`/`funRepr`.
+      *   3. Register it in the cache BEFORE building the rhs so the rhs (built by `buildRhs`) can
+      *      refer to the var for self-recursion.
+      *   4. Build the rhs by calling `buildRhs(v)`.
+      *   5. Append `(v, rhs)` to [[pendingTopLevelLetRecs]] so the lowering driver emits the
+      *      let-rec wrapping the lowered SIR root.
+      *
+      * `label` is the short site name passed to [[LoweringContext.traceLetRec]] — used when
+      * filtering `SCALUS_TRACE_LETREC` output.
+      */
+    def defineCachedTopLevelHelper(
+        cacheKey: String,
+        namePrefix: String,
+        funType: SIRType,
+        funRepr: LoweredValueRepresentation,
+        label: String,
+        pos: SIRPosition
+    )(buildRhs: IdentifiableLoweredValue => LoweredValue): IdentifiableLoweredValue =
+        lookupCachedHelper(cacheKey) match
+            case Some(v) =>
+                LoweringContext.traceLetRec("HIT", label, cacheKey)
+                v
+            case None =>
+                val id = uniqueVarName(namePrefix)
+                val v = new VariableLoweredValue(
+                  id = id,
+                  name = id,
+                  sir = SIR.Var(id, funType, AnnotationsDecl(pos)),
+                  representation = funRepr
+                )
+                cachedTopLevelHelpers(cacheKey) = v
+                val rhs = buildRhs(v)
+                pendingTopLevelLetRecs += ((v, rhs))
+                LoweringContext.traceLetRec("ADD", label, cacheKey)
+                v
+
     /** Find a binding in a provider module by module name and method name. */
     def findProviderBinding(providerModuleName: String, methodName: String): Option[Binding] = {
         val fullBindingName = s"$providerModuleName.$methodName"

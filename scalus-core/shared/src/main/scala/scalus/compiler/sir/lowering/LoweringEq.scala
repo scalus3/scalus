@@ -253,22 +253,91 @@ object LoweringEq {
           funType,
           InOutRepresentationPair(lhsSum, innerFunRepr)
         )
-        // Reuse cached helper across emission sites; emit and register on first encounter.
-        val eqFnVar = lctx.lookupCachedHelper(typeKey) match
-            case Some(v) =>
-                LoweringContext.traceLetRec("HIT", "sumEq", typeKey)
-                v
-            case None =>
-                createSumEqHelper(
-                  typeKey,
-                  baseType,
-                  lhsSum,
-                  funType,
-                  funRepr,
-                  innerFunType,
-                  innerFunRepr,
-                  pos
-                )
+        // Predicate: does this field type match the outer sum type? If yes, recurse via eqFnVar.
+        def isOuterSumType(t: SIRType): Boolean = {
+            val st = stripAnnotated(t) match
+                case SIRType.TypeProxy(ref) if ref != null => ref.asInstanceOf[SIRType]
+                case other                                 => other
+            (st, baseType) match
+                case (SIRType.SumCaseClass(d1, ta1), SIRType.SumCaseClass(d2, ta2)) =>
+                    d1.name == d2.name && ta1.length == ta2.length
+                case _ => false
+        }
+        val eqFnVar = lctx.defineCachedTopLevelHelper(
+          typeKey,
+          "$sumEq_" + typeKey.filter(c => c.isLetterOrDigit || c == '_' || c == '.'),
+          funType,
+          funRepr,
+          "sumEq",
+          pos
+        ) { eqFnVar =>
+            lvLamAbs(
+              "a",
+              baseType,
+              lhsSum,
+              a =>
+                  lvLamAbs(
+                    "b",
+                    baseType,
+                    lhsSum,
+                    b =>
+                        typegens.SumUplcConstrOps.genMatchUplcConstrAllVariants(
+                          a,
+                          lhsSum,
+                          baseType,
+                          SIRType.Boolean,
+                          PrimitiveRepresentation.Constant,
+                          pos,
+                          (aTag, aFields) =>
+                              typegens.SumUplcConstrOps
+                                  .genMatchUplcConstrAllVariants(
+                                    b,
+                                    lhsSum,
+                                    baseType,
+                                    SIRType.Boolean,
+                                    PrimitiveRepresentation.Constant,
+                                    pos,
+                                    (bTag, bFields) =>
+                                        if aTag != bTag then lvBoolConstant(false, pos)
+                                        else if aFields.isEmpty then lvBoolConstant(true, pos)
+                                        else
+                                            val fieldComparisons =
+                                                aFields.zip(bFields).map { case (af, bf) =>
+                                                    if isOuterSumType(af.sirType) then
+                                                        // Self-recursion: use the cached eqFnVar
+                                                        lvApplyDirect(
+                                                          lvApplyDirect(
+                                                            eqFnVar,
+                                                            af,
+                                                            innerFunType,
+                                                            innerFunRepr,
+                                                            pos
+                                                          ),
+                                                          bf,
+                                                          SIRType.Boolean,
+                                                          PrimitiveRepresentation.Constant,
+                                                          pos
+                                                        )
+                                                    else generateEqualsForRepr(af, bf, pos)
+                                                }
+                                            fieldComparisons.reduceLeft { (acc, next) =>
+                                                lvIfThenElse(
+                                                  acc.toRepresentation(
+                                                    PrimitiveRepresentation.Constant,
+                                                    pos
+                                                  ),
+                                                  next,
+                                                  lvBoolConstant(false, pos),
+                                                  pos
+                                                )
+                                            }
+                                  )
+                        ),
+                    pos
+                  ),
+              pos
+            )
+        }
         lvApplyDirect(
           lvApplyDirect(eqFnVar, lhs, innerFunType, innerFunRepr, pos),
           rhsConv,
@@ -290,121 +359,6 @@ object LoweringEq {
             cd.name + (if args.isEmpty then "" else args.map(sumEqKey).mkString("[", ",", "]"))
         case SIRType.Annotated(inner, _) => sumEqKey(inner)
         case other                       => other.show
-
-    /** Build the recursive helper function `eqSum: (T, T) => Boolean` for a given sum type. The
-      * helper does outer Case dispatch on `a`, inner Case dispatch on `b`, returns false on tag
-      * mismatch, and ANDs field comparisons otherwise. Self-recursive fields (whose type matches
-      * the outer sum) reuse the recursive `eqFn` reference; other fields recurse into
-      * [[generateEqualsForRepr]] (which may itself emit further cached helpers).
-      *
-      * The result is registered in [[LoweringContext.pendingTopLevelLetRecs]]; the lowering driver
-      * is expected to wrap the lowered SIR root with the corresponding let-recs.
-      */
-    private def createSumEqHelper(
-        typeKey: String,
-        baseType: SIRType,
-        lhsSum: SumCaseClassRepresentation.SumUplcConstr,
-        funType: SIRType,
-        funRepr: LoweredValueRepresentation,
-        innerFunType: SIRType,
-        innerFunRepr: LoweredValueRepresentation,
-        pos: SIRPosition
-    )(using lctx: LoweringContext): IdentifiableLoweredValue = {
-        // Predicate: does this field type match the outer sum type? If yes, use eqFn.
-        def isOuterSumType(t: SIRType): Boolean = {
-            val st = stripAnnotated(t) match
-                case SIRType.TypeProxy(ref) if ref != null => ref.asInstanceOf[SIRType]
-                case other                                 => other
-            (st, baseType) match
-                case (SIRType.SumCaseClass(d1, ta1), SIRType.SumCaseClass(d2, ta2)) =>
-                    d1.name == d2.name && ta1.length == ta2.length
-                case _ => false
-        }
-        // Allocate the recursive var up front so we can register it in the cache before
-        // computing the rhs — supports forward references during recursion. `uniqueVarName`
-        // already disambiguates; the key is mixed in for easier debugging (stripped of
-        // non-identifier characters).
-        val eqFnId = lctx.uniqueVarName(
-          "$sumEq_" + typeKey.filter(c => c.isLetterOrDigit || c == '_' || c == '.')
-        )
-        val eqFnVar = new VariableLoweredValue(
-          id = eqFnId,
-          name = eqFnId,
-          sir = SIR.Var(eqFnId, funType, AnnotationsDecl(pos)),
-          representation = funRepr
-        )
-        // Register early so recursive references from inside the rhs reuse this same var.
-        lctx.cachedTopLevelHelpers(typeKey) = eqFnVar
-        val eqFnRhs = lvLamAbs(
-          "a",
-          baseType,
-          lhsSum,
-          a =>
-              lvLamAbs(
-                "b",
-                baseType,
-                lhsSum,
-                b =>
-                    typegens.SumUplcConstrOps.genMatchUplcConstrAllVariants(
-                      a,
-                      lhsSum,
-                      baseType,
-                      SIRType.Boolean,
-                      PrimitiveRepresentation.Constant,
-                      pos,
-                      (aTag, aFields) =>
-                          typegens.SumUplcConstrOps
-                              .genMatchUplcConstrAllVariants(
-                                b,
-                                lhsSum,
-                                baseType,
-                                SIRType.Boolean,
-                                PrimitiveRepresentation.Constant,
-                                pos,
-                                (bTag, bFields) =>
-                                    if aTag != bTag then lvBoolConstant(false, pos)
-                                    else if aFields.isEmpty then lvBoolConstant(true, pos)
-                                    else
-                                        val fieldComparisons =
-                                            aFields.zip(bFields).map { case (af, bf) =>
-                                                if isOuterSumType(af.sirType) then
-                                                    // Self-recursion: use the cached eqFnVar
-                                                    lvApplyDirect(
-                                                      lvApplyDirect(
-                                                        eqFnVar,
-                                                        af,
-                                                        innerFunType,
-                                                        innerFunRepr,
-                                                        pos
-                                                      ),
-                                                      bf,
-                                                      SIRType.Boolean,
-                                                      PrimitiveRepresentation.Constant,
-                                                      pos
-                                                    )
-                                                else generateEqualsForRepr(af, bf, pos)
-                                            }
-                                        fieldComparisons.reduceLeft { (acc, next) =>
-                                            lvIfThenElse(
-                                              acc.toRepresentation(
-                                                PrimitiveRepresentation.Constant,
-                                                pos
-                                              ),
-                                              next,
-                                              lvBoolConstant(false, pos),
-                                              pos
-                                            )
-                                        }
-                              )
-                    ),
-                pos
-              ),
-          pos
-        )
-        lctx.pendingTopLevelLetRecs += ((eqFnVar, eqFnRhs))
-        LoweringContext.traceLetRec("ADD", "sumEq", typeKey)
-        eqFnVar
-    }
 
     def generatePrimitiveEquals(
         builtin: SIR.Builtin,
