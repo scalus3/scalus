@@ -622,26 +622,30 @@ object Lowering {
     private val UnboxedNilName =
         "scalus.cardano.onchain.plutus.prelude.List$.unboxedNil"
 
-    private def isTypeProxyApp(app: SIR.Apply): Boolean = app.f match
-        case SIR.ExternalVar(_, name, _, _) => name == TypeProxyName
-        case _                              => false
+    /** True iff `app.f` is a Var/ExternalVar whose name satisfies `pred`. Centralizes the
+      * Var-or-ExternalVar destructure that every `is*App` predicate over a known module-qualified
+      * name needs; without it each predicate re-implements the same 3-arm match.
+      */
+    private def appNameMatches(app: SIR.Apply, pred: String => Boolean): Boolean =
+        app.f match
+            case SIR.ExternalVar(_, name, _, _) => pred(name)
+            case SIR.Var(name, _, _)            => pred(name)
+            case _                              => false
 
-    private def isTypeProxyReprApp(app: SIR.Apply): Boolean = app.f match
-        case SIR.ExternalVar(_, name, _, _) => name == TypeProxyReprName
-        case _                              => false
+    private def isTypeProxyApp(app: SIR.Apply): Boolean =
+        appNameMatches(app, _ == TypeProxyName)
 
-    private def isToDefaultTypeVarReprApp(app: SIR.Apply): Boolean = app.f match
-        case SIR.ExternalVar(_, name, _, _) => name == ToDefaultTypeVarReprName
-        case _                              => false
+    private def isTypeProxyReprApp(app: SIR.Apply): Boolean =
+        appNameMatches(app, _ == TypeProxyReprName)
 
-    private def isFromDefaultTypeVarReprApp(app: SIR.Apply): Boolean = app.f match
-        case SIR.ExternalVar(_, name, _, _) => name == FromDefaultTypeVarReprName
-        case _                              => false
+    private def isToDefaultTypeVarReprApp(app: SIR.Apply): Boolean =
+        appNameMatches(app, _ == ToDefaultTypeVarReprName)
 
-    private def isUnboxedNilApp(app: SIR.Apply): Boolean = app.f match
-        case SIR.ExternalVar(_, name, _, _) => name == UnboxedNilName
-        case SIR.Var(name, _, _)            => name == UnboxedNilName
-        case _                              => false
+    private def isFromDefaultTypeVarReprApp(app: SIR.Apply): Boolean =
+        appNameMatches(app, _ == FromDefaultTypeVarReprName)
+
+    private def isUnboxedNilApp(app: SIR.Apply): Boolean =
+        appNameMatches(app, _ == UnboxedNilName)
 
     /** Direct lowering of `List.unboxedNil[A]()`. The plugin's SIR for a `def f[A]: T` is
       * polymorphic and typed as `List[Nothing]` inside the body (accurate for Scala's covariant
@@ -1064,22 +1068,14 @@ object Lowering {
     private def isPairListConversionName(name: String): Boolean =
         SIRType.PairList.ConversionNames.contains(name)
 
-    private def isPairListConversion(app: SIR.Apply): Boolean = {
-        app.f match
-            case SIR.ExternalVar(_, name, _, _) => isPairListConversionName(name)
-            case SIR.Var(name, _, _)            => isPairListConversionName(name)
-            case _                              => false
-    }
+    private def isPairListConversion(app: SIR.Apply): Boolean =
+        appNameMatches(app, isPairListConversionName)
 
     private def isToMapConversionName(name: String): Boolean =
         SIRType.PairList.ToMapNames.contains(name)
 
-    private def isToMapConversion(app: SIR.Apply): Boolean = {
-        app.f match
-            case SIR.ExternalVar(_, name, _, _) => isToMapConversionName(name)
-            case SIR.Var(name, _, _)            => isToMapConversionName(name)
-            case _                              => false
-    }
+    private def isToMapConversion(app: SIR.Apply): Boolean =
+        appNameMatches(app, isToMapConversionName)
 
     private def lowerPairListConversion(
         app: SIR.Apply

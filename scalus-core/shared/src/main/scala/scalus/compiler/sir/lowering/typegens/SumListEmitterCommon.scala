@@ -54,20 +54,12 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
                   pos
                 )
             case SumCaseClassRepresentation.SumDataAssocMap =>
-                if SirTypeUplcGenerator.isPairOrTuple2(targetElementType) then
-                    TypeRepresentationProxyLoweredValue(
-                      input,
-                      effectiveTargetType,
-                      input.representation,
-                      pos
-                    )
-                else
-                    TypeRepresentationProxyLoweredValue(
-                      input,
-                      effectiveTargetType,
-                      input.representation,
-                      pos
-                    )
+                TypeRepresentationProxyLoweredValue(
+                  input,
+                  effectiveTargetType,
+                  input.representation,
+                  pos
+                )
             case tvr: TypeVarRepresentation =>
                 val targetRepresentation = {
                     if tvr.isBuiltin then defaultRepresentation(input.sirType)

@@ -122,10 +122,7 @@ case class OneElementWrapperEmitter(
               s"Expected select on ${name}, got ${sel.field}",
               sel.anns.pos
             )
-        else {
-            val retval = argLoweredValue(loweredScrutinee)
-            argLoweredValue(loweredScrutinee)
-        }
+        else argLoweredValue(loweredScrutinee)
     }
 
     override def genMatch(
