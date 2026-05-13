@@ -150,25 +150,7 @@ class LoweringContext(
       * to live as separate entries.
       */
     def captureFingerprint(tps: SIRType*): String = {
-        val seen = new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
-        val acc = scala.collection.mutable.LinkedHashSet[SIRType.TypeVar]()
-        def collect(t: SIRType, bound: Set[SIRType.TypeVar]): Unit = t match
-            case tv: SIRType.TypeVar =>
-                if !bound.contains(tv) then acc += tv
-            case SIRType.TypeLambda(ps, body) => collect(body, bound ++ ps)
-            case SIRType.Fun(in, out)         => collect(in, bound); collect(out, bound)
-            case SIRType.CaseClass(_, args, parent) =>
-                args.foreach(collect(_, bound)); parent.foreach(collect(_, bound))
-            case SIRType.SumCaseClass(_, args) =>
-                args.foreach(collect(_, bound))
-            case SIRType.Annotated(t1, _) => collect(t1, bound)
-            case SIRType.TypeProxy(ref) =>
-                if ref != null && !seen.containsKey(t) then
-                    seen.put(t.asInstanceOf[SIRType.TypeProxy], true)
-                    collect(ref, bound)
-            case _ => // primitives, FreeUnificator, TypeNothing
-        tps.foreach(collect(_, Set.empty))
-        val freeTvs = acc.toList
+        val freeTvs = OuterTypeLambdaWrappedLoweredValue.collectFreeTypeVars(tps)
         def tvId(tv: SIRType.TypeVar): String =
             s"${tv.name}#${tv.optId.getOrElse(0L)}"
         // For each free TypeVar in `tps`, capture two pieces of state:

@@ -258,7 +258,14 @@ object OuterTypeLambdaWrappedLoweredValue {
     }
 
     /** Collect TypeVars referenced in `tp` that are NOT bound by any inner `TypeLambda`. */
-    def collectFreeTypeVars(tp: SIRType): scala.List[SIRType.TypeVar] = {
+    def collectFreeTypeVars(tp: SIRType): scala.List[SIRType.TypeVar] =
+        collectFreeTypeVars(Seq(tp))
+
+    /** Collect free TypeVars across multiple types, with order-preserving identity dedup. The
+      * accumulator is shared across `tps`, so a TypeVar referenced by several inputs appears once —
+      * matching the bound-aware semantics callers like `LoweringContext.captureFingerprint` need.
+      */
+    def collectFreeTypeVars(tps: Seq[SIRType]): scala.List[SIRType.TypeVar] = {
         val seen = new java.util.IdentityHashMap[SIRType.TypeProxy, Boolean]()
         val acc = scala.collection.mutable.LinkedHashSet[SIRType.TypeVar]()
         def go(t: SIRType, bound: Set[SIRType.TypeVar]): Unit = t match
@@ -280,7 +287,7 @@ object OuterTypeLambdaWrappedLoweredValue {
                     go(ref, bound)
                 }
             case _ => // primitives, FreeUnificator, TypeNothing
-        go(tp, Set.empty)
+        tps.foreach(go(_, Set.empty))
         acc.toList
     }
 }
