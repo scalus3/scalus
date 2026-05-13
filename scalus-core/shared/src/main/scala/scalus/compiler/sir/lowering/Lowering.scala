@@ -80,7 +80,7 @@ object Lowering {
                 // the `inUplcConstrListScope` rerouting that used to live in the
                 // typegen-internal `ConstrDispatcher.shouldDelegateToUplcConstr` rule
                 // #4. Non-Nil Constr forms route through `SumDispatch.genConstr` /
-                // `ProdDispatch.genConstr`, which call `chooseConstrOutputRepr`.
+                // `ProdDispatch.genConstr`, which call `chooseConstrOutputEmitter`.
                 val isNil =
                     name == SIRType.List.NilConstr.name
                         || name == typegens.SumListEmitterCommon.PairNilName

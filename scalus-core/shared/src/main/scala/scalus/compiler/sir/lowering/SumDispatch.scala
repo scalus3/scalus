@@ -132,47 +132,59 @@ object SumDispatch {
         }
 
     /** Choose the typegen that should emit this `Constr`, considering both the static type and
-      * surrounding-arg/context cues. Centralizes the four rules formerly in
+      * surrounding-arg/context cues. Centralizes the rules formerly in
       * `ConstrDispatcher.shouldDelegateToUplcConstr`:
       *
-      *   1. Parent sum's default representation is `SumUplcConstr`.
-      *   2. `List.Cons` whose tail's actual representation is `SumUplcConstr`.
+      *   1. Parent sum's default representation is `SumUplcConstr` → use parent's gen.
+      *   2. The constr is List/Option-shaped AND either:
+      *      a. it's a `List.Cons` whose tail's actual representation is already `SumUplcConstr`
+      *         (spine propagation), or
+      *      b. `lctx.inUplcConstrListScope == true` (caller asked for native lists).
       *   3. Caller's `optTargetType` is `@UplcRepr(UplcConstr)`-annotated.
-      *   4. `lctx.inUplcConstrListScope == true` AND parent sum is List/Option.
       *
       * Returns the typegen to dispatch to; default is the static-type's own typegen.
       */
-    def chooseConstrOutputRepr(
+    def chooseConstrOutputEmitter(
         constr: SIR.Constr,
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): typegens.SirTypeUplcGenerator = {
         val resolvedType = lctx.resolveTypeVarIfNeeded(constr.tp)
 
-        // 1. Parent's default repr is SumUplcConstr.
         resolvedType match
-            case SIRType.CaseClass(_, typeArgs, Some(parent)) =>
-                val substitutedParent = parent match
-                    case SIRType.TypeLambda(params, body)
-                        if typeArgs.nonEmpty && params.length == typeArgs.length =>
-                        SIRType.substitute(body, params.zip(typeArgs).toMap, Map.empty)
-                    case _ => parent
-                val parentGen = typegens.SirTypeUplcGenerator(substitutedParent)
-                parentGen.defaultRepresentation(substitutedParent) match
-                    case _: SumUplcConstr => return parentGen
-                    case _                =>
+            case SIRType.CaseClass(cd, typeArgs, optParent) =>
+                // 1. Parent sum's default repr is SumUplcConstr → route to parent's gen.
+                optParent match
+                    case Some(parent) =>
+                        val substitutedParent = parent match
+                            case SIRType.TypeLambda(params, body)
+                                if typeArgs.nonEmpty && params.length == typeArgs.length =>
+                                SIRType.substitute(body, params.zip(typeArgs).toMap, Map.empty)
+                            case _ => parent
+                        val parentGen = typegens.SirTypeUplcGenerator(substitutedParent)
+                        parentGen.defaultRepresentation(substitutedParent) match
+                            case _: SumUplcConstr => return parentGen
+                            case _                =>
+                    case None =>
+                // 2. List/Option-shaped constr — emit UplcConstr if either Cons-tail
+                //    propagation fires or `inUplcConstrListScope` is on.
+                val parentIsListOrOption = optParent match
+                    case Some(parent) => IntrinsicResolver.isUplcConstrListOrOption(parent)
+                    case None         => IntrinsicResolver.isUplcConstrListOrOption(resolvedType)
+                if parentIsListOrOption then
+                    val tailHasUplcConstr = cd.name == SIRType.List.Cons.name &&
+                        loweredArgs.length >= 2 &&
+                        (loweredArgs.last.representation match
+                            case _: SumUplcConstr => true
+                            case _                => false)
+                    if tailHasUplcConstr || lctx.inUplcConstrListScope then
+                        return typegens.SumCaseUplcConstrEmitter
             case _ =>
+                if lctx.inUplcConstrListScope
+                    && IntrinsicResolver.isUplcConstrListOrOption(resolvedType)
+                then return typegens.SumCaseUplcConstrEmitter
 
-        // 2. List.Cons + tail has SumUplcConstr repr.
-        resolvedType match
-            case SIRType.CaseClass(cd, _, Some(_))
-                if cd.name == SIRType.List.Cons.name && loweredArgs.length >= 2 =>
-                loweredArgs.last.representation match
-                    case _: SumUplcConstr => return typegens.SumCaseUplcConstrEmitter
-                    case _                =>
-            case _ =>
-
-        // 3. Caller's target type is @UplcRepr(UplcConstr) annotated.
+        // 3. Caller's target type is @UplcRepr(UplcConstr)-annotated.
         val targetUsesUplcConstr = optTargetType.exists {
             case SIRType.Annotated(inner, anns) =>
                 anns.data.contains("uplcRepr") &&
@@ -181,22 +193,13 @@ object SumDispatch {
         }
         if targetUsesUplcConstr then return typegens.SumCaseUplcConstrEmitter
 
-        // 4. inUplcConstrListScope flag + this constr's parent sum is List/Option.
-        val parentIsListOrOption = resolvedType match
-            case SIRType.CaseClass(_, _, Some(parent)) =>
-                IntrinsicResolver.isUplcConstrListOrOption(parent)
-            case _ =>
-                IntrinsicResolver.isUplcConstrListOrOption(resolvedType)
-        if lctx.inUplcConstrListScope && parentIsListOrOption then
-            return typegens.SumCaseUplcConstrEmitter
-
         typegens.SirTypeUplcGenerator(resolvedType)
     }
 
     /** Pick the type generator for a `Nil` constructor.
       *
       * `Lowering.lowerSIR` routes `Nil` straight to `typeGenerator.genConstrLowered`, bypassing
-      * `chooseConstrOutputRepr`. So this path also has to apply the `inUplcConstrListScope`
+      * `chooseConstrOutputEmitter`. So this path also has to apply the `inUplcConstrListScope`
       * override (the rule that, pre-Phase-3a, the typegen- internal
       * `ConstrDispatcher.shouldDelegateToUplcConstr` rule #4 supplied); without it, a Nil produced
       * inside an UplcConstr-scoped intrinsic body whose surrounding target type is unannotated
@@ -238,7 +241,7 @@ object SumDispatch {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        val gen = chooseConstrOutputRepr(constr, loweredArgs, optTargetType)
+        val gen = chooseConstrOutputEmitter(constr, loweredArgs, optTargetType)
         gen.genConstrLowered(constr, loweredArgs, optTargetType)
     }
 
@@ -281,7 +284,13 @@ object SumDispatch {
             case PackedSumDataList =>
                 val elemType = SumBuiltinList
                     .retrieveListElementType(loweredScrutinee.sirType)
-                    .getOrElse(SIRType.Data.tp)
+                    .getOrElse {
+                        throw LoweringException(
+                          s"genMatch: PackedSumDataList scrutinee requires a list-typed " +
+                              s"input, got ${loweredScrutinee.sirType.show}",
+                          matchData.anns.pos
+                        )
+                    }
                 val elemRepr = typegens.SirTypeUplcGenerator.defaultDataRepresentation(elemType)
                 val listRepr = SumBuiltinList(elemRepr)
                 val unpacked = loweredScrutinee.toRepresentation(listRepr, matchData.anns.pos)

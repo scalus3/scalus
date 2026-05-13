@@ -132,7 +132,7 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        // Repr-routing decisions live in `SumDispatch.chooseConstrOutputRepr`. The
+        // Emitter-routing decisions live in `SumDispatch.chooseConstrOutputEmitter`. The
         // remaining decision here is structural: a Transparent TypeVar arg or a
         // non-Data-convertible payload forces native UplcConstr emission.
         if hasTransparentTypeVarArgs(loweredArgs) then

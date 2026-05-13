@@ -103,7 +103,7 @@ object DataConstrEmitter extends SirTypeUplcGenerator {
     )(using lctx: LoweringContext): LoweredValue = {
         // Routing decisions (parent-default check, tail-repr propagation,
         // `@UplcRepr(UplcConstr)` annotation, `inUplcConstrListScope`) live in
-        // `SumDispatch.chooseConstrOutputRepr`. By the time we land here, the
+        // `SumDispatch.chooseConstrOutputEmitter`. By the time we land here, the
         // dispatcher already routed the constr to this generator.
         val caseClassType = constr.data.constrType(constr.name)
         SirTypeUplcGenerator(caseClassType)

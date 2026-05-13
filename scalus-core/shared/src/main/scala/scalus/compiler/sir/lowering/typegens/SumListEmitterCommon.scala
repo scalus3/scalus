@@ -95,7 +95,7 @@ trait SumListEmitterCommon extends SirTypeUplcGenerator {
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
         import SumListEmitterCommon.*
-        // Routing decisions live in `SumDispatch.chooseConstrOutputRepr`.
+        // Routing decisions live in `SumDispatch.chooseConstrOutputEmitter`.
         constr.name match
             case SIRType.List.NilConstr.name | SIRType.BuiltinList.Nil.name | PairNilName =>
                 genNil(constr.tp, constr.anns.pos)

@@ -45,7 +45,7 @@ object ProdDispatch {
         loweredArgs: scala.List[LoweredValue],
         optTargetType: Option[SIRType]
     )(using lctx: LoweringContext): LoweredValue = {
-        val gen = SumDispatch.chooseConstrOutputRepr(constr, loweredArgs, optTargetType)
+        val gen = SumDispatch.chooseConstrOutputEmitter(constr, loweredArgs, optTargetType)
         gen.genConstrLowered(constr, loweredArgs, optTargetType)
     }
 
