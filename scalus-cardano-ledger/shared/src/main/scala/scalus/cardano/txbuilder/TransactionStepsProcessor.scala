@@ -718,12 +718,22 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
               step
             )
         case Certificate.RegCert(credential, _) =>
-            useNonSpendingWitness(
-              Operation.CertificateOperation(cert),
-              credential,
-              witness,
-              step
-            )
+            // Stake-credential registration is permissionless in the Conway ledger — it requires no
+            // witness from the credential being registered (only deregistration and delegation do).
+            // So a script credential registered with no explicit witness (the default PubKeyWitness
+            // sentinel from `registerStake(stakeAddress)`) is valid and must not be rejected as a
+            // credential/witness-type mismatch. An explicitly provided script/native witness is still
+            // honored (e.g. `registerStake(addr, attached(script, redeemer))`).
+            (credential, witness) match {
+                case (Credential.ScriptHash(_), PubKeyWitness) => Ok
+                case _ =>
+                    useNonSpendingWitness(
+                      Operation.CertificateOperation(cert),
+                      credential,
+                      witness,
+                      step
+                    )
+            }
         case Certificate.PoolRegistration(_, _, _, _, _, _, _, _, _) => Ok
         case Certificate.PoolRetirement(_, _)                        => Ok
         case Certificate.VoteDelegCert(credential, _) =>
