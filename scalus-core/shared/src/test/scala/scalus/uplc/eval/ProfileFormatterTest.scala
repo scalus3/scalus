@@ -103,6 +103,21 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(html.contains("200 cpu / 100 mem"))
     }
 
+    test("By Source Location links to the Annotated Source line (cross-tab nav)") {
+        val html = ProfileFormatter.toHtml(data, sources)
+        // a jump button in the location table and the matching anchor on the source line
+        assert(html.contains("class=\"goto\""))
+        assert(html.contains("scalusGoto('loc_Foo_scala_3')"))
+        assert(html.contains("id=\"loc_Foo_scala_3\""))
+        assert(html.contains("function scalusGoto"))
+    }
+
+    test("no goto button when the source is not annotated") {
+        // without sources there is no Annotated Source tab to navigate to
+        val html = ProfileFormatter.toHtml(data)
+        assert(!html.contains("class=\"goto\""))
+    }
+
     test("html escaping is applied to rendered content") {
         val tricky = data.copy(
           byFunction = Seq(FunctionProfile("a<b>&c", memory = 1, cpu = 1, count = 1))

@@ -283,7 +283,9 @@ object ProfileFormatter {
             sections += ((id, title, b.toString))
         }
 
-        section("src", "By Source Location")(appendSourceLocationTable(_, data, totalCpu))
+        section("src", "By Source Location")(
+          appendSourceLocationTable(_, data, totalCpu, sources.keySet)
+        )
 
         renderAnnotatedSource(data, sources).foreach(html =>
             sections += (("annotated", "Annotated Source", html))
@@ -411,7 +413,8 @@ object ProfileFormatter {
     private def appendSourceLocationTable(
         sb: StringBuilder,
         data: ProfilingData,
-        totalCpu: Long
+        totalCpu: Long,
+        annotatedFiles: Set[String]
     ): Unit = {
         val rows = data.bySourceLocation
         if rows.isEmpty then sb.append("<p>(none recorded)</p>\n")
@@ -465,12 +468,21 @@ object ProfileFormatter {
                 val loc = s"${shortFile(e.file)}:${e.line}"
                 val id = idOf((e.file, e.line))
                 val hasIncoming = inByDest.get(id).exists(_.nonEmpty)
+                // Jump to this line in the Annotated Source tab (only when its source is annotated).
+                val goto =
+                    if annotatedFiles.contains(e.file) then
+                        s"""<a class="goto" title="show in Annotated Source" onclick="scalusGoto('${locAnchor(
+                              e.file,
+                              e.line
+                            )}')">⇲</a> """
+                    else ""
                 val locCell =
-                    if !hasIncoming then escapeHtml(loc)
+                    if !hasIncoming then goto + escapeHtml(loc)
                     else
-                        s"""<span class="treenode" data-id="$id" data-path=""><span class="mark">▶</span> ${escapeHtml(
-                              loc
-                            )}</span><div class="subtree" hidden></div>"""
+                        goto +
+                            s"""<span class="treenode" data-id="$id" data-path=""><span class="mark">▶</span> ${escapeHtml(
+                                  loc
+                                )}</span><div class="subtree" hidden></div>"""
                 val pct = oneDecimalPct(e.cpu, totalCpu)
                 val barW = (e.cpu * 120 / maxCpu).toInt
                 sb.append(
@@ -540,8 +552,10 @@ object ProfileFormatter {
                     else
                         s" style='background:rgba(220,40,40,${0.08 + 0.5 * (cpu.toDouble / maxCpu)})'"
                 val gut = if cpu == 0 then "" else s"$cpu cpu / $mem mem / $cnt×"
+                // Anchor profiled lines so the By Source Location tab can jump straight here.
+                val anchor = if e.isDefined then s" id=\"${locAnchor(file, ln)}\"" else ""
                 sb.append(
-                  s"<tr$rowStyle><td class='ln'>$ln</td><td class='cost'>$gut</td><td class='code'>${escapeHtml(text)}</td></tr>\n"
+                  s"<tr$anchor$rowStyle><td class='ln'>$ln</td><td class='cost'>$gut</td><td class='code'>${escapeHtml(text)}</td></tr>\n"
                 )
             }
             sb.append("</table>\n")
@@ -646,6 +660,12 @@ object ProfileFormatter {
         s"${col1.padTo(col1Width, ' ')}  ${count.reverse.padTo(countWidth, ' ').reverse}  ${mem.reverse.padTo(memWidth, ' ').reverse}  ${cpu.reverse.padTo(cpuWidth, ' ').reverse}"
     }
 
+    /** Deterministic HTML anchor id for a `(file, line)` — computed identically in both the By
+      * Source Location table and the Annotated Source view so one can link to the other.
+      */
+    private def locAnchor(file: String, line: Int): String =
+        "loc_" + file.map(c => if c.isLetterOrDigit then c else '_').mkString + "_" + line
+
     /** Shorten file path to just the filename without extension. */
     private def shortFile(path: String): String = {
         val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
@@ -693,7 +713,10 @@ nav.tabs { position: sticky; top: 0; background: #fafafa; padding: 8px 0; margin
 .treenode { cursor: pointer; }
 .treenode .mark { color: #4a90d9; font-size: 0.8em; }
 .subtree { margin-left: 14px; border-left: 1px solid #ddd; padding-left: 8px; }
-.treeleaf { color: #999; }"""
+.treeleaf { color: #999; }
+a.goto { cursor: pointer; color: #4a90d9; text-decoration: none; margin-right: 2px; }
+a.goto:hover { color: #1c5fa8; }
+table.src tr.hl { background: #fff3cd !important; outline: 2px solid #f0ad4e; }"""
 
     private val htmlScript: String =
         """function scalusFilter(q){q=(q||'').toLowerCase();document.querySelectorAll('table.sortable tbody tr').forEach(function(tr){tr.style.display=tr.textContent.toLowerCase().indexOf(q)>=0?'':'none';});}
@@ -727,6 +750,11 @@ document.addEventListener('click',function(e){
   var t=e.target;
   while(t&&t.nodeType===1){if(t.classList&&t.classList.contains('treenode')){scalusToggle(t);return;}t=t.parentNode;}
 });
+function scalusGoto(anchor){
+  scalusTab('annotated');
+  var el=document.getElementById(anchor);
+  if(el){el.scrollIntoView({block:'center'});el.classList.add('hl');setTimeout(function(){el.classList.remove('hl');},1800);}
+}
 function scalusTab(id){
   document.querySelectorAll('.tab-panel').forEach(function(p){p.hidden=(p.id!==id);});
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.toggle('active', b.getAttribute('data-tab')===id);});
