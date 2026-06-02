@@ -308,6 +308,12 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
         val uint8Array = new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
         fs.appendFileSync(path, uint8Array)
     }
+
+    override def createDirectories(path: String): Unit = {
+        val fs = js.Dynamic.global.require("fs")
+        fs.mkdirSync(path, js.Dynamic.literal(recursive = true))
+        ()
+    }
 }
 
 object NodeJsPlatformSpecific extends NodeJsPlatformSpecific

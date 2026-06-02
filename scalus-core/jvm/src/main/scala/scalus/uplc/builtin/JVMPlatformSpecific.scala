@@ -295,6 +295,11 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         )
         ()
     }
+
+    override def createDirectories(path: String): Unit = {
+        Files.createDirectories(Paths.get(path))
+        ()
+    }
 }
 
 given PlatformSpecific = JVMPlatformSpecific

@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `EvaluatorReportConfig` — typed configuration for `PlutusScriptEvaluator` diagnostic output
+  (output directory, artifact selection, profile level), overridable via the `SCALUS_DUMP`,
+  `SCALUS_DUMP_DIR`, and `SCALUS_PROFILE*` environment variables; new `PlutusScriptEvaluator.apply`
+  overload accepting it. The legacy `debugDumpFilesForTesting: Boolean` constructors are retained
+  and map onto it
+- `platform.createDirectories` for cross-platform directory creation
+
+### Changed
+
+- Evaluator debug dumps now use stable, overwriting filenames
+  (`<scriptHash>-<language>-<tag>-<index>.flat`) instead of the volatile `script-<txid>-…` names,
+  so fee-balancing re-evaluations overwrite rather than accumulate duplicate files; the per-builtin
+  budget log is truncated once per evaluation (previously appended without bound) and renamed to
+  `budget.log`; a `manifest.json` describing every dumped script is written alongside (#93)
+
 ## 0.17.0 (2026-05-05)
 
 ### Added

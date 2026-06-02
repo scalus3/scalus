@@ -265,6 +265,18 @@ trait PlatformSpecific:
       */
     def appendFile(path: String, bytes: Array[Byte]): Unit
 
+    /** Create the directory at `path` and any missing parent directories. Idempotent — succeeds if
+      * the directory already exists.
+      *
+      * @note
+      *   This method is only meaningful in Node.js, JVM, and Native environments. The default
+      *   implementation is a no-op for platforms (and browsers) without filesystem access.
+      *
+      * @param path
+      *   The directory path to create
+      */
+    def createDirectories(path: String): Unit = ()
+
 @Compile
 object PlatformSpecific:
     val bls12_381_scalar_period: BigInt =
