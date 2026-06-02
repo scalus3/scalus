@@ -660,11 +660,16 @@ object ProfileFormatter {
         s"${col1.padTo(col1Width, ' ')}  ${count.reverse.padTo(countWidth, ' ').reverse}  ${mem.reverse.padTo(memWidth, ' ').reverse}  ${cpu.reverse.padTo(cpuWidth, ' ').reverse}"
     }
 
-    /** Deterministic HTML anchor id for a `(file, line)` — computed identically in both the By
-      * Source Location table and the Annotated Source view so one can link to the other.
+    /** Deterministic, injection-safe HTML anchor id for a `(file, line)`, computed identically in
+      * the By Source Location table and the Annotated Source view so one can link to the other.
+      *
+      * Output is `loc_<hex>_<line>` — only `[a-z0-9_]`, so it is safe to embed unescaped in both an
+      * `id` attribute and the `onclick` JS string literal; the unescaped call sites rely on that.
+      * Uses a hash of the full path (not a sanitized path) so distinct paths like `a/b.scala` and
+      * `a.b.scala` don't collapse to the same anchor.
       */
     private def locAnchor(file: String, line: Int): String =
-        "loc_" + file.map(c => if c.isLetterOrDigit then c else '_').mkString + "_" + line
+        "loc_" + Integer.toHexString(file.hashCode) + "_" + line
 
     /** Shorten file path to just the filename without extension. */
     private def shortFile(path: String): String = {
@@ -751,9 +756,10 @@ document.addEventListener('click',function(e){
   while(t&&t.nodeType===1){if(t.classList&&t.classList.contains('treenode')){scalusToggle(t);return;}t=t.parentNode;}
 });
 function scalusGoto(anchor){
-  scalusTab('annotated');
   var el=document.getElementById(anchor);
-  if(el){el.scrollIntoView({block:'center'});el.classList.add('hl');setTimeout(function(){el.classList.remove('hl');},1800);}
+  if(!el)return;
+  scalusTab('annotated');
+  el.scrollIntoView({block:'center'});el.classList.add('hl');setTimeout(function(){el.classList.remove('hl');},1800);
 }
 function scalusTab(id){
   document.querySelectorAll('.tab-panel').forEach(function(p){p.hidden=(p.id!==id);});

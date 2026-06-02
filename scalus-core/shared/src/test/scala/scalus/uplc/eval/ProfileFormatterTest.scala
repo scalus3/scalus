@@ -105,11 +105,14 @@ class ProfileFormatterTest extends AnyFunSuite {
 
     test("By Source Location links to the Annotated Source line (cross-tab nav)") {
         val html = ProfileFormatter.toHtml(data, sources)
-        // a jump button in the location table and the matching anchor on the source line
         assert(html.contains("class=\"goto\""))
-        assert(html.contains("scalusGoto('loc_Foo_scala_3')"))
-        assert(html.contains("id=\"loc_Foo_scala_3\""))
         assert(html.contains("function scalusGoto"))
+        // every goto button must target an anchor id that actually exists on a source line
+        val anchors = "scalusGoto\\('([^']+)'\\)".r.findAllMatchIn(html).map(_.group(1)).toList
+        assert(anchors.nonEmpty, "expected at least one goto button")
+        anchors.foreach(a =>
+            assert(html.contains(s"""id="$a""""), s"no source line anchored as $a")
+        )
     }
 
     test("no goto button when the source is not annotated") {
