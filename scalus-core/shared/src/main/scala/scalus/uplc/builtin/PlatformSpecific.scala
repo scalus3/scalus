@@ -277,6 +277,14 @@ trait PlatformSpecific:
       */
     def createDirectories(path: String): Unit = ()
 
+    /** Whether a readable file exists at `path`. The default returns `false` for platforms (and
+      * browsers) without filesystem access; overridden on JVM and Node.js.
+      *
+      * @param path
+      *   The file path to test
+      */
+    def fileExists(path: String): Boolean = false
+
 @Compile
 object PlatformSpecific:
     val bls12_381_scalar_period: BigInt =

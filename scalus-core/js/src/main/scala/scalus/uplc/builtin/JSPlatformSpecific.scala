@@ -314,6 +314,11 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
         fs.mkdirSync(path, js.Dynamic.literal(recursive = true))
         ()
     }
+
+    override def fileExists(path: String): Boolean = {
+        val fs = js.Dynamic.global.require("fs")
+        fs.existsSync(path).asInstanceOf[Boolean]
+    }
 }
 
 object NodeJsPlatformSpecific extends NodeJsPlatformSpecific

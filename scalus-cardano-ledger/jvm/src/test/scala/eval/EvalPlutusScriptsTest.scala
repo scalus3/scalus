@@ -67,6 +67,39 @@ class EvalPlutusScriptsTest extends AnyFunSuite {
             Files.deleteIfExists(dir)
     }
 
+    test("profile = Full writes per-script HTML + CSV reports") {
+        val dir = Files.createTempDirectory("scalus-profile-test")
+        try {
+            val report = EvaluatorReportConfig(
+              enabled = true,
+              outputDir = dir.toString,
+              artifacts = Set.empty, // profile only, no .flat dump
+              profile = ProfileLevel.Full
+            )
+            evalPlutusScripts(tx7430, utxo7430, SlotConfig.mainnet, report)
+
+            val files = Option(dir.toFile.listFiles())
+                .getOrElse(Array.empty[java.io.File])
+                .map(_.getName)
+            assert(
+              files.exists(_.endsWith(".profile.html")),
+              s"expected a profile.html, got ${files.mkString(", ")}"
+            )
+            assert(
+              files.exists(_.endsWith(".profile.csv")),
+              s"expected a profile.csv, got ${files.mkString(", ")}"
+            )
+            val htmlName = files.find(_.endsWith(".profile.html")).get
+            val html = new String(Files.readAllBytes(dir.resolve(htmlName)), "UTF-8")
+            assert(html.contains("Scalus CEK Machine Profile"))
+            assert(html.contains("By Source Location"))
+        } finally
+            Option(dir.toFile.listFiles())
+                .getOrElse(Array.empty[java.io.File])
+                .foreach(_.delete())
+            Files.deleteIfExists(dir)
+    }
+
     private lazy val tx7430: Array[Byte] = platform.readFile(
       "scalus-examples/js/src/main/ts/tx-743042177a25ed7675d6258211df87cd7dcc208d2fa82cb32ac3c77221bd87c3.cbor"
     )

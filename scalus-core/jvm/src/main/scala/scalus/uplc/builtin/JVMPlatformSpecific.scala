@@ -300,6 +300,8 @@ trait JVMPlatformSpecific extends PlatformSpecific {
         Files.createDirectories(Paths.get(path))
         ()
     }
+
+    override def fileExists(path: String): Boolean = Files.isRegularFile(Paths.get(path))
 }
 
 given PlatformSpecific = JVMPlatformSpecific

@@ -75,6 +75,22 @@ final case class EvaluatorReportConfig(
 
     /** True when reporting is enabled and the given artifact is requested. */
     def dumps(artifact: DumpArtifact): Boolean = enabled && artifacts.contains(artifact)
+
+    /** The profile renderings to produce: explicit [[profileOutputs]] when set, otherwise derived
+      * from the [[profile]] level (Summary ⇒ compact text to the console; Full ⇒ HTML + CSV files).
+      */
+    def effectiveProfileOutputs: Seq[ProfileOutput] =
+        if profileOutputs.nonEmpty then profileOutputs
+        else
+            profile match
+                case ProfileLevel.Off => Nil
+                case ProfileLevel.Summary =>
+                    Seq(ProfileOutput(ProfileFormat.Text, ProfileDestination.Console))
+                case ProfileLevel.Full =>
+                    Seq(
+                      ProfileOutput(ProfileFormat.Html, ProfileDestination.File("profile.html")),
+                      ProfileOutput(ProfileFormat.Csv, ProfileDestination.File("profile.csv"))
+                    )
 }
 
 object EvaluatorReportConfig {
@@ -106,6 +122,8 @@ object EvaluatorReportConfig {
       *   - `SCALUS_DUMP` — comma list of `flat`,`cbor`,`budget`,`profile` (or `off`)
       *   - `SCALUS_DUMP_DIR` — output directory
       *   - `SCALUS_PROFILE` — `off` | `summary` | `full`
+      *   - `SCALUS_PROFILE_OUT` — comma list of destinations: `-`/`console` to display, or a file
+      *     name (format inferred from `.html`/`.csv`/`.json`/`.txt`); enables profiling
       *   - `SCALUS_PROFILE_THRESHOLD` — budget fraction (Double)
       *   - `SCALUS_PROFILE_MAX_ROWS` — Int
       *
@@ -140,6 +158,28 @@ object EvaluatorReportConfig {
             case _         => // ignore unrecognised value
         }
 
+        env.get("SCALUS_PROFILE_OUT").map(_.trim).filter(_.nonEmpty).foreach { spec =>
+            val outs = spec
+                .split(",")
+                .iterator
+                .map(_.trim)
+                .filter(_.nonEmpty)
+                .map {
+                    case "-" | "console" | "stdout" =>
+                        ProfileOutput(ProfileFormat.Text, ProfileDestination.Console)
+                    case path if path.startsWith("/") =>
+                        ProfileOutput(formatFromName(path), ProfileDestination.AbsoluteFile(path))
+                    case name =>
+                        ProfileOutput(formatFromName(name), ProfileDestination.File(name))
+                }
+                .toSeq
+            cfg = cfg.copy(
+              enabled = true,
+              profileOutputs = outs,
+              profile = if cfg.profile == ProfileLevel.Off then ProfileLevel.Full else cfg.profile
+            )
+        }
+
         env.get("SCALUS_PROFILE_THRESHOLD").flatMap(_.trim.toDoubleOption).foreach { t =>
             cfg = cfg.copy(profileThreshold = t)
         }
@@ -157,4 +197,12 @@ object EvaluatorReportConfig {
         case "budget" | "budgetlog" => Some(DumpArtifact.BudgetLog)
         case "profile"              => Some(DumpArtifact.Profile)
         case _                      => None
+
+    /** Infer a [[ProfileFormat]] from a destination file extension, defaulting to `Text`. */
+    private def formatFromName(name: String): ProfileFormat =
+        val lower = name.toLowerCase
+        if lower.endsWith(".html") || lower.endsWith(".htm") then ProfileFormat.Html
+        else if lower.endsWith(".csv") then ProfileFormat.Csv
+        else if lower.endsWith(".json") then ProfileFormat.Json
+        else ProfileFormat.Text
 }

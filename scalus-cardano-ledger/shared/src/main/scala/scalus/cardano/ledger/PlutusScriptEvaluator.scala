@@ -355,6 +355,47 @@ object PlutusScriptEvaluator {
 
         private def budgetLogPath: String = reportPath("budget.log")
 
+        /** Render a script's profile to each configured [[ProfileOutput]] (console / files). File
+          * destinations are prefixed with the script key so per-redeemer profiles don't collide.
+          * HTML output annotates source lines when the source file is readable from the CWD.
+          */
+        private def renderProfile(
+            result: Result,
+            scriptHash: ScriptHash,
+            redeemer: Redeemer
+        ): Unit = result.profile.foreach { data =>
+            val outs = report.effectiveProfileOutputs
+            val sources: Map[String, IndexedSeq[String]] =
+                if outs.exists(_.format == ProfileFormat.Html) then
+                    data.bySourceLocation
+                        .map(_.file)
+                        .distinct
+                        .filter(platform.fileExists)
+                        .map(f =>
+                            f -> new String(platform.readFile(f), "UTF-8").split('\n').toIndexedSeq
+                        )
+                        .toMap
+                else Map.empty
+            val key = s"${scriptHash.toHex}-${redeemer.tag}-${redeemer.index}"
+            outs.foreach { out =>
+                val content = out.format match
+                    case ProfileFormat.Text =>
+                        if report.profile == ProfileLevel.Full then
+                            ProfileFormatter.toText(data, report.maxRows)
+                        else ProfileFormatter.summary(data)
+                    case ProfileFormat.Csv  => ProfileFormatter.toCsv(data)
+                    case ProfileFormat.Html => ProfileFormatter.toHtml(data, sources)
+                    case ProfileFormat.Json => ProfileFormatter.toJson(data)
+                out.destination match
+                    case ProfileDestination.Console =>
+                        log.info(s"Profile $key:\n$content")
+                    case ProfileDestination.File(name) =>
+                        platform.writeFile(reportPath(s"$key.$name"), content.getBytes("UTF-8"))
+                    case ProfileDestination.AbsoluteFile(path) =>
+                        platform.writeFile(path, content.getBytes("UTF-8"))
+            }
+        }
+
         private val log = Logger()
         //        .withHandler(minimumLevel = Some(Level.Debug))
 
@@ -676,6 +717,12 @@ object PlutusScriptEvaluator {
             // Execute the script
             try
                 val resultTerm = vm.evaluateScript(applied, spender, logger)
+                if report.enabled && report.profile != ProfileLevel.Off then
+                    renderProfile(
+                      vm.evaluateScriptProfile(applied),
+                      plutusScript.scriptHash,
+                      redeemer
+                    )
                 Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
             catch
                 case e: StackTraceMachineError =>

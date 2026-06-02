@@ -5,11 +5,17 @@
 ### Added
 
 - `EvaluatorReportConfig` — typed configuration for `PlutusScriptEvaluator` diagnostic output
-  (output directory, artifact selection, profile level), overridable via the `SCALUS_DUMP`,
+  (output directory, artifact selection, profile level/outputs), overridable via the `SCALUS_DUMP`,
   `SCALUS_DUMP_DIR`, and `SCALUS_PROFILE*` environment variables; new `PlutusScriptEvaluator.apply`
   overload accepting it. The legacy `debugDumpFilesForTesting: Boolean` constructors are retained
   and map onto it
-- `platform.createDirectories` for cross-platform directory creation
+- profiling integrated into `PlutusScriptEvaluator`: when enabled (`SCALUS_PROFILE=summary|full`,
+  `SCALUS_PROFILE_OUT=…`, or `EvaluatorReportConfig.profile`), each script's profile is rendered to
+  the console or to per-script files. Output formats: a compact text summary, CSV, JSON, and a
+  **self-contained interactive HTML report** — sortable/filterable tables with %-of-CPU bars, a
+  per-line cost-annotated source view, and a transition-matrix heatmap with a hot-edges table
+- `ProfileFormatter.toCsv` / `toJson` / `summary`, and `toHtml(data, sources)` with source
+  annotation; `platform.createDirectories` and `platform.fileExists` for cross-platform file I/O
 
 ### Changed
 
