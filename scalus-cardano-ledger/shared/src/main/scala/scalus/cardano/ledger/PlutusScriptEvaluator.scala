@@ -224,7 +224,7 @@ object PlutusScriptEvaluator {
       CardanoInfo.mainnet.majorProtocolVersion,
       CardanoInfo.mainnet.protocolParams.costModels,
       EvaluatorMode.EvaluateAndComputeCost,
-      debugDumpFilesForTesting = false
+      report = EvaluatorReportConfig.disabled
     ) {
         override protected def evalScript(
             redeemer: Redeemer,
@@ -276,7 +276,33 @@ object PlutusScriptEvaluator {
           protocolMajorVersion,
           costModels,
           mode,
-          debugDumpFilesForTesting,
+          EvaluatorReportConfig.fromEnv(
+            EvaluatorReportConfig.fromLegacyBoolean(debugDumpFilesForTesting)
+          ),
+          logBudgetDifferences
+        )
+
+    /** Factory method taking a typed [[EvaluatorReportConfig]] instead of the legacy boolean.
+      *
+      * Environment overrides (`SCALUS_DUMP*` / `SCALUS_PROFILE*`) are layered on top of `report`
+      * field-by-field; see [[EvaluatorReportConfig.fromEnv]].
+      */
+    def apply(
+        slotConfig: SlotConfig,
+        initialBudget: ExUnits,
+        protocolMajorVersion: MajorProtocolVersion,
+        costModels: CostModels,
+        mode: EvaluatorMode,
+        report: EvaluatorReportConfig,
+        logBudgetDifferences: Boolean
+    ): PlutusScriptEvaluator =
+        new DefaultImpl(
+          slotConfig,
+          initialBudget,
+          protocolMajorVersion,
+          costModels,
+          mode,
+          EvaluatorReportConfig.fromEnv(report),
           logBudgetDifferences
         )
 
@@ -307,9 +333,27 @@ object PlutusScriptEvaluator {
         val protocolMajorVersion: MajorProtocolVersion,
         val costModels: CostModels,
         val mode: EvaluatorMode,
-        val debugDumpFilesForTesting: Boolean,
+        val report: EvaluatorReportConfig,
         val logBudgetDifferences: Boolean = false
     ) extends PlutusScriptEvaluator {
+
+        /** Path under [[report]]'s output directory, or the bare name when the dir is the CWD. */
+        private def reportPath(name: String): String =
+            if report.outputDir.isEmpty || report.outputDir == "." then name
+            else s"${report.outputDir}/$name"
+
+        /** Stable, overwriting dump file name for a script's fully-applied program. Keyed on the
+          * script hash (not the volatile txid), so re-evaluations during fee balancing overwrite
+          * rather than accumulate.
+          */
+        private def flatFileName(
+            scriptHash: ScriptHash,
+            language: Language,
+            redeemer: Redeemer
+        ): String =
+            s"${scriptHash.toHex}-$language-${redeemer.tag}-${redeemer.index}.flat"
+
+        private def budgetLogPath: String = reportPath("budget.log")
 
         private val log = Logger()
         //        .withHandler(minimumLevel = Some(Level.Debug))
@@ -350,6 +394,8 @@ object PlutusScriptEvaluator {
             debugScripts: Map[ScriptHash, DebugScript] = Map.empty
         ): Seq[(Redeemer, ScriptContext, ScriptHash)] = {
             log.debug(s"Starting Phase 2 evaluation for transaction: ${tx.id}")
+
+            if report.enabled then prepareReportDir()
 
             val redeemers = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)
 
@@ -452,7 +498,10 @@ object PlutusScriptEvaluator {
                 }
 
             log.debug(s"Phase 2 evaluation completed. Remaining budget: $remainingBudget")
-            evaluatedRedeemers.toSeq
+            val result = evaluatedRedeemers.toSeq
+            if report.enabled && report.dumps(DumpArtifact.Flat) then
+                writeManifest(tx, result, scriptsMap)
+            result
         }
 
         /** Evaluate a Plutus V1 script with the V1 script context.
@@ -609,8 +658,8 @@ object PlutusScriptEvaluator {
                 acc $ arg
 
             // Optional debug dumping
-            if debugDumpFilesForTesting then
-                dumpScriptForDebugging(applied, redeemer, txhash, vm.language)
+            if report.dumps(DumpArtifact.Flat) then
+                dumpScriptForDebugging(applied, plutusScript.scriptHash, redeemer, vm.language)
 
             // Create budget spender based on evaluation mode
             val spender = mode match
@@ -618,7 +667,8 @@ object PlutusScriptEvaluator {
                 case EvaluatorMode.Validate =>
                     RestrictingBudgetSpenderWithScriptDump(
                       redeemer.exUnits,
-                      debugDumpFilesForTesting
+                      report.dumps(DumpArtifact.BudgetLog),
+                      budgetLogPath
                     )
 
             val logger = Log()
@@ -701,17 +751,61 @@ object PlutusScriptEvaluator {
                             )
         }
 
-        /** Dump script information for debugging purposes.
-          */
+        /** Dump a script's fully-applied program to a stable, overwriting `.flat` file. */
         private def dumpScriptForDebugging(
             program: DeBruijnedProgram,
+            scriptHash: ScriptHash,
             redeemer: Redeemer,
-            txhash: String,
             language: Language
         ): Unit = {
-            val filename = s"script-$txhash-$language-${redeemer.tag}-${redeemer.index}.flat"
-            platform.writeFile(filename, program.flatEncoded)
+            val filename = flatFileName(scriptHash, language, redeemer)
+            platform.writeFile(reportPath(filename), program.flatEncoded)
         }
+
+        /** Prepare the report output directory before an evaluation: create the directory and
+          * truncate `budget.log` so it reflects a single evaluation rather than accumulating across
+          * runs (the root cause of the inflated counts in #93).
+          */
+        private def prepareReportDir(): Unit = {
+            platform.createDirectories(report.outputDir)
+            if report.dumps(DumpArtifact.BudgetLog) && mode == EvaluatorMode.Validate then
+                platform.writeFile(budgetLogPath, Array.emptyByteArray)
+        }
+
+        /** Write `manifest.json` describing every dumped script for the (latest) evaluation. */
+        private def writeManifest(
+            tx: Transaction,
+            evaluated: Seq[(Redeemer, ?, ScriptHash)],
+            scripts: Map[ScriptHash, Script]
+        ): Unit = {
+            val entries = evaluated
+                .distinctBy { case (r, _, h) => (h, r.tag, r.index) }
+                .flatMap { case (r, _, h) =>
+                    scripts.get(h).collect { case ps: PlutusScript =>
+                        manifestEntryJson(flatFileName(h, ps.language, r), h, ps.language, r)
+                    }
+                }
+            val json =
+                s"""{
+                   |  "txId": "${tx.id.toHex}",
+                   |  "protocolVersion": ${protocolMajorVersion.version},
+                   |  "scripts": [
+                   |${entries.mkString(",\n")}
+                   |  ]
+                   |}
+                   |""".stripMargin
+            platform.writeFile(reportPath("manifest.json"), json.getBytes("UTF-8"))
+        }
+
+        private def manifestEntryJson(
+            file: String,
+            scriptHash: ScriptHash,
+            language: Language,
+            redeemer: Redeemer
+        ): String =
+            s"""    { "file": "$file", "scriptHash": "${scriptHash.toHex}", """ +
+                s""""language": "$language", "tag": "${redeemer.tag}", "index": ${redeemer.index}, """ +
+                s""""spentBudget": { "mem": ${redeemer.exUnits.memory}, "cpu": ${redeemer.exUnits.steps} } }"""
 
         /** Extract all scripts from transaction and UTxOs.
           */

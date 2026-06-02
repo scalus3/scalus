@@ -21,9 +21,16 @@ import scalus.utils.Hex
 class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
 
     override def afterEach(): Unit = {
-        // Clean up script-*.flat files created by debugDumpFilesForTesting
+        // Clean up dump artifacts created by debugDumpFilesForTesting:
+        // <scriptHash>-<language>-<tag>-<index>.flat plus the manifest / budget log.
         val currentDir = new File(".")
-        currentDir.listFiles().filter(_.getName.matches("script-.*\\.flat")).foreach(_.delete())
+        currentDir
+            .listFiles()
+            .filter { f =>
+                val n = f.getName
+                n.matches(".*-PlutusV\\d-.*\\.flat") || n == "manifest.json" || n == "budget.log"
+            }
+            .foreach(_.delete())
         super.afterEach()
     }
 
