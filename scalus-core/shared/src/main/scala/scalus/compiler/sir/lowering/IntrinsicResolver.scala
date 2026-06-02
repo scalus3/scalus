@@ -1,8 +1,6 @@
 package scalus.compiler.sir.lowering
 
-import org.typelevel.paiges.Doc
 import scalus.compiler.sir.*
-import scalus.uplc.Term
 
 /** Resolves intrinsic implementations for method calls based on argument representation and
   * protocol version.

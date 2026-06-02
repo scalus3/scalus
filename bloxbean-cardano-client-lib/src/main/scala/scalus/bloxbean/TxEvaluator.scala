@@ -389,6 +389,11 @@ class TxEvaluator(
                     case e: TxEvaluationException => throw e.withContext(scriptContext)
                 }
 
+            case (_: Script.PlutusV4, _) =>
+                throw new UnsupportedOperationException(
+                  "Plutus V4 (Dijkstra) script evaluation is not yet implemented"
+                )
+
         val cost = result._1.budget
         log.debug(s"Eval result: $result")
         Redeemer(
