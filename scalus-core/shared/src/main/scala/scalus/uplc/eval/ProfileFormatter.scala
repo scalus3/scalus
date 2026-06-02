@@ -2,6 +2,12 @@ package scalus.uplc.eval
 
 object ProfileFormatter {
 
+    /** Max rows rendered per HTML table before collapsing into a "… and N more" note. */
+    private val htmlRowCap = 200
+
+    /** Max locations shown on each axis of the transition matrix (keeps it readable). */
+    private val matrixCap = 24
+
     /** Renders profiling data as a formatted text table.
       *
       * @param data
@@ -128,68 +134,339 @@ object ProfileFormatter {
         sb.toString
     }
 
-    /** Renders profiling data as a self-contained HTML page. */
-    def toHtml(data: ProfilingData): String = {
+    /** Compact summary suitable for console / log output: total budget plus the top-N by CPU. */
+    def summary(data: ProfilingData, topN: Int = 10): String = {
+        val n = math.max(1, topN)
         val sb = new StringBuilder
-        sb.append("""<!DOCTYPE html>
-<html><head><meta charset="utf-8"><title>Scalus Profile</title>
-<style>
-body { font-family: monospace; margin: 20px; background: #fafafa; }
-h2 { color: #333; }
-table { border-collapse: collapse; margin-bottom: 20px; }
-th, td { padding: 4px 12px; text-align: right; border: 1px solid #ddd; }
-th { background: #f0f0f0; }
-td:first-child, th:first-child { text-align: left; }
-tr:hover { background: #e8f4fd; }
-.bar { display: inline-block; height: 12px; background: #4a90d9; vertical-align: middle; }
-.summary { font-size: 1.1em; margin: 10px 0; }
-</style></head><body>
-<h1>Scalus CEK Machine Profile</h1>
-""")
+        sb.append(s"Total: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}\n")
+        if data.byFunction.nonEmpty then
+            sb.append(s"Top $n by CPU (function):\n")
+            data.byFunction.sortBy(e => -e.cpu).take(n).foreach { e =>
+                sb.append(
+                  "  " + e.name.padTo(24, ' ') + s" cpu=${e.cpu} mem=${e.memory} n=${e.count}\n"
+                )
+            }
+        if data.bySourceLocation.nonEmpty then
+            sb.append(s"Top $n by CPU (source):\n")
+            data.bySourceLocation.sortBy(e => -e.cpu).take(n).foreach { e =>
+                val loc = s"${shortFile(e.file)}:${e.line}"
+                sb.append(
+                  "  " + loc.padTo(24, ' ') + s" cpu=${e.cpu} mem=${e.memory} n=${e.count}\n"
+                )
+            }
+        sb.toString
+    }
+
+    /** Renders profiling data as CSV (one diffable file across all sections). */
+    def toCsv(data: ProfilingData): String = {
+        val sb = new StringBuilder
+        sb.append("section,key,detail,count,mem,cpu\n")
+        data.bySourceLocation.foreach(e =>
+            sb.append(csvRow("location", s"${e.file}:${e.line}", "", e.count, e.memory, e.cpu))
+        )
+        data.byFunction.foreach(e =>
+            sb.append(csvRow("function", e.name, "", e.count, e.memory, e.cpu))
+        )
+        data.byLocationFunction.foreach(e =>
+            sb.append(
+              csvRow("builtin", s"${e.file}:${e.line}", e.functionName, e.count, e.memory, e.cpu)
+            )
+        )
+        data.transitions.foreach(t =>
+            sb.append(
+              csvRow(
+                "edge",
+                s"${t.fromFile}:${t.fromLine}",
+                s"${t.toFile}:${t.toLine}",
+                t.count,
+                0,
+                0
+              )
+            )
+        )
+        sb.append(csvRow("total", "", "", 0, data.totalBudget.memory, data.totalBudget.steps))
+        sb.toString
+    }
+
+    /** Renders the full profiling data as JSON (machine-readable). */
+    def toJson(data: ProfilingData): String = {
+        val sb = new StringBuilder
+        sb.append("{\n")
+        sb.append(
+          s"""  "totalBudget": { "mem": ${data.totalBudget.memory}, "cpu": ${data.totalBudget.steps} },\n"""
+        )
+        sb.append("  \"bySourceLocation\": [")
+        sb.append(
+          data.bySourceLocation
+              .map(e =>
+                  s"""{"file":"${jsonEsc(
+                        e.file
+                      )}","line":${e.line},"count":${e.count},"mem":${e.memory},"cpu":${e.cpu}}"""
+              )
+              .mkString(",")
+        )
+        sb.append("],\n")
+        sb.append("  \"byFunction\": [")
+        sb.append(
+          data.byFunction
+              .map(e =>
+                  s"""{"name":"${jsonEsc(
+                        e.name
+                      )}","count":${e.count},"mem":${e.memory},"cpu":${e.cpu}}"""
+              )
+              .mkString(",")
+        )
+        sb.append("],\n")
+        sb.append("  \"byLocationFunction\": [")
+        sb.append(
+          data.byLocationFunction
+              .map(e =>
+                  s"""{"file":"${jsonEsc(e.file)}","line":${e.line},"function":"${jsonEsc(
+                        e.functionName
+                      )}","count":${e.count},"mem":${e.memory},"cpu":${e.cpu}}"""
+              )
+              .mkString(",")
+        )
+        sb.append("],\n")
+        sb.append("  \"transitions\": [")
+        sb.append(
+          data.transitions
+              .map(t =>
+                  s"""{"fromFile":"${jsonEsc(
+                        t.fromFile
+                      )}","fromLine":${t.fromLine},"toFile":"${jsonEsc(
+                        t.toFile
+                      )}","toLine":${t.toLine},"count":${t.count}}"""
+              )
+              .mkString(",")
+        )
+        sb.append("]\n}\n")
+        sb.toString
+    }
+
+    /** Renders profiling data as a self-contained HTML page (no source annotation). */
+    def toHtml(data: ProfilingData): String = toHtml(data, Map.empty)
+
+    /** Renders profiling data as a self-contained, interactive HTML page.
+      *
+      * The page bundles its own CSS/JS (no external dependencies): sortable, filterable tables with
+      * %-of-CPU bars, a transition matrix heatmap with a hot-edges table, and — when source text is
+      * supplied — a per-line cost-annotated source view (the flagship view).
+      *
+      * @param data
+      *   the profiling data
+      * @param sources
+      *   optional `file -> source lines` (line `n` is element `n - 1`); profiled files present here
+      *   are rendered with per-line cost annotations
+      */
+    def toHtml(data: ProfilingData, sources: Map[String, IndexedSeq[String]]): String = {
+        val totalCpu = math.max(1L, data.totalBudget.steps)
+        val sb = new StringBuilder
+        sb.append(
+          "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Scalus Profile</title>\n<style>\n"
+        )
+        sb.append(htmlStyle)
+        sb.append("\n</style></head><body>\n<h1>Scalus CEK Machine Profile</h1>\n")
         sb.append(
           s"""<p class="summary">Total budget: mem=${data.totalBudget.memory}, cpu=${data.totalBudget.steps}</p>\n"""
         )
+        sb.append(
+          "<input id=\"filter\" class=\"filter\" placeholder=\"filter rows by text…\" oninput=\"scalusFilter(this.value)\">\n"
+        )
 
-        // By Source Location
         sb.append("<h2>By Source Location</h2>\n")
-        if data.bySourceLocation.isEmpty then sb.append("<p>No source locations recorded.</p>\n")
-        else
-            val maxMem =
-                math.max(1L, data.bySourceLocation.headOption.map(_.memory).getOrElse(1L))
-            sb.append(
-              "<table><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th><th></th></tr>\n"
-            )
-            data.bySourceLocation.foreach { e =>
-                val barWidth = (e.memory * 100 / maxMem).toInt
-                sb.append(
-                  s"""<tr><td>${escapeHtml(
-                        e.file
-                      )}:${e.line}</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td><td><span class="bar" style="width:${barWidth}px"></span></td></tr>\n"""
-                )
-            }
-            sb.append("</table>\n")
+        appendCostTable(
+          sb,
+          Seq("Location"),
+          data.bySourceLocation.map(e =>
+              (Seq(s"${shortFile(e.file)}:${e.line}"), e.count, e.memory, e.cpu)
+          ),
+          totalCpu
+        )
 
-        // By Function
+        appendAnnotatedSource(sb, data, sources)
+
         sb.append("<h2>By Function</h2>\n")
-        if data.byFunction.isEmpty then sb.append("<p>No functions recorded.</p>\n")
-        else
-            val maxMem = math.max(1L, data.byFunction.headOption.map(_.memory).getOrElse(1L))
-            sb.append(
-              "<table><tr><th>Function</th><th>Count</th><th>Memory</th><th>CPU</th><th></th></tr>\n"
-            )
-            data.byFunction.foreach { e =>
-                val barWidth = (e.memory * 100 / maxMem).toInt
-                sb.append(
-                  s"""<tr><td>${escapeHtml(
-                        e.name
-                      )}</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td><td><span class="bar" style="width:${barWidth}px"></span></td></tr>\n"""
-                )
-            }
-            sb.append("</table>\n")
+        appendCostTable(
+          sb,
+          Seq("Function"),
+          data.byFunction.map(e => (Seq(e.name), e.count, e.memory, e.cpu)),
+          totalCpu
+        )
 
-        sb.append("</body></html>")
+        if data.byLocationFunction.nonEmpty then
+            sb.append("<h2>Builtins by Source Location</h2>\n")
+            appendCostTable(
+              sb,
+              Seq("Location", "Function"),
+              data.byLocationFunction.map(e =>
+                  (Seq(s"${shortFile(e.file)}:${e.line}", e.functionName), e.count, e.memory, e.cpu)
+              ),
+              totalCpu
+            )
+
+        if data.transitions.nonEmpty then
+            appendTransitionMatrix(sb, data)
+            appendHotEdges(sb, data)
+
+        sb.append("<script>\n")
+        sb.append(htmlScript)
+        sb.append("\n</script>\n</body></html>")
         sb.toString
     }
+
+    /** A sortable/filterable cost table: label column(s) + count, mem, cpu and a %-of-CPU bar. */
+    private def appendCostTable(
+        sb: StringBuilder,
+        labelHeaders: Seq[String],
+        rows: Seq[(Seq[String], Long, Long, Long)],
+        totalCpu: Long
+    ): Unit = {
+        if rows.isEmpty then sb.append("<p>(none recorded)</p>\n")
+        else
+            val maxCpu = math.max(1L, rows.map(_._4).max)
+            sb.append("<table class=\"sortable\"><thead><tr>")
+            labelHeaders.foreach(h => sb.append(s"<th>${escapeHtml(h)}</th>"))
+            sb.append(
+              "<th>Count</th><th>Memory</th><th>CPU</th><th>%cpu</th></tr></thead><tbody>\n"
+            )
+            rows.take(htmlRowCap).foreach { case (labels, count, mem, cpu) =>
+                val pct = f"${cpu * 100.0 / totalCpu}%.1f"
+                val barW = (cpu * 120 / maxCpu).toInt
+                sb.append("<tr>")
+                labels.foreach(l => sb.append(s"<td>${escapeHtml(l)}</td>"))
+                sb.append(s"<td>$count</td><td>$mem</td><td>$cpu</td>")
+                sb.append(s"<td><span class='bar' style='width:${barW}px'></span> $pct%</td>")
+                sb.append("</tr>\n")
+            }
+            sb.append("</tbody></table>\n")
+            if rows.size > htmlRowCap then
+                sb.append(s"<p>… and ${rows.size - htmlRowCap} more rows</p>\n")
+    }
+
+    /** Per-line cost-annotated source: each line shown with its cpu/mem/count and a heat background
+      * proportional to its share of the file's CPU. Only files present in `sources` are rendered.
+      */
+    private def appendAnnotatedSource(
+        sb: StringBuilder,
+        data: ProfilingData,
+        sources: Map[String, IndexedSeq[String]]
+    ): Unit = {
+        if sources.isEmpty then return
+        val byFile = data.bySourceLocation.groupBy(_.file)
+        val files =
+            sources.keys.filter(byFile.contains).toSeq.sortBy(f => -byFile(f).map(_.cpu).sum)
+        if files.isEmpty then return
+        sb.append("<h2>Annotated Source</h2>\n")
+        files.foreach { file =>
+            val lines = sources(file)
+            val perLine = byFile(file).map(e => e.line -> e).toMap
+            val maxCpu = math.max(1L, byFile(file).map(_.cpu).max)
+            sb.append(s"<h3>${escapeHtml(file)}</h3>\n<table class='src'>\n")
+            lines.zipWithIndex.foreach { case (text, i) =>
+                val ln = i + 1
+                val e = perLine.get(ln)
+                val cpu = e.map(_.cpu).getOrElse(0L)
+                val mem = e.map(_.memory).getOrElse(0L)
+                val cnt = e.map(_.count).getOrElse(0L)
+                val rowStyle =
+                    if cpu == 0 then ""
+                    else
+                        s" style='background:rgba(220,40,40,${0.08 + 0.5 * (cpu.toDouble / maxCpu)})'"
+                val gut = if cpu == 0 then "" else s"$cpu cpu / $mem mem / $cnt×"
+                sb.append(
+                  s"<tr$rowStyle><td class='ln'>$ln</td><td class='cost'>$gut</td><td class='code'>${escapeHtml(text)}</td></tr>\n"
+                )
+            }
+            sb.append("</table>\n")
+        }
+    }
+
+    /** Transition matrix heatmap: top-N locations by CPU on each axis; cell = transition count. */
+    private def appendTransitionMatrix(sb: StringBuilder, data: ProfilingData): Unit = {
+        val byLocCpu = data.bySourceLocation.map(e => (e.file, e.line) -> e.cpu).toMap
+        val nodes = data.transitions
+            .flatMap(t => Seq((t.fromFile, t.fromLine), (t.toFile, t.toLine)))
+            .distinct
+            .sortBy(loc => -byLocCpu.getOrElse(loc, 0L))
+            .take(matrixCap)
+        if nodes.isEmpty then return
+        val idx = nodes.zipWithIndex.toMap
+        val cells = scala.collection.mutable.HashMap[(Int, Int), Long]()
+        var maxCount = 1L
+        data.transitions.foreach { t =>
+            for fi <- idx.get((t.fromFile, t.fromLine)); ti <- idx.get((t.toFile, t.toLine)) do
+                val v = cells.getOrElse((fi, ti), 0L) + t.count
+                cells((fi, ti)) = v
+                if v > maxCount then maxCount = v
+        }
+        sb.append("<h2>Transition Matrix</h2>\n")
+        sb.append(
+          s"<p>Top ${nodes.size} locations by CPU; cell = transition count (row = from, column = to).</p>\n"
+        )
+        sb.append("<table class='matrix'><tr><th>from \\ to</th>")
+        nodes.indices.foreach(i => sb.append(s"<th>${i + 1}</th>"))
+        sb.append("</tr>\n")
+        nodes.zipWithIndex.foreach { case (loc, ri) =>
+            sb.append(
+              s"<tr><th class='rowhdr'>${ri + 1}. ${escapeHtml(shortFile(loc._1))}:${loc._2}</th>"
+            )
+            nodes.indices.foreach { ci =>
+                val v = cells.getOrElse((ri, ci), 0L)
+                val style =
+                    if v == 0 then ""
+                    else
+                        s" style='background:rgba(40,120,220,${0.1 + 0.7 * (v.toDouble / maxCount)})'"
+                sb.append(s"<td$style>${if v == 0 then "" else v.toString}</td>")
+            }
+            sb.append("</tr>\n")
+        }
+        sb.append("</table>\n<ol class='legend'>\n")
+        nodes.foreach(loc => sb.append(s"<li>${escapeHtml(shortFile(loc._1))}:${loc._2}</li>\n"))
+        sb.append("</ol>\n")
+    }
+
+    /** Sortable hot-edges table (from → to, count), the full edge list behind the matrix. */
+    private def appendHotEdges(sb: StringBuilder, data: ProfilingData): Unit = {
+        sb.append("<h2>Hot Edges</h2>\n")
+        sb.append(
+          "<table class='sortable'><thead><tr><th>From</th><th>To</th><th>Count</th></tr></thead><tbody>\n"
+        )
+        data.transitions.take(htmlRowCap).foreach { t =>
+            sb.append(
+              s"<tr><td>${escapeHtml(shortFile(t.fromFile))}:${t.fromLine}</td><td>${escapeHtml(shortFile(t.toFile))}:${t.toLine}</td><td>${t.count}</td></tr>\n"
+            )
+        }
+        sb.append("</tbody></table>\n")
+        if data.transitions.size > htmlRowCap then
+            sb.append(s"<p>… and ${data.transitions.size - htmlRowCap} more edges</p>\n")
+    }
+
+    private def csvRow(
+        section: String,
+        key: String,
+        detail: String,
+        count: Long,
+        mem: Long,
+        cpu: Long
+    ): String =
+        s"${csvEscape(section)},${csvEscape(key)},${csvEscape(detail)},$count,$mem,$cpu\n"
+
+    private def csvEscape(s: String): String =
+        if s.exists(c => c == ',' || c == '"' || c == '\n' || c == '\r') then
+            "\"" + s.replace("\"", "\"\"") + "\""
+        else s
+
+    private def jsonEsc(s: String): String =
+        s.flatMap {
+            case '"'          => "\\\""
+            case '\\'         => "\\\\"
+            case '\n'         => "\\n"
+            case '\r'         => "\\r"
+            case '\t'         => "\\t"
+            case c if c < ' ' => "\\u%04x".format(c.toInt)
+            case c            => c.toString
+        }
 
     private def formatRow(
         col1: String,
@@ -214,4 +491,45 @@ tr:hover { background: #e8f4fd; }
 
     private def escapeHtml(s: String): String =
         s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    private val htmlStyle: String =
+        """body { font-family: monospace; margin: 20px; background: #fafafa; color: #222; }
+h1 { font-size: 1.4em; } h2 { color: #333; margin-top: 1.4em; } h3 { color: #555; margin: 0.6em 0 0.2em; }
+.filter { width: 320px; padding: 4px 8px; margin: 8px 0; font-family: monospace; }
+table { border-collapse: collapse; margin-bottom: 12px; }
+th, td { padding: 3px 10px; text-align: right; border: 1px solid #ddd; }
+td:first-child, th:first-child { text-align: left; }
+thead th { background: #f0f0f0; cursor: pointer; user-select: none; }
+thead th:hover { background: #e0e8f0; }
+tbody tr:hover { background: #e8f4fd; }
+.bar { display: inline-block; height: 10px; background: #4a90d9; vertical-align: middle; }
+.summary { font-size: 1.1em; margin: 10px 0; }
+table.matrix td { min-width: 22px; text-align: center; }
+table.matrix th.rowhdr { text-align: left; font-weight: normal; }
+ol.legend { color: #555; font-size: 0.9em; }
+table.src { border: none; width: 100%; }
+table.src td { border: none; padding: 0 8px; }
+table.src td.ln { color: #999; text-align: right; user-select: none; }
+table.src td.cost { color: #b00; text-align: right; white-space: nowrap; }
+table.src td.code { text-align: left; white-space: pre; }"""
+
+    private val htmlScript: String =
+        """function scalusFilter(q){q=(q||'').toLowerCase();document.querySelectorAll('table.sortable tbody tr').forEach(function(tr){tr.style.display=tr.textContent.toLowerCase().indexOf(q)>=0?'':'none';});}
+document.querySelectorAll('table.sortable thead th').forEach(function(th){
+  th.addEventListener('click',function(){
+    var ci=Array.prototype.indexOf.call(th.parentNode.children, th);
+    var tb=th.closest('table').querySelector('tbody');
+    var rows=Array.prototype.slice.call(tb.querySelectorAll('tr'));
+    var asc=th.getAttribute('data-asc')!=='1';
+    th.setAttribute('data-asc',asc?'1':'0');
+    rows.sort(function(a,b){
+      var x=((a.children[ci]||{}).textContent||'').trim();
+      var y=((b.children[ci]||{}).textContent||'').trim();
+      var nx=parseFloat(x.replace(/[^0-9.\-]/g,'')), ny=parseFloat(y.replace(/[^0-9.\-]/g,''));
+      var c=(!isNaN(nx)&&!isNaN(ny))?(nx-ny):(x<y?-1:(x>y?1:0));
+      return asc?c:-c;
+    });
+    rows.forEach(function(r){tb.appendChild(r);});
+  });
+});"""
 }
