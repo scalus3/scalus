@@ -12,7 +12,7 @@ import scalus.cardano.onchain.plutus.v1.PosixTime
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, getScriptContextV3}
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
-import scalus.uplc.eval.Result
+import scalus.uplc.eval.{ProfileFormatter, Result}
 import scalus.utils.await
 
 class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
@@ -96,6 +96,10 @@ object AuctionValidatorTest extends ScalusTest {
     import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
     import scalus.cardano.node.BlockchainProvider
     import scalus.cardano.address.Network
+
+    // Set to true to emit an interactive HTML profile (target/auction-profile.html) when a
+    // validator runs. Off by default so the suite stays fast and side-effect free.
+    private val profilingEnabled = false
 
     // Party to role mapping
     private val sellerParty = Alice
@@ -583,6 +587,21 @@ object AuctionValidatorTest extends ScalusTest {
 
         val result = program.runWithDebug(scriptContext)
         assert(result.isSuccess, s"Validator failed: $result, logs: ${result.logs.mkString(", ")}")
+
+        // Set `profilingEnabled = true` to emit an interactive profile of this validator. The
+        // `include` filter keeps only the example's own sources (skipping inlined framework code).
+        if profilingEnabled then
+            program.runWithProfile(scriptContext).profile.foreach { p =>
+                println(ProfileFormatter.summary(p))
+                ProfileFormatter.writeHtml(
+                  p,
+                  "target/auction-profile.html",
+                  include =
+                      f => !f.contains("/scalus-core/") && !f.contains("/scalus-cardano-ledger/")
+                )
+                println("Wrote profile to target/auction-profile.html")
+            }
+
         result
 
     private def createProvider(): Emulator =
