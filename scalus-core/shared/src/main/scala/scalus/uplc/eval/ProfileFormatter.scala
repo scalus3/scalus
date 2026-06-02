@@ -10,6 +10,9 @@ object ProfileFormatter {
     /** Max locations shown on each axis of the transition matrix (keeps it readable). */
     private val matrixCap = 24
 
+    /** Max incoming edges kept per node in the By-Source-Location call tree. */
+    private val treeChildCap = 50
+
     /** Renders profiling data as a formatted text table.
       *
       * @param data
@@ -280,16 +283,7 @@ object ProfileFormatter {
             sections += ((id, title, b.toString))
         }
 
-        section("src", "By Source Location")(
-          appendCostTable(
-            _,
-            Seq("Location"),
-            data.bySourceLocation.map(e =>
-                (Seq(s"${shortFile(e.file)}:${e.line}"), e.count, e.memory, e.cpu)
-            ),
-            totalCpu
-          )
-        )
+        section("src", "By Source Location")(appendSourceLocationTable(_, data, totalCpu))
 
         renderAnnotatedSource(data, sources).foreach(html =>
             sections += (("annotated", "Annotated Source", html))
@@ -403,6 +397,85 @@ object ProfileFormatter {
         val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
         if sep > 0 then platform.createDirectories(path.substring(0, sep))
         platform.writeFile(path, content.getBytes("UTF-8"))
+    }
+
+    /** The "By Source Location" table. Each location cell is the root of a lazily-expanded tree of
+      * *incoming* transitions: click to reveal where control flowed from to reach this location,
+      * then keep drilling (from-from, …). The graph is embedded as compact JS data (O(edges)) and
+      * each level is built on click, so deep/cyclic graphs don't explode the HTML. A node already
+      * present on the current expansion path is shown as a leaf marked `↺ (loop)` rather than
+      * expanded again, which cuts recursive loops.
+      */
+    private def appendSourceLocationTable(
+        sb: StringBuilder,
+        data: ProfilingData,
+        totalCpu: Long
+    ): Unit = {
+        val rows = data.bySourceLocation
+        if rows.isEmpty then sb.append("<p>(none recorded)</p>\n")
+        else
+            // Stable id for every location appearing in the table or in a transition endpoint.
+            val allLocs =
+                (rows.map(e => (e.file, e.line)) ++
+                    data.transitions.flatMap(t =>
+                        Seq((t.fromFile, t.fromLine), (t.toFile, t.toLine))
+                    )).distinct
+            val idOf = allLocs.zipWithIndex.toMap
+            // Incoming edges per destination id (hottest first, capped).
+            val inByDest: Map[Int, Seq[(Int, Long)]] =
+                data.transitions
+                    .groupBy(t => idOf((t.toFile, t.toLine)))
+                    .view
+                    .mapValues(ts =>
+                        ts.map(t => (idOf((t.fromFile, t.fromLine)), t.count))
+                            .sortBy(-_._2)
+                            .take(treeChildCap)
+                    )
+                    .toMap
+
+            // Embed the graph as JS data (labels + incoming adjacency) for lazy expansion.
+            sb.append("<script>\nvar SCALUS_LABEL={")
+            sb.append(
+              allLocs.zipWithIndex
+                  .map((loc, i) =>
+                      s"""$i:"${jsonEsc(escapeHtml(s"${shortFile(loc._1)}:${loc._2}"))}""""
+                  )
+                  .mkString(",")
+            )
+            sb.append("};\nvar SCALUS_IN={")
+            sb.append(
+              inByDest
+                  .map((destId, ins) =>
+                      s"$destId:[${ins.map((fid, c) => s"[$fid,$c]").mkString(",")}]"
+                  )
+                  .mkString(",")
+            )
+            sb.append("};\n</script>\n")
+
+            val maxCpu = math.max(1L, rows.map(_.cpu).max)
+            sb.append(
+              "<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th><th>%cpu</th></tr></thead><tbody>\n"
+            )
+            rows.take(htmlRowCap).foreach { e =>
+                val loc = s"${shortFile(e.file)}:${e.line}"
+                val id = idOf((e.file, e.line))
+                val hasIncoming = inByDest.get(id).exists(_.nonEmpty)
+                val locCell =
+                    if !hasIncoming then escapeHtml(loc)
+                    else
+                        s"""<span class="treenode" data-id="$id" data-path=""><span class="mark">▶</span> ${escapeHtml(
+                              loc
+                            )}</span><div class="subtree" hidden></div>"""
+                val pct = f"${e.cpu * 100.0 / totalCpu}%.1f"
+                val barW = (e.cpu * 120 / maxCpu).toInt
+                sb.append(
+                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>" +
+                      s"<td><span class='bar' style='width:${barW}px'></span> $pct%</td></tr>\n"
+                )
+            }
+            sb.append("</tbody></table>\n")
+            if rows.size > htmlRowCap then
+                sb.append(s"<p>… and ${rows.size - htmlRowCap} more rows</p>\n")
     }
 
     /** A sortable/filterable cost table: label column(s) + count, mem, cpu and a %-of-CPU bar. */
@@ -603,10 +676,44 @@ nav.tabs { position: sticky; top: 0; background: #fafafa; padding: 8px 0; margin
 .tab-btn { font-family: monospace; font-size: 0.95em; padding: 5px 12px; margin: 0 4px 0 0; border: 1px solid #ccc; background: #eee; color: #333; cursor: pointer; border-radius: 4px 4px 0 0; }
 .tab-btn:hover { background: #e0e8f0; }
 .tab-btn.active { background: #4a90d9; border-color: #4a90d9; color: #fff; }
-.tab-panel[hidden] { display: none; }"""
+.tab-panel[hidden] { display: none; }
+.treenode { cursor: pointer; }
+.treenode .mark { color: #4a90d9; font-size: 0.8em; }
+.subtree { margin-left: 14px; border-left: 1px solid #ddd; padding-left: 8px; }
+.treeleaf { color: #999; }"""
 
     private val htmlScript: String =
         """function scalusFilter(q){q=(q||'').toLowerCase();document.querySelectorAll('table.sortable tbody tr').forEach(function(tr){tr.style.display=tr.textContent.toLowerCase().indexOf(q)>=0?'':'none';});}
+function scalusBuildChildren(container,id,path){
+  var ins=(typeof SCALUS_IN!=='undefined'&&SCALUS_IN[id])||[];
+  if(!ins.length){container.innerHTML='<div class="treeleaf">(no incoming)</div>';return;}
+  var h='';
+  for(var i=0;i<ins.length;i++){
+    var cid=ins[i][0],cnt=ins[i][1],lbl=(typeof SCALUS_LABEL!=='undefined'&&SCALUS_LABEL[cid])||('#'+cid);
+    if(path.indexOf(cid)>=0){
+      h+='<div class="treeleaf">↺ '+lbl+' ×'+cnt+' (loop)</div>';
+    }else{
+      h+='<div class="treerow"><span class="treenode" data-id="'+cid+'" data-path="'+path.join(',')+'"><span class="mark">▶</span> '+lbl+' ×'+cnt+'</span><div class="subtree" hidden></div></div>';
+    }
+  }
+  container.innerHTML=h;
+}
+function scalusToggle(node){
+  var sub=node.nextElementSibling;
+  if(!sub)return;
+  if(node.getAttribute('data-built')!=='1'){
+    var id=+node.getAttribute('data-id');
+    var path=(node.getAttribute('data-path')||'').split(',').filter(Boolean).map(Number);
+    scalusBuildChildren(sub,id,path.concat([id]));
+    node.setAttribute('data-built','1');
+  }
+  sub.hidden=!sub.hidden;
+  var m=node.querySelector('.mark');if(m)m.textContent=sub.hidden?'▶':'▼';
+}
+document.addEventListener('click',function(e){
+  var t=e.target;
+  while(t&&t.nodeType===1){if(t.classList&&t.classList.contains('treenode')){scalusToggle(t);return;}t=t.parentNode;}
+});
 function scalusTab(id){
   document.querySelectorAll('.tab-panel').forEach(function(p){p.hidden=(p.id!==id);});
   document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.toggle('active', b.getAttribute('data-tab')===id);});

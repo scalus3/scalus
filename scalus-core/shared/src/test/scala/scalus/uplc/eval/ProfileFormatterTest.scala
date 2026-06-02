@@ -80,6 +80,21 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(html.contains("scalusTab"))
     }
 
+    test("By Source Location rows expand into a recursive incoming-call tree") {
+        val html = ProfileFormatter.toHtml(data)
+        // Locations are tree roots; the incoming graph is embedded as JS data for lazy expansion.
+        assert(html.contains("class=\"treenode\""))
+        assert(html.contains("var SCALUS_IN="))
+        assert(html.contains("var SCALUS_LABEL="))
+        assert(html.contains("scalusToggle"))
+        // both endpoints are labelled, and the Foo:3 -> Foo:4 edge (count 4) is in the adjacency
+        assert(html.contains("\"Foo:4\""))
+        assert(html.contains("\"Foo:3\""))
+        assert(html.contains(",4]"))
+        // the loop-cutoff path is threaded through data-path
+        assert(html.contains("data-path="))
+    }
+
     test("toHtml with sources renders the annotated-source view") {
         val html = ProfileFormatter.toHtml(data, sources)
         assert(html.contains("Annotated Source"))
