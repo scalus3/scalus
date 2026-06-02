@@ -72,6 +72,10 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
             val appliedScript = self $ scriptContext.toData
             appliedScript.evaluateDebug
 
+        /** Like [[runWithDebug]] but also collects profiling data (`result.profile`). */
+        def runWithProfile(scriptContext: ScriptContext)(using vm: PlutusVM): Result =
+            vm.evaluateScriptProfile((self $ scriptContext.toData).deBruijnedProgram)
+
     protected def random[A: Arbitrary]: A = {
         Arbitrary.arbitrary[A].sample.get
     }

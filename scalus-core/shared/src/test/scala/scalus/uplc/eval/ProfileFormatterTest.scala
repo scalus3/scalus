@@ -33,7 +33,7 @@ class ProfileFormatterTest extends AnyFunSuite {
     test("toText still renders the legacy sections") {
         val text = ProfileFormatter.toText(data)
         assert(text.contains("Profile by Source Location"))
-        assert(text.contains("Profile by Function"))
+        assert(text.contains("Profile by Builtin"))
         assert(text.contains("Total:"))
     }
 
@@ -48,7 +48,7 @@ class ProfileFormatterTest extends AnyFunSuite {
         val csv = ProfileFormatter.toCsv(data)
         assert(csv.startsWith("section,key,detail,count,mem,cpu\n"))
         assert(csv.contains("location,Foo.scala:3,,5,100,200"))
-        assert(csv.contains("function,AddInteger"))
+        assert(csv.contains("builtin,AddInteger"))
         assert(csv.contains("edge,Foo.scala:3,Foo.scala:4,4"))
         assert(csv.contains("total,,,0,150,260"))
     }
@@ -66,13 +66,18 @@ class ProfileFormatterTest extends AnyFunSuite {
         val html = ProfileFormatter.toHtml(data)
         assert(html.startsWith("<!DOCTYPE html>"))
         assert(html.contains("By Source Location"))
-        assert(html.contains("By Function"))
+        assert(html.contains("By Builtin"))
         assert(html.contains("Transition Matrix"))
         assert(html.contains("Hot Edges"))
         // bundled, no external dependency
         assert(html.contains("<script>"))
         assert(html.contains("scalusFilter"))
         assert(html.contains("</html>"))
+        // sections are navigable tabs, not one long scroll
+        assert(html.contains("nav class=\"tabs\""))
+        assert(html.contains("class=\"tab-btn"))
+        assert(html.contains("class=\"tab-panel\""))
+        assert(html.contains("scalusTab"))
     }
 
     test("toHtml with sources renders the annotated-source view") {

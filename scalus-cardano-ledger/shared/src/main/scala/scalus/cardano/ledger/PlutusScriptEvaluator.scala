@@ -367,14 +367,7 @@ object PlutusScriptEvaluator {
             val outs = report.effectiveProfileOutputs
             val sources: Map[String, IndexedSeq[String]] =
                 if outs.exists(_.format == ProfileFormat.Html) then
-                    data.bySourceLocation
-                        .map(_.file)
-                        .distinct
-                        .filter(platform.fileExists)
-                        .map(f =>
-                            f -> new String(platform.readFile(f), "UTF-8").split('\n').toIndexedSeq
-                        )
-                        .toMap
+                    ProfileFormatter.loadSources(data)
                 else Map.empty
             val key = s"${scriptHash.toHex}-${redeemer.tag}-${redeemer.index}"
             outs.foreach { out =>

@@ -57,7 +57,11 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
         private def evalWithOptionalProfile(using PlutusVM): Result =
             if profilingEnabled then
                 val result = term.evaluateProfile
-                result.profile.foreach(p => info(ProfileFormatter.toText(p, maxRows = 200)))
+                result.profile.foreach { p =>
+                    info(ProfileFormatter.summary(p))
+                    ProfileFormatter.writeHtml(p, "target/knights-profile.html")
+                    info("Wrote profile to target/knights-profile.html")
+                }
                 result
             else term.evaluateDebug
 

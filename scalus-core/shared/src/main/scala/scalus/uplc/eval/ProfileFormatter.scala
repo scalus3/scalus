@@ -1,5 +1,7 @@
 package scalus.uplc.eval
 
+import scalus.uplc.builtin.platform
+
 object ProfileFormatter {
 
     /** Max rows rendered per HTML table before collapsing into a "… and N more" note. */
@@ -53,8 +55,8 @@ object ProfileFormatter {
                 sb.append(s"  ... and ${data.bySourceLocation.size - effectiveMaxRows} more\n")
 
         sb.append('\n')
-        sb.append("=== Profile by Function ===\n")
-        if data.byFunction.isEmpty then sb.append("  (no functions recorded)\n")
+        sb.append("=== Profile by Builtin ===\n")
+        if data.byFunction.isEmpty then sb.append("  (no builtins recorded)\n")
         else
             val rows = data.byFunction.take(effectiveMaxRows)
             val nameWidth = math.max(8, rows.map(_.name.length).max)
@@ -64,7 +66,7 @@ object ProfileFormatter {
 
             sb.append(
               formatRow(
-                "function",
+                "builtin",
                 "count",
                 "mem",
                 "cpu",
@@ -140,7 +142,7 @@ object ProfileFormatter {
         val sb = new StringBuilder
         sb.append(s"Total: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}\n")
         if data.byFunction.nonEmpty then
-            sb.append(s"Top $n by CPU (function):\n")
+            sb.append(s"Top $n by CPU (builtin):\n")
             data.byFunction.sortBy(e => -e.cpu).take(n).foreach { e =>
                 sb.append(
                   "  " + e.name.padTo(24, ' ') + s" cpu=${e.cpu} mem=${e.memory} n=${e.count}\n"
@@ -165,11 +167,18 @@ object ProfileFormatter {
             sb.append(csvRow("location", s"${e.file}:${e.line}", "", e.count, e.memory, e.cpu))
         )
         data.byFunction.foreach(e =>
-            sb.append(csvRow("function", e.name, "", e.count, e.memory, e.cpu))
+            sb.append(csvRow("builtin", e.name, "", e.count, e.memory, e.cpu))
         )
         data.byLocationFunction.foreach(e =>
             sb.append(
-              csvRow("builtin", s"${e.file}:${e.line}", e.functionName, e.count, e.memory, e.cpu)
+              csvRow(
+                "loc-builtin",
+                s"${e.file}:${e.line}",
+                e.functionName,
+                e.count,
+                e.memory,
+                e.cpu
+              )
             )
         )
         data.transitions.foreach(t =>
@@ -261,6 +270,61 @@ object ProfileFormatter {
       */
     def toHtml(data: ProfilingData, sources: Map[String, IndexedSeq[String]]): String = {
         val totalCpu = math.max(1L, data.totalBudget.steps)
+
+        // Build each section's inner HTML; only non-empty sections become tabs. Section titles
+        // live on the tab buttons, so the panels themselves carry no <h2>.
+        val sections = scala.collection.mutable.ArrayBuffer[(String, String, String)]()
+        def section(id: String, title: String)(render: StringBuilder => Unit): Unit = {
+            val b = new StringBuilder
+            render(b)
+            sections += ((id, title, b.toString))
+        }
+
+        section("src", "By Source Location")(
+          appendCostTable(
+            _,
+            Seq("Location"),
+            data.bySourceLocation.map(e =>
+                (Seq(s"${shortFile(e.file)}:${e.line}"), e.count, e.memory, e.cpu)
+            ),
+            totalCpu
+          )
+        )
+
+        renderAnnotatedSource(data, sources).foreach(html =>
+            sections += (("annotated", "Annotated Source", html))
+        )
+
+        section("fun", "By Builtin")(
+          appendCostTable(
+            _,
+            Seq("Builtin"),
+            data.byFunction.map(e => (Seq(e.name), e.count, e.memory, e.cpu)),
+            totalCpu
+          )
+        )
+
+        if data.byLocationFunction.nonEmpty then
+            section("lf", "Builtins by Source Location")(
+              appendCostTable(
+                _,
+                Seq("Location", "Function"),
+                data.byLocationFunction.map(e =>
+                    (
+                      Seq(s"${shortFile(e.file)}:${e.line}", e.functionName),
+                      e.count,
+                      e.memory,
+                      e.cpu
+                    )
+                ),
+                totalCpu
+              )
+            )
+
+        if data.transitions.nonEmpty then
+            section("matrix", "Transition Matrix")(appendTransitionMatrix(_, data))
+            section("edges", "Hot Edges")(appendHotEdges(_, data))
+
         val sb = new StringBuilder
         sb.append(
           "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Scalus Profile</title>\n<style>\n"
@@ -274,45 +338,71 @@ object ProfileFormatter {
           "<input id=\"filter\" class=\"filter\" placeholder=\"filter rows by text…\" oninput=\"scalusFilter(this.value)\">\n"
         )
 
-        sb.append("<h2>By Source Location</h2>\n")
-        appendCostTable(
-          sb,
-          Seq("Location"),
-          data.bySourceLocation.map(e =>
-              (Seq(s"${shortFile(e.file)}:${e.line}"), e.count, e.memory, e.cpu)
-          ),
-          totalCpu
-        )
-
-        appendAnnotatedSource(sb, data, sources)
-
-        sb.append("<h2>By Function</h2>\n")
-        appendCostTable(
-          sb,
-          Seq("Function"),
-          data.byFunction.map(e => (Seq(e.name), e.count, e.memory, e.cpu)),
-          totalCpu
-        )
-
-        if data.byLocationFunction.nonEmpty then
-            sb.append("<h2>Builtins by Source Location</h2>\n")
-            appendCostTable(
-              sb,
-              Seq("Location", "Function"),
-              data.byLocationFunction.map(e =>
-                  (Seq(s"${shortFile(e.file)}:${e.line}", e.functionName), e.count, e.memory, e.cpu)
-              ),
-              totalCpu
+        sb.append("<nav class=\"tabs\">\n")
+        sections.zipWithIndex.foreach { case ((id, title, _), i) =>
+            val active = if i == 0 then " active" else ""
+            sb.append(
+              s"""<button class="tab-btn$active" data-tab="$id">${escapeHtml(title)}</button>\n"""
             )
+        }
+        sb.append("</nav>\n")
 
-        if data.transitions.nonEmpty then
-            appendTransitionMatrix(sb, data)
-            appendHotEdges(sb, data)
+        sections.zipWithIndex.foreach { case ((id, _, content), i) =>
+            val hidden = if i == 0 then "" else " hidden"
+            sb.append(s"""<section class="tab-panel" id="$id"$hidden>\n""")
+            sb.append(content)
+            sb.append("</section>\n")
+        }
 
         sb.append("<script>\n")
         sb.append(htmlScript)
         sb.append("\n</script>\n</body></html>")
         sb.toString
+    }
+
+    /** Source files referenced by `data`, loaded best-effort (only files readable from the current
+      * working directory) so the HTML report can annotate them with per-line cost.
+      *
+      * @param include
+      *   keep only files whose path satisfies this predicate. Use it to skip framework/library
+      *   sources and annotate only your own contract — e.g. `!_.contains("/scalus-core/")`. For
+      *   projects that depend on Scalus as a published artifact, library sources live in jars and
+      *   are already excluded (they are not readable files).
+      */
+    def loadSources(
+        data: ProfilingData,
+        include: String => Boolean = _ => true
+    ): Map[String, IndexedSeq[String]] =
+        data.bySourceLocation
+            .map(_.file)
+            .distinct
+            .filter(include)
+            .filter(platform.fileExists)
+            .map(f => f -> new String(platform.readFile(f), "UTF-8").split('\n').toIndexedSeq)
+            .toMap
+
+    /** Write a self-contained, source-annotated HTML report to `path` (creating parent dirs).
+      *
+      * @param include
+      *   source-file filter for the annotated-source view (see [[loadSources]])
+      */
+    def writeHtml(
+        data: ProfilingData,
+        path: String,
+        include: String => Boolean = _ => true
+    ): Unit =
+        writeTo(path, toHtml(data, loadSources(data, include)))
+
+    /** Write the CSV rendering to `path` (creating parent dirs). */
+    def writeCsv(data: ProfilingData, path: String): Unit = writeTo(path, toCsv(data))
+
+    /** Write the JSON rendering to `path` (creating parent dirs). */
+    def writeJson(data: ProfilingData, path: String): Unit = writeTo(path, toJson(data))
+
+    private def writeTo(path: String, content: String): Unit = {
+        val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+        if sep > 0 then platform.createDirectories(path.substring(0, sep))
+        platform.writeFile(path, content.getBytes("UTF-8"))
     }
 
     /** A sortable/filterable cost table: label column(s) + count, mem, cpu and a %-of-CPU bar. */
@@ -347,17 +437,15 @@ object ProfileFormatter {
     /** Per-line cost-annotated source: each line shown with its cpu/mem/count and a heat background
       * proportional to its share of the file's CPU. Only files present in `sources` are rendered.
       */
-    private def appendAnnotatedSource(
-        sb: StringBuilder,
+    private def renderAnnotatedSource(
         data: ProfilingData,
         sources: Map[String, IndexedSeq[String]]
-    ): Unit = {
-        if sources.isEmpty then return
+    ): Option[String] = {
         val byFile = data.bySourceLocation.groupBy(_.file)
         val files =
             sources.keys.filter(byFile.contains).toSeq.sortBy(f => -byFile(f).map(_.cpu).sum)
-        if files.isEmpty then return
-        sb.append("<h2>Annotated Source</h2>\n")
+        if files.isEmpty then return None
+        val sb = new StringBuilder
         files.foreach { file =>
             val lines = sources(file)
             val perLine = byFile(file).map(e => e.line -> e).toMap
@@ -380,6 +468,7 @@ object ProfileFormatter {
             }
             sb.append("</table>\n")
         }
+        Some(sb.toString)
     }
 
     /** Transition matrix heatmap: top-N locations by CPU on each axis; cell = transition count. */
@@ -400,7 +489,6 @@ object ProfileFormatter {
                 cells((fi, ti)) = v
                 if v > maxCount then maxCount = v
         }
-        sb.append("<h2>Transition Matrix</h2>\n")
         sb.append(
           s"<p>Top ${nodes.size} locations by CPU; cell = transition count (row = from, column = to).</p>\n"
         )
@@ -428,7 +516,6 @@ object ProfileFormatter {
 
     /** Sortable hot-edges table (from → to, count), the full edge list behind the matrix. */
     private def appendHotEdges(sb: StringBuilder, data: ProfilingData): Unit = {
-        sb.append("<h2>Hot Edges</h2>\n")
         sb.append(
           "<table class='sortable'><thead><tr><th>From</th><th>To</th><th>Count</th></tr></thead><tbody>\n"
         )
@@ -511,10 +598,20 @@ table.src { border: none; width: 100%; }
 table.src td { border: none; padding: 0 8px; }
 table.src td.ln { color: #999; text-align: right; user-select: none; }
 table.src td.cost { color: #b00; text-align: right; white-space: nowrap; }
-table.src td.code { text-align: left; white-space: pre; }"""
+table.src td.code { text-align: left; white-space: pre; }
+nav.tabs { position: sticky; top: 0; background: #fafafa; padding: 8px 0; margin-bottom: 12px; border-bottom: 1px solid #ccc; z-index: 10; }
+.tab-btn { font-family: monospace; font-size: 0.95em; padding: 5px 12px; margin: 0 4px 0 0; border: 1px solid #ccc; background: #eee; color: #333; cursor: pointer; border-radius: 4px 4px 0 0; }
+.tab-btn:hover { background: #e0e8f0; }
+.tab-btn.active { background: #4a90d9; border-color: #4a90d9; color: #fff; }
+.tab-panel[hidden] { display: none; }"""
 
     private val htmlScript: String =
         """function scalusFilter(q){q=(q||'').toLowerCase();document.querySelectorAll('table.sortable tbody tr').forEach(function(tr){tr.style.display=tr.textContent.toLowerCase().indexOf(q)>=0?'':'none';});}
+function scalusTab(id){
+  document.querySelectorAll('.tab-panel').forEach(function(p){p.hidden=(p.id!==id);});
+  document.querySelectorAll('.tab-btn').forEach(function(b){b.classList.toggle('active', b.getAttribute('data-tab')===id);});
+}
+document.querySelectorAll('.tab-btn').forEach(function(b){b.addEventListener('click',function(){scalusTab(b.getAttribute('data-tab'));});});
 document.querySelectorAll('table.sortable thead th').forEach(function(th){
   th.addEventListener('click',function(){
     var ci=Array.prototype.indexOf.call(th.parentNode.children, th);

@@ -80,7 +80,7 @@ class CekProfilerTest extends AnyFunSuite {
         val profile = result.profile.get
         val text = ProfileFormatter.toText(profile)
         assert(text.contains("Profile by Source Location"))
-        assert(text.contains("Profile by Function"))
+        assert(text.contains("Profile by Builtin"))
         assert(text.contains("Total:"))
     }
 
@@ -91,7 +91,7 @@ class CekProfilerTest extends AnyFunSuite {
         val html = ProfileFormatter.toHtml(profile)
         assert(html.contains("<!DOCTYPE html>"))
         assert(html.contains("By Source Location"))
-        assert(html.contains("By Function"))
+        assert(html.contains("By Builtin"))
         assert(html.contains("</html>"))
     }
 
