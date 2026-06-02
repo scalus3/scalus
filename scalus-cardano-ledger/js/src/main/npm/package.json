@@ -28,7 +28,7 @@
     "cbor-x": "^1.6.0",
     "esbuild": "^0.27.2",
     "typescript": "^5.7.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.0"
   },
   "repository": {
     "type": "git",
