@@ -59,6 +59,18 @@ class EvaluatorReportConfigTest extends AnyFunSuite {
         assert(cfg.profile == ProfileLevel.Full)
     }
 
+    test("SCALUS_PROFILE=off clears level and derived outputs") {
+        val base = EvaluatorReportConfig(
+          enabled = true,
+          profile = ProfileLevel.Full,
+          profileOutputs = Seq(ProfileOutput(ProfileFormat.Html, ProfileDestination.File("p.html")))
+        )
+        val cfg = EvaluatorReportConfig.fromEnv(base, Map("SCALUS_PROFILE" -> "off"))
+        assert(cfg.profile == ProfileLevel.Off)
+        assert(cfg.profileOutputs.isEmpty)
+        assert(cfg.effectiveProfileOutputs.isEmpty)
+    }
+
     test("numeric overrides parse, bad values are ignored") {
         val cfg = EvaluatorReportConfig.fromEnv(
           EvaluatorReportConfig.disabled,

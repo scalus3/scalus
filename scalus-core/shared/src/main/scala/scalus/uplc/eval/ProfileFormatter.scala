@@ -372,7 +372,9 @@ object ProfileFormatter {
             .distinct
             .filter(include)
             .filter(platform.fileExists)
-            .map(f => f -> new String(platform.readFile(f), "UTF-8").split('\n').toIndexedSeq)
+            .map(f =>
+                f -> new String(platform.readFile(f), "UTF-8").split("\r?\n", -1).toIndexedSeq
+            )
             .toMap
 
     /** Write a self-contained, source-annotated HTML report to `path` (creating parent dirs).
@@ -434,6 +436,9 @@ object ProfileFormatter {
                     .toMap
 
             // Embed the graph as JS data (labels + incoming adjacency) for lazy expansion.
+            // Labels are escapeHtml'd (so they are safe both inside this inline <script> — no
+            // </script> breakout — and when the JS re-inserts them via innerHTML, which decodes the
+            // entities) then jsonEsc'd (valid JS string literal). Ids/counts are integers.
             sb.append("<script>\nvar SCALUS_LABEL={")
             sb.append(
               allLocs.zipWithIndex
@@ -466,7 +471,7 @@ object ProfileFormatter {
                         s"""<span class="treenode" data-id="$id" data-path=""><span class="mark">▶</span> ${escapeHtml(
                               loc
                             )}</span><div class="subtree" hidden></div>"""
-                val pct = f"${e.cpu * 100.0 / totalCpu}%.1f"
+                val pct = oneDecimalPct(e.cpu, totalCpu)
                 val barW = (e.cpu * 120 / maxCpu).toInt
                 sb.append(
                   s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>" +
@@ -494,7 +499,7 @@ object ProfileFormatter {
               "<th>Count</th><th>Memory</th><th>CPU</th><th>%cpu</th></tr></thead><tbody>\n"
             )
             rows.take(htmlRowCap).foreach { case (labels, count, mem, cpu) =>
-                val pct = f"${cpu * 100.0 / totalCpu}%.1f"
+                val pct = oneDecimalPct(cpu, totalCpu)
                 val barW = (cpu * 120 / maxCpu).toInt
                 sb.append("<tr>")
                 labels.foreach(l => sb.append(s"<td>${escapeHtml(l)}</td>"))
@@ -651,6 +656,14 @@ object ProfileFormatter {
 
     private def escapeHtml(s: String): String =
         s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+    /** `num/denom` as a percentage with one decimal, computed with integer math so the result is
+      * independent of the platform default locale (`f"%.1f"` would emit `,` on e.g. de_DE and break
+      * the rendered tables / CSS).
+      */
+    private def oneDecimalPct(num: Long, denom: Long): String =
+        val permille = if denom <= 0 then 0L else num * 1000 / denom
+        s"${permille / 10}.${permille % 10}"
 
     private val htmlStyle: String =
         """body { font-family: monospace; margin: 20px; background: #fafafa; color: #222; }

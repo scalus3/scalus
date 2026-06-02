@@ -358,6 +358,12 @@ object PlutusScriptEvaluator {
         /** Render a script's profile to each configured [[ProfileOutput]] (console / files). File
           * destinations are prefixed with the script key so per-redeemer profiles don't collide.
           * HTML output annotates source lines when the source file is readable from the CWD.
+          *
+          * @note
+          *   This is fed by a *separate* profiling evaluation of the script (see the call site), so
+          *   enabling profiling roughly doubles evaluation cost. That profiling pass counts budget
+          *   but does not enforce the redeemer's execution-unit limit, so it is only run after the
+          *   real (budget-enforcing) evaluation has already succeeded.
           */
         private def renderProfile(
             result: Result,
@@ -385,6 +391,8 @@ object PlutusScriptEvaluator {
                     case ProfileDestination.File(name) =>
                         platform.writeFile(reportPath(s"$key.$name"), content.getBytes("UTF-8"))
                     case ProfileDestination.AbsoluteFile(path) =>
+                        val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+                        if sep > 0 then platform.createDirectories(path.substring(0, sep))
                         platform.writeFile(path, content.getBytes("UTF-8"))
             }
         }
