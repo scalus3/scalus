@@ -152,7 +152,7 @@ object EvaluatorReportConfig {
         }
 
         env.get("SCALUS_PROFILE").map(_.trim.toLowerCase).foreach {
-            case "off"     => cfg = cfg.copy(profile = ProfileLevel.Off)
+            case "off"     => cfg = cfg.copy(profile = ProfileLevel.Off, profileOutputs = Nil)
             case "summary" => cfg = cfg.copy(enabled = true, profile = ProfileLevel.Summary)
             case "full"    => cfg = cfg.copy(enabled = true, profile = ProfileLevel.Full)
             case _         => // ignore unrecognised value
