@@ -670,8 +670,10 @@ object Result:
 type ArgStack = Seq[CekValue]
 
 private enum Context {
-    case FrameAwaitArg(f: CekValue, ctx: Context)
-    case FrameAwaitFunTerm(env: CekValEnv, term: Term, ctx: Context)
+    // `callPos` carries the source position of the originating `Apply` so the profiler can record a
+    // call edge (call site → callee body) when the function is finally entered (beta-reduction).
+    case FrameAwaitArg(f: CekValue, ctx: Context, callPos: ScalusSourcePos)
+    case FrameAwaitFunTerm(env: CekValEnv, term: Term, ctx: Context, callPos: ScalusSourcePos)
     case FrameAwaitFunValue(value: CekValue, ctx: Context)
     case FrameForce(ctx: Context)
     case FrameConstr(env: CekValEnv, tag: Word64, rest: Seq[Term], args: ArgStack, ctx: Context)
@@ -945,10 +947,27 @@ class CekMachine(
         private val byFunction = new Array[Array[Long]](DefaultFun.values.length)
         // Per-location per-builtin: (file, line, builtinOrdinal) → [mem, cpu, count]
         private val byLocationFunction = HashMap[(String, Int, Int), Array[Long]]()
-        // Transition counts: (fromFile, fromLine, toFile, toLine) → count
-        private val transitions = HashMap[(String, Int, String, Int), Long]()
+        // Call edges (caller → callee body): (fromFile, fromLine, toFile, toLine) → count. Recorded
+        // only at beta-reduction (onCall), so this is a true call graph — no return back-edges.
+        private val callEdges = HashMap[(String, Int, String, Int), Long]()
         private var prevFile: String = ""
         private var prevLine: Int = 0
+        // A call has begun; its edge is completed at the first *located* step inside the body (so it
+        // survives the empty source positions that optimized UPLC leaves on Apply/LamAbs nodes).
+        private var callPending: Boolean = false
+        private var pendCallerFile: String = ""
+        private var pendCallerLine: Int = 0
+
+        /** Note a beta-reduction. `callPos` is the originating `Apply`'s position when annotated,
+          * else we fall back to the last known location; the callee end is resolved lazily in
+          * `spendBudget` from the body's first located step.
+          */
+        def onCall(callPos: ScalusSourcePos): Unit =
+            callPending = true
+            if !callPos.isEmpty then
+                pendCallerFile = callPos.file; pendCallerLine = callPos.startLine + 1
+            else
+                pendCallerFile = prevFile; pendCallerLine = prevLine
 
         def spendBudget(cat: ExBudgetCategory, budget: ExUnits, env: CekValEnv): Unit = {
             wrapped.spendBudget(cat, budget, env)
@@ -963,13 +982,16 @@ class CekMachine(
                 arr(0) += mem
                 arr(1) += steps
                 arr(2) += 1
-                // Track transitions between source locations
-                if prevFile.nonEmpty && ((file ne prevFile) || line != prevLine) then
-                    val tkey = (prevFile, prevLine, file, line)
-                    transitions.updateWith(tkey) {
-                        case Some(c) => Some(c + 1)
-                        case None    => Some(1)
-                    }
+                // Complete a pending call edge at the first located step of the callee body.
+                if callPending then
+                    callPending = false
+                    if pendCallerFile.nonEmpty && (pendCallerFile != file || pendCallerLine != line)
+                    then
+                        val tkey = (pendCallerFile, pendCallerLine, file, line)
+                        callEdges.updateWith(tkey) {
+                            case Some(c) => Some(c + 1)
+                            case None    => Some(1)
+                        }
                 prevFile = file
                 prevLine = line
             cat match
@@ -1032,7 +1054,7 @@ class CekMachine(
                 .toSeq
                 .sortBy(e => (-e.memory, -e.cpu))
 
-            val transitionSeq = transitions.iterator
+            val transitionSeq = callEdges.iterator
                 .map { case ((fromFile, fromLine, toFile, toLine), count) =>
                     SourceTransition(fromFile, fromLine, toFile, toLine, count)
                 }
@@ -1052,6 +1074,12 @@ class CekMachine(
     private val effectiveSpender: BudgetSpender =
         if profiling then new ProfilingBudgetSpender(budgetSpender)
         else budgetSpender
+
+    // Non-null only when profiling; lets the hot path record call edges with a single null check.
+    private val profilingSpenderOrNull: ProfilingBudgetSpender | Null =
+        effectiveSpender match
+            case p: ProfilingBudgetSpender => p
+            case _                         => null
 
     /** Returns profiling data if profiling was enabled, None otherwise. */
     def getProfile: Option[ProfilingData] = effectiveSpender match
@@ -1108,7 +1136,7 @@ class CekMachine(
                 Return(ctx, env, VLamAbs(name, term, env))
             case Apply(fun, arg, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Apply), costs.applyCost, env)
-                Compute(FrameAwaitFunTerm(env, arg, ctx), env, fun)
+                Compute(FrameAwaitFunTerm(env, arg, ctx, term.sourcePos), env, fun)
             case Force(term, _) =>
                 spendBudget(ExBudgetCategory.Step(StepKind.Force), costs.forceCost, env)
                 Compute(FrameForce(ctx), env, term)
@@ -1139,11 +1167,13 @@ class CekMachine(
 
     private def returnCek(ctx: Context, env: CekValEnv, value: CekValue): CekState = {
         ctx match
-            case NoFrame                          => Done(dischargeCekValue(value))
-            case FrameForce(ctx)                  => forceEvaluate(ctx, env, value)
-            case FrameAwaitFunTerm(env, arg, ctx) => Compute(FrameAwaitArg(value, ctx), env, arg)
-            case FrameAwaitArg(fun, ctx)          => applyEvaluate(ctx, env, fun, value)
-            case FrameAwaitFunValue(arg, ctx)     => applyEvaluate(ctx, env, value, arg)
+            case NoFrame         => Done(dischargeCekValue(value))
+            case FrameForce(ctx) => forceEvaluate(ctx, env, value)
+            case FrameAwaitFunTerm(env, arg, ctx, callPos) =>
+                Compute(FrameAwaitArg(value, ctx, callPos), env, arg)
+            case FrameAwaitArg(fun, ctx, callPos) => applyEvaluate(ctx, env, fun, value, callPos)
+            case FrameAwaitFunValue(arg, ctx) =>
+                applyEvaluate(ctx, env, value, arg, ScalusSourcePos.empty)
             case FrameConstr(env, tag, todo, evaled, ctx) =>
                 val newEvaled = evaled :+ value
                 todo match
@@ -1425,7 +1455,8 @@ class CekMachine(
         ctx: Context,
         env: CekValEnv,
         fun: CekValue,
-        arg: CekValue
+        arg: CekValue,
+        callPos: ScalusSourcePos
     ): CekState = {
         // Diagnostic (gated by -Dscalus.assert.apply.data.to.uc=1):
         // catches the BIND moment where Data.Constr bytes flow into a slot
@@ -1483,7 +1514,12 @@ class CekMachine(
                         case _ => ()
                 case _ => ()
         fun match
-            case VLamAbs(name, term, env) => Compute(ctx, env :+ (name, arg), term)
+            case VLamAbs(name, term, env) =>
+                // Beta-reduction = entering a function body: record a call edge (call site → body)
+                // for the profiler. Stateless (no runtime stack), so tail calls stay constant-space.
+                val ps = profilingSpenderOrNull
+                if ps != null then ps.onCall(callPos)
+                Compute(ctx, env :+ (name, arg), term)
             case VBuiltin(fun, term, runtime) =>
                 val term1 = () => Apply(term(), dischargeCekValue(arg))
                 runtime.typeScheme match

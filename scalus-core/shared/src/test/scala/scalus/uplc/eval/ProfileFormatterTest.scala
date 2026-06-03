@@ -21,6 +21,22 @@ class ProfileFormatterTest extends AnyFunSuite {
       totalBudget = ExUnits(memory = 150, steps = 260)
     )
 
+    // A simple acyclic call chain A→B→C with known self-costs, for inclusive-cost / Hot Path checks.
+    private val chain = ProfilingData(
+      bySourceLocation = Seq(
+        SourceLocationProfile("Chain.scala", 1, memory = 1, cpu = 10, count = 1),
+        SourceLocationProfile("Chain.scala", 2, memory = 2, cpu = 20, count = 1),
+        SourceLocationProfile("Chain.scala", 3, memory = 4, cpu = 100, count = 1)
+      ),
+      byFunction = Nil,
+      byLocationFunction = Nil,
+      transitions = Seq(
+        SourceTransition("Chain.scala", 1, "Chain.scala", 2, count = 1),
+        SourceTransition("Chain.scala", 2, "Chain.scala", 3, count = 1)
+      ),
+      totalBudget = ExUnits(memory = 7, steps = 130)
+    )
+
     private val sources = Map(
       "Foo.scala" -> IndexedSeq(
         "object Foo {",
@@ -143,6 +159,23 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(html.contains("<td>Foo:3</td><td>Foo:4</td><td>4</td><td>50</td><td>60</td>"))
         // By Source Location gains a Downstream column (cost a line pushes into its callees)
         assert(html.contains("<th>Downstream (cpu)</th>"))
+    }
+
+    test("inclusive cost accumulates over the call DAG (Inclusive column)") {
+        val html = ProfileFormatter.toHtml(chain)
+        // inclusive(C)=100 (self); inclusive(B)=20+100=120; inclusive(A)=10+120=130 (=total budget).
+        // The Inclusive column carries these even though the self CPU column is 100, 20, 10.
+        assert(html.contains("<th>Inclusive (cpu)</th>"))
+        assert(html.contains("<td>130</td>")) // A: inclusive = whole chain
+        assert(html.contains("<td>120</td>")) // B: self 20 + C's 100
+    }
+
+    test("inclusive cost does not diverge on cycles (SCC collapse)") {
+        // `data` has the Foo:3 ⇄ Foo:4 2-cycle: it collapses to one SCC whose inclusive cpu is the
+        // total budget (260) — every member shares it, no blow-up.
+        val html = ProfileFormatter.toHtml(data)
+        assert(html.contains("<th>Inclusive (cpu)</th>"))
+        assert(html.contains("<td>260</td>"))
     }
 
     test("toHtml with sources renders the annotated-source view") {
