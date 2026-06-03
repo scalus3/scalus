@@ -93,7 +93,6 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(html.startsWith("<!DOCTYPE html>"))
         assert(html.contains("By Source Location"))
         assert(html.contains("By Builtin"))
-        assert(html.contains("Transition Matrix"))
         assert(html.contains("Hot Edges"))
         // bundled, no external dependency
         assert(html.contains("<script>"))
@@ -125,12 +124,25 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(html.contains("var SCALUS_IN="))
         assert(html.contains("var SCALUS_LABEL="))
         assert(html.contains("scalusToggle"))
-        // both endpoints are labelled, and the Foo:3 -> Foo:4 edge (count 4) is in the adjacency
+        // both endpoints are labelled, and the Foo:3 -> Foo:4 edge (count 4, est. cpu 60) is in
+        // the adjacency as [sourceId, count, edgeCost]
         assert(html.contains("\"Foo:4\""))
         assert(html.contains("\"Foo:3\""))
-        assert(html.contains(",4]"))
+        assert(html.contains(",4,60]"))
         // the loop-cutoff path is threaded through data-path
         assert(html.contains("data-path="))
+    }
+
+    test("transition edges carry an estimated cost that conserves node self-cost") {
+        val html = ProfileFormatter.toHtml(data)
+        // edgeCost(A→B) = selfCost(B) · count(A→B)/inDeg(B). Here every share is 1, so each edge
+        // carries its target's full self-cost — Hot Edges shows From|To|Count|Mem|CPU:
+        //   Foo:4→Foo:3 carries Foo:3 (mem 100, cpu 200), count 1
+        //   Foo:3→Foo:4 carries Foo:4 (mem 50, cpu 60), count 4
+        assert(html.contains("<td>Foo:4</td><td>Foo:3</td><td>1</td><td>100</td><td>200</td>"))
+        assert(html.contains("<td>Foo:3</td><td>Foo:4</td><td>4</td><td>50</td><td>60</td>"))
+        // By Source Location gains a Downstream column (cost a line pushes into its callees)
+        assert(html.contains("<th>Downstream (cpu)</th>"))
     }
 
     test("toHtml with sources renders the annotated-source view") {
