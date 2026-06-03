@@ -33,6 +33,18 @@ class SIRTyper(using Context) {
     private val uplcRepresentationClass =
         Symbols.requiredClass("scalus.compiler.UplcRepresentation")
 
+    /** `scala.Tuple` — the sealed root of the tuple ADT (`EmptyTuple`, `*:`, `TupleN`). */
+    private val tupleClass = Symbols.requiredClass("scala.Tuple")
+
+    /** True for any member of the tuple family (`Tuple2`, `*:`, `EmptyTuple`, ...).
+      *
+      * The tuple hierarchy is sealed and, since Scala 3.5, lists the concrete `TupleN` classes
+      * among its `children`; its base type is the `*:`-cons encoding ending in `EmptyTuple`, which
+      * has no SIR type. Tuples lower to standalone case classes, so they must be excluded from
+      * sum-type parent detection (see [[retrieveParentSymbol]] and `SIRCompiler.makeConstrDecl`).
+      */
+    def isTupleClass(sym: Symbol): Boolean = sym.derivesFrom(tupleClass)
+
     /** Extract a `TypeVarKind` from `@UplcRepr(TypeVar(kind))` on a symbol. Returns `None` if the
       * annotation is absent or its argument isn't a `TypeVar(...)` shape. Used by
       * [[SIRCompiler.compileDefDef]] to stamp the correct kind on a method's `SIRType.TypeVar`.
@@ -670,6 +682,7 @@ class SIRTyper(using Context) {
             val bcChildren = bc.children
             bcChildren.nonEmpty && !bc.flags.is(Flags.Transparent)
             && bcChildren.exists(_ == typeSymbol)
+            && !isTupleClass(bc) // tuples lower to case classes, not sum types; see isTupleClass
         }
         val optParent = parentSyms match
             case Nil         => None
