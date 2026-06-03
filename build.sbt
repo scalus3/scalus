@@ -30,7 +30,11 @@ val monocleVersion = "3.3.0"
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.7.3-RC1-bin-SNAPSHOT"
-ThisBuild / scalaVersion := "3.3.7"
+// LTS is the default build version; the next series is used to cross-build the
+// compiler plugin (which depends on the unstable scala3-compiler internal API).
+val scala3LtsVersion = "3.3.7"
+val scala3NextVersion = "3.8.4"
+ThisBuild / scalaVersion := scala3LtsVersion
 ThisBuild / organization := "org.scalus"
 ThisBuild / organizationName := "Scalus"
 ThisBuild / organizationHomepage := Some(url("https://scalus.org/"))
@@ -225,6 +229,7 @@ lazy val scalusPlugin = project
     .settings(
       name := "scalus-plugin",
       crossVersion := CrossVersion.full,
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
 //      scalacOptions += "-Wunused:all",
       // Manually set a fixed version to avoid recompilation on every commit
@@ -289,6 +294,15 @@ lazy val scalusPlugin = project
 //          sharedFiles.map(file => baseDir / file)
 //      },
       Compile / unmanagedSourceDirectories += (Compile / sourceDirectory).value / "shared" / "scala",
+      // Version-specific sources: the StandardPlugin phase-registration hook differs between the
+      // 3.3.x LTS (`init`) and 3.5+/3.8.x (`initialize(using Context)`). See PluginCompat.
+      Compile / unmanagedSourceDirectories += {
+          val srcDir = (Compile / sourceDirectory).value
+          CrossVersion.partialVersion(scalaVersion.value) match {
+              case Some((3, minor)) if minor >= 5 => srcDir / "scala-3.8"
+              case _                              => srcDir / "scala-3.3"
+          }
+      },
       cleanFiles += (Compile / sourceDirectory).value / "shared",
       // Ensure shared files are copied before any source inspection
       Compile / sourceGenerators += Def.task {

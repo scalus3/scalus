@@ -17,19 +17,19 @@ import scalus.compiler.sir.SIRPosition
 
 import scala.language.implicitConversions
 
-class Plugin extends StandardPlugin {
+class Plugin extends PluginCompat {
     val name: String = "scalus"
     override val description: String = "Compile Scala to Scalus IR"
 
     // val compiledSirs: mutable.Map[String, SIR] = mmutable.Map.empty
 
-    /** For enabling debug in scalus
+    /** Builds the Scalus plugin phases.
       *
-      * Note: In Scala 3.7+, the `init` method is deprecated in favor of `initialize(options)(using
-      * Context)`. When upgrading to Scala 3.7+, rename this method to `initialize` and add the
-      * `(using Context)` parameter.
+      * The phases are registered by the version-specific [[PluginCompat]] mix-in, which adapts to
+      * the `StandardPlugin` registration hook of the active Scala version: the pre-3.5 `init` on
+      * the LTS (3.3.x) and `initialize(options)(using Context)` on 3.5+ (3.8.x).
       */
-    override def init(options: List[String]): List[PluginPhase] = {
+    protected def scalusPhases(options: List[String]): List[PluginPhase] = {
         val debugLevel = options
             .find(_.startsWith("debugLevel="))
             .map(_.substring("debugLevel=".length))
