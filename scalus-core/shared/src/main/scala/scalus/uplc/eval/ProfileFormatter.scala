@@ -11,6 +11,22 @@ object ProfileFormatter {
     private def feeLovelace(prices: Option[ExUnitPrices], mem: Long, cpu: Long): Option[Long] =
         prices.map(p => ExUnits(memory = mem, steps = cpu).fee(p).value)
 
+    /** Estimated cost carried by each transition edge A→B: the target node's self-cost distributed
+      * across B's incoming edges by traversal frequency —
+      * `edgeCost(A→B) = selfCost(B) · count(A→B) / Σ_X count(X→B)`. Always finite (no recursion),
+      * and the incoming edges of B sum back (up to integer rounding) to B's self-cost. Returns one
+      * `(edge, mem, cpu)` per transition.
+      */
+    private def edgeCosts(data: ProfilingData): Seq[(SourceTransition, Long, Long)] = {
+        val selfByLoc = data.bySourceLocation.map(e => (e.file, e.line) -> (e.memory, e.cpu)).toMap
+        val inDeg = data.transitions.groupMapReduce(t => (t.toFile, t.toLine))(_.count)(_ + _)
+        data.transitions.map { t =>
+            val (mem, cpu) = selfByLoc.getOrElse((t.toFile, t.toLine), (0L, 0L))
+            val d = inDeg.getOrElse((t.toFile, t.toLine), 0L)
+            if d <= 0 then (t, 0L, 0L) else (t, mem * t.count / d, cpu * t.count / d)
+        }
+    }
+
     /** `lovelace` rendered as ADA with 6 decimals, using integer math so the output is independent
       * of the platform default locale (1 ADA = 1_000_000 lovelace).
       */
@@ -21,9 +37,6 @@ object ProfileFormatter {
 
     /** Max rows rendered per HTML table before collapsing into a "… and N more" note. */
     private val htmlRowCap = 200
-
-    /** Max locations shown on each axis of the transition matrix (keeps it readable). */
-    private val matrixCap = 24
 
     /** Max incoming edges kept per node in the By-Source-Location call tree. */
     private val treeChildCap = 50
@@ -335,8 +348,8 @@ object ProfileFormatter {
     /** Renders profiling data as a self-contained, interactive HTML page.
       *
       * The page bundles its own CSS/JS (no external dependencies): sortable, filterable tables with
-      * %-of-CPU bars, a transition matrix heatmap with a hot-edges table, and — when source text is
-      * supplied — a per-line cost-annotated source view (the flagship view).
+      * %-of-CPU bars, a cost-ranked hot-edges table, and — when source text is supplied — a
+      * per-line cost-annotated source view (the flagship view).
       *
       * @param data
       *   the profiling data
@@ -399,9 +412,7 @@ object ProfileFormatter {
               )
             )
 
-        if data.transitions.nonEmpty then
-            section("matrix", "Transition Matrix")(appendTransitionMatrix(_, data))
-            section("edges", "Hot Edges")(appendHotEdges(_, data))
+        if data.transitions.nonEmpty then section("edges", "Hot Edges")(appendHotEdges(_, data))
 
         val sb = new StringBuilder
         val pageTitle =
@@ -519,14 +530,33 @@ object ProfileFormatter {
                         Seq((t.fromFile, t.fromLine), (t.toFile, t.toLine))
                     )).distinct
             val idOf = allLocs.zipWithIndex.toMap
-            // Incoming edges per destination id (hottest first, capped).
-            val inByDest: Map[Int, Seq[(Int, Long)]] =
+            // Estimated cost on each transition edge (target self-cost × entry-frequency share),
+            // shown as fee when priced else cpu; used on tree branches and the Downstream column.
+            val edgeCostList = edgeCosts(data)
+            val edgeDisplayCost: Map[(String, Int, String, Int), Long] =
+                edgeCostList.map { case (t, mem, cpu) =>
+                    (t.fromFile, t.fromLine, t.toFile, t.toLine) ->
+                        feeLovelace(data.prices, mem, cpu).getOrElse(cpu)
+                }.toMap
+            // Downstream cost a location pushes into its callees = Σ over its outgoing edges.
+            val downstreamByLoc: Map[(String, Int), Long] =
+                edgeCostList
+                    .groupMapReduce(c => (c._1.fromFile, c._1.fromLine))(c =>
+                        feeLovelace(data.prices, c._2, c._3).getOrElse(c._3)
+                    )(_ + _)
+            // Incoming edges per destination id (hottest first, capped): (sourceId, count, edgeCost).
+            val inByDest: Map[Int, Seq[(Int, Long, Long)]] =
                 data.transitions
                     .groupBy(t => idOf((t.toFile, t.toLine)))
                     .view
                     .mapValues(ts =>
-                        ts.map(t => (idOf((t.fromFile, t.fromLine)), t.count))
-                            .sortBy(-_._2)
+                        ts.map(t =>
+                            (
+                              idOf((t.fromFile, t.fromLine)),
+                              t.count,
+                              edgeDisplayCost((t.fromFile, t.fromLine, t.toFile, t.toLine))
+                            )
+                        ).sortBy(-_._2)
                             .take(treeChildCap)
                     )
                     .toMap
@@ -547,16 +577,19 @@ object ProfileFormatter {
             sb.append(
               inByDest
                   .map((destId, ins) =>
-                      s"$destId:[${ins.map((fid, c) => s"[$fid,$c]").mkString(",")}]"
+                      s"$destId:[${ins.map((fid, c, cost) => s"[$fid,$c,$cost]").mkString(",")}]"
                   )
                   .mkString(",")
             )
-            sb.append("};\n</script>\n")
+            sb.append(s"};\nvar SCALUS_FEE=${data.prices.isDefined};\n</script>\n")
 
             val maxCpu = math.max(1L, rows.map(_.cpu).max)
             val feeHeader = if data.prices.isDefined then "<th>Fee (lov)</th>" else ""
+            val unit = if data.prices.isDefined then "lov" else "cpu"
+            val hasEdges = data.transitions.nonEmpty
+            val dsHeader = if hasEdges then s"<th>Downstream ($unit)</th>" else ""
             sb.append(
-              s"<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th>$feeHeader<th>%cpu</th></tr></thead><tbody>\n"
+              s"<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th>$feeHeader$dsHeader<th>%cpu</th></tr></thead><tbody>\n"
             )
             rows.take(htmlRowCap).foreach { e =>
                 val loc = s"${shortFile(e.file)}:${e.line}"
@@ -581,8 +614,11 @@ object ProfileFormatter {
                 val barW = (e.cpu * 120 / maxCpu).toInt
                 val feeCell =
                     feeLovelace(data.prices, e.memory, e.cpu).map(f => s"<td>$f</td>").getOrElse("")
+                val dsCell =
+                    if !hasEdges then ""
+                    else s"<td>${downstreamByLoc.getOrElse((e.file, e.line), 0L)}</td>"
                 sb.append(
-                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>$feeCell" +
+                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>$feeCell$dsCell" +
                       s"<td><span class='bar' style='width:${barW}px'></span> $pct%</td></tr>\n"
                 )
             }
@@ -667,59 +703,25 @@ object ProfileFormatter {
         Some(sb.toString)
     }
 
-    /** Transition matrix heatmap: top-N locations by CPU on each axis; cell = transition count. */
-    private def appendTransitionMatrix(sb: StringBuilder, data: ProfilingData): Unit = {
-        val byLocCpu = data.bySourceLocation.map(e => (e.file, e.line) -> e.cpu).toMap
-        val nodes = data.transitions
-            .flatMap(t => Seq((t.fromFile, t.fromLine), (t.toFile, t.toLine)))
-            .distinct
-            .sortBy(loc => -byLocCpu.getOrElse(loc, 0L))
-            .take(matrixCap)
-        if nodes.isEmpty then return
-        val idx = nodes.zipWithIndex.toMap
-        val cells = scala.collection.mutable.HashMap[(Int, Int), Long]()
-        var maxCount = 1L
-        data.transitions.foreach { t =>
-            for fi <- idx.get((t.fromFile, t.fromLine)); ti <- idx.get((t.toFile, t.toLine)) do
-                val v = cells.getOrElse((fi, ti), 0L) + t.count
-                cells((fi, ti)) = v
-                if v > maxCount then maxCount = v
-        }
-        sb.append(
-          s"<p>Top ${nodes.size} locations by CPU; cell = transition count (row = from, column = to).</p>\n"
-        )
-        sb.append("<table class='matrix'><tr><th>from \\ to</th>")
-        nodes.indices.foreach(i => sb.append(s"<th>${i + 1}</th>"))
-        sb.append("</tr>\n")
-        nodes.zipWithIndex.foreach { case (loc, ri) =>
-            sb.append(
-              s"<tr><th class='rowhdr'>${ri + 1}. ${escapeHtml(shortFile(loc._1))}:${loc._2}</th>"
-            )
-            nodes.indices.foreach { ci =>
-                val v = cells.getOrElse((ri, ci), 0L)
-                val style =
-                    if v == 0 then ""
-                    else
-                        s" style='background:rgba(40,120,220,${0.1 + 0.7 * (v.toDouble / maxCount)})'"
-                sb.append(s"<td$style>${if v == 0 then "" else v.toString}</td>")
-            }
-            sb.append("</tr>\n")
-        }
-        sb.append("</table>\n<ol class='legend'>\n")
-        nodes.foreach(loc => sb.append(s"<li>${escapeHtml(shortFile(loc._1))}:${loc._2}</li>\n"))
-        sb.append("</ol>\n")
-    }
-
-    /** Sortable hot-edges table (from → to, count), the full edge list behind the matrix. */
+    /** Hottest control-flow edges, ranked by estimated cost (see [[edgeCosts]]). The Est. Memory /
+      * Est. CPU / Fee are the target node's self-cost distributed across its incoming edges by
+      * traversal frequency, so an edge's columns answer "how much budget flows across this call".
+      */
     private def appendHotEdges(sb: StringBuilder, data: ProfilingData): Unit = {
+        val feeHeader = if data.prices.isDefined then "<th>Fee (lov)</th>" else ""
         sb.append(
-          "<table class='sortable'><thead><tr><th>From</th><th>To</th><th>Count</th></tr></thead><tbody>\n"
+          s"<table class='sortable'><thead><tr><th>From</th><th>To</th><th>Count</th><th>Est. Memory</th><th>Est. CPU</th>$feeHeader</tr></thead><tbody>\n"
         )
-        data.transitions.take(htmlRowCap).foreach { t =>
-            sb.append(
-              s"<tr><td>${escapeHtml(shortFile(t.fromFile))}:${t.fromLine}</td><td>${escapeHtml(shortFile(t.toFile))}:${t.toLine}</td><td>${t.count}</td></tr>\n"
-            )
-        }
+        edgeCosts(data)
+            .sortBy { case (_, _, cpu) => -cpu }
+            .take(htmlRowCap)
+            .foreach { case (t, mem, cpu) =>
+                val feeCell =
+                    feeLovelace(data.prices, mem, cpu).map(f => s"<td>$f</td>").getOrElse("")
+                sb.append(
+                  s"<tr><td>${escapeHtml(shortFile(t.fromFile))}:${t.fromLine}</td><td>${escapeHtml(shortFile(t.toFile))}:${t.toLine}</td><td>${t.count}</td><td>$mem</td><td>$cpu</td>$feeCell</tr>\n"
+                )
+            }
         sb.append("</tbody></table>\n")
         if data.transitions.size > htmlRowCap then
             sb.append(s"<p>… and ${data.transitions.size - htmlRowCap} more edges</p>\n")
@@ -810,9 +812,6 @@ tbody tr:hover { background: #e8f4fd; }
 .bar { display: inline-block; height: 10px; background: #4a90d9; vertical-align: middle; }
 .summary { font-size: 1.1em; margin: 10px 0; }
 .subtitle { font-size: 1.25em; font-weight: 600; color: #2a5b8c; margin: -6px 0 8px; }
-table.matrix td { min-width: 22px; text-align: center; }
-table.matrix th.rowhdr { text-align: left; font-weight: normal; }
-ol.legend { color: #555; font-size: 0.9em; }
 table.src { border: none; width: 100%; }
 table.src td { border: none; padding: 0 8px; }
 table.src td.ln { color: #999; text-align: right; user-select: none; }
@@ -837,12 +836,14 @@ function scalusBuildChildren(container,id,path){
   var ins=(typeof SCALUS_IN!=='undefined'&&SCALUS_IN[id])||[];
   if(!ins.length){container.innerHTML='<div class="treeleaf">(no incoming)</div>';return;}
   var h='';
+  var feeUnit=(typeof SCALUS_FEE!=='undefined'&&SCALUS_FEE)?' lov':' cpu';
   for(var i=0;i<ins.length;i++){
-    var cid=ins[i][0],cnt=ins[i][1],lbl=(typeof SCALUS_LABEL!=='undefined'&&SCALUS_LABEL[cid])||('#'+cid);
+    var cid=ins[i][0],cnt=ins[i][1],cost=ins[i].length>2?ins[i][2]:0,lbl=(typeof SCALUS_LABEL!=='undefined'&&SCALUS_LABEL[cid])||('#'+cid);
+    var costStr=cost?(' · '+cost+feeUnit):'';
     if(path.indexOf(cid)>=0){
-      h+='<div class="treeleaf">↺ '+lbl+' ×'+cnt+' (loop)</div>';
+      h+='<div class="treeleaf">↺ '+lbl+' ×'+cnt+costStr+' (loop)</div>';
     }else{
-      h+='<div class="treerow"><span class="treenode" data-id="'+cid+'" data-path="'+path.join(',')+'"><span class="mark">▶</span> '+lbl+' ×'+cnt+'</span><div class="subtree" hidden></div></div>';
+      h+='<div class="treerow"><span class="treenode" data-id="'+cid+'" data-path="'+path.join(',')+'"><span class="mark">▶</span> '+lbl+' ×'+cnt+costStr+'</span><div class="subtree" hidden></div></div>';
     }
   }
   container.innerHTML=h;
