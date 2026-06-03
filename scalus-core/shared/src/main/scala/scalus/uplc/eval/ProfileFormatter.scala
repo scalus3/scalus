@@ -1,8 +1,23 @@
 package scalus.uplc.eval
 
+import scalus.cardano.ledger.{ExUnitPrices, ExUnits}
 import scalus.uplc.builtin.platform
 
 object ProfileFormatter {
+
+    /** On-chain fee (lovelace) for `(mem, cpu)` under `prices`, or `None` when no prices are set.
+      * Reuses the ledger fee formula so it matches what a transaction would actually be charged.
+      */
+    private def feeLovelace(prices: Option[ExUnitPrices], mem: Long, cpu: Long): Option[Long] =
+        prices.map(p => ExUnits(memory = mem, steps = cpu).fee(p).value)
+
+    /** `lovelace` rendered as ADA with 6 decimals, using integer math so the output is independent
+      * of the platform default locale (1 ADA = 1_000_000 lovelace).
+      */
+    private def adaString(lovelace: Long): String = {
+        val frac = (math.abs(lovelace) % 1_000_000L).toString.reverse.padTo(6, '0').reverse
+        s"${lovelace / 1_000_000L}.$frac"
+    }
 
     /** Max rows rendered per HTML table before collapsing into a "… and N more" note. */
     private val htmlRowCap = 200
@@ -135,7 +150,10 @@ object ProfileFormatter {
             if data.transitions.size > effectiveMaxRows then
                 sb.append(s"  ... and ${data.transitions.size - effectiveMaxRows} more\n")
 
-        sb.append(s"\nTotal: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}")
+        val totalFee = feeLovelace(data.prices, data.totalBudget.memory, data.totalBudget.steps)
+            .map(f => s" fee=$f lovelace (${adaString(f)} ADA)")
+            .getOrElse("")
+        sb.append(s"\nTotal: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}$totalFee")
         sb.toString
     }
 
@@ -143,12 +161,20 @@ object ProfileFormatter {
     def summary(data: ProfilingData, topN: Int = 10): String = {
         val n = math.max(1, topN)
         val sb = new StringBuilder
-        sb.append(s"Total: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}\n")
+        // ` fee=<lovelace>` for an entry's (mem, cpu), or "" when no prices are attached.
+        def feeStr(mem: Long, cpu: Long): String =
+            feeLovelace(data.prices, mem, cpu).map(f => s" fee=$f").getOrElse("")
+        sb.append(
+          s"Total: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}${feeStr(data.totalBudget.memory, data.totalBudget.steps)}\n"
+        )
         if data.byFunction.nonEmpty then
             sb.append(s"Top $n by CPU (builtin):\n")
             data.byFunction.sortBy(e => -e.cpu).take(n).foreach { e =>
                 sb.append(
-                  "  " + e.name.padTo(24, ' ') + s" cpu=${e.cpu} mem=${e.memory} n=${e.count}\n"
+                  "  " + e.name.padTo(
+                    24,
+                    ' '
+                  ) + s" cpu=${e.cpu} mem=${e.memory} n=${e.count}${feeStr(e.memory, e.cpu)}\n"
                 )
             }
         if data.bySourceLocation.nonEmpty then
@@ -156,21 +182,39 @@ object ProfileFormatter {
             data.bySourceLocation.sortBy(e => -e.cpu).take(n).foreach { e =>
                 val loc = s"${shortFile(e.file)}:${e.line}"
                 sb.append(
-                  "  " + loc.padTo(24, ' ') + s" cpu=${e.cpu} mem=${e.memory} n=${e.count}\n"
+                  "  " + loc.padTo(
+                    24,
+                    ' '
+                  ) + s" cpu=${e.cpu} mem=${e.memory} n=${e.count}${feeStr(e.memory, e.cpu)}\n"
                 )
             }
         sb.toString
     }
 
-    /** Renders profiling data as CSV (one diffable file across all sections). */
+    /** Renders profiling data as CSV (one diffable file across all sections). When the data carries
+      * execution unit prices, a trailing `fee` column (lovelace) is added.
+      */
     def toCsv(data: ProfilingData): String = {
+        def fee(mem: Long, cpu: Long): Option[Long] = feeLovelace(data.prices, mem, cpu)
         val sb = new StringBuilder
-        sb.append("section,key,detail,count,mem,cpu\n")
+        sb.append(
+          s"section,key,detail,count,mem,cpu${if data.prices.isDefined then ",fee" else ""}\n"
+        )
         data.bySourceLocation.foreach(e =>
-            sb.append(csvRow("location", s"${e.file}:${e.line}", "", e.count, e.memory, e.cpu))
+            sb.append(
+              csvRow(
+                "location",
+                s"${e.file}:${e.line}",
+                "",
+                e.count,
+                e.memory,
+                e.cpu,
+                fee(e.memory, e.cpu)
+              )
+            )
         )
         data.byFunction.foreach(e =>
-            sb.append(csvRow("builtin", e.name, "", e.count, e.memory, e.cpu))
+            sb.append(csvRow("builtin", e.name, "", e.count, e.memory, e.cpu, fee(e.memory, e.cpu)))
         )
         data.byLocationFunction.foreach(e =>
             sb.append(
@@ -180,7 +224,8 @@ object ProfileFormatter {
                 e.functionName,
                 e.count,
                 e.memory,
-                e.cpu
+                e.cpu,
+                fee(e.memory, e.cpu)
               )
             )
         )
@@ -192,20 +237,39 @@ object ProfileFormatter {
                 s"${t.toFile}:${t.toLine}",
                 t.count,
                 0,
-                0
+                0,
+                fee(0, 0)
               )
             )
         )
-        sb.append(csvRow("total", "", "", 0, data.totalBudget.memory, data.totalBudget.steps))
+        sb.append(
+          csvRow(
+            "total",
+            "",
+            "",
+            0,
+            data.totalBudget.memory,
+            data.totalBudget.steps,
+            fee(data.totalBudget.memory, data.totalBudget.steps)
+          )
+        )
         sb.toString
     }
 
-    /** Renders the full profiling data as JSON (machine-readable). */
+    /** Renders the full profiling data as JSON (machine-readable). When the data carries execution
+      * unit prices, every entry and the total also include a derived `"fee"` in lovelace.
+      */
     def toJson(data: ProfilingData): String = {
+        // `,"fee":<lovelace>` for an entry's (mem, cpu), or "" when no prices are attached.
+        def feeJson(mem: Long, cpu: Long): String =
+            feeLovelace(data.prices, mem, cpu).map(f => s""","fee":$f""").getOrElse("")
         val sb = new StringBuilder
         sb.append("{\n")
         sb.append(
-          s"""  "totalBudget": { "mem": ${data.totalBudget.memory}, "cpu": ${data.totalBudget.steps} },\n"""
+          s"""  "totalBudget": { "mem": ${data.totalBudget.memory}, "cpu": ${data.totalBudget.steps}${feeJson(
+                data.totalBudget.memory,
+                data.totalBudget.steps
+              )} },\n"""
         )
         sb.append("  \"bySourceLocation\": [")
         sb.append(
@@ -213,7 +277,10 @@ object ProfileFormatter {
               .map(e =>
                   s"""{"file":"${jsonEsc(
                         e.file
-                      )}","line":${e.line},"count":${e.count},"mem":${e.memory},"cpu":${e.cpu}}"""
+                      )}","line":${e.line},"count":${e.count},"mem":${e.memory},"cpu":${e.cpu}${feeJson(
+                        e.memory,
+                        e.cpu
+                      )}}"""
               )
               .mkString(",")
         )
@@ -224,7 +291,10 @@ object ProfileFormatter {
               .map(e =>
                   s"""{"name":"${jsonEsc(
                         e.name
-                      )}","count":${e.count},"mem":${e.memory},"cpu":${e.cpu}}"""
+                      )}","count":${e.count},"mem":${e.memory},"cpu":${e.cpu}${feeJson(
+                        e.memory,
+                        e.cpu
+                      )}}"""
               )
               .mkString(",")
         )
@@ -235,7 +305,10 @@ object ProfileFormatter {
               .map(e =>
                   s"""{"file":"${jsonEsc(e.file)}","line":${e.line},"function":"${jsonEsc(
                         e.functionName
-                      )}","count":${e.count},"mem":${e.memory},"cpu":${e.cpu}}"""
+                      )}","count":${e.count},"mem":${e.memory},"cpu":${e.cpu}${feeJson(
+                        e.memory,
+                        e.cpu
+                      )}}"""
               )
               .mkString(",")
         )
@@ -270,8 +343,15 @@ object ProfileFormatter {
       * @param sources
       *   optional `file -> source lines` (line `n` is element `n - 1`); profiled files present here
       *   are rendered with per-line cost annotations
+      * @param title
+      *   optional label identifying what was profiled (e.g. the contract and test-case name). When
+      *   non-empty it is shown in the page `<title>` and as a subtitle above the report.
       */
-    def toHtml(data: ProfilingData, sources: Map[String, IndexedSeq[String]]): String = {
+    def toHtml(
+        data: ProfilingData,
+        sources: Map[String, IndexedSeq[String]],
+        title: String = ""
+    ): String = {
         val totalCpu = math.max(1L, data.totalBudget.steps)
 
         // Build each section's inner HTML; only non-empty sections become tabs. Section titles
@@ -296,7 +376,8 @@ object ProfileFormatter {
             _,
             Seq("Builtin"),
             data.byFunction.map(e => (Seq(e.name), e.count, e.memory, e.cpu)),
-            totalCpu
+            totalCpu,
+            data.prices
           )
         )
 
@@ -313,7 +394,8 @@ object ProfileFormatter {
                       e.cpu
                     )
                 ),
-                totalCpu
+                totalCpu,
+                data.prices
               )
             )
 
@@ -322,13 +404,20 @@ object ProfileFormatter {
             section("edges", "Hot Edges")(appendHotEdges(_, data))
 
         val sb = new StringBuilder
+        val pageTitle =
+            if title.isEmpty then "Scalus Profile" else s"Scalus Profile — ${escapeHtml(title)}"
         sb.append(
-          "<!DOCTYPE html>\n<html><head><meta charset=\"utf-8\"><title>Scalus Profile</title>\n<style>\n"
+          s"""<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>$pageTitle</title>\n<style>\n"""
         )
         sb.append(htmlStyle)
         sb.append("\n</style></head><body>\n<h1>Scalus CEK Machine Profile</h1>\n")
+        if title.nonEmpty then sb.append(s"""<p class="subtitle">${escapeHtml(title)}</p>\n""")
+        val totalFeeStr =
+            feeLovelace(data.prices, data.totalBudget.memory, data.totalBudget.steps)
+                .map(f => s", fee=$f lovelace (${adaString(f)} ADA)")
+                .getOrElse("")
         sb.append(
-          s"""<p class="summary">Total budget: mem=${data.totalBudget.memory}, cpu=${data.totalBudget.steps}</p>\n"""
+          s"""<p class="summary">Total budget: mem=${data.totalBudget.memory}, cpu=${data.totalBudget.steps}$totalFeeStr</p>\n"""
         )
         sb.append(
           "<input id=\"filter\" class=\"filter\" placeholder=\"filter rows by text…\" oninput=\"scalusFilter(this.value)\">\n"
@@ -383,13 +472,17 @@ object ProfileFormatter {
       *
       * @param include
       *   source-file filter for the annotated-source view (see [[loadSources]])
+      * @param title
+      *   optional label identifying what was profiled (e.g. the contract and test-case name); shown
+      *   in the page `<title>` and as a subtitle above the report (see [[toHtml]])
       */
     def writeHtml(
         data: ProfilingData,
         path: String,
-        include: String => Boolean = _ => true
+        include: String => Boolean = _ => true,
+        title: String = ""
     ): Unit =
-        writeTo(path, toHtml(data, loadSources(data, include)))
+        writeTo(path, toHtml(data, loadSources(data, include), title))
 
     /** Write the CSV rendering to `path` (creating parent dirs). */
     def writeCsv(data: ProfilingData, path: String): Unit = writeTo(path, toCsv(data))
@@ -461,8 +554,9 @@ object ProfileFormatter {
             sb.append("};\n</script>\n")
 
             val maxCpu = math.max(1L, rows.map(_.cpu).max)
+            val feeHeader = if data.prices.isDefined then "<th>Fee (lov)</th>" else ""
             sb.append(
-              "<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th><th>%cpu</th></tr></thead><tbody>\n"
+              s"<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th>$feeHeader<th>%cpu</th></tr></thead><tbody>\n"
             )
             rows.take(htmlRowCap).foreach { e =>
                 val loc = s"${shortFile(e.file)}:${e.line}"
@@ -485,8 +579,10 @@ object ProfileFormatter {
                                 )}</span><div class="subtree" hidden></div>"""
                 val pct = oneDecimalPct(e.cpu, totalCpu)
                 val barW = (e.cpu * 120 / maxCpu).toInt
+                val feeCell =
+                    feeLovelace(data.prices, e.memory, e.cpu).map(f => s"<td>$f</td>").getOrElse("")
                 sb.append(
-                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>" +
+                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>$feeCell" +
                       s"<td><span class='bar' style='width:${barW}px'></span> $pct%</td></tr>\n"
                 )
             }
@@ -500,15 +596,17 @@ object ProfileFormatter {
         sb: StringBuilder,
         labelHeaders: Seq[String],
         rows: Seq[(Seq[String], Long, Long, Long)],
-        totalCpu: Long
+        totalCpu: Long,
+        prices: Option[ExUnitPrices]
     ): Unit = {
         if rows.isEmpty then sb.append("<p>(none recorded)</p>\n")
         else
             val maxCpu = math.max(1L, rows.map(_._4).max)
+            val feeHeader = if prices.isDefined then "<th>Fee (lov)</th>" else ""
             sb.append("<table class=\"sortable\"><thead><tr>")
             labelHeaders.foreach(h => sb.append(s"<th>${escapeHtml(h)}</th>"))
             sb.append(
-              "<th>Count</th><th>Memory</th><th>CPU</th><th>%cpu</th></tr></thead><tbody>\n"
+              s"<th>Count</th><th>Memory</th><th>CPU</th>$feeHeader<th>%cpu</th></tr></thead><tbody>\n"
             )
             rows.take(htmlRowCap).foreach { case (labels, count, mem, cpu) =>
                 val pct = oneDecimalPct(cpu, totalCpu)
@@ -516,6 +614,7 @@ object ProfileFormatter {
                 sb.append("<tr>")
                 labels.foreach(l => sb.append(s"<td>${escapeHtml(l)}</td>"))
                 sb.append(s"<td>$count</td><td>$mem</td><td>$cpu</td>")
+                feeLovelace(prices, mem, cpu).foreach(f => sb.append(s"<td>$f</td>"))
                 sb.append(s"<td><span class='bar' style='width:${barW}px'></span> $pct%</td>")
                 sb.append("</tr>\n")
             }
@@ -551,7 +650,12 @@ object ProfileFormatter {
                     if cpu == 0 then ""
                     else
                         s" style='background:rgba(220,40,40,${0.08 + 0.5 * (cpu.toDouble / maxCpu)})'"
-                val gut = if cpu == 0 then "" else s"$cpu cpu / $mem mem / $cnt×"
+                val gut =
+                    if cpu == 0 then ""
+                    else
+                        val feeStr =
+                            feeLovelace(data.prices, mem, cpu).map(f => s" / $f lov").getOrElse("")
+                        s"$cpu cpu / $mem mem / $cnt×$feeStr"
                 // Anchor profiled lines so the By Source Location tab can jump straight here.
                 val anchor = if e.isDefined then s" id=\"${locAnchor(file, ln)}\"" else ""
                 sb.append(
@@ -627,9 +731,12 @@ object ProfileFormatter {
         detail: String,
         count: Long,
         mem: Long,
-        cpu: Long
+        cpu: Long,
+        fee: Option[Long]
     ): String =
-        s"${csvEscape(section)},${csvEscape(key)},${csvEscape(detail)},$count,$mem,$cpu\n"
+        s"${csvEscape(section)},${csvEscape(key)},${csvEscape(detail)},$count,$mem,$cpu${fee
+                .map(f => s",$f")
+                .getOrElse("")}\n"
 
     private def csvEscape(s: String): String =
         if s.exists(c => c == ',' || c == '"' || c == '\n' || c == '\r') then
@@ -702,6 +809,7 @@ thead th:hover { background: #e0e8f0; }
 tbody tr:hover { background: #e8f4fd; }
 .bar { display: inline-block; height: 10px; background: #4a90d9; vertical-align: middle; }
 .summary { font-size: 1.1em; margin: 10px 0; }
+.subtitle { font-size: 1.25em; font-weight: 600; color: #2a5b8c; margin: -6px 0 8px; }
 table.matrix td { min-width: 22px; text-align: center; }
 table.matrix th.rowhdr { text-align: left; font-weight: normal; }
 ol.legend { color: #555; font-size: 0.9em; }

@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval}
 
 class ProfileFormatterTest extends AnyFunSuite {
 
@@ -62,6 +62,32 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(json.contains("\"fromLine\":3"))
     }
 
+    test("a derived fee column/field appears across formats when prices are attached") {
+        // mainnet-like prices: 0.0577 / mem unit, 0.0000721 / cpu step.
+        // fee = ceil(0.0577*mem + 0.0000721*cpu): Foo:3 (100,200) -> 6, total (150,260) -> 9.
+        val priced = data.withPrices(
+          ExUnitPrices(NonNegativeInterval(577, 10000), NonNegativeInterval(721, 10000000))
+        )
+
+        // JSON: per-entry and total fee in lovelace (the shape LLMs consume); absent without prices
+        val json = ProfileFormatter.toJson(priced)
+        assert(json.contains("\"cpu\":200,\"fee\":6"))
+        assert(json.contains("\"fee\":9")) // total
+        assert(!ProfileFormatter.toJson(data).contains("\"fee\""))
+
+        // CSV: trailing fee column only when priced
+        val csv = ProfileFormatter.toCsv(priced)
+        assert(csv.startsWith("section,key,detail,count,mem,cpu,fee\n"))
+        assert(csv.contains("total,,,0,150,260,9"))
+        assert(ProfileFormatter.toCsv(data).startsWith("section,key,detail,count,mem,cpu\n"))
+
+        // HTML: a Fee column and a total fee; neither present without prices
+        val html = ProfileFormatter.toHtml(priced)
+        assert(html.contains("<th>Fee (lov)</th>"))
+        assert(html.contains("fee=9 lovelace"))
+        assert(!ProfileFormatter.toHtml(data).contains("Fee (lov)"))
+    }
+
     test("toHtml is self-contained and includes all views") {
         val html = ProfileFormatter.toHtml(data)
         assert(html.startsWith("<!DOCTYPE html>"))
@@ -78,6 +104,18 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(html.contains("class=\"tab-btn"))
         assert(html.contains("class=\"tab-panel\""))
         assert(html.contains("scalusTab"))
+    }
+
+    test("toHtml shows the profiled contract/test-case title in the head and on top") {
+        // default: generic head title, no subtitle
+        val plain = ProfileFormatter.toHtml(data)
+        assert(plain.contains("<title>Scalus Profile</title>"))
+        assert(!plain.contains("class=\"subtitle\""))
+
+        // with a label: it appears in the <head> title and as a subtitle on top, HTML-escaped
+        val titled = ProfileFormatter.toHtml(data, sources, title = "Foo<Validator> & spend")
+        assert(titled.contains("<title>Scalus Profile — Foo&lt;Validator&gt; &amp; spend</title>"))
+        assert(titled.contains("<p class=\"subtitle\">Foo&lt;Validator&gt; &amp; spend</p>"))
     }
 
     test("By Source Location rows expand into a recursive incoming-call tree") {
