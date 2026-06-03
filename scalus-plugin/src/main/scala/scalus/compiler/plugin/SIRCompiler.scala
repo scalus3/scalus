@@ -912,7 +912,7 @@ final class SIRCompiler(
         }
         val constrType = typer.constructorResultType(constrSymbol)
         val optBaseClass = constrSymbol.info.baseClasses.find { b =>
-            b.flags.is(Flags.Sealed) && b.children.contains(constrSymbol)
+            b.flags.is(Flags.Sealed) && b.children.contains(constrSymbol) && !typer.isTupleClass(b)
         }
         val baseTypeArgs = optBaseClass
             .flatMap { bs =>
