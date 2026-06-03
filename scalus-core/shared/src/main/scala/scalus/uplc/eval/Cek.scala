@@ -952,6 +952,12 @@ class CekMachine(
         private val callEdges = HashMap[(String, Int, String, Int), Long]()
         private var prevFile: String = ""
         private var prevLine: Int = 0
+        // The first distinct located steps in execution order. The hot-path tree roots at the first
+        // of these that belongs to a contract file (the formatter knows which); the literal first
+        // step is often a framework/annotation-fallback location, not the contract's own entry.
+        private val entryTrace = ArrayBuffer[(String, Int)]()
+        private val entrySeen = scala.collection.mutable.HashSet[(String, Int)]()
+        private val entryTraceCap = 64
         // A call has begun; its edge is completed at the first *located* step inside the body (so it
         // survives the empty source positions that optimized UPLC leaves on Apply/LamAbs nodes).
         private var callPending: Boolean = false
@@ -978,6 +984,7 @@ class CekMachine(
                 val file = pos.file
                 val line = pos.startLine + 1
                 val key = (file, line)
+                if entryTrace.size < entryTraceCap && entrySeen.add(key) then entryTrace += key
                 val arr = byLocation.getOrElseUpdate(key, new Array[Long](3))
                 arr(0) += mem
                 arr(1) += steps
@@ -1066,7 +1073,8 @@ class CekMachine(
               functions,
               builtinsByLocation,
               transitionSeq,
-              wrapped.getSpentBudget
+              wrapped.getSpentBudget,
+              entryTrace = entryTrace.toSeq
             )
         }
     }

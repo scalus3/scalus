@@ -483,6 +483,10 @@ object ProfileFormatter {
           appendSourceLocationTable(_, data, totalCpu, sources.keySet, incl)
         )
 
+        renderHotPaths(data, sources.keySet).foreach(html =>
+            sections += (("hotpaths", "Hot Paths", html))
+        )
+
         renderAnnotatedSource(data, sources).foreach(html =>
             sections += (("annotated", "Annotated Source", html))
         )
@@ -837,6 +841,83 @@ object ProfileFormatter {
             sb.append(s"<p>… and ${data.transitions.size - htmlRowCap} more edges</p>\n")
     }
 
+    /** "Hot Paths": where the budget flows from the program entry, as a bounded tree of the
+      * heaviest call edges. Grown best-first (heaviest edge first) from `data.entry` up to a node
+      * cap, so it branches — showing the several hot paths, not a single spine. Each node is
+      * reached via its heaviest incoming edge (cycles add a node once), and each edge is labelled
+      * with the cost it carries (the [[edgeCosts]] estimate, fee when priced). Anchoring at the
+      * real entry keeps the contract's own code at the root; descending by per-edge cost sidesteps
+      * the share-dilution that makes a node's *total* inclusive cost a poor guide here.
+      */
+    private def renderHotPaths(data: ProfilingData, contractFiles: Set[String]): Option[String] = {
+        // Root at the first executed location that belongs to a contract file (so the contract's own
+        // entry is the root, not the framework/annotation-fallback step that happens to run first);
+        // fall back to the literal first step when no contract files are known.
+        val entry = data.entryTrace
+            .find(n => contractFiles.contains(n._1))
+            .orElse(data.entryTrace.headOption)
+            .getOrElse(return None)
+        val unit = if data.prices.isDefined then "lov" else "cpu"
+        val adj = scala.collection.mutable.HashMap[
+          (String, Int),
+          scala.collection.mutable.ArrayBuffer[((String, Int), Long)]
+        ]()
+        edgeCosts(data).foreach { case (t, mem, cpu) =>
+            val c = feeLovelace(data.prices, mem, cpu).getOrElse(cpu)
+            if c > 0 then
+                adj.getOrElseUpdate(
+                  (t.fromFile, t.fromLine),
+                  scala.collection.mutable.ArrayBuffer()
+                )
+                    += (((t.toFile, t.toLine), c))
+        }
+        if !adj.contains(entry) then return None
+        val selfOf = data.bySourceLocation
+            .map(e =>
+                (e.file, e.line) -> feeLovelace(data.prices, e.memory, e.cpu).getOrElse(e.cpu)
+            )
+            .toMap
+
+        val maxNodes = 40
+        val inTree = scala.collection.mutable.HashSet[(String, Int)](entry)
+        val children =
+            scala.collection.mutable.HashMap[
+              (String, Int),
+              scala.collection.mutable.ArrayBuffer[((String, Int), Long)]
+            ]()
+        // Best-first: always grow the heaviest pending edge whose source is already in the tree.
+        val pq = scala.collection.mutable.PriorityQueue
+            .empty[(Long, (String, Int), (String, Int))](Ordering.by(_._1))
+        adj(entry).foreach { case (to, c) => pq.enqueue((c, entry, to)) }
+        while inTree.size < maxNodes && pq.nonEmpty do
+            val (c, from, to) = pq.dequeue()
+            if !inTree.contains(to) then
+                inTree += to
+                children.getOrElseUpdate(from, scala.collection.mutable.ArrayBuffer()) += ((to, c))
+                adj.getOrElse(to, Nil).foreach { case (t2, c2) =>
+                    if !inTree.contains(t2) then pq.enqueue((c2, to, t2))
+                }
+
+        val sb = new StringBuilder
+        sb.append(
+          s"<p>Where the budget flows from the program entry: the heaviest call edges (cost in $unit carried by each call), branching to show the top paths.</p>\n"
+        )
+        def renderNode(node: (String, Int), carried: String): Unit = {
+            val loc = escapeHtml(s"${shortFile(node._1)}:${node._2}")
+            sb.append(s"<li><span class='loc'>$loc</span> <span class='c'>$carried</span>")
+            children.get(node).foreach { cs =>
+                sb.append("<ul>")
+                cs.sortBy(-_._2).foreach((ch, c) => renderNode(ch, s"· $c $unit"))
+                sb.append("</ul>")
+            }
+            sb.append("</li>\n")
+        }
+        sb.append("<ul class='hottree'>\n")
+        renderNode(entry, s"(entry, self ${selfOf.getOrElse(entry, 0L)} $unit)")
+        sb.append("</ul>\n")
+        Some(sb.toString)
+    }
+
     private def csvRow(
         section: String,
         key: String,
@@ -922,6 +1003,11 @@ tbody tr:hover { background: #e8f4fd; }
 .bar { display: inline-block; height: 10px; background: #4a90d9; vertical-align: middle; }
 .summary { font-size: 1.1em; margin: 10px 0; }
 .subtitle { font-size: 1.25em; font-weight: 600; color: #2a5b8c; margin: -6px 0 8px; }
+.hottree, .hottree ul { list-style: none; padding-left: 0; }
+.hottree ul { margin-left: 12px; border-left: 1px solid #ddd; padding-left: 10px; }
+.hottree li { margin: 2px 0; }
+.hottree .loc { font-weight: 600; }
+.hottree .c { color: #b5651d; margin-left: 6px; }
 table.src { border: none; width: 100%; }
 table.src td { border: none; padding: 0 8px; }
 table.src td.ln { color: #999; text-align: right; user-select: none; }

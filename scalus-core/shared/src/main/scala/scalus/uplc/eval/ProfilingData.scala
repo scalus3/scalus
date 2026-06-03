@@ -55,6 +55,9 @@ case class SourceTransition(
   *   Optional execution-unit prices. When set, the formatters derive a per-entry on-chain fee (in
   *   lovelace) from each entry's `(mem, cpu)` and render a `fee` column/field alongside count, mem
   *   and cpu. Set it with [[withPrices]] before formatting.
+  * @param entryTrace
+  *   The first distinct source locations executed, in order. Used to root the hot-path tree at the
+  *   first contract location (the literal first step is often a framework/fallback location).
   */
 case class ProfilingData(
     bySourceLocation: Seq[SourceLocationProfile],
@@ -62,7 +65,8 @@ case class ProfilingData(
     byLocationFunction: Seq[LocationFunctionProfile],
     transitions: Seq[SourceTransition],
     totalBudget: ExUnits,
-    prices: Option[ExUnitPrices] = None
+    prices: Option[ExUnitPrices] = None,
+    entryTrace: Seq[(String, Int)] = Nil
 ) {
 
     /** Attach execution-unit prices so the formatters emit a derived per-entry fee (lovelace). */

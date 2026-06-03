@@ -37,6 +37,45 @@ class ProfileFormatterTest extends AnyFunSuite {
       totalBudget = ExUnits(memory = 7, steps = 130)
     )
 
+    // Entry E(1) calls B(2, cheap) and C(3, expensive); C calls D(4). Exercises the Hot Paths tree:
+    // it must root at E and branch (E→C→D and E→B).
+    private val branch = ProfilingData(
+      bySourceLocation = Seq(
+        SourceLocationProfile("T.scala", 1, memory = 1, cpu = 10, count = 1),
+        SourceLocationProfile("T.scala", 2, memory = 1, cpu = 30, count = 1),
+        SourceLocationProfile("T.scala", 3, memory = 1, cpu = 50, count = 1),
+        SourceLocationProfile("T.scala", 4, memory = 1, cpu = 70, count = 1)
+      ),
+      byFunction = Nil,
+      byLocationFunction = Nil,
+      transitions = Seq(
+        SourceTransition("T.scala", 1, "T.scala", 2, count = 1),
+        SourceTransition("T.scala", 1, "T.scala", 3, count = 1),
+        SourceTransition("T.scala", 3, "T.scala", 4, count = 1)
+      ),
+      totalBudget = ExUnits(memory = 4, steps = 160),
+      entryTrace = Seq(("T.scala", 1))
+    )
+
+    // Like `branch` but the entry trace starts in a framework file that calls the contract entry.
+    private val fwBranch = ProfilingData(
+      bySourceLocation = Seq(
+        SourceLocationProfile("Framework.scala", 9, memory = 1, cpu = 5, count = 1),
+        SourceLocationProfile("T.scala", 1, memory = 1, cpu = 10, count = 1),
+        SourceLocationProfile("T.scala", 2, memory = 1, cpu = 30, count = 1),
+        SourceLocationProfile("T.scala", 3, memory = 1, cpu = 50, count = 1)
+      ),
+      byFunction = Nil,
+      byLocationFunction = Nil,
+      transitions = Seq(
+        SourceTransition("Framework.scala", 9, "T.scala", 1, count = 1),
+        SourceTransition("T.scala", 1, "T.scala", 2, count = 1),
+        SourceTransition("T.scala", 1, "T.scala", 3, count = 1)
+      ),
+      totalBudget = ExUnits(memory = 4, steps = 95),
+      entryTrace = Seq(("Framework.scala", 9), ("T.scala", 1))
+    )
+
     private val sources = Map(
       "Foo.scala" -> IndexedSeq(
         "object Foo {",
@@ -168,6 +207,30 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(html.contains("<th>Inclusive (cpu)</th>"))
         assert(html.contains("<td>130</td>")) // A: inclusive = whole chain
         assert(html.contains("<td>120</td>")) // B: self 20 + C's 100
+    }
+
+    test("Hot Paths tree roots at the entry and branches by edge cost") {
+        val html = ProfileFormatter.toHtml(branch)
+        assert(html.contains("Hot Paths"))
+        assert(html.contains("class='hottree'"))
+        // entry T:1 is the root; edges carry the callee's self cost: E→C 50, E→B 30, C→D 70
+        assert(html.contains(">T:1</span> <span class='c'>(entry"))
+        assert(html.contains(">T:3</span> <span class='c'>· 50 cpu")) // E→C (heavier branch first)
+        assert(html.contains(">T:2</span> <span class='c'>· 30 cpu")) // E→B (the other branch)
+        assert(html.contains(">T:4</span> <span class='c'>· 70 cpu")) // C→D, nested under C
+        // no entry recorded → no Hot Paths tab
+        assert(!ProfileFormatter.toHtml(chain).contains("Hot Paths"))
+    }
+
+    test("Hot Paths roots at the first contract-file location, not the framework entry") {
+        // With contract sources known, the tree roots at the contract entry (T:1), skipping the
+        // framework step that ran first.
+        val rooted = ProfileFormatter.toHtml(fwBranch, Map("T.scala" -> IndexedSeq("a", "b", "c")))
+        assert(rooted.contains(">T:1</span> <span class='c'>(entry"))
+        // Without contract info, the root is the literal first step — the framework location.
+        assert(
+          ProfileFormatter.toHtml(fwBranch).contains(">Framework:9</span> <span class='c'>(entry")
+        )
     }
 
     test("inclusive cost does not diverge on cycles (SCC collapse)") {
