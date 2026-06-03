@@ -27,6 +27,107 @@ object ProfileFormatter {
         }
     }
 
+    /** Inclusive (cumulative) cost per source location over the call graph (`data.transitions` =
+      * caller→callee call edges): a node's self-cost plus the cost of everything it calls, with
+      * each callee's inclusive cost shared back to its callers by call frequency. Returns one
+      * `(mem, cpu)` per location.
+      *
+      * The call graph can still contain cycles (recursion, higher-order calls), on which the naive
+      * recurrence diverges, so strongly-connected components are collapsed with Tarjan's algorithm
+      * and the inclusive cost is accumulated over the resulting DAG (Tarjan emits SCCs in
+      * reverse-topological order, so each component's successors are already done when it is
+      * processed). Every node in a recursive nest shares the nest's total; roots sum to the budget.
+      */
+    private def inclusiveCosts(data: ProfilingData): Map[(String, Int), (Long, Long)] = {
+        val nodes: Array[(String, Int)] =
+            (data.bySourceLocation.map(e => (e.file, e.line)) ++
+                data.transitions.flatMap(t =>
+                    Seq((t.fromFile, t.fromLine), (t.toFile, t.toLine))
+                )).distinct.toArray
+        val n = nodes.length
+        if n == 0 then return Map.empty
+        val nodeIdx = nodes.zipWithIndex.toMap
+        val selfMem = new Array[Long](n)
+        val selfCpu = new Array[Long](n)
+        data.bySourceLocation.foreach { e =>
+            val i = nodeIdx((e.file, e.line)); selfMem(i) = e.memory; selfCpu(i) = e.cpu
+        }
+        val succ = Array.fill(n)(scala.collection.mutable.ArrayBuffer[Int]())
+        data.transitions.foreach { t =>
+            val u = nodeIdx((t.fromFile, t.fromLine)); val v = nodeIdx((t.toFile, t.toLine))
+            if u != v then succ(u) += v
+        }
+        val succA = succ.map(_.distinct.toArray)
+
+        // Iterative Tarjan SCC (explicit stacks so deep graphs don't blow the JVM stack).
+        val index = Array.fill(n)(-1)
+        val low = new Array[Int](n)
+        val onStack = new Array[Boolean](n)
+        val tStack = scala.collection.mutable.ArrayBuffer[Int]()
+        val sccId = Array.fill(n)(-1)
+        val sccOrder = scala.collection.mutable.ArrayBuffer[Int]() // emission order = reverse topo
+        var counter = 0
+        var sccCount = 0
+        val work = scala.collection.mutable.ArrayBuffer[(Int, Int)]() // (node, next succ index)
+        var start = 0
+        while start < n do
+            if index(start) == -1 then
+                work += ((start, 0))
+                while work.nonEmpty do
+                    val (v, pi) = work.last
+                    if pi == 0 then
+                        index(v) = counter; low(v) = counter; counter += 1
+                        tStack += v; onStack(v) = true
+                    if pi < succA(v).length then
+                        work(work.length - 1) = (v, pi + 1)
+                        val w = succA(v)(pi)
+                        if index(w) == -1 then work += ((w, 0))
+                        else if onStack(w) then low(v) = math.min(low(v), index(w))
+                    else
+                        if low(v) == index(v) then
+                            var done = false
+                            while !done do
+                                val w = tStack.remove(tStack.length - 1)
+                                onStack(w) = false; sccId(w) = sccCount
+                                if w == v then done = true
+                            sccOrder += sccCount; sccCount += 1
+                        work.remove(work.length - 1)
+                        if work.nonEmpty then
+                            val parent = work.last._1
+                            low(parent) = math.min(low(parent), low(v))
+            start += 1
+
+        // Condensation: aggregate cross-SCC edge counts, external in-degree, per-SCC self cost.
+        val condCount = scala.collection.mutable.HashMap[(Int, Int), Long]()
+        data.transitions.foreach { t =>
+            val u = sccId(nodeIdx((t.fromFile, t.fromLine)))
+            val v = sccId(nodeIdx((t.toFile, t.toLine)))
+            if u != v then condCount((u, v)) = condCount.getOrElse((u, v), 0L) + t.count
+        }
+        val inDegExt = new Array[Long](sccCount)
+        val outEdges = Array.fill(sccCount)(scala.collection.mutable.ArrayBuffer[(Int, Long)]())
+        condCount.foreach { case ((u, v), c) => inDegExt(v) += c; outEdges(u) += ((v, c)) }
+        val sccMem = new Array[Long](sccCount)
+        val sccCpu = new Array[Long](sccCount)
+        var i = 0
+        while i < n do
+            sccMem(sccId(i)) += selfMem(i); sccCpu(sccId(i)) += selfCpu(i); i += 1
+
+        // Accumulate inclusive cost over the DAG in reverse-topological (emission) order.
+        val incMem = new Array[Long](sccCount)
+        val incCpu = new Array[Long](sccCount)
+        sccOrder.foreach { u =>
+            var m = sccMem(u); var c = sccCpu(u)
+            outEdges(u).foreach { case (v, cnt) =>
+                val d = inDegExt(v)
+                if d > 0 then { m += incMem(v) * cnt / d; c += incCpu(v) * cnt / d }
+            }
+            incMem(u) = m; incCpu(u) = c
+        }
+
+        nodes.indices.map(j => nodes(j) -> (incMem(sccId(j)), incCpu(sccId(j)))).toMap
+    }
+
     /** `lovelace` rendered as ADA with 6 decimals, using integer math so the output is independent
       * of the platform default locale (1 ADA = 1_000_000 lovelace).
       */
@@ -376,8 +477,10 @@ object ProfileFormatter {
             sections += ((id, title, b.toString))
         }
 
+        val incl = inclusiveCosts(data)
+
         section("src", "By Source Location")(
-          appendSourceLocationTable(_, data, totalCpu, sources.keySet)
+          appendSourceLocationTable(_, data, totalCpu, sources.keySet, incl)
         )
 
         renderAnnotatedSource(data, sources).foreach(html =>
@@ -518,7 +621,8 @@ object ProfileFormatter {
         sb: StringBuilder,
         data: ProfilingData,
         totalCpu: Long,
-        annotatedFiles: Set[String]
+        annotatedFiles: Set[String],
+        inclusive: Map[(String, Int), (Long, Long)]
     ): Unit = {
         val rows = data.bySourceLocation
         if rows.isEmpty then sb.append("<p>(none recorded)</p>\n")
@@ -587,9 +691,10 @@ object ProfileFormatter {
             val feeHeader = if data.prices.isDefined then "<th>Fee (lov)</th>" else ""
             val unit = if data.prices.isDefined then "lov" else "cpu"
             val hasEdges = data.transitions.nonEmpty
+            val inclHeader = if hasEdges then s"<th>Inclusive ($unit)</th>" else ""
             val dsHeader = if hasEdges then s"<th>Downstream ($unit)</th>" else ""
             sb.append(
-              s"<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th>$feeHeader$dsHeader<th>%cpu</th></tr></thead><tbody>\n"
+              s"<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th>$feeHeader$inclHeader$dsHeader<th>%cpu</th></tr></thead><tbody>\n"
             )
             rows.take(htmlRowCap).foreach { e =>
                 val loc = s"${shortFile(e.file)}:${e.line}"
@@ -614,11 +719,16 @@ object ProfileFormatter {
                 val barW = (e.cpu * 120 / maxCpu).toInt
                 val feeCell =
                     feeLovelace(data.prices, e.memory, e.cpu).map(f => s"<td>$f</td>").getOrElse("")
+                val inclCell =
+                    if !hasEdges then ""
+                    else
+                        val (im, ic) = inclusive.getOrElse((e.file, e.line), (0L, 0L))
+                        s"<td>${feeLovelace(data.prices, im, ic).getOrElse(ic)}</td>"
                 val dsCell =
                     if !hasEdges then ""
                     else s"<td>${downstreamByLoc.getOrElse((e.file, e.line), 0L)}</td>"
                 sb.append(
-                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>$feeCell$dsCell" +
+                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>$feeCell$inclCell$dsCell" +
                       s"<td><span class='bar' style='width:${barW}px'></span> $pct%</td></tr>\n"
                 )
             }
