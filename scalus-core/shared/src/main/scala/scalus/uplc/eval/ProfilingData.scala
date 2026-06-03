@@ -1,6 +1,6 @@
 package scalus.uplc.eval
 
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{ExUnitPrices, ExUnits}
 
 /** Profile entry for a single source location. */
 case class SourceLocationProfile(
@@ -51,11 +51,20 @@ case class SourceTransition(
   *   sorted by count descending
   * @param totalBudget
   *   Total budget spent during profiled execution
+  * @param prices
+  *   Optional execution-unit prices. When set, the formatters derive a per-entry on-chain fee (in
+  *   lovelace) from each entry's `(mem, cpu)` and render a `fee` column/field alongside count, mem
+  *   and cpu. Set it with [[withPrices]] before formatting.
   */
 case class ProfilingData(
     bySourceLocation: Seq[SourceLocationProfile],
     byFunction: Seq[FunctionProfile],
     byLocationFunction: Seq[LocationFunctionProfile],
     transitions: Seq[SourceTransition],
-    totalBudget: ExUnits
-)
+    totalBudget: ExUnits,
+    prices: Option[ExUnitPrices] = None
+) {
+
+    /** Attach execution-unit prices so the formatters emit a derived per-entry fee (lovelace). */
+    def withPrices(prices: ExUnitPrices): ProfilingData = copy(prices = Some(prices))
+}

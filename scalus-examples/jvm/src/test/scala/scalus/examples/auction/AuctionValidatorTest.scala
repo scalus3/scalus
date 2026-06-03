@@ -97,9 +97,12 @@ object AuctionValidatorTest extends ScalusTest {
     import scalus.cardano.node.BlockchainProvider
     import scalus.cardano.address.Network
 
-    // Set to true to emit an interactive HTML profile (target/auction-profile.html) when a
-    // validator runs. Off by default so the suite stays fast and side-effect free.
-    private val profilingEnabled = false
+    // Emit an interactive HTML profile (target/auction-profile.html) when a validator runs.
+    // Off by default so the suite stays fast and side-effect free; enable with env
+    // `SCALUS_PROFILE=1` (env so it reaches the forked test JVM) or `-Dscalus.profile=true`.
+    private val profilingEnabled =
+        sys.env.get("SCALUS_PROFILE").contains("1") ||
+            sys.props.get("scalus.profile").contains("true")
 
     // Party to role mapping
     private val sellerParty = Alice
@@ -412,7 +415,14 @@ object AuctionValidatorTest extends ScalusTest {
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, auction, tx, auctionUtxo.input, utxosBeforeBid).budget
+            runValidatorWithUtxos(
+              provider,
+              auction,
+              tx,
+              auctionUtxo.input,
+              utxosBeforeBid,
+              "First bid"
+            ).budget
 
         private def runOutbidWithBudget(
             provider: Emulator,
@@ -464,7 +474,8 @@ object AuctionValidatorTest extends ScalusTest {
               auction,
               tx,
               auctionUtxo.input,
-              allUtxosBeforeOutbid
+              allUtxosBeforeOutbid,
+              "Outbid with refund"
             ).budget
 
         private def runEndWithWinnerWithBudget(
@@ -516,7 +527,8 @@ object AuctionValidatorTest extends ScalusTest {
               auction,
               tx,
               auctionUtxo.input,
-              allUtxosBeforeEnd
+              allUtxosBeforeEnd,
+              "End auction with winner"
             ).budget
 
         private def runEndNoBidsWithBudget(
@@ -554,7 +566,14 @@ object AuctionValidatorTest extends ScalusTest {
                 )
                 .await()
 
-            runValidatorWithUtxos(provider, auction, tx, auctionUtxo.input, utxosBeforeEnd).budget
+            runValidatorWithUtxos(
+              provider,
+              auction,
+              tx,
+              auctionUtxo.input,
+              utxosBeforeEnd,
+              "End auction without bids"
+            ).budget
 
     /** Run validator with pre-captured UTxOs (for when the transaction has already been submitted)
       */
@@ -563,7 +582,8 @@ object AuctionValidatorTest extends ScalusTest {
         auction: AuctionInstance,
         tx: Transaction,
         scriptInput: TransactionInput,
-        knownUtxos: Map[TransactionInput, TransactionOutput]
+        knownUtxos: Map[TransactionInput, TransactionOutput],
+        label: String = ""
     ): Result =
         given CardanoInfo = provider.cardanoInfo
         // Merge known utxos with any remaining utxos from provider
@@ -591,13 +611,17 @@ object AuctionValidatorTest extends ScalusTest {
         // Set `profilingEnabled = true` to emit an interactive profile of this validator. The
         // `include` filter keeps only the example's own sources (skipping inlined framework code).
         if profilingEnabled then
-            program.runWithProfile(scriptContext).profile.foreach { p =>
+            program.runWithProfile(scriptContext).profile.foreach { rawProfile =>
+                // Attach prices so the report derives a per-entry on-chain fee (lovelace).
+                val p =
+                    rawProfile.withPrices(provider.cardanoInfo.protocolParams.executionUnitPrices)
                 println(ProfileFormatter.summary(p))
                 ProfileFormatter.writeHtml(
                   p,
                   "target/auction-profile.html",
                   include =
-                      f => !f.contains("/scalus-core/") && !f.contains("/scalus-cardano-ledger/")
+                      f => !f.contains("/scalus-core/") && !f.contains("/scalus-cardano-ledger/"),
+                  title = if label.isEmpty then "AuctionValidator" else s"AuctionValidator — $label"
                 )
                 println("Wrote profile to target/auction-profile.html")
             }
