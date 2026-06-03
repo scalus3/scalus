@@ -2,8 +2,8 @@ package scalus.uplc.transform
 
 import scalus.*
 import scalus.uplc.Term.*
-import scalus.uplc.transform.TermAnalysis.isPure
-import scalus.uplc.{NamedDeBruijn, Term}
+import scalus.uplc.transform.TermAnalysis.{freeVars, isPure}
+import scalus.uplc.Term
 import scalus.uplc.eval.{Log, Logger}
 
 /** Performs eta-reduction on a term.
@@ -42,7 +42,7 @@ class EtaReduce(logger: Logger = new Log()) extends Optimizer:
     /** Performs eta-reduction on a term. */
     private def etaReduce(term: Term): Term = term match
         case LamAbs(name1, Term.Apply(f, Term.Var(name2, _), _), ann)
-            if name1 == name2.name && !freeNames(f).contains(name1) && f.isPure =>
+            if name1 == name2.name && !f.freeVars.contains(name1) && f.isPure =>
             logger.log(s"Eta-reducing term: ${f.show}")
             etaReduce(f)
         case LamAbs(name, body, ann) =>
@@ -52,15 +52,6 @@ class EtaReduce(logger: Logger = new Log()) extends Optimizer:
         case Force(term, ann)   => Force(etaReduce(term), ann)
         case Delay(term, ann)   => Delay(etaReduce(term), ann)
         case _                  => term
-
-    /** Returns the set of free names in a term */
-    private def freeNames(term: Term): Set[String] = term match
-        case Var(NamedDeBruijn(name, _), _) => Set(name)
-        case LamAbs(name, body, _)          => freeNames(body) - name
-        case Apply(f, arg, _)               => freeNames(f) ++ freeNames(arg)
-        case Force(term, _)                 => freeNames(term)
-        case Delay(term, _)                 => freeNames(term)
-        case _                              => Set.empty
 
 object EtaReduce:
     def apply(term: Term): Term = new EtaReduce().apply(term)
