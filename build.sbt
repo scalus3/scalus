@@ -484,6 +484,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     .settings(
       name := "scalus-testkit",
       scalaVersion := scalaVersion.value,
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for Arbitrary[Certificate] = autoDerived
 
@@ -574,6 +575,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .enablePlugins(ScalusBlueprintPlugin)
     .settings(
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
@@ -636,6 +638,7 @@ lazy val scalusDesignPatterns = project
     .dependsOn(scalus.jvm, scalusTestkit.jvm)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
@@ -651,6 +654,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
     .in(file("bloxbean-cardano-client-lib"))
     .dependsOn(scalus.jvm, scalusCardanoLedger.jvm)
     .settings(
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       publish / skip := false,
       scalacOptions ++= commonScalacOptions,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
@@ -750,6 +754,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       name := "scalus-cardano-ledger",
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
       libraryDependencies ++= Seq(
@@ -850,6 +855,7 @@ lazy val scalusEthereumKzgCeremony = project
     .dependsOn(scalus.jvm)
     .disablePlugins(MimaPlugin)
     .settings(
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       name := "scalus-ethereum-kzg-ceremony",
       scalacOptions ++= commonScalacOptions,
       libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.14",
