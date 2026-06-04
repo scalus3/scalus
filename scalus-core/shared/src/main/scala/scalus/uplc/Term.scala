@@ -98,6 +98,142 @@ enum Term:
       */
     def withPosIfEmpty(pos: ScalusSourcePos): Term = withAnnotationIfEmpty(UplcAnnotation(pos))
 
+    /** Bottom-up pass: gives every position-less subterm the source position of its nearest
+      * positioned *descendant*, and returns that representative position for this subtree (its own
+      * if positioned, else the first positioned child, preferring the function/scrutinee side).
+      *
+      * This is the main filler for lowered code: source positions sit on the leaves (the `Var`/
+      * `Const`/`Builtin` a value references), while the `Apply`/`Case`/`Constr` spine that combines
+      * them is built position-less. A spine node here inherits the location of what it operates on
+      * — e.g. an application inherits the position of the function being applied — so its cost is
+      * attributed to that code rather than vanishing. Never overwrites an existing position.
+      */
+    def fillEmptyPosBottomUp: (Term, ScalusSourcePos) =
+        // Resolve each candidate's effective position first (a synthetic compile-boundary root
+        // becomes the real user call it was inlined from), then take the first real one — so
+        // provenance wins over the structural descendant/ancestor fallback.
+        def firstNonEmpty(ps: ScalusSourcePos*): ScalusSourcePos =
+            ps.iterator
+                .map(_.effectivePos)
+                .find(!_.isEffectivelyEmpty)
+                .getOrElse(ScalusSourcePos.empty)
+        def stamp(t: Term, rep: ScalusSourcePos): UplcAnnotation =
+            if t.annotation.isEffectivelyEmpty && !rep.isEffectivelyEmpty then UplcAnnotation(rep)
+            else t.annotation
+        this match
+            case t: Var     => (t, t.annotation.pos)
+            case t: Const   => (t, t.annotation.pos)
+            case t: Builtin => (t, t.annotation.pos)
+            case t: Error   => (t, t.annotation.pos)
+            case t: LamAbs =>
+                val (b, bp) = t.term.fillEmptyPosBottomUp
+                val rep = firstNonEmpty(t.annotation.pos, bp)
+                val ann = stamp(t, rep)
+                (
+                  if (b eq t.term) && (ann eq t.annotation) then t
+                  else t.copy(term = b, annotation = ann),
+                  rep
+                )
+            case t: Force =>
+                val (b, bp) = t.term.fillEmptyPosBottomUp
+                val rep = firstNonEmpty(t.annotation.pos, bp)
+                val ann = stamp(t, rep)
+                (
+                  if (b eq t.term) && (ann eq t.annotation) then t
+                  else t.copy(term = b, annotation = ann),
+                  rep
+                )
+            case t: Delay =>
+                val (b, bp) = t.term.fillEmptyPosBottomUp
+                val rep = firstNonEmpty(t.annotation.pos, bp)
+                val ann = stamp(t, rep)
+                (
+                  if (b eq t.term) && (ann eq t.annotation) then t
+                  else t.copy(term = b, annotation = ann),
+                  rep
+                )
+            case t: Apply =>
+                val (f, fp) = t.f.fillEmptyPosBottomUp
+                val (arg, ap) = t.arg.fillEmptyPosBottomUp
+                val rep = firstNonEmpty(t.annotation.pos, fp, ap)
+                val ann = stamp(t, rep)
+                (
+                  if (f eq t.f) && (arg eq t.arg) && (ann eq t.annotation) then t
+                  else t.copy(f = f, arg = arg, annotation = ann),
+                  rep
+                )
+            case t: Constr =>
+                val processed = t.args.map(_.fillEmptyPosBottomUp)
+                val rep = firstNonEmpty((t.annotation.pos +: processed.map(_._2))*)
+                val ann = stamp(t, rep)
+                val args = processed.map(_._1)
+                (
+                  if args.corresponds(t.args)(_ eq _) && (ann eq t.annotation) then t
+                  else t.copy(args = args, annotation = ann),
+                  rep
+                )
+            case t: Case =>
+                val (arg, ap) = t.arg.fillEmptyPosBottomUp
+                val processed = t.cases.map(_.fillEmptyPosBottomUp)
+                val rep = firstNonEmpty((t.annotation.pos +: ap +: processed.map(_._2))*)
+                val ann = stamp(t, rep)
+                val cases = processed.map(_._1)
+                (
+                  if (arg eq t.arg) && cases.corresponds(t.cases)(_ eq _) && (ann eq t.annotation)
+                  then t
+                  else t.copy(arg = arg, cases = cases, annotation = ann),
+                  rep
+                )
+
+    /** Top-down pass: stamps every position-less subterm with the source position of its nearest
+      * enclosing positioned ancestor (`inherited` at the root). Positioned subterms keep their own
+      * position and become the inherited position for their descendants.
+      *
+      * This completes [[fillEmptyPosBottomUp]]: per-value stamping during lowering can only place a
+      * position a lowered value actually knows, but many `Apply`/`Let` SIR nodes carry no position
+      * at all (the plugin doesn't stamp them), so the spines they build stay position-less. Here
+      * those nodes inherit the source location of the surrounding code — which is exactly what
+      * profiling and source traces should attribute their cost to.
+      */
+    def fillEmptyPosTopDown(inherited: ScalusSourcePos): Term =
+        val eff = if annotation.isEffectivelyEmpty then inherited else annotation.pos
+        val selfAnn =
+            if annotation.isEffectivelyEmpty && !inherited.isEffectivelyEmpty then
+                UplcAnnotation(inherited)
+            else annotation
+        this match
+            case t: Var     => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
+            case t: Const   => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
+            case t: Builtin => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
+            case t: Error   => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
+            case t: LamAbs =>
+                val b = t.term.fillEmptyPosTopDown(eff)
+                if (selfAnn eq t.annotation) && (b eq t.term) then t
+                else t.copy(term = b, annotation = selfAnn)
+            case t: Force =>
+                val b = t.term.fillEmptyPosTopDown(eff)
+                if (selfAnn eq t.annotation) && (b eq t.term) then t
+                else t.copy(term = b, annotation = selfAnn)
+            case t: Delay =>
+                val b = t.term.fillEmptyPosTopDown(eff)
+                if (selfAnn eq t.annotation) && (b eq t.term) then t
+                else t.copy(term = b, annotation = selfAnn)
+            case t: Apply =>
+                val f = t.f.fillEmptyPosTopDown(eff)
+                val arg = t.arg.fillEmptyPosTopDown(eff)
+                if (selfAnn eq t.annotation) && (f eq t.f) && (arg eq t.arg) then t
+                else t.copy(f = f, arg = arg, annotation = selfAnn)
+            case t: Constr =>
+                val args = t.args.map(_.fillEmptyPosTopDown(eff))
+                if (selfAnn eq t.annotation) && args.corresponds(t.args)(_ eq _) then t
+                else t.copy(args = args, annotation = selfAnn)
+            case t: Case =>
+                val arg = t.arg.fillEmptyPosTopDown(eff)
+                val cases = t.cases.map(_.fillEmptyPosTopDown(eff))
+                if (selfAnn eq t.annotation) && (arg eq t.arg) && cases.corresponds(t.cases)(_ eq _)
+                then t
+                else t.copy(arg = arg, cases = cases, annotation = selfAnn)
+
     /** Applies the argument to the term. */
     infix def $(rhs: Term): Term = Term.Apply(this, rhs)
 

@@ -201,11 +201,11 @@ def compiledModules(moduleNames: String*): Map[String, Module] =
   * }}}
   */
 inline def compileInline(inline code: Any): SIR = ${
-    Macros.generateCompileCall('code)
+    CompiledProgramRoot.generateCompileCall('code)
 }
 
 inline def compileInlineWithOptions(inline options: Options, inline code: Any): SIR = ${
-    Macros.generateCompileCall('options, 'code)
+    CompiledProgramRoot.generateCompileCall('options, 'code)
 }
 
 private def throwCompilerPluginMissingException(): Nothing =

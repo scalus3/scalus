@@ -563,29 +563,7 @@ object Macros {
         }
     }
 
-    /** Compile the provided quoted AST into a SIR using the project's Compiler.
-      *
-      * @param code
-      *   quoted code/term to be compiled
-      * @return
-      *   quoted SIR representation
-      */
-    def generateCompileCall(code: Expr[Any])(using Quotes): Expr[SIR] = '{
-        scalus.compiler.compile($code)
-    }
-
-    /** Compile the provided quoted AST into a SIR using Compiler with options.
-      *
-      * @param options
-      *   quoted scalus.compiler.Options
-      * @param code
-      *   quoted code/term to be compiled
-      * @return
-      *   quoted SIR representation
-      */
-    def generateCompileCall(options: Expr[scalus.compiler.Options], code: Expr[Any])(using
-        Quotes
-    ): Expr[SIR] = '{
-        scalus.compiler.compileWithOptions($options, $code)
-    }
+    // The `compile` / `compileWithOptions` macro emitters moved to
+    // scalus.compiler.CompiledProgramRoot so the program-root source position they leak has a
+    // stable, self-documenting name (see that file's header).
 }

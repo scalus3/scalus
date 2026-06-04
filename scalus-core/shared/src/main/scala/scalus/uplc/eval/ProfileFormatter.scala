@@ -27,7 +27,14 @@ object ProfileFormatter {
         }
     }
 
-    /** Inclusive (cumulative) cost per source location over the call graph (`data.transitions` =
+    /** NOTE: currently unwired — the Inclusive column was removed from the report because the
+      * context-insensitive recurrence below degenerates on real UPLC (share-dilution collapses
+      * entry/gateway nodes to their self-cost, and the synthetic compile-boundary root
+      * ([[scalus.compiler.CompiledProgramRoot]]) plus any annotation-fallback hub fuse unrelated
+      * locations into one SCC that all report the cycle's lump sum). Kept for reference while a
+      * per-frame (Callgrind-style) replacement is considered.
+      *
+      * Inclusive (cumulative) cost per source location over the call graph (`data.transitions` =
       * caller→callee call edges): a node's self-cost plus the cost of everything it calls, with
       * each callee's inclusive cost shared back to its callers by call frequency. Returns one
       * `(mem, cpu)` per location.
@@ -477,10 +484,8 @@ object ProfileFormatter {
             sections += ((id, title, b.toString))
         }
 
-        val incl = inclusiveCosts(data)
-
         section("src", "By Source Location")(
-          appendSourceLocationTable(_, data, totalCpu, sources.keySet, incl)
+          appendSourceLocationTable(_, data, totalCpu, sources.keySet)
         )
 
         renderHotPaths(data, sources.keySet).foreach(html =>
@@ -625,8 +630,7 @@ object ProfileFormatter {
         sb: StringBuilder,
         data: ProfilingData,
         totalCpu: Long,
-        annotatedFiles: Set[String],
-        inclusive: Map[(String, Int), (Long, Long)]
+        annotatedFiles: Set[String]
     ): Unit = {
         val rows = data.bySourceLocation
         if rows.isEmpty then sb.append("<p>(none recorded)</p>\n")
@@ -695,10 +699,9 @@ object ProfileFormatter {
             val feeHeader = if data.prices.isDefined then "<th>Fee (lov)</th>" else ""
             val unit = if data.prices.isDefined then "lov" else "cpu"
             val hasEdges = data.transitions.nonEmpty
-            val inclHeader = if hasEdges then s"<th>Inclusive ($unit)</th>" else ""
             val dsHeader = if hasEdges then s"<th>Downstream ($unit)</th>" else ""
             sb.append(
-              s"<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th>$feeHeader$inclHeader$dsHeader<th>%cpu</th></tr></thead><tbody>\n"
+              s"<table class=\"sortable\"><thead><tr><th>Location</th><th>Count</th><th>Memory</th><th>CPU</th>$feeHeader$dsHeader<th>%cpu</th></tr></thead><tbody>\n"
             )
             rows.take(htmlRowCap).foreach { e =>
                 val loc = s"${shortFile(e.file)}:${e.line}"
@@ -723,16 +726,11 @@ object ProfileFormatter {
                 val barW = (e.cpu * 120 / maxCpu).toInt
                 val feeCell =
                     feeLovelace(data.prices, e.memory, e.cpu).map(f => s"<td>$f</td>").getOrElse("")
-                val inclCell =
-                    if !hasEdges then ""
-                    else
-                        val (im, ic) = inclusive.getOrElse((e.file, e.line), (0L, 0L))
-                        s"<td>${feeLovelace(data.prices, im, ic).getOrElse(ic)}</td>"
                 val dsCell =
                     if !hasEdges then ""
                     else s"<td>${downstreamByLoc.getOrElse((e.file, e.line), 0L)}</td>"
                 sb.append(
-                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>$feeCell$inclCell$dsCell" +
+                  s"<tr><td>$locCell</td><td>${e.count}</td><td>${e.memory}</td><td>${e.cpu}</td>$feeCell$dsCell" +
                       s"<td><span class='bar' style='width:${barW}px'></span> $pct%</td></tr>\n"
                 )
             }
