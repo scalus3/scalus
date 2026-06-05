@@ -851,10 +851,11 @@ object ProfileFormatter {
         // Root at the first executed location that belongs to a contract file (so the contract's own
         // entry is the root, not the framework/annotation-fallback step that happens to run first);
         // fall back to the literal first step when no contract files are known.
-        val entry = data.entryTrace
+        val entryOpt = data.entryTrace
             .find(n => contractFiles.contains(n._1))
             .orElse(data.entryTrace.headOption)
-            .getOrElse(return None)
+        if entryOpt.isEmpty then return None
+        val entry = entryOpt.get
         val unit = if data.prices.isDefined then "lov" else "cpu"
         val adj = scala.collection.mutable.HashMap[
           (String, Int),
