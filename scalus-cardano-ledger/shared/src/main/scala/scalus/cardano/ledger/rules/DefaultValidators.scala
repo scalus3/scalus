@@ -46,6 +46,7 @@ object DefaultMutators {
     val all: Set[STS.Mutator] = SortedSet[STS.Mutator](
       PlutusScriptsTransactionMutator,
       StakeCertificatesMutator,
-      StakePoolCertificatesMutator
+      StakePoolCertificatesMutator,
+      VotingCertificatesMutator
     )(using Ordering.by(_.name))
 }

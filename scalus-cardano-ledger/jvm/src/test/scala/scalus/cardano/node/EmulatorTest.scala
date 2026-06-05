@@ -299,6 +299,59 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         assert(emulator.certState.pstate.futureStakePoolParams.contains(poolId))
     }
 
+    test("Emulator applies DRep registration, update and deregistration certificates") {
+        val params = CardanoInfo.mainnet.protocolParams
+        val emulator = Emulator(
+          validators = Set.empty,
+          mutators = Emulator.defaultMutators
+        )
+
+        val drepCred = Credential.KeyHash(AddrKeyHash.fromHex("d" * 56))
+        val deposit = Coin(params.dRepDeposit)
+        val anchor = Anchor(
+          url = "https://example.com/drep.json",
+          dataHash = DataHash.fromHex("1" * 64)
+        )
+
+        // Deregistration before registration is rejected
+        val premature = emulator.submitSync(certTx(Certificate.UnregDRepCert(drepCred, deposit)))
+        assert(premature.isLeft, "Deregistration of unregistered DRep should fail")
+
+        // Registration with a wrong deposit is rejected
+        val wrongDeposit = emulator.submitSync(
+          certTx(Certificate.RegDRepCert(drepCred, deposit + Coin.ada(1), None))
+        )
+        assert(wrongDeposit.isLeft, "Registration with wrong deposit should fail")
+
+        // Registration lands in vstate with the deposit
+        val regResult =
+            emulator.submitSync(certTx(Certificate.RegDRepCert(drepCred, deposit, None)))
+        assert(regResult.isRight, s"DRep registration should succeed: $regResult")
+        assert(emulator.certState.vstate.dreps.get(drepCred).map(_.deposit).contains(deposit))
+
+        // Double registration is rejected
+        val doubleReg =
+            emulator.submitSync(certTx(Certificate.RegDRepCert(drepCred, deposit, None)))
+        assert(doubleReg.isLeft, "Double DRep registration should fail")
+
+        // Update changes the anchor
+        val updResult =
+            emulator.submitSync(certTx(Certificate.UpdateDRepCert(drepCred, Some(anchor))))
+        assert(updResult.isRight, s"DRep update should succeed: $updResult")
+        assert(emulator.certState.vstate.dreps.get(drepCred).flatMap(_.anchor).contains(anchor))
+
+        // Deregistration with a wrong refund is rejected
+        val wrongRefund = emulator.submitSync(
+          certTx(Certificate.UnregDRepCert(drepCred, deposit + Coin.ada(1)))
+        )
+        assert(wrongRefund.isLeft, "Deregistration with wrong refund should fail")
+
+        // Deregistration removes the DRep
+        val unregResult = emulator.submitSync(certTx(Certificate.UnregDRepCert(drepCred, deposit)))
+        assert(unregResult.isRight, s"DRep deregistration should succeed: $unregResult")
+        assert(!emulator.certState.vstate.dreps.contains(drepCred))
+    }
+
     test("Emulator derives the current epoch from the slot for retirement validation") {
         val params = CardanoInfo.mainnet.protocolParams
         val slotConfig = CardanoInfo.mainnet.slotConfig

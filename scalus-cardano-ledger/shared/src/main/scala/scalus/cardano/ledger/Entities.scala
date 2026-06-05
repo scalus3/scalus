@@ -255,6 +255,21 @@ object TransactionException {
              |invalid retirement epochs (pool -> (epoch, current, maxAllowed)): $invalidRetirementEpochs.""".stripMargin
         )
 
+    // It's Conway GOVCERT failures (ConwayGovCertPredFailure) in cardano-ledger
+    final case class DRepException(
+        transactionId: TransactionHash,
+        alreadyRegistered: Set[Credential],
+        notRegistered: Set[Credential],
+        invalidDeposits: Map[Credential, (Coin, Coin)],
+        invalidRefunds: Map[Credential, (Coin, Coin)]
+    ) extends TransactionException(
+          s"""DRep certificate validation failed for transactionId $transactionId.
+             |already registered: $alreadyRegistered,
+             |not registered: $notRegistered,
+             |invalid deposits (expected -> provided): $invalidDeposits,
+             |invalid refunds (expected -> provided): $invalidRefunds.""".stripMargin
+        )
+
     // It's Conway.WithdrawalsNotInRewards in cardano-ledger
     final case class WithdrawalsNotInRewardsException(
         transactionId: TransactionHash,
