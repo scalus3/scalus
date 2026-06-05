@@ -34,6 +34,9 @@ val monocleVersion = "3.3.0"
 // compiler plugin (which depends on the unstable scala3-compiler internal API).
 val scala3LtsVersion = "3.3.7"
 val scala3NextVersion = "3.8.4"
+// Scala Native 0.5.12 (latest) supports Scala up to 3.8.3, not 3.8.4 — so the Native platform
+// targets 3.8.3 while JVM/JS use 3.8.4. Same desugaring as 3.8.4, so budgets/baselines match.
+val scala3NativeNextVersion = "3.8.3"
 ThisBuild / scalaVersion := scala3LtsVersion
 ThisBuild / organization := "org.scalus"
 ThisBuild / organizationName := "Scalus"
@@ -229,7 +232,9 @@ lazy val scalusPlugin = project
     .settings(
       name := "scalus-plugin",
       crossVersion := CrossVersion.full,
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      // Build the plugin for 3.8.3 too: the Native platform compiles on 3.8.3 and a Scala 3
+      // compiler plugin must match the compiler version.
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NativeNextVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
 //      scalacOptions += "-Wunused:all",
       // Manually set a fixed version to avoid recompilation on every commit
@@ -424,6 +429,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     )
     .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
     .nativeSettings(
+      // Native targets 3.8.3 (highest Scala that Scala Native 0.5.12 supports), not the 3.8.4
+      // used by JVM/JS. Run with `++3.8.3 scalusNative/test`.
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NativeNextVersion),
       // Disable doc due to scaladoc NPE bug on Native platform
       Compile / doc / sources := Seq.empty,
       Test / doc / sources := Seq.empty,
