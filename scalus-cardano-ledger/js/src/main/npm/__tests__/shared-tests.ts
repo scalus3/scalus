@@ -42,13 +42,21 @@ interface ScalusAPI {
 interface SlotConfigAPI {
   slotToTime(slot: number): number;
   timeToSlot(time: number): number;
+  epochOf(slot: number): number;
+  firstSlotOfEpoch(epoch: number): number;
 }
 
 interface SlotConfigStatic {
   mainnet: SlotConfigAPI;
   preview: SlotConfigAPI;
   preprod: SlotConfigAPI;
-  new (zeroTime: number, zeroSlot: number, slotLength: number): SlotConfigAPI;
+  new (
+    zeroTime: number,
+    zeroSlot: number,
+    slotLength: number,
+    epochLength?: number,
+    zeroEpoch?: number,
+  ): SlotConfigAPI;
 }
 
 /**
@@ -243,6 +251,50 @@ export function testSlotConfig(SlotConfig: SlotConfigStatic): TestResult[] {
   } catch (e) {
     results.push({
       name: "SlotConfig: custom config creation",
+      passed: false,
+      message: String(e),
+    });
+  }
+
+  // Test epoch derivation
+  try {
+    // mainnet: Shelley starts at slot 4492800 = start of epoch 208
+    const mainnetEpoch = Number(SlotConfig.mainnet.epochOf(4492800 + 432000));
+    results.push({
+      name: "SlotConfig: mainnet epochOf",
+      passed: mainnetEpoch === 209,
+      message: `epochOf(4924800) = ${mainnetEpoch}, expected 209`,
+    });
+
+    // preprod: Shelley starts at slot 86400 = start of epoch 4
+    const preprodEpoch = Number(SlotConfig.preprod.epochOf(86400 + 2 * 432000));
+    results.push({
+      name: "SlotConfig: preprod epochOf",
+      passed: preprodEpoch === 6,
+      message: `epochOf(950400) = ${preprodEpoch}, expected 6`,
+    });
+
+    // custom config with default epoch settings (epochLength=432000, zeroEpoch=0)
+    const custom = new SlotConfig(1654041600000, 0, 1000);
+    const customEpoch = Number(custom.epochOf(432000 * 3 + 1));
+    results.push({
+      name: "SlotConfig: custom config epochOf with defaults",
+      passed: customEpoch === 3,
+      message: `epochOf(1296001) = ${customEpoch}, expected 3`,
+    });
+
+    // custom config with explicit epoch settings
+    const custom2 = new SlotConfig(1654041600000, 100, 1000, 86400, 10);
+    const custom2Epoch = Number(custom2.epochOf(100 + 86400));
+    const firstSlot = Number(custom2.firstSlotOfEpoch(11));
+    results.push({
+      name: "SlotConfig: custom config epochOf with explicit epoch params",
+      passed: custom2Epoch === 11 && firstSlot === 100 + 86400,
+      message: `epochOf = ${custom2Epoch} (expected 11), firstSlotOfEpoch(11) = ${firstSlot} (expected ${100 + 86400})`,
+    });
+  } catch (e) {
+    results.push({
+      name: "SlotConfig: epochOf",
       passed: false,
       message: String(e),
     });

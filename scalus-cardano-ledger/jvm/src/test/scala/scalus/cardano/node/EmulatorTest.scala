@@ -227,4 +227,100 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
             assert(submit2.isLeft, "Double spend should be rejected")
         }
     }
+
+    private val poolOperator = AddrKeyHash.fromHex("f" * 56)
+    private val poolId = PoolKeyHash.fromByteString(poolOperator)
+
+    private def mkPoolRegistration(params: ProtocolParams): Certificate.PoolRegistration =
+        Certificate.PoolRegistration(
+          operator = poolOperator,
+          vrfKeyHash = VrfKeyHash.fromHex("a" * 64),
+          pledge = Coin.ada(100),
+          cost = Coin(params.minPoolCost),
+          margin = UnitInterval.one,
+          rewardAccount = RewardAccount(
+            StakeAddress(Network.Mainnet, StakePayload.Stake(StakeKeyHash.fromHex("b" * 56)))
+          ),
+          poolOwners = Set(poolOperator),
+          relays = IndexedSeq.empty,
+          poolMetadata = None
+        )
+
+    private def certTx(cert: Certificate): Transaction = Transaction(
+      TransactionBody(
+        inputs = TaggedSortedSet.empty,
+        outputs = IndexedSeq.empty,
+        fee = Coin.zero,
+        certificates = TaggedOrderedStrictSet.from(Seq(cert))
+      )
+    )
+
+    test("Emulator applies pool registration and retirement certificates") {
+        val params = CardanoInfo.mainnet.protocolParams
+        val slotConfig = CardanoInfo.mainnet.slotConfig
+        val emulator = Emulator(
+          validators = Set.empty,
+          mutators = Emulator.defaultMutators
+        )
+
+        val registration = mkPoolRegistration(params)
+        val regResult = emulator.submitSync(certTx(registration))
+        assert(regResult.isRight, s"Pool registration should succeed: $regResult")
+        assert(emulator.certState.pstate.stakePools.contains(poolId))
+        assert(
+          emulator.certState.pstate.deposits.get(poolId).contains(Coin(params.stakePoolDeposit))
+        )
+
+        // At slot 0 the mainnet slot config clamps to zeroEpoch
+        val currentEpoch = slotConfig.epochOf(0L)
+        assert(currentEpoch == 208L)
+
+        // Retirement of an unregistered pool is rejected
+        val unknownPool = PoolKeyHash.fromHex("e" * 56)
+        val unknownResult =
+            emulator.submitSync(certTx(Certificate.PoolRetirement(unknownPool, currentEpoch + 1)))
+        assert(unknownResult.isLeft, "Retirement of unregistered pool should fail")
+
+        // Retirement with a non-future epoch is rejected
+        val pastResult =
+            emulator.submitSync(certTx(Certificate.PoolRetirement(poolId, currentEpoch)))
+        assert(pastResult.isLeft, "Retirement with non-future epoch should fail")
+
+        // Valid retirement is scheduled
+        val retireResult =
+            emulator.submitSync(certTx(Certificate.PoolRetirement(poolId, currentEpoch + 1)))
+        assert(retireResult.isRight, s"Pool retirement should succeed: $retireResult")
+        assert(emulator.certState.pstate.retiring.get(poolId).contains(currentEpoch + 1))
+
+        // Re-registration cancels the pending retirement
+        val reRegResult = emulator.submitSync(certTx(registration))
+        assert(reRegResult.isRight, s"Pool re-registration should succeed: $reRegResult")
+        assert(!emulator.certState.pstate.retiring.contains(poolId))
+        assert(emulator.certState.pstate.futureStakePoolParams.contains(poolId))
+    }
+
+    test("Emulator derives the current epoch from the slot for retirement validation") {
+        val params = CardanoInfo.mainnet.protocolParams
+        val slotConfig = CardanoInfo.mainnet.slotConfig
+        val emulator = Emulator(
+          validators = Set.empty,
+          mutators = Emulator.defaultMutators
+        )
+
+        val regResult = emulator.submitSync(certTx(mkPoolRegistration(params)))
+        assert(regResult.isRight, s"Pool registration should succeed: $regResult")
+
+        val epoch = 250L
+        emulator.setSlot(slotConfig.firstSlotOfEpoch(epoch))
+
+        // Not in the future
+        assert(emulator.submitSync(certTx(Certificate.PoolRetirement(poolId, epoch))).isLeft)
+        // Beyond currentEpoch + poolRetireMaxEpoch
+        val tooFar = epoch + params.poolRetireMaxEpoch + 1
+        assert(emulator.submitSync(certTx(Certificate.PoolRetirement(poolId, tooFar))).isLeft)
+        // Within bounds
+        val ok = emulator.submitSync(certTx(Certificate.PoolRetirement(poolId, epoch + 1)))
+        assert(ok.isRight, s"Retirement within bounds should succeed: $ok")
+        assert(emulator.certState.pstate.retiring.get(poolId).contains(epoch + 1))
+    }
 }

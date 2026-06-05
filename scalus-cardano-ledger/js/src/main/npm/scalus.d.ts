@@ -65,9 +65,22 @@ export namespace Scalus {
   ): Redeemer[];
 }
 
-/** Slot configuration for time conversions between slots and POSIX time. */
+/** Slot and epoch configuration for a Cardano network. */
 export class SlotConfig {
-  constructor(zeroTime: number, zeroSlot: number, slotLength: number);
+  /**
+   * @param zeroTime POSIX time in milliseconds of slot `zeroSlot`.
+   * @param zeroSlot First slot of the linear (post-Byron) era.
+   * @param slotLength Slot length in milliseconds.
+   * @param epochLength Epoch length in slots (default: 432000).
+   * @param zeroEpoch Epoch number at `zeroSlot` (default: 0).
+   */
+  constructor(
+    zeroTime: number,
+    zeroSlot: number,
+    slotLength: number,
+    epochLength?: number,
+    zeroEpoch?: number,
+  );
 
   /**
    * Convert a slot number to POSIX time in milliseconds.
@@ -82,6 +95,20 @@ export class SlotConfig {
    * @returns The slot number.
    */
   timeToSlot(time: number): number;
+
+  /**
+   * Epoch containing the given slot. Slots before `zeroSlot` are clamped to `zeroEpoch`.
+   * @param slot The slot number.
+   * @returns The epoch number.
+   */
+  epochOf(slot: number): number;
+
+  /**
+   * First slot of the given epoch (for epochs >= `zeroEpoch`).
+   * @param epoch The epoch number.
+   * @returns The slot number.
+   */
+  firstSlotOfEpoch(epoch: number): number;
 
   /** Mainnet slot configuration (starting at Shelley era). */
   static mainnet: SlotConfig;
@@ -152,13 +179,13 @@ export interface EmulatorInitialState {
   /** CBOR-encoded UTxO map. */
   utxos: Uint8Array;
   /** Pre-registered stake credentials with rewards and optional delegation. */
-  stakeRegistrations?: StakeRegistration[];
+  stakeRegistrations?: ReadonlyArray<StakeRegistration>;
   /** Pre-registered stake pools. */
-  poolRegistrations?: PoolRegistration[];
+  poolRegistrations?: ReadonlyArray<PoolRegistration>;
   /** Pre-registered DReps. */
-  drepRegistrations?: DRepRegistration[];
+  drepRegistrations?: ReadonlyArray<DRepRegistration>;
   /** Pre-seeded datum store. */
-  datums?: DatumEntry[];
+  datums?: ReadonlyArray<DatumEntry>;
 }
 
 /** Cardano emulator for testing transactions. */
@@ -208,6 +235,12 @@ export class Emulator {
    * @param slot The slot number.
    */
   setSlot(slot: number): void;
+
+  /**
+   * Get the current slot number.
+   * @returns The current slot.
+   */
+  getSlot(): number;
 
   /**
    * Advance the current slot by n slots.

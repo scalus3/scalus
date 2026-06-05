@@ -175,4 +175,23 @@ describe("Emulator", () => {
         expect(changeLovelace).toBeGreaterThan(BigInt(4_995_000_000));
         expect(changeLovelace).toBeLessThan(BigInt(4_998_000_000));
     });
+
+    it("should track the current slot via getSlot/setSlot/tick", () => {
+        const emulator = new Emulator(
+            hexToBytes(initialUtxosCborHex),
+            SlotConfig.preprod
+        );
+
+        expect(Number(emulator.getSlot())).toBe(0);
+
+        emulator.setSlot(1_000_000);
+        expect(Number(emulator.getSlot())).toBe(1_000_000);
+
+        emulator.tick(5);
+        expect(Number(emulator.getSlot())).toBe(1_000_005);
+
+        // epochOf(slot) lets clients derive the current epoch for e.g. pool retirement
+        const epoch = Number(SlotConfig.preprod.epochOf(emulator.getSlot()));
+        expect(epoch).toBe(4 + Math.floor((1_000_005 - 86_400) / 432_000));
+    });
 });

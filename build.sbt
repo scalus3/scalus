@@ -349,6 +349,10 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.ledger.NonNegativeInterval.unapply"
         ),
+        // SlotConfig: gained epochLength/zeroEpoch fields (with defaults) for slot→epoch
+        // derivation. A 3-arg secondary constructor and apply overload preserve the old
+        // signatures, but the case-class copy method cannot be overloaded.
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.SlotConfig.copy"),
       ),
 
       // enable when debug compilation of tests

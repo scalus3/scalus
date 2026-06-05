@@ -6,6 +6,10 @@ import org.scalatest.matchers.should.Matchers
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 
+import scala.annotation.nowarn
+
+// toLong/long2double: SlotConfig is Long-based on JVM/Native and Double-based on JS
+@nowarn("msg=(toLong is redundant|long2double)")
 class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with EitherValues {
 
     private val cardanoInfo = CardanoInfo.preprod
@@ -32,12 +36,12 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
           poolMetadata = None
         )
 
-    // Note: slot is used as epoch in these tests due to current implementation limitation.
-    // See TODO in StakePoolCertificatesValidator.
-    private def mkContext(certState: CertState, epoch: Long = 0): Context =
+    private val zeroEpoch = cardanoInfo.slotConfig.zeroEpoch.toLong
+
+    private def mkContext(certState: CertState, epoch: Long): Context =
         new Context(
           env = UtxoEnv(
-            slot = epoch, // Using slot field as epoch for pool validation
+            slot = cardanoInfo.slotConfig.firstSlotOfEpoch(epoch).toLong,
             params = protocolParams,
             certState = certState,
             network = Network.Testnet
@@ -48,7 +52,7 @@ class StakePoolCertificatesValidatorTest extends AnyFunSuite with Matchers with 
     private def runValidator(
         certs: Seq[Certificate],
         certState: CertState = CertState.empty,
-        epoch: Long = 0
+        epoch: Long = zeroEpoch
     ) = StakePoolCertificatesValidator.validate(
       mkContext(certState, epoch),
       State(certState = certState),

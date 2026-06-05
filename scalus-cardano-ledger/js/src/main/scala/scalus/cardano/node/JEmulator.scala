@@ -190,6 +190,9 @@ class JEmulator(
         emulator.setSlot(slot.toLong)
     }
 
+    /** The current slot number of the emulator. */
+    def getSlot(): Double = emulator.currentContext.env.slot.toDouble
+
     /** Advance the current slot by `n` slots. */
     def tick(n: Double): Unit = emulator.tick(n.toLong)
 

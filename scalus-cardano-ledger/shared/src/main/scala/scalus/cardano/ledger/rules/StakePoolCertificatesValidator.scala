@@ -3,6 +3,8 @@ package rules
 
 import scalus.cardano.address.Network
 
+import scala.annotation.nowarn
+
 // It's the Shelley/Conway POOL rule predicate checks in cardano-ledger
 object StakePoolCertificatesValidator extends STS.Validator {
     override final type Error = TransactionException.StakePoolException
@@ -54,8 +56,7 @@ object StakePoolCertificatesValidator extends STS.Validator {
                       (epochNo, currentEpoch, maxRetirementEpoch)
                     )
                 )
-            // Skip upper bound check when currentEpoch is 0 (epoch unknown)
-            else if currentEpoch > 0 && epochNo > maxRetirementEpoch then
+            else if epochNo > maxRetirementEpoch then
                 copy(invalidRetirementEpochs =
                     invalidRetirementEpochs.updated(
                       poolId,
@@ -82,16 +83,17 @@ object StakePoolCertificatesValidator extends STS.Validator {
             case _ => this
     }
 
+    // @nowarn: Suppress Long→Double implicit conversion warning. This is intentional for
+    // cross-platform compatibility: JS SlotConfig uses Double (JavaScript's number type),
+    // while JVM uses Long. The conversion is safe because slot values are well within
+    // Double's safe integer range (2^53).
+    @nowarn("msg=long2double")
     override def validate(context: Context, state: State, event: Event): Result = {
         val certificates = event.body.value.certificates.toSeq
         if certificates.isEmpty then success
         else {
             val protocolParams = context.env.params
-            // TODO: UtxoEnv.slot is a slot number, not an epoch number.
-            //   We need to know the current epoch, but we only know the current slot,
-            //   and we don't have a way to convert between the two of them.
-            //   Cardano mainnet uses 432000 slots per epoch, but testnet may differ.
-            val currentEpoch: Long = context.env.slot
+            val currentEpoch: Long = context.slotConfig.epochOf(context.env.slot).toLong
 
             val initialState = ValidationState(
               network = context.env.network,

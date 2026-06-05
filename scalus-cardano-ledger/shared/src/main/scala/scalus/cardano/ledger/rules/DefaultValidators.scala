@@ -45,6 +45,7 @@ object DefaultMutators {
     /** All built-in mutators for Cardano ledger rules. */
     val all: Set[STS.Mutator] = SortedSet[STS.Mutator](
       PlutusScriptsTransactionMutator,
-      StakeCertificatesMutator
+      StakeCertificatesMutator,
+      StakePoolCertificatesMutator
     )(using Ordering.by(_.name))
 }
