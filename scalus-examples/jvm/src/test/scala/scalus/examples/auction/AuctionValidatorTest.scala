@@ -1,6 +1,7 @@
 package scalus.examples.auction
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.ScalaCompilerVersion
 import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.*
@@ -64,7 +65,12 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.Bid(bidAmount = 3_000_000L),
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 189048L, steps = 62219312L))
+        assert(
+          budget == ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 189048L, steps = 62219312L),
+            since38 = ExUnits(memory = 185992L, steps = 61141450L)
+          )
+        )
     }
 
     test("budget: outbid with refund") {
@@ -72,7 +78,12 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.Outbid(newBidAmount = 5_000_000L),
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 243306L, steps = 78916057L))
+        assert(
+          budget == ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 243306L, steps = 78916057L),
+            since38 = ExUnits(memory = 240250L, steps = 77838195L)
+          )
+        )
     }
 
     test("budget: end auction with winner") {
@@ -80,7 +91,12 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.EndWithWinner,
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 300158L, steps = 93669049L))
+        assert(
+          budget == ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 300158L, steps = 93669049L),
+            since38 = ExUnits(memory = 293134L, steps = 91522940L)
+          )
+        )
     }
 
     test("budget: end auction without bids") {
@@ -88,7 +104,12 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           action = TestAction.EndNoBids,
           expected = Expected.Success
         ).runWithBudget()
-        assert(budget == ExUnits(memory = 247525L, steps = 76453575L))
+        assert(
+          budget == ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 247525L, steps = 76453575L),
+            since38 = ExUnits(memory = 244469L, steps = 75375713L)
+          )
+        )
     }
 }
 

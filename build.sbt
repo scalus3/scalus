@@ -601,6 +601,9 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     )
     .jvmSettings(
       Test / fork := true,
+      // Expose the compiler version to tests so they can pick version-specific baselines
+      // (budgets / script sizes drift between the 3.3.x LTS and 3.8.x). See ScalaCompilerVersion.
+      Test / javaOptions += s"-Dscalus.test.scalaVersion=${scalaVersion.value}",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion
     )
     .jsSettings(
