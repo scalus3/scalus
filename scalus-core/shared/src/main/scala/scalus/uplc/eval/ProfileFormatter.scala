@@ -884,8 +884,12 @@ object ProfileFormatter {
               scala.collection.mutable.ArrayBuffer[((String, Int), Long)]
             ]()
         // Best-first: always grow the heaviest pending edge whose source is already in the tree.
-        val pq = scala.collection.mutable.PriorityQueue
-            .empty[(Long, (String, Int), (String, Int))](Ordering.by(_._1))
+        // Supply the ordering via `given` rather than positionally: `PriorityQueue.empty` takes it
+        // as a context-bound/using param, and passing it positionally fails on Scala 3.5+ (3.8.x)
+        // while the explicit `given` type lets `Ordering.by(_._1)` infer on both 3.3.x and 3.8.x.
+        given Ordering[(Long, (String, Int), (String, Int))] = Ordering.by(_._1)
+        val pq =
+            scala.collection.mutable.PriorityQueue.empty[(Long, (String, Int), (String, Int))]
         adj(entry).foreach { case (to, c) => pq.enqueue((c, entry, to)) }
         while inTree.size < maxNodes && pq.nonEmpty do
             val (c, from, to) = pq.dequeue()
