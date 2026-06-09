@@ -173,6 +173,86 @@ object UplcConstrListOperations {
         go(self)
     }
 
+    def indexOf[@UplcRepr(TypeVar(Unwrapped)) A](
+        self: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+        elem: A,
+        eq: (A, A) => Boolean
+    ): BigInt = {
+        def go(
+            lst: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+            idx: BigInt
+        ): BigInt = lst match
+            case List.Cons(h, t) =>
+                if eq(h, elem) then idx
+                else go(t, idx + BigInt(1))
+            case List.Nil => BigInt(-1)
+        go(self, BigInt(0))
+    }
+
+    // NOTE: on the UplcConstr (case-class element) path, `eq`/`equalsRepr` Data-encodes the elements
+    // it compares, and those same elements are placed back into the result — so the result list's
+    // elements end up in `DataData` repr (not native `ProdUplcConstr` as `reverse`/`filter` produce).
+    // The result is self-consistent and correct (verified via `length`/`indexOf`); it only diverges
+    // from a native list literal when fed to the *named generic* `listEq` (which needs
+    // `ProdDataConstr` and hits the missing `DataData → ProdDataConstr` arm in `ProductCaseEmitter`).
+    // Tracked as a follow-up under the UplcConstr→Data boundary issue. `Transparent` does not help.
+    def deleteFirst[@UplcRepr(TypeVar(Unwrapped)) A](
+        self: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+        elem: A,
+        eq: (A, A) => Boolean
+    ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = {
+        def go(
+            lst: List[A] @UplcRepr(UplcRepresentation.UplcConstr)
+        ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = lst match
+            case List.Cons(h, t) =>
+                if eq(h, elem) then t
+                else List.Cons(h, go(t))
+            case List.Nil => List.Nil
+        go(self)
+    }
+
+    // distinct / diff compose the sibling `contains` / `deleteFirst` (threading `eq`, which the
+    // dispatcher supplies as `equalsRepr`), mirroring the prelude — no reimplemented element scan.
+    // `rev`/`loop`/`go` are pure spine recursions (no equality). `contains`/`deleteFirst` are
+    // defined earlier in this object, so composing them is safe during eager support-binding init.
+    def distinct[@UplcRepr(TypeVar(Unwrapped)) A](
+        self: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+        eq: (A, A) => Boolean
+    ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = {
+        def rev(
+            lst: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+            acc: List[A] @UplcRepr(UplcRepresentation.UplcConstr)
+        ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = lst match
+            case List.Cons(h, t) => rev(t, List.Cons(h, acc))
+            case List.Nil        => acc
+        def loop(
+            lst: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+            acc: List[A] @UplcRepr(UplcRepresentation.UplcConstr)
+        ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = lst match
+            case List.Cons(h, t) =>
+                if contains(acc, h, eq) then loop(t, acc)
+                else loop(t, List.Cons(h, acc))
+            case List.Nil => acc
+        rev(loop(self, List.Nil), List.Nil)
+    }
+
+    def diff[@UplcRepr(TypeVar(Unwrapped)) A](
+        self: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+        other: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+        eq: (A, A) => Boolean
+    ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = {
+        def go(
+            acc: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
+            o: List[A] @UplcRepr(UplcRepresentation.UplcConstr)
+        ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = acc match
+            case List.Nil => List.Nil
+            case List.Cons(_, _) =>
+                o match
+                    case List.Cons(head, tail) => go(deleteFirst(acc, head, eq), tail)
+                    case List.Nil              => acc
+        go(self, other)
+    }
+
     def length[@UplcRepr(TypeVar(Unwrapped)) A](
         self: List[A] @UplcRepr(UplcRepresentation.UplcConstr)
     ): BigInt = {

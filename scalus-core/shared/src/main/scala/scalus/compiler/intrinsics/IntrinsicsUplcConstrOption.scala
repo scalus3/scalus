@@ -2,7 +2,7 @@ package scalus.compiler.intrinsics
 
 import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{fail, Option}
-import scalus.compiler.intrinsics.IntrinsicHelpers.fromDefaultTypeVarRepr
+import scalus.compiler.intrinsics.IntrinsicHelpers.{equalsRepr, fromDefaultTypeVarRepr}
 import scalus.compiler.UplcRepr
 import scalus.compiler.UplcRepresentation
 import scalus.compiler.UplcRepresentation.TypeVar
@@ -100,4 +100,11 @@ object IntrinsicsUplcConstrOption {
           self,
           (item: A) => predicate(fromDefaultTypeVarRepr(item))
         )
+
+    // `eq` dropped (resolver strips it); structural `equalsRepr` supplied to the support leaf.
+    def contains[@UplcRepr(TypeVar(Transparent)) A](
+        @UplcRepr(UplcRepresentation.UplcConstr) self: Option[A],
+        elem: A
+    ): Boolean =
+        UplcConstrOptionOperations.contains(self, elem, (a: A, b: A) => equalsRepr(a, b))
 }

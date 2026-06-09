@@ -107,6 +107,10 @@ final class SIRCompiler(
     private val BigIntClassSymbol = requiredClass("scala.math.BigInt")
     private val ByteStringClassSymbol = requiredClass("scalus.uplc.builtin.ByteString")
     private val DataClassSymbol = requiredClass("scalus.uplc.builtin.Data")
+    private val RationalClassSymbol =
+        requiredClass("scalus.cardano.onchain.plutus.prelude.Rational")
+    private val AssocMapClassSymbol =
+        requiredClass("scalus.cardano.onchain.plutus.prelude.AssocMap")
     private val DataModuleSymbol = requiredModule("scalus.uplc.builtin.Data")
     // Data case class companion apply methods (for Data.I(x), Data.B(x))
     private val DataIApplySymbol =
@@ -2764,6 +2768,27 @@ final class SIRCompiler(
                   posAnns
                 )
             if op == nme.EQ then eq else SIR.Not(eq, posAnns)
+        else if lhsTpe =:= RationalClassSymbol.typeRef then
+            report.error(
+              s"""Rational has no structural equality, so `==` / `!=` (and `===`) are not supported.
+                 |Its value equality is cross-multiplication (a/b == c/d iff a*d == c*b).
+                 |
+                 |Use RationalEq.equals(${lhs.show}, ${rhs.show}) for value equality,
+                 |or compare reduced forms via `.normalize`.
+                 |""".stripMargin,
+              srcPos
+            )
+            SIR.Error("Rational equality must use RationalEq.equals", posAnns)
+        else if lhsTpe.typeSymbol == AssocMapClassSymbol then
+            report.error(
+              s"""AssocMap has no structural equality, so `==` / `!=` (and `===`) are not supported.
+                 |Its equality is order-insensitive (same size, every key maps to an equal value).
+                 |
+                 |Use AssocMapEq.equals(${lhs.show}, ${rhs.show}) instead.
+                 |""".stripMargin,
+              srcPos
+            )
+            SIR.Error("AssocMap equality must use AssocMapEq.equals", posAnns)
         else
             report.error(
               s"""Equality check operations (`==`, `!=`) are only allowed between these primitive types:

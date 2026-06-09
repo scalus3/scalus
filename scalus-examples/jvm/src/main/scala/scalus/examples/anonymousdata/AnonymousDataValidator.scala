@@ -33,7 +33,11 @@ case class AnonymousDataDatum(
 
 @Compile
 object AnonymousDataDatum {
-    given Eq[AnonymousDataDatum] = Eq.derived
+    // AssocMap has no Eq (its equality is order-insensitive, not structural), so this can't be
+    // derived. Compare the map via AssocMapEq.equals — matching the historical behavior, where the
+    // named `assocMapEq` given was called (order-insensitive), not inlined structurally.
+    given Eq[AnonymousDataDatum] = (a: AnonymousDataDatum, b: AnonymousDataDatum) =>
+        a.participantsRoot === b.participantsRoot && AssocMapEq.equals(a.dataMap, b.dataMap)
 }
 
 /** Redeemer for the minting policy. */
@@ -192,7 +196,10 @@ object AnonymousDataValidator extends ParameterizedValidator[ByteString] {
                   "participantsRoot must not change"
                 )
                 val expectedMap = currentDatum.dataMap.insert(dataKey, encryptedData)
-                require(newDatum.dataMap === expectedMap, "dataMap must have new entry")
+                require(
+                  AssocMapEq.equals(newDatum.dataMap, expectedMap),
+                  "dataMap must have new entry"
+                )
 
             case AnonymousDataSpendRedeemer.UpdateData(
                   membershipProof,
@@ -218,7 +225,10 @@ object AnonymousDataValidator extends ParameterizedValidator[ByteString] {
                   "participantsRoot must not change"
                 )
                 val expectedMap = currentDatum.dataMap.insert(dataKey, newEncryptedData)
-                require(newDatum.dataMap === expectedMap, "dataMap must have updated entry")
+                require(
+                  AssocMapEq.equals(newDatum.dataMap, expectedMap),
+                  "dataMap must have updated entry"
+                )
 
             case AnonymousDataSpendRedeemer.DeleteData(membershipProof, dataKey) =>
                 // Verify signer is a participant
@@ -240,7 +250,10 @@ object AnonymousDataValidator extends ParameterizedValidator[ByteString] {
                   "participantsRoot must not change"
                 )
                 val expectedMap = currentDatum.dataMap.delete(dataKey)
-                require(newDatum.dataMap === expectedMap, "dataMap must have entry removed")
+                require(
+                  AssocMapEq.equals(newDatum.dataMap, expectedMap),
+                  "dataMap must have entry removed"
+                )
 
             case AnonymousDataSpendRedeemer.UpdateParticipants(newParticipantsRoot) =>
                 // Admin must sign
@@ -261,7 +274,7 @@ object AnonymousDataValidator extends ParameterizedValidator[ByteString] {
                   "participantsRoot must be updated"
                 )
                 require(
-                  newDatum.dataMap === currentDatum.dataMap,
+                  AssocMapEq.equals(newDatum.dataMap, currentDatum.dataMap),
                   "dataMap must not change"
                 )
     }

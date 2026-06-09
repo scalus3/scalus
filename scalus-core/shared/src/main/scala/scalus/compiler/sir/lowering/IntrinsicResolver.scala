@@ -32,6 +32,20 @@ object IntrinsicResolver {
     private val AssocMapModule = "scalus.cardano.onchain.plutus.prelude.AssocMap$"
     private val OptionModule = "scalus.cardano.onchain.plutus.prelude.Option$"
 
+    /** Methods whose trailing implicit `Eq` argument is discarded during intrinsic resolution: the
+      * V3 intrinsic compares structurally via `equalsRepr` instead of calling `eq`. Sound because
+      * non-structural types are excluded from `Eq` (see `RationalEq`/`AssocMapEq`), so every `Eq`
+      * type is structural — exactly what `equalsRepr` produces. See `tryResolveFull`.
+      */
+    private val EqStripMethods: Set[String] = Set(
+      ListModule + ".contains",
+      ListModule + ".indexOf",
+      ListModule + ".deleteFirst",
+      ListModule + ".distinct",
+      ListModule + ".diff",
+      OptionModule + ".contains"
+    )
+
     private val ListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
     private val ListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
     private val NativeListOps = "scalus.compiler.intrinsics.IntrinsicsNativeList$"
@@ -90,7 +104,9 @@ object IntrinsicResolver {
         scalus.compiler.compiledModules(
           "scalus.compiler.intrinsics.NativeListOperations",
           "scalus.compiler.intrinsics.UplcConstrListOperations",
-          "scalus.compiler.intrinsics.UplcConstrOptionOperations"
+          "scalus.compiler.intrinsics.UplcConstrOptionOperations",
+          // Data-repr list support (recursion for the BuiltinList path; compares via equalsData).
+          "scalus.compiler.intrinsics.BuiltinListSupport"
         )
     }
 
@@ -205,17 +221,27 @@ object IntrinsicResolver {
 
     def tryResolveFull(
         head: SIR,
-        argSirs: scala.List[SIR],
+        argSirs0: scala.List[SIR],
         loweredArgs: scala.List[LoweredValue],
         appType: SIRType,
         pos: SIRPosition
     )(using lctx: LoweringContext): Option[LoweredValue] = {
         require(loweredArgs.length == 1, "tryResolveFull: only the first arg is lowered eagerly")
-        if argSirs.isEmpty then return None
+        if argSirs0.isEmpty then return None
         val firstLoweredOnly = loweredArgs.head
         extractModuleAndMethod(head) match
-            case None => None
+            case None                           => None
             case Some((moduleName, methodName)) =>
+                // Discard the trailing implicit `Eq` argument for eq-stripping methods (e.g.
+                // `List.contains`): the V3 intrinsic compares structurally via `equalsRepr` and no
+                // longer takes `eq`. The dropped `eq` SIR is never lowered, so no `Eq` closure is
+                // built. Safe because non-structural types are excluded from `Eq` (Rational,
+                // AssocMap) — every remaining `Eq` is structural, which is exactly what `equalsRepr`
+                // produces. See docs/local/claude/compiler/v3-eq-eliminating.md.
+                val argSirs =
+                    if EqStripMethods.contains(s"$moduleName.$methodName") then
+                        argSirs0.dropRight(1)
+                    else argSirs0
                 val firstArgRepr = firstLoweredOnly.representation
                 val reprNames = representationNames(firstArgRepr)
                 registry.get(moduleName) match

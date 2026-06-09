@@ -89,4 +89,12 @@ object UplcConstrOptionOperations {
     ): Boolean = self match
         case Option.Some(value) => predicate(value)
         case Option.None        => true
+
+    def contains[@UplcRepr(TypeVar(Unwrapped)) A](
+        @UplcRepr(UplcRepresentation.UplcConstr) self: Option[A],
+        elem: A,
+        eq: (A, A) => Boolean
+    ): Boolean = self match
+        case Option.Some(value) => eq(value, elem)
+        case Option.None        => false
 }

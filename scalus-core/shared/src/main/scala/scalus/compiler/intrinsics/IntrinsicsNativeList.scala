@@ -8,7 +8,6 @@ import scalus.compiler.UplcRepresentation.TypeVarKind.Transparent
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.uplc.builtin.BuiltinList
 import scalus.uplc.builtin.Builtins.*
-import scalus.compiler.intrinsics.IntrinsicHelpers.toDefaultTypeVarRepr
 
 /** Native list intrinsics — thin delegation to NativeListOperations.
   *
@@ -63,15 +62,35 @@ object IntrinsicsNativeList {
     def find[A](self: List[A], predicate: A => Boolean): Option[A] =
         NativeListOperations.find(self, predicate)
 
+    // `eq` parameter dropped (the resolver strips the caller's `Eq` argument). The dispatcher is
+    // re-lowered per concrete element type, so `equalsRepr` resolves here; structural equality is
+    // supplied to the (abstract, support-module) leaf.
     def contains[@UplcRepr(TypeVar(Transparent)) A](
         self: List[A],
-        elem: A,
-        eq: (A, A) => Boolean
+        elem: A
     ): Boolean =
-        NativeListOperations.contains(
-          self,
-          elem,
-          (a: A, b: A) => eq(toDefaultTypeVarRepr(a), toDefaultTypeVarRepr(b))
-        )
+        NativeListOperations.contains(self, elem, (a: A, b: A) => equalsRepr(a, b))
+
+    // `eq` dropped (resolver strips it); structural `equalsRepr` supplied to the support leaf.
+    def indexOf[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        elem: A
+    ): BigInt =
+        NativeListOperations.indexOf(self, elem, (a: A, b: A) => equalsRepr(a, b))
+
+    def deleteFirst[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        elem: A
+    ): List[A] =
+        NativeListOperations.deleteFirst(self, elem, (a: A, b: A) => equalsRepr(a, b))
+
+    def distinct[@UplcRepr(TypeVar(Transparent)) A](self: List[A]): List[A] =
+        NativeListOperations.distinct(self, (a: A, b: A) => equalsRepr(a, b))
+
+    def diff[@UplcRepr(TypeVar(Transparent)) A](
+        self: List[A],
+        other: List[A]
+    ): List[A] =
+        NativeListOperations.diff(self, other, (a: A, b: A) => equalsRepr(a, b))
 
 }

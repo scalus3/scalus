@@ -2859,7 +2859,9 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(1),
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 13992L, steps = 4209203L)
+            // diff is intrinsified composing the eq-stripped `deleteFirst` → slightly cheaper than
+            // the prelude (which threaded a dead `Eq`). See v3-eq-eliminating.md.
+            compilerOptions -> ExUnits(memory = 13791L, steps = 4159715L)
           )
         )
     }
@@ -2870,7 +2872,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Nil),
           Seq(
-            compilerOptions -> ExUnits(memory = 18886L, steps = 6658108L)
+            compilerOptions -> ExUnits(memory = 18685L, steps = 6608620L)
           )
         )
     }
@@ -2881,7 +2883,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
-            compilerOptions -> ExUnits(memory = 21482L, steps = 7346614L)
+            compilerOptions -> ExUnits(memory = 21281L, steps = 7297126L)
           )
         )
     }

@@ -549,7 +549,13 @@ object GovernanceAction:
                 rhs match
                     case UpdateCommittee(rhsId, rhsRemovedMembers, rhsAddedMembers, rhsNewQuorum) =>
                         lhsId === rhsId && lhsRemovedMembers === rhsRemovedMembers
-                        && lhsAddedMembers === rhsAddedMembers && lhsNewQuorum === rhsNewQuorum
+                        && lhsAddedMembers === rhsAddedMembers
+                        // Rational has no Eq. This is a Data-faithful ledger type, so compare the
+                        // quorum structurally (numerator+denominator) — what a derived Eq would do,
+                        // and matching the historical behavior. (Not RationalEq.equals, which would
+                        // be value/cross-multiply equality.)
+                        && lhsNewQuorum.numerator === rhsNewQuorum.numerator
+                        && lhsNewQuorum.denominator === rhsNewQuorum.denominator
                     case _ => false
             case NewConstitution(lhsId, lhsConstitution) =>
                 rhs match

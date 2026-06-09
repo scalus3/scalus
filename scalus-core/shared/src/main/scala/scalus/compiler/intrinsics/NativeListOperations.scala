@@ -115,4 +115,72 @@ object NativeListOperations {
         go(blist)
     }
 
+    def indexOf[@UplcRepr(TypeVar(Unwrapped)) A](
+        self: List[A],
+        elem: A,
+        eq: (A, A) => Boolean
+    ): BigInt = {
+        val blist = typeProxy[BuiltinList[A]](self)
+        def go(lst: BuiltinList[A], idx: BigInt): BigInt =
+            if nullList(lst) then BigInt(-1)
+            else {
+                val h = headList(lst)
+                if eq(h, elem) then idx
+                else go(tailList(lst), idx + BigInt(1))
+            }
+        go(blist, BigInt(0))
+    }
+
+    def deleteFirst[@UplcRepr(TypeVar(Unwrapped)) A](
+        self: List[A],
+        elem: A,
+        eq: (A, A) => Boolean
+    ): List[A] = {
+        val blist = typeProxy[BuiltinList[A]](self)
+        def go(lst: BuiltinList[A]): List[A] =
+            if nullList(lst) then List.Nil
+            else {
+                val h = headList(lst)
+                val t = tailList(lst)
+                if eq(h, elem) then typeProxy[List[A]](t)
+                else List.Cons(h, go(t))
+            }
+        go(blist)
+    }
+
+    // distinct / diff compose the sibling `contains` / `deleteFirst` (threading `eq`, which the
+    // dispatcher supplies as `equalsRepr`), mirroring the prelude — no reimplemented element scan.
+    // `loop`/`rev`/`go` are pure spine recursions (no equality).
+    def distinct[@UplcRepr(TypeVar(Unwrapped)) A](
+        self: List[A],
+        eq: (A, A) => Boolean
+    ): List[A] = {
+        def rev(lst: BuiltinList[A], acc: List[A]): List[A] =
+            if nullList(lst) then acc
+            else rev(tailList(lst), List.Cons(headList(lst), acc))
+        def loop(lst: BuiltinList[A], acc: List[A]): List[A] =
+            if nullList(lst) then acc
+            else {
+                val h = headList(lst)
+                val t = tailList(lst)
+                if contains(acc, h, eq) then loop(t, acc)
+                else loop(t, List.Cons(h, acc))
+            }
+        val built = loop(typeProxy[BuiltinList[A]](self), List.Nil)
+        rev(typeProxy[BuiltinList[A]](built), List.Nil)
+    }
+
+    def diff[@UplcRepr(TypeVar(Unwrapped)) A](
+        self: List[A],
+        other: List[A],
+        eq: (A, A) => Boolean
+    ): List[A] = {
+        // Short-circuit on empty `acc` (prelude's `if isEmpty then Nil`), mirroring the other reprs.
+        def go(acc: List[A], o: BuiltinList[A]): List[A] =
+            if nullList(typeProxy[BuiltinList[A]](acc)) then List.Nil
+            else if nullList(o) then acc
+            else go(deleteFirst(acc, headList(o), eq), tailList(o))
+        go(self, typeProxy[BuiltinList[A]](other))
+    }
+
 }

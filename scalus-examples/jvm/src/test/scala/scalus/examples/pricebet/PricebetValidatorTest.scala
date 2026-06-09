@@ -54,7 +54,9 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
 
         val joinResult = assertSuccess(provider, joinTx, pricebetUtxo._1)
         assert(
-          joinResult.budget == (ExUnits(memory = 163931L, steps = 57112657L))
+          // Slightly higher than before: the exchange-rate check now uses RationalEq.equals
+          // (cross-multiplication) instead of the previous structural equalsData on Rational.
+          joinResult.budget == (ExUnits(memory = 168583L, steps = 57650904L))
         )
     }
 

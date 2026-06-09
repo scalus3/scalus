@@ -169,11 +169,30 @@ object AssocMap {
         AssocMap(lhs1.appendedAll(rhsThat))
     }
 
-    given assocMapEq[A: Eq, B: Eq]: Eq[AssocMap[A, B]] =
-        (lhs: AssocMap[A, B], rhs: AssocMap[A, B]) =>
-            lhs.size === rhs.size && lhs.toList.forall { case (key, lhsValue) =>
-                rhs.get(key) match
-                    case None           => false
-                    case Some(rhsValue) => lhsValue === rhsValue
-            }
+    /** `AssocMap` intentionally has no usable `Eq`: its equality is order-insensitive (same size,
+      * every key maps to an equal value), which is non-structural and cannot be expressed by the
+      * structural-equality lowering. This `given` only produces a clear compile error if someone
+      * writes `m1 === m2` / `m1 == m2`, or `Eq.derived` for a type with an `AssocMap` field. Use
+      * [[AssocMapEq.equals]] instead.
+      */
+    inline given assocMapNoEq[A, B]: Eq[AssocMap[A, B]] =
+        scala.compiletime.error(
+          "AssocMap has no Eq instance: its equality is order-insensitive, not structural. " +
+              "Use AssocMapEq.equals(a, b) (requires Eq for the key and value types)."
+        )
 }
+
+/** Order-insensitive value equality for [[AssocMap]]: same size, and every key in `lhs` maps to an
+  * equal value in `rhs`.
+  *
+  * Provided as a named operation because `AssocMap` has no `Eq` instance (its equality is not
+  * structural). Use this instead of `===` / `==`.
+  */
+@Compile
+object AssocMapEq:
+    def equals[A: Eq, B: Eq](lhs: AssocMap[A, B], rhs: AssocMap[A, B]): Boolean =
+        lhs.size === rhs.size && lhs.toList.forall { case (key, lhsValue) =>
+            rhs.get(key) match
+                case Option.None           => false
+                case Option.Some(rhsValue) => lhsValue === rhsValue
+        }

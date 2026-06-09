@@ -132,16 +132,48 @@ object IntrinsicsUplcConstrList {
           (a: A, b: A) => ord(toDefaultTypeVarRepr(a), toDefaultTypeVarRepr(b))
         )
 
+    // `eq` parameter dropped (the resolver strips the caller's `Eq` argument); the dispatcher
+    // (re-lowered per concrete element type) supplies `equalsRepr` to the leaf.
     def contains[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
-        elem: A,
-        eq: (A, A) => Boolean
+        elem: A
     ): Boolean =
         UplcConstrListOperations.contains(
           self,
           elem,
           (a: A, b: A) => equalsRepr(a, b)
         )
+
+    // `eq` dropped (resolver strips it); structural `equalsRepr` supplied to the support leaf.
+    def indexOf[@UplcRepr(TypeVar(Unwrapped)) A](
+        @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
+        elem: A
+    ): BigInt =
+        UplcConstrListOperations.indexOf(
+          self,
+          elem,
+          (a: A, b: A) => equalsRepr(a, b)
+        )
+
+    @UplcRepr(UplcRepresentation.UplcConstr)
+    def deleteFirst[@UplcRepr(TypeVar(Unwrapped)) A](
+        @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
+        elem: A
+    ): List[A] =
+        UplcConstrListOperations.deleteFirst(self, elem, (a: A, b: A) => equalsRepr(a, b))
+
+    @UplcRepr(UplcRepresentation.UplcConstr)
+    def distinct[@UplcRepr(TypeVar(Unwrapped)) A](
+        @UplcRepr(UplcRepresentation.UplcConstr) self: List[A]
+    ): List[A] =
+        UplcConstrListOperations.distinct(self, (a: A, b: A) => equalsRepr(a, b))
+
+    @UplcRepr(UplcRepresentation.UplcConstr)
+    def diff[@UplcRepr(TypeVar(Unwrapped)) A](
+        @UplcRepr(UplcRepresentation.UplcConstr) self: List[A],
+        @UplcRepr(UplcRepresentation.UplcConstr) other: List[A]
+    ): List[A] =
+        UplcConstrListOperations.diff(self, other, (a: A, b: A) => equalsRepr(a, b))
 
     def length[@UplcRepr(TypeVar(Unwrapped)) A](
         @UplcRepr(UplcRepresentation.UplcConstr) self: List[A]

@@ -1,6 +1,6 @@
 package scalus.compiler.intrinsics
 
-import scalus.compiler.Compile
+import scalus.compiler.{Compile, UplcRepresentation}
 import scalus.cardano.onchain.plutus.prelude.{List, PairList}
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.compiler.sir.{SIRPosition, SIRType}
@@ -140,9 +140,8 @@ object NativeListReprRules {
                 )
             case _ => optionRepr(outTp)
 
-    /** contains: List[A] → A → Eq[A] → Boolean */
-    val containsRule: ReprRule = (outTp, _, lctx) =>
-        typegens.SirTypeUplcGenerator.defaultRepresentation(outTp)(using lctx)
+    // scalar-returning ops (`contains`/`indexOf`) need no repr rule — the body's natural Boolean/
+    // BigInt repr flows through.
 
     val rules: Map[String, ReprRule] = Map(
       "isEmpty" -> isEmptyRule,
@@ -152,7 +151,11 @@ object NativeListReprRules {
       "filter" -> filterRule,
       "foldLeft" -> foldLeftRule,
       "foldRight" -> foldRightRule,
-      "find" -> findRule
+      "find" -> findRule,
+      // deleteFirst / distinct / diff all return a List[A] of the same repr as `self`.
+      "deleteFirst" -> filterRule,
+      "distinct" -> filterRule,
+      "diff" -> filterRule
     )
 }
 
@@ -223,7 +226,11 @@ object UplcConstrListReprRules {
       "drop" -> sameListRule,
       "prepended" -> sameListRule,
       "dropRight" -> sameListRule,
-      "init" -> sameListRule
+      "init" -> sameListRule,
+      // deleteFirst / distinct return the same list repr; diff's second arg is a same-type list.
+      "deleteFirst" -> sameListRule,
+      "distinct" -> sameListRule,
+      "diff" -> appendListRule
     )
 }
 
@@ -245,6 +252,38 @@ object BuiltinListOperations {
           tailList(typeProxy[BuiltinList[A]](self))
         )
 
+    // Data-repr dispatcher: `eq` is dropped (the resolver strips the caller's `Eq` arg). Elements
+    // are `Data`, so the support module compares with `equalsData` directly — no function passed.
+    def contains[A](self: List[A], elem: A): Boolean =
+        BuiltinListSupport.contains(self, elem)
+
+    def indexOf[A](self: List[A], elem: A): BigInt =
+        BuiltinListSupport.indexOf(self, elem)
+
+    // The support is lowered once with its element type abstract, so its list result is labelled
+    // `SumBuiltinList(DataData)`. Re-lowered here per concrete element type, `typeProxyRepr` relabels
+    // the result to `SumBuiltinList(<A's default-data repr>)` (the sentinel `SumBuiltinList(DataData)`
+    // is refined to the concrete element repr by `lowerTypeProxyRepr`). Pure relabel — the bytes are
+    // already a builtin list of `Data`; without it the result stays `DataData`-element and a
+    // structural `listEq` over the result can't destructure the elements.
+    def deleteFirst[A](self: List[A], elem: A): List[A] =
+        typeProxyRepr[List[A]](
+          BuiltinListSupport.deleteFirst(self, elem),
+          UplcRepresentation.SumBuiltinList(UplcRepresentation.DataData)
+        )
+
+    def distinct[A](self: List[A]): List[A] =
+        typeProxyRepr[List[A]](
+          BuiltinListSupport.distinct(self),
+          UplcRepresentation.SumBuiltinList(UplcRepresentation.DataData)
+        )
+
+    def diff[A](self: List[A], other: List[A]): List[A] =
+        typeProxyRepr[List[A]](
+          BuiltinListSupport.diff(self, other),
+          UplcRepresentation.SumBuiltinList(UplcRepresentation.DataData)
+        )
+
 }
 
 @Compile
@@ -257,6 +296,30 @@ object BuiltinListOperationsV11 {
 
     def at[A](self: List[A], index: BigInt): A =
         headList(dropList(index, typeProxy[BuiltinList[A]](self)))
+
+    def contains[A](self: List[A], elem: A): Boolean =
+        BuiltinListSupport.contains(self, elem)
+
+    def indexOf[A](self: List[A], elem: A): BigInt =
+        BuiltinListSupport.indexOf(self, elem)
+
+    def deleteFirst[A](self: List[A], elem: A): List[A] =
+        typeProxyRepr[List[A]](
+          BuiltinListSupport.deleteFirst(self, elem),
+          UplcRepresentation.SumBuiltinList(UplcRepresentation.DataData)
+        )
+
+    def distinct[A](self: List[A]): List[A] =
+        typeProxyRepr[List[A]](
+          BuiltinListSupport.distinct(self),
+          UplcRepresentation.SumBuiltinList(UplcRepresentation.DataData)
+        )
+
+    def diff[A](self: List[A], other: List[A]): List[A] =
+        typeProxyRepr[List[A]](
+          BuiltinListSupport.diff(self, other),
+          UplcRepresentation.SumBuiltinList(UplcRepresentation.DataData)
+        )
 
 }
 

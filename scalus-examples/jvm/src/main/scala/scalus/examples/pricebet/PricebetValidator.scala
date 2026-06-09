@@ -93,7 +93,8 @@ object PricebetValidator extends DataParameterizedValidator {
                 require(newState.owner === state.owner, "Owner must not change")
                 require(newState.deadline === state.deadline, "Deadline must not change")
                 require(
-                  newState.exchangeRate === state.exchangeRate,
+                  // Rational has no Eq; compare by value (cross-multiplication).
+                  RationalEq.equals(newState.exchangeRate, state.exchangeRate),
                   "Exchange rate must not change"
                 )
 

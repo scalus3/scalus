@@ -195,8 +195,18 @@ case class Rational(numerator: BigInt, denominator: BigInt)
 @Compile
 object Rational:
 
-    given Eq[Rational] = (lhs: Rational, rhs: Rational) =>
-        lhs.numerator * rhs.denominator === rhs.numerator * lhs.denominator
+    /** `Rational` intentionally has no usable `Eq`: its mathematical equality is
+      * cross-multiplication (`a/b == c/d` iff `a*d == c*b`), which is non-structural and cannot be
+      * expressed by the structural-equality lowering. This `given` only produces a clear compile
+      * error if someone writes `r1 === r2` / `r1 == r2`, or `Eq.derived` for a type with a
+      * `Rational` field. Use [[RationalEq.equals]] for value equality, or [[normalize]] for a
+      * reduced (lowest-terms) form that can be compared structurally.
+      */
+    inline given rationalNoEq: Eq[Rational] =
+        scala.compiletime.error(
+          "Rational has no Eq instance: its equality is non-structural (a/b == c/d iff a*d == c*b). " +
+              "Use RationalEq.equals(a, b) for value equality, or x.normalize for a reduced form."
+        )
 
     given Ord[Rational] = (lhs: Rational, rhs: Rational) =>
         lhs.numerator * rhs.denominator <=> rhs.numerator * lhs.denominator
@@ -211,7 +221,27 @@ object Rational:
 
         inline def checkDenominator(): Unit =
             require(self.denominator !== BigInt(0), "Division by zero in Rational")
+
+        /** Reduce to lowest terms, with the sign carried on the numerator (denominator made
+          * positive). After normalization two equal-valued rationals share identical
+          * numerator/denominator, so they may be compared structurally.
+          */
+        def normalize: Rational =
+            val g = Math.gcd(self.numerator, self.denominator)
+            if self.denominator < BigInt(0) then
+                Rational(-self.numerator / g, -self.denominator / g)
+            else Rational(self.numerator / g, self.denominator / g)
     }
+
+/** Value equality for [[Rational]] by cross-multiplication: `a/b == c/d` iff `a*d == c*b`.
+  *
+  * Provided as a named operation because `Rational` has no `Eq` instance (its equality is not
+  * structural). Use this instead of `===` / `==`.
+  */
+@Compile
+object RationalEq:
+    def equals(a: Rational, b: Rational): Boolean =
+        a.numerator * b.denominator == b.numerator * a.denominator
 
 extension [A](self: scala.Seq[A]) {
 
