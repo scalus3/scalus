@@ -54,6 +54,8 @@
   { "from": "/docs/ledger/provider", "to": "/docs/dapp-development/blockchain-providers" },
   { "from": "/docs/ledger/protocol-parameters", "to": "/docs/dapp-development/protocol-parameters" },
   { "from": "/docs/testing/testkit", "to": "/docs/testing" },
-  { "from": "/docs/dapp-development/blueprint-plugin", "to": "/docs/smart-contracts/blueprint" },
-  { "from": "/docs/dapp-development/deploy", "to": "/docs/smart-contracts/deploy" }
+  { "from": "/docs/dapp-development/blueprint-plugin", "to": "/docs/dapp-development/sbt-plugin#blueprint-generation" },
+  { "from": "/docs/dapp-development/deploy", "to": "/docs/dapp-development/sbt-plugin#deploying-contracts" },
+  { "from": "/docs/smart-contracts/blueprint", "to": "/docs/dapp-development/sbt-plugin#blueprint-generation" },
+  { "from": "/docs/smart-contracts/deploy", "to": "/docs/dapp-development/sbt-plugin#deploying-contracts" }
 ]
