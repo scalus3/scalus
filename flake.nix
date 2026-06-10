@@ -194,10 +194,12 @@
           };
         ci =
           let
-            jdk = pkgs.openjdk11;
+            # JDK 21: Scala 3.8+ requires JDK 17+ to run the compiler (3.3 LTS still
+            # supports JDK 8+). ci-jvm cross-builds on 3.8.4, so the CI shell must be >= 17.
+            jdk = pkgs.openjdk21;
             sbt = pkgs.sbt.override { jre = jdk; };
 
-            # Common JVM options for CI environment (Java 11 - more conservative settings)
+            # Common JVM options for CI environment (Java 21 - more conservative settings)
             ciCommonJvmOpts = [
               # Memory settings - fixed heap to avoid OOM on 16GB GitHub Actions runners.
               # MaxRAMPercentage=75% gives ~12GB heap, leaving too little for Node.js
@@ -206,10 +208,10 @@
               "-Xmx7g" # Max heap: 7GB (leaves ~9GB for Node.js, Nix, OS on 16GB runner)
               "-Xss64m" # Stack size for deep recursive calls in compiler
 
-              # Garbage Collection - G1GC for Java 11 stability
+              # Garbage Collection - G1GC for stability
               "-XX:+UseG1GC" # Use G1 Garbage Collector (stable, good for large heaps)
 
-              # Memory optimizations (Java 11 compatible)
+              # Memory optimizations
               "-XX:+UseStringDeduplication" # Deduplicate identical strings to save memory
 
               # Code cache settings - enabled for better JIT performance
