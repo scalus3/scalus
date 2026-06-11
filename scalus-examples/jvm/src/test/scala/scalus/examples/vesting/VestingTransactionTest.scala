@@ -139,7 +139,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
         assert(result.isSuccess, s"Validator failed: $result")
         assert(
-          result.budget == (ExUnits(memory = 283592L, steps = 92129173L))
+          result.budget == (ExUnits(memory = 314080L, steps = 102729620L))
         )
 
         val submitResult = provider.submit(withdrawTx).await()
@@ -172,7 +172,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
         assert(result.isSuccess, s"Validator failed: $result")
         assert(
-          result.budget == (ExUnits(memory = 348260L, steps = 115233391L))
+          result.budget == (ExUnits(memory = 454526L, steps = 150186176L))
         )
 
         val submitResult = provider.submit(withdrawTx).await()
@@ -208,7 +208,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
           validFrom = validFrom,
           signer = Bob.signer
         )
-        assertSubmitScriptFail(provider, "Declared amount does not match calculated amount")(tx)
+        assertSubmitScriptFail(provider, "Requested amount exceeds the available vested amount")(tx)
     }
 
     test("Fail: withdraw more than available") {
@@ -233,7 +233,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
           validFrom = validFrom,
           signer = Bob.signer
         )
-        assertSubmitScriptFail(provider, "Declared amount does not match calculated amount")(tx)
+        assertSubmitScriptFail(provider, "Requested amount exceeds the available vested amount")(tx)
     }
 
     test("Fail: wrong signer") {

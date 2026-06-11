@@ -4,10 +4,11 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
+import scalus.uplc.builtin.ByteString.hex
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compileWithOptions, Options}
 import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
-import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, StakingCredential}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
@@ -522,6 +523,183 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
 
         val secondResult = compiled.runScript(scriptContext2)
         assert(secondResult.isFailure, "Second withdrawal should fail")
+    }
+
+    test("Fail: double satisfaction across two vesting inputs sharing one continuing output") {
+        // Two independent vesting UTxOs with identical config, each holding the full amount.
+        // Spent together, a single continuing output of (amount - withdrawn) satisfies BOTH
+        // validator runs, letting the spender pocket the second UTxO's locked funds.
+        val vestingDatum = Config(
+          beneficiary = beneficiaryPKH,
+          startTimestamp = defaultStartTime,
+          duration = defaultDuration,
+          initialAmount = defaultInitialAmount
+        )
+        val signatories = List(beneficiaryPKH)
+        // 50% of the vesting period -> 50% (10 ADA) available per input
+        val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration / 2)
+        val withdrawalAmount = vestingDatum.initialAmount / 2
+        val redeemer = Action(withdrawalAmount)
+
+        val scriptInput1 = makeScriptHashInput(contractHash, vestingDatum.initialAmount)
+        val scriptInput2 = makeScriptHashInput(contractHash, vestingDatum.initialAmount)
+        val beneficiaryInput = makePubKeyHashInput(beneficiaryPKH.hash, defaultFee)
+        val inputs = List(scriptInput1, scriptInput2, beneficiaryInput)
+
+        // Only ONE continuing output and one beneficiary output: the rest is siphoned.
+        val outputs = List(
+          makePubKeyHashOutput(beneficiaryPKH.hash, withdrawalAmount),
+          TxOut(
+            address = Address(ScriptCredential(contractHash), Option.None),
+            value = Value.lovelace(vestingDatum.initialAmount - withdrawalAmount),
+            datum = OutputDatum.OutputDatum(vestingDatum.toData)
+          )
+        )
+
+        val txInfo = TxInfo(
+          inputs = inputs,
+          id = random[TxId],
+          signatories = signatories,
+          outputs = outputs,
+          validRange = interval,
+          fee = defaultFee
+        )
+
+        def contextFor(ref: TxOutRef): ScriptContext = ScriptContext(
+          txInfo = txInfo,
+          redeemer = toData(redeemer),
+          scriptInfo = ScriptInfo.SpendingScript(
+            txOutRef = ref,
+            datum = Some(vestingDatum.toData)
+          )
+        )
+
+        val firstResult = compiled.runScript(contextFor(scriptInput1.outRef))
+        val secondResult = compiled.runScript(contextFor(scriptInput2.outRef))
+
+        assert(
+          firstResult.isFailure,
+          "Spending a vesting input must fail when 2+ vesting inputs are present"
+        )
+        assert(
+          secondResult.isFailure,
+          "Spending a vesting input must fail when 2+ vesting inputs are present"
+        )
+    }
+
+    test("Fail: native tokens stripped from the continuing output") {
+        // The vesting UTxO holds ADA plus a native token. A partial withdrawal preserves the
+        // ADA remainder but routes the native token to the spender. A lovelace-only continuing
+        // output check would accept this; full value preservation must reject it.
+        val tokenPolicy = TestUtil.mockScriptHash(1)
+        val tokenName = hex"abcd"
+        val nativeToken = Value(tokenPolicy, tokenName, BigInt(100))
+
+        val vestingDatum = Config(
+          beneficiary = beneficiaryPKH,
+          startTimestamp = defaultStartTime,
+          duration = defaultDuration,
+          initialAmount = defaultInitialAmount
+        )
+        val signatories = List(beneficiaryPKH)
+        val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration / 2)
+        val withdrawalAmount = vestingDatum.initialAmount / 2
+        val redeemer = Action(withdrawalAmount)
+
+        val scriptInput = TxInInfo(
+          outRef = TxOutRef(random[TxId], 0),
+          resolved = TxOut(
+            address = Address(ScriptCredential(contractHash), Option.None),
+            value = Value.lovelace(vestingDatum.initialAmount) + nativeToken
+          )
+        )
+        val beneficiaryInput = makePubKeyHashInput(beneficiaryPKH.hash, defaultFee)
+        val inputs = List(scriptInput, beneficiaryInput)
+
+        val outputs = List(
+          makePubKeyHashOutput(beneficiaryPKH.hash, withdrawalAmount),
+          TxOut(
+            address = Address(ScriptCredential(contractHash), Option.None),
+            // native token omitted -> stolen
+            value = Value.lovelace(vestingDatum.initialAmount - withdrawalAmount),
+            datum = OutputDatum.OutputDatum(vestingDatum.toData)
+          )
+        )
+
+        val txInfo = TxInfo(
+          inputs = inputs,
+          id = random[TxId],
+          signatories = signatories,
+          outputs = outputs,
+          validRange = interval,
+          fee = defaultFee
+        )
+
+        val scriptContext = ScriptContext(
+          txInfo = txInfo,
+          redeemer = toData(redeemer),
+          scriptInfo = ScriptInfo.SpendingScript(
+            txOutRef = scriptInput.outRef,
+            datum = Some(vestingDatum.toData)
+          )
+        )
+
+        val result = compiled.runScript(scriptContext)
+        assert(result.isFailure, "Stripping native tokens from the continuing output must fail")
+    }
+
+    test("Fail: continuing output redirects the staking credential") {
+        // The continuing output keeps the script payment credential, value and datum, but
+        // attaches the attacker's staking credential — hijacking delegation rewards. Matching
+        // on payment credential alone would accept it; the full address must be preserved.
+        val vestingDatum = Config(
+          beneficiary = beneficiaryPKH,
+          startTimestamp = defaultStartTime,
+          duration = defaultDuration,
+          initialAmount = defaultInitialAmount
+        )
+        val signatories = List(beneficiaryPKH)
+        val interval = Interval.after(vestingDatum.startTimestamp + vestingDatum.duration / 2)
+        val withdrawalAmount = vestingDatum.initialAmount / 2
+        val redeemer = Action(withdrawalAmount)
+
+        val scriptInput = makeScriptHashInput(contractHash, vestingDatum.initialAmount)
+        val beneficiaryInput = makePubKeyHashInput(beneficiaryPKH.hash, defaultFee)
+        val inputs = List(scriptInput, beneficiaryInput)
+
+        val hijackedAddress = Address(
+          ScriptCredential(contractHash),
+          Option.Some(StakingCredential.StakingHash(Credential.PubKeyCredential(ownerPKH)))
+        )
+        val outputs = List(
+          makePubKeyHashOutput(beneficiaryPKH.hash, withdrawalAmount),
+          TxOut(
+            address = hijackedAddress,
+            value = Value.lovelace(vestingDatum.initialAmount - withdrawalAmount),
+            datum = OutputDatum.OutputDatum(vestingDatum.toData)
+          )
+        )
+
+        val txInfo = TxInfo(
+          inputs = inputs,
+          id = random[TxId],
+          signatories = signatories,
+          outputs = outputs,
+          validRange = interval,
+          fee = defaultFee
+        )
+
+        val scriptContext = ScriptContext(
+          txInfo = txInfo,
+          redeemer = toData(redeemer),
+          scriptInfo = ScriptInfo.SpendingScript(
+            txOutRef = scriptInput.outRef,
+            datum = Some(vestingDatum.toData)
+          )
+        )
+
+        val result = compiled.runScript(scriptContext)
+        assert(result.isFailure, "Redirecting the staking credential must fail")
     }
 
 }

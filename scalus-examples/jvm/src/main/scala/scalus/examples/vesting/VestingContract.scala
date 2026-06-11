@@ -11,7 +11,7 @@ object VestingContract extends Contract {
       title = "Vesting validator",
       description = "Time-locked token distribution with linear vesting schedule",
       version = "1.0.0",
-      license = None,
+      license = Some("Apache License Version 2.0"),
       compiled = compiled
     )
 }

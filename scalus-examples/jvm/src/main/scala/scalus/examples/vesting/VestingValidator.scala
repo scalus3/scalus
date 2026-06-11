@@ -1,15 +1,13 @@
 package scalus.examples.vesting
 
 import scalus.compiler.Compile
-
-import scalus.*
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.Value.getLovelace
+import scalus.cardano.onchain.plutus.v1.Value
+import scalus.cardano.onchain.plutus.v1.Value.*
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.cardano.onchain.plutus.prelude.Option.*
 
 // Datum
@@ -22,9 +20,7 @@ case class Config(
       ToData
 
 @Compile
-object Config {
-    given Eq[Config] = Eq.derived
-}
+object Config
 
 // Redeemer
 case class Action(amount: Lovelace) derives FromData, ToData
@@ -54,13 +50,22 @@ object VestingValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
-        val vestingDatum = datum.getOrFail("Datum not found").to[Config]
+        val vestingDatum = datum.getOrFail(DatumNotFound).to[Config]
         val Action(requestedAmount) = redeemer.to[Action]
 
-        require(requestedAmount > 0, "Withdrawal amount must be greater than 0")
+        require(requestedAmount > 0, NonPositiveAmount)
 
         val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
         val contractAddress = ownInput.address
+
+        // Reject spending more than one vesting UTxO at once: otherwise a single continuing
+        // output could satisfy several script inputs (double satisfaction) and the remaining
+        // locked funds of the extra inputs would be siphoned off.
+        require(
+          txInfo.findOwnInputsByCredential(contractAddress.credential).length === BigInt(1),
+          MultipleVestingInputs
+        )
+
         val contractAmount = ownInput.value.getLovelace
 
         val contractOutputs = txInfo.findOwnOutputsByCredential(contractAddress.credential)
@@ -73,11 +78,11 @@ object VestingValidator extends Validator {
 
         require(
           txInfo.isSignedBy(vestingDatum.beneficiary),
-          "No signature from beneficiary"
+          NoBeneficiarySignature
         )
         require(
           requestedAmount <= availableAmount,
-          "Declared amount does not match calculated amount"
+          AmountExceedsAvailable
         )
 
         val beneficiaryCred = Credential.PubKeyCredential(vestingDatum.beneficiary)
@@ -93,29 +98,32 @@ object VestingValidator extends Validator {
 
         require(
           adaInOutputs === expectedOutput,
-          "Beneficiary output mismatch"
+          BeneficiaryOutputMismatch
         )
 
         if requestedAmount === contractAmount then ()
         else
-            require(contractOutputs.length === BigInt(1), "Expected exactly one contract output")
+            require(contractOutputs.length === BigInt(1), NotExactlyOneContractOutput)
 
             val contractOutput = contractOutputs.head
 
-            // Verify continuing output has correct remaining amount (prevents fund theft)
-            val expectedRemainingAmount = contractAmount - requestedAmount
+            // Pin the continuing output to the exact own input address: matching the payment
+            // credential alone would let the staking credential (and thus delegation rewards)
+            // be redirected to the attacker.
+            require(contractOutput.address === ownInput.address, ContinuingAddressMismatch)
+
+            // The continuing output must preserve the entire remaining value — ADA and any
+            // native tokens — minus only the withdrawn lovelace. A lovelace-only check would
+            // let native tokens be stripped out of the locked UTxO.
             require(
-              contractOutput.value.getLovelace >= expectedRemainingAmount,
-              "Continuing output must contain remaining vested funds"
+              contractOutput.value === ownInput.value - Value.lovelace(requestedAmount),
+              ContinuingValueMismatch
             )
 
             contractOutput.datum match
                 case OutputDatum.OutputDatum(inlineData) =>
-                    require(
-                      inlineData === datum.getOrFail("Datum not found"),
-                      "VestingDatum mismatch"
-                    )
-                case _ => fail("Expected inline datum")
+                    require(inlineData === datum.getOrFail(DatumNotFound), DatumMismatch)
+                case _ => fail(ExpectedInlineDatum)
     }
 
     def linearVesting(vestingDatum: Config, timestamp: BigInt): BigInt = {
@@ -126,4 +134,18 @@ object VestingValidator extends Validator {
         else
             vestingDatum.initialAmount * (timestamp - vestingDatum.startTimestamp) / vestingDatum.duration
     }
+
+    // Error messages
+    inline val DatumNotFound = "Datum not found"
+    inline val NonPositiveAmount = "Withdrawal amount must be greater than 0"
+    inline val MultipleVestingInputs = "Only one vesting input may be spent per transaction"
+    inline val NoBeneficiarySignature = "No signature from beneficiary"
+    inline val AmountExceedsAvailable = "Requested amount exceeds the available vested amount"
+    inline val BeneficiaryOutputMismatch = "Beneficiary output mismatch"
+    inline val NotExactlyOneContractOutput = "Expected exactly one contract output"
+    inline val ContinuingAddressMismatch = "Continuing output must keep the vesting address"
+    inline val ContinuingValueMismatch =
+        "Continuing output must preserve the remaining vested value"
+    inline val DatumMismatch = "VestingDatum mismatch"
+    inline val ExpectedInlineDatum = "Expected inline datum"
 }
