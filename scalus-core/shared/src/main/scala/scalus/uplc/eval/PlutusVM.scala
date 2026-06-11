@@ -388,26 +388,4 @@ object PlutusVM {
         val params = MachineParams.defaultParamsFor(Language.PlutusV3, protocolVersion)
         makePlutusV3VM(params, protocolVersion)
     }
-
-    /** Creates a Plutus V4 VM with custom parameters.
-      *
-      * @deprecated
-      *   Use makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV) instead. There is no PlutusV4
-      *   in Cardano.
-      */
-    @deprecated("Use makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV) instead", "0.15.1")
-    def makePlutusV4VM(params: MachineParams): PlutusVM = {
-        makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV)
-    }
-
-    /** Creates a Plutus V4 VM with default parameters.
-      *
-      * @deprecated
-      *   Use makePlutusV3VM(MajorProtocolVersion.vanRossemPV) instead. There is no PlutusV4 in
-      *   Cardano.
-      */
-    @deprecated("Use makePlutusV3VM(MajorProtocolVersion.vanRossemPV) instead", "0.15.1")
-    def makePlutusV4VM(): PlutusVM = {
-        makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
-    }
 }

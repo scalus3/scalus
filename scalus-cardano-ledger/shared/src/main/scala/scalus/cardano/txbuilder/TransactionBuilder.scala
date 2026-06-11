@@ -92,16 +92,6 @@ case class NativeScriptWitness(
 
 object NativeScriptWitness {
 
-    @deprecated(
-      "Use NativeScriptWitness(scriptSource) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def apply(
-        scriptSource: ScriptSource[Script.Native],
-        additionalSigners: Set[ExpectedSigner]
-    ): NativeScriptWitness =
-        NativeScriptWitness(scriptSource)
-
     /** Creates a witness for an attached native script.
       *
       * The script will be included in the transaction witness set.
@@ -114,24 +104,11 @@ object NativeScriptWitness {
     ): NativeScriptWitness =
         NativeScriptWitness(ScriptSource.NativeScriptValue(script))
 
-    @deprecated("Use attached(script) and TxBuilder.requireSignature() instead", "0.15.1")
-    def attached(
-        script: Script.Native,
-        signers: Set[AddrKeyHash]
-    ): NativeScriptWitness =
-        NativeScriptWitness(ScriptSource.NativeScriptValue(script))
-
     /** Creates a witness for a reference native script.
       *
       * The script must be provided via a reference input (using `references` method).
       */
     def reference(): NativeScriptWitness =
-        NativeScriptWitness(ScriptSource.NativeScriptAttached)
-
-    @deprecated("Use reference() and TxBuilder.requireSignature() instead", "0.15.1")
-    def reference(
-        signers: Set[AddrKeyHash]
-    ): NativeScriptWitness =
         NativeScriptWitness(ScriptSource.NativeScriptAttached)
 }
 
@@ -150,28 +127,6 @@ object TwoArgumentPlutusScriptWitness {
     ): TwoArgumentPlutusScriptWitness =
         apply(scriptSource, _ => redeemer)
 
-    @deprecated(
-      "Use apply(scriptSource, redeemer) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def apply(
-        scriptSource: ScriptSource[PlutusScript],
-        redeemer: Data,
-        additionalSigners: Set[ExpectedSigner]
-    ): TwoArgumentPlutusScriptWitness =
-        apply(scriptSource, _ => redeemer)
-
-    @deprecated(
-      "Use apply(scriptSource, redeemerBuilder) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def apply(
-        scriptSource: ScriptSource[PlutusScript],
-        redeemerBuilder: Transaction => Data,
-        additionalSigners: Set[ExpectedSigner]
-    ): TwoArgumentPlutusScriptWitness =
-        apply(scriptSource, redeemerBuilder)
-
     /** Creates a witness for an attached Plutus script with immediate redeemer.
       *
       * The script will be included in the transaction witness set.
@@ -189,14 +144,6 @@ object TwoArgumentPlutusScriptWitness {
           ScriptSource.PlutusScriptValue(script),
           redeemer.toData
         )
-
-    @deprecated("Use attached(script, redeemer) and TxBuilder.requireSignature() instead", "0.15.1")
-    def attached[T: ToData](
-        script: PlutusScript,
-        redeemer: T,
-        signers: Set[AddrKeyHash]
-    ): TwoArgumentPlutusScriptWitness =
-        attached(script, redeemer)
 
     /** Creates a witness for an attached Plutus script with delayed redeemer.
       *
@@ -217,17 +164,6 @@ object TwoArgumentPlutusScriptWitness {
           redeemerBuilder
         )
 
-    @deprecated(
-      "Use attached(script, redeemerBuilder) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def attached(
-        script: PlutusScript,
-        redeemerBuilder: Transaction => Data,
-        signers: Set[AddrKeyHash]
-    ): TwoArgumentPlutusScriptWitness =
-        attached(script, redeemerBuilder)
-
     /** Creates a witness for a reference Plutus script with immediate redeemer.
       *
       * The script must be provided via a reference input (using `references` method).
@@ -242,13 +178,6 @@ object TwoArgumentPlutusScriptWitness {
           ScriptSource.PlutusScriptAttached,
           redeemer.toData
         )
-
-    @deprecated("Use reference(redeemer) and TxBuilder.requireSignature() instead", "0.15.1")
-    def reference[T: ToData](
-        redeemer: T,
-        signers: Set[AddrKeyHash]
-    ): TwoArgumentPlutusScriptWitness =
-        reference(redeemer)
 
     /** Creates a witness for a reference Plutus script with delayed redeemer.
       *
@@ -265,13 +194,6 @@ object TwoArgumentPlutusScriptWitness {
           ScriptSource.PlutusScriptAttached,
           redeemerBuilder
         )
-
-    @deprecated("Use reference(redeemerBuilder) and TxBuilder.requireSignature() instead", "0.15.1")
-    def reference(
-        redeemerBuilder: Transaction => Data,
-        signers: Set[AddrKeyHash]
-    ): TwoArgumentPlutusScriptWitness =
-        reference(redeemerBuilder)
 }
 
 // For operations that take a datum, redeemer, and script context
@@ -291,30 +213,6 @@ object ThreeArgumentPlutusScriptWitness {
     ): ThreeArgumentPlutusScriptWitness =
         apply(scriptSource, tx => redeemer, datum)
 
-    @deprecated(
-      "Use apply(scriptSource, redeemer, datum) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def apply(
-        scriptSource: ScriptSource[PlutusScript],
-        redeemer: Data,
-        datum: Datum,
-        additionalSigners: Set[ExpectedSigner]
-    ): ThreeArgumentPlutusScriptWitness =
-        apply(scriptSource, tx => redeemer, datum)
-
-    @deprecated(
-      "Use apply(scriptSource, redeemerBuilder, datum) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def apply(
-        scriptSource: ScriptSource[PlutusScript],
-        redeemerBuilder: Transaction => Data,
-        datum: Datum,
-        additionalSigners: Set[ExpectedSigner]
-    ): ThreeArgumentPlutusScriptWitness =
-        apply(scriptSource, redeemerBuilder, datum)
-
     /** Creates a witness for an attached Plutus script with immediate redeemer.
       *
       * The script will be included in the transaction witness set.
@@ -336,18 +234,6 @@ object ThreeArgumentPlutusScriptWitness {
           redeemer.toData,
           datum
         )
-
-    @deprecated(
-      "Use attached(script, redeemer, datum) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def attached[T: ToData](
-        script: PlutusScript,
-        redeemer: T,
-        datum: Datum,
-        signers: Set[AddrKeyHash]
-    ): ThreeArgumentPlutusScriptWitness =
-        attached(script, redeemer, datum)
 
     /** Creates a witness for an attached Plutus script with delayed redeemer.
       *
@@ -372,18 +258,6 @@ object ThreeArgumentPlutusScriptWitness {
           datum
         )
 
-    @deprecated(
-      "Use attached(script, redeemerBuilder, datum) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def attached(
-        script: PlutusScript,
-        redeemerBuilder: Transaction => Data,
-        datum: Datum,
-        signers: Set[AddrKeyHash]
-    ): ThreeArgumentPlutusScriptWitness =
-        attached(script, redeemerBuilder, datum)
-
     /** Creates a witness for a reference Plutus script with immediate redeemer.
       *
       * The script must be provided via a reference input (using `references` method).
@@ -402,14 +276,6 @@ object ThreeArgumentPlutusScriptWitness {
           redeemer.toData,
           datum
         )
-
-    @deprecated("Use reference(redeemer, datum) and TxBuilder.requireSignature() instead", "0.15.1")
-    def reference[T: ToData](
-        redeemer: T,
-        datum: Datum,
-        signers: Set[AddrKeyHash]
-    ): ThreeArgumentPlutusScriptWitness =
-        reference(redeemer, datum)
 
     /** Creates a witness for a reference Plutus script with delayed redeemer.
       *
@@ -430,17 +296,6 @@ object ThreeArgumentPlutusScriptWitness {
           redeemerBuilder,
           datum
         )
-
-    @deprecated(
-      "Use reference(redeemerBuilder, datum) and TxBuilder.requireSignature() instead",
-      "0.15.1"
-    )
-    def reference(
-        redeemerBuilder: Transaction => Data,
-        datum: Datum,
-        signers: Set[AddrKeyHash]
-    ): ThreeArgumentPlutusScriptWitness =
-        reference(redeemerBuilder, datum)
 }
 
 /** Witness type for minting, certificates, withdrawals, and voting operations.
@@ -496,17 +351,6 @@ object Datum {
     case object DatumInlined extends Datum
     case class DatumValue(datum: Data) extends Datum
 }
-
-// -----------------------------------------------------------------------------
-// ExpectedSigner
-// -----------------------------------------------------------------------------
-
-/** Tracks a pubkey hash expected to sign the transaction, used for fee estimation.
-  *
-  * To add on-chain required signers, use [[TransactionBuilderStep.RequireSignature]] instead.
-  */
-@deprecated("Use TxBuilder.requireSignature() instead", "0.15.1")
-case class ExpectedSigner(hash: AddrKeyHash)
 
 // -----------------------------------------------------------------------------
 // Transaction Builder
@@ -617,12 +461,11 @@ object TransactionBuilder {
       *
       * TODO: make a class, remove toTuple()?
       */
-    @nowarn("cat=deprecation")
     case class Context(
         transaction: Transaction,
         redeemers: Seq[DetachedRedeemer],
         network: Network,
-        expectedSigners: Set[ExpectedSigner],
+        expectedSigners: Set[AddrKeyHash],
         /** Invariants:
           *   - The union of transaction.body.value.inputs, transaction.body.value.referenceInputs,
           *     and transaction.body.value.collateralInputs must exactly match resolvedUtxos.inputs
@@ -644,7 +487,7 @@ object TransactionBuilder {
             Transaction,
             Seq[DetachedRedeemer],
             Network,
-            Set[ExpectedSigner],
+            Set[AddrKeyHash],
             ResolvedUtxos
         ) = (
           this.transaction,

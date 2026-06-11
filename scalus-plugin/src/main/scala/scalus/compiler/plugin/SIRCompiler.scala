@@ -130,11 +130,11 @@ final class SIRCompiler(
     private val ByteStringSymbolHex = ByteStringModuleSymbol.requiredMethod("hex")
     private val ByteStringSymbolUtf8 = ByteStringModuleSymbol.requiredMethod("utf8")
     private val BLS12_381_G1_ElementModuleSymbol =
-        requiredModule("scalus.uplc.builtin.BLS12_381_G1_Element")
+        requiredModule("scalus.uplc.builtin.bls12_381.G1Element")
     private val BLS12_381_G1_ElementSymbolG1 =
         BLS12_381_G1_ElementModuleSymbol.requiredMethod("g1")
     private val BLS12_381_G2_ElementModuleSymbol =
-        requiredModule("scalus.uplc.builtin.BLS12_381_G2_Element")
+        requiredModule("scalus.uplc.builtin.bls12_381.G2Element")
     private val BLS12_381_G2_ElementSymbolG2 =
         BLS12_381_G2_ElementModuleSymbol.requiredMethod("g2")
     private val BuiltinValueModuleSymbol = requiredModule("scalus.uplc.builtin.BuiltinValue")

@@ -68,8 +68,6 @@ object MajorProtocolVersion {
     val changPV = MajorProtocolVersion(9)
     val plominPV = MajorProtocolVersion(10)
     val vanRossemPV = MajorProtocolVersion(11)
-    @deprecated("Use vanRossemPV instead", "0.15.1")
-    val dijkstraPV: MajorProtocolVersion = vanRossemPV
     val futurePV = MajorProtocolVersion(Int.MaxValue)
 
     // Known protocol versions

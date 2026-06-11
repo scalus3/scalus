@@ -40,12 +40,12 @@ trait ArbitraryInstances:
       yield scalus.uplc.builtin.ByteString.unsafeFromArray(bytes)
     )
 
-    given Arbitrary[builtin.BLS12_381_G1_Element] = Arbitrary(
+    given g1ElementArbitrary: Arbitrary[scalus.uplc.builtin.bls12_381.G1Element] = Arbitrary(
       for bs <- Arbitrary.arbitrary[ByteString]
       yield Builtins.bls12_381_G1_hashToGroup(bs, dst = utf8"Test")
     )
 
-    given Arbitrary[builtin.BLS12_381_G2_Element] = Arbitrary(
+    given g2ElementArbitrary: Arbitrary[scalus.uplc.builtin.bls12_381.G2Element] = Arbitrary(
       for bs <- Arbitrary.arbitrary[ByteString]
       yield Builtins.bls12_381_G2_hashToGroup(bs, dst = utf8"Test")
     )
@@ -180,11 +180,11 @@ trait ArbitraryInstances:
                 yield Constant.Pair(vala, valb)
             case DefaultUni.BLS12_381_G1_Element =>
                 Arbitrary
-                    .arbitrary[builtin.BLS12_381_G1_Element]
+                    .arbitrary[scalus.uplc.builtin.bls12_381.G1Element]
                     .map(Constant.BLS12_381_G1_Element.apply)
             case DefaultUni.BLS12_381_G2_Element =>
                 Arbitrary
-                    .arbitrary[builtin.BLS12_381_G2_Element]
+                    .arbitrary[scalus.uplc.builtin.bls12_381.G2Element]
                     .map(Constant.BLS12_381_G2_Element.apply)
             case DefaultUni.BLS12_381_MlResult =>
                 throw new IllegalArgumentException(

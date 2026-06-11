@@ -150,28 +150,6 @@ object TransactionOutput:
       * @param value
       *   the value (ADA and native tokens) contained in this output
       * @param datumOption
-      *   optional datum associated with this output
-      * @return
-      *   a new Babbage transaction output with no script reference
-      */
-    @deprecated(
-      "use apply(address, value, datumOption: DatumOption) or apply(address, value, inlineDatum: Data)",
-      "0.14.2"
-    )
-    def apply(
-        address: Address,
-        value: Value,
-        datumOption: Option[DatumOption]
-    ): TransactionOutput = Babbage(address, value, datumOption, None)
-
-    /** Creates a Babbage-era transaction output with the specified address, value, and optional
-      * datum.
-      *
-      * @param address
-      *   the destination address for this output
-      * @param value
-      *   the value (ADA and native tokens) contained in this output
-      * @param datumOption
       *   datum associated with this output
       * @return
       *   a new Babbage transaction output with no script reference

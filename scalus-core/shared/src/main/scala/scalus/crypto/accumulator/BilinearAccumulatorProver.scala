@@ -193,47 +193,6 @@ object BilinearAccumulatorProver {
         )
     }
 
-    // -- Legacy API (G2 accumulator, for backwards compatibility) --
-
-    /** Compute accumulator (G2 variant). */
-    @deprecated("Use accumulateG2 instead", "0.15.1")
-    def accumulate(setup: Setup, elements: Vector[BigInt]): G2Element =
-        accumulateG2(setup, elements)
-
-    /** Generate membership proof (G2 variant). */
-    @deprecated("Use membershipProofG2 instead", "0.15.1")
-    def membershipProof(
-        setup: Setup,
-        fullSet: Vector[BigInt],
-        subset: Vector[BigInt]
-    ): G2Element = membershipProofG2(setup, fullSet, subset)
-
-    /** Generate non-membership proof (G2 variant). */
-    @deprecated("Use nonMembershipProofG2 instead", "0.15.1")
-    def nonMembershipProof(
-        setup: Setup,
-        fullSet: Vector[BigInt],
-        disjointSet: Vector[BigInt]
-    ): (G1Element, G2Element) = nonMembershipProofG2(setup, fullSet, disjointSet)
-
-    /** Verify membership proof (G2 variant). */
-    @deprecated("Use verifyMembershipG2 instead", "0.15.1")
-    def verifyMembership(
-        setup: Setup,
-        acc: G2Element,
-        subset: Vector[BigInt],
-        proof: G2Element
-    ): Boolean = verifyMembershipG2(setup, acc, subset, proof)
-
-    /** Verify non-membership proof (G2 variant). */
-    @deprecated("Use verifyNonMembershipG2 instead", "0.15.1")
-    def verifyNonMembership(
-        setup: Setup,
-        acc: G2Element,
-        disjointSet: Vector[BigInt],
-        proof: (G1Element, G2Element)
-    ): Boolean = verifyNonMembershipG2(setup, acc, disjointSet, proof)
-
     // -- Multi-scalar multiplication helpers --
 
     /** Compute polynomial commitment on G1: sum(coeff_i * g1Powers_i). */

@@ -382,10 +382,8 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
           tx.map(_.expectedSigners) ==
               Right(
                 Set(
-                  ExpectedSigner(
-                    spendPkhUtxoStep.utxo.output.address.keyHashOption.get
-                        .asInstanceOf[AddrKeyHash]
-                  )
+                  spendPkhUtxoStep.utxo.output.address.keyHashOption.get
+                      .asInstanceOf[AddrKeyHash]
                 )
               )
         )
@@ -411,7 +409,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         // Witnesses no longer carry signers, so expectedSigners should be empty
         assert(
           build(Mainnet, List(step)).map(_.expectedSigners) ==
-              Right(Set.empty[ExpectedSigner])
+              Right(Set.empty[AddrKeyHash])
         )
     }
 
@@ -436,7 +434,7 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
         val built = fromRight(build(Mainnet, List(step)))
 
         // Witnesses no longer carry signers, so expectedSigners should be empty
-        assert(built.expectedSigners == Set.empty[ExpectedSigner])
+        assert(built.expectedSigners == Set.empty[AddrKeyHash])
 
         // requiredSigners in tx body should be empty since witnesses don't carry signers
         val obtained =
@@ -1262,8 +1260,7 @@ def unitDRedeemer(purpose: RedeemerPurpose) = DetachedRedeemer(
   purpose = purpose
 )
 
-// `ContextTuple` projects `Context.expectedSigners` down to `Set[AddrKeyHash]` so the
-// test machinery doesn't mention the deprecated `ExpectedSigner` class. Use
+// `ContextTuple` mirrors the `Context` fields needed by the test machinery. Use
 // `Context.toCtxTuple` to build one from a `Context`.
 def transactionL: Lens[ContextTuple, Transaction] = Focus[ContextTuple](_._1)
 def ctxRedeemersL: Lens[ContextTuple, Seq[DetachedRedeemer]] = Focus[ContextTuple](_._2)
@@ -1276,7 +1273,7 @@ extension (c: Context)
       c.transaction,
       c.redeemers,
       c.network,
-      c.expectedSigners.map(_.hash),
+      c.expectedSigners,
       c.resolvedUtxos
     )
 
@@ -1374,8 +1371,6 @@ private def fromRight[A, B](e: Either[A, B]): B =
 
 // The fields of a Context, to cut down on noise
 // Note: delayedRedeemerSpecs is excluded since it contains lambdas that can't be compared
-// Note: the fourth slot stores signer hashes directly to avoid mentioning the deprecated
-//       `ExpectedSigner` class in test machinery; use `Context.toCtxTuple` for conversion.
 private type ContextTuple = (
     Transaction,
     Seq[DetachedRedeemer],

@@ -71,9 +71,13 @@ object JIT extends JitRunner {
                 '{ BuiltinPair(${ constantToExpr(a) }, ${ constantToExpr(b) }) }
                 // Expr.ofTuple(constantToExpr(a), constantToExpr(b))
             case Constant.BLS12_381_G1_Element(value) =>
-                '{ BLS12_381_G1_Element(${ Expr(value.toCompressedByteString) }) }
+                '{
+                    scalus.uplc.builtin.bls12_381.G1Element(${ Expr(value.toCompressedByteString) })
+                }
             case Constant.BLS12_381_G2_Element(value) =>
-                '{ BLS12_381_G2_Element(${ Expr(value.toCompressedByteString) }) }
+                '{
+                    scalus.uplc.builtin.bls12_381.G2Element(${ Expr(value.toCompressedByteString) })
+                }
             case Constant.BLS12_381_MlResult(value) =>
                 throw JitEvaluationFailure(
                   "BLS12_381_MlResult values cannot be serialized as constants in UPLC"

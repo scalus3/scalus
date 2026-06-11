@@ -525,6 +525,3 @@ object PlutusV3 {
         }
     }
 }
-
-@deprecated("use CompiledPlutus", "0.15.1")
-type Compiled[A] = CompiledPlutus[A]
