@@ -78,6 +78,12 @@ ThisBuild / run / javaOptions ++= (if (javaVersion >= 23)
                                        Seq("--sun-misc-unsafe-memory-access=allow")
                                    else Nil)
 
+// Pin published Java bytecode to JDK 11 so artifacts stay loadable on JDK 11 regardless of the
+// (newer) JDK used to build/publish — cardano-client-lib and the downstream consumers that bridge
+// through scalus-bloxbean-cardano-client-lib target JDK 11. Only the Java sources need this; Scala
+// already defaults to -Xtarget:8. Without it, building on JDK 21 emitted v65 Java classes.
+ThisBuild / javacOptions ++= Seq("--release", "11")
+
 // Improve incremental compilation
 ThisBuild / incOptions := {
     incOptions.value
