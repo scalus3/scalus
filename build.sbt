@@ -436,6 +436,11 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // Native targets 3.8.3 (highest Scala that Scala Native 0.5.12 supports), not the 3.8.4
       // used by JVM/JS. Run with `++3.8.3 scalusNative/test`.
       crossScalaVersions := Seq(scala3LtsVersion, scala3NativeNextVersion),
+      // Each native test group runs as its own statically-linked binary with its own
+      // immix-GC heap. Running them in parallel exhausted RAM on 16GB CI runners and the
+      // OOM-killer took down the job (SIGKILL/137). Serialize so only one native test
+      // process is live at a time.
+      Test / parallelExecution := false,
       // Disable doc due to scaladoc NPE bug on Native platform
       Compile / doc / sources := Seq.empty,
       Test / doc / sources := Seq.empty,
