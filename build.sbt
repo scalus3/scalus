@@ -125,6 +125,15 @@ lazy val commonScalacOptions = Seq(
   //  "-source:future-migration"
 ) // ++ profilingScalacOptions
 
+// Published JVM artifacts pin the emitted bytecode so the (newer) build JDK doesn't raise the
+// runtime floor, and so shared source can't reference an API newer than that floor. The 3.3 LTS
+// line targets JDK 11 (cardano-client-lib's floor — the LTS artifacts are what JDK 11 consumers
+// use); Scala 3.8.x cannot emit below JDK 17 (its compiler requires 17), so those variants target
+// 17. Compile-scoped (test code may still use newer APIs); JVM only — -release is rejected on JS/Native.
+val jvmReleaseTarget = Compile / scalacOptions ++= {
+    if (scalaVersion.value.startsWith("3.3.")) Seq("-release", "11") else Seq("-release", "17")
+}
+
 // Compilation profiling options for analyzing compilation time
 lazy val profilingScalacOptions = Seq(
   "-Vprofile", // Basic compilation profiling with file complexity
@@ -242,6 +251,8 @@ lazy val scalusPlugin = project
       // compiler plugin must match the compiler version.
       crossScalaVersions := Seq(scala3LtsVersion, scala3NativeNextVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
+      // Plugin links scala3-compiler; the 3.8.x line is JDK-17 bytecode, the 3.3 LTS line is JDK 11.
+      jvmReleaseTarget,
 //      scalacOptions += "-Wunused:all",
       // Manually set a fixed version to avoid recompilation on every commit
       // as sbt-ci-release plugin increments the version on every commit
@@ -410,6 +421,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         project.enablePlugins(BuildInfoPlugin)
     }
     .jvmSettings(
+      jvmReleaseTarget,
       Test / fork := true,
       // Run forked tests from project root so paths are consistent across platforms
       Test / baseDirectory := (LocalRootProject / baseDirectory).value,
@@ -577,6 +589,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       }.taskValue,
     )
     .jvmSettings(
+      jvmReleaseTarget,
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
@@ -683,6 +696,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       publish / skip := false,
       scalacOptions ++= commonScalacOptions,
+      jvmReleaseTarget,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
       // Removed deprecated 0.14.x members; safe to drop because they shipped deprecated in 0.15.0.
       mimaBinaryIssueFilters ++= Seq(
@@ -803,6 +817,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       publish / skip := false
     )
     .jvmSettings(
+      jvmReleaseTarget,
       // For conformance test vector extraction
       libraryDependencies += "org.apache.commons" % "commons-compress" % "1.28.0" % "test"
     )
