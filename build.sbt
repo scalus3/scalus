@@ -965,10 +965,10 @@ addCommandAlias(
   // to read the 3.8.4 TASTy of scalus-core they depend on. So target only the modules that
   // list 3.8.4 and whose dependency closure is entirely 3.8.4-capable.
   "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/test;mima;" +
-    "++3.8.4;scalusPlugin/Test/compile;scalusJVM/Test/compile;scalusCardanoLedgerJVM/Test/compile;" +
-    "scalusTestkitJVM/Test/compile;scalusExamplesJVM/Test/compile;scalusDesignPatterns/Test/compile;" +
-    "scalus-bloxbean-cardano-client-lib/Test/compile;scalusEthereumKzgCeremony/Test/compile;" +
-    "scalusJVM/test;scalusExamplesJVM/test"
+      "++3.8.4;scalusPlugin/Test/compile;scalusJVM/Test/compile;scalusCardanoLedgerJVM/Test/compile;" +
+      "scalusTestkitJVM/Test/compile;scalusExamplesJVM/Test/compile;scalusDesignPatterns/Test/compile;" +
+      "scalus-bloxbean-cardano-client-lib/Test/compile;scalusEthereumKzgCeremony/Test/compile;" +
+      "scalusJVM/test;scalusExamplesJVM/test"
 )
 addCommandAlias(
   "ci-js",
