@@ -134,6 +134,13 @@ val jvmReleaseTarget = Compile / scalacOptions ++= {
     if (scalaVersion.value.startsWith("3.3.")) Seq("-release", "11") else Seq("-release", "17")
 }
 
+// Library artifacts use the binary `_3` (and `_sjs1_3` / `_native0.5_3`) suffix, so the 3.3 LTS
+// and 3.8.x cross-builds publish to the SAME coordinates and overwrite each other — the 3.8.x
+// build (JDK 17) would clobber the JDK 11 LTS one. Publish only the LTS build (it is Scala-3
+// binary-compatible, so 3.8.x consumers can use it); 3.8.x stays cross-built for CI but unpublished.
+// The compiler plugin is exempt: it uses CrossVersion.full, so its 3.8.x variants are distinct artifacts.
+val publishOnlyLts = publish / skip := (scalaVersion.value != scala3LtsVersion)
+
 // Compilation profiling options for analyzing compilation time
 lazy val profilingScalacOptions = Seq(
   "-Vprofile", // Basic compilation profiling with file complexity
@@ -339,6 +346,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
     .in(file("scalus-core"))
     .settings(
       name := "scalus",
+      publishOnlyLts,
       scalaVersion := scalaVersion.value,
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
@@ -518,6 +526,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     .dependsOn(scalus % "compile->compile;compile->test", scalusCardanoLedger)
     .settings(
       name := "scalus-testkit",
+      publishOnlyLts,
       scalaVersion := scalaVersion.value,
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
@@ -694,7 +703,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
     .dependsOn(scalus.jvm, scalusCardanoLedger.jvm)
     .settings(
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
-      publish / skip := false,
+      publishOnlyLts,
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
@@ -814,7 +823,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.25",
       inConfig(Test)(PluginDependency),
-      publish / skip := false
+      publishOnlyLts
     )
     .jvmSettings(
       jvmReleaseTarget,
