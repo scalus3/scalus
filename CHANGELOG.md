@@ -1,9 +1,26 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 (2026-06-09)
 
 ### Added
 
+- Scala 3 cross-build: `scalus-plugin` and `scalus-core` now compile on both Scala 3.3.7 (LTS) and
+  3.8.x. The plugin isolates the one diverging compiler-API call (phase registration) behind a
+  version-specific `PluginCompat` trait; the remaining ~9.4k lines of dotty-internal API usage
+  compile unchanged. The Native platform targets 3.8.3 while JVM/JS stay on 3.8.4, with
+  version-conditional budget/size baselines for the cross-build
+- V3 `==` now routes to structural equality: non-structural types (`Rational`, `AssocMap`) are
+  excluded from the `Eq` system (their `given Eq` is replaced with a `compiletime.error` and the
+  plugin errors on `Rational ==` / `AssocMap ==`, with `RationalEq`/`AssocMapEq` for explicit
+  comparison), so every remaining `Eq` is structural; the V3 `List`/`Option` intrinsics
+  (`contains`, `indexOf`, `deleteFirst`, `distinct`, `diff`, `Option.contains`) drop their dead
+  `Eq` argument and compare via `equalsRepr`
+- Conway certificate mutators in `scalus-cardano-ledger`: `StakePoolCertificatesMutator`
+  (Shelley/Conway POOL transitions — registration, re-registration into `futureStakePoolParams`,
+  retirement) and `VotingCertificatesMutator` (Conway GOVCERT DRep register/unregister/update with
+  deposit validation). `SlotConfig` gains `epochLength`/`zeroEpoch` plus `epochOf`/`firstSlotOfEpoch`
+  so the current epoch is derived from the slot (mainnet `zeroEpoch=208`, preprod `4`, preview
+  1-day epochs) instead of treating the slot number as an epoch
 - `EvaluatorReportConfig` — typed configuration for `PlutusScriptEvaluator` diagnostic output
   (output directory, artifact selection, profile level/outputs), overridable via the `SCALUS_DUMP`,
   `SCALUS_DUMP_DIR`, and `SCALUS_PROFILE*` environment variables; new `PlutusScriptEvaluator.apply`
@@ -12,8 +29,12 @@
 - profiling integrated into `PlutusScriptEvaluator`: when enabled (`SCALUS_PROFILE=summary|full`,
   `SCALUS_PROFILE_OUT=…`, or `EvaluatorReportConfig.profile`), each script's profile is rendered to
   the console or to per-script files. Output formats: a compact text summary, CSV, JSON, and a
-  **self-contained interactive HTML report** — sortable/filterable tables with %-of-CPU bars, a
-  per-line cost-annotated source view, and a transition-matrix heatmap with a hot-edges table
+  **self-contained interactive HTML report** — a tabbed UI with sortable/filterable tables and
+  %-of-CPU bars, a "By Source Location" view with full source-position attribution and a recursive
+  incoming-call tree, a call graph with inclusive (call-stack) cost and a Hot Paths tree showing
+  where the budget flows from the entry point, a per-line cost-annotated source view (cross-linked
+  from the location tables), and a transition-matrix heatmap with cost-weighted edges and a
+  hot-edges table; the report title and per-entry fee are included
 - `ProfileFormatter.toCsv` / `toJson` / `summary`, and `toHtml(data, sources)` with source
   annotation; `platform.createDirectories` and `platform.fileExists` for cross-platform file I/O
 
@@ -24,6 +45,21 @@
   so fee-balancing re-evaluations overwrite rather than accumulate duplicate files; the per-builtin
   budget log is truncated once per evaluation (previously appended without bound) and renamed to
   `budget.log`; a `manifest.json` describing every dumped script is written alongside (#93)
+- dependency updates: Yaci DevKit 0.4.4, cardano-client-lib/backend-blockfrost 0.7.2,
+  jsoniter-scala 2.38.14, dotty-cps-async 1.3.3, jackson-databind 2.21.4, Scala Native libs 0.5.12,
+  sttp client4 4.0.25, slf4j 2.0.18; security bumps for brace-expansion (CVE-2026-45149) and vitest
+  (CVE-2026-47429) in `scalus-site`
+
+### Fixed
+
+- `EtaReduce` free-variable check had no cases for `Case`/`Constr` terms, so `λx.(f x)` was
+  eta-reduced even when `f` referenced `x` inside a `Case`/`Constr` — dropping the binder and
+  leaving `x` unbound; it now uses the canonical `TermAnalysis.freeVars`. Surfaced on Scala 3.8.x
+  (Knights `depthSearch` lowering); latent on 3.3.x where the shape did not arise
+- `TxBuilder` now accepts permissionless script stake-credential registration (registration is
+  witness-free in the Conway ledger) instead of rejecting it as a credential/witness-type mismatch,
+  while still honoring an explicitly attached script/native witness
+- conformance vectors now run in cardano-ledger's Imp slot/epoch environment
 
 ## 0.17.0 (2026-05-05)
 
