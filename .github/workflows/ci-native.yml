@@ -24,10 +24,13 @@ jobs:
       - name: Build and test in Nix devshell
         # The native test binaries each carry their own GC heap and run alongside the sbt JVM.
         # The shared `ci` devshell sets -Xmx7g (sized for JVM/JS tests); that leaves too little
-        # headroom for the native binaries on a 16GB runner. Drop the sbt heap to 5G for this
-        # job only (the Scala Native build/optimize still fits). Substitution runs inside the
-        # nix shell where SBT_OPTS/JAVA_OPTS are defined, so the arg is single-quoted.
-        run: nix develop .#ci --accept-flake-config --command bash -c 'export SBT_OPTS="${SBT_OPTS//-Xmx7g/-Xmx5g}" JAVA_OPTS="${JAVA_OPTS//-Xmx7g/-Xmx5g}"; sbt ci-native'
+        # headroom for the native binaries. Drop the sbt heap to 5G for this job only (the Scala
+        # Native build/optimize still fits). Substitution runs inside the nix shell where
+        # SBT_OPTS/JAVA_OPTS are defined, so the arg is single-quoted.
+        # `free -h`/`nproc` log the runner's real memory/cores while we tune native test memory.
+        run: |
+          echo "== runner resources =="; free -h; nproc; echo "======================"
+          nix develop .#ci --accept-flake-config --command bash -c 'export SBT_OPTS="${SBT_OPTS//-Xmx7g/-Xmx5g}" JAVA_OPTS="${JAVA_OPTS//-Xmx7g/-Xmx5g}"; sbt ci-native'
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: failure()
