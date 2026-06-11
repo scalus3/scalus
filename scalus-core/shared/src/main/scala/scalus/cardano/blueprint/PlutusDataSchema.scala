@@ -25,7 +25,7 @@ import scala.quoted.*
   *   [[DataType]] for type description
   *
   * @see
-  *   [[scalus.builtin.Data]] for more info about onchain data types
+  *   [[scalus.uplc.builtin.Data]] for more info about onchain data types
   *
   * @note
   *   the types described by these schemas are used as datums, redeemers and parameters. As such,

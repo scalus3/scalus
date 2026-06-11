@@ -1067,7 +1067,7 @@ object Address {
 
     // Address parsing and construction functions
 
-    /** Parse address from [[scalus.builtin.ByteString]]
+    /** Parse address from [[scalus.uplc.builtin.ByteString]]
       *
       * @param bs
       *   Raw address bytes
