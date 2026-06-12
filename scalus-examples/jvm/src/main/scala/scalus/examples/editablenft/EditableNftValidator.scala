@@ -2,15 +2,13 @@ package scalus.examples.editablenft
 
 import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{Credential, PolicyId}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
-
-case class ReferenceNftParam(seed: TxOutRef) derives FromData, ToData
 
 case class ReferenceNftDatum(
     tokenId: ByteString,
@@ -58,12 +56,15 @@ object EditableNftValidator extends DataParameterizedValidator {
       *   - User NFT: "222" ++ tokenId
       */
     inline def mint(param: Data, redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit = {
-        val seed = param.to[ReferenceNftParam].seed
+        val seed = param.to[TxOutRef]
         val r = redeemer.to[MintRedeemer]
         r match {
-            case MintRedeemer.Mint(seedIndex, refNftOutIndex) =>
-                val isSpent = tx.inputs.get(seedIndex).isDefined
-                require(isSpent, "Must spend seed UTxO")
+            case MintRedeemer.Mint(_, refNftOutIndex) =>
+                // Bind the seed: the parameterized seed UTxO must actually be spent, not merely
+                // some input existing at seedIndex. Otherwise the one-shot guarantee is defeated
+                // and the same policy can mint unlimited NFTs (uniqueness broken). Checked by
+                // value (not by the redeemer-supplied index) so it cannot be bypassed.
+                require(tx.inputs.exists(_.outRef === seed), MustSpendSeed)
 
                 // Find the reference NFT output - must be at script address with inline datum
                 val refNftOutput = tx.outputs.at(refNftOutIndex)
@@ -71,7 +72,7 @@ object EditableNftValidator extends DataParameterizedValidator {
                 // Validate datum structure and content
                 val datum = refNftOutput.datum match
                     case OutputDatum.OutputDatum(d) => d.to[ReferenceNftDatum]
-                    case _                          => fail("Reference NFT must have inline datum")
+                    case _                          => fail(ReferenceNftMustHaveInlineDatum)
 
                 val refTokenName = EditableNftValidator.refNftName(datum.tokenId)
                 val userTokenName = EditableNftValidator.userNftName(datum.tokenId)
@@ -89,13 +90,13 @@ object EditableNftValidator extends DataParameterizedValidator {
                 // Verify exactly one reference NFT is minted with correct name
                 require(
                   tx.mint.quantityOf(policyId, refTokenName) === BigInt(1),
-                  "Must mint exactly 1 reference NFT"
+                  MustMintOneRefNft
                 )
 
                 // Verify exactly one user NFT is minted with correct name
                 require(
                   tx.mint.quantityOf(policyId, userTokenName) === BigInt(1),
-                  "Must mint exactly 1 user NFT"
+                  MustMintOneUserNft
                 )
             case MintRedeemer.Burn =>
             // handled by in the `spend`
@@ -113,12 +114,12 @@ object EditableNftValidator extends DataParameterizedValidator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val datum = d.getOrFail("Datum required").to[ReferenceNftDatum]
+        val datum = d.getOrFail(DatumRequired).to[ReferenceNftDatum]
         val ownInput = tx.findOwnInputOrFail(ownRef)
         val scriptAddress = ownInput.resolved.address
         val policyId = scriptAddress.credential match
             case Credential.ScriptCredential(hash) => hash
-            case _                                 => fail("Expected script credential")
+            case _                                 => fail(ExpectedScriptCredential)
 
         val userTokenName = EditableNftValidator.userNftName(datum.tokenId)
         val refTokenName = EditableNftValidator.refNftName(datum.tokenId)
@@ -129,43 +130,60 @@ object EditableNftValidator extends DataParameterizedValidator {
                 val hasUserToken =
                     userTokenInput.resolved.value.quantityOf(policyId, userTokenName) === BigInt(1)
 
-                require(hasUserToken, "Must present user token to edit the reference NFT")
+                require(hasUserToken, MustPresentUserToken)
 
                 val newOutput = tx.outputs.at(refNftOutputIndex)
                 val correctAddress = newOutput.address === scriptAddress
                 val correctQuantity =
                     newOutput.value.quantityOf(policyId, refTokenName) === BigInt(1)
                 val validContinuation = correctAddress && correctQuantity
-                require(validContinuation, "Must return reference NFT to the script address")
+                require(validContinuation, MustReturnRefNft)
 
                 val newDatum = newOutput.datum match
                     case OutputDatum.OutputDatum(d) => d.to[ReferenceNftDatum]
-                    case _                          => fail("Continuation must have inline datum")
+                    case _                          => fail(ContinuationMustHaveInlineDatum)
 
                 // Sealed policy enforcement
                 if datum.isSealed then
                     // check the entire datum
-                    require(newDatum.toData === d.get, "Sealed NFTs are immutable")
+                    require(newDatum.toData === d.get, SealedNftImmutable)
                 else
                     // just check the token id, rest is ok to change
-                    require(newDatum.tokenId === datum.tokenId, "Token ID immutable")
+                    require(newDatum.tokenId === datum.tokenId, TokenIdImmutable)
             }
             case SpendRedeemer.Burn(userNftInputIndex) => {
                 val refNftName = datum.refNftName
                 val userNftName = datum.userNftName
 
                 val isRefNftBurned = tx.mint.quantityOf(policyId, refNftName) === BigInt(-1)
-                require(isRefNftBurned, "Must burn ref NFT")
+                require(isRefNftBurned, MustBurnRefNft)
                 val isUserNftBurned = tx.mint.quantityOf(policyId, userNftName) === BigInt(-1)
-                require(isUserNftBurned, "Must burn ref NFT")
+                require(isUserNftBurned, MustBurnUserNft)
             }
         }
 
     }
 
-    inline def userNftName(tokenId: ByteString): ByteString =
-        ByteString.fromString("100") ++ tokenId
-    inline def refNftName(tokenId: ByteString): ByteString = ByteString.fromString("222") ++ tokenId
+    // CIP-67/68 asset name labels: 100 (0x000643b0) = reference token, 222 (0x000de140) = user token.
+    inline def refNftName(tokenId: ByteString): ByteString = Cip68ReferenceLabel ++ tokenId
+    inline def userNftName(tokenId: ByteString): ByteString = Cip68UserLabel ++ tokenId
 
+    private inline def Cip68ReferenceLabel: ByteString = hex"000643b0"
+    private inline def Cip68UserLabel: ByteString = hex"000de140"
+
+    // Error messages
+    private inline val MustSpendSeed = "Must spend the seed UTxO"
+    private inline val ReferenceNftMustHaveInlineDatum = "Reference NFT must have an inline datum"
     private inline val ReferenceNftMustBePreserved = "Reference NFT must go to this script address"
+    private inline val MustMintOneRefNft = "Must mint exactly 1 reference NFT"
+    private inline val MustMintOneUserNft = "Must mint exactly 1 user NFT"
+    private inline val DatumRequired = "Datum required"
+    private inline val ExpectedScriptCredential = "Expected script credential"
+    private inline val MustPresentUserToken = "Must present user token to edit the reference NFT"
+    private inline val MustReturnRefNft = "Must return reference NFT to the script address"
+    private inline val ContinuationMustHaveInlineDatum = "Continuation must have an inline datum"
+    private inline val SealedNftImmutable = "Sealed NFTs are immutable"
+    private inline val TokenIdImmutable = "Token ID is immutable"
+    private inline val MustBurnRefNft = "Must burn the reference NFT"
+    private inline val MustBurnUserNft = "Must burn the user NFT"
 }

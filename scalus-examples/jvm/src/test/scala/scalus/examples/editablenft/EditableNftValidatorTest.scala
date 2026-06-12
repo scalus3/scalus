@@ -2,9 +2,12 @@ package scalus.examples.editablenft
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.ByteString.utf8
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
+import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.ScalusTest
@@ -55,6 +58,74 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
             }
         }
         assert(userNftOutput.nonEmpty, "User NFT should be at holder address")
+    }
+
+    test("CIP-68 token names use canonical 4-byte labels (100=ref, 222=user)") {
+        val ref = EditableNftValidator.refNftName(tokenId).toHex
+        val user = EditableNftValidator.userNftName(tokenId).toHex
+        // CIP-67/68: reference token label 100 = 0x000643b0, user token label 222 = 0x000de140.
+        assert(ref.startsWith("000643b0"), s"reference NFT must use CIP-68 label 100, got $ref")
+        assert(user.startsWith("000de140"), s"user NFT must use CIP-68 label 222, got $user")
+    }
+
+    test("Mint: cannot mint under the same policy without spending the seed") {
+        val provider = createProvider()
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
+
+        // Legitimate first mint consumes the seed.
+        val mintTx = txCreator.mint(
+          utxos = utxos,
+          tokenId = tokenId,
+          initialData = initialData,
+          holderAddress = Alice.address,
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        assert(provider.submit(mintTx).await().isRight, "first mint should succeed")
+
+        // Attacker mints again under the SAME policy (same seed parameter, same policyId) without
+        // spending the seed, pointing seedIndex at an arbitrary owned input. The one-shot guarantee
+        // must reject this.
+        val aliceUtxos = provider.findUtxos(Alice.address).await().toOption.get
+        val decoy = Utxo(aliceUtxos.head)
+        val parameterizedScript = EditableNftContract.withErrorTraces.apply(
+          TxOutRef(TxId(seedUtxo.input.transactionId), BigInt(seedUtxo.input.index)).toData
+        )
+        val tokenId2 = utf8"forgery"
+        val refAsset = EditableNftValidator.refNftName(tokenId2)
+        val userAsset = EditableNftValidator.userNftName(tokenId2)
+        val refDatum = ReferenceNftDatum(tokenId2, initialData, isSealed = false)
+
+        def buildRedeemer(tx: Transaction): Data = {
+            val seedIdx = tx.body.value.inputs.toSeq.indexWhere(i =>
+                i.transactionId == decoy.input.transactionId && i.index == decoy.input.index
+            )
+            val refIdx =
+                tx.body.value.outputs.toSeq.indexWhere(_.value.address == txCreator.scriptAddr)
+            MintRedeemer.Mint(BigInt(seedIdx), BigInt(refIdx)).toData
+        }
+
+        val attackTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .spend(decoy)
+            .mint(
+              parameterizedScript,
+              Map(AssetName(refAsset) -> 1L, AssetName(userAsset) -> 1L),
+              buildRedeemer
+            )
+            .payTo(
+              txCreator.scriptAddr,
+              Value.asset(txCreator.policyId, AssetName(refAsset), 1),
+              refDatum
+            )
+            .payTo(Alice.address, Value.asset(txCreator.policyId, AssetName(userAsset), 1))
+            .complete(availableUtxos = aliceUtxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+
+        val result = provider.submit(attackTx).await()
+        assert(result.isLeft, s"minting without spending the seed must fail, got: $result")
     }
 
     test("Lifecycle: mint -> edit -> edit -> seal success") {
@@ -304,7 +375,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
         assertResult(
-          ExUnits(memory = 124838L, steps = 36906325L)
+          ExUnits(memory = 123342L, steps = 36432931L)
         ):
             burnTx.witnessSet.redeemers.get.value.totalExUnits
         val burnResult = provider.submit(burnTx).await()
