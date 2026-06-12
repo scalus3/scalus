@@ -128,6 +128,38 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
         assert(result.isLeft, s"minting without spending the seed must fail, got: $result")
     }
 
+    test("Mint: cannot mint a pair via the Burn redeemer (empty burn branch side door)") {
+        val provider = createProvider()
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
+
+        val parameterizedScript = EditableNftContract.withErrorTraces.apply(
+          TxOutRef(TxId(seedUtxo.input.transactionId), BigInt(seedUtxo.input.index)).toData
+        )
+        val tokenId2 = utf8"forged-via-burn"
+        val refAsset = EditableNftValidator.refNftName(tokenId2)
+        val userAsset = EditableNftValidator.userNftName(tokenId2)
+
+        // Attacker mints a fresh ref/user pair using the Burn redeemer. The seed is never spent and
+        // no script UTxO is involved, so only the minting policy governs — and its Burn branch must
+        // refuse to mint (positive quantities), otherwise the one-shot seed check is bypassed.
+        val attackTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .mint(
+              parameterizedScript,
+              Map(AssetName(refAsset) -> 1L, AssetName(userAsset) -> 1L),
+              _ => MintRedeemer.Burn.toData
+            )
+            .payTo(Alice.address, Value.asset(txCreator.policyId, AssetName(refAsset), 1))
+            .payTo(Alice.address, Value.asset(txCreator.policyId, AssetName(userAsset), 1))
+            .complete(availableUtxos = utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+
+        val result = provider.submit(attackTx).await()
+        assert(result.isLeft, s"minting via the Burn redeemer must fail, got: $result")
+    }
+
     test("Lifecycle: mint -> edit -> edit -> seal success") {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
@@ -375,7 +407,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
         assertResult(
-          ExUnits(memory = 123342L, steps = 36432931L)
+          ExUnits(memory = 193165L, steps = 56517151L)
         ):
             burnTx.witnessSet.redeemers.get.value.totalExUnits
         val burnResult = provider.submit(burnTx).await()

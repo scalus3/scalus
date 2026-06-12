@@ -99,7 +99,15 @@ object EditableNftValidator extends DataParameterizedValidator {
                   MustMintOneUserNft
                 )
             case MintRedeemer.Burn =>
-            // handled by in the `spend`
+                // The Burn redeemer may only burn. Reject any positive mint under this policy:
+                // otherwise it is a side door around the one-shot seed check in the Mint branch
+                // (an attacker could mint fresh ref/user pairs with this redeemer, never spending
+                // the seed or any script UTxO). The actual "both tokens burned" check lives in the
+                // spend validator, which runs because the reference NFT is spent from the script.
+                require(
+                  tx.mint.flatten.forall((pid, _, qty) => (pid !== policyId) || (qty <= BigInt(0))),
+                  BurnMustNotMint
+                )
         }
     }
 
@@ -186,4 +194,5 @@ object EditableNftValidator extends DataParameterizedValidator {
     private inline val TokenIdImmutable = "Token ID is immutable"
     private inline val MustBurnRefNft = "Must burn the reference NFT"
     private inline val MustBurnUserNft = "Must burn the user NFT"
+    private inline val BurnMustNotMint = "Burn redeemer must not mint tokens"
 }
