@@ -3,7 +3,7 @@ package scalus.uplc
 import scalus.cardano.ledger.*
 
 enum BuiltinSemanticsVariant:
-    case A, B, C
+    case A, B, C, D, E
 
 object BuiltinSemanticsVariant:
 
@@ -22,11 +22,14 @@ object BuiltinSemanticsVariant:
         (protocolVersion, plutusLedgerLanguage) match
             case (pv, Language.PlutusV1 | Language.PlutusV2) =>
                 if pv < MajorProtocolVersion.changPV then BuiltinSemanticsVariant.A
-                else BuiltinSemanticsVariant.B
+                else if pv < MajorProtocolVersion.vanRossemPV then BuiltinSemanticsVariant.B
+                else BuiltinSemanticsVariant.D
+            case (pv, Language.PlutusV3) if pv >= MajorProtocolVersion.vanRossemPV =>
+                BuiltinSemanticsVariant.E
             case (pv, Language.PlutusV3) if pv >= MajorProtocolVersion.changPV =>
                 BuiltinSemanticsVariant.C
             case (pv, Language.PlutusV4) if pv >= MajorProtocolVersion.vanRossemPV =>
-                BuiltinSemanticsVariant.C
+                BuiltinSemanticsVariant.E
             case _ =>
                 throw new IllegalArgumentException(
                   s"Unsupported protocol version and Plutus language combination $protocolVersion $plutusLedgerLanguage"

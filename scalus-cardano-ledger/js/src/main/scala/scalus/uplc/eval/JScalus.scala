@@ -113,7 +113,8 @@ object JScalus {
         txCborBytes: Uint8Array,
         utxoCborBytes: Uint8Array,
         slotConfig: SlotConfig,
-        costModels: js.Array[js.Array[Double]]
+        costModels: js.Array[js.Array[Double]],
+        protocolMajorVersion: Int = CardanoInfo.mainnet.majorProtocolVersion.version
     ): js.Array[Redeemer] = {
         try
             val tx = Transaction.fromCbor(txCborBytes.toArray.map(_.toByte))
@@ -127,7 +128,7 @@ object JScalus {
             val evaluator = PlutusScriptEvaluator(
               slotConfig = slotConfig,
               initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
-              protocolMajorVersion = CardanoInfo.mainnet.majorProtocolVersion,
+              protocolMajorVersion = MajorProtocolVersion(protocolMajorVersion),
               costModels = cms,
               mode = EvaluatorMode.EvaluateAndComputeCost
             )

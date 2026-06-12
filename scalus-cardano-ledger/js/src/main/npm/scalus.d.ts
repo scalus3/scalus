@@ -49,6 +49,7 @@ export namespace Scalus {
    * @param utxoCborBytes The CBOR bytes of the UTxO map (Map[TransactionInput, TransactionOutput]).
    * @param slotConfig The slot configuration for time conversions.
    * @param costModels Array of cost models for each Plutus language version [V1, V2, V3]. Each cost model is an array of cost values.
+   * @param protocolMajorVersion Optional Cardano protocol major version used for Plutus semantics and costing.
    * @returns An array of Redeemers with computed execution budgets.
    */
   export function evalPlutusScripts(
@@ -56,6 +57,7 @@ export namespace Scalus {
     utxoCborBytes: Uint8Array,
     slotConfig: SlotConfig,
     costModels: number[][],
+    protocolMajorVersion?: number,
   ): Redeemer[];
 }
 

@@ -2,7 +2,7 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.platform
-import scalus.cardano.ledger.{CardanoInfo, SlotConfig}
+import scalus.cardano.ledger.{CardanoInfo, MajorProtocolVersion, SlotConfig}
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -35,5 +35,14 @@ class JScalusTest extends AnyFunSuite {
 
         // Verify results
         assert(redeemers.length == 2, "Should have 2 redeemers evaluated")
+
+        val redeemersWithProtocolVersion = JScalus.evalPlutusScripts(
+          tx,
+          utxo,
+          SlotConfig.mainnet,
+          costModels,
+          MajorProtocolVersion.vanRossemPV.version
+        )
+        assert(redeemersWithProtocolVersion.length == 2, "Should accept protocol major version")
     }
 }

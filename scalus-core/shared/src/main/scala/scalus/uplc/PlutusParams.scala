@@ -313,6 +313,59 @@ trait PlutusParams {
     def `ripemd_160-cpu-arguments-intercept`: Long
     def `ripemd_160-cpu-arguments-slope`: Long
     def `ripemd_160-memory-arguments`: Long
+    def `expModInteger-cpu-arguments-coefficient00`: Long
+    def `expModInteger-cpu-arguments-coefficient11`: Long
+    def `expModInteger-cpu-arguments-coefficient12`: Long
+    def `expModInteger-memory-arguments-intercept`: Long
+    def `expModInteger-memory-arguments-slope`: Long
+    def `dropList-cpu-arguments-intercept`: Long
+    def `dropList-cpu-arguments-slope`: Long
+    def `dropList-memory-arguments`: Long
+    def `lengthOfArray-cpu-arguments`: Long
+    def `lengthOfArray-memory-arguments`: Long
+    def `listToArray-cpu-arguments-intercept`: Long
+    def `listToArray-cpu-arguments-slope`: Long
+    def `listToArray-memory-arguments-intercept`: Long
+    def `listToArray-memory-arguments-slope`: Long
+    def `indexArray-cpu-arguments`: Long
+    def `indexArray-memory-arguments`: Long
+    def `bls12_381_G1_multiScalarMul-cpu-arguments-intercept`: Long
+    def `bls12_381_G1_multiScalarMul-cpu-arguments-slope`: Long
+    def `bls12_381_G1_multiScalarMul-memory-arguments`: Long
+    def `bls12_381_G2_multiScalarMul-cpu-arguments-intercept`: Long
+    def `bls12_381_G2_multiScalarMul-cpu-arguments-slope`: Long
+    def `bls12_381_G2_multiScalarMul-memory-arguments`: Long
+    def `insertCoin-cpu-arguments-intercept`: Long
+    def `insertCoin-cpu-arguments-slope`: Long
+    def `insertCoin-memory-arguments-intercept`: Long
+    def `insertCoin-memory-arguments-slope`: Long
+    def `lookupCoin-cpu-arguments-intercept`: Long
+    def `lookupCoin-cpu-arguments-slope`: Long
+    def `lookupCoin-memory-arguments`: Long
+    def `unionValue-cpu-arguments-c00`: Long
+    def `unionValue-cpu-arguments-c10`: Long
+    def `unionValue-cpu-arguments-c01`: Long
+    def `unionValue-cpu-arguments-c11`: Long
+    def `unionValue-memory-arguments-intercept`: Long
+    def `unionValue-memory-arguments-slope`: Long
+    def `valueContains-cpu-arguments-constant`: Long
+    def `valueContains-cpu-arguments-model-arguments-intercept`: Long
+    def `valueContains-cpu-arguments-model-arguments-slope1`: Long
+    def `valueContains-cpu-arguments-model-arguments-slope2`: Long
+    def `valueContains-memory-arguments`: Long
+    def `valueData-cpu-arguments-intercept`: Long
+    def `valueData-cpu-arguments-slope`: Long
+    def `valueData-memory-arguments-intercept`: Long
+    def `valueData-memory-arguments-slope`: Long
+    def `unValueData-cpu-arguments-c0`: Long
+    def `unValueData-cpu-arguments-c1`: Long
+    def `unValueData-cpu-arguments-c2`: Long
+    def `unValueData-memory-arguments-intercept`: Long
+    def `unValueData-memory-arguments-slope`: Long
+    def `scaleValue-cpu-arguments-intercept`: Long
+    def `scaleValue-cpu-arguments-slope`: Long
+    def `scaleValue-memory-arguments-intercept`: Long
+    def `scaleValue-memory-arguments-slope`: Long
 
     def toJson: String
     def numberOfParams: Int =
@@ -655,6 +708,59 @@ class PlutusV1Params extends PlutusParams {
     def `ripemd_160-cpu-arguments-intercept`: Long = 300_000_000L
     def `ripemd_160-cpu-arguments-slope`: Long = 300_000_000L
     def `ripemd_160-memory-arguments`: Long = 300_000_000L
+    def `expModInteger-cpu-arguments-coefficient00`: Long = 300_000_000L
+    def `expModInteger-cpu-arguments-coefficient11`: Long = 300_000_000L
+    def `expModInteger-cpu-arguments-coefficient12`: Long = 300_000_000L
+    def `expModInteger-memory-arguments-intercept`: Long = 300_000_000L
+    def `expModInteger-memory-arguments-slope`: Long = 300_000_000L
+    def `dropList-cpu-arguments-intercept`: Long = 300_000_000L
+    def `dropList-cpu-arguments-slope`: Long = 300_000_000L
+    def `dropList-memory-arguments`: Long = 300_000_000L
+    def `lengthOfArray-cpu-arguments`: Long = 300_000_000L
+    def `lengthOfArray-memory-arguments`: Long = 300_000_000L
+    def `listToArray-cpu-arguments-intercept`: Long = 300_000_000L
+    def `listToArray-cpu-arguments-slope`: Long = 300_000_000L
+    def `listToArray-memory-arguments-intercept`: Long = 300_000_000L
+    def `listToArray-memory-arguments-slope`: Long = 300_000_000L
+    def `indexArray-cpu-arguments`: Long = 300_000_000L
+    def `indexArray-memory-arguments`: Long = 300_000_000L
+    def `bls12_381_G1_multiScalarMul-cpu-arguments-intercept`: Long = 300_000_000L
+    def `bls12_381_G1_multiScalarMul-cpu-arguments-slope`: Long = 300_000_000L
+    def `bls12_381_G1_multiScalarMul-memory-arguments`: Long = 300_000_000L
+    def `bls12_381_G2_multiScalarMul-cpu-arguments-intercept`: Long = 300_000_000L
+    def `bls12_381_G2_multiScalarMul-cpu-arguments-slope`: Long = 300_000_000L
+    def `bls12_381_G2_multiScalarMul-memory-arguments`: Long = 300_000_000L
+    def `insertCoin-cpu-arguments-intercept`: Long = 300_000_000L
+    def `insertCoin-cpu-arguments-slope`: Long = 300_000_000L
+    def `insertCoin-memory-arguments-intercept`: Long = 300_000_000L
+    def `insertCoin-memory-arguments-slope`: Long = 300_000_000L
+    def `lookupCoin-cpu-arguments-intercept`: Long = 300_000_000L
+    def `lookupCoin-cpu-arguments-slope`: Long = 300_000_000L
+    def `lookupCoin-memory-arguments`: Long = 300_000_000L
+    def `unionValue-cpu-arguments-c00`: Long = 300_000_000L
+    def `unionValue-cpu-arguments-c10`: Long = 300_000_000L
+    def `unionValue-cpu-arguments-c01`: Long = 300_000_000L
+    def `unionValue-cpu-arguments-c11`: Long = 300_000_000L
+    def `unionValue-memory-arguments-intercept`: Long = 300_000_000L
+    def `unionValue-memory-arguments-slope`: Long = 300_000_000L
+    def `valueContains-cpu-arguments-constant`: Long = 300_000_000L
+    def `valueContains-cpu-arguments-model-arguments-intercept`: Long = 300_000_000L
+    def `valueContains-cpu-arguments-model-arguments-slope1`: Long = 300_000_000L
+    def `valueContains-cpu-arguments-model-arguments-slope2`: Long = 300_000_000L
+    def `valueContains-memory-arguments`: Long = 300_000_000L
+    def `valueData-cpu-arguments-intercept`: Long = 300_000_000L
+    def `valueData-cpu-arguments-slope`: Long = 300_000_000L
+    def `valueData-memory-arguments-intercept`: Long = 300_000_000L
+    def `valueData-memory-arguments-slope`: Long = 300_000_000L
+    def `unValueData-cpu-arguments-c0`: Long = 300_000_000L
+    def `unValueData-cpu-arguments-c1`: Long = 300_000_000L
+    def `unValueData-cpu-arguments-c2`: Long = 300_000_000L
+    def `unValueData-memory-arguments-intercept`: Long = 300_000_000L
+    def `unValueData-memory-arguments-slope`: Long = 300_000_000L
+    def `scaleValue-cpu-arguments-intercept`: Long = 300_000_000L
+    def `scaleValue-cpu-arguments-slope`: Long = 300_000_000L
+    def `scaleValue-memory-arguments-intercept`: Long = 300_000_000L
+    def `scaleValue-memory-arguments-slope`: Long = 300_000_000L
 }
 
 /** Plutus V2 cost model parameters.
@@ -978,6 +1084,59 @@ class PlutusV2Params extends PlutusParams {
     def `ripemd_160-cpu-arguments-intercept`: Long = 300_000_000L
     def `ripemd_160-cpu-arguments-slope`: Long = 300_000_000L
     def `ripemd_160-memory-arguments`: Long = 300_000_000L
+    def `expModInteger-cpu-arguments-coefficient00`: Long = 300_000_000L
+    def `expModInteger-cpu-arguments-coefficient11`: Long = 300_000_000L
+    def `expModInteger-cpu-arguments-coefficient12`: Long = 300_000_000L
+    def `expModInteger-memory-arguments-intercept`: Long = 300_000_000L
+    def `expModInteger-memory-arguments-slope`: Long = 300_000_000L
+    def `dropList-cpu-arguments-intercept`: Long = 300_000_000L
+    def `dropList-cpu-arguments-slope`: Long = 300_000_000L
+    def `dropList-memory-arguments`: Long = 300_000_000L
+    def `lengthOfArray-cpu-arguments`: Long = 300_000_000L
+    def `lengthOfArray-memory-arguments`: Long = 300_000_000L
+    def `listToArray-cpu-arguments-intercept`: Long = 300_000_000L
+    def `listToArray-cpu-arguments-slope`: Long = 300_000_000L
+    def `listToArray-memory-arguments-intercept`: Long = 300_000_000L
+    def `listToArray-memory-arguments-slope`: Long = 300_000_000L
+    def `indexArray-cpu-arguments`: Long = 300_000_000L
+    def `indexArray-memory-arguments`: Long = 300_000_000L
+    def `bls12_381_G1_multiScalarMul-cpu-arguments-intercept`: Long = 300_000_000L
+    def `bls12_381_G1_multiScalarMul-cpu-arguments-slope`: Long = 300_000_000L
+    def `bls12_381_G1_multiScalarMul-memory-arguments`: Long = 300_000_000L
+    def `bls12_381_G2_multiScalarMul-cpu-arguments-intercept`: Long = 300_000_000L
+    def `bls12_381_G2_multiScalarMul-cpu-arguments-slope`: Long = 300_000_000L
+    def `bls12_381_G2_multiScalarMul-memory-arguments`: Long = 300_000_000L
+    def `insertCoin-cpu-arguments-intercept`: Long = 300_000_000L
+    def `insertCoin-cpu-arguments-slope`: Long = 300_000_000L
+    def `insertCoin-memory-arguments-intercept`: Long = 300_000_000L
+    def `insertCoin-memory-arguments-slope`: Long = 300_000_000L
+    def `lookupCoin-cpu-arguments-intercept`: Long = 300_000_000L
+    def `lookupCoin-cpu-arguments-slope`: Long = 300_000_000L
+    def `lookupCoin-memory-arguments`: Long = 300_000_000L
+    def `unionValue-cpu-arguments-c00`: Long = 300_000_000L
+    def `unionValue-cpu-arguments-c10`: Long = 300_000_000L
+    def `unionValue-cpu-arguments-c01`: Long = 300_000_000L
+    def `unionValue-cpu-arguments-c11`: Long = 300_000_000L
+    def `unionValue-memory-arguments-intercept`: Long = 300_000_000L
+    def `unionValue-memory-arguments-slope`: Long = 300_000_000L
+    def `valueContains-cpu-arguments-constant`: Long = 300_000_000L
+    def `valueContains-cpu-arguments-model-arguments-intercept`: Long = 300_000_000L
+    def `valueContains-cpu-arguments-model-arguments-slope1`: Long = 300_000_000L
+    def `valueContains-cpu-arguments-model-arguments-slope2`: Long = 300_000_000L
+    def `valueContains-memory-arguments`: Long = 300_000_000L
+    def `valueData-cpu-arguments-intercept`: Long = 300_000_000L
+    def `valueData-cpu-arguments-slope`: Long = 300_000_000L
+    def `valueData-memory-arguments-intercept`: Long = 300_000_000L
+    def `valueData-memory-arguments-slope`: Long = 300_000_000L
+    def `unValueData-cpu-arguments-c0`: Long = 300_000_000L
+    def `unValueData-cpu-arguments-c1`: Long = 300_000_000L
+    def `unValueData-cpu-arguments-c2`: Long = 300_000_000L
+    def `unValueData-memory-arguments-intercept`: Long = 300_000_000L
+    def `unValueData-memory-arguments-slope`: Long = 300_000_000L
+    def `scaleValue-cpu-arguments-intercept`: Long = 300_000_000L
+    def `scaleValue-cpu-arguments-slope`: Long = 300_000_000L
+    def `scaleValue-memory-arguments-intercept`: Long = 300_000_000L
+    def `scaleValue-memory-arguments-slope`: Long = 300_000_000L
 }
 
 /** Plutus V3 cost model parameters.
@@ -1288,6 +1447,59 @@ class PlutusV3Params extends PlutusParams {
     var `ripemd_160-cpu-arguments-intercept`: Long = 300_000_000L
     var `ripemd_160-cpu-arguments-slope`: Long = 300_000_000L
     var `ripemd_160-memory-arguments`: Long = 300_000_000L
+    var `expModInteger-cpu-arguments-coefficient00`: Long = 300_000_000L
+    var `expModInteger-cpu-arguments-coefficient11`: Long = 300_000_000L
+    var `expModInteger-cpu-arguments-coefficient12`: Long = 300_000_000L
+    var `expModInteger-memory-arguments-intercept`: Long = 300_000_000L
+    var `expModInteger-memory-arguments-slope`: Long = 300_000_000L
+    var `dropList-cpu-arguments-intercept`: Long = 300_000_000L
+    var `dropList-cpu-arguments-slope`: Long = 300_000_000L
+    var `dropList-memory-arguments`: Long = 300_000_000L
+    var `lengthOfArray-cpu-arguments`: Long = 300_000_000L
+    var `lengthOfArray-memory-arguments`: Long = 300_000_000L
+    var `listToArray-cpu-arguments-intercept`: Long = 300_000_000L
+    var `listToArray-cpu-arguments-slope`: Long = 300_000_000L
+    var `listToArray-memory-arguments-intercept`: Long = 300_000_000L
+    var `listToArray-memory-arguments-slope`: Long = 300_000_000L
+    var `indexArray-cpu-arguments`: Long = 300_000_000L
+    var `indexArray-memory-arguments`: Long = 300_000_000L
+    var `bls12_381_G1_multiScalarMul-cpu-arguments-intercept`: Long = 300_000_000L
+    var `bls12_381_G1_multiScalarMul-cpu-arguments-slope`: Long = 300_000_000L
+    var `bls12_381_G1_multiScalarMul-memory-arguments`: Long = 300_000_000L
+    var `bls12_381_G2_multiScalarMul-cpu-arguments-intercept`: Long = 300_000_000L
+    var `bls12_381_G2_multiScalarMul-cpu-arguments-slope`: Long = 300_000_000L
+    var `bls12_381_G2_multiScalarMul-memory-arguments`: Long = 300_000_000L
+    var `insertCoin-cpu-arguments-intercept`: Long = 300_000_000L
+    var `insertCoin-cpu-arguments-slope`: Long = 300_000_000L
+    var `insertCoin-memory-arguments-intercept`: Long = 300_000_000L
+    var `insertCoin-memory-arguments-slope`: Long = 300_000_000L
+    var `lookupCoin-cpu-arguments-intercept`: Long = 300_000_000L
+    var `lookupCoin-cpu-arguments-slope`: Long = 300_000_000L
+    var `lookupCoin-memory-arguments`: Long = 300_000_000L
+    var `unionValue-cpu-arguments-c00`: Long = 300_000_000L
+    var `unionValue-cpu-arguments-c10`: Long = 300_000_000L
+    var `unionValue-cpu-arguments-c01`: Long = 300_000_000L
+    var `unionValue-cpu-arguments-c11`: Long = 300_000_000L
+    var `unionValue-memory-arguments-intercept`: Long = 300_000_000L
+    var `unionValue-memory-arguments-slope`: Long = 300_000_000L
+    var `valueContains-cpu-arguments-constant`: Long = 300_000_000L
+    var `valueContains-cpu-arguments-model-arguments-intercept`: Long = 300_000_000L
+    var `valueContains-cpu-arguments-model-arguments-slope1`: Long = 300_000_000L
+    var `valueContains-cpu-arguments-model-arguments-slope2`: Long = 300_000_000L
+    var `valueContains-memory-arguments`: Long = 300_000_000L
+    var `valueData-cpu-arguments-intercept`: Long = 300_000_000L
+    var `valueData-cpu-arguments-slope`: Long = 300_000_000L
+    var `valueData-memory-arguments-intercept`: Long = 300_000_000L
+    var `valueData-memory-arguments-slope`: Long = 300_000_000L
+    var `unValueData-cpu-arguments-c0`: Long = 300_000_000L
+    var `unValueData-cpu-arguments-c1`: Long = 300_000_000L
+    var `unValueData-cpu-arguments-c2`: Long = 300_000_000L
+    var `unValueData-memory-arguments-intercept`: Long = 300_000_000L
+    var `unValueData-memory-arguments-slope`: Long = 300_000_000L
+    var `scaleValue-cpu-arguments-intercept`: Long = 300_000_000L
+    var `scaleValue-cpu-arguments-slope`: Long = 300_000_000L
+    var `scaleValue-memory-arguments-intercept`: Long = 300_000_000L
+    var `scaleValue-memory-arguments-slope`: Long = 300_000_000L
 
     // Not available in Plutus V3, old names kept for compatibility
     def `divideInteger-cpu-arguments-model-arguments-intercept`: Long = 300_000_000L
