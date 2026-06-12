@@ -258,6 +258,11 @@ object TwoArguments {
             costFun(arg2)
     }
 
+    case class LinearInY2(costFun: SubtractedSizesLinearFunction) extends TwoArguments {
+        def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger =
+            OneVariableLinearFunction(costFun.intercept, costFun.slope)(arg2)
+    }
+
     case class LinearInXAndY(cost: TwoVariableLinearFunction) extends TwoArguments {
         def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger =
             cost.intercept + arg1 * cost.slope1 + arg2 * cost.slope2
@@ -301,6 +306,11 @@ object TwoArguments {
             if arg1 < arg2 then cost.constant else cost.model(arg1, arg2)
     }
 
+    case class AboveAndBelowDiagonal(cost: ConstantOrTwoArguments) extends TwoArguments {
+        def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger =
+            cost.model(arg1.max(arg2), arg1.min(arg2))
+    }
+
     case class ConstOffDiagonal(cost: ConstantOrOneArgument) extends TwoArguments {
         def apply(arg1: CostingInteger, arg2: CostingInteger): CostingInteger =
             if arg1 != arg2 then cost.constant else cost.model(arg1)
@@ -329,6 +339,8 @@ object TwoArguments {
               ujson.Obj("type" -> "linear_in_x", "arguments" -> writeJs(costFun))
           case LinearInY(costFun) =>
               ujson.Obj("type" -> "linear_in_y", "arguments" -> writeJs(costFun))
+          case LinearInY2(costFun) =>
+              ujson.Obj("type" -> "linear_in_y2", "arguments" -> writeJs(costFun))
           case LinearInXAndY(cost) =>
               ujson.Obj("type" -> "linear_in_x_and_y", "arguments" -> writeJs(cost))
           case AddedSizes(cost) =>
@@ -345,6 +357,8 @@ object TwoArguments {
               ujson.Obj("type" -> "linear_on_diagonal", "arguments" -> writeJs(cost))
           case ConstAboveDiagonal(cost) =>
               ujson.Obj("type" -> "const_above_diagonal", "arguments" -> writeJs(cost))
+          case AboveAndBelowDiagonal(cost) =>
+              ujson.Obj("type" -> "above_and_below_diagonal", "arguments" -> writeJs(cost))
           case ConstBelowDiagonal(cost) =>
               ujson.Obj("type" -> "const_below_diagonal", "arguments" -> writeJs(cost))
           case QuadraticInY(cost) =>
@@ -363,6 +377,8 @@ object TwoArguments {
                   LinearInX(read[OneVariableLinearFunction](json.obj("arguments")))
               case "linear_in_y" =>
                   LinearInY(read[OneVariableLinearFunction](json.obj("arguments")))
+              case "linear_in_y2" =>
+                  LinearInY2(read[SubtractedSizesLinearFunction](json.obj("arguments")))
               case "linear_in_x_and_y" =>
                   LinearInXAndY(read[TwoVariableLinearFunction](json.obj("arguments")))
               case "quadratic_in_y" =>
@@ -383,6 +399,8 @@ object TwoArguments {
                   LinearOnDiagonal(read[ConstantOrLinear](json.obj("arguments")))
               case "const_above_diagonal" =>
                   ConstAboveDiagonal(read[ConstantOrTwoArguments](json.obj("arguments")))
+              case "above_and_below_diagonal" =>
+                  AboveAndBelowDiagonal(read[ConstantOrTwoArguments](json.obj("arguments")))
               case "const_below_diagonal" =>
                   ConstBelowDiagonal(read[ConstantOrTwoArguments](json.obj("arguments")))
               case "const_off_diagonal" =>
@@ -688,6 +706,30 @@ class ValueMaxDepthCostingFun[+M <: CostModel](delegate: DefaultCostingFun[M], v
                 arg match
                     case CekValue.VCon(Constant.BuiltinValue(v)) =>
                         BuiltinValueOps.valueMaxDepth(v)
+                    case _ => MemoryUsage.memoryUsage(arg)
+            else MemoryUsage.memoryUsage(arg)
+        }
+        val cpu = delegate.cpu.calculateCost(argsMem)
+        val mem = delegate.memory.calculateCost(argsMem)
+        ExUnits(mem.toLong, cpu.toLong)
+    }
+}
+
+/** CostingFun wrapper that uses UTF-8 byte-length memory for String arguments. Matches Plutus
+  * TextCostedByByteLength for the string builtins in builtin semantics variants D/E.
+  */
+class StringByByteLengthCostingFun[+M <: CostModel](
+    delegate: DefaultCostingFun[M],
+    stringArgIndices: Int*
+) extends CostingFun {
+    private val indices = stringArgIndices.toSet
+
+    def calculateCost(args: CekValue*): ExUnits = {
+        val argsMem = args.zipWithIndex.map { case (arg, i) =>
+            if indices(i) then
+                arg match
+                    case CekValue.VCon(Constant.String(s)) =>
+                        MemoryUsage.memoryUsageStringByByteLength(s)
                     case _ => MemoryUsage.memoryUsage(arg)
             else MemoryUsage.memoryUsage(arg)
         }
