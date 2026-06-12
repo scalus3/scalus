@@ -6,10 +6,12 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.node.Emulator
+import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.genesisHash
 import scalus.uplc.builtin.ByteString
+import scalus.uplc.builtin.Data.toData
 import scalus.utils.await
 
 class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
@@ -180,6 +182,37 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           Alice.signer
         )
         assertSubmitFails(provider, badTx)
+    }
+
+    test("FAIL: swap that drains the reserve tokens from the continuation output") {
+        val (provider, txCreator) = createSetup()
+        val poolUtxo = initPoolWith(provider, txCreator, x0 = 10_000L, x1 = 40_000L)
+        val d = txCreator.readPoolDatum(poolUtxo)
+
+        // Honest swap math, so the datum transition check passes...
+        val amountIn = 1000L
+        val dxAdj = BigInt(amountIn) * ammParams.feeNumerator
+        val out = d.r1 * dxAdj / (d.r0 * ammParams.feeDenominator + dxAdj)
+        val newDatum = AmmDatum(d.r0 + BigInt(amountIn), d.r1 - out, d.lpSupply)
+
+        // ...but the continuation output is emptied of the reserve tokens (only min ADA), so the
+        // real T0/T1 reserves flow to the attacker as change. A validator that inspects only the
+        // datum lets this through — draining the pool.
+        val drainedValue = Value.lovelace(2_000_000L)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        // Build with constMaxBudget so the script isn't evaluated at build time; the validator
+        // failure then surfaces at submission (like the other FAIL tests).
+        val drainTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .spend(
+              poolUtxo,
+              _ => AmmRedeemer.Swap(true, BigInt(amountIn), BigInt(1)).toData,
+              txCreator.script
+            )
+            .payTo(txCreator.scriptAddress, drainedValue, newDatum)
+            .complete(utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+        assertSubmitFails(provider, drainTx)
     }
 
     test("property: k-invariant holds for all valid swaps") {

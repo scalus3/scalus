@@ -109,6 +109,18 @@ object AmmValidator extends DataParameterizedValidator {
             case AmmRedeemer.Swap(t0In, amountIn, minAmountOut) =>
                 handleSwap(params, datum, newDatum, t0In, amountIn, minAmountOut)
         }
+
+        // Bind the datum reserves to the tokens actually held by the continuing pool output.
+        // The handlers above only check the datum arithmetic; without this an attacker can write a
+        // valid-looking datum while sending the real reserve tokens elsewhere, draining the pool.
+        require(
+          poolOutput.value.quantityOf(params.t0._1, params.t0._2) === newDatum.r0,
+          ReserveT0Mismatch
+        )
+        require(
+          poolOutput.value.quantityOf(params.t1._1, params.t1._2) === newDatum.r1,
+          ReserveT1Mismatch
+        )
     }
 
     private inline def handleDeposit(
@@ -144,9 +156,10 @@ object AmmValidator extends DataParameterizedValidator {
         newDatum: AmmDatum,
         lp: BigInt
     ): Unit = {
-        // Notice that we intentionally don't check where the redeemed tokens are going.
-        // As long as the transaction passed the phase-1 checks, we know that it's balanced, and don't have to
-        // check anything other than the pool invariants. Similar thing occurs in `handleSwap`.
+        // We don't check where the redeemed tokens go: phase-1 already guarantees the tx balances,
+        // and the caller (`spend`) binds the new datum reserves to the continuing pool output's
+        // actual token quantities, so the pool cannot be under-funded. We only validate the datum
+        // transition here. Similar reasoning applies in `handleSwap`.
 
         require(lp > BigInt(0), "Redeem: LP amount must be positive")
         require(lp <= datum.lpSupply, "Redeem: LP amount exceeds supply")
@@ -170,9 +183,10 @@ object AmmValidator extends DataParameterizedValidator {
         amountIn: BigInt,
         minAmountOut: BigInt
     ): Unit = {
-        // Notice that we intentionally don't check where the redeemed tokens are going.
-        // As long as the transaction passed the phase-1 checks, we know that it's balanced, and don't have to
-        // check anything other than the pool invariants. Similar thing occurs in `handleRedeem`.
+        // We don't check where the swapped-out tokens go: phase-1 already guarantees the tx
+        // balances, and `spend` binds the new datum reserves to the continuing pool output's actual
+        // token quantities, so the pool cannot be under-funded. We only validate the datum
+        // transition here. Similar reasoning applies in `handleRedeem`.
 
         require(amountIn > BigInt(0), "Swap: amountIn must be positive")
 
@@ -192,4 +206,7 @@ object AmmValidator extends DataParameterizedValidator {
         val expectedDatum = AmmDatum(r0 = newR0, r1 = newR1, lpSupply = datum.lpSupply)
         require(newDatum === expectedDatum, "Swap: output datum mismatch")
     }
+
+    private inline val ReserveT0Mismatch = "Pool output must hold r0 of token0"
+    private inline val ReserveT1Mismatch = "Pool output must hold r1 of token1"
 }
