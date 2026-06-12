@@ -51,10 +51,12 @@ Derived from `htlc/` + `CLAUDE.md`. This is the target every example is measured
   `lazy val blueprint = Blueprint.plutusV3[Config, Action](title, description, version,
   license = Some("Apache License Version 2.0"), compiled)`.
 - **`XxxValidator.scala`**: `@Compile object XxxValidator`; datum
-  `case class Config(...) derives FromData, ToData` (+ `@Compile object Config`); redeemer
-  `enum Action derives FromData, ToData` (+ `@Compile object Action`); error strings as
+  `case class Config(...) derives FromData, ToData`; redeemer
+  `enum Action derives FromData, ToData`; error strings as
   `inline val Foo = "..."` collected at the bottom; checks via `require(cond, Foo)`; imports
-  `scalus.cardano.onchain.plutus.v3.*` and `.prelude.*`.
+  `scalus.cardano.onchain.plutus.v3.*` and `.prelude.*`. **Do not** add empty `@Compile object Config` /
+  `@Compile object Action` companions — `derives FromData, ToData` is sufficient and the empty `@Compile`
+  companions are redundant (verified by clean build; removed from htlc + vesting on this branch).
 - **`XxxTransactions.scala`**: `case class XxxTransactions(env: CardanoInfo, contract: PlutusV3[Data => Unit])`;
   pure `TxBuilder` methods returning `Transaction`; **no** provider / `Future` / `.submit` / `Thread.sleep`;
   `private val scriptAddress`, `private val builder`.

@@ -19,14 +19,8 @@ case class Config(
 ) derives FromData,
       ToData
 
-@Compile
-object Config
-
 // Redeemer
 case class Action(amount: Lovelace) derives FromData, ToData
-
-@Compile
-object Action
 
 /** Locks up funds and allows the beneficiary to withdraw the funds after the lockup period
   *
@@ -120,10 +114,10 @@ object VestingValidator extends Validator {
               ContinuingValueMismatch
             )
 
-            contractOutput.datum match
-                case OutputDatum.OutputDatum(inlineData) =>
-                    require(inlineData === datum.getOrFail(DatumNotFound), DatumMismatch)
-                case _ => fail(ExpectedInlineDatum)
+            require(
+              contractOutput.datum === OutputDatum.OutputDatum(datum.getOrFail(DatumNotFound)),
+              InvalidDatum
+            )
     }
 
     def linearVesting(vestingDatum: Config, timestamp: BigInt): BigInt = {
@@ -146,6 +140,5 @@ object VestingValidator extends Validator {
     inline val ContinuingAddressMismatch = "Continuing output must keep the vesting address"
     inline val ContinuingValueMismatch =
         "Continuing output must preserve the remaining vested value"
-    inline val DatumMismatch = "VestingDatum mismatch"
-    inline val ExpectedInlineDatum = "Expected inline datum"
+    inline val InvalidDatum = "VestingDatum mismatch"
 }

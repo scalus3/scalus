@@ -19,16 +19,10 @@ case class Config(
 ) derives FromData,
       ToData
 
-@Compile
-object Config
-
 // Redeemer
 enum Action derives FromData, ToData:
     case Timeout
     case Reveal(preimage: Preimage)
-
-@Compile
-object Action
 
 /** A Hash Time-Locked Contract (HTLC) validator.
   *
