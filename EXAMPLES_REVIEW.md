@@ -299,13 +299,15 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   (token-possession check) — closes forgery + restores revocation. Optionally bind identity token name to seed hash.
 - Refs: `DecentralizedIdentityTest`.
 
-### editablenft
-- Structure: convert `EditableNftContract.scala` (bare `lazy val`, no blueprint) to `object … extends Contract`
-  + blueprint; hoist error strings; fix "Must burn ref NFT" message on the user-NFT check; `match` indentation.
-- Bugs: **bind seed input to `param.seed`** (one-shot mint); **fix CIP-68 labels** — unswap (100=ref, 222=user)
-  and use real 4-byte encodings (`0x000643b0`/`0x000de140`); harden empty mint `Burn` branch.
-- Tests: add a "mint without spending seed" negative and a "minted names == canonical CIP-68" assertion.
-- Refs: `EditableNftValidatorTest` (`userNftName`/`refNftName` call sites must move together).
+### editablenft — ✅ DONE (Critical bugs fixed, this branch)
+- Bugs fixed (TDD): **seed binding** — root cause was a param-encoding mismatch (validator decoded the bare
+  `TxOutRef` param as a `ReferenceNftParam` wrapper → garbage seed, masked by the old `isDefined`-only check);
+  now decodes `param.to[TxOutRef]` and requires the seed is actually spent (`tx.inputs.exists(_.outRef === seed)`,
+  by value not index). **CIP-68 labels** unswapped + real 4-byte encodings (ref = `0x000643b0`, user = `0x000de140`).
+  Deduped the "Must burn ref NFT" message; hoisted all error strings to `inline val`.
+- Tests: added "mint without spending seed" negative + "canonical CIP-68 labels" assertion; Burn ExUnits re-baselined.
+- **Deferred:** Contract-object/blueprint conversion — the param'd dual (mint+spend) `DataParameterizedValidator`
+  has a non-obvious blueprint shape; left `EditableNftContract` as the bare `lazy val`. Revisit as a focused change.
 
 ### anonymousdata
 - Structure: add `AnonymousDataContract.scala` (`extends Contract` + blueprint for both main & gate — currently
