@@ -59,12 +59,12 @@ object EditableNftValidator extends DataParameterizedValidator {
         val seed = param.to[TxOutRef]
         val r = redeemer.to[MintRedeemer]
         r match {
-            case MintRedeemer.Mint(_, refNftOutIndex) =>
-                // Bind the seed: the parameterized seed UTxO must actually be spent, not merely
-                // some input existing at seedIndex. Otherwise the one-shot guarantee is defeated
-                // and the same policy can mint unlimited NFTs (uniqueness broken). Checked by
-                // value (not by the redeemer-supplied index) so it cannot be bypassed.
-                require(tx.inputs.exists(_.outRef === seed), MustSpendSeed)
+            case MintRedeemer.Mint(seedIndex, refNftOutIndex) =>
+                // Bind the seed: the input at seedIndex must be the exact parameterized seed UTxO,
+                // not merely some input that exists. Otherwise the one-shot guarantee is defeated
+                // and the same policy can mint unlimited NFTs (uniqueness broken). A wrong index
+                // simply fails the check (fails closed), so it cannot be bypassed.
+                require(tx.inputs.at(seedIndex).outRef === seed, MustSpendSeed)
 
                 // Find the reference NFT output - must be at script address with inline datum
                 val refNftOutput = tx.outputs.at(refNftOutIndex)
