@@ -104,10 +104,10 @@ object EditableNftValidator extends DataParameterizedValidator {
                 // (an attacker could mint fresh ref/user pairs with this redeemer, never spending
                 // the seed or any script UTxO). The actual "both tokens burned" check lives in the
                 // spend validator, which runs because the reference NFT is spent from the script.
-                require(
-                  tx.mint.flatten.forall((pid, _, qty) => (pid !== policyId) || (qty <= BigInt(0))),
-                  BurnMustNotMint
-                )
+                val noPositiveMint = tx.mint.toSortedMap.get(policyId) match
+                    case Option.Some(tokens) => tokens.values.forall(_ <= BigInt(0))
+                    case Option.None         => true
+                require(noPositiveMint, BurnMustNotMint)
         }
     }
 
