@@ -259,14 +259,14 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   `Lose`/winning-reveal auth.
 - Refs: `LotteryValidatorTest`, `LotteryScenarioTest`, `LotteryScalaCheckCommandTest` (ignore `lottery-complete/`).
 
-### amm
-- Structure: convert `AmmContract.scala` (bare `lazy val`, **no blueprint**) to `object AmmContract extends
-  Contract` with `compiled` + `Blueprint.plutusV3`; rename `AmmOffchain.scala`→`AmmTransactions.scala`; hoist
-  error strings.
-- Bugs (the contract is currently a no-op guard): bind datum reserves to actual pool-output token quantities
-  (value-preservation) — mandatory; cross-bind spend↔mint LP deltas; restrict the LP asset name; validate fee
-  params.
-- Tests: add adversarial tests that under-fund the continuing pool output.
+### amm — ⚠️ Critical drain FIXED (this branch); secondary items remain
+- Bug fixed (TDD): **value-preservation** — `spend` now binds the new datum reserves to the continuing pool
+  output's actual token quantities (`poolOutput.value.quantityOf(t0/t1) === newDatum.r0/r1`), closing the
+  full-drain hole where only the datum transition was checked. New negative test under-funds the continuation.
+- **Still open** (secondary, not yet done): cross-bind spend↔mint LP deltas (spend doesn't require the LP mint to
+  occur); restrict the LP asset name (the mint endpoint sums all names under the policy); validate fee params;
+  hoist remaining error strings; convert `AmmContract` (bare `lazy val`, no blueprint) to `object … extends
+  Contract` + `Blueprint.plutusV3`; rename `AmmOffchain.scala`→`AmmTransactions.scala`.
 - Refs: `AmmTest` (`AmmContract.script`/`.withErrorTraces`, `AmmOffchain(...)`).
 
 ### upgradeableproxy — ✅ DONE (structural template, this branch)
