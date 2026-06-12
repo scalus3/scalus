@@ -3,7 +3,11 @@
 
 import { describe, test, expect } from "vitest";
 import { Scalus } from "../scalus";
-import { testApplyDataArgToScript, testEvaluateScript } from "./shared-tests";
+import {
+  testApplyDataArgToScript,
+  testEvaluateScript,
+  testEvaluateScriptProfile,
+} from "./shared-tests";
 
 describe("Scalus.applyDataArgToScript", () => {
   const results = testApplyDataArgToScript(Scalus);
@@ -17,6 +21,16 @@ describe("Scalus.applyDataArgToScript", () => {
 
 describe("Scalus.evaluateScript", () => {
   const results = testEvaluateScript(Scalus);
+
+  for (const result of results) {
+    test(result.name, () => {
+      expect(result.passed, result.message).toBe(true);
+    });
+  }
+});
+
+describe("Scalus.evaluateScriptProfile", () => {
+  const results = testEvaluateScriptProfile(Scalus);
 
   for (const result of results) {
     test(result.name, () => {
