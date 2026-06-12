@@ -75,9 +75,10 @@ no `object`-with-`???`-placeholder shape; no hardcoded `CardanoInfo.mainnet`.
    `import scalus.{show as _, *}`, redundant `import …v3.Validator` already covered by `…v3.*`.
 5. Brace/indentation per `CLAUDE.md` (`{}` for top-level/multi-line bodies; indentation for
    `if`/`match`/`for` under 20 lines; `then`/`do`).
-6. **Tests:** stop hardcoding exact `ExUnits`/fee/script-size as behavioral assertions — they are
-   brittle and break on any compiler/cost-model change. Move cost tracking to a clearly-labeled
-   regression test, and **add negative/adversarial tests** (see §3).
+6. **Tests:** keep exact `ExUnits` assertions and **re-baseline them on every validator change**
+   (user decision, 2026-06-12: budget movement should be tracked, so a shifted assertion is the
+   intended signal — do not relax to upper bounds). Re-baseline fee/script-size the same way. Always
+   **add negative/adversarial tests** (see §3).
 
 ### Two open style decisions (need your call — see questions at end)
 - **(A) Validator shape.** HTLC uses an explicit `inline def validate(scData) { ctx.scriptInfo match … }`.
