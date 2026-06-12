@@ -11,10 +11,20 @@ export namespace Scalus {
 
   /** Script evaluation result. */
   export class Result {
-    constructor(isSuccess: boolean, budget: ExUnits, logs: string[]);
+    constructor(
+      isSuccess: boolean,
+      budget: ExUnits,
+      logs: string[],
+      profileJson?: string,
+    );
     isSuccess: boolean;
     budget: ExUnits;
     logs: string[];
+    /**
+     * CEK machine profiling data as JSON. Present only when the result was produced by
+     * {@link evaluateScriptProfile}; `undefined` otherwise.
+     */
+    profileJson?: string;
   }
 
   /** Redeemer with execution budget. */
@@ -42,6 +52,19 @@ export namespace Scalus {
    * @returns A Result object with the evaluation outcome, budget, and logs.
    */
   export function evaluateScript(doubleCborHex: string): Result;
+
+  /**
+   * Evaluates a Plutus script with profiling enabled.
+   *
+   * Like {@link evaluateScript}, but the returned Result also carries the CEK machine profiling
+   * data as JSON in `profileJson` (per-source-location and per-builtin cost plus the transition
+   * edges). The interactive HTML report renderer is intentionally not bundled in `scalus.js` (to
+   * keep the transaction-builder bundle small); generate it from this data with the Scala/JVM
+   * `ProfileFormatter` if needed.
+   * @param doubleCborHex The double-CBOR-encoded hex of the script.
+   * @returns A Result with `profileJson` populated.
+   */
+  export function evaluateScriptProfile(doubleCborHex: string): Result;
 
   /**
    * Evaluates all Plutus scripts in a transaction against the provided UTxO set.

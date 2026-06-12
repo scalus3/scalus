@@ -235,6 +235,33 @@ for (const redeemer of redeemers) {
 }
 ```
 
+### Profiling a script
+
+`Scalus.evaluateScript(doubleCborHex)` runs a single fully-applied script (for example the output of `Scalus.applyDataArgToScript`) and returns a `Result` with `isSuccess`, `budget`, and `logs`. `Scalus.evaluateScriptProfile(doubleCborHex)` does the same but also collects [CEK machine profiling data](/docs/testing/profiling), exposed on the result as `profileJson` — per-source-location and per-builtin cost plus the transition edges. It is `undefined` for the plain `evaluateScript` (which has zero profiling overhead).
+
+```typescript
+import { Scalus } from "scalus";
+
+// `applied` is a fully-applied script, e.g. from Scalus.applyDataArgToScript(...)
+const result = Scalus.evaluateScriptProfile(applied);
+
+console.log(`success=${result.isSuccess}, cpu=${result.budget.steps}, mem=${result.budget.memory}`);
+
+if (result.profileJson) {
+  const profile = JSON.parse(result.profileJson);
+  console.log(`total cpu: ${profile.totalBudget.cpu}`);
+  // profile.bySourceLocation / profile.byFunction / profile.transitions
+}
+```
+
+<Callout type="info">
+  Only the profiling **data** is available from JavaScript. The interactive HTML report (sortable
+  tables, hot paths/edges, annotated source) is rendered by the Scala/JVM
+  [`ProfileFormatter`](/docs/testing/profiling#html-output) — it is deliberately kept out of
+  `scalus.js` so the transaction-builder bundle stays small. Feed `profileJson` into your own tooling,
+  or run the profiler on the JVM to get the HTML.
+</Callout>
+
 ## See Also
 
 - [Emulator (JVM)](/docs/testing/emulator) — Full Scala API documentation
