@@ -44,7 +44,8 @@ object VestingValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
-        val vestingDatum = datum.getOrFail(DatumNotFound).to[Config]
+        val vestingDatum = datum.getOrFail(DatumNotFound)
+        val vestingConfig = vestingDatum.to[Config]
         val Action(requestedAmount) = redeemer.to[Action]
 
         require(requestedAmount > 0, NonPositiveAmount)
@@ -66,12 +67,12 @@ object VestingValidator extends Validator {
 
         val txEarliestTime = txInfo.getValidityStartTime
 
-        val released = vestingDatum.initialAmount - contractAmount
+        val released = vestingConfig.initialAmount - contractAmount
 
-        val availableAmount = linearVesting(vestingDatum, txEarliestTime) - released
+        val availableAmount = linearVesting(vestingConfig, txEarliestTime) - released
 
         require(
-          txInfo.isSignedBy(vestingDatum.beneficiary),
+          txInfo.isSignedBy(vestingConfig.beneficiary),
           NoBeneficiarySignature
         )
         require(
@@ -79,7 +80,7 @@ object VestingValidator extends Validator {
           AmountExceedsAvailable
         )
 
-        val beneficiaryCred = Credential.PubKeyCredential(vestingDatum.beneficiary)
+        val beneficiaryCred = Credential.PubKeyCredential(vestingConfig.beneficiary)
 
         val beneficiaryInputs = txInfo.findOwnInputsByCredential(beneficiaryCred)
         val beneficiaryOutputs = txInfo.findOwnOutputsByCredential(beneficiaryCred)
@@ -115,7 +116,7 @@ object VestingValidator extends Validator {
             )
 
             require(
-              contractOutput.datum === OutputDatum.OutputDatum(datum.getOrFail(DatumNotFound)),
+              contractOutput.datum === OutputDatum.OutputDatum(vestingDatum),
               InvalidDatum
             )
     }
