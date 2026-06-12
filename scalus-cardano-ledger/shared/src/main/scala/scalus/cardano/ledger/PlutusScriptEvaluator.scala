@@ -357,7 +357,10 @@ object PlutusScriptEvaluator {
 
         /** Render a script's profile to each configured [[ProfileOutput]] (console / files). File
           * destinations are prefixed with the script key so per-redeemer profiles don't collide.
-          * HTML output annotates source lines when the source file is readable from the CWD.
+          * The actual rendering is delegated to the platform-specific [[ProfileReporting]] so that
+          * [[scalus.uplc.eval.ProfileFormatter]] (HTML/CSS/JS templates, Tarjan pass) stays out of
+          * the JS bundle; HTML output annotates source lines when the source file is readable from
+          * the CWD (JVM only — [[ProfileReporting]] returns `None` on JS).
           *
           * @note
           *   This is fed by a *separate* profiling evaluation of the script (see the call site), so
@@ -370,30 +373,23 @@ object PlutusScriptEvaluator {
             scriptHash: ScriptHash,
             redeemer: Redeemer
         ): Unit = result.profile.foreach { data =>
-            val outs = report.effectiveProfileOutputs
-            val sources: Map[String, IndexedSeq[String]] =
-                if outs.exists(_.format == ProfileFormat.Html) then
-                    ProfileFormatter.loadSources(data)
-                else Map.empty
             val key = s"${scriptHash.toHex}-${redeemer.tag}-${redeemer.index}"
-            outs.foreach { out =>
-                val content = out.format match
-                    case ProfileFormat.Text =>
-                        if report.profile == ProfileLevel.Full then
-                            ProfileFormatter.toText(data, report.maxRows)
-                        else ProfileFormatter.summary(data)
-                    case ProfileFormat.Csv  => ProfileFormatter.toCsv(data)
-                    case ProfileFormat.Html => ProfileFormatter.toHtml(data, sources)
-                    case ProfileFormat.Json => ProfileFormatter.toJson(data)
-                out.destination match
-                    case ProfileDestination.Console =>
-                        log.info(s"Profile $key:\n$content")
-                    case ProfileDestination.File(name) =>
-                        platform.writeFile(reportPath(s"$key.$name"), content.getBytes("UTF-8"))
-                    case ProfileDestination.AbsoluteFile(path) =>
-                        val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-                        if sep > 0 then platform.createDirectories(path.substring(0, sep))
-                        platform.writeFile(path, content.getBytes("UTF-8"))
+            report.effectiveProfileOutputs.foreach { out =>
+                ProfileReporting.render(data, out.format, report.profile, report.maxRows).foreach {
+                    content =>
+                        out.destination match
+                            case ProfileDestination.Console =>
+                                log.info(s"Profile $key:\n$content")
+                            case ProfileDestination.File(name) =>
+                                platform.writeFile(
+                                  reportPath(s"$key.$name"),
+                                  content.getBytes("UTF-8")
+                                )
+                            case ProfileDestination.AbsoluteFile(path) =>
+                                val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+                                if sep > 0 then platform.createDirectories(path.substring(0, sep))
+                                platform.writeFile(path, content.getBytes("UTF-8"))
+                }
             }
         }
 
