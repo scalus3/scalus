@@ -25,6 +25,3 @@ enum ImtRedeemer derives FromData, ToData:
     case Add(key: ByteString, proof: Data)
     case Deposit(key: ByteString, proof: Data)
     case Withdraw(key: ByteString, proof: Data)
-
-@Compile
-object ImtRedeemer

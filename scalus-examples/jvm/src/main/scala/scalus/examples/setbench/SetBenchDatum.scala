@@ -23,14 +23,8 @@ enum SetBenchRedeemer derives FromData, ToData:
     case Withdraw(key: ByteString, value: ByteString, proof: Data)
     case Deposit(key: ByteString, value: ByteString, proof: Data)
 
-@Compile
-object SetBenchRedeemer
-
 case class AccWithdrawRedeemer(
     element: BigInt,
     compressedProof: ByteString
 ) derives FromData,
       ToData
-
-@Compile
-object AccWithdrawRedeemer

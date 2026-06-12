@@ -39,9 +39,6 @@ enum MembershipRedeemer derives FromData, ToData:
     case Mint(proof: Data)
     case Burn
 
-@Compile
-object MembershipRedeemer
-
 // ============================================================================
 // VALIDATOR
 // ============================================================================
