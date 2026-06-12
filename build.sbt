@@ -18,7 +18,6 @@ val scalusCompatibleVersion = scalusStableVersion
 val cardanoClientLibVersion = "0.7.2"
 val yaciVersion = "0.4.4"
 val yaciCardanoTestVersion = "0.1.0"
-val nobleCurvesVersion = "1.9.7"
 val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.19.0"
 val borerVersion = "1.16.2"
@@ -154,6 +153,38 @@ lazy val profilingScalacOptions = Seq(
 lazy val copySharedFiles = taskKey[Unit]("Copy shared files")
 lazy val prepareNpmPackage = taskKey[Unit]("Make an copy scalus bundle.js to npm directory")
 lazy val runNpmTests = taskKey[Unit]("Run npm TypeScript tests")
+lazy val installNpmTestDeps =
+    taskKey[File](
+      "Install npm deps required by Scala.js tests (Node resolves them via node_modules walk-up)"
+    )
+
+// Shared settings for every Scala.js (cross) project.
+//
+// We emit standard ECMAScript modules and no longer use scalajs-bundler/webpack. npm
+// dependencies (@noble/curves, @noble/hashes) are left as bare `import` specifiers in the
+// linker output and resolved from node_modules, not bundled in. For tests, Node resolves
+// those specifiers from the repo-root node_modules (it walks parent directories up from the
+// linked test module), so we install them there before running tests.
+lazy val jsModuleSettings: Seq[Def.Setting[?]] = Seq(
+  scalaJSUseMainModuleInitializer := false,
+  scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
+  installNpmTestDeps := {
+      val base = (LocalRootProject / baseDirectory).value
+      val log = streams.value.log
+      val nodeModules = base / "node_modules"
+      val marker = nodeModules / ".scalus-test-deps-installed"
+      val pkgJson = base / "package.json"
+      if (!marker.exists() || pkgJson.lastModified() > marker.lastModified()) {
+          log.info(s"Installing npm test dependencies in $base ...")
+          val code = scala.sys.process.Process("npm" :: "install" :: Nil, base).!
+          if (code != 0) sys.error("npm install for Scala.js test dependencies failed")
+          IO.touch(marker)
+      }
+      nodeModules
+  },
+  Test / executeTests := (Test / executeTests).dependsOn(installNpmTestDeps).value,
+  Test / testOnly := (Test / testOnly).dependsOn(installNpmTestDeps).evaluated
+)
 
 // Scalus Compiler Plugin Dependency
 lazy val PluginDependency: List[Def.Setting[?]] = List(scalacOptions ++= {
@@ -406,21 +437,13 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
       Test / unmanagedResourceDirectories += (LocalRootProject / baseDirectory).value / "scalus-ethereum-kzg-ceremony" / "src" / "main" / "resources"
     )
+    .jsSettings(jsModuleSettings *)
     .jsSettings(
       // Add JS-specific settings here
       // Disable doc due to scaladoc NPE bug on JS platform
       Compile / doc / sources := Seq.empty,
-      Test / doc / sources := Seq.empty,
-      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
-      Test / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
-      scalaJSLinkerConfig ~= {
-          _.withModuleKind(ModuleKind.CommonJSModule)
-          // Use .mjs extension.
-//              .withOutputPatterns(OutputPatterns.fromJSFile("%s.mjs"))
-      },
-      scalaJSUseMainModuleInitializer := false
+      Test / doc / sources := Seq.empty
     )
-    .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
     .nativeSettings(
       // Native targets 3.8.3 (highest Scala that Scala Native 0.5.12 supports), not the 3.8.4
       // used by JVM/JS. Run with `++3.8.3 scalusNative/test`.
@@ -568,14 +591,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.25",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test
     )
-    .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
-      scalaJSLinkerConfig ~= {
-          _.withModuleKind(ModuleKind.CommonJSModule)
-      },
-      scalaJSUseMainModuleInitializer := false
-    )
-    .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
+    .jsSettings(jsModuleSettings *)
 
 lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
@@ -610,15 +626,10 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       Test / javaOptions += s"-Dscalus.test.scalaVersion=${scalaVersion.value}",
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion
     )
+    .jsSettings(jsModuleSettings *)
     .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
-      Test / envVars := sys.env.toMap, // for HTLC integration tests
-      scalaJSUseMainModuleInitializer := false,
-      scalaJSLinkerConfig ~= {
-          _.withModuleKind(ModuleKind.CommonJSModule)
-      }
+      Test / envVars := sys.env.toMap // for HTLC integration tests
     )
-    .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
 
 lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-utxo-cell"))
@@ -637,12 +648,7 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
       publish / skip := true
     )
     .jvmSettings(Test / fork := true)
-    .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
-      scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.CommonJSModule) },
-      scalaJSUseMainModuleInitializer := false
-    )
-    .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
+    .jsSettings(jsModuleSettings *)
 
 lazy val scalusDesignPatterns = project
     .in(file("scalus-design-patterns"))
@@ -768,31 +774,37 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // For conformance test vector extraction
       libraryDependencies += "org.apache.commons" % "commons-compress" % "1.28.0" % "test"
     )
+    .jsSettings(jsModuleSettings *)
     .jsSettings(
-      Compile / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
-      Test / npmDependencies += "@noble/curves" -> nobleCurvesVersion,
-      // Lucid Evolution and CML for transaction signing
-      Compile / npmDependencies += "@lucid-evolution/wallet" -> "0.1.72",
-      Compile / npmDependencies += "@anastasia-labs/cardano-multiplatform-lib-nodejs" -> "6.0.2-3",
-      Compile / fullLinkJS / scalaJSLinkerConfig ~= (_.withClosureCompiler(true)),
-      // copy scalus.js and scalus.js.map to npm directory for publishing
+      // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
+      // The Scala.js linker emits standard ES modules; we run esbuild over the linker
+      // output to collapse any internal chunks into one file and minify. @noble/* are
+      // marked external — they stay as bare `import`s and are declared as runtime
+      // dependencies in the npm package.json, so they are NOT bundled in.
       prepareNpmPackage := {
-          val bundle = (Compile / fullOptJS / webpack).value
+          (Compile / fullLinkJS).value
+          val linkerOutputDir = (Compile / fullLinkJS / scalaJSLinkerOutputDirectory).value
+          val nodeModules = installNpmTestDeps.value
           val npmDir = (Compile / sourceDirectory).value / "npm"
           val log = streams.value.log
-          bundle.foreach { f =>
-              val sourceJs = f.data.file
-              val targetJs = npmDir / "scalus.js"
-              IO.copyFile(sourceJs, targetJs)
-              log.info(s"Copied ${sourceJs} to ${targetJs}")
-              // Also copy source map if it exists
-              val sourceMap = new File(sourceJs.getParentFile, sourceJs.getName + ".map")
-              if (sourceMap.exists()) {
-                  val targetMap = npmDir / "scalus.js.map"
-                  IO.copyFile(sourceMap, targetMap)
-                  log.info(s"Copied ${sourceMap} to ${targetMap}")
-              }
-          }
+          val esbuild = nodeModules / ".bin" / "esbuild"
+          val entry = linkerOutputDir / "main.js"
+          val outFile = npmDir / "scalus.js"
+          val cmd = Seq(
+            esbuild.getAbsolutePath,
+            entry.getAbsolutePath,
+            "--bundle",
+            "--format=esm",
+            "--platform=node",
+            "--minify",
+            "--legal-comments=none",
+            "--external:@noble/*",
+            s"--outfile=${outFile.getAbsolutePath}"
+          )
+          log.info(cmd.mkString(" "))
+          val code = scala.sys.process.Process(cmd).!
+          if (code != 0) sys.error("esbuild bundling of scalus.js failed")
+          log.info(s"Wrote ESM bundle to $outFile (${outFile.length} bytes)")
       },
       runNpmTests := {
           import scala.sys.process.*
@@ -809,20 +821,8 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
               throw new RuntimeException("npm tests failed")
           }
       },
-      runNpmTests := runNpmTests.dependsOn(prepareNpmPackage).value,
-      // use custom webpack config to export scalus as a commonjs2 module
-      // otherwise it won't export the module correctly
-      webpackConfigFile := Some(sourceDirectory.value / "main" / "webpack" / "webpack.config.js"),
-      // Upgrade webpack and related tools to newer versions to eliminate npm deprecation warnings
-      webpack / version := "5.97.1",
-      webpackCliVersion := "5.1.4",
-      startWebpackDevServer / version := "4.15.2",
-      scalaJSUseMainModuleInitializer := false,
-      scalaJSLinkerConfig ~= {
-          _.withModuleKind(ModuleKind.CommonJSModule)
-      }
+      runNpmTests := runNpmTests.dependsOn(prepareNpmPackage).value
     )
-    .jsConfigure { project => project.enablePlugins(ScalaJSBundlerPlugin) }
 
 // sbt plugin for blueprint generation
 lazy val scalusSbtPlugin = project

@@ -68,20 +68,26 @@
 
     <div id="results"></div>
 
-    <!-- CommonJS shim for browser -->
-    <script>
-        // Create module/exports shim for CommonJS bundles
-        var module = { exports: {} };
-        var exports = module.exports;
+    <!-- scalus.js is now an ES module whose @noble/* imports are left external.
+         An import map resolves them to a CDN so the bundle runs unbundled in the browser. -->
+    <script type="importmap">
+    {
+        "imports": {
+            "@noble/curves/": "https://esm.sh/@noble/curves@1.9.7/",
+            "@noble/hashes/": "https://esm.sh/@noble/hashes@1.8.0/"
+        }
+    }
     </script>
-    <script src="scalus.js"></script>
-    <script>
-        // Expose exports to global scope after bundle loads
-        window.Scalus = module.exports.Scalus;
-        window.SlotConfig = module.exports.SlotConfig;
-        window.Result = module.exports.Result;
-        window.Redeemer = module.exports.Redeemer;
-        console.log('Module exports:', module.exports);
+    <script type="module">
+        // Load the ESM bundle and expose its named exports as globals so the
+        // (classic-script) test buttons below can use them.
+        import * as Scalus from './scalus.js';
+        window.Scalus = Scalus.Scalus;
+        window.SlotConfig = Scalus.SlotConfig;
+        window.Result = Scalus.Result;
+        window.Redeemer = Scalus.Redeemer;
+        window.dispatchEvent(new Event('scalus-loaded'));
+        console.log('Scalus ESM module loaded:', Scalus);
     </script>
     <!-- Load bundled shared tests (built with: npm run build:browser-tests) -->
     <script src="shared-tests-bundle.js" onerror="console.log('shared-tests-bundle.js not found. Run npm run build:browser-tests to build it.')"></script>

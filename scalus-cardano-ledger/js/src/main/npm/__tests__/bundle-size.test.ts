@@ -18,9 +18,13 @@ describe("scalus.js bundle", () => {
     expect(bundle).not.toContain('"nonce"');
   });
 
-  test("should be smaller than 3MB", () => {
+  test("should be smaller than 3.5MB", () => {
+    // The bundle is ~3.0MB. It grew from ~2.8MB when we moved from a CommonJS/webpack
+    // bundle (minified by the Google Closure Compiler) to an ESModule build minified by
+    // esbuild: Scala.js disables Closure for ES modules (deprecated since Scala.js 1.21),
+    // and esbuild's output is somewhat larger. The limit guards against gross regressions.
     const sizeInBytes = Buffer.byteLength(bundle, "utf8");
-    const limit = 3 * 1024 * 1024;
+    const limit = 3.5 * 1024 * 1024;
     expect(sizeInBytes).toBeLessThan(limit);
   });
 });

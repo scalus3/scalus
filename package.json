@@ -1,0 +1,12 @@
+{
+  "name": "scalus-build-test-deps",
+  "private": true,
+  "description": "Root-level npm dependencies required to run Scala.js tests (resolved by Node's node_modules walk-up). Not published.",
+  "dependencies": {
+    "@noble/curves": "1.9.7",
+    "@noble/hashes": "1.8.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.27.2"
+  }
+}
