@@ -306,8 +306,9 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   (`tx.inputs.at(seedIndex).outRef === seed` — O(1), and a wrong index fails closed).
   **CIP-68 labels** unswapped + real 4-byte encodings (ref = `0x000643b0`, user = `0x000de140`).
   **Hardened the empty mint `Burn` branch** — it now rejects any positive mint under the policy
-  (`tx.mint.flatten.forall(...)`), closing a side door where `MintRedeemer.Burn` could mint fresh
-  pairs and bypass the seed check entirely; the spend validator still enforces both-tokens-burned.
+  (`tx.mint.toSortedMap.get(policyId)` per-policy lookup, not `flatten`), closing a side door where
+  `MintRedeemer.Burn` could mint fresh pairs and bypass the seed check entirely; the spend validator
+  still enforces both-tokens-burned.
   Deduped the "Must burn ref NFT" message; hoisted all error strings to `inline val`.
 - Tests: added "mint without spending seed" negative + "canonical CIP-68 labels" assertion; Burn ExUnits re-baselined.
 - **Deferred:** Contract-object/blueprint conversion — the param'd dual (mint+spend) `DataParameterizedValidator`
