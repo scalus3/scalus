@@ -128,9 +128,6 @@ enum Action derives Data.FromData, Data.ToData:
         reclaimerOutputIndices: List[BigInt]
     )
 
-@Compile
-object Action
-
 // ============================================================================
 // DONATION MINTING POLICY (Parameterized by campaignId)
 // ============================================================================

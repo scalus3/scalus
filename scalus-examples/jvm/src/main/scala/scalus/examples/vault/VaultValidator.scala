@@ -25,18 +25,12 @@ case class State(
 ) derives FromData,
       ToData
 
-@Compile
-object State
-
 // Redeemer
 enum Action derives FromData, ToData:
     case Deposit
     case InitiateWithdrawal
     case FinalizeWithdrawal
     case Cancel
-
-@Compile
-object Action
 
 enum Status derives FromData, ToData:
     case Idle

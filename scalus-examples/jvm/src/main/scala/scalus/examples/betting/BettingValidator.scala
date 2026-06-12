@@ -36,9 +36,6 @@ case class Config(
 ) derives FromData,
       ToData
 
-@Compile
-object Config
-
 // Redeemer
 /** Actions that can be performed on the betting contract */
 enum Action derives FromData, ToData:
@@ -52,9 +49,6 @@ enum Action derives FromData, ToData:
       *   Index of the payout output in tx.outputs (V005 fix: prevents double satisfaction)
       */
     case AnnounceWinner(winner: PubKeyHash, payoutOutputIdx: BigInt)
-
-@Compile
-object Action
 
 /** Main betting validator
   * @see

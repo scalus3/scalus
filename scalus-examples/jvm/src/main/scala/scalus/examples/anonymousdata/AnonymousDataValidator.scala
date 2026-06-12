@@ -45,9 +45,6 @@ enum AnonymousDataMintRedeemer derives FromData, ToData:
     case MintBeacon
     case BurnBeacon
 
-@Compile
-object AnonymousDataMintRedeemer
-
 /** Redeemer for the spending validator. */
 enum AnonymousDataSpendRedeemer derives FromData, ToData:
     case StoreData(
@@ -67,9 +64,6 @@ enum AnonymousDataSpendRedeemer derives FromData, ToData:
     case UpdateParticipants(
         newParticipantsRoot: ByteString
     )
-
-@Compile
-object AnonymousDataSpendRedeemer
 
 // ============================================================================
 // VALIDATOR

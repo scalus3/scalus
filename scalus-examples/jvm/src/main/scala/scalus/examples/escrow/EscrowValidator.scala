@@ -31,9 +31,6 @@ enum Action derives FromData, ToData:
     case Pay
     case Refund
 
-@Compile
-object Action
-
 /** Secure exchange of assets between two parties
   *
   * The escrow smart contract allows two parties to exchange assets securely. The contract holds the

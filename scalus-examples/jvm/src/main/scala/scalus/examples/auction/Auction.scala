@@ -91,9 +91,6 @@ enum Action derives Data.FromData, Data.ToData:
       */
     case End(inputIdx: BigInt, sellerOutputIdx: BigInt, winnerOutputIdx: BigInt)
 
-@Compile
-object Action
-
 /** Auction validator parameterized by a one-shot UTxO reference.
   *
   * The oneShot TxOutRef must be spent when starting the auction, ensuring each auction instance has

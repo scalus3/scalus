@@ -39,9 +39,6 @@ enum GateRedeemer derives FromData, ToData:
     /** Refund to creator (if data entry was deleted or no longer available). */
     case Refund
 
-@Compile
-object GateRedeemer
-
 // ============================================================================
 // VALIDATOR
 // ============================================================================

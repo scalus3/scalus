@@ -15,16 +15,10 @@ case class Parties(
 ) derives ToData,
       FromData
 
-@Compile
-object Parties
-
 // Redeemer
 enum Action derives ToData, FromData:
     case Deposit(amount: Value)
     case Withdraw(amount: Value)
-
-@Compile
-object Action
 
 /** https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/simple_transfer
   *

@@ -20,16 +20,10 @@ case class State(
 ) derives FromData,
       ToData
 
-@Compile
-object State
-
 enum LotteryState derives FromData, ToData:
     case Empty
     case PlayerOneRevealed(length: BigInt, pubKeyHash: PubKeyHash)
     case PlayerTwoRevealed(length: BigInt, pubKeyHash: PubKeyHash)
-
-@Compile
-object LotteryState
 
 // Redeemer
 enum Action derives ToData, FromData:
@@ -37,9 +31,6 @@ enum Action derives ToData, FromData:
     case RevealPlayerTwo(preimage: Preimage)
     case Lose(preimage: Preimage, winnerOutputIdx: BigInt)
     case Timeout(preimage: Preimage)
-
-@Compile
-object Action
 
 /** A lottery between two players, where each of them commits a bet and the winner takes both bets.
   * Since Cardano is deterministic, this lottery uses a commit-reveal-punish scheme to ensure
