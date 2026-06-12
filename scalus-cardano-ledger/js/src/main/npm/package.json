@@ -1,6 +1,6 @@
 {
   "name": "scalus",
-  "version": "0.17.0",
+  "version": "0.18.0",
   "description": "Scalus – Cardano on-chain / off-chain toolkit compiled with Scala.js",
   "files": [
     "scalus.js",
@@ -32,7 +32,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/nau/scalus.git"
+    "url": "https://github.com/scalus3/scalus.git"
   },
   "homepage": "https://scalus.org",
   "license": "Apache-2.0"

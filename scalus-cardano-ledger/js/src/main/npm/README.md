@@ -1,7 +1,7 @@
 # Scalus - Cardano Toolkit for JavaScript
 
 Scalus brings a near-complete Cardano node emulator, Plutus script evaluator, and transaction
-tooling to JavaScript and TypeScript. It is compiled from the JVM Scalus codebase via Scala.jsю
+tooling to JavaScript and TypeScript. It is compiled from the JVM Scalus codebase via Scala.js.
 
 The core features include a **Node Emulator** -- a local, in-process implementation of a Cardano node, complete with
 most of the ledger rules to validate incoming transactions, as well ledger state transitions.
@@ -153,7 +153,7 @@ for (const r of redeemers) {
 }
 ```
 
-On failure, `evalPlutusScripts` throws a `PlutusScriptEvaluationException` with
+On failure, `evalPlutusScripts` throws a `PlutusScriptEvaluationError` with
 `.message` and `.logs` (the script's trace output).
 
 ### Plutus Data JSON Format
