@@ -4,15 +4,8 @@ import scalus.*
 import scalus.cardano.address.{Address, StakeAddress}
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.compiler.Options
 import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.Data
-
-private object ProxyCompilation:
-    private given Options = Options.release
-    lazy val contract = PlutusV3.compile(ProxyValidator.validate)
-
-lazy val ProxyContract = ProxyCompilation.contract
 
 case class ProxyTransactions(
     env: CardanoInfo,

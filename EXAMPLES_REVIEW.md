@@ -266,13 +266,18 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 - Tests: add adversarial tests that under-fund the continuing pool output.
 - Refs: `AmmTest` (`AmmContract.script`/`.withErrorTraces`, `AmmOffchain(...)`).
 
-### upgradeableproxy
-- Structure: add `UpgradeableProxyContract.scala` (`extends Contract` + blueprint — currently none); rename
-  `UpgradeableProxy.scala`→`UpgradeableProxyValidator.scala`, `UpgradeableProxyOffchain.scala`→
-  `UpgradeableProxyTransactions.scala` (the type is already `ProxyTransactions`). Error constants already `inline val` ✅.
-- Bugs: bind continuation per-input (require exactly one proxy input, or equal #continuations with matching
-  values) — closes double satisfaction. Document the one-input constraint in README.
-- Refs: `UpgradeableProxyTest`.
+### upgradeableproxy — ✅ DONE (structural template, this branch)
+- Structure: added `UpgradeableProxyContract.scala` (`object … extends Contract` + `Blueprint.plutusV3[ProxyDatum,
+  ProxyRedeemer]`, Apache license); renamed `UpgradeableProxy.scala`→`UpgradeableProxyValidator.scala` and
+  `UpgradeableProxyOffchain.scala`→`UpgradeableProxyTransactions.scala`; moved compilation out of the Transactions
+  file (was `ProxyCompilation`/`lazy val ProxyContract`) into the Contract object; dropped redundant `scalus.*` +
+  `v3.Validator` imports.
+- Bug fixed (TDD, RED→GREEN): single-own-input guard (`findOwnInputsByCredential(...).length === 1`) closes the
+  double-satisfaction hole where two proxy inputs shared one continuation. New negative test demonstrates the attack.
+- Refs updated: `UpgradeableProxyTest` (`ProxyContract.withErrorTraces`→`UpgradeableProxyContract.compiled.withErrorTraces`);
+  README file-name references + one-input constraint note.
+- **Proved the riskier structural pattern** (add missing Contract/blueprint object + file renames + compilation move)
+  on top of vesting's security+style pattern. Ready to scale to the remaining examples.
 
 ### factory
 - Structure: split `FactoryExample.scala` into `FactoryValidator.scala` (`object FactoryValidator`) +

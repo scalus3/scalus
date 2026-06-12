@@ -1,14 +1,11 @@
 package scalus.examples.upgradeableproxy
 
 import scalus.compiler.Compile
-
-import scalus.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.builtin.{Data, FromData, ToData}
-import scalus.cardano.onchain.plutus.v3.Validator
 
 /** Upgradeable proxy pattern for Cardano smart contracts.
   *
@@ -53,6 +50,14 @@ object ProxyValidator extends Validator {
         val r = redeemer.to[ProxyRedeemer]
         val ownInput = tx.findOwnInputOrFail(ownRef)
 
+        // Reject spending more than one proxy UTxO at once: otherwise a single continuation
+        // output could satisfy several script inputs (double satisfaction) and the value of the
+        // extra inputs would be swept off to the attacker.
+        require(
+          tx.findOwnInputsByCredential(ownInput.resolved.address.credential).length === BigInt(1),
+          MultipleProxyInputs
+        )
+
         val continuationOutput =
             tx.outputs
                 .filter(out => out.address === ownInput.resolved.address)
@@ -88,6 +93,7 @@ object ProxyValidator extends Validator {
     }
 
     inline val MissingDatum = "Proxy datum must be present"
+    inline val MultipleProxyInputs = "Only one proxy input may be spent per transaction"
     inline val LogicNotInvoked = "Logic stake validator must be invoked in this transaction"
     inline val MissingContinuation = "Proxy continuation output not found"
     inline val ContinuationMustHaveInlineDatum = "Continuation output must have an inline datum"

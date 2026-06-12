@@ -14,5 +14,8 @@ The datum stores the current logic validator hash and the owner's public key has
   address. This triggers the logic validator to run, effectively delegating validation to the current logic contract.
 - **Upgrade** — the owner updates the logic hash in the datum, pointing the proxy to a new logic contract.
 
-`UpgradeableProxy.scala` is the on-chain spending validator. `UpgradeableProxyOffchain.scala` builds the off-chain
-transactions.
+Only one proxy UTxO may be spent per transaction: this prevents a double-satisfaction attack where several proxy
+inputs share a single continuation output, letting an attacker pocket the rest.
+
+`UpgradeableProxyValidator.scala` is the on-chain spending validator, `UpgradeableProxyContract.scala` compiles it and
+exposes the blueprint, and `UpgradeableProxyTransactions.scala` builds the off-chain transactions.

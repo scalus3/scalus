@@ -21,7 +21,7 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
     private given env: CardanoInfo = TestUtil.testEnvironment
     private given Options = Options.release
 
-    private val contract = ProxyContract.withErrorTraces
+    private val contract = UpgradeableProxyContract.compiled.withErrorTraces
 
     // Succeeds when the transaction mints nothing.
     private val mustNotMintLogic = PlutusV3
@@ -239,6 +239,30 @@ class UpgradeableProxyTest extends AnyFunSuite, ScalusTest {
             .transaction
 
         assertSubmitScriptFail(provider, ProxyValidator.LogicHashChanged)(tx)
+    }
+
+    test("failure: double satisfaction across two proxy inputs sharing one continuation") {
+        val provider = createProvider()
+        val proxyUtxo1 = deployProxy(provider, mustNotMintHash)
+        val proxyUtxo2 = deployProxy(provider, mustNotMintHash)
+        registerStake(provider, mustNotMintStakeAddress, mustNotMintWitness)
+
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val proxyDatum = proxyUtxo1.output.requireInlineDatum
+        // Spend BOTH proxy UTxOs but provide only ONE continuation output worth a single proxy's
+        // value. Without a single-input guard both spend validators are satisfied by the same
+        // continuation (each sees it via headOption) and the second proxy's value is swept to the
+        // attacker as change.
+        val tx = TxBuilder(env, evaluator)
+            .spend(proxyUtxo1, ProxyRedeemer.Call, txCreator.script)
+            .spend(proxyUtxo2, ProxyRedeemer.Call, txCreator.script)
+            .payTo(txCreator.scriptAddress, proxyValue, proxyDatum)
+            .withdrawRewards(mustNotMintStakeAddress, Coin.zero, mustNotMintWitness)
+            .complete(availableUtxos = utxos, sponsor = Alice.address)
+            .sign(Alice.signer)
+            .transaction
+
+        assertSubmitScriptFail(provider, ProxyValidator.MultipleProxyInputs)(tx)
     }
 
     test("success: Upgrade from mustNotMint to mustMint logic with owner signature") {
