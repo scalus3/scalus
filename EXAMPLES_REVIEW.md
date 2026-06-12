@@ -302,8 +302,9 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 ### editablenft — ✅ DONE (Critical bugs fixed, this branch)
 - Bugs fixed (TDD): **seed binding** — root cause was a param-encoding mismatch (validator decoded the bare
   `TxOutRef` param as a `ReferenceNftParam` wrapper → garbage seed, masked by the old `isDefined`-only check);
-  now decodes `param.to[TxOutRef]` and requires the seed is actually spent (`tx.inputs.exists(_.outRef === seed)`,
-  by value not index). **CIP-68 labels** unswapped + real 4-byte encodings (ref = `0x000643b0`, user = `0x000de140`).
+  now decodes `param.to[TxOutRef]` and requires the seed is actually spent
+  (`tx.inputs.at(seedIndex).outRef === seed` — O(1), and a wrong index fails closed).
+  **CIP-68 labels** unswapped + real 4-byte encodings (ref = `0x000643b0`, user = `0x000de140`).
   Deduped the "Must burn ref NFT" message; hoisted all error strings to `inline val`.
 - Tests: added "mint without spending seed" negative + "canonical CIP-68 labels" assertion; Burn ExUnits re-baselined.
 - **Deferred:** Contract-object/blueprint conversion — the param'd dual (mint+spend) `DataParameterizedValidator`
