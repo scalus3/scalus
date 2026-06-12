@@ -32,7 +32,7 @@ val monocleVersion = "3.3.0"
 //ThisBuild / scalaVersion := "3.7.3-RC1-bin-SNAPSHOT"
 // LTS is the default build version; the next series is used to cross-build the
 // compiler plugin (which depends on the unstable scala3-compiler internal API).
-val scala3LtsVersion = "3.3.7"
+val scala3LtsVersion = "3.3.8"
 val scala3NextVersion = "3.8.4"
 // Scala Native 0.5.12 (latest) supports Scala up to 3.8.3, not 3.8.4 — so the Native platform
 // targets 3.8.3 while JVM/JS use 3.8.4. Same desugaring as 3.8.4, so budgets/baselines match.
