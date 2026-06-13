@@ -791,7 +791,7 @@ lazy val bench = project
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.4",
+      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.0",
       libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )
