@@ -250,14 +250,21 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 - Refs: `NaivePaymentSplitterValidatorTest`, `OptimizedPaymentSplitterValidatorTest`, `PaymentSplitterTxBuilderTest`,
   `PaymentSplitterTestCases`, README.
 
-### lottery
-- Structure: base-trait/explicit validate (decision A); hoist error strings; factor the four near-identical
-  reveal/lose branches into helpers (~120 lines of duplication); fix `==`/`===` drift; import the fully-qualified
-  names; `private val scriptAddress`; Apache license.
-- Bugs (load-bearing): add winner payout + signature to both winning-reveal branches; value-preservation on both
-  empty-state reveals; reveal-deadline upper bound (disjoint from timeout); store both players' PKHs in state for
-  `Lose`/winning-reveal auth.
-- Refs: `LotteryValidatorTest`, `LotteryScenarioTest`, `LotteryScalaCheckCommandTest` (ignore `lottery-complete/`).
+### lottery — ⚠️ security bugs FIXED (this branch); checked against rosetta spec
+- **Corrected the review's own framing** (verified against the rosetta Solidity reference): the winning-reveal
+  branches require a *still-secret* preimage, so only the winner can execute them — no payout enforcement is needed
+  there (the earlier "pot can be sent anywhere" claim was wrong for those). The reference's winner is
+  `(len0 + len1) % 2` — **length-based, exactly like ours** — so the winner function is faithful and was kept
+  (its cryptographic weakness is now documented, not "fixed").
+- Bugs fixed (TDD): **Timeout payout theft** — the Timeout preimage is already public (revealed to reach the state),
+  so anyone could claim the pot; now pinned to the stored revealer pkh. **Reveal/timeout overlap** — winning reveals
+  must be `isEntirelyBefore(revealDeadline)` so they can't race a post-deadline Timeout. New theft negative test;
+  ExUnits re-baselined (whole-script cost shift hit 9 assertions).
+- **Documented simplifications** vs rosetta: symmetric reveal order (vs fixed P0-then-P1), single `revealDeadline`
+  (vs `end_join`/`end_reveal`), atomic multisig join (no `end_join` no-show refund).
+- **Still open** (style, not security): hoist error strings; factor the four near-identical reveal/lose branches
+  (~120 lines dup); Apache license. The empty-state reveals DO preserve value (continuation checked) — not a bug.
+- Refs: `LotteryValidatorTest`, `LotteryScenarioTest`, `LotteryScalaCheckCommandTest`.
 
 ### amm — ⚠️ Critical drain FIXED (this branch); secondary items remain
 - Bug fixed (TDD): **value-preservation** — `spend` now binds the new datum reserves to the continuing pool
