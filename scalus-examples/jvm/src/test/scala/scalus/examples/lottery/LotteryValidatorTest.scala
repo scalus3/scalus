@@ -46,7 +46,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 139293L, steps = 47153240L)
+          ExUnits(memory = 139593L, steps = 47201240L)
         )
     }
 
@@ -73,7 +73,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 139894L, steps = 47280113L)
+          ExUnits(memory = 140194L, steps = 47328113L)
         )
     }
 
@@ -100,7 +100,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           revealTx,
           lotteryUtxo._1,
-          ExUnits(memory = 139293L, steps = 47153240L)
+          ExUnits(memory = 139593L, steps = 47201240L)
         )
     }
 
@@ -241,7 +241,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           p2RevealTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 85794L, steps = 27354821L)
+          ExUnits(memory = 98733L, steps = 31826993L)
         )
     }
 
@@ -288,7 +288,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           timeoutTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 89665L, steps = 27854549L)
+          ExUnits(memory = 134687L, steps = 42188704L)
         )
     }
 
@@ -376,7 +376,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           loseTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 126710L, steps = 40360871L)
+          ExUnits(memory = 128310L, steps = 40616871L)
         )
     }
 
@@ -421,8 +421,47 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           timeoutTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 89665L, steps = 27899725L)
+          ExUnits(memory = 134687L, steps = 42233880L)
         )
+    }
+
+    test("FAIL: a third party cannot steal the pot via Timeout using the public preimage") {
+        val provider = createProvider()
+        val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
+
+        // P1 reveals, publishing validPreimage1 on-chain (it is now public to everyone).
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val p1RevealTx = txCreator.revealPlayerOne(
+          utxos = utxos1,
+          lotteryUtxo = lotteryUtxo,
+          preimage = validPreimage1,
+          playerOnePkh = Alice.addrKeyHash,
+          playerOneSecret = validSecret1,
+          playerTwoSecret = validSecret2,
+          revealDeadline = deadline.toEpochMilli,
+          sponsor = Alice.address,
+          validTo = deadline,
+          signer = Alice.signer
+        )
+        provider.setSlot(beforeSlot)
+        provider.submit(p1RevealTx).await()
+        val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
+
+        // Eve (neither player) supplies the now-public preimage and directs the pot to herself
+        // after the deadline. The validator must reject this: a Timeout must pay the revealer (P1).
+        val utxos2 = provider.findUtxos(Eve.address).await().toOption.get
+        val theftTx = txCreator.timeout(
+          utxos = utxos2,
+          lotteryUtxo = lotteryUtxo2,
+          preimage = validPreimage1,
+          claimantPkh = Eve.addrKeyHash,
+          payeeAddress = Eve.address,
+          sponsor = Eve.address,
+          validFrom = afterDeadline,
+          signer = Eve.signer
+        )
+        provider.setSlot(afterSlot)
+        assertFailure(provider, theftTx, lotteryUtxo2._1, "Timeout must pay the revealer")
     }
 
     test("FAIL: P2 reveals with odd sum (32 + 17 = 49) - Unlucky") {
@@ -532,7 +571,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           loseTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 126710L, steps = 40406047L)
+          ExUnits(memory = 128310L, steps = 40662047L)
         )
     }
 
@@ -702,7 +741,7 @@ class LotteryValidatorTest extends AnyFunSuite, ScalusTest {
           provider,
           p1RevealTx,
           lotteryUtxo2._1,
-          ExUnits(memory = 85193L, steps = 27227948L)
+          ExUnits(memory = 98132L, steps = 31700120L)
         )
     }
 }
