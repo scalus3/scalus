@@ -27,6 +27,29 @@ class BuiltinCostModelTest extends AnyFunSuite:
         )
     }
 
+    test("van Rossem builtins fall back to Plutus reference costs when PV11 params are absent") {
+        // Today's mainnet (Plomin) cost model carries no PV11 builtin parameters, so reading them
+        // yields the 300_000_000 placeholder. At vanRossemPV the new builtins (dropList, value ops,
+        // expModInteger, multiScalarMul, ...) must instead be costed from the vendored Plutus
+        // reference model, while existing builtins keep their supplied (mainnet) costs.
+        val pv11 =
+            MachineParams.defaultParamsFor(Language.PlutusV3, MajorProtocolVersion.vanRossemPV)
+        assert(pv11.builtinCostModel.dropList == BuiltinCostModel.vanRossemReferenceE.dropList)
+        assert(
+          pv11.builtinCostModel.expModInteger == BuiltinCostModel.vanRossemReferenceE.expModInteger
+        )
+        assert(
+          pv11.builtinCostModel.unionValue == BuiltinCostModel.vanRossemReferenceE.unionValue
+        )
+
+        // Existing builtins keep the supplied mainnet cost, not the reference value.
+        val plomin =
+            MachineParams.defaultParamsFor(Language.PlutusV3, MajorProtocolVersion.plominPV)
+        assert(pv11.builtinCostModel.addInteger == plomin.builtinCostModel.addInteger)
+        // Pre-van-Rossem (variant C) does not apply the reference fallback.
+        assert(plomin.builtinCostModel.dropList != BuiltinCostModel.vanRossemReferenceE.dropList)
+    }
+
     test("PlutusV3Params accepts PV11 350-parameter cost model tail") {
         val params = PlutusV3Params.fromSeq(1L to 350L)
         assert(params.numberOfParams == 350)

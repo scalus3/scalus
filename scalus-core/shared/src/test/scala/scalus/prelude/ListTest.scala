@@ -9,6 +9,7 @@ import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
 import scalus.compiler.Options
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.PlutusV3
+import scalus.uplc.eval.PlutusVM
 
 class ListTest extends AnyFunSuite with EvalTestKit {
 
@@ -3028,9 +3029,14 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(BigInt(10), Cons(BigInt(20), Cons(BigInt(30), Nil))).at(1),
           BigInt(20)
         )
-        // Compare budget: vanRossemPV at(1) should be cheaper than changPV at(1)
+        // Compare budget: vanRossemPV at(1) should be cheaper than changPV at(1).
+        // The PV11-compiled term uses the dropList builtin, so it must be evaluated on a PV11 VM
+        // (which costs dropList via the van Rossem reference cost model) rather than the default
+        // Plomin VM, where the PV11 builtin parameters are absent.
+        val v11VM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
         val v11Compiled = PlutusV3.compile(Cons(BigInt(1), Cons(BigInt(2), Nil)).at(1))
-        val v11Budget = v11Compiled.program.term.evaluateDebug
+        val v11Budget = v11Compiled.program.term
+            .evaluateDebug(using v11VM)
             .asInstanceOf[scalus.uplc.eval.Result.Success]
             .budget
         val v9Compiled = {

@@ -232,7 +232,44 @@ object MachineParams {
           protocolVersion,
           language
         )
-        val builtinCostModel = BuiltinCostModel.fromPlutusParams(params, language, semvar)
+        val base = BuiltinCostModel.fromPlutusParams(params, language, semvar)
+        // The van Rossem (PV11) variants D/E add builtins (dropList, array/value ops, expModInteger,
+        // multiScalarMul, ...) whose cost parameters do not exist in pre-van-Rossem cost models. When
+        // such a model is supplied (e.g. today's mainnet Plomin params), reading those parameters
+        // yields the 300_000_000 placeholder (the value `fromSeq` fills in for absent entries),
+        // making the new builtins absurdly expensive. Fill ONLY those new builtins from the vendored
+        // Plutus reference model, leaving every existing builtin on its supplied (governance-set)
+        // cost. We detect "PV11 params absent" by probing a representative new parameter for the
+        // placeholder; this also covers variant D, whose V1/V2 param classes never carry these
+        // parameters (they always read the placeholder). A real on-chain PV11 cost model supplies a
+        // real value, so the reference is not used. (Avoids PlutusParams.numberOfParams, which relies
+        // on JVM reflection and does not link on Scala.js.)
+        val needsReferenceNewBuiltins =
+            (semvar == BuiltinSemanticsVariant.D || semvar == BuiltinSemanticsVariant.E) &&
+                params.`dropList-cpu-arguments-intercept` == 300_000_000L
+        val builtinCostModel =
+            if needsReferenceNewBuiltins then
+                val ref =
+                    if semvar == BuiltinSemanticsVariant.D then BuiltinCostModel.vanRossemReferenceD
+                    else BuiltinCostModel.vanRossemReferenceE
+                base.copy(
+                  expModInteger = ref.expModInteger,
+                  dropList = ref.dropList,
+                  lengthOfArray = ref.lengthOfArray,
+                  listToArray = ref.listToArray,
+                  indexArray = ref.indexArray,
+                  multiIndexArray = ref.multiIndexArray,
+                  bls12_381_G1_multiScalarMul = ref.bls12_381_G1_multiScalarMul,
+                  bls12_381_G2_multiScalarMul = ref.bls12_381_G2_multiScalarMul,
+                  insertCoin = ref.insertCoin,
+                  lookupCoin = ref.lookupCoin,
+                  unionValue = ref.unionValue,
+                  valueContains = ref.valueContains,
+                  valueData = ref.valueData,
+                  unValueData = ref.unValueData,
+                  scaleValue = ref.scaleValue
+                )
+            else base
         val machineCosts = CekMachineCosts.fromPlutusParams(params)
         MachineParams(
           machineCosts = machineCosts,
