@@ -483,6 +483,45 @@ class LotteryTest extends AnyFunSuite, ScalusTest {
         assertSuccess(provider, timeoutTx, lotteryUtxo2._1)
     }
 
+    test("FAIL: a third party cannot steal the pot via Timeout using the public preimage") {
+        val provider = createProvider()
+        val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)
+
+        // P1 reveals, publishing validPreimage1 on-chain (now public to everyone).
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val p1RevealTx = txCreator.revealPlayerOne(
+          utxos = utxos1,
+          lotteryUtxo = lotteryUtxo,
+          preimage = validPreimage1,
+          playerOnePkh = Alice.addrKeyHash,
+          playerOneSecret = validSecret1,
+          playerTwoSecret = validSecret2,
+          revealDeadline = deadline.toEpochMilli,
+          sponsor = Alice.address,
+          validTo = deadline,
+          signer = Alice.signer
+        )
+        provider.setSlot(beforeSlot)
+        provider.submit(p1RevealTx).await()
+        val lotteryUtxo2 = Utxo(p1RevealTx.utxos.find(_._2.address == scriptAddress).get)
+
+        // Eve (neither player) supplies the now-public preimage and directs the pot to herself
+        // after the deadline. The validator must reject this: a Timeout must pay the revealer (P1).
+        val utxos2 = provider.findUtxos(Eve.address).await().toOption.get
+        val theftTx = txCreator.timeout(
+          utxos = utxos2,
+          lotteryUtxo = lotteryUtxo2,
+          preimage = validPreimage1,
+          claimantPkh = Eve.addrKeyHash,
+          payeeAddress = Eve.address,
+          sponsor = Eve.address,
+          validFrom = afterDeadline,
+          signer = Eve.signer
+        )
+        provider.setSlot(afterSlot)
+        assertFailure(provider, theftTx, lotteryUtxo2._1, "Timeout must pay the revealer")
+    }
+
     test("P2 timeout after P2 revealed but P1 didn't reveal") {
         val provider = createProvider()
         val (_, lotteryUtxo) = createAndSubmitInitiateTx(provider)

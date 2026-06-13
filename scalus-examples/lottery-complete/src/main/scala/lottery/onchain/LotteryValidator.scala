@@ -165,6 +165,12 @@ object LotteryValidator extends Validator {
                         val isReallyPlayerTwo =
                             sha2_256(playerTwoPreimage) === state.playerTwoSecret
                         require(isReallyPlayerTwo, "Fraudulent attempt")
+                        // A winning reveal must land before the deadline; otherwise it would race
+                        // the opponent's Timeout (which is only valid after the deadline).
+                        require(
+                          tx.validRange.isEntirelyBefore(state.revealDeadline),
+                          "Reveal too late"
+                        )
                         val totalLength = playerOnePreimageLen + playerTwoPreimage.length
                         require(totalLength % 2 == BigInt(0), "Unlucky")
 
@@ -191,6 +197,10 @@ object LotteryValidator extends Validator {
                           tx.validRange.isEntirelyAfter(state.revealDeadline),
                           "Deadline not reached"
                         )
+                        // playerOnePreimage is already public (revealed when reaching this state),
+                        // so anyone can submit this Timeout. Pin the pot to the revealer (player
+                        // one) so a third party cannot redirect it to themselves.
+                        require(paysAtLeast(tx, playerOnePkh, amount), "Timeout must pay the revealer")
                 }
 
             case LotteryState.PlayerTwoRevealed(playerTwoPreimageLen, playerTwoPkh) =>
@@ -201,6 +211,12 @@ object LotteryValidator extends Validator {
                         require(
                           sha2_256(playerOnePreimage) === state.playerOneSecret,
                           "Fraudulent attempt"
+                        )
+                        // A winning reveal must land before the deadline; otherwise it would race
+                        // the opponent's Timeout (which is only valid after the deadline).
+                        require(
+                          tx.validRange.isEntirelyBefore(state.revealDeadline),
+                          "Reveal too late"
                         )
                         val totalLength = playerTwoPreimageLen + playerOnePreimage.length
                         require(totalLength % 2 == BigInt(0), "Unlucky")
@@ -230,7 +246,19 @@ object LotteryValidator extends Validator {
                           tx.validRange.isEntirelyAfter(state.revealDeadline),
                           "Deadline not reached"
                         )
+                        // playerTwoPreimage is already public (revealed when reaching this state),
+                        // so anyone can submit this Timeout. Pin the pot to the revealer (player
+                        // two) so a third party cannot redirect it to themselves.
+                        require(paysAtLeast(tx, playerTwoPkh, amount), "Timeout must pay the revealer")
                 }
         }
     }
+
+    /** True if some output pays at least `amount` lovelace to the public-key `pkh`. */
+    private inline def paysAtLeast(tx: TxInfo, pkh: PubKeyHash, amount: BigInt): Boolean =
+        tx.outputs.exists { out =>
+            out.address.credential match
+                case v1.Credential.PubKeyCredential(h) => h === pkh && out.value.getLovelace >= amount
+                case _                                 => false
+        }
 }
