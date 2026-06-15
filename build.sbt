@@ -11,7 +11,7 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.17.0"
+val scalusStableVersion = "0.18.0"
 val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
@@ -362,43 +362,6 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       },
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
-      // NonNegativeInterval: converted from case class to regular class so a custom
-      // hashCode matching the reduce-based equals could be supplied without the
-      // case-class machinery falling out of step (issue #272).
-      mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters.exclude[FinalClassProblem]("scalus.cardano.ledger.NonNegativeInterval"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.NonNegativeInterval"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.NonNegativeInterval$"),
-        ProblemFilters
-            .exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.NonNegativeInterval._1"),
-        ProblemFilters
-            .exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.NonNegativeInterval._2"),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.NonNegativeInterval.canEqual"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.NonNegativeInterval.productArity"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.NonNegativeInterval.productPrefix"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.NonNegativeInterval.productElement"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.NonNegativeInterval.productElementName"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.ledger.NonNegativeInterval.fromProduct"
-        ),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem](
-          "scalus.cardano.ledger.NonNegativeInterval.unapply"
-        ),
-        // SlotConfig: gained epochLength/zeroEpoch fields (with defaults) for slot→epoch
-        // derivation. A 3-arg secondary constructor and apply overload preserve the old
-        // signatures, but the case-class copy method cannot be overloaded.
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.SlotConfig.copy"),
-      ),
 
       // enable when debug compilation of tests
       Test / scalacOptions += "-color:never",
@@ -707,31 +670,6 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      // Removed deprecated 0.14.x members; safe to drop because they shipped deprecated in 0.15.0.
-      mimaBinaryIssueFilters ++= Seq(
-        ProblemFilters
-            .exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_BigInteger"),
-        ProblemFilters
-            .exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_Integer"),
-        ProblemFilters
-            .exclude[DirectMissingMethodProblem]("scalus.bloxbean.Interop.given_ToData_Long"),
-        ProblemFilters
-            .exclude[MissingClassProblem]("scalus.bloxbean.LegacyScalusTransactionEvaluator"),
-        ProblemFilters
-            .exclude[MissingClassProblem]("scalus.bloxbean.LegacyScalusTransactionEvaluator$"),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.getCostMdls"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.costMdls"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.evaluateTx"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.bloxbean.ScalusTransactionEvaluator.evaluateTxWithContexts"
-        ),
-      ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
