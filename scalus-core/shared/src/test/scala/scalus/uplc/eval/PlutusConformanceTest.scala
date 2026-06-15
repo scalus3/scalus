@@ -53,9 +53,7 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
       */
     protected def ignoredCases: Map[String, String] = Map(
       "builtin/constant/string/string-07/string-07" ->
-          "Plutus 1.53 new string constant cases not yet supported by the Scalus UPLC parser",
-      "builtin/constant/string/string-08/string-08" ->
-          "Plutus 1.53 new string constant cases not yet supported by the Scalus UPLC parser",
+          "Scalus UPLC parser lacks Haskell ASCII-mnemonic string escapes (\\DEL, \\NUL, ...) and raw control chars (newline/tab) in string literals",
       "builtin/semantics/bls12_381-cardano-crypto-tests/signature/large-dst/large-dst" ->
           "blst Java binding bug for DST longer than 255 bytes (supranational/blst#232)",
       "builtin/semantics/bls12_381_G1_hashToGroup/hash-dst-len-255/hash-dst-len-255" ->
