@@ -24,7 +24,20 @@ abstract class PlutusConformanceTest extends AnyFunSuite:
           MajorProtocolVersion.vanRossemPV
         )
         val params = MachineParams(baseParams.machineCosts, builtinCostModel)
-        PlutusVM.makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV)
+        // The vendored conformance corpus needs PV11 features (the `case`-on-builtins term
+        // appears in the constant-case test cases) but its budget expectations and
+        // builtinCostModelC.json correspond to semantics variant C (char-length text costing).
+        // PV11 normally selects variant E, which recosts appendString/equalsString/encodeUtf8 by
+        // UTF-8 byte length and breaks those budgets. Pin the variant to C explicitly while keeping
+        // protocolVersion = vanRossemPV so `case` stays enabled. Switching to variant E here would
+        // require shipping builtinCostModelE.json and regenerating the corpus budgets at variant E.
+        new PlutusVM(
+          Language.PlutusV3,
+          params,
+          BuiltinSemanticsVariant.C,
+          platform,
+          MajorProtocolVersion.vanRossemPV
+        )
     }
 
     protected given PlutusVM = plutusVM

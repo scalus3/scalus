@@ -1,5 +1,7 @@
 package scalus.uplc.eval
 
+import java.nio.charset.StandardCharsets
+
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
 import scalus.uplc.Constant
@@ -54,6 +56,9 @@ object MemoryUsage {
         CostingInteger((bs.size - 1) / 8 + 1)
 
     def memoryUsageString(s: String): CostingInteger = CostingInteger(s.length.toLong)
+
+    def memoryUsageStringByByteLength(s: String): CostingInteger =
+        CostingInteger(s.getBytes(StandardCharsets.UTF_8).length.toLong / 4L)
 
     def memoryUsageData(d: Data): CostingInteger = {
         val nodeMem: CostingInteger = CostingInteger(4L)

@@ -43,6 +43,17 @@ class CardanoBuiltins(
         costFunction: CostingFun
     ) =
         BuiltinRuntime(t, f, ArraySeq.empty, costFunction)
+
+    private val costStringsByByteLength =
+        semanticVariant == BuiltinSemanticsVariant.D || semanticVariant == BuiltinSemanticsVariant.E
+
+    private def stringCostingFun[M <: CostModel](
+        costFunction: DefaultCostingFun[M],
+        argIndices: Int*
+    ): CostingFun =
+        if costStringsByByteLength then StringByByteLengthCostingFun(costFunction, argIndices*)
+        else costFunction
+
     import TypeScheme.*
 
     val AddInteger: BuiltinRuntime =
@@ -173,10 +184,11 @@ class CardanoBuiltins(
               val char = args(0).asInteger
               val byteString = args(1).asByteString
               val result = semanticVariant match
-                  case BuiltinSemanticsVariant.A | BuiltinSemanticsVariant.B =>
+                  case BuiltinSemanticsVariant.A | BuiltinSemanticsVariant.B |
+                      BuiltinSemanticsVariant.D =>
                       // essentially, char % 256
                       ByteString.unsafeFromArray(char.toByte +: byteString.bytes)
-                  case BuiltinSemanticsVariant.C =>
+                  case BuiltinSemanticsVariant.C | BuiltinSemanticsVariant.E =>
                       if char < 0 || char > 255 then
                           throw new BuiltinException(s"consByteString: invalid byte value: $char")
                       ByteString.unsafeFromArray(char.toByte +: byteString.bytes)
@@ -335,7 +347,7 @@ class CardanoBuiltins(
               val bb = args(1).asString
               VCon(asConstant(appendString(aa, bb)))
           ,
-          builtinCostModel.appendString
+          stringCostingFun(builtinCostModel.appendString, 0, 1)
         )
 
     val EqualsString: BuiltinRuntime =
@@ -346,7 +358,7 @@ class CardanoBuiltins(
               val bb = args(1).asString
               VCon(asConstant(equalsString(aa, bb)))
           ,
-          builtinCostModel.equalsString
+          stringCostingFun(builtinCostModel.equalsString, 0, 1)
         )
 
     val EncodeUtf8: BuiltinRuntime =
@@ -356,7 +368,7 @@ class CardanoBuiltins(
               val aa = args(0).asString
               VCon(asConstant(encodeUtf8(aa)))
           ,
-          builtinCostModel.encodeUtf8
+          stringCostingFun(builtinCostModel.encodeUtf8, 0)
         )
 
     val DecodeUtf8: BuiltinRuntime =

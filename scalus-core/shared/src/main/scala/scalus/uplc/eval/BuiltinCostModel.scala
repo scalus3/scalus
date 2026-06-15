@@ -2,7 +2,10 @@ package scalus.uplc.eval
 
 import scalus.cardano.ledger.Language
 import scalus.uplc.{BuiltinSemanticsVariant, PlutusParams}
+import scalus.utils.Macros
 import upickle.default.*
+
+import scala.annotation.threadUnsafe
 
 case class BuiltinCostModel(
     // Integers
@@ -229,6 +232,28 @@ case class BuiltinCostModel(
 }
 
 object BuiltinCostModel {
+
+    /** Plutus reference cost model for builtin semantics variant D (PlutusV1/V2 in the van Rossem /
+      * PV11 era), vendored from `builtinCostModelD.json`.
+      *
+      * Used as a fallback by [[MachineParams.fromCostModels]] when a pre-van-Rossem cost model
+      * (which lacks the PV11 builtin parameters) is used for a PV11 evaluation, so that the new
+      * builtins are not costed with the `300_000_000` placeholder.
+      */
+    @threadUnsafe
+    lazy val vanRossemReferenceD: BuiltinCostModel =
+        fromJsonString(inlineResource("builtinCostModelD.json"))
+
+    /** Plutus reference cost model for builtin semantics variant E (PlutusV3/V4 in the van Rossem /
+      * PV11 era), vendored from `builtinCostModelE.json`. See [[vanRossemReferenceD]].
+      */
+    @threadUnsafe
+    lazy val vanRossemReferenceE: BuiltinCostModel =
+        fromJsonString(inlineResource("builtinCostModelE.json"))
+
+    /** Embeds a resource file's contents as a string at compile time (cross-platform). */
+    private inline def inlineResource(inline name: String): String =
+        ${ Macros.inlineResource('name) }
 
     given ReadWriter[BuiltinCostModel] = readwriter[ujson.Value].bimap(
       model =>
@@ -748,7 +773,9 @@ object BuiltinCostModel {
                     )
                   )
               case (Language.PlutusV1 | Language.PlutusV2, BuiltinSemanticsVariant.B) |
-                  (Language.PlutusV3 | Language.PlutusV4, BuiltinSemanticsVariant.C) =>
+                  (Language.PlutusV1 | Language.PlutusV2, BuiltinSemanticsVariant.D) |
+                  (Language.PlutusV3 | Language.PlutusV4, BuiltinSemanticsVariant.C) |
+                  (Language.PlutusV3 | Language.PlutusV4, BuiltinSemanticsVariant.E) =>
                   DefaultCostingFun(
                     cpu = TwoArguments.MultipliedSizes(
                       OneVariableLinearFunction(
@@ -771,18 +798,21 @@ object BuiltinCostModel {
           divideInteger = language match
               case Language.PlutusV1 | Language.PlutusV2 =>
                   DefaultCostingFun(
-                    cpu = TwoArguments.ConstAboveDiagonal(
-                      ConstantOrTwoArguments(
-                        constant = params.`divideInteger-cpu-arguments-constant`,
-                        model = TwoArguments.MultipliedSizes(
-                          OneVariableLinearFunction(
-                            intercept =
-                                params.`divideInteger-cpu-arguments-model-arguments-intercept`,
-                            slope = params.`divideInteger-cpu-arguments-model-arguments-slope`
+                    cpu = {
+                        val cpuModel = ConstantOrTwoArguments(
+                          constant = params.`divideInteger-cpu-arguments-constant`,
+                          model = TwoArguments.MultipliedSizes(
+                            OneVariableLinearFunction(
+                              intercept =
+                                  params.`divideInteger-cpu-arguments-model-arguments-intercept`,
+                              slope = params.`divideInteger-cpu-arguments-model-arguments-slope`
+                            )
                           )
                         )
-                      )
-                    ),
+                        if semvar == BuiltinSemanticsVariant.D then
+                            TwoArguments.AboveAndBelowDiagonal(cpuModel)
+                        else TwoArguments.ConstAboveDiagonal(cpuModel)
+                    },
                     memory = TwoArguments.SubtractedSizes(
                       SubtractedSizesLinearFunction(
                         intercept = params.`divideInteger-memory-arguments-intercept`,
@@ -793,22 +823,25 @@ object BuiltinCostModel {
                   )
               case Language.PlutusV3 | Language.PlutusV4 =>
                   DefaultCostingFun(
-                    cpu = TwoArguments.ConstAboveDiagonal(
-                      ConstantOrTwoArguments(
-                        constant = params.`divideInteger-cpu-arguments-constant`,
-                        model = TwoArguments.QuadraticInXAndY(
-                          TwoVariableQuadraticFunction(
-                            minimum = params.`divideInteger-cpu-arguments-minimum`,
-                            c00 = params.`divideInteger-cpu-arguments-c00`,
-                            c10 = params.`divideInteger-cpu-arguments-c10`,
-                            c01 = params.`divideInteger-cpu-arguments-c01`,
-                            c20 = params.`divideInteger-cpu-arguments-c20`,
-                            c11 = params.`divideInteger-cpu-arguments-c11`,
-                            c02 = params.`divideInteger-cpu-arguments-c02`
+                    cpu = {
+                        val cpuModel = ConstantOrTwoArguments(
+                          constant = params.`divideInteger-cpu-arguments-constant`,
+                          model = TwoArguments.QuadraticInXAndY(
+                            TwoVariableQuadraticFunction(
+                              minimum = params.`divideInteger-cpu-arguments-minimum`,
+                              c00 = params.`divideInteger-cpu-arguments-c00`,
+                              c10 = params.`divideInteger-cpu-arguments-c10`,
+                              c01 = params.`divideInteger-cpu-arguments-c01`,
+                              c20 = params.`divideInteger-cpu-arguments-c20`,
+                              c11 = params.`divideInteger-cpu-arguments-c11`,
+                              c02 = params.`divideInteger-cpu-arguments-c02`
+                            )
                           )
                         )
-                      )
-                    ),
+                        if semvar == BuiltinSemanticsVariant.E then
+                            TwoArguments.AboveAndBelowDiagonal(cpuModel)
+                        else TwoArguments.ConstAboveDiagonal(cpuModel)
+                    },
                     memory = TwoArguments.SubtractedSizes(
                       SubtractedSizesLinearFunction(
                         intercept = params.`divideInteger-memory-arguments-intercept`,
@@ -884,13 +917,16 @@ object BuiltinCostModel {
                         )
                       )
                     ),
-                    memory = TwoArguments.SubtractedSizes(
-                      SubtractedSizesLinearFunction(
-                        intercept = params.`remainderInteger-memory-arguments-intercept`,
-                        slope = params.`remainderInteger-memory-arguments-slope`,
-                        minimum = params.`remainderInteger-memory-arguments-minimum`
-                      )
-                    )
+                    memory = {
+                        val memoryModel = SubtractedSizesLinearFunction(
+                          intercept = params.`remainderInteger-memory-arguments-intercept`,
+                          slope = params.`remainderInteger-memory-arguments-slope`,
+                          minimum = params.`remainderInteger-memory-arguments-minimum`
+                        )
+                        if semvar == BuiltinSemanticsVariant.D then
+                            TwoArguments.LinearInY2(memoryModel)
+                        else TwoArguments.SubtractedSizes(memoryModel)
+                    }
                   )
               case Language.PlutusV3 | Language.PlutusV4 =>
                   // same as modInteger
@@ -923,43 +959,53 @@ object BuiltinCostModel {
           modInteger = language match
               case Language.PlutusV1 | Language.PlutusV2 =>
                   DefaultCostingFun(
-                    cpu = TwoArguments.ConstAboveDiagonal(
-                      ConstantOrTwoArguments(
-                        constant = params.`modInteger-cpu-arguments-constant`,
-                        model = TwoArguments.MultipliedSizes(
-                          OneVariableLinearFunction(
-                            intercept = params.`modInteger-cpu-arguments-model-arguments-intercept`,
-                            slope = params.`modInteger-cpu-arguments-model-arguments-slope`
+                    cpu = {
+                        val cpuModel = ConstantOrTwoArguments(
+                          constant = params.`modInteger-cpu-arguments-constant`,
+                          model = TwoArguments.MultipliedSizes(
+                            OneVariableLinearFunction(
+                              intercept =
+                                  params.`modInteger-cpu-arguments-model-arguments-intercept`,
+                              slope = params.`modInteger-cpu-arguments-model-arguments-slope`
+                            )
                           )
                         )
-                      )
-                    ),
-                    memory = TwoArguments.SubtractedSizes(
-                      SubtractedSizesLinearFunction(
-                        intercept = params.`modInteger-memory-arguments-intercept`,
-                        slope = params.`modInteger-memory-arguments-slope`,
-                        minimum = params.`modInteger-memory-arguments-minimum`
-                      )
-                    )
+                        if semvar == BuiltinSemanticsVariant.D then
+                            TwoArguments.AboveAndBelowDiagonal(cpuModel)
+                        else TwoArguments.ConstAboveDiagonal(cpuModel)
+                    },
+                    memory = {
+                        val memoryModel = SubtractedSizesLinearFunction(
+                          intercept = params.`modInteger-memory-arguments-intercept`,
+                          slope = params.`modInteger-memory-arguments-slope`,
+                          minimum = params.`modInteger-memory-arguments-minimum`
+                        )
+                        if semvar == BuiltinSemanticsVariant.D then
+                            TwoArguments.LinearInY2(memoryModel)
+                        else TwoArguments.SubtractedSizes(memoryModel)
+                    }
                   )
               case Language.PlutusV3 | Language.PlutusV4 =>
                   DefaultCostingFun(
-                    cpu = TwoArguments.ConstAboveDiagonal(
-                      ConstantOrTwoArguments(
-                        constant = params.`modInteger-cpu-arguments-constant`,
-                        model = TwoArguments.QuadraticInXAndY(
-                          TwoVariableQuadraticFunction(
-                            minimum = params.`modInteger-cpu-arguments-model-arguments-minimum`,
-                            c00 = params.`modInteger-cpu-arguments-model-arguments-c00`,
-                            c10 = params.`modInteger-cpu-arguments-model-arguments-c10`,
-                            c01 = params.`modInteger-cpu-arguments-model-arguments-c01`,
-                            c20 = params.`modInteger-cpu-arguments-model-arguments-c20`,
-                            c11 = params.`modInteger-cpu-arguments-model-arguments-c11`,
-                            c02 = params.`modInteger-cpu-arguments-model-arguments-c02`
+                    cpu = {
+                        val cpuModel = ConstantOrTwoArguments(
+                          constant = params.`modInteger-cpu-arguments-constant`,
+                          model = TwoArguments.QuadraticInXAndY(
+                            TwoVariableQuadraticFunction(
+                              minimum = params.`modInteger-cpu-arguments-model-arguments-minimum`,
+                              c00 = params.`modInteger-cpu-arguments-model-arguments-c00`,
+                              c10 = params.`modInteger-cpu-arguments-model-arguments-c10`,
+                              c01 = params.`modInteger-cpu-arguments-model-arguments-c01`,
+                              c20 = params.`modInteger-cpu-arguments-model-arguments-c20`,
+                              c11 = params.`modInteger-cpu-arguments-model-arguments-c11`,
+                              c02 = params.`modInteger-cpu-arguments-model-arguments-c02`
+                            )
                           )
                         )
-                      )
-                    ),
+                        if semvar == BuiltinSemanticsVariant.E then
+                            TwoArguments.AboveAndBelowDiagonal(cpuModel)
+                        else TwoArguments.ConstAboveDiagonal(cpuModel)
+                    },
                     memory = TwoArguments.LinearInY(
                       OneVariableLinearFunction(
                         intercept = params.`modInteger-memory-arguments-intercept`,
@@ -1429,24 +1475,27 @@ object BuiltinCostModel {
             cpu = params.`bls12_381_finalVerify-cpu-arguments`,
             memory = params.`bls12_381_finalVerify-memory-arguments`
           ),
-          // MSM builtins - Plutus V4, use hardcoded values until protocol params are updated
           bls12_381_G1_multiScalarMul = DefaultCostingFun(
             cpu = TwoArguments.LinearInX(
               OneVariableLinearFunction(
-                intercept = CostingInteger(321837444L),
-                slope = CostingInteger(25087669L)
+                intercept = params.`bls12_381_G1_multiScalarMul-cpu-arguments-intercept`,
+                slope = params.`bls12_381_G1_multiScalarMul-cpu-arguments-slope`
               )
             ),
-            memory = TwoArguments.ConstantCost(CostingInteger(18L))
+            memory = TwoArguments.ConstantCost(
+              cost = params.`bls12_381_G1_multiScalarMul-memory-arguments`
+            )
           ),
           bls12_381_G2_multiScalarMul = DefaultCostingFun(
             cpu = TwoArguments.LinearInX(
               OneVariableLinearFunction(
-                intercept = CostingInteger(617887431L),
-                slope = CostingInteger(67302824L)
+                intercept = params.`bls12_381_G2_multiScalarMul-cpu-arguments-intercept`,
+                slope = params.`bls12_381_G2_multiScalarMul-cpu-arguments-slope`
               )
             ),
-            memory = TwoArguments.ConstantCost(CostingInteger(36L))
+            memory = TwoArguments.ConstantCost(
+              cost = params.`bls12_381_G2_multiScalarMul-memory-arguments`
+            )
           ),
           integerToByteString = IntegerToByteStringCostingFun(
             cpu = ThreeArguments.QuadraticInZ(
@@ -1630,46 +1679,152 @@ object BuiltinCostModel {
               cost = params.`ripemd_160-memory-arguments`
             )
           ),
-          // CIP-109 modular exponentiation - uses proper cost model from Plutus reference
           expModInteger = ExpModIntegerCostingFun(
             cpu = ThreeArguments.ExpModCost(
               ExpModCostingFunction(
-                coefficient00 = CostingInteger(607153L),
-                coefficient11 = CostingInteger(231697L),
-                coefficient12 = CostingInteger(53144L)
+                coefficient00 = params.`expModInteger-cpu-arguments-coefficient00`,
+                coefficient11 = params.`expModInteger-cpu-arguments-coefficient11`,
+                coefficient12 = params.`expModInteger-cpu-arguments-coefficient12`
               )
             ),
             memory = ThreeArguments.LinearInZ(
-              OneVariableLinearFunction(intercept = CostingInteger(0L), slope = CostingInteger(1L))
+              OneVariableLinearFunction(
+                intercept = params.`expModInteger-memory-arguments-intercept`,
+                slope = params.`expModInteger-memory-arguments-slope`
+              )
             )
           ),
-          // Plutus 1.53 new builtins - default cost model until protocol params are updated
-          // Values from builtinCostModelC.json (Plutus 1.53 reference implementation)
           dropList = DropListCostingFun(
             cpu = TwoArguments.LinearInX(
               OneVariableLinearFunction(
-                intercept = CostingInteger(116711L),
-                slope = CostingInteger(1957L)
+                intercept = params.`dropList-cpu-arguments-intercept`,
+                slope = params.`dropList-cpu-arguments-slope`
               )
             ),
-            memory = TwoArguments.ConstantCost(CostingInteger(4L))
+            memory = TwoArguments.ConstantCost(params.`dropList-memory-arguments`)
           ),
-          // Array builtins - placeholder cost model, will be updated with proper values
           lengthOfArray = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(CostingInteger(100000L)),
-            memory = OneArgument.ConstantCost(CostingInteger(4L))
+            cpu = OneArgument.ConstantCost(params.`lengthOfArray-cpu-arguments`),
+            memory = OneArgument.ConstantCost(params.`lengthOfArray-memory-arguments`)
           ),
           listToArray = DefaultCostingFun(
-            cpu = OneArgument.ConstantCost(CostingInteger(100000L)),
-            memory = OneArgument.ConstantCost(CostingInteger(4L))
+            cpu = OneArgument.LinearInX(
+              OneVariableLinearFunction(
+                intercept = params.`listToArray-cpu-arguments-intercept`,
+                slope = params.`listToArray-cpu-arguments-slope`
+              )
+            ),
+            memory = OneArgument.LinearInX(
+              OneVariableLinearFunction(
+                intercept = params.`listToArray-memory-arguments-intercept`,
+                slope = params.`listToArray-memory-arguments-slope`
+              )
+            )
           ),
           indexArray = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
-            memory = TwoArguments.ConstantCost(CostingInteger(4L))
+            cpu = TwoArguments.ConstantCost(params.`indexArray-cpu-arguments`),
+            memory = TwoArguments.ConstantCost(params.`indexArray-memory-arguments`)
           ),
           multiIndexArray = DefaultCostingFun(
             cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
             memory = TwoArguments.ConstantCost(CostingInteger(4L))
+          ),
+          insertCoin = DefaultCostingFun(
+            cpu = FourArguments.LinearInU(
+              OneVariableLinearFunction(
+                intercept = params.`insertCoin-cpu-arguments-intercept`,
+                slope = params.`insertCoin-cpu-arguments-slope`
+              )
+            ),
+            memory = FourArguments.LinearInU(
+              OneVariableLinearFunction(
+                intercept = params.`insertCoin-memory-arguments-intercept`,
+                slope = params.`insertCoin-memory-arguments-slope`
+              )
+            )
+          ),
+          lookupCoin = DefaultCostingFun(
+            cpu = ThreeArguments.LinearInZ(
+              OneVariableLinearFunction(
+                intercept = params.`lookupCoin-cpu-arguments-intercept`,
+                slope = params.`lookupCoin-cpu-arguments-slope`
+              )
+            ),
+            memory = ThreeArguments.ConstantCost(params.`lookupCoin-memory-arguments`)
+          ),
+          unionValue = DefaultCostingFun(
+            cpu = TwoArguments.WithInteractionInXAndY(
+              TwoVariableWithInteractionFunction(
+                c00 = params.`unionValue-cpu-arguments-c00`,
+                c10 = params.`unionValue-cpu-arguments-c10`,
+                c01 = params.`unionValue-cpu-arguments-c01`,
+                c11 = params.`unionValue-cpu-arguments-c11`
+              )
+            ),
+            memory = TwoArguments.AddedSizes(
+              OneVariableLinearFunction(
+                intercept = params.`unionValue-memory-arguments-intercept`,
+                slope = params.`unionValue-memory-arguments-slope`
+              )
+            )
+          ),
+          valueContains = DefaultCostingFun(
+            cpu = TwoArguments.ConstAboveDiagonal(
+              ConstantOrTwoArguments(
+                constant = params.`valueContains-cpu-arguments-constant`,
+                model = TwoArguments.LinearInXAndY(
+                  TwoVariableLinearFunction(
+                    intercept = params.`valueContains-cpu-arguments-model-arguments-intercept`,
+                    slope1 = params.`valueContains-cpu-arguments-model-arguments-slope1`,
+                    slope2 = params.`valueContains-cpu-arguments-model-arguments-slope2`
+                  )
+                )
+              )
+            ),
+            memory = TwoArguments.ConstantCost(params.`valueContains-memory-arguments`)
+          ),
+          valueData = DefaultCostingFun(
+            cpu = OneArgument.LinearInX(
+              OneVariableLinearFunction(
+                intercept = params.`valueData-cpu-arguments-intercept`,
+                slope = params.`valueData-cpu-arguments-slope`
+              )
+            ),
+            memory = OneArgument.LinearInX(
+              OneVariableLinearFunction(
+                intercept = params.`valueData-memory-arguments-intercept`,
+                slope = params.`valueData-memory-arguments-slope`
+              )
+            )
+          ),
+          unValueData = DefaultCostingFun(
+            cpu = OneArgument.QuadraticInX(
+              OneVariableQuadraticFunction(
+                c0 = params.`unValueData-cpu-arguments-c0`,
+                c1 = params.`unValueData-cpu-arguments-c1`,
+                c2 = params.`unValueData-cpu-arguments-c2`
+              )
+            ),
+            memory = OneArgument.LinearInX(
+              OneVariableLinearFunction(
+                intercept = params.`unValueData-memory-arguments-intercept`,
+                slope = params.`unValueData-memory-arguments-slope`
+              )
+            )
+          ),
+          scaleValue = DefaultCostingFun(
+            cpu = TwoArguments.LinearInY(
+              OneVariableLinearFunction(
+                intercept = params.`scaleValue-cpu-arguments-intercept`,
+                slope = params.`scaleValue-cpu-arguments-slope`
+              )
+            ),
+            memory = TwoArguments.LinearInY(
+              OneVariableLinearFunction(
+                intercept = params.`scaleValue-memory-arguments-intercept`,
+                slope = params.`scaleValue-memory-arguments-slope`
+              )
+            )
           )
         )
 
