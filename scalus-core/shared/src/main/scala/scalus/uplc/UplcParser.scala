@@ -178,7 +178,9 @@ object UplcParser:
     }
 
     def stringChars(c: Char): Boolean = c != '\"' && c != '\\'
-    def isAllowedChar(c: Char): Boolean = c >= 32 && c != '"' && c != '\\'
+    // Any char except the closing quote and the escape backslash is taken literally — including raw
+    // control characters (newline, tab, ...) — matching Plutus's megaparsec `Lex.charLiteral`.
+    def isAllowedChar(c: Char): Boolean = c != '"' && c != '\\'
 
     val regularChar: P[Char] = P.charWhere(isAllowedChar)
 
@@ -197,6 +199,47 @@ object UplcParser:
     )
 
     val escapedChar: P[Char] = P.charIn(escapeMap.keys).map(escapeMap)
+
+    // Haskell ASCII control-code escape mnemonics (\NUL .. \DEL), supported by Plutus's
+    // megaparsec `Lex.charLiteral`. `stringIn` matches the longest mnemonic (e.g. \SOH over \SO).
+    val asciiMnemonics: Map[String, Char] = Map(
+      "NUL" -> 0,
+      "SOH" -> 1,
+      "STX" -> 2,
+      "ETX" -> 3,
+      "EOT" -> 4,
+      "ENQ" -> 5,
+      "ACK" -> 6,
+      "BEL" -> 7,
+      "BS" -> 8,
+      "HT" -> 9,
+      "LF" -> 10,
+      "VT" -> 11,
+      "FF" -> 12,
+      "CR" -> 13,
+      "SO" -> 14,
+      "SI" -> 15,
+      "DLE" -> 16,
+      "DC1" -> 17,
+      "DC2" -> 18,
+      "DC3" -> 19,
+      "DC4" -> 20,
+      "NAK" -> 21,
+      "SYN" -> 22,
+      "ETB" -> 23,
+      "CAN" -> 24,
+      "EM" -> 25,
+      "SUB" -> 26,
+      "ESC" -> 27,
+      "FS" -> 28,
+      "GS" -> 29,
+      "RS" -> 30,
+      "US" -> 31,
+      "SP" -> 32,
+      "DEL" -> 127
+    ).view.mapValues(_.toChar).toMap
+
+    val asciiMnemonicChar: P[Char] = P.stringIn(asciiMnemonics.keys.toList).map(asciiMnemonics)
 
     val decimalChar: P[Char] = digit.rep(1).map(digits => digits.toList.mkString.toInt.toChar)
 
@@ -217,7 +260,7 @@ object UplcParser:
     val controlChar: P[Char] = P.char('^') *> P.charIn('@'.to('_')).map(c => (c - '@').toChar)
 
     val escapeSequence: P[Char] = P.char('\\') *> (
-      escapedChar | decimalChar | octalChar | hexChar | unicodeChar | controlChar
+      escapedChar | asciiMnemonicChar | decimalChar | octalChar | hexChar | unicodeChar | controlChar
     )
 
     val stringChar: P[Char] = regularChar | escapeSequence
