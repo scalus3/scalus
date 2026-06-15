@@ -25,6 +25,12 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
     private val ownerPkh = AddrKeyHash(platform.blake2b_224(ownerPublicKey))
     private val ownerAddress = TestUtil.createTestAddress(ownerPkh)
 
+    // Separate recovery key — the credential allowed to cancel a pending withdrawal.
+    private val recoveryKeyPair @ (_, recoveryPublicKey) = generateKeyPair()
+    private val recoverySigner = TransactionSigner(Set(recoveryKeyPair))
+    private val recoveryPkh = AddrKeyHash(platform.blake2b_224(recoveryPublicKey))
+    private val recoveryAddress = TestUtil.createTestAddress(recoveryPkh)
+
     private val defaultInitialAmount: Coin = Coin.ada(10)
     private val defaultWaitTime: Long = 10_000L
     private val commissionAmount = Coin(2_000_000L)
@@ -50,10 +56,10 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         Emulator(
           initialUtxos = Map(
             Input(genesisHash, 0) ->
-                Output(
-                  address = ownerAddress,
-                  value = Value.ada(100)
-                )
+                Output(address = ownerAddress, value = Value.ada(100)),
+            // Fund the recovery key holder so they can pay fees for a cancel without the owner key.
+            Input(genesisHash, 1) ->
+                Output(address = recoveryAddress, value = Value.ada(100))
           ),
           initialContext = Context.testMainnet(),
           mutators = Set(PlutusScriptsTransactionMutator)
@@ -96,7 +102,14 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .get
 
             transactionCreatorFor(ownerSigner)
-                .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
+                .lock(
+                  utxos,
+                  defaultInitialAmount,
+                  defaultWaitTime,
+                  ownerAddress,
+                  recoveryAddress,
+                  ownerAddress
+                )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -118,7 +131,8 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         assert(vaultUtxo.output.value.coin == defaultInitialAmount)
 
         val currentSlot = 1000L
-        val currentTime = env.slotConfig.slotToTime(currentSlot)
+        // validity upper bound is one slot ahead so the tx is still valid when submitted at currentSlot
+        val validityEndTime = env.slotConfig.slotToTime(currentSlot + 1)
 
         val withdrawTx = {
             val utxos = provider
@@ -130,7 +144,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .get
 
             transactionCreatorFor(ownerSigner)
-                .withdraw(utxos, utxos, vaultUtxo, ownerAddress, currentTime)
+                .withdraw(utxos, utxos, vaultUtxo, ownerAddress, validityEndTime)
         }
 
         val result = runValidator(provider, withdrawTx, vaultUtxo.input)
@@ -138,7 +152,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         // TODO: review after changing PairData representations
         // assert(result.budget == ExUnits(memory = 264301, steps = 78_973160))
         assert(
-          result.budget == (ExUnits(memory = 187832L, steps = 63533193L))
+          result.budget == (ExUnits(memory = 191122L, steps = 64733791L))
         )
 
         provider.setSlot(currentSlot)
@@ -191,7 +205,14 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .get
 
             transactionCreatorFor(ownerSigner)
-                .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
+                .lock(
+                  utxos,
+                  defaultInitialAmount,
+                  defaultWaitTime,
+                  ownerAddress,
+                  recoveryAddress,
+                  ownerAddress
+                )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -228,7 +249,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, depositTx, vaultUtxo.input)
         assert(result.isSuccess, s"Deposit should succeed: $result")
         assert(
-          result.budget == (ExUnits(memory = 210869L, steps = 67643729L))
+          result.budget == (ExUnits(memory = 217125L, steps = 70557940L))
         )
 
         assert(provider.submit(depositTx).await().isRight)
@@ -279,7 +300,14 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .get
 
             transactionCreatorFor(ownerSigner)
-                .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
+                .lock(
+                  utxos,
+                  defaultInitialAmount,
+                  defaultWaitTime,
+                  ownerAddress,
+                  recoveryAddress,
+                  ownerAddress
+                )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -332,7 +360,14 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .get
 
             transactionCreatorFor(ownerSigner)
-                .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
+                .lock(
+                  utxos,
+                  defaultInitialAmount,
+                  defaultWaitTime,
+                  ownerAddress,
+                  recoveryAddress,
+                  ownerAddress
+                )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -352,7 +387,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         )
 
         val withdrawSlot = 1000L
-        val withdrawTime = env.slotConfig.slotToTime(withdrawSlot)
+        val withdrawTime = env.slotConfig.slotToTime(withdrawSlot + 1)
 
         val withdrawTx = {
             val utxos = provider
@@ -372,7 +407,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         // TODO: review after changing PairData representations
         // assert(withdrawResult.budget == ExUnits(memory = 264301, steps = 78_973160))
         assert(
-          withdrawResult.budget == (ExUnits(memory = 187832L, steps = 63533193L))
+          withdrawResult.budget == (ExUnits(memory = 191122L, steps = 64733791L))
         )
 
         provider.setSlot(withdrawSlot)
@@ -392,8 +427,8 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
               .head
         )
 
-        // Calculate finalization time (after wait time)
-        val finalizeSlot = withdrawSlot + (defaultWaitTime / env.slotConfig.slotLength) + 1
+        // Calculate finalization time (after wait time; deadline is anchored to withdrawSlot + 1)
+        val finalizeSlot = withdrawSlot + 1 + (defaultWaitTime / env.slotConfig.slotLength) + 1
         val finalizeTime = env.slotConfig.slotToTime(finalizeSlot)
 
         val finalizeTx = {
@@ -421,7 +456,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         // TODO: review after changing PairData representations
         // assert(finalizeResult.budget == ExUnits(memory = 324554, steps = 92_685932))
         assert(
-          finalizeResult.budget == (ExUnits(memory = 221998, steps = 66994783))
+          finalizeResult.budget == (ExUnits(memory = 216106, steps = 67544582))
         )
 
         provider.setSlot(finalizeSlot)
@@ -455,7 +490,14 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
                 .get
 
             transactionCreatorFor(ownerSigner)
-                .lock(utxos, defaultInitialAmount, defaultWaitTime, ownerAddress, ownerAddress)
+                .lock(
+                  utxos,
+                  defaultInitialAmount,
+                  defaultWaitTime,
+                  ownerAddress,
+                  recoveryAddress,
+                  ownerAddress
+                )
         }
 
         assert(provider.submit(lockTx).await().isRight)
@@ -475,7 +517,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         )
 
         val withdrawSlot = 1000L
-        val withdrawTime = env.slotConfig.slotToTime(withdrawSlot)
+        val withdrawTime = env.slotConfig.slotToTime(withdrawSlot + 1)
 
         val withdrawTx = {
             val utxos = provider
@@ -538,5 +580,119 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         assert(finalizeResult.isFailure, "Finalize before wait time should fail")
         assert(finalizeResult.logs.last.contains(VaultValidator.DeadlineNotPassed))
+    }
+
+    /** Locks a vault and moves it to Pending via a withdrawal request; returns the pending UTxO. */
+    private def lockAndRequest(provider: Emulator): Utxo = {
+        val lockUtxos = provider
+            .queryUtxos { u => u.output.address == ownerAddress }
+            .minTotal(defaultInitialAmount + commissionAmount)
+            .execute()
+            .await()
+            .toOption
+            .get
+        val lockTx = transactionCreatorFor(ownerSigner)
+            .lock(
+              lockUtxos,
+              defaultInitialAmount,
+              defaultWaitTime,
+              ownerAddress,
+              recoveryAddress,
+              ownerAddress
+            )
+        assert(provider.submit(lockTx).await().isRight)
+        val vaultUtxo = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress && u.input.transactionId == lockTx.id
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
+
+        val withdrawSlot = 1000L
+        val withdrawTime = env.slotConfig.slotToTime(withdrawSlot + 1)
+        val withdrawUtxos = provider
+            .queryUtxos { u => u.output.address == ownerAddress }
+            .minTotal(commissionAmount)
+            .execute()
+            .await()
+            .toOption
+            .get
+        val withdrawTx = transactionCreatorFor(ownerSigner)
+            .withdraw(withdrawUtxos, withdrawUtxos, vaultUtxo, ownerAddress, withdrawTime)
+        provider.setSlot(withdrawSlot)
+        assert(provider.submit(withdrawTx).await().isRight)
+        Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress && u.input.transactionId == withdrawTx.id
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
+    }
+
+    test("recovery key cancels a pending withdrawal") {
+        val provider = createProvider()
+        val pendingVaultUtxo = lockAndRequest(provider)
+
+        val utxos = provider
+            .queryUtxos { u => u.output.address == recoveryAddress }
+            .minTotal(commissionAmount)
+            .execute()
+            .await()
+            .toOption
+            .get
+        val cancelTx = transactionCreatorFor(recoverySigner)
+            .cancel(utxos, utxos, pendingVaultUtxo, recoveryPkh, recoveryAddress)
+
+        val result = runValidator(provider, cancelTx, pendingVaultUtxo.input)
+        assert(result.isSuccess, s"Recovery-key cancel should succeed: $result")
+        assert(provider.submit(cancelTx).await().isRight)
+
+        val idleVault = Utxo(
+          provider
+              .queryUtxos { u =>
+                  u.output.address == scriptAddress && u.input.transactionId == cancelTx.id
+              }
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
+        idleVault.output match {
+            case TransactionOutput.Babbage(_, _, Some(DatumOption.Inline(d)), _) =>
+                assert(d.to[State].status == Status.Idle, "Cancel should return the vault to Idle")
+            case _ => fail("Vault output should have inline datum")
+        }
+    }
+
+    test("owner cannot cancel a withdrawal — only the recovery key can") {
+        val provider = createProvider()
+        val pendingVaultUtxo = lockAndRequest(provider)
+
+        val utxos = provider
+            .queryUtxos { u => u.output.address == ownerAddress }
+            .minTotal(commissionAmount)
+            .execute()
+            .await()
+            .toOption
+            .get
+        // The owner signs and points the cancel at their own key — the threat model is a stolen
+        // owner key, so the validator must reject this and require the separate recovery key.
+        val cancelTx = transactionCreatorWithConstEvaluatorFor(ownerSigner)
+            .cancel(utxos, utxos, pendingVaultUtxo, ownerPkh, ownerAddress)
+
+        val result = runValidator(provider, cancelTx, pendingVaultUtxo.input)
+        assert(result.isFailure, "Owner-signed cancel must fail")
+        assert(result.logs.last.contains(VaultValidator.RecoveryKeyMustSign))
     }
 }

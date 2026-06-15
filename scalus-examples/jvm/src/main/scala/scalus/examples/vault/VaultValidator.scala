@@ -1,23 +1,19 @@
 package scalus.examples.vault
 
 import scalus.compiler.Compile
-
-import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.examples.vault.Action.{Cancel, Deposit, FinalizeWithdrawal, InitiateWithdrawal}
-import scalus.cardano.onchain.plutus
-import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
-import scalus.cardano.onchain.plutus.v1.{Credential, Interval, PosixTime, Value}
-import scalus.cardano.onchain.plutus.v2.TxOut
-import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.v1
+import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime}
+import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
+import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef, Validator}
 import scalus.cardano.onchain.plutus.prelude.{===, fail, require}
-import scalus.cardano.onchain.plutus.v3.Validator
-import scalus.*
 
 // Datum
 case class State(
     owner: ByteString,
+    recoveryKey: ByteString,
     status: Status,
     amount: BigInt,
     waitTime: PosixTime,
@@ -73,7 +69,7 @@ object VaultValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val datum = d.get.to[State]
+        val datum = d.getOrFail(NoDatumExists).to[State]
         redeemer.to[Action] match {
             case Deposit            => deposit(tx, ownRef, datum)
             case InitiateWithdrawal => initiateWithdrawal(tx, ownRef, datum)
@@ -101,6 +97,9 @@ object VaultValidator extends Validator {
           newDatum.finalizationDeadline == datum.finalizationDeadline,
           FinalizationDeadlineChanged
         )
+        // A deposit must not change the withdrawal state machine — otherwise anyone could flip a
+        // Pending withdrawal back to Idle (or vice versa) just by adding funds.
+        require(newDatum.status.toData == datum.status.toData, DepositMustNotChangeStatus)
     }
 
     def initiateWithdrawal(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
@@ -130,7 +129,11 @@ object VaultValidator extends Validator {
           ValueNotConserved
         )
 
-        val requestTime = tx.getValidityStartTime
+        // Derive the request time from the validity interval's *upper* bound, not the lower bound.
+        // The lower bound (getValidityStartTime) can be backdated arbitrarily, which would let an
+        // attacker set finalizationDeadline in the past and finalize immediately, defeating the
+        // wait. The ledger guarantees the upper bound is >= now, so deadline >= now + waitTime.
+        val requestTime = tx.validRange.to.finiteOrFail(NoFinalizationUpperBound)
         val finalizationDeadline = requestTime + datum.waitTime
         val newDatum = getVaultDatum(out)
         require(newDatum.status.isPending, MustBePending)
@@ -148,8 +151,9 @@ object VaultValidator extends Validator {
 
         val scriptOutputs = tx.findOwnOutputsByCredential(ownInput.resolved.address.credential)
         require(scriptOutputs.size == BigInt(0), WithdrawalsMustNotSendBackToVault)
+        val ownerCredential = Credential.PubKeyCredential(v1.PubKeyHash(datum.owner))
         val ownerOutputs =
-            tx.findOwnOutputs(out => addressEquals(out.address.credential, datum.owner))
+            tx.findOwnOutputs(out => out.address.credential === ownerCredential)
         require(ownerOutputs.size > BigInt(0), WrongAddressWithdrawal)
         val totalToOwner =
             ownerOutputs.foldLeft(BigInt(0))((acc, out) => acc + out.value.getLovelace)
@@ -157,11 +161,15 @@ object VaultValidator extends Validator {
     }
 
     def cancel(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
-        // Owner must sign to cancel withdrawal
+        // The recovery key — not the owner — cancels a pending withdrawal. The vault exists to
+        // survive a stolen owner key, so cancellation must use a separate credential the attacker
+        // does not hold.
         require(
-          tx.isSignedBy(v1.PubKeyHash(datum.owner)),
-          OwnerMustSign
+          tx.isSignedBy(v1.PubKeyHash(datum.recoveryKey)),
+          RecoveryKeyMustSign
         )
+        // There must be a pending request to cancel.
+        require(datum.status.isPending, NothingToCancel)
 
         val out = getVaultOutput(tx, ownRef)
         requireSameOwner(out, datum)
@@ -194,26 +202,18 @@ object VaultValidator extends Validator {
     }
 
     private def getVaultDatum(vaultOutput: TxOut) = vaultOutput.datum match {
-        case scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum(d) => d.to[State]
-        case _                                                           => fail(NoDatumProvided)
+        case OutputDatum.OutputDatum(d) => d.to[State]
+        case _                          => fail(NoDatumProvided)
     }
 
     private def requireSameOwner(out: TxOut, datum: State): Unit =
         out.datum match {
-            case scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum(newDatum) =>
-                require(
-                  newDatum.to[State].owner == datum.owner,
-                  VaultOwnerChanged
-                )
+            case OutputDatum.OutputDatum(newDatum) =>
+                val s = newDatum.to[State]
+                require(s.owner == datum.owner, VaultOwnerChanged)
+                require(s.recoveryKey == datum.recoveryKey, RecoveryKeyChanged)
             case _ => fail(NoInlineDatum)
         }
-
-    private def addressEquals(left: Credential, right: ByteString) = {
-        left match {
-            case v1.Credential.PubKeyCredential(hash) => hash.hash === right
-            case v1.Credential.ScriptCredential(hash) => hash === right
-        }
-    }
 
     // Errors
     inline val NoDatumExists = "Contract has no datum"
@@ -246,6 +246,12 @@ object VaultValidator extends Validator {
     inline val NoInlineDatum = "Vault transactions must have an inline datum"
     inline val VaultOwnerChanged = "Vault transactions cannot change the vault owner"
     inline val AdaLeftover = "Must spend entire vault"
-    inline val OwnerMustSign = "Owner must sign to initiate or cancel withdrawal"
+    inline val OwnerMustSign = "Owner must sign to initiate a withdrawal"
     inline val ValueNotConserved = "Value must be conserved during initiation"
+    inline val NoFinalizationUpperBound =
+        "Withdrawal request must set a finite validity upper bound"
+    inline val DepositMustNotChangeStatus = "Deposits must not change the vault status"
+    inline val RecoveryKeyChanged = "Vault transactions cannot change the recovery key"
+    inline val RecoveryKeyMustSign = "Recovery key must sign to cancel a withdrawal"
+    inline val NothingToCancel = "Cannot cancel: no withdrawal is pending"
 }
