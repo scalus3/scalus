@@ -483,6 +483,53 @@ object Macros {
         Expr(params)
     }
 
+    /** Discovers all Plutus conformance UPLC evaluation test cases at compile time.
+      *
+      * Walks `<repo>/plutus-conformance/test-cases/uplc/evaluation` (resolved from the calling
+      * source file's path), and returns every `*.uplc` file as a `/`-separated case key relative to
+      * that directory with the `.uplc` suffix stripped, sorted. The result is embedded as a
+      * constant, so callers iterate it without any runtime filesystem access (works on
+      * JVM/JS/Native).
+      *
+      * NOTE: the list is fixed at compile time. A corpus change (e.g. a Plutus flake bump) that
+      * does not also touch the calling source file requires a recompile (`sbtn
+      * scalusJVM/clean`/`sbtn ci`).
+      */
+    def conformanceEvaluationCasesImpl(using Quotes): Expr[List[String]] = {
+        import scala.jdk.CollectionConverters.*
+        val srcPath = quotes.reflect.SourceFile.current.path
+        val marker = File.separator + "scalus-core" + File.separator
+        val pos = srcPath.lastIndexOf(marker)
+        require(pos > 0, s"Cannot locate repo root (no '$marker') in source path '$srcPath'")
+        val evalDir = Paths.get(
+          srcPath.substring(0, pos),
+          "plutus-conformance",
+          "test-cases",
+          "uplc",
+          "evaluation"
+        )
+        require(Files.exists(evalDir), s"Plutus conformance corpus not found at $evalDir")
+        val stream = Files.walk(evalDir)
+        val cases =
+            try
+                stream
+                    .iterator()
+                    .asScala
+                    .filter(p => Files.isRegularFile(p) && p.toString.endsWith(".uplc"))
+                    .map(p =>
+                        evalDir
+                            .relativize(p)
+                            .toString
+                            .stripSuffix(".uplc")
+                            .replace(File.separatorChar, '/')
+                    )
+                    .toList
+                    .sorted
+            finally stream.close()
+        require(cases.nonEmpty, s"No .uplc conformance cases found under $evalDir")
+        Expr(cases)
+    }
+
     /** Read a resource file from disk using the compile-time source root.
       *
       * This inline helper computes the path to the resource and returns its contents.
