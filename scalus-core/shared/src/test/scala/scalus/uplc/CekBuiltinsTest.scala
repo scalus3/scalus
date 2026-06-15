@@ -5,6 +5,7 @@ import scalus.*
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.compiler.compile
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.Constant.{asConstant, Pair}
@@ -685,6 +686,27 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
             assertResult(binaryStr.takeRight(i) + binaryStr.dropRight(i))(
               scalus.uplc.builtin.Builtins.rotateByteString(byteString, -i).toBinaryString
             )
+    }
+
+    test(
+      "ShiftByteString/RotateByteString reject Int64-overflow amounts under Van Rossem (variant E)"
+    ) {
+        val ShiftByteString = compile(scalus.uplc.builtin.Builtins.shiftByteString).toUplc()
+        val RotateByteString = compile(scalus.uplc.builtin.Builtins.rotateByteString).toUplc()
+        val bs = hex"33C2F0"
+        // maxBound::Int64 + 1 — does not fit a machine Int
+        val tooBig = Term.Const(asConstant(BigInt(1) << 63))
+
+        val vmC = PlutusVM.makePlutusV3VM(MajorProtocolVersion.plominPV) // variant C
+        val vmE = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV) // variant E
+
+        // Pre-van-Rossem (variant C): out-of-Int64 amounts are accepted
+        // (shift collapses to zeroes, rotate reduces modulo the bit length).
+        assert((ShiftByteString $ bs $ tooBig).evaluateDebug(using vmC).isSuccess)
+        assert((RotateByteString $ bs $ tooBig).evaluateDebug(using vmC).isSuccess)
+        // Van Rossem (variant E): the amount is unlifted as a machine Int, so it fails evaluation.
+        assert((ShiftByteString $ bs $ tooBig).evaluateDebug(using vmE).isFailure)
+        assert((RotateByteString $ bs $ tooBig).evaluateDebug(using vmE).isFailure)
     }
 
     test("CountSetBits follows CIP-123") {

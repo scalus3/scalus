@@ -54,6 +54,22 @@ class CardanoBuiltins(
         if costStringsByByteLength then StringByByteLengthCostingFun(costFunction, argIndices*)
         else costFunction
 
+    /** Van Rossem (PV11) variants D/E unlift the shiftByteString/rotateByteString amount as a
+      * machine `Int`, so an amount outside the Int64 range fails evaluation. Pre-van-Rossem
+      * variants (A/B/C) keep it as an unbounded Integer (a shift larger than the bit length yields
+      * all-zeroes; a rotation is reduced modulo the bit length). Matches Plutus `ensurable`-gated
+      * `ShiftByteString`/`RotateByteString` denotations.
+      */
+    private val enforcesInt64ShiftAmount =
+        semanticVariant == BuiltinSemanticsVariant.D || semanticVariant == BuiltinSemanticsVariant.E
+    private val Int64Min = BigInt(Long.MinValue)
+    private val Int64Max = BigInt(Long.MaxValue)
+
+    private def requireInt64ShiftAmount(name: String, amount: BigInt): BigInt =
+        if enforcesInt64ShiftAmount && (amount < Int64Min || amount > Int64Max) then
+            throw new BuiltinException(s"$name: shift amount out of Int64 range: $amount")
+        else amount
+
     import TypeScheme.*
 
     val AddInteger: BuiltinRuntime =
@@ -1111,7 +1127,7 @@ class CardanoBuiltins(
           DefaultUni.ByteString ->: DefaultUni.Integer ->: DefaultUni.ByteString,
           (_: Logger, args: Seq[CekValue]) =>
               val byteString = args(0).asByteString
-              val shift = args(1).asInteger
+              val shift = requireInt64ShiftAmount("shiftByteString", args(1).asInteger)
               VCon(asConstant(shiftByteString(byteString, shift)))
           ,
           builtinCostModel.shiftByteString
@@ -1122,7 +1138,7 @@ class CardanoBuiltins(
           DefaultUni.ByteString ->: DefaultUni.Integer ->: DefaultUni.ByteString,
           (_: Logger, args: Seq[CekValue]) =>
               val byteString = args(0).asByteString
-              val rotation = args(1).asInteger
+              val rotation = requireInt64ShiftAmount("rotateByteString", args(1).asInteger)
               VCon(asConstant(rotateByteString(byteString, rotation)))
           ,
           builtinCostModel.rotateByteString

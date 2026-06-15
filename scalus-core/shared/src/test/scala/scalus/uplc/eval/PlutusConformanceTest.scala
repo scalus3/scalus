@@ -4,7 +4,7 @@ package eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.platform
-import scalus.cardano.ledger.{CardanoInfo, ExUnits, Language, MajorProtocolVersion}
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
 
 import scala.util.Failure
 import scala.util.Success
@@ -13,31 +13,30 @@ import scala.util.Try
 /** Tests for the Plutus Conformance Test Suite. */
 abstract class PlutusConformanceTest extends AnyFunSuite:
     protected lazy val plutusVM: PlutusVM = {
-        val costModelJson = new String(
-          platform.readFile("scalus-core/shared/src/main/resources/builtinCostModelC.json"),
-          "UTF-8"
+        // The Plutus conformance corpus (>= 1.63 / van Rossem) is generated under semantics
+        // variant E: PV11 features (case-on-builtins), UTF-8-byte-length text costing,
+        // consByteString range checks, and Int64-bounded shift/rotate amounts. Build the VM from
+        // Plutus's reference variant-E builtin cost model AND reference variant-E CEK machine costs
+        // so produced budgets match the corpus exactly; makePlutusV3VM derives variant E from
+        // vanRossemPV.
+        def reference(name: String): String =
+            new String(platform.readFile(s"scalus-core/shared/src/main/resources/$name"), "UTF-8")
+        val builtinCostModel = BuiltinCostModel.fromJsonString(reference("builtinCostModelE.json"))
+        val machineCosts = CekMachineCosts.fromMap(
+          ujson
+              .read(reference("cekMachineCostsE.json"))
+              .obj
+              .iterator
+              .flatMap { (key, value) =>
+                  Seq(
+                    s"$key-exBudgetCPU" -> value("exBudgetCPU").num.toLong,
+                    s"$key-exBudgetMemory" -> value("exBudgetMemory").num.toLong
+                  )
+              }
+              .toMap
         )
-        val builtinCostModel = BuiltinCostModel.fromJsonString(costModelJson)
-        val baseParams = MachineParams.fromCostModels(
-          CardanoInfo.mainnet.protocolParams.costModels,
-          Language.PlutusV3,
-          MajorProtocolVersion.vanRossemPV
-        )
-        val params = MachineParams(baseParams.machineCosts, builtinCostModel)
-        // The vendored conformance corpus needs PV11 features (the `case`-on-builtins term
-        // appears in the constant-case test cases) but its budget expectations and
-        // builtinCostModelC.json correspond to semantics variant C (char-length text costing).
-        // PV11 normally selects variant E, which recosts appendString/equalsString/encodeUtf8 by
-        // UTF-8 byte length and breaks those budgets. Pin the variant to C explicitly while keeping
-        // protocolVersion = vanRossemPV so `case` stays enabled. Switching to variant E here would
-        // require shipping builtinCostModelE.json and regenerating the corpus budgets at variant E.
-        new PlutusVM(
-          Language.PlutusV3,
-          params,
-          BuiltinSemanticsVariant.C,
-          platform,
-          MajorProtocolVersion.vanRossemPV
-        )
+        val params = MachineParams(machineCosts, builtinCostModel)
+        PlutusVM.makePlutusV3VM(params, MajorProtocolVersion.vanRossemPV)
     }
 
     protected given PlutusVM = plutusVM
