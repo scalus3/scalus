@@ -198,11 +198,18 @@ object BuiltinValueOps:
       *   if data is not in the expected format, or validation fails
       */
     def fromData(data: Data): BuiltinValue = {
+        // Plutus `unValueData` requires the Data to be in canonical form and FAILS otherwise (it does
+        // not normalize): currency symbols and, within each currency, token names must be strictly
+        // ascending (so no duplicate or unordered keys), inner token maps must be non-empty, and no
+        // quantity may be zero. Mirrors PlutusCore.Value.buildValueWith.
+        val keyOrdering = summon[Ordering[ByteString]]
         data match {
             case Data.Map(entries) =>
-                val result = entries.toScalaList.foldLeft(
-                  SortedMap.empty[ByteString, SortedMap[ByteString, BigInt]]
-                ) { case (acc, (keyData, valueData)) =>
+                var result = SortedMap.empty[ByteString, SortedMap[ByteString, BigInt]]
+                var prevCurrency: Option[ByteString] = None
+                val it = entries.toScalaList.iterator
+                while it.hasNext do
+                    val (keyData, valueData) = it.next()
                     val currency = keyData match {
                         case Data.B(bs) => bs
                         case _ =>
@@ -212,43 +219,57 @@ object BuiltinValueOps:
                         throw new BuiltinException(
                           s"Currency symbol exceeds max length of $maxKeyLen bytes"
                         )
+                    prevCurrency match
+                        case Some(p) if !keyOrdering.lt(p, currency) =>
+                            throw new BuiltinException(
+                              "unValueData: currency symbols not strictly ascending"
+                            )
+                        case _ =>
+                    prevCurrency = Some(currency)
 
                     val tokens = valueData match {
                         case Data.Map(tokenEntries) =>
-                            tokenEntries.toScalaList.foldLeft(SortedMap.empty[ByteString, BigInt]) {
-                                case (tokenAcc, (tokenKeyData, tokenValueData)) =>
-                                    val token = tokenKeyData match {
-                                        case Data.B(bs) => bs
-                                        case _ =>
-                                            throw new BuiltinException(
-                                              "Expected ByteString for token name"
-                                            )
-                                    }
-                                    if !isValidKey(token) then
+                            var tokenAcc = SortedMap.empty[ByteString, BigInt]
+                            var prevToken: Option[ByteString] = None
+                            val tit = tokenEntries.toScalaList.iterator
+                            while tit.hasNext do
+                                val (tokenKeyData, tokenValueData) = tit.next()
+                                val token = tokenKeyData match {
+                                    case Data.B(bs) => bs
+                                    case _ =>
                                         throw new BuiltinException(
-                                          s"Token name exceeds max length of $maxKeyLen bytes"
+                                          "Expected ByteString for token name"
                                         )
-                                    val amount = tokenValueData match {
-                                        case Data.I(i) => i
-                                        case _ =>
-                                            throw new BuiltinException(
-                                              "Expected Integer for amount"
-                                            )
-                                    }
-                                    if !isValidQuantity(amount) then
+                                }
+                                if !isValidKey(token) then
+                                    throw new BuiltinException(
+                                      s"Token name exceeds max length of $maxKeyLen bytes"
+                                    )
+                                prevToken match
+                                    case Some(p) if !keyOrdering.lt(p, token) =>
                                         throw new BuiltinException(
-                                          s"Quantity $amount out of 128-bit signed integer range"
+                                          "unValueData: token names not strictly ascending"
                                         )
-                                    // Skip zero amounts (maintain invariant)
-                                    if amount != BigInt(0) then tokenAcc.updated(token, amount)
-                                    else tokenAcc
-                            }
+                                    case _ =>
+                                prevToken = Some(token)
+                                val amount = tokenValueData match {
+                                    case Data.I(i) => i
+                                    case _ =>
+                                        throw new BuiltinException("Expected Integer for amount")
+                                }
+                                if !isValidQuantity(amount) then
+                                    throw new BuiltinException(
+                                      s"Quantity $amount out of 128-bit signed integer range"
+                                    )
+                                if amount == BigInt(0) then
+                                    throw new BuiltinException("unValueData: zero quantity")
+                                tokenAcc = tokenAcc.updated(token, amount)
+                            tokenAcc
                         case _ => throw new BuiltinException("Expected Map for token map")
                     }
-                    // Skip empty token maps (maintain invariant)
-                    if tokens.nonEmpty then acc.updated(currency, tokens)
-                    else acc
-                }
+                    if tokens.isEmpty then
+                        throw new BuiltinException("unValueData: empty inner map")
+                    result = result.updated(currency, tokens)
                 BuiltinValue.unsafeFromInner(result)
             case _ => throw new BuiltinException("Expected Map for BuiltinValue")
         }

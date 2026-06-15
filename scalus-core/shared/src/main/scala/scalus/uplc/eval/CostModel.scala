@@ -739,6 +739,26 @@ class StringByByteLengthCostingFun[+M <: CostModel](
     }
 }
 
+/** CostingFun wrapper that sizes a `Data` argument by its node count instead of the default
+  * [[MemoryUsage.memoryUsageData]]. Matches Plutus `DataNodeCount`, used to cost `unValueData`.
+  */
+class DataNodeCountCostingFun[+M <: CostModel](delegate: DefaultCostingFun[M], dataArgIndex: Int)
+    extends CostingFun {
+    def calculateCost(args: CekValue*): ExUnits = {
+        val argsMem = args.zipWithIndex.map { case (arg, i) =>
+            if i == dataArgIndex then
+                arg match
+                    case CekValue.VCon(Constant.Data(d)) =>
+                        MemoryUsage.memoryUsageDataNodeCount(d)
+                    case _ => MemoryUsage.memoryUsage(arg)
+            else MemoryUsage.memoryUsage(arg)
+        }
+        val cpu = delegate.cpu.calculateCost(argsMem)
+        val mem = delegate.memory.calculateCost(argsMem)
+        ExUnits(mem.toLong, cpu.toLong)
+    }
+}
+
 case class ConstCostingFun(cpu: CostingInteger, memory: CostingInteger) extends CostingFun {
 
     def calculateCost(args: CekValue*): ExUnits = {

@@ -84,6 +84,32 @@ object MemoryUsage {
         while it.hasNext do acc = acc + memoryUsageData(it.next())
         acc
 
+    /** Counts the number of nodes in a `Data` value (each Constr/Map/List/I/B node is 1, ignoring
+      * the size of integer/bytestring leaves). Matches Plutus `DataNodeCount`, used to cost
+      * `unValueData`.
+      */
+    def memoryUsageDataNodeCount(d: Data): CostingInteger = {
+        val children: CostingInteger = d match
+            case Data.I(_)         => CostingInteger(0L)
+            case Data.B(_)         => CostingInteger(0L)
+            case Data.Constr(_, l) => sumNodeCount(l.toScalaList)
+            case Data.Map(l) =>
+                var acc: CostingInteger = CostingInteger(0L)
+                val it = l.toScalaList.iterator
+                while it.hasNext do
+                    val t = it.next()
+                    acc = acc + memoryUsageDataNodeCount(t._1) + memoryUsageDataNodeCount(t._2)
+                acc
+            case Data.List(l) => sumNodeCount(l.toScalaList)
+        CostingInteger(1L) + children
+    }
+
+    private def sumNodeCount(l: List[Data]): CostingInteger =
+        var acc: CostingInteger = CostingInteger(0L)
+        val it = l.iterator
+        while it.hasNext do acc = acc + memoryUsageDataNodeCount(it.next())
+        acc
+
     def memoryUsage(a: CekValue): CostingInteger = a match
         case VCon(const) => memoryUsage(const)
         case _           => CostingInteger(1L)

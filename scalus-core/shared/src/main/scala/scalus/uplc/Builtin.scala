@@ -70,6 +70,15 @@ class CardanoBuiltins(
             throw new BuiltinException(s"$name: shift amount out of Int64 range: $amount")
         else amount
 
+    // bls12_381_G{1,2}_multiScalarMul rejects scalars outside a signed 4096-bit (512-byte) range.
+    // Matches Plutus `msmScalarOutOfBounds` (PlutusCore.Crypto.BLS12_381.Bounds).
+    private val MsmScalarUb = (BigInt(1) << 4095) - 1
+    private val MsmScalarLb = -(BigInt(1) << 4095)
+
+    private def requireMsmScalarsInBounds(group: String, scalars: collection.Seq[BigInt]): Unit =
+        if scalars.exists(s => s < MsmScalarLb || s > MsmScalarUb) then
+            throw new BuiltinException(s"Scalar exceeds 512-byte bound for $group.multiScalarMul")
+
     import TypeScheme.*
 
     val AddInteger: BuiltinRuntime =
@@ -983,6 +992,7 @@ class CardanoBuiltins(
               case Constant.BLS12_381_G1_Element(p) => p
               case _ => throw new KnownTypeUnliftingError(DefaultUni.BLS12_381_G1_Element, args(1))
           }
+          requireMsmScalarsInBounds("G1", scalars)
           VCon(
             Constant.BLS12_381_G1_Element(
               platformSpecific.bls12_381_G1_multiScalarMul(scalars, points)
@@ -1005,6 +1015,7 @@ class CardanoBuiltins(
               case Constant.BLS12_381_G2_Element(p) => p
               case _ => throw new KnownTypeUnliftingError(DefaultUni.BLS12_381_G2_Element, args(1))
           }
+          requireMsmScalarsInBounds("G2", scalars)
           VCon(
             Constant.BLS12_381_G2_Element(
               platformSpecific.bls12_381_G2_multiScalarMul(scalars, points)
@@ -1381,7 +1392,9 @@ class CardanoBuiltins(
               val data = args(0).asData
               VCon(Constant.BuiltinValue(BuiltinValueOps.fromData(data)))
           ,
-          builtinCostModel.unValueData
+          // Plutus costs unValueData by the input Data's node count (DataNodeCount), not its full
+          // memoryUsage (which also counts integer/bytestring leaf sizes).
+          DataNodeCountCostingFun(builtinCostModel.unValueData, 0)
         )
 
     // Integer -> BuiltinValue -> BuiltinValue
