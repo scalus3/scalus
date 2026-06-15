@@ -1,5 +1,46 @@
 # Changelog
 
+## 0.18.1 (2026-06-15)
+
+### Added
+
+- Protocol Version 11 (van Rossem) evaluator support, matching `cardano-node` 11.0.1 / Plutus
+  1.63.0.0. Adds builtin semantics variants `D` (PlutusV1/V2) and `E` (PlutusV3/V4) for PV11, plus
+  cost models for the new builtins — `expModInteger`, `dropList`, the array operations,
+  `bls12_381_G1/G2_multiScalarMul`, and the `Value` builtins (`insertCoin`, `lookupCoin`,
+  `unionValue`, `valueContains`, `valueData`, `unValueData`, `scaleValue`) — wired to protocol
+  parameters. PV11 semantics: UTF-8-byte-length text costing for `appendString`/`equalsString`/
+  `encodeUtf8`, the `consByteString` `[0,255]` range check, `Int64`-bounded `shiftByteString`/
+  `rotateByteString`, and `above_and_below_diagonal` CPU costing for `divideInteger`/`modInteger`.
+  When a pre-PV11 cost model is supplied for a PV11 evaluation, the new builtins fall back to the
+  vendored Plutus reference cost model instead of a placeholder cost
+- CEK profiling data is now exposed through `scalus.js` (the interactive HTML report renderer stays
+  JVM-side)
+- UPLC text parser now accepts Haskell ASCII control-code escape mnemonics (`\NUL` … `\DEL`) and raw
+  control characters inside string literals, matching Plutus's `charLiteral`
+
+### Changed
+
+- `scalus-core` and `scalus-cardano-ledger` build against Plutus 1.63.0.0; the bundled Plutus
+  conformance suite is the 1.63 corpus, evaluated under semantics variant E
+- the Plutus conformance test discovers every evaluation case in the corpus at compile time and runs
+  them all by default, skipping only an explicit, documented ignore list (so new corpus cases are
+  picked up automatically). Only 3 cases remain skipped — the `bls12_381_*_hashToGroup` DST-length
+  cases blocked by a blst Java-binding bug (supranational/blst#232)
+- MiMa compatibility baseline (`scalusStableVersion`) bumped to 0.18.0, and the now-obsolete MiMa
+  problem filters removed
+- dependency updates: sbt 1.12.12
+
+### Fixed
+
+- `bls12_381_G1/G2_multiScalarMul` rejects scalars outside the signed 4096-bit (512-byte) range, as
+  Plutus does, instead of silently reducing them modulo the group order
+- `unValueData` is costed by the input `Data`'s node count (matching Plutus `DataNodeCount`) rather
+  than its full memory usage — it was over-charging by roughly 3× — and now rejects non-canonical
+  `Value` encodings (currency symbols and token names must be strictly ascending, inner maps
+  non-empty, no zero quantities) instead of silently normalizing them
+- corrected a swapped `intercept`/`slope` in the `unValueData` memory cost in `builtinCostModelC.json`
+
 ## 0.18.0 (2026-06-09)
 
 ### Added
