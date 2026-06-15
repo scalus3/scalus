@@ -7,7 +7,6 @@ import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.uplc.PlutusV3
 import scalus.compiler.Compile
 
@@ -410,7 +409,6 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 6. Verify donation token is minted and goes to donation UTxO
-        // 6. Verify donation token is minted and goes to donation UTxO
         val tokenName = DonationMintingPolicy.donationTokenName
         require(
           txInfo.mint.quantityOf(currentDatum.donationPolicyId, tokenName) === BigInt(1),
@@ -529,6 +527,25 @@ object CrowdfundingValidator extends Validator {
         // 3. Verify donation indices are unique (prevents double-spend attack)
         requireStrictlyAscending(donationInputIndices)
 
+        // 3a. Every consumed donation must have its own distinct refund output. The
+        // requireStrictlyAscending check above only constrains donationInputIndices, NOT the
+        // reclaimerOutputIndices used below — the sweep lives in that second list, which step 4
+        // pairs against the donations via `zip`. Two independent guards are needed, neither
+        // implied by the ascending check:
+        //   - Equal length: `zip` silently truncates to the shorter list, so supplying fewer
+        //     reclaimer outputs than donations leaves the unpaired donations' ADA to exit as
+        //     change (their tokens are still burned). Distinctness can't catch this — a shorter
+        //     prefix is still distinct.
+        //   - Distinct outputs: a reused index (e.g. [0, 0]) points several donations at one
+        //     payout, sweeping the rest. The length check can't catch this — [0, 0] has the
+        //     right length. (Strictly-ascending would also work but would force an output
+        //     ordering the off-chain builder doesn't guarantee; distinctness is order-free.)
+        require(
+          donationInputIndices.length === reclaimerOutputIndices.length,
+          "Reclaimer output count must match donation count"
+        )
+        requireDistinct(reclaimerOutputIndices)
+
         // 4. Verify each donation is returned to the original donor (from DonationDatum)
         val totalReclaimed =
             donationInputIndices.zip(reclaimerOutputIndices).foldLeft(BigInt(0)) {
@@ -610,6 +627,19 @@ object CrowdfundingValidator extends Validator {
         indices.foldLeft(BigInt(-1)) { (prev, curr) =>
             require(prev < curr, "Donation indices must be strictly ascending (no duplicates)")
             curr
+        }
+        ()
+
+    /** Verify that indices are pairwise distinct, without imposing an ordering.
+      *
+      * Reclaimer output indices need not be sorted (the off-chain builder lays out outputs in its
+      * own order), but they must not repeat — otherwise two donations could be refunded by a single
+      * output.
+      */
+    def requireDistinct(indices: List[BigInt]): Unit =
+        indices.foldLeft(List.empty[BigInt]) { (seen, curr) =>
+            require(!seen.contains(curr), "Reclaimer output indices must be distinct")
+            List.Cons(curr, seen)
         }
         ()
 

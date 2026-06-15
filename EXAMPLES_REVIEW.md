@@ -109,7 +109,7 @@ every example's tests build only honest transactions.
 |---------|-----|----|---------------------|
 | **AMM** | Critical | ✅ | Datum reserves never tied to pool output `Value` — `Value` imported but unused in `AmmValidator.scala`; swap/deposit/redeem validate only the datum transition. Pool fully drainable. Also: spend doesn't require the LP mint to occur, and the mint check sums all asset names under the policy (LP name unconstrained). |
 | **Lottery** | Critical | ✅ | Winning-reveal branches (`LotteryValidator.scala:199-204`, `:241-247`) check only preimage hash + parity — **no output/value/destination/signature** check. Pot can be sent anywhere by anyone who saw the preimage. Empty-state reveals (`:100-181`) also don't preserve the locked value. No reveal deadline → reveal/timeout windows overlap. |
-| **Crowdfunding** | Critical | | `handleReclaimSpend` (`Crowdfunding.scala:533-563`): `reclaimerOutputIndices` length/order/uniqueness unchecked; `zip` truncation lets an attacker reclaim all donation UTxOs while paying out only a prefix, sweeping the rest as change. Reclaim path also requires no signature. |
+| **Crowdfunding** | Critical | ✅ FIXED | `handleReclaimSpend`: `reclaimerOutputIndices` length/uniqueness unchecked; `zip` truncation lets an attacker reclaim all donation UTxOs while paying out only a prefix, sweeping the rest as change. **Fixed** (this branch): require equal length + `requireDistinct(reclaimerOutputIndices)`; anyone-can-trigger is by design (funds routed to each donor). |
 | **AnonymousData** | Critical | | Update/Delete (`AnonymousDataValidator.scala:204-256`) verify only Merkle membership of *some* participant, not ownership of the public `dataKey` → any member can overwrite/delete anyone's entry. Plus the write path requires a named signature in the same tx, breaking the core "unlinkable" claim (the two cannot both hold without a nullifier/ZK scheme). |
 | **EditableNft** | Critical | ✅ | Seed UTxO never bound: `EditableNftValidator.scala:65` checks `tx.inputs.get(seedIndex).isDefined` but never compares to `param.seed` → one-shot mint defeated, NFT uniqueness broken. |
 | **Vault** | High | | Wait-time bypass: deadline derived from `getValidityStartTime` (lower bound / 0 if unbounded), so a backdated `validFrom` makes `finalize` pass immediately (`VaultValidator.scala:139-151`). Also `deposit` doesn't constrain `status` and `finalize` has no signature check → anyone flips Idle→Pending and forces payout. Plus double satisfaction across same-owner vaults. README claims a recovery key that doesn't exist. |
@@ -185,13 +185,27 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   auction); **add a test with two genuinely-applied instances** (current "fix verification" gives false assurance).
 - Refs: `AuctionValidatorTest`, `AuctionTestKitTest`, `DoubleSatisfactionAttackTest`, README.
 
-### crowdfunding
-- Structure: split `Crowdfunding.scala` (759 lines) into `CrowdfundingContract.scala` (+ blueprint),
-  `CrowdfundingValidator.scala`, and rename `CrowdfundingEndpoints.scala`→`CrowdfundingTransactions.scala`
-  (drop `Future`/`provider.submit`, return `Transaction`). Hoist ~40 inline error strings; remove duplicated
-  lines (`:415-417`), `Vxxx` tags, redundant `v3.Validator` import.
-- Bugs: enforce `reclaimerOutputIndices` length/uniqueness (Critical); add NFT + value-preservation to Donate;
-  unify amount accounting (datum `amount` vs lovelace) to remove the liveness lock.
+### crowdfunding — ⚠️ Critical reclaim sweep FIXED (this branch); checked vs rosetta spec + our README
+- Bug fixed (TDD, RED→GREEN): **reclaim zip-truncation / shared-output sweep**. `handleReclaimSpend` paired
+  donations to refund outputs with `donationInputIndices.zip(reclaimerOutputIndices)`, which silently truncates to
+  the shorter list, and never checked the outputs were distinct. An attacker could consume N donations (burning all
+  N tokens, as `verifyDonationsBurned` demands) while supplying only a prefix of refund outputs — or aim several
+  donations at one output — pocketing the surplus as change, with no signature required. Fix: `require` the index
+  lists are equal length **and** added a `requireDistinct(reclaimerOutputIndices)` helper (pairwise-distinct,
+  order-free so it doesn't constrain the off-chain output layout). Two new adversarial validator tests
+  (truncation sweep; shared-output theft) demonstrate both attacks; rosetta + our README confirm reclaim must
+  return every donation to its donor and may be triggered by anyone (correctness is in the routing, not a signer).
+- Cleanups (touched file only): removed the duplicated `// 6.` comment and the redundant `v3.Validator` import
+  (`v3.*` already covers it). No exact-`ExUnits` assertions in the suite (validator test asserts `size > 0`;
+  emulator/scenario assert submit success), so nothing to re-baseline. All 8 emulator/scenario/scalacheck tests
+  (incl. honest multi-donor reclaim) still pass — the fix is fail-closed for distinct donors.
+- **Still open** (deferred, not security-critical theft): monolith split (`Crowdfunding.scala` 759 lines →
+  Contract/Validator + `Endpoints`→`Transactions`, drop `Future`/`provider.submit`); hoist ~40 inline error
+  strings; **Donate NFT/value-preservation** (the continuing campaign output's NFT isn't re-checked in
+  `handleDonateSpend` — a griefing/lock vector, not direct theft); unify datum-`amount` vs lovelace accounting to
+  remove the liveness lock; off-chain `reclaim` builds reclaimer indices with `indexWhere(address)` (first-match),
+  correct only for distinct donors — now fail-closed on-chain for same-donor-twice, harden the builder to emit one
+  distinct output per donation.
 - Refs: `CrowdfundingEmulatorTest`, `CrowdfundingScalaCheckCommandTest`, `CrowdfundingScenarioTest`,
   `CrowdfundingValidatorTest`, README.
 
