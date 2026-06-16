@@ -12,7 +12,10 @@ auctioned item. The datum tracks the seller, highest bidder, current bid, end ti
 - **Bid** — before the end time, a new bidder places a higher bid. The previous highest bidder is refunded via an
   indexed output (O(1) lookup).
 - **End** — after the end time, the seller closes the auction. The NFT goes to the winner and the bid goes to the
-  seller. If nobody bid, the seller reclaims the NFT.
+  seller. If nobody bid, the seller reclaims the NFT. The seller's payout output is **tagged with this auction's
+  script hash** (an inline datum): because each auction has a unique one-shot hash, the per-input NFT guard can't see
+  a sibling auction at a different address, so without the tag two same-seller auctions ended in one transaction
+  could share a single seller output and pay the seller once. The tag forces a distinct seller output per auction.
 
 The contract uses indexed UTxO lookups and the delayed redeemer pattern. `Auction.scala` contains both the on-chain
 validator and the off-chain transaction builders.

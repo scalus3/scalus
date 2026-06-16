@@ -1569,7 +1569,12 @@ object AuctionTestKitTest {
                 case scala.Some(addr) =>
                     builder
                         .payTo(addr, Value.lovelace(2_000_000L) + nftValue)
-                        .payTo(sellerAddr, Value.lovelace(state.datum.highestBid.toLong))
+                        // Seller payout is tagged with this auction's scriptHash (anti-DS).
+                        .payTo(
+                          sellerAddr,
+                          Value.lovelace(state.datum.highestBid.toLong),
+                          (scriptHash: scalus.uplc.builtin.ByteString)
+                        )
                 case scala.None =>
                     builder.payTo(sellerAddr, Value.lovelace(2_000_000L) + nftValue)
 

@@ -323,6 +323,20 @@ object AuctionValidator extends DataParameterizedValidator {
                   sellerOutput.value.getLovelace >= currentHighestBid,
                   "Seller must receive at least the highest bid amount"
                 )
+                // Tag the seller payout with this auction's unique id (its scriptHash). Each auction
+                // is one-shot-parameterized to a distinct scriptHash, so the per-hash NFT-input count
+                // above cannot see a sibling auction at a *different* script address. Without a tag,
+                // two same-seller auctions ended in one tx could share a single seller output (each
+                // check is only `>=` its own bid), letting an attacker pay the seller once and pocket
+                // the rest. Requiring the seller output to carry this auction's scriptHash forces a
+                // distinct seller output per auction, closing the cross-instance double satisfaction.
+                val sellerOutputDatum = sellerOutput.datum match
+                    case OutputDatum.OutputDatum(d) => d
+                    case _ => fail("Seller output must carry this auction's id datum")
+                require(
+                  sellerOutputDatum == scriptHash.toData,
+                  "Seller output must be tagged with this auction's id"
+                )
 
             case Option.None =>
                 // No bidders - seller can reclaim the item
@@ -774,10 +788,16 @@ class AuctionInstance(
 
             builderWithOutputs = winnerAddr match
                 case scala.Some(addr) =>
-                    // Winner gets the NFT (auctioned item), seller gets the bid amount
+                    // Winner gets the NFT (auctioned item), seller gets the bid amount. The seller
+                    // output is tagged with this auction's scriptHash so it cannot be shared with a
+                    // sibling auction (prevents cross-instance double satisfaction).
                     builder
                         .payTo(addr, LedgerValue.lovelace(2_000_000L) + nftValue)
-                        .payTo(sellerAddr, LedgerValue.lovelace(currentDatum.highestBid.toLong))
+                        .payTo(
+                          sellerAddr,
+                          LedgerValue.lovelace(currentDatum.highestBid.toLong),
+                          (scriptHash: ByteString)
+                        )
                 case scala.None =>
                     // No bids - seller reclaims the NFT (auctioned item)
                     builder.payTo(sellerAddr, LedgerValue.lovelace(2_000_000L) + nftValue)

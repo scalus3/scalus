@@ -120,7 +120,7 @@ every example's tests build only honest transactions.
 | **EditableNft** | High | ✅ | CIP-68 labels swapped **and** wrong-encoded: `userNftName="100"`, `refNftName="222"` (CIP-68: 100=ref, 222=user), and `ByteString.fromString("100")` is ASCII bytes, not the 4-byte CIP-68 label `0x000643b0`. Breaks all CIP-68 tooling interop. |
 | **Vesting** | High | ✅ | No single-script-input guard (only `contractOutputs.length === 1` at `:101`, not inputs) → double satisfaction spending two vesting UTxOs with one shared continuing output. Also continuing-output check is lovelace-only → native tokens can be stripped. |
 | **PaymentSplitter** | High | ✅ FIXED | Both validators reconciled only `getLovelace` → native tokens in a contract UTxO could be skimmed by the fee payer (no asset preservation); the Naive validator also missed the `reminder >= 0` check the Optimized one has. **Fixed** (this branch): both validators now `require(input.value.withoutLovelace.isZero)` on each contract input (ADA-only — nothing to skim), and Naive gained `reminder >= 0`. |
-| **Auction** | High (Med conf) | | "Fixed" `AuctionValidator.handleEnd` DS guard counts NFTs only under its own script hash; because each instance is one-shot-parameterized (distinct hash), two same-seller instances ended together aren't detected → cross-instance double satisfaction; seller payout still `>=`. Test only covers the single-script case. |
+| **Auction** | High (Med conf) | ✅ FIXED | "Fixed" `handleEnd` DS guard counted NFTs only under its own script hash; since each instance is one-shot-parameterized (distinct hash), two same-seller instances ended together weren't detected → cross-instance double satisfaction (seller paid once via a shared `>=` output). The old test only covered the single-script case. **Fixed** (this branch): `handleEnd`'s winner branch now requires the seller payout to carry this auction's `scriptHash` as an inline datum, so two distinct-hash auctions can't share one seller output. New ScriptContext test exercises two genuinely distinct one-shot instances. |
 | **UpgradeableProxy** | High | | Continuation located via `.headOption` and checked against own input value, not bound per-input (`UpgradeableProxy.scala:56-69`); `Call` needs no signature → two same-datum proxy UTxOs share one continuation, attacker pockets the other. |
 
 ### Medium / Low
@@ -189,14 +189,24 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   README vs the two-party implementation (add arbiter/timeout, or fix wording).
 - Refs: `EscrowTest` (incl. its "known bug" test at `:142-164` and hardcoded `ExUnits`).
 
-### auction
-- Structure: largest refactor. Split `Auction.scala` (824 lines) into `AuctionContract.scala`
-  (`extends Contract` + `Blueprint.plutusV3`), `AuctionValidator.scala` (`@Compile`, error constants),
-  `AuctionTransactions.scala` (pure `TxBuilder`, **remove embedded `provider.submit`/`Future`**). Keep
-  `UnfixedAuction.scala` as the intentional teaching vuln but document it clearly. Drop unused `inputValue` bindings.
-- Bugs: fix cross-instance double satisfaction in the "fixed" validator (exact seller payout or burn-link per
-  auction); **add a test with two genuinely-applied instances** (current "fix verification" gives false assurance).
-- Refs: `AuctionValidatorTest`, `AuctionTestKitTest`, `DoubleSatisfactionAttackTest`, README.
+### auction — ✅ High cross-instance double satisfaction FIXED (this branch)
+- Bug fixed (TDD): **cross-instance double satisfaction across distinct one-shot auctions**. `handleEnd`'s anti-DS
+  guard counts auction NFTs only under its *own* scriptHash at its *own* address; since each auction is
+  one-shot-parameterized to a unique hash, that guard never sees a sibling auction at a different address. With the
+  seller payout checked only `>=` its own bid, an attacker could end two same-seller auctions in one tx, point both
+  `End` redeemers at a single seller output, and pocket the second bid. The old "FIX VERIFICATION" test gave false
+  assurance — it created both auctions at the *same* script hash, where the per-hash NFT count (=2) catches it. Fix:
+  `handleEnd`'s winner branch now requires the seller payout output to carry **this auction's scriptHash as an inline
+  datum**. Two distinct-hash auctions therefore cannot share one seller output (each demands its own tag), forcing a
+  distinct seller payout per auction. Off-chain `endAuction` (and the manual test end-builders) attach the tag.
+- Tests: new `CrossInstanceDoubleSatisfactionTest` builds two *genuinely distinct* one-shot instances and shows the
+  shared-seller-output attack is rejected (auction A accepts its tag; auction B rejects it). Re-baselined the
+  "end auction with winner" budget on both compiler generations (pre38 3.3.7 + since38 3.8.4); only that path shifted
+  (the new code runs only in the winner branch). 20 auction tests pass on both compilers.
+- **Still open** (deferred, not security): split the 820-line `Auction.scala` monolith into Contract/Validator/
+  Transactions; remove embedded `provider.submit`/`Future` from the builders; hoist error strings; keep
+  `UnfixedAuction.scala` as the teaching vuln (documented).
+- Refs: `AuctionValidatorTest`, `AuctionTestKitTest`, `DoubleSatisfactionAttackTest`, `CrossInstanceDoubleSatisfactionTest`, README.
 
 ### crowdfunding — ⚠️ Critical reclaim sweep FIXED (this branch); checked vs rosetta spec + our README
 - Bug fixed (TDD, RED→GREEN): **reclaim zip-truncation / shared-output sweep**. `handleReclaimSpend` paired
