@@ -14,7 +14,7 @@ addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 // sbt plugin to unify scaladoc/javadoc across multiple projects
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
 // Migration Manager for Scala
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.5")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.6")
 // buildinfo
 addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.13.1")
 
