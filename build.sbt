@@ -158,6 +158,26 @@ lazy val installNpmTestDeps =
       "Install npm deps required by Scala.js tests (Node resolves them via node_modules walk-up)"
     )
 
+// Scoped to ThisBuild so it is evaluated exactly once per sbt run, even though every JS
+// project's tests depend on it. Defining it per-project would let sbt run several `npm
+// install` processes concurrently in the same directory, which corrupts the esbuild binary
+// install (ETXTBSY) — the marker check below is not enough because all of them race past it
+// before any writes the marker.
+ThisBuild / installNpmTestDeps := {
+    val base = (LocalRootProject / baseDirectory).value
+    val log = streams.value.log
+    val nodeModules = base / "node_modules"
+    val marker = nodeModules / ".scalus-test-deps-installed"
+    val pkgJson = base / "package.json"
+    if (!marker.exists() || pkgJson.lastModified() > marker.lastModified()) {
+        log.info(s"Installing npm test dependencies in $base ...")
+        val code = scala.sys.process.Process("npm" :: "install" :: Nil, base).!
+        if (code != 0) sys.error("npm install for Scala.js test dependencies failed")
+        IO.touch(marker)
+    }
+    nodeModules
+}
+
 // Shared settings for every Scala.js (cross) project.
 //
 // We emit standard ECMAScript modules and no longer use scalajs-bundler/webpack. npm
@@ -171,22 +191,8 @@ lazy val jsModuleSettings: Seq[Def.Setting[?]] = Seq(
   // Compiler. It's a no-op on top of esbuild's --minify for our current bundle, but we
   // keep it on as the officially-supported minification path for ESModule output.
   scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule).withMinify(true) },
-  installNpmTestDeps := {
-      val base = (LocalRootProject / baseDirectory).value
-      val log = streams.value.log
-      val nodeModules = base / "node_modules"
-      val marker = nodeModules / ".scalus-test-deps-installed"
-      val pkgJson = base / "package.json"
-      if (!marker.exists() || pkgJson.lastModified() > marker.lastModified()) {
-          log.info(s"Installing npm test dependencies in $base ...")
-          val code = scala.sys.process.Process("npm" :: "install" :: Nil, base).!
-          if (code != 0) sys.error("npm install for Scala.js test dependencies failed")
-          IO.touch(marker)
-      }
-      nodeModules
-  },
-  Test / executeTests := (Test / executeTests).dependsOn(installNpmTestDeps).value,
-  Test / testOnly := (Test / testOnly).dependsOn(installNpmTestDeps).evaluated
+  Test / executeTests := (Test / executeTests).dependsOn(ThisBuild / installNpmTestDeps).value,
+  Test / testOnly := (Test / testOnly).dependsOn(ThisBuild / installNpmTestDeps).evaluated
 )
 
 // Scalus Compiler Plugin Dependency
@@ -787,7 +793,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       prepareNpmPackage := {
           (Compile / fullLinkJS).value
           val linkerOutputDir = (Compile / fullLinkJS / scalaJSLinkerOutputDirectory).value
-          val nodeModules = installNpmTestDeps.value
+          val nodeModules = (ThisBuild / installNpmTestDeps).value
           val npmDir = (Compile / sourceDirectory).value / "npm"
           val log = streams.value.log
           val esbuild = nodeModules / ".bin" / "esbuild"
