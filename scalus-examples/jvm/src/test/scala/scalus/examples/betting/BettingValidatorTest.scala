@@ -86,7 +86,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for initial minting")
         assert(
-          result.budget == (ExUnits(memory = 117444L, steps = 38503173L))
+          result.budget == (ExUnits(memory = 118344L, steps = 38647173L))
         )
 
     test("Verify that player2 can join an existing bet"):
@@ -161,7 +161,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for player2 joining spending")
         assert(
-          result.budget == (ExUnits(memory = 269284L, steps = 94647213L))
+          result.budget == (ExUnits(memory = 270184L, steps = 94791213L))
         )
 
     test("Verify that the oracle can announce winner and trigger payout"):
@@ -227,5 +227,111 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for announce winner spending")
         assert(
-          result.budget == (ExUnits(memory = 173903L, steps = 59985193L))
+          result.budget == (ExUnits(memory = 175705L, steps = 60401575L))
         )
+
+    /** Build a joined-bet timeout transaction with the given outputs and validity range. */
+    private def timeoutTx(
+        policyId: PolicyId,
+        tx: TxOutRef,
+        config: Config,
+        outputs: List[TxOut],
+        signatory: PubKeyHash,
+        validRange: Interval
+    ): TxInfo =
+        TxInfo.placeholder.copy(
+          inputs = List(
+            TxInInfo(
+              outRef = tx,
+              resolved = TxOut(
+                address = Address.fromScriptHash(policyId),
+                value = Value.lovelace(6_000_000) + Value(policyId, utf8"lucky_number_slevin", 1),
+                datum = OutputDatum.OutputDatum(config.toData)
+              )
+            )
+          ),
+          outputs = outputs,
+          signatories = List(signatory),
+          validRange = validRange
+        )
+
+    test("Verify that both players can reclaim the pot after a timeout"):
+        val player1 = TestUtil.mockPubKeyHash(1)
+        val player2 = TestUtil.mockPubKeyHash(2)
+        val oracle = TestUtil.mockPubKeyHash(3)
+        val config = Config(player1, player2, oracle, expiration = 1753939940)
+        val policyId = TestUtil.mockScriptHash(1)
+        val tx = TestUtil.mockTxOutRef(1, 0)
+
+        // Each player is refunded their 3 ADA stake; the beacon rides with player1's output.
+        val outputs = List(
+          TxOut(
+            address = Address.fromPubKeyHash(player1),
+            value = Value.lovelace(3_000_000) + Value(policyId, utf8"lucky_number_slevin", 1)
+          ),
+          TxOut(
+            address = Address.fromPubKeyHash(player2),
+            value = Value.lovelace(3_000_000)
+          )
+        )
+        // 1st of August 2025 — after expiration
+        val result = contract.program.runWithDebug(
+          ScriptContext(
+            txInfo = timeoutTx(policyId, tx, config, outputs, player1, Interval.after(1754027120)),
+            redeemer = (Action.Timeout: Action).toData,
+            scriptInfo = ScriptInfo.SpendingScript(txOutRef = tx)
+          )
+        )
+        if result.isFailure then result.logs.foreach(println)
+        assert(result.isSuccess, "Reclaim after expiration should succeed")
+        assert(
+          result.budget == (ExUnits(memory = 246934L, steps = 83506481L))
+        )
+
+    test("Verify that reclaim before expiration fails"):
+        val player1 = TestUtil.mockPubKeyHash(1)
+        val player2 = TestUtil.mockPubKeyHash(2)
+        val oracle = TestUtil.mockPubKeyHash(3)
+        val config = Config(player1, player2, oracle, expiration = 1753939940)
+        val policyId = TestUtil.mockScriptHash(1)
+        val tx = TestUtil.mockTxOutRef(1, 0)
+        val outputs = List(
+          TxOut(
+            address = Address.fromPubKeyHash(player1),
+            value = Value.lovelace(3_000_000) + Value(policyId, utf8"lucky_number_slevin", 1)
+          ),
+          TxOut(address = Address.fromPubKeyHash(player2), value = Value.lovelace(3_000_000))
+        )
+        // Validity entirely before expiration
+        val result = contract.program.runWithDebug(
+          ScriptContext(
+            txInfo =
+                timeoutTx(policyId, tx, config, outputs, player1, Interval.between(1752989540, 1752990020)),
+            redeemer = (Action.Timeout: Action).toData,
+            scriptInfo = ScriptInfo.SpendingScript(txOutRef = tx)
+          )
+        )
+        assert(result.isFailure, "Reclaim before expiration must fail")
+
+    test("Verify that reclaim fails if a player is not refunded"):
+        val player1 = TestUtil.mockPubKeyHash(1)
+        val player2 = TestUtil.mockPubKeyHash(2)
+        val oracle = TestUtil.mockPubKeyHash(3)
+        val config = Config(player1, player2, oracle, expiration = 1753939940)
+        val policyId = TestUtil.mockScriptHash(1)
+        val tx = TestUtil.mockTxOutRef(1, 0)
+        // player1 grabs the whole pot; player2 gets nothing
+        val outputs = List(
+          TxOut(
+            address = Address.fromPubKeyHash(player1),
+            value = Value.lovelace(6_000_000) + Value(policyId, utf8"lucky_number_slevin", 1)
+          )
+        )
+        val result = contract.program.runWithDebug(
+          ScriptContext(
+            txInfo = timeoutTx(policyId, tx, config, outputs, player1, Interval.after(1754027120)),
+            redeemer = (Action.Timeout: Action).toData,
+            scriptInfo = ScriptInfo.SpendingScript(txOutRef = tx)
+          )
+        )
+        assert(result.isFailure, "Reclaim must refund both players")

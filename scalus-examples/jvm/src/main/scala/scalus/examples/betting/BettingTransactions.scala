@@ -139,4 +139,51 @@ case class BettingTransactions(
             .sign(signer)
             .transaction
     }
+
+    /** Reclaim the bet after expiration when the oracle never announced a winner.
+      *
+      * If `player2` has joined, the doubled pot is split back to both players (the beacon token
+      * rides with player1's output); otherwise the whole pot is refunded to player1. A player must
+      * sign (`signerPkh`).
+      */
+    def timeout(
+        utxos: Utxos,
+        collateralUtxo: Utxo,
+        scriptUtxo: Utxo,
+        betUtxo: Utxo,
+        bet: Coin,
+        player1: PubKeyHash,
+        player2: PubKeyHash,
+        signerPkh: AddrKeyHash,
+        changeAddress: Address,
+        afterTime: Long
+    ): Transaction = {
+        def enterprise(pkh: PubKeyHash): Address = ShelleyAddress(
+          network = env.network,
+          payment = ShelleyPaymentPart.Key(AddrKeyHash.fromByteString(pkh.hash)),
+          delegation = ShelleyDelegationPart.Null
+        )
+
+        val betValue = betUtxo.output.value
+        val base = TxBuilder(env, evaluator)
+            .spend(utxos)
+            .collaterals(collateralUtxo)
+            .references(scriptUtxo)
+            .spend(betUtxo, Action.Timeout)
+            .requireSignature(signerPkh)
+            .validFrom(java.time.Instant.ofEpochMilli(afterTime))
+
+        val withPayouts =
+            if player2.hash == hex"" then base.payTo(enterprise(player1), betValue)
+            else
+                base
+                    // player1 keeps their stake plus the beacon token; player2 gets their stake back
+                    .payTo(enterprise(player1), betValue - Value(bet))
+                    .payTo(enterprise(player2), Value(bet))
+
+        withPayouts
+            .build(changeTo = changeAddress)
+            .sign(signer)
+            .transaction
+    }
 }

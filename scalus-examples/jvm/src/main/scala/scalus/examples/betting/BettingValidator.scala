@@ -13,7 +13,6 @@ import scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
-import scalus.{show as _, *}
 
 // Datum
 /** Represents the state of a two-player betting game The bet starts with player1 creating it, then
@@ -49,6 +48,12 @@ enum Action derives FromData, ToData:
       *   Index of the payout output in tx.outputs (V005 fix: prevents double satisfaction)
       */
     case AnnounceWinner(winner: PubKeyHash, payoutOutputIdx: BigInt)
+
+    /** Action for a player to reclaim the bet after expiration when the oracle never announced a
+      * winner. Without this the funds would lock forever if the oracle goes silent (or nobody
+      * joined).
+      */
+    case Timeout
 
 /** Main betting validator
   * @see
@@ -189,6 +194,49 @@ object BettingValidator extends Validator {
                   txInfo.validRange.isEntirelyAfter(expiration),
                   "The bet must have been expired (no future bets allowed) before announcing"
                 )
+
+            case Action.Timeout =>
+                // Reclaim is only possible once the bet has expired without a winner announced.
+                require(
+                  txInfo.validRange.isEntirelyAfter(expiration),
+                  "Cannot reclaim before the bet has expired"
+                )
+                // A player must initiate the reclaim.
+                require(
+                  txInfo.isSignedBy(player1) || txInfo.isSignedBy(player2),
+                  "Reclaim must be signed by one of the players"
+                )
+                // Exactly one bet input — the per-player refund check below sums outputs by address,
+                // so batching two bets in one tx could let one refund satisfy both. One input per
+                // reclaim keeps the accounting sound.
+                require(
+                  txInfo.findOwnInputsByCredential(address.credential).length === BigInt(1),
+                  "Reclaim must spend exactly one bet input"
+                )
+                if player2.hash.isEmpty then
+                    // No opponent joined — refund the whole pot to player1.
+                    require(
+                      totalPaidTo(txInfo, player1) >= value.getLovelace,
+                      "Player1 must be refunded the full bet on timeout"
+                    )
+                else
+                    // Both players staked — return each their half of the doubled pot.
+                    val stake = value.getLovelace / BigInt(2)
+                    require(
+                      totalPaidTo(txInfo, player1) >= stake,
+                      "Player1 must be refunded their stake on timeout"
+                    )
+                    require(
+                      totalPaidTo(txInfo, player2) >= stake,
+                      "Player2 must be refunded their stake on timeout"
+                    )
+
+    /** Sum the lovelace paid to a public key's (enterprise) address across all outputs. */
+    private inline def totalPaidTo(txInfo: TxInfo, pkh: PubKeyHash): BigInt =
+        txInfo.outputs.foldLeft(BigInt(0)) { (acc, out) =>
+            if out.address === Address.fromPubKeyHash(pkh) then acc + out.value.getLovelace
+            else acc
+        }
 
     /** Minting policy:
       *

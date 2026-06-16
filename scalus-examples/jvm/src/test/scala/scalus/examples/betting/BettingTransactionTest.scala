@@ -289,7 +289,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, joinTx, betUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 282597L, steps = 99891203L))
+          result.budget == (ExUnits(memory = 283497L, steps = 100035203L))
         )
 
         provider.setSlot(beforeSlot - 1)
@@ -514,7 +514,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, winTx, joinedBetUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 178697L, steps = 62706670L))
+          result.budget == (ExUnits(memory = 180499L, steps = 63123052L))
         )
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))
@@ -536,6 +536,128 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         )
 
         assert(winnerUtxo.output.value.coin == betAmount + betAmount)
+    }
+
+    test("players reclaim the pot after a timeout") {
+        val provider = createProvider()
+        val scriptUtxo = deployScript(provider)
+
+        val initTx = {
+            val utxos = provider
+                .queryUtxos(u => u.output.address == player1Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
+                .await()
+                .toOption
+                .get
+            transactionCreatorFor(player1Signer)
+                .init(
+                  utxos,
+                  Utxo(utxos.head),
+                  scriptUtxo,
+                  betAmount,
+                  PubKeyHash(player1Pkh),
+                  PubKeyHash(oraclePkh),
+                  expiration,
+                  player1Address,
+                  beforeTime
+                )
+        }
+        assert(provider.submit(initTx).await().isRight)
+
+        val betUtxo = Utxo(
+          provider
+              .queryUtxos(u => u.output.address == scriptAddress && u.input.transactionId == initTx.id)
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
+
+        val joinTx = {
+            val utxos = provider
+                .queryUtxos(u => u.output.address == player2Address)
+                .minTotal(betAmount + commissionAmount)
+                .execute()
+                .await()
+                .toOption
+                .get
+            transactionCreatorFor(player2Signer)
+                .join(
+                  utxos,
+                  Utxo(utxos.head),
+                  scriptUtxo,
+                  betUtxo,
+                  betAmount,
+                  PubKeyHash(player1Pkh),
+                  PubKeyHash(player2Pkh),
+                  player2Pkh,
+                  PubKeyHash(oraclePkh),
+                  expiration,
+                  player2Address,
+                  beforeTime
+                )
+        }
+        provider.setSlot(beforeSlot - 1)
+        assert(provider.submit(joinTx).await().isRight)
+
+        val joinedBetUtxo = Utxo(
+          provider
+              .queryUtxos(u => u.output.address == scriptAddress && u.input.transactionId == joinTx.id)
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
+
+        // Oracle never announces; after expiration player1 reclaims, splitting the pot.
+        val timeoutTx = {
+            val utxos = provider
+                .queryUtxos(u => u.output.address == player1Address)
+                .minTotal(commissionAmount)
+                .execute()
+                .await()
+                .toOption
+                .get
+            transactionCreatorFor(player1Signer)
+                .timeout(
+                  utxos,
+                  Utxo(utxos.head),
+                  scriptUtxo,
+                  joinedBetUtxo,
+                  betAmount,
+                  PubKeyHash(player1Pkh),
+                  PubKeyHash(player2Pkh),
+                  player1Pkh,
+                  player1Address,
+                  afterTime
+                )
+        }
+
+        val result = runValidator(provider, timeoutTx, joinedBetUtxo.input)
+        assert(result.isSuccess)
+        // No exact-ExUnits assertion here: this integration test uses random key pairs and coin
+        // selection, so the balanced two-payout tx varies run to run. The deterministic Timeout
+        // budget is pinned by the ScriptContext-level test in BettingValidatorTest.
+
+        provider.setSlot(env.slotConfig.timeToSlot(afterTime))
+        assert(provider.submit(timeoutTx).await().isRight)
+
+        // player2 is refunded their full stake
+        val player2Refund = Utxo(
+          provider
+              .queryUtxos(u =>
+                  u.output.address == player2Address && u.input.transactionId == timeoutTx.id
+              )
+              .execute()
+              .await()
+              .toOption
+              .get
+              .head
+        )
+        assert(player2Refund.output.value.coin == betAmount)
     }
 
     test("oracle announcing winner fails before expiration") {

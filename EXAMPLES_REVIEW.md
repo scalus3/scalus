@@ -116,7 +116,7 @@ every example's tests build only honest transactions.
 | **Vault** | High | | Wait-time bypass: deadline derived from `getValidityStartTime` (lower bound / 0 if unbounded), so a backdated `validFrom` makes `finalize` pass immediately (`VaultValidator.scala:139-151`). Also `deposit` doesn't constrain `status` and `finalize` has no signature check → anyone flips Idle→Pending and forces payout. Plus double satisfaction across same-owner vaults. README claims a recovery key that doesn't exist. |
 | **PriceBet** | High | ✅ FIXED | `Win` authenticated the oracle reference input only by script credential, never by a beacon NFT, so an attacker could plant a fake oracle UTxO (winning rate, no beacon) at the oracle address and reference it. **Fixed** (this branch): `Win` now requires the oracle reference input to hold the beacon (`quantityOf(oracleScriptHash, OracleBeaconName) === 1`), with the beacon name a hardcoded contract constant; the beacon is a one-shot mint, so only the genuine oracle carries it. |
 | **DecentralizedIdentity** | High | ✅ FIXED | `PublishAttribute` accepted any datum-shaped delegation at the script address without requiring the delegation token → forged delegation (anyone plants a `DelegationDatum` UTxO and publishes), also defeating revocation. **Fixed** (this branch): `PublishAttribute` now requires the delegation reference input to hold its delegation token (`quantityOf(policyId, delegationTokenName(identityTn, delegatePkh)) === 1`). The token is mintable only via owner-signed `AddDelegate` and burned by `RevokeDelegate`, so possession proves authenticity and makes revocation effective. |
-| **Betting** | High | | No timeout/reclaim path (`BettingValidator.scala` enum has only `Join`/`AnnounceWinner`) → funds lock if oracle silent or nobody joins; README documents a Timeout that isn't implemented. Plus `AnnounceWinner` double satisfaction (per-input lovelace `>=` against a shared output) and beacon token not burned. |
+| **Betting** | High | ✅ FIXED | No timeout/reclaim path (enum had only `Join`/`AnnounceWinner`) → funds lock forever if the oracle goes silent or nobody joins; the README documented a Timeout that wasn't implemented. **Fixed** (this branch): added a `Timeout` action — after expiration a player reclaims, splitting the doubled pot back to both players (or refunding player1 if no one joined), guarded by a single-own-input check so the per-player refund accounting can't be gamed by batching. Off-chain `timeout` builder added. (Still open: `AnnounceWinner` double-satisfaction guard, beacon burn.) |
 | **EditableNft** | High | ✅ | CIP-68 labels swapped **and** wrong-encoded: `userNftName="100"`, `refNftName="222"` (CIP-68: 100=ref, 222=user), and `ByteString.fromString("100")` is ASCII bytes, not the 4-byte CIP-68 label `0x000643b0`. Breaks all CIP-68 tooling interop. |
 | **Vesting** | High | ✅ | No single-script-input guard (only `contractOutputs.length === 1` at `:101`, not inputs) → double satisfaction spending two vesting UTxOs with one shared continuing output. Also continuing-output check is lovelace-only → native tokens can be stripped. |
 | **PaymentSplitter** | High | | Both validators reconcile only `getLovelace` → native tokens in a contract UTxO can be skimmed (no asset preservation). Naive validator also misses `reminder >= 0` that the Optimized one has. |
@@ -154,12 +154,24 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 - Optionally add a one-line README note that committer ≠ receiver for cross-chain swaps.
 - Refs: `HtlcTest.scala` (hardcoded ExUnits/size — candidate to relax).
 
-### betting
-- Structure: ✅ already 3-file + correct names. Move error strings to `inline val`; set Apache license;
-  drop `import scalus.{show as _, *}` and redundant imports; remove `// ???`/`// TODO`/`// Vxxx` comments.
-- Bugs: implement `Timeout`/`Reclaim` action (fixes fund-lock + matches README); add single-own-input guard
-  to `AnnounceWinner`; require beacon burn + full-value payout; pin beacon asset name.
-- Tests: replace happy-path-only `BettingValidatorTest` (has `// TODO: test wrong tx fails`) with negative cases.
+### betting — ✅ High fund-lock FIXED (missing Timeout implemented, this branch)
+- Bug fixed (TDD): **missing Timeout → permanent fund-lock**. The enum had only `Join`/`AnnounceWinner`, so if the
+  oracle never announced (or nobody joined) the pot was locked forever — and the README promised a Timeout that
+  didn't exist. Added `Action.Timeout`: after expiration a player reclaims, with the validator enforcing the refund
+  routing — if `player2` joined, each player must get back ≥ their stake (half the doubled pot, summed by address via
+  `totalPaidTo`); otherwise player1 is refunded the full pot. Guarded by a single-own-input check
+  (`findOwnInputsByCredential(...).length === 1`) so the address-sum accounting can't be gamed by batching two bets.
+  Off-chain `timeout` builder added (splits the pot, beacon rides with player1). Also dropped the unused
+  `import scalus.{show as _, *}`.
+- Tests: 3 new ScriptContext tests (reclaim succeeds after expiry; fails before expiry; fails if a player isn't
+  refunded) + 1 emulator end-to-end reclaim test. Re-baselined the 5 existing exact ExUnits (the extra enum case
+  shifted init/join/announce in both suites) and pinned the deterministic Timeout budget at the ScriptContext level
+  (246934/83506481); the emulator reclaim test omits an exact-ExUnits assertion because random keys + coin selection
+  make the balanced two-payout tx vary run to run.
+- **Still open** (deferred, not the fund-lock headline): `AnnounceWinner` double-satisfaction guard (per-input
+  lovelace `>=` against a possibly-shared output); require the beacon to be burned on `AnnounceWinner`/`Timeout`
+  (needs a mint-policy redeemer that distinguishes burn — currently the policy only allows a single +1 mint); hoist
+  error strings to `inline val`; Apache license; remove `// ???`/`// TODO` comments.
 - Refs: `BettingValidatorTest`, `BettingTransactionTest`, `docs/Examples.md`, `docs/design/cce-generalized-report.md`.
 
 ### simpletransfer
