@@ -7,6 +7,8 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party.{Alice, Bob, Charles}
 import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
@@ -214,6 +216,48 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
         val attrDatum = attrOutputs.head._2.inlineDatum.get.to[AttributeDatum]
         assert(attrDatum.key == utf8"email", "Attribute key should match")
         assert(attrDatum.value == utf8"alice@example.com", "Attribute value should match")
+    }
+
+    test("Publish attribute rejects a forged delegation that lacks the delegation token") {
+        val provider = createProvider()
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
+
+        // Attacker (Charles) plants a UTxO at the script address with a forged DelegationDatum
+        // naming himself as delegate for Alice's identity — but mints NO delegation token. Anyone
+        // can pay a datum to a script address, so this needs no owner authorization. Without a
+        // token-possession check, PublishAttribute would trust this fake delegation.
+        val forgedDatum = DelegationDatum(
+          identityTokenName = txCreator.identityTokenName,
+          delegatePkh = PubKeyHash(Charles.addrKeyHash),
+          validFrom = BigInt(now.toEpochMilli),
+          validUntil = BigInt(oneHourLater.toEpochMilli),
+          delegateType = utf8"auth"
+        )
+        val charlesUtxos = provider.findUtxos(Charles.address).await().toOption.get
+        val plantTx = TxBuilder(env)
+            .payTo(txCreator.scriptAddr, Value.ada(2), forgedDatum)
+            .complete(availableUtxos = charlesUtxos, Charles.address)
+            .sign(Charles.signer)
+            .transaction
+        assert(provider.submit(plantTx).await().isRight, "Planting the forged delegation should succeed")
+        val forgedDelegation = Utxo(plantTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
+
+        // Charles tries to publish an attribute about Alice's identity via the forged delegation.
+        val charlesUtxos2 = provider.findUtxos(Charles.address).await().toOption.get
+        val publishTx = txCreator.publishAttribute(
+          utxos = charlesUtxos2,
+          delegationUtxo = forgedDelegation,
+          key = utf8"email",
+          value = utf8"forged@evil.com",
+          validFrom = now,
+          validUntil = oneHourLater,
+          changeAddress = Charles.address,
+          signer = Charles.signer
+        )
+        val result = provider.submit(publishTx).await()
+        assert(result.isLeft, s"Publishing via a token-less forged delegation must fail: $result")
     }
 
     test("Revoke delegate: owner burns delegation token") {

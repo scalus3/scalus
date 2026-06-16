@@ -115,7 +115,7 @@ every example's tests build only honest transactions.
 | **EditableNft** | Critical | ✅ | Seed UTxO never bound: `EditableNftValidator.scala:65` checks `tx.inputs.get(seedIndex).isDefined` but never compares to `param.seed` → one-shot mint defeated, NFT uniqueness broken. |
 | **Vault** | High | | Wait-time bypass: deadline derived from `getValidityStartTime` (lower bound / 0 if unbounded), so a backdated `validFrom` makes `finalize` pass immediately (`VaultValidator.scala:139-151`). Also `deposit` doesn't constrain `status` and `finalize` has no signature check → anyone flips Idle→Pending and forces payout. Plus double satisfaction across same-owner vaults. README claims a recovery key that doesn't exist. |
 | **PriceBet** | High | ✅ FIXED | `Win` authenticated the oracle reference input only by script credential, never by a beacon NFT, so an attacker could plant a fake oracle UTxO (winning rate, no beacon) at the oracle address and reference it. **Fixed** (this branch): `Win` now requires the oracle reference input to hold the beacon (`quantityOf(oracleScriptHash, OracleBeaconName) === 1`), with the beacon name a hardcoded contract constant; the beacon is a one-shot mint, so only the genuine oracle carries it. |
-| **DecentralizedIdentity** | High | | `PublishAttribute` (`DecentralizedIdentityValidator.scala:173-200`) accepts any datum-shaped delegation at the script address without requiring the delegation token → forged delegation, also defeats revocation. |
+| **DecentralizedIdentity** | High | ✅ FIXED | `PublishAttribute` accepted any datum-shaped delegation at the script address without requiring the delegation token → forged delegation (anyone plants a `DelegationDatum` UTxO and publishes), also defeating revocation. **Fixed** (this branch): `PublishAttribute` now requires the delegation reference input to hold its delegation token (`quantityOf(policyId, delegationTokenName(identityTn, delegatePkh)) === 1`). The token is mintable only via owner-signed `AddDelegate` and burned by `RevokeDelegate`, so possession proves authenticity and makes revocation effective. |
 | **Betting** | High | | No timeout/reclaim path (`BettingValidator.scala` enum has only `Join`/`AnnounceWinner`) → funds lock if oracle silent or nobody joins; README documents a Timeout that isn't implemented. Plus `AnnounceWinner` double satisfaction (per-input lovelace `>=` against a shared output) and beacon token not burned. |
 | **EditableNft** | High | ✅ | CIP-68 labels swapped **and** wrong-encoded: `userNftName="100"`, `refNftName="222"` (CIP-68: 100=ref, 222=user), and `ByteString.fromString("100")` is ASCII bytes, not the 4-byte CIP-68 label `0x000643b0`. Breaks all CIP-68 tooling interop. |
 | **Vesting** | High | ✅ | No single-script-input guard (only `contractOutputs.length === 1` at `:101`, not inputs) → double satisfaction spending two vesting UTxOs with one shared continuing output. Also continuing-output check is lovelace-only → native tokens can be stripped. |
@@ -331,12 +331,20 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   ambiguity); guard `signatories.head`; reconsider redundant `validateDestroy` creator check / single-burn limit.
 - Refs: `FactoryTest`; `FactoryContract.compile(FactoryExample.validate)` call site.
 
-### decentralizedidentity
-- Structure: convert `DecentralizedIdentityContract.scala` (9-line bare `lazy val`, no blueprint) to
-  `object … extends Contract` + `Blueprint.plutusV3`; hoist ~30 error strings; add `@Compile object` companions;
-  enum indentation style. Transactions file already correct ✅.
-- Bugs: require the delegation reference input to actually hold the delegation token in `PublishAttribute`
-  (token-possession check) — closes forgery + restores revocation. Optionally bind identity token name to seed hash.
+### decentralizedidentity — ✅ High forged-delegation hole FIXED (this branch)
+- Bug fixed (TDD, RED→GREEN): **forged delegation**. `PublishAttribute` authenticated the delegation reference input
+  only by its script address + datum shape, never by token possession — so anyone could pay a forged
+  `DelegationDatum` (naming themselves as delegate for a victim's identity, no token) to the script address and
+  publish arbitrary attributes; this also defeated revocation (burning the token didn't stop a re-planted fake).
+  Fix: `PublishAttribute` now requires the delegation ref input to hold the delegation token
+  (`quantityOf(policyId, delegationTokenName(delegDatum.identityTokenName, delegDatum.delegatePkh)) === 1`). The
+  token is minted only by owner-signed `AddDelegate` and burned by `RevokeDelegate`, so possession proves
+  authenticity and makes revocation effective. New adversarial test plants a token-less forged delegation and
+  asserts publish is rejected (RED: it published before the fix). No exact-ExUnits assertions in the suite, nothing
+  to re-baseline; the full create→delegate→publish→revoke→transfer lifecycle still passes (11 tests).
+- **Still open** (deferred, not security): convert `DecentralizedIdentityContract` (bare `lazy val`) to
+  `object … extends Contract` + `Blueprint.plutusV3`; hoist ~30 error strings; enum indentation style; move
+  `submitWithRetry` (`Thread.sleep`) out of the Transactions object.
 - Refs: `DecentralizedIdentityTest`.
 
 ### editablenft — ✅ DONE (Critical bugs fixed, this branch)

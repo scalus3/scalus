@@ -183,6 +183,18 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                         require(hash === policyId, "Delegation must be at script address")
                     case _ => fail("Delegation must be at script address")
 
+                // The delegation must actually hold its delegation token. Being at the script
+                // address with a datum-shaped value is not enough — anyone can pay a forged
+                // DelegationDatum there. The token is minted only by AddDelegate (which requires the
+                // identity owner's signature) and burned by RevokeDelegate, so requiring it both
+                // proves the delegation is genuine and makes revocation effective.
+                val delegTn =
+                    delegationTokenName(delegDatum.identityTokenName, delegDatum.delegatePkh)
+                require(
+                  delegationRefInput.resolved.value.quantityOf(policyId, delegTn) === BigInt(1),
+                  "Delegation reference input must hold the delegation token"
+                )
+
                 // Must be signed by delegate
                 require(
                   tx.signatories.exists(_ === delegDatum.delegatePkh),
