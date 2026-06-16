@@ -114,7 +114,7 @@ every example's tests build only honest transactions.
 | **AnonymousData** | Critical | ✅ REWRITTEN | The whole on-chain design was unsound: Update/Delete let any member overwrite/delete anyone's entry, and even after fixing that, on-chain writes can't be anonymous (the signing tx links the writer). **Rewritten** (this branch) to the literal rosetta `anonymous_data` spec using a native Cardano primitive — a **datum hash** commitment to `Data.List([B(nonce), data])`, fully off-chain, no validator. Store = a UTxO carrying only the hash; retrieve = reveal the preimage and verify off-chain. Highlights that this use case needs no on-chain execution. |
 | **EditableNft** | Critical | ✅ | Seed UTxO never bound: `EditableNftValidator.scala:65` checks `tx.inputs.get(seedIndex).isDefined` but never compares to `param.seed` → one-shot mint defeated, NFT uniqueness broken. |
 | **Vault** | High | | Wait-time bypass: deadline derived from `getValidityStartTime` (lower bound / 0 if unbounded), so a backdated `validFrom` makes `finalize` pass immediately (`VaultValidator.scala:139-151`). Also `deposit` doesn't constrain `status` and `finalize` has no signature check → anyone flips Idle→Pending and forces payout. Plus double satisfaction across same-owner vaults. README claims a recovery key that doesn't exist. |
-| **PriceBet** | High | ✅ | `Win` authenticates the oracle reference input only by script credential (`PricebetValidator.scala:110-115`), never by a beacon NFT — `PricebetConfig` has no beacon field. Attacker creates a fake oracle UTxO with a winning rate and references it. |
+| **PriceBet** | High | ✅ FIXED | `Win` authenticated the oracle reference input only by script credential, never by a beacon NFT, so an attacker could plant a fake oracle UTxO (winning rate, no beacon) at the oracle address and reference it. **Fixed** (this branch): `Win` now requires the oracle reference input to hold the beacon (`quantityOf(oracleScriptHash, OracleBeaconName) === 1`), with the beacon name a hardcoded contract constant; the beacon is a one-shot mint, so only the genuine oracle carries it. |
 | **DecentralizedIdentity** | High | | `PublishAttribute` (`DecentralizedIdentityValidator.scala:173-200`) accepts any datum-shaped delegation at the script address without requiring the delegation token → forged delegation, also defeats revocation. |
 | **Betting** | High | | No timeout/reclaim path (`BettingValidator.scala` enum has only `Join`/`AnnounceWinner`) → funds lock if oracle silent or nobody joins; README documents a Timeout that isn't implemented. Plus `AnnounceWinner` double satisfaction (per-input lovelace `>=` against a shared output) and beacon token not burned. |
 | **EditableNft** | High | ✅ | CIP-68 labels swapped **and** wrong-encoded: `userNftName="100"`, `refNftName="222"` (CIP-68: 100=ref, 222=user), and `ByteString.fromString("100")` is ASCII bytes, not the 4-byte CIP-68 label `0x000643b0`. Breaks all CIP-68 tooling interop. |
@@ -256,14 +256,22 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   comment). Standardize on `.complete(...).sign(...)` vs `.build(changeTo=...)` across the off-chain trio.
 - Refs: README only (no test today — add one).
 
-### pricebet
-- Structure: wrap both scripts in `Contract` objects with `Blueprint.plutusV3` (currently bare `def`s, no
-  blueprint); fix `PriceBetContract` vs file-name casing; switch `Options.release.copy(generateErrorTraces=true)`
-  → `Options.release` (or document); hoist error strings; remove unused `ZeroExchangeRateError`.
-- Bugs: authenticate the oracle reference input by beacon NFT (add beacon policy/name to `PricebetConfig`) —
-  the headline fix; harden `Join` against multi-input merge; validate `newState` (not inbound state) in oracle
-  `Update`; fix README Win/deadline wording.
-- Refs: `PricebetValidatorTest` (hardcoded ExUnits will need re-baselining).
+### pricebet — ✅ Critical fake-oracle hole FIXED (this branch); checked vs rosetta spec
+- Bug fixed (TDD, RED→GREEN): **fake-oracle authentication**. `Win` checked only that the oracle reference input sat
+  at the oracle script address — but anyone can pay a forged `OracleState` (winning rate, no beacon) to that address.
+  `Win` now requires the oracle reference input to hold the beacon NFT
+  (`value.quantityOf(config.oracleScriptHash, OracleBeaconName) === 1`), where `OracleBeaconName` is a hardcoded
+  contract constant (a fixed convention shared with the oracle) rather than a datum/param field. The beacon is a
+  one-shot seeded mint under the oracle's own policy (= its script hash), so only the genuine oracle UTxO carries it.
+  New adversarial test plants a beacon-less fake oracle and asserts `Win` rejects it (RED: it won before the fix).
+  Re-baselined the 3 exact ExUnits (join 172011/58223636, win 150256/48964315, timeout 57875/20048299 — note the
+  branch was also rebased onto the PV11 cost-model update, which moved these independently of the fix).
+- README: fixed the Win-timing wording (`Win` happens *before* the deadline — `!isEntirelyAfter(deadline)` — not
+  after, as the old text claimed) and documented the beacon authentication.
+- **Still open** (deferred): wrap both scripts in `Contract` objects with `Blueprint.plutusV3` (currently bare
+  `def`s, no blueprint); hoist error strings; remove unused `ZeroExchangeRateError`; harden `Join` against
+  multi-input merge; validate `newState` (not inbound state) in oracle `Update`.
+- Refs: `PricebetValidatorTest`.
 
 ### paymentsplitter
 - Structure: refactor `PaymentSplitterContract.scala` to a `Contract` object using `Blueprint.plutusV3` (currently

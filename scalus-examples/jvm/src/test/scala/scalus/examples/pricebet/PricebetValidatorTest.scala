@@ -56,7 +56,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         assert(
           // Slightly higher than before: the exchange-rate check now uses RationalEq.equals
           // (cross-multiplication) instead of the previous structural equalsData on Rational.
-          joinResult.budget == (ExUnits(memory = 168583L, steps = 57650904L))
+          joinResult.budget == (ExUnits(memory = 172011L, steps = 58223636L))
         )
     }
 
@@ -132,8 +132,47 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(beforeSlot)
         val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
         assert(
-          winResult.budget == (ExUnits(memory = 108182L, steps = 37461561L))
+          winResult.budget == (ExUnits(memory = 150256L, steps = 48964315L))
         )
+    }
+
+    test("Win rejects a forged oracle UTxO that lacks the beacon token") {
+        val provider = createProvider()
+        val txCreator = createTxCreator(provider)
+        val (_, pricebetUtxo) = createAndSubmitInitiateTx(provider, txCreator)
+
+        // Bob joins
+        val utxos1 = provider.findUtxos(Bob.address).await().toOption.get
+        val joinTx = txCreator.join(
+          utxos = utxos1,
+          pricebetUtxo = pricebetUtxo,
+          playerPkh = Bob.addrKeyHash,
+          sponsor = Bob.address,
+          signer = Bob.signer
+        )
+        assertSuccess(provider, joinTx, pricebetUtxo._1)
+        val joinedPricebetUtxo = {
+            val pricebetUtxos =
+                provider.findUtxos(txCreator.pricebetScriptAddress).await().toOption.get
+            Utxo(pricebetUtxos.head)
+        }
+
+        // Attacker plants a fake oracle UTxO (winning rate, no beacon) and tries to win with it.
+        val fakeOracle = createFakeOracleUtxo(provider, txCreator, winningRate)
+        val utxos2 = provider.findUtxos(Bob.address).await().toOption.get
+        val winTx = txCreator.win(
+          utxos = utxos2,
+          pricebetUtxo = joinedPricebetUtxo,
+          oracleUtxo = fakeOracle,
+          playerAddress = Bob.address,
+          sponsor = Bob.address,
+          validFrom = beforeDeadline,
+          validTo = deadline,
+          signer = Bob.signer
+        )
+
+        provider.setSlot(beforeSlot)
+        assertFailure(provider, winTx, joinedPricebetUtxo._1, "Oracle reference input must hold the beacon token")
     }
 
     test("Fails to win with a low rate") {
@@ -193,7 +232,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(afterDeadlineSlot)
         val timeoutResult = assertSuccess(provider, timeoutTx, pricebetUtxo._1)
         assert(
-          timeoutResult.budget == (ExUnits(memory = 57575L, steps = 20000299L))
+          timeoutResult.budget == (ExUnits(memory = 57875L, steps = 20048299L))
         )
     }
 
@@ -639,6 +678,37 @@ object PricebetValidatorTest extends ScalusTest {
         // Find the oracle UTXO
         val oracleUtxos = provider.findUtxos(txCreator.oracleScriptAddress).await().toOption.get
         Utxo(oracleUtxos.head)
+    }
+
+    /** Plant a *fake* oracle UTXO at the oracle script address with an attacker-chosen rate and NO
+      * beacon token. Anyone can pay to a script address, so this needs no oracle authorization — it
+      * is exactly the forged-oracle attack the beacon check must defeat.
+      */
+    def createFakeOracleUtxo(
+        provider: Emulator,
+        txCreator: PricebetTransactions,
+        rate: Rational
+    ): Utxo = {
+        import scalus.cardano.txbuilder.TxBuilder
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val fakeState = OracleState(
+          timestamp = oracleTimestamp.toEpochMilli,
+          exchangeRate = rate
+        )
+        val tx = TxBuilder(env)
+            .payTo(txCreator.oracleScriptAddress, Value.ada(2), fakeState)
+            .complete(availableUtxos = utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+        val result = provider.submit(tx).await()
+        assert(result.isRight, s"Planting fake oracle should succeed: ${result.left}")
+
+        val oracleUtxos = provider.findUtxos(txCreator.oracleScriptAddress).await().toOption.get
+        // The fake has no beacon token (its value is bare ADA).
+        val fake = oracleUtxos
+            .find { case (_, out) => out.value.assets.assets.isEmpty }
+            .getOrElse(fail("Fake oracle UTxO not found"))
+        Utxo(fake)
     }
 
     def assertSuccess(

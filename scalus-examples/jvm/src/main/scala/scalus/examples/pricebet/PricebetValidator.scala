@@ -114,6 +114,17 @@ object PricebetValidator extends DataParameterizedValidator {
                         require(hash == config.oracleScriptHash, OracleInputMustBeOracleScript)
                 }
 
+                // Authenticate the oracle UTxO by its beacon NFT — being at the oracle script
+                // address is not enough, since anyone can pay a forged datum to that address. The
+                // beacon is a one-shot mint under the oracle's own policy (= oracleScriptHash), so
+                // only the genuine oracle UTxO carries it. The beacon name is a fixed convention
+                // ([[OracleBeaconName]]), so it lives in the contract rather than the datum.
+                require(
+                  oracleInput.resolved.value
+                      .quantityOf(config.oracleScriptHash, OracleBeaconName) === BigInt(1),
+                  OracleInputMustHaveBeacon
+                )
+
                 val oracleState = oracleInput.resolved.datum match {
                     case v2.OutputDatum.OutputDatum(d) => d.to[scalus.examples.pricebet.OracleState]
                     case _                             => fail("Oracle must have inline datum")
@@ -142,6 +153,13 @@ object PricebetValidator extends DataParameterizedValidator {
         }
     }
 
+    /** The oracle's beacon NFT name — a fixed convention shared with the oracle, hardcoded here
+      * rather than carried in the datum.
+      */
+    inline def OracleBeaconName: ByteString = ByteString.fromString("ORACLE")
+
     private inline val OracleInputMustBeOracleScript =
         "Oracle input must be locked by the oracle script"
+    private inline val OracleInputMustHaveBeacon =
+        "Oracle reference input must hold the beacon token"
 }
