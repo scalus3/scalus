@@ -1,42 +1,42 @@
-# Anonymous Data Contract
+# Anonymous Data
 
-On-chain anonymous storage. Users store data entries that are visible to everyone but unlinkable to their identity.
+Store data on-chain, associated with a cryptographic hash, so that only someone who can reproduce that hash can
+retrieve it.
+
+The interesting part: on Cardano this needs **no smart contract**. It is built entirely from a native ledger
+feature — the **datum hash** — and all logic is off-chain. The example exists to show that this requirement does not
+call for on-chain execution at all.
 
 ## How it works
 
-All participants share a single UTxO (identified by a beacon token) so that individual write patterns don't leak
-identity. The datum contains a Merkle tree root of authorized participants and a map of encrypted entries.
+Every Cardano transaction output may carry a datum as either the value itself (an *inline datum*) or just its
+**hash** (`DatumOption.Hash`). A datum hash is a 32-byte commitment: the preimage is never written to the chain.
 
-Each entry is keyed by `blake2b_256(pubkeyhash || nonce)` — unlinkable without the secret nonce. Values are
-XOR-encrypted with a key derived from `blake2b_256(nonce || "enc")`.
+We commit to the preimage `Data.List([B(nonce), data])`:
 
-- **MintBeacon / BurnBeacon** — the admin creates or destroys the shared UTxO.
-- **StoreData** — a participant proves membership via a Merkle tree proof and adds an entry under their key.
-- **UpdateParticipants** — the admin changes the Merkle tree root.
+- **Store** — create a UTxO carrying only `blake2b_256(serialise([nonce, data]))`. The chain shows a hash; the data
+  stays private. The UTxO sits at the owner's address, so only the owner's key can spend it.
+- **Retrieve** — reveal `(nonce, data)`; anyone recomputes the hash and checks it against the on-chain UTxO. Only
+  someone who already knows the preimage can produce a match. This is pure off-chain verification — no transaction,
+  no script. (The ledger will not even let you attach a datum when spending an ordinary key-locked UTxO, so
+  disclosure is inherently an off-chain act: the commitment is already on-chain, and revealing the preimage to a
+  verifier is all that "retrieve" requires.)
 
-### Append-only by design (this is what keeps it anonymous)
+### Why the nonce
 
-There is intentionally **no Update and no Delete**, following the rosetta `anonymous_data` reference (store-once,
-off-chain reads). Entries are immutable: a second `StoreData` at an occupied key is rejected, so neither the owner nor
-anyone else can change or remove a stored value.
+Without it, low-entropy `data` — a vote, a yes/no flag, a small number — could be brute-forced by hashing every
+candidate and comparing. The random `nonce` makes the preimage high-entropy, so the commitment is genuinely hiding.
+A fresh nonce per entry also makes the same `data` stored twice produce two **unlinkable** hashes.
 
-This is a deliberate privacy trade-off, not a missing feature. An entry's key is `blake2b_256(pubkeyhash || nonce)`,
-so the only way to authorize a mutation on-chain would be to reveal the `nonce` — which would publish the
-`signer ↔ entry` link and destroy the anonymity the contract exists to provide. Mutable anonymous storage needs a
-nullifier or zero-knowledge scheme; this example keeps the secret off-chain instead. Immutability also removes the
-entire class of "any participant overwrites/deletes another's entry" attacks for free.
+### What this does and does not hide
 
-To "change" data, store a new entry under a fresh nonce. Reading never reveals the nonce (see below), so anonymity
-holds for the lifetime of the data.
+A datum hash hides the **contents** of an entry until its owner chooses to reveal them — confidentiality with
+selective disclosure. It does **not** hide *who stored it*: the storing transaction is signed by some wallet, so on a
+public chain an observer can link that wallet to the UTxO it created. Breaking that link is a separate, much harder
+problem that needs a relayer plus a zero-knowledge membership proof (e.g. a bilinear accumulator or a zk-SNARK), not
+a hash. This example deliberately stays within what the native primitive provides.
 
-### On-chain reading
+## Files
 
-Other contracts can read anonymous data via CIP-31 reference inputs. The `AnonymousDataReader` helper (in
-`AnonymousDataValidator.scala`) verifies the beacon token, looks up an entry, and XOR-decrypts it. The caller provides
-`decKey = blake2b_256(nonce || "enc")`, which decrypts the data without revealing the nonce or the owner's identity.
-
-`AnonymousDataGateValidator.scala` demonstrates this pattern: a spending contract that releases locked funds only when
-someone proves that specific data exists in the anonymous data store.
-
-`AnonymousDataValidator.scala` is the on-chain validator. `AnonymousDataCrypto.scala` handles off-chain key derivation
-and encryption. `AnonymousDataTransactions.scala` builds all transactions including gate operations.
+`AnonymousDataTransactions.scala` builds the store/retrieve/reveal transactions and the off-chain verification. There
+is no validator — that is the point.

@@ -1,332 +1,78 @@
 package scalus.examples.anonymousdata
 
+import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.uplc.builtin.Data.toData
-import scalus.uplc.PlutusV3
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
 import scalus.cardano.txbuilder.*
-import scalus.cardano.node.{BlockchainProvider, NetworkSubmitError, NodeSubmitError, SubmitError}
-import scalus.cardano.onchain.plutus.prelude.AssocMap
-import scalus.crypto.tree.MerkleTree
 
-import scala.concurrent.{ExecutionContext, Future}
-import scala.util.{Failure, Success, Try}
-
-/** Transaction builder for anonymous data contract operations.
+/** Anonymous on-chain data storage — implemented with **zero on-chain execution**.
   *
-  * @param env
-  *   Cardano environment (network, protocol params)
-  * @param evaluator
-  *   Plutus script evaluator
-  * @param contract
-  *   compiled anonymous data contract
-  * @param adminPkh
-  *   admin public key hash (baked into the parameterized script)
+  * Specification (rosetta `anonymous_data`): "store data on-chain, associated with a cryptographic
+  * hash, in a way that only the user who can generate that hash can retrieve it."
+  *
+  * On Cardano this needs no validator at all. Every transaction output can carry a **datum hash**
+  * ([[scalus.cardano.ledger.DatumOption.Hash]]) — a 32-byte commitment whose preimage is NOT kept
+  * on-chain. We commit to `Data.List([B(nonce), data])`:
+  *
+  *   - The chain stores only `blake2b_256(serialise([nonce, data]))`. Observers see a hash, not the
+  *     data, and cannot tell two unrelated entries apart.
+  *   - To **retrieve** an entry you reveal the preimage `(nonce, data)`; anyone can recompute the
+  *     hash and check it against the on-chain UTxO. Only someone who already knows `(nonce, data)`
+  *     can produce a matching preimage.
+  *   - The `nonce` is what makes the commitment *hiding*: without it, low-entropy `data` (a vote, a
+  *     yes/no flag, a small number) could be brute-forced by hashing every candidate. A fresh random
+  *     nonce per entry also makes the same `data` stored twice produce two unlinkable hashes.
+  *
+  * This is a commitment scheme expressed in a native ledger feature. It is the whole point of the
+  * example: this functionality requires no smart contract — just a datum hash on an ordinary UTxO.
+  *
+  * Note on anonymity: the storing transaction is still signed by *some* key, so on a public chain a
+  * determined observer can link the storer's wallet to the UTxO they created. Hiding *that* link is
+  * a different problem (it needs a relayer plus a zero-knowledge membership proof, e.g. a bilinear
+  * accumulator or zk-SNARK). What a datum hash gives you, simply and cheaply, is data confidentiality
+  * with selective disclosure: the *contents* stay private until their owner chooses to reveal them.
   */
-case class AnonymousDataTransactions(
-    env: CardanoInfo,
-    evaluator: PlutusScriptEvaluator,
-    contract: PlutusV3[ByteString => Data => Unit],
-    adminPkh: AddrKeyHash
-) {
-    private val parameterizedScript = contract.apply(adminPkh: ByteString)
-    val scriptAddr: Address = parameterizedScript.address(env.network)
-    val policyId: PolicyId = parameterizedScript.script.scriptHash
-    private val beaconAsset = AssetName(AnonymousDataValidator.beaconTokenName)
+case class AnonymousDataTransactions(env: CardanoInfo) {
 
-    /** Initialize the shared UTXO with a beacon token and empty data map. */
-    def initialize(
-        utxos: Utxos,
-        participantsRoot: ByteString,
-        changeAddress: Address,
-        signer: TransactionSigner
-    ): Transaction = {
-        val datum = AnonymousDataDatum(
-          participantsRoot = participantsRoot,
-          dataMap = AssocMap.empty[ByteString, ByteString]
-        )
-        val redeemer = AnonymousDataMintRedeemer.MintBeacon.toData
+    /** The committed preimage for `data` under a secret `nonce`: `Data.List([B(nonce), data])`. */
+    def commitment(nonce: ByteString, data: Data): Data =
+        Data.List(PList.Cons(Data.B(nonce), PList.Cons(data, PList.Nil)))
 
-        TxBuilder(env, evaluator)
-            .mint(
-              parameterizedScript,
-              Map(beaconAsset -> 1L),
-              _ => redeemer
-            )
-            .requireSignatures(Set(adminPkh))
-            .payTo(
-              scriptAddr,
-              Value.lovelace(2_000_000L) + Value.asset(policyId, beaconAsset, 1),
-              datum
-            )
-            .complete(availableUtxos = utxos, changeAddress)
-            .sign(signer)
-            .transaction
-    }
+    /** The on-chain footprint of an entry: `blake2b_256` of the CBOR-encoded commitment. */
+    def commitmentHash(nonce: ByteString, data: Data): DataHash =
+        DataHash.fromByteString(commitment(nonce, data).dataHash)
 
-    /** Store a new data entry in the shared UTXO. */
-    def storeData(
-        utxos: Utxos,
-        sharedUtxo: Utxo,
-        tree: MerkleTree,
-        signerPkh: AddrKeyHash,
-        dataKey: ByteString,
-        encryptedData: ByteString,
-        changeAddress: Address,
-        signer: TransactionSigner
-    ): Transaction = {
-        val proof = tree.proveMembership(signerPkh: ByteString)
-        val redeemer =
-            AnonymousDataSpendRedeemer.StoreData(proof, dataKey, encryptedData).toData
-
-        val currentDatum = sharedUtxo.output.inlineDatum.get.to[AnonymousDataDatum]
-        val newDatum = AnonymousDataDatum(
-          participantsRoot = currentDatum.participantsRoot,
-          dataMap = currentDatum.dataMap.insert(dataKey, encryptedData)
-        )
-
-        TxBuilder(env, evaluator)
-            .spend(sharedUtxo, redeemer, parameterizedScript.script)
-            .requireSignatures(Set(signerPkh))
-            .payTo(scriptAddr, sharedUtxo.output.value, newDatum)
-            .complete(availableUtxos = utxos, changeAddress)
-            .sign(signer)
-            .transaction
-    }
-
-    /** Update the participants MerkleTree root (admin only). */
-    def updateParticipants(
-        utxos: Utxos,
-        sharedUtxo: Utxo,
-        newParticipantsRoot: ByteString,
-        changeAddress: Address,
-        signer: TransactionSigner
-    ): Transaction = {
-        val redeemer =
-            AnonymousDataSpendRedeemer.UpdateParticipants(newParticipantsRoot).toData
-
-        val currentDatum = sharedUtxo.output.inlineDatum.get.to[AnonymousDataDatum]
-        val newDatum = AnonymousDataDatum(
-          participantsRoot = newParticipantsRoot,
-          dataMap = currentDatum.dataMap
-        )
-
-        TxBuilder(env, evaluator)
-            .spend(sharedUtxo, redeemer, parameterizedScript.script)
-            .requireSignatures(Set(adminPkh))
-            .payTo(scriptAddr, sharedUtxo.output.value, newDatum)
-            .complete(availableUtxos = utxos, changeAddress)
-            .sign(signer)
-            .transaction
-    }
-
-    /** Burn the beacon token (admin only). */
-    def burn(
-        utxos: Utxos,
-        sharedUtxo: Utxo,
-        changeAddress: Address,
-        signer: TransactionSigner
-    ): Transaction = {
-        val burnRedeemer = AnonymousDataMintRedeemer.BurnBeacon.toData
-
-        TxBuilder(env, evaluator)
-            .spend(sharedUtxo)
-            .mint(
-              parameterizedScript,
-              Map(beaconAsset -> -1L),
-              _ => burnRedeemer
-            )
-            .requireSignatures(Set(adminPkh))
-            .complete(availableUtxos = utxos, changeAddress)
-            .sign(signer)
-            .transaction
-    }
-
-    /** Create a gate: lock funds at the gate script with an expected data hash.
+    /** Store `data`: create a UTxO whose datum is committed *by hash only*.
       *
-      * The gate can be unlocked by proving that a specific decrypted entry in the anonymous data
-      * store hashes to `expectedDataHash`.
-      *
-      * @param gateContract
-      *   compiled gate contract (parameterized by anonymous data policyId)
-      * @param expectedDataHash
-      *   blake2b_256 hash of the expected decrypted data
-      * @param lockedValue
-      *   value to lock at the gate script
+      * The preimage `(nonce, data)` never touches the chain — only its 32-byte hash does. The UTxO
+      * sits at `owner`, so only the owner's key can later spend it; the data itself is recoverable
+      * only by someone who knows the preimage.
       */
-    def createGate(
-        gateContract: PlutusV3[ByteString => Data => Unit],
-        expectedDataHash: ByteString,
-        creatorPkh: AddrKeyHash,
-        lockedValue: Value,
+    def store(
         utxos: Utxos,
+        data: Data,
+        nonce: ByteString,
+        ada: Coin,
+        owner: Address,
         changeAddress: Address,
         signer: TransactionSigner
-    ): Transaction = {
-        val gateScript = gateContract.apply(policyId: ByteString)
-        val gateAddr = gateScript.address(env.network)
-        val datum = GateDatum(expectedDataHash, creatorPkh)
-
-        TxBuilder(env, evaluator)
-            .payTo(gateAddr, lockedValue, datum)
+    ): Transaction =
+        TxBuilder(env)
+            .payTo(owner, Value(ada), commitmentHash(nonce, data))
             .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)
             .transaction
-    }
 
-    /** Unlock a gate by proving anonymous data via reference input.
+    /** Retrieve (open) a stored entry off-chain.
       *
-      * @param gateContract
-      *   compiled gate contract (parameterized by anonymous data policyId)
-      * @param gateUtxo
-      *   the locked gate UTXO to spend
-      * @param sharedUtxo
-      *   the anonymous data shared UTXO (added as reference input)
-      * @param dataKey
-      *   the map key in the anonymous data store
-      * @param decKey
-      *   the decryption key (blake2b_256(nonce || "enc"))
+      * Given a revealed `(nonce, data)` and the stored UTxO, return the data iff the preimage hashes
+      * to the UTxO's committed datum hash. Pure verification — no transaction, no script. Retrieval
+      * never needs to touch the chain: the commitment is already there, and revealing the preimage
+      * to any verifier proves what was stored.
       */
-    def unlockGate(
-        gateContract: PlutusV3[ByteString => Data => Unit],
-        gateUtxo: Utxo,
-        sharedUtxo: Utxo,
-        dataKey: ByteString,
-        decKey: ByteString,
-        utxos: Utxos,
-        changeAddress: Address,
-        signer: TransactionSigner
-    ): Transaction = {
-        val gateScript = gateContract.apply(policyId: ByteString)
-        val redeemer = GateRedeemer.Unlock(dataKey, decKey).toData
-
-        TxBuilder(env, evaluator)
-            .references(sharedUtxo)
-            .spend(gateUtxo, redeemer, gateScript.script)
-            .complete(availableUtxos = utxos, changeAddress)
-            .sign(signer)
-            .transaction
-    }
-
-    /** Refund a gate to its creator (e.g., if the data entry was deleted).
-      *
-      * @param gateContract
-      *   compiled gate contract (parameterized by anonymous data policyId)
-      * @param gateUtxo
-      *   the locked gate UTXO to spend
-      * @param signerPkh
-      *   the signer's pubkeyhash (must match creatorPkh in the gate datum)
-      */
-    def refundGate(
-        gateContract: PlutusV3[ByteString => Data => Unit],
-        gateUtxo: Utxo,
-        signerPkh: AddrKeyHash,
-        utxos: Utxos,
-        changeAddress: Address,
-        signer: TransactionSigner
-    ): Transaction = {
-        val gateScript = gateContract.apply(policyId: ByteString)
-        val redeemer = GateRedeemer.Refund.toData
-
-        TxBuilder(env, evaluator)
-            .spend(gateUtxo, redeemer, gateScript.script)
-            .requireSignatures(Set(signerPkh))
-            .complete(availableUtxos = utxos, changeAddress)
-            .sign(signer)
-            .transaction
-    }
-
-    /** Find the shared UTXO (beacon token) at the script address. */
-    def findSharedUtxo(provider: BlockchainProvider)(using ExecutionContext): Future[Option[Utxo]] =
-        provider.findUtxos(scriptAddr).map {
-            case Left(_) => None
-            case Right(utxos) =>
-                utxos
-                    .find { case (_, txOut) =>
-                        txOut.value.assets.assets.exists { case (cs, tokens) =>
-                            cs == policyId && tokens.get(beaconAsset).exists(_ > 0)
-                        }
-                    }
-                    .map(Utxo(_))
-        }
-}
-
-object AnonymousDataTransactions {
-
-    /** Submit a transaction with retry logic for TOCTOU race conditions on the shared UTXO.
-      *
-      * When the shared UTXO is consumed between query and submission (another participant modified
-      * it), the transaction fails with `UtxoNotAvailable`. This method re-queries the shared UTXO
-      * and rebuilds the transaction.
-      *
-      * @param provider
-      *   blockchain provider for querying UTXOs and submitting transactions
-      * @param maxRetries
-      *   maximum number of retry attempts (default 3)
-      * @param delayMs
-      *   delay in milliseconds between retries (default 1000)
-      * @param buildTx
-      *   function that builds a transaction from fresh shared UTXO and available UTXOs
-      * @return
-      *   either a submit error or the transaction hash
-      */
-    def submitWithRetry(
-        provider: BlockchainProvider,
-        txCreator: AnonymousDataTransactions,
-        payerAddress: Address,
-        maxRetries: Int = 3,
-        delayMs: Long = 1000
-    )(
-        buildTx: (Utxo, Utxos) => Transaction
-    )(using ExecutionContext): Future[Either[SubmitError, TransactionHash]] = {
-        def attempt(retriesLeft: Int): Future[Either[SubmitError, TransactionHash]] =
-            for {
-                sharedUtxoOpt <- txCreator.findSharedUtxo(provider)
-                utxosResult <- provider.findUtxos(payerAddress)
-                result <- (sharedUtxoOpt, utxosResult) match
-                    case (None, _) =>
-                        Future.successful(
-                          Left(
-                            NetworkSubmitError.InternalError("Shared UTXO not found")
-                          )
-                        )
-                    case (_, Left(err)) =>
-                        Future.successful(
-                          Left(
-                            NetworkSubmitError.InternalError(s"Failed to query UTXOs: $err")
-                          )
-                        )
-                    case (Some(sharedUtxo), Right(utxos)) =>
-                        Try(buildTx(sharedUtxo, utxos)) match
-                            case Failure(ex) =>
-                                Future.successful(
-                                  Left(
-                                    NetworkSubmitError.InternalError(
-                                      s"Failed to build transaction: ${ex.getMessage}",
-                                      Some(ex)
-                                    )
-                                  )
-                                )
-                            case Success(tx) =>
-                                provider.submit(tx).flatMap {
-                                    case right @ Right(_) => Future.successful(right)
-                                    case left @ Left(err) =>
-                                        if retriesLeft > 0 && isRetryable(err) then
-                                            Future {
-                                                Thread.sleep(delayMs)
-                                            }.flatMap(_ => attempt(retriesLeft - 1))
-                                        else Future.successful(left)
-                                }
-            } yield result
-
-        attempt(maxRetries)
-    }
-
-    private def isRetryable(error: SubmitError): Boolean = error match
-        case _: NetworkSubmitError.ConnectionError => true
-        case _: NetworkSubmitError.InternalError   => true
-        case _: NetworkSubmitError.MempoolFull     => true
-        case _: NodeSubmitError.UtxoNotAvailable   => true
-        case _                                     => false
+    def open(storedUtxo: Utxo, nonce: ByteString, data: Data): Option[Data] =
+        storedUtxo.output.datumOption match
+            case Some(DatumOption.Hash(h)) if h == commitmentHash(nonce, data) => Some(data)
+            case _                                                             => None
 }

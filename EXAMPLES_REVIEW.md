@@ -36,7 +36,7 @@ Reference style = **HTLC** (`htlc/`). Out of scope (not blueprint templates):
 | 17 | Factory | `factory/` | yes | `FactoryExample.scala` naming |
 | 18 | Decentralized identity | `decentralizedidentity/` | yes | |
 | 19 | Editable NFT | `editablenft/` | yes | CIP-68 |
-| 20 | Anonymous Data | `anonymousdata/` | yes | no Contract obj |
+| 20 | Anonymous Data | `anonymousdata/` | **no** | off-chain only (datum-hash commitment; rewritten this branch) |
 | 21 | Atomic Transactions | `atomictransactions/` | **no** | off-chain only (by design) |
 
 ---
@@ -62,10 +62,11 @@ Derived from `htlc/` + `CLAUDE.md`. This is the target every example is measured
   `private val scriptAddress`, `private val builder`.
 - **`README.md`**: short, with a "How it works" section.
 
-### Off-chain-only examples (`storage`, `simplewallet`, `atomictransactions`)
+### Off-chain-only examples (`storage`, `simplewallet`, `atomictransactions`, `anonymousdata`)
 Do **not** force the Contract/Validator triad. Instead unify on a single off-chain convention:
 `case class XxxTransactions(env: CardanoInfo)` with `TxBuilder` methods returning `Transaction`;
-no `object`-with-`???`-placeholder shape; no hardcoded `CardanoInfo.mainnet`.
+no `object`-with-`???`-placeholder shape; no hardcoded `CardanoInfo.mainnet`. (`anonymousdata` was
+rewritten into this category this branch — a datum-hash commitment store, `AnonymousDataTransactions(env)`.)
 
 ### Cross-cutting cleanups (apply everywhere)
 1. **Hoist error strings** to `inline val` constants — near-universal deviation today.
@@ -110,7 +111,7 @@ every example's tests build only honest transactions.
 | **AMM** | Critical | ✅ | Datum reserves never tied to pool output `Value` — `Value` imported but unused in `AmmValidator.scala`; swap/deposit/redeem validate only the datum transition. Pool fully drainable. Also: spend doesn't require the LP mint to occur, and the mint check sums all asset names under the policy (LP name unconstrained). |
 | **Lottery** | Critical | ✅ | Winning-reveal branches (`LotteryValidator.scala:199-204`, `:241-247`) check only preimage hash + parity — **no output/value/destination/signature** check. Pot can be sent anywhere by anyone who saw the preimage. Empty-state reveals (`:100-181`) also don't preserve the locked value. No reveal deadline → reveal/timeout windows overlap. |
 | **Crowdfunding** | Critical | ✅ FIXED | `handleReclaimSpend`: `reclaimerOutputIndices` length/uniqueness unchecked; `zip` truncation lets an attacker reclaim all donation UTxOs while paying out only a prefix, sweeping the rest as change. **Fixed** (this branch): require equal length + `requireDistinct(reclaimerOutputIndices)`; anyone-can-trigger is by design (funds routed to each donor). |
-| **AnonymousData** | Critical | ✅ FIXED | Update/Delete verified only Merkle membership of *some* participant, not ownership of the public `dataKey` → any member could overwrite/delete anyone's entry. **Fixed** (this branch) by removing Update/Delete entirely: the contract is now append-only/immutable, matching the rosetta `anonymous_data` reference (store-once, off-chain reads). This eliminates the attack class AND preserves anonymity — authorizing a mutation would require revealing the nonce on-chain (signer↔entry link), which a nullifier/ZK scheme would be needed to avoid. |
+| **AnonymousData** | Critical | ✅ REWRITTEN | The whole on-chain design was unsound: Update/Delete let any member overwrite/delete anyone's entry, and even after fixing that, on-chain writes can't be anonymous (the signing tx links the writer). **Rewritten** (this branch) to the literal rosetta `anonymous_data` spec using a native Cardano primitive — a **datum hash** commitment to `Data.List([B(nonce), data])`, fully off-chain, no validator. Store = a UTxO carrying only the hash; retrieve = reveal the preimage and verify off-chain. Highlights that this use case needs no on-chain execution. |
 | **EditableNft** | Critical | ✅ | Seed UTxO never bound: `EditableNftValidator.scala:65` checks `tx.inputs.get(seedIndex).isDefined` but never compares to `param.seed` → one-shot mint defeated, NFT uniqueness broken. |
 | **Vault** | High | | Wait-time bypass: deadline derived from `getValidityStartTime` (lower bound / 0 if unbounded), so a backdated `validFrom` makes `finalize` pass immediately (`VaultValidator.scala:139-151`). Also `deposit` doesn't constrain `status` and `finalize` has no signature check → anyone flips Idle→Pending and forces payout. Plus double satisfaction across same-owner vaults. README claims a recovery key that doesn't exist. |
 | **PriceBet** | High | ✅ | `Win` authenticates the oracle reference input only by script credential (`PricebetValidator.scala:110-115`), never by a beacon NFT — `PricebetConfig` has no beacon field. Attacker creates a fake oracle UTxO with a winning rate and references it. |
@@ -345,26 +346,31 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 - **Deferred:** Contract-object/blueprint conversion — the param'd dual (mint+spend) `DataParameterizedValidator`
   has a non-obvious blueprint shape; left `EditableNftContract` as the bare `lazy val`. Revisit as a focused change.
 
-### anonymousdata — ✅ Critical write-authorization hole FIXED (append-only redesign, this branch)
-- **Cross-checked vs the rosetta `anonymous_data` reference** (decisive): the reference is append-only —
-  `getID`/`storeData`/`getMyData`, store is one-time per ID, reads are off-chain, and the nonce is **never** put
-  on-chain. It has no Update or Delete. So our "any member can overwrite/delete anyone's entry" Critical existed
-  only because our implementation *added* Update/Delete that the reference deliberately omits.
-- Bug fixed: **removed Update and Delete entirely** (redeemer cases + off-chain builders + tests). The contract is
-  now append-only/immutable — a second `StoreData` at an occupied key is rejected, so no participant (not even the
-  owner) can change or remove an entry. This kills the attack class *and* preserves anonymity: authorizing a
-  mutation would force revealing the nonce on-chain (publishing the signer↔entry link), which only a nullifier/ZK
-  scheme could avoid. (An earlier attempt that added a nonce-reveal ownership check was reverted for exactly this
-  reason — user decision: keep anonymity, match the reference.)
-- Tests: replaced the update/delete happy-path tests with an adversarial immutability test (a participant cannot
-  overwrite another's entry — `isLeft`, original value unchanged). 14 tests pass. Validator shrank 3828→2906 bytes;
-  size test only info-logs, so no exact ExUnits to re-baseline.
-- README: new "Append-only by design" section explaining the privacy trade-off (mutate = store under a fresh nonce;
-  reads never reveal the nonce).
-- **Still open** (deferred, not security-critical): add `AnonymousDataContract` (`extends Contract` + blueprint for
-  main & gate — currently bare `lazy val`s); hoist error strings; split `AnonymousDataReader` into its own file;
-  move `submitWithRetry` (`Thread.sleep`/`Future`) out of the Transactions builder; value-preservation in
-  `findContinuingOutput` (the shared UTxO's lovelace isn't pinned); fix/remove the broken `burn()` path.
+### anonymousdata — ✅ REWRITTEN off-chain (datum-hash commitment, this branch)
+- **Why a rewrite, not a patch** (user-driven): the original on-chain design (shared UTxO + Merkle participants +
+  encrypted map + gate/reader) was fundamentally unsound for its stated goal. First the Critical: Store/Update/Delete
+  checked only that the signer was *a* participant, never that they owned the public `dataKey`, so any member could
+  overwrite/delete anyone's entry. Two intermediate fixes were tried and discarded: (1) a nonce-reveal ownership
+  check — reverted because revealing the nonce on-chain publishes the signer↔entry link and *defeats anonymity*;
+  (2) append-only (remove Update/Delete) — matched the rosetta reference but the user pointed out the deeper flaw:
+  **on a public chain the write tx's signer is always visible, so hash(pkh‖nonce) keying gives no real anonymity at
+  all.** True writer-anonymity needs a relayer + ZK membership proof (bilinear accumulator / zk-SNARK), which Scalus
+  actually ships (`crypto/accumulator/G1Accumulator`, Groth16) but is a much larger build.
+- **Implemented** (user decision): the literal rosetta `anonymous_data` spec — "store data associated with a hash so
+  only someone who can generate that hash can retrieve it" — using a native Cardano primitive and **zero on-chain
+  execution**. An entry is a UTxO carrying only a **datum hash** (`DatumOption.Hash`) committing to
+  `Data.List([B(nonce), data])`. Store = create that UTxO (chain holds only the hash); retrieve = reveal the
+  preimage and verify off-chain (`open`). The `nonce` makes the commitment hiding (no brute-force of low-entropy
+  data) and makes repeated stores of the same data unlinkable. The example's *point* is that this needs no validator.
+- Discovered Cardano semantics worth noting: the ledger **rejects** attaching a datum when spending an ordinary
+  key-locked UTxO ("not allowed supplemental datum hashes"), so on-chain disclosure isn't possible on a script-free
+  UTxO — retrieval is inherently off-chain. (Confirmed by a `reveal` test that failed and was removed.)
+- Files: deleted `AnonymousDataValidator`, `AnonymousDataGateValidator`, `AnonymousDataCrypto`; rewrote
+  `AnonymousDataTransactions` (store/open + commitment helpers) and `AnonymousDataTest` (3 tests: hash-only storage,
+  preimage retrieval incl. wrong-nonce/wrong-data, nonce-unlinkability); rewrote README. No validator → no ExUnits.
+- Honest scope note in README/docstring: a datum hash hides the *contents* (confidentiality + selective disclosure),
+  not *who stored it*. The latter is called out as a separate, harder problem (relayer + ZK), intentionally out of
+  scope for this example.
 - Refs: `AnonymousDataTest`.
 
 ### atomictransactions (off-chain only)
