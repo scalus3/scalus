@@ -136,7 +136,11 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
         assert(decrypted == plainData, "Decrypted long data should match original")
     }
 
-    test("Update data: participant can update their entry") {
+    test("Entries are append-only: a participant cannot overwrite an existing entry") {
+        // The contract has no Update/Delete by design (revealing the nonce to authorize a mutation
+        // would break anonymity — see the redeemer doc and README). Immutability is what stops one
+        // participant from hijacking another's entry: a second StoreData at an occupied dataKey is
+        // rejected, so even the original owner can't change a stored value.
         val provider = createProvider()
         val txCreator = createTxCreator()
 
@@ -146,15 +150,15 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
         provider.submit(initTx).await()
         val sharedUtxo1 = findSharedUtxo(initTx, txCreator)
 
-        // Bob stores data
+        // Bob stores an entry
         val nonce = utf8"bob_nonce"
         val dataKey = AnonymousDataCrypto.deriveKey(Bob.addrKeyHash, nonce)
         val encKey = AnonymousDataCrypto.deriveEncKey(nonce)
         val encData1 = AnonymousDataCrypto.encrypt(utf8"version1", encKey)
 
-        val bobUtxos1 = provider.findUtxos(Bob.address).await().toOption.get
+        val bobUtxos = provider.findUtxos(Bob.address).await().toOption.get
         val storeTx = txCreator.storeData(
-          bobUtxos1,
+          bobUtxos,
           sharedUtxo1,
           tree,
           Bob.addrKeyHash,
@@ -166,79 +170,26 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
         provider.submit(storeTx).await()
         val sharedUtxo2 = findSharedUtxo(storeTx, txCreator)
 
-        // Bob updates data
-        val encData2 = AnonymousDataCrypto.encrypt(utf8"version2", encKey)
-        val bobUtxos2 = provider.findUtxos(Bob.address).await().toOption.get
-        val updateTx = txCreator.updateData(
-          bobUtxos2,
-          sharedUtxo2,
-          tree,
-          Bob.addrKeyHash,
-          dataKey,
-          encData2,
-          Bob.address,
-          Bob.signer
-        )
-
-        val result = provider.submit(updateTx).await()
-        assert(result.isRight, s"Update data should succeed: $result")
-
-        // Verify updated entry
-        val sharedUtxo3 = findSharedUtxo(updateTx, txCreator)
-        val datum = sharedUtxo3.output.inlineDatum.get.to[AnonymousDataDatum]
-        val storedEnc = datum.dataMap.get(dataKey)
-        assert(storedEnc.isDefined, "Entry should exist after update")
-    }
-
-    test("Delete data: participant can remove their entry") {
-        val provider = createProvider()
-        val txCreator = createTxCreator()
-
-        // Initialize
-        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
-        val initTx = txCreator.initialize(utxos1, tree.rootHash, Alice.address, Alice.signer)
-        provider.submit(initTx).await()
-        val sharedUtxo1 = findSharedUtxo(initTx, txCreator)
-
-        // Charles stores data
-        val nonce = utf8"charles_nonce"
-        val dataKey = AnonymousDataCrypto.deriveKey(Charles.addrKeyHash, nonce)
-        val encKey = AnonymousDataCrypto.deriveEncKey(nonce)
-        val encData = AnonymousDataCrypto.encrypt(utf8"charles_data", encKey)
-
-        val charlesUtxos1 = provider.findUtxos(Charles.address).await().toOption.get
-        val storeTx = txCreator.storeData(
-          charlesUtxos1,
-          sharedUtxo1,
-          tree,
-          Charles.addrKeyHash,
-          dataKey,
-          encData,
-          Charles.address,
-          Charles.signer
-        )
-        provider.submit(storeTx).await()
-        val sharedUtxo2 = findSharedUtxo(storeTx, txCreator)
-
-        // Charles deletes data
-        val charlesUtxos2 = provider.findUtxos(Charles.address).await().toOption.get
-        val deleteTx = txCreator.deleteData(
-          charlesUtxos2,
+        // Charles (also a participant) tries to overwrite Bob's entry at the same dataKey.
+        val charlesEvil = AnonymousDataCrypto.encrypt(utf8"hijacked", encKey)
+        val charlesUtxos = provider.findUtxos(Charles.address).await().toOption.get
+        val overwriteTx = txCreator.storeData(
+          charlesUtxos,
           sharedUtxo2,
           tree,
           Charles.addrKeyHash,
-          dataKey,
+          dataKey, // Bob's existing key
+          charlesEvil,
           Charles.address,
           Charles.signer
         )
+        val result = provider.submit(overwriteTx).await()
+        assert(result.isLeft, s"Overwriting an existing entry must fail: $result")
 
-        val result = provider.submit(deleteTx).await()
-        assert(result.isRight, s"Delete data should succeed: $result")
-
-        // Verify entry removed
-        val sharedUtxo3 = findSharedUtxo(deleteTx, txCreator)
-        val datum = sharedUtxo3.output.inlineDatum.get.to[AnonymousDataDatum]
-        assert(!datum.dataMap.contains(dataKey), "Entry should be removed after delete")
+        // Bob's original value is untouched.
+        val datum = sharedUtxo2.output.inlineDatum.get.to[AnonymousDataDatum]
+        val stored = datum.dataMap.get(dataKey).getOrElse(ByteString.empty)
+        assert(stored == encData1, "Bob's entry must be unchanged")
     }
 
     test("Update participants: admin-only") {
@@ -493,7 +444,7 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
         val initTx = txCreator.initialize(utxos1, tree.rootHash, Alice.address, Alice.signer)
         provider.submit(initTx).await()
 
-        // Dave creates a gate (no data stored — simulates deleted entry scenario)
+        // Dave creates a gate for data that was never stored, so it can never be unlocked
         val expectedDataHash = scalus.uplc.builtin.Builtins.blake2b_256(utf8"some_data")
         val daveUtxos1 = provider.findUtxos(Dave.address).await().toOption.get
         val gateTx = txCreator.createGate(

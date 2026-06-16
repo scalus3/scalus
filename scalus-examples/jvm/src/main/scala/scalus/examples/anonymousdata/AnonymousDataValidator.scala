@@ -45,21 +45,21 @@ enum AnonymousDataMintRedeemer derives FromData, ToData:
     case MintBeacon
     case BurnBeacon
 
-/** Redeemer for the spending validator. */
+/** Redeemer for the spending validator.
+  *
+  * Stored entries are '''append-only and immutable''': there is intentionally no Update or Delete
+  * action. This is what preserves anonymity. An entry's key is `blake2b_256(pubkeyhash ‖ nonce)`,
+  * and the only way to prove ownership for a mutation would be to reveal the `nonce` on-chain —
+  * which would publish the `signer ↔ entry` link and defeat the whole point. Following the rosetta
+  * `anonymous_data` reference (store-once, off-chain reads), the contract never reveals the nonce:
+  * you can add your entry and read any entry (off-chain, or via the reference-input reader using
+  * only the decryption key), but no one — not even the owner — can overwrite or remove an entry.
+  */
 enum AnonymousDataSpendRedeemer derives FromData, ToData:
     case StoreData(
         membershipProof: ByteString,
         dataKey: ByteString,
         encryptedData: ByteString
-    )
-    case UpdateData(
-        membershipProof: ByteString,
-        dataKey: ByteString,
-        newEncryptedData: ByteString
-    )
-    case DeleteData(
-        membershipProof: ByteString,
-        dataKey: ByteString
     )
     case UpdateParticipants(
         newParticipantsRoot: ByteString
@@ -80,9 +80,8 @@ enum AnonymousDataSpendRedeemer derives FromData, ToData:
   *   - BurnBeacon: admin destroys the shared UTXO
   *
   * '''Spending:'''
-  *   - StoreData: participant adds an entry (verified via MerkleTree proof)
-  *   - UpdateData: participant updates their entry
-  *   - DeleteData: participant removes their entry
+  *   - StoreData: participant adds an entry (verified via MerkleTree proof). Entries are
+  *     append-only and immutable — there is no Update or Delete (see the redeemer doc for why).
   *   - UpdateParticipants: admin updates the MerkleTree root
   */
 @Compile
@@ -193,60 +192,6 @@ object AnonymousDataValidator extends ParameterizedValidator[ByteString] {
                 require(
                   AssocMapEq.equals(newDatum.dataMap, expectedMap),
                   "dataMap must have new entry"
-                )
-
-            case AnonymousDataSpendRedeemer.UpdateData(
-                  membershipProof,
-                  dataKey,
-                  newEncryptedData
-                ) =>
-                // Verify signer is a participant
-                require(txInfo.signatories.length > BigInt(0), "No signatories")
-                val signer = txInfo.signatories.head
-                MerkleTree.verifyMembership(
-                  currentDatum.participantsRoot,
-                  signer.hash,
-                  membershipProof
-                )
-
-                // dataKey must exist
-                require(currentDatum.dataMap.contains(dataKey), "dataKey does not exist")
-
-                // Verify output
-                val newDatum = findContinuingOutput(txInfo, scriptAddress, policyId)
-                require(
-                  newDatum.participantsRoot === currentDatum.participantsRoot,
-                  "participantsRoot must not change"
-                )
-                val expectedMap = currentDatum.dataMap.insert(dataKey, newEncryptedData)
-                require(
-                  AssocMapEq.equals(newDatum.dataMap, expectedMap),
-                  "dataMap must have updated entry"
-                )
-
-            case AnonymousDataSpendRedeemer.DeleteData(membershipProof, dataKey) =>
-                // Verify signer is a participant
-                require(txInfo.signatories.length > BigInt(0), "No signatories")
-                val signer = txInfo.signatories.head
-                MerkleTree.verifyMembership(
-                  currentDatum.participantsRoot,
-                  signer.hash,
-                  membershipProof
-                )
-
-                // dataKey must exist
-                require(currentDatum.dataMap.contains(dataKey), "dataKey does not exist")
-
-                // Verify output
-                val newDatum = findContinuingOutput(txInfo, scriptAddress, policyId)
-                require(
-                  newDatum.participantsRoot === currentDatum.participantsRoot,
-                  "participantsRoot must not change"
-                )
-                val expectedMap = currentDatum.dataMap.delete(dataKey)
-                require(
-                  AssocMapEq.equals(newDatum.dataMap, expectedMap),
-                  "dataMap must have entry removed"
                 )
 
             case AnonymousDataSpendRedeemer.UpdateParticipants(newParticipantsRoot) =>

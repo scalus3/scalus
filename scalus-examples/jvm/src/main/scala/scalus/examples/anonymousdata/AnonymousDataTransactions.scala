@@ -95,65 +95,6 @@ case class AnonymousDataTransactions(
             .transaction
     }
 
-    /** Update an existing data entry in the shared UTXO. */
-    def updateData(
-        utxos: Utxos,
-        sharedUtxo: Utxo,
-        tree: MerkleTree,
-        signerPkh: AddrKeyHash,
-        dataKey: ByteString,
-        newEncryptedData: ByteString,
-        changeAddress: Address,
-        signer: TransactionSigner
-    ): Transaction = {
-        val proof = tree.proveMembership(signerPkh: ByteString)
-        val redeemer =
-            AnonymousDataSpendRedeemer.UpdateData(proof, dataKey, newEncryptedData).toData
-
-        val currentDatum = sharedUtxo.output.inlineDatum.get.to[AnonymousDataDatum]
-        val newDatum = AnonymousDataDatum(
-          participantsRoot = currentDatum.participantsRoot,
-          dataMap = currentDatum.dataMap.insert(dataKey, newEncryptedData)
-        )
-
-        TxBuilder(env, evaluator)
-            .spend(sharedUtxo, redeemer, parameterizedScript.script)
-            .requireSignatures(Set(signerPkh))
-            .payTo(scriptAddr, sharedUtxo.output.value, newDatum)
-            .complete(availableUtxos = utxos, changeAddress)
-            .sign(signer)
-            .transaction
-    }
-
-    /** Delete a data entry from the shared UTXO. */
-    def deleteData(
-        utxos: Utxos,
-        sharedUtxo: Utxo,
-        tree: MerkleTree,
-        signerPkh: AddrKeyHash,
-        dataKey: ByteString,
-        changeAddress: Address,
-        signer: TransactionSigner
-    ): Transaction = {
-        val proof = tree.proveMembership(signerPkh: ByteString)
-        val redeemer =
-            AnonymousDataSpendRedeemer.DeleteData(proof, dataKey).toData
-
-        val currentDatum = sharedUtxo.output.inlineDatum.get.to[AnonymousDataDatum]
-        val newDatum = AnonymousDataDatum(
-          participantsRoot = currentDatum.participantsRoot,
-          dataMap = currentDatum.dataMap.delete(dataKey)
-        )
-
-        TxBuilder(env, evaluator)
-            .spend(sharedUtxo, redeemer, parameterizedScript.script)
-            .requireSignatures(Set(signerPkh))
-            .payTo(scriptAddr, sharedUtxo.output.value, newDatum)
-            .complete(availableUtxos = utxos, changeAddress)
-            .sign(signer)
-            .transaction
-    }
-
     /** Update the participants MerkleTree root (admin only). */
     def updateParticipants(
         utxos: Utxos,

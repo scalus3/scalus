@@ -110,7 +110,7 @@ every example's tests build only honest transactions.
 | **AMM** | Critical | ✅ | Datum reserves never tied to pool output `Value` — `Value` imported but unused in `AmmValidator.scala`; swap/deposit/redeem validate only the datum transition. Pool fully drainable. Also: spend doesn't require the LP mint to occur, and the mint check sums all asset names under the policy (LP name unconstrained). |
 | **Lottery** | Critical | ✅ | Winning-reveal branches (`LotteryValidator.scala:199-204`, `:241-247`) check only preimage hash + parity — **no output/value/destination/signature** check. Pot can be sent anywhere by anyone who saw the preimage. Empty-state reveals (`:100-181`) also don't preserve the locked value. No reveal deadline → reveal/timeout windows overlap. |
 | **Crowdfunding** | Critical | ✅ FIXED | `handleReclaimSpend`: `reclaimerOutputIndices` length/uniqueness unchecked; `zip` truncation lets an attacker reclaim all donation UTxOs while paying out only a prefix, sweeping the rest as change. **Fixed** (this branch): require equal length + `requireDistinct(reclaimerOutputIndices)`; anyone-can-trigger is by design (funds routed to each donor). |
-| **AnonymousData** | Critical | | Update/Delete (`AnonymousDataValidator.scala:204-256`) verify only Merkle membership of *some* participant, not ownership of the public `dataKey` → any member can overwrite/delete anyone's entry. Plus the write path requires a named signature in the same tx, breaking the core "unlinkable" claim (the two cannot both hold without a nullifier/ZK scheme). |
+| **AnonymousData** | Critical | ✅ FIXED | Update/Delete verified only Merkle membership of *some* participant, not ownership of the public `dataKey` → any member could overwrite/delete anyone's entry. **Fixed** (this branch) by removing Update/Delete entirely: the contract is now append-only/immutable, matching the rosetta `anonymous_data` reference (store-once, off-chain reads). This eliminates the attack class AND preserves anonymity — authorizing a mutation would require revealing the nonce on-chain (signer↔entry link), which a nullifier/ZK scheme would be needed to avoid. |
 | **EditableNft** | Critical | ✅ | Seed UTxO never bound: `EditableNftValidator.scala:65` checks `tx.inputs.get(seedIndex).isDefined` but never compares to `param.seed` → one-shot mint defeated, NFT uniqueness broken. |
 | **Vault** | High | | Wait-time bypass: deadline derived from `getValidityStartTime` (lower bound / 0 if unbounded), so a backdated `validFrom` makes `finalize` pass immediately (`VaultValidator.scala:139-151`). Also `deposit` doesn't constrain `status` and `finalize` has no signature check → anyone flips Idle→Pending and forces payout. Plus double satisfaction across same-owner vaults. README claims a recovery key that doesn't exist. |
 | **PriceBet** | High | ✅ | `Win` authenticates the oracle reference input only by script credential (`PricebetValidator.scala:110-115`), never by a beacon NFT — `PricebetConfig` has no beacon field. Attacker creates a fake oracle UTxO with a winning rate and references it. |
@@ -345,13 +345,26 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 - **Deferred:** Contract-object/blueprint conversion — the param'd dual (mint+spend) `DataParameterizedValidator`
   has a non-obvious blueprint shape; left `EditableNftContract` as the bare `lazy val`. Revisit as a focused change.
 
-### anonymousdata
-- Structure: add `AnonymousDataContract.scala` (`extends Contract` + blueprint for both main & gate — currently
-  bare `lazy val`s, no blueprint); hoist error strings; split `AnonymousDataReader` into its own file; move
-  `submitWithRetry` (`Thread.sleep`/`Future`) out of the Transactions builder.
-- Bugs: redesign write authorization to bind `dataKey` to the signer (or a nullifier/ZK scheme) — currently any
-  member can overwrite/delete any entry; add value-preservation to `findContinuingOutput`; per-version IV to avoid
-  keystream reuse; fix/remove the broken `burn()` path. Honestly document the unlinkability limitation on writes.
+### anonymousdata — ✅ Critical write-authorization hole FIXED (append-only redesign, this branch)
+- **Cross-checked vs the rosetta `anonymous_data` reference** (decisive): the reference is append-only —
+  `getID`/`storeData`/`getMyData`, store is one-time per ID, reads are off-chain, and the nonce is **never** put
+  on-chain. It has no Update or Delete. So our "any member can overwrite/delete anyone's entry" Critical existed
+  only because our implementation *added* Update/Delete that the reference deliberately omits.
+- Bug fixed: **removed Update and Delete entirely** (redeemer cases + off-chain builders + tests). The contract is
+  now append-only/immutable — a second `StoreData` at an occupied key is rejected, so no participant (not even the
+  owner) can change or remove an entry. This kills the attack class *and* preserves anonymity: authorizing a
+  mutation would force revealing the nonce on-chain (publishing the signer↔entry link), which only a nullifier/ZK
+  scheme could avoid. (An earlier attempt that added a nonce-reveal ownership check was reverted for exactly this
+  reason — user decision: keep anonymity, match the reference.)
+- Tests: replaced the update/delete happy-path tests with an adversarial immutability test (a participant cannot
+  overwrite another's entry — `isLeft`, original value unchanged). 14 tests pass. Validator shrank 3828→2906 bytes;
+  size test only info-logs, so no exact ExUnits to re-baseline.
+- README: new "Append-only by design" section explaining the privacy trade-off (mutate = store under a fresh nonce;
+  reads never reveal the nonce).
+- **Still open** (deferred, not security-critical): add `AnonymousDataContract` (`extends Contract` + blueprint for
+  main & gate — currently bare `lazy val`s); hoist error strings; split `AnonymousDataReader` into its own file;
+  move `submitWithRetry` (`Thread.sleep`/`Future`) out of the Transactions builder; value-preservation in
+  `findContinuingOutput` (the shared UTxO's lovelace isn't pinned); fix/remove the broken `burn()` path.
 - Refs: `AnonymousDataTest`.
 
 ### atomictransactions (off-chain only)
