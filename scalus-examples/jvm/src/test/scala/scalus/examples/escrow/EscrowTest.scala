@@ -109,7 +109,7 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         )
 
         assertResult(
-          ExUnits(memory = 231621L, steps = 79379490L)
+          ExUnits(memory = 231352L, steps = 79337104L)
         ):
             depositTx.witnessSet.redeemers.get.value.totalExUnits
         val result = provider.submit(depositTx).await()
@@ -139,28 +139,61 @@ class EscrowTest extends AnyFunSuite, ScalusTest {
         }
     }
 
-    test("Deposit: already funded (known bug - should fail but passes)") {
+    test("Deposit: already-funded contract is rejected (no idempotent re-deposit)") {
         val provider = createProvider()
         val fundedUtxo = initializeAndDeposit(provider)
         val utxos = provider.findUtxos(Bob.address).await().toOption.get
 
-        // BUG: This should fail but passes due to incorrect validation in handleDeposit.
-        // The validator uses `contractBalance != escrowAmount` (line 91-92) instead of
-        // checking `contractBalance === initializationAmount`. This allows deposits
-        // to already-funded contracts. The deposit creates a contract output with
-        // the same amount as the input (12 ADA), effectively doing nothing.
+        // The deposit precondition requires the contract to hold ONLY the initialization amount
+        // beforehand (`contractBalance === initializationAmount`). A re-deposit onto an already
+        // funded contract (balance = escrowAmount + initializationAmount) must therefore fail.
+        assertScriptFail("Contract must contain only initialization amount before deposit") {
+            txCreator.deposit(
+              utxos = utxos,
+              escrowUtxo = fundedUtxo,
+              buyerAddress = Bob.address,
+              sponsor = Bob.address,
+              buyer = Bob.addrKeyHash,
+              signer = Bob.signer
+            )
+        }
+    }
+
+    test("Deposit: works when initializationAmount equals escrowAmount") {
+        val provider = createProvider()
+        val utxos0 = provider.findUtxos(Alice.address).await().toOption.get
+
+        // With the old `contractBalance != escrowAmount` precondition, an escrow whose
+        // initializationAmount equals its escrowAmount could never be funded (the contract holds
+        // exactly escrowAmount before deposit, so the check failed). The corrected precondition
+        // (=== initializationAmount) funds it fine.
+        val initTx = txCreator.initialize(
+          utxos = utxos0,
+          sponsor = Alice.address,
+          seller = Alice.addrKeyHash,
+          buyer = Bob.addrKeyHash,
+          escrowAmount = escrowAmount,
+          initializationAmount = escrowAmount, // init == escrow
+          signer = Alice.signer
+        )
+        assert(provider.submit(initTx).await().isRight, "init failed")
+        val escrowUtxo = Utxo(
+          initTx.utxos.find(_._2.address == contract.address(env.network)).get
+        )
+
+        val utxos1 = provider.findUtxos(Bob.address).await().toOption.get
         val depositTx = txCreator.deposit(
-          utxos = utxos,
-          escrowUtxo = fundedUtxo,
+          utxos = utxos1,
+          escrowUtxo = escrowUtxo,
           buyerAddress = Bob.address,
           sponsor = Bob.address,
           buyer = Bob.addrKeyHash,
           signer = Bob.signer
         )
-
-        // Transaction succeeds due to the bug - documenting this as the current behavior
-        val result = provider.submit(depositTx).await()
-        assert(result.isRight, s"Deposit tx unexpectedly failed: $result")
+        assert(
+          provider.submit(depositTx).await().isRight,
+          "deposit must succeed when init == escrow"
+        )
     }
 
     // --- Pay Tests ---

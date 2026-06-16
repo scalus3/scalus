@@ -126,7 +126,7 @@ every example's tests build only honest transactions.
 ### Medium / Low
 | Example | Sev | Finding |
 |---------|-----|---------|
-| **Escrow** | Med | Deposit precondition uses `!=` instead of `===` against the wrong field (`EscrowValidator.scala:94-97`): idempotent re-deposit accepted; and if `initializationAmount == escrowAmount` the escrow can never be funded. |
+| **Escrow** | Med | ✅ FIXED | Deposit precondition used `!=` against the wrong field (`contractBalance != escrowAmount`): idempotent re-deposit accepted, and if `initializationAmount == escrowAmount` the escrow could never be funded. **Fixed** (this branch): `contractBalance === initializationAmount` (matching the error message's intent). Flipped the existing "known bug" test to assert rejection + added an init==escrow funding test. |
 | **Escrow** | Low | Balance/payout computed over credential-aggregated inputs/outputs → batching fails closed; fragile. |
 | **Betting** | Low | Beacon asset name unconstrained on mint. |
 | **PaymentSplitter** | Low | Payee outputs matched on payment credential only (staking-credential redirect of rewards). |
@@ -180,14 +180,19 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 - Bugs: `datum.get`→`getOrFail`; hoist + de-dup error strings; set Apache license; remove redundant `Validator` import.
 - Refs: `SimpleTransferValidatorTest`, `docs/design/cce-generalized-report.md:215`.
 
-### escrow
-- Structure: **delete `EscrowOffchain.scala`** (Bloxbean/Blockfrost `main` with mnemonics/`Thread.sleep`/`sys.exit`)
-  — `EscrowTransactions` already exists; update README. Hoist error strings; remove unused `given Eq[Config]`
-  and `import scalus.{show as _, *}`.
-- Bugs: fix deposit precondition to `=== initializationAmount`; compute balance from own input not credential sum;
-  check specific continuing/payout output not credential aggregate. Reconcile "three-party"/"trusted intermediary"
-  README vs the two-party implementation (add arbiter/timeout, or fix wording).
-- Refs: `EscrowTest` (incl. its "known bug" test at `:142-164` and hardcoded `ExUnits`).
+### escrow — ✅ Med deposit-precondition bug FIXED (this branch)
+- Bug fixed (TDD): the deposit precondition was `contractBalance != escrowDatum.escrowAmount` — wrong operator and
+  wrong field vs its own message ("Contract must contain only initialization amount before deposit"). It let a buyer
+  re-deposit onto an already-funded contract (idempotent no-op) and made any escrow with `initializationAmount ==
+  escrowAmount` unfundable. Fixed to `contractBalance === escrowDatum.initializationAmount`. The repo's existing
+  "known bug" test (which asserted the buggy re-deposit *succeeds*) was flipped to assert rejection; added a test that
+  funding works when `init == escrow`. Removed the unused `import scalus.{show as _, *}` (warned). Deposit ExUnits
+  re-baselined (231621/79379490→231352/79337104, identical on both compiler generations so it stays a single value).
+- **Still open** (deferred, not the headline bug): delete `EscrowOffchain.scala` (Bloxbean `main` with
+  mnemonics/`Thread.sleep`/`sys.exit`); remove the unused `given Eq[Config]`; hoist error strings; compute balance
+  from the own input rather than the credential-aggregated sum (Low — batching fragility); reconcile the
+  "three-party/trusted intermediary" README wording vs the two-party implementation.
+- Refs: `EscrowTest`.
 
 ### auction — ✅ High cross-instance double satisfaction FIXED (this branch)
 - Bug fixed (TDD): **cross-instance double satisfaction across distinct one-shot auctions**. `handleEnd`'s anti-DS

@@ -9,7 +9,6 @@ import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.cardano.onchain.plutus.prelude.Option.*
-import scalus.{show as _, *}
 
 // Datum
 case class Config(
@@ -89,7 +88,7 @@ object EscrowValidator extends Validator {
         require(buyerOutputs.length === BigInt(1), "Expected exactly one buyer output")
 
         require(
-          contractBalance != escrowDatum.escrowAmount,
+          contractBalance === escrowDatum.initializationAmount,
           "Contract must contain only initialization amount before deposit"
         )
 
