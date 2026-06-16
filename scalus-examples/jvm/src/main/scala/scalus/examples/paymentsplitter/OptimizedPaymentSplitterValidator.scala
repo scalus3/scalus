@@ -150,6 +150,12 @@ object OptimizedPaymentSplitterValidator extends DataParameterizedValidator {
                         (true, sum)
                     else fail("Payee input must be from payeeWithChange")
                 else if inputCredential === ownScriptCredential then
+                    // Only ADA is split; reject contract inputs carrying native tokens, otherwise
+                    // the fee payer could pocket them for free (outputs reconcile lovelace only).
+                    require(
+                      input.resolved.value.withoutLovelace.isZero,
+                      "Contract input must contain only ADA"
+                    )
                     (foundPayer, sum + input.resolved.value.getLovelace)
                 else fail("Input not from the contract or fee payer")
             }

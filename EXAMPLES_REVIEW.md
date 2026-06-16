@@ -119,7 +119,7 @@ every example's tests build only honest transactions.
 | **Betting** | High | ✅ FIXED | No timeout/reclaim path (enum had only `Join`/`AnnounceWinner`) → funds lock forever if the oracle goes silent or nobody joins; the README documented a Timeout that wasn't implemented. **Fixed** (this branch): added a `Timeout` action — after expiration a player reclaims, splitting the doubled pot back to both players (or refunding player1 if no one joined), guarded by a single-own-input check so the per-player refund accounting can't be gamed by batching. Off-chain `timeout` builder added. (Still open: `AnnounceWinner` double-satisfaction guard, beacon burn.) |
 | **EditableNft** | High | ✅ | CIP-68 labels swapped **and** wrong-encoded: `userNftName="100"`, `refNftName="222"` (CIP-68: 100=ref, 222=user), and `ByteString.fromString("100")` is ASCII bytes, not the 4-byte CIP-68 label `0x000643b0`. Breaks all CIP-68 tooling interop. |
 | **Vesting** | High | ✅ | No single-script-input guard (only `contractOutputs.length === 1` at `:101`, not inputs) → double satisfaction spending two vesting UTxOs with one shared continuing output. Also continuing-output check is lovelace-only → native tokens can be stripped. |
-| **PaymentSplitter** | High | | Both validators reconcile only `getLovelace` → native tokens in a contract UTxO can be skimmed (no asset preservation). Naive validator also misses `reminder >= 0` that the Optimized one has. |
+| **PaymentSplitter** | High | ✅ FIXED | Both validators reconciled only `getLovelace` → native tokens in a contract UTxO could be skimmed by the fee payer (no asset preservation); the Naive validator also missed the `reminder >= 0` check the Optimized one has. **Fixed** (this branch): both validators now `require(input.value.withoutLovelace.isZero)` on each contract input (ADA-only — nothing to skim), and Naive gained `reminder >= 0`. |
 | **Auction** | High (Med conf) | | "Fixed" `AuctionValidator.handleEnd` DS guard counts NFTs only under its own script hash; because each instance is one-shot-parameterized (distinct hash), two same-seller instances ended together aren't detected → cross-instance double satisfaction; seller payout still `>=`. Test only covers the single-script case. |
 | **UpgradeableProxy** | High | | Continuation located via `.headOption` and checked against own input value, not bound per-input (`UpgradeableProxy.scala:56-69`); `Call` needs no signature → two same-datum proxy UTxOs share one continuation, attacker pockets the other. |
 
@@ -285,13 +285,21 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   multi-input merge; validate `newState` (not inbound state) in oracle `Update`.
 - Refs: `PricebetValidatorTest`.
 
-### paymentsplitter
-- Structure: refactor `PaymentSplitterContract.scala` to a `Contract` object using `Blueprint.plutusV3` (currently
-  bare `lazy val`s + hand-rolled `Blueprint(...)`); rename `PaymentSplitterValidator.scala`→
-  `NaivePaymentSplitterValidator.scala` (file/object mismatch); **add `PaymentSplitterTransactions.scala`**
-  (off-chain currently lives only in tests); hoist error strings; remove `// TODO: think`; fix stale
-  `@see StakeValidatorPaymentSplitterExample` scaladoc.
-- Bugs: add native-token preservation (or reject non-ADA inputs); add `require(reminder >= 0)` to Naive.
+### paymentsplitter — ✅ High native-token skim FIXED (this branch)
+- Bug fixed (TDD): **native-token skim**. Both validators reconciled only `getLovelace`, so a contract UTxO holding
+  native tokens let the fee payer pocket those tokens for free (outputs reconcile lovelace only, and every output
+  must go to a payee — the fee-payer payee grabs the tokens). Since the splitter splits ADA, both validators now
+  `require(input.resolved.value.withoutLovelace.isZero, "Contract input must contain only ADA")` on each contract
+  input — there's nothing to skim. Also added the missing `reminder >= 0` to the Naive validator (parity with
+  Optimized). New adversarial test: a contract input carrying a native token is rejected (`only ADA`).
+- Tests/ExUnits: the per-input guard shifts the success-path cost, so re-baselined all exact budgets on **both
+  compiler generations** — `pre38` (Scala 3.3.7, measured locally) and `since38` (Scala 3.8.4, measured via
+  `++3.8.4`) — across `NaivePaymentSplitterValidatorTest` and `OptimizedPaymentSplitterValidatorTest` (reward + spend
+  budgets).
+- **Still open** (deferred, not security): refactor `PaymentSplitterContract` to `Contract` + `Blueprint.plutusV3`;
+  rename `PaymentSplitterValidator.scala`→`NaivePaymentSplitterValidator.scala`; add `PaymentSplitterTransactions`
+  (off-chain lives only in tests); hoist error strings; remove `// TODO: think`; payee outputs matched on payment
+  credential only (staking-credential redirect — Low).
 - Refs: `NaivePaymentSplitterValidatorTest`, `OptimizedPaymentSplitterValidatorTest`, `PaymentSplitterTxBuilderTest`,
   `PaymentSplitterTestCases`, README.
 

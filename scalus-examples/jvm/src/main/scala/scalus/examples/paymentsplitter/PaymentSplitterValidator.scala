@@ -61,9 +61,15 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
                         if optTxOut.isEmpty then (Some(input.resolved), sumContractInputs)
                         else fail("Already found a fee payer")
                     else if input.resolved.address.credential === myTxInputCredential then
+                        // Only ADA is split. A contract UTxO holding native tokens would let the
+                        // fee payer pocket those tokens for free (outputs reconcile lovelace only),
+                        // so reject non-ADA contract inputs outright.
+                        require(
+                          input.resolved.value.withoutLovelace.isZero,
+                          "Contract input must contain only ADA"
+                        )
                         (optTxOut, sumContractInputs + input.resolved.value.getLovelace)
                     else
-                        // TODO: think
                         fail("Input not from the contract or payer")
             }
 
@@ -108,7 +114,10 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
                 val payeeSumWithChange = optPayeeSumWithChange.getOrFail("No change output")
                 val eqSumValue = sumOutput - payeeSumWithChange + split
                 val reminder = sumContractInputs - eqSumValue
-                require(reminder < nPayed, "value to be payed to payees is too low")
+                require(
+                  reminder >= BigInt(0) && reminder < nPayed,
+                  "value to be payed to payees is too low"
+                )
                 //    nOutputs * (split + 1) > sumContractInputs   <=>
                 //    nOutputs * split + nOutputs > sumContractInputs <=>
                 //    eqSumValue + nOutputs > sumContractInputs <=>
