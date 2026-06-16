@@ -68,16 +68,8 @@
 
     <div id="results"></div>
 
-    <!-- scalus.js is now an ES module whose @noble/* imports are left external.
-         An import map resolves them to a CDN so the bundle runs unbundled in the browser. -->
-    <script type="importmap">
-    {
-        "imports": {
-            "@noble/curves/": "https://esm.sh/@noble/curves@1.9.7/",
-            "@noble/hashes/": "https://esm.sh/@noble/hashes@1.8.0/"
-        }
-    }
-    </script>
+    <!-- scalus.js is a self-contained ES module (its @noble/* deps are inlined),
+         so it loads directly in the browser with no import map. -->
     <script type="module">
         // Load the ESM bundle and expose its named exports as globals so the
         // (classic-script) test buttons below can use them.

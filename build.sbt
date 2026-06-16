@@ -167,7 +167,10 @@ lazy val installNpmTestDeps =
 // linked test module), so we install them there before running tests.
 lazy val jsModuleSettings: Seq[Def.Setting[?]] = Seq(
   scalaJSUseMainModuleInitializer := false,
-  scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule) },
+  // withMinify is the Scala.js-native replacement for the now-deprecated Closure
+  // Compiler. It's a no-op on top of esbuild's --minify for our current bundle, but we
+  // keep it on as the officially-supported minification path for ESModule output.
+  scalaJSLinkerConfig ~= { _.withModuleKind(ModuleKind.ESModule).withMinify(true) },
   installNpmTestDeps := {
       val base = (LocalRootProject / baseDirectory).value
       val log = streams.value.log
@@ -779,8 +782,8 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
       // The Scala.js linker emits standard ES modules; we run esbuild over the linker
       // output to collapse any internal chunks into one file and minify. @noble/* are
-      // marked external — they stay as bare `import`s and are declared as runtime
-      // dependencies in the npm package.json, so they are NOT bundled in.
+      // inlined into the bundle so scalus.js is fully self-contained — it can be loaded
+      // directly in a browser `<script type="module">` with no import map or npm install.
       prepareNpmPackage := {
           (Compile / fullLinkJS).value
           val linkerOutputDir = (Compile / fullLinkJS / scalaJSLinkerOutputDirectory).value
@@ -798,7 +801,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
             "--platform=node",
             "--minify",
             "--legal-comments=none",
-            "--external:@noble/*",
             s"--outfile=${outFile.getAbsolutePath}"
           )
           log.info(cmd.mkString(" "))
