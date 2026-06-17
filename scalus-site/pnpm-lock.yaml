@@ -11,7 +11,7 @@ overrides:
   picomatch@>=4.0.0 <4.0.4: ^4.0.4
   lodash-es@<4.18.0: ^4.18.1
   '@xmldom/xmldom@<0.9.10': ^0.9.10
-  dompurify@<3.4.0: ^3.4.2
+  dompurify@<3.4.11: ^3.4.11
   uuid@<14.0.0: ^14.0.0
   yaml@<2.8.3: ^2.8.3
   postcss@<8.5.10: ^8.5.13
@@ -1114,8 +1114,8 @@ packages:
     resolution: {integrity: sha512-WkrWp9GR4KXfKGYzOLmTuGVi1UWFfws377n9cc55/tb6DuqyF6pcQ5AbiHEshaDpY9v6oaSr2XCDidGmMwdzIA==}
     engines: {node: '>=8'}
 
-  dompurify@3.4.2:
-    resolution: {integrity: sha512-lHeS9SA/IKeIFFyYciHBr2n0v1VMPlSj843HdLOwjb2OxNwdq9Xykxqhk+FE42MzAdHvInbAolSE4mhahPpjXA==}
+  dompurify@3.4.11:
+    resolution: {integrity: sha512-zhlUV12GsaRzMsf9q5M254YhA4+VuF0fG+QFqu6aYpoGlKtz+w8//jBcGVYBgQkR5GHjUomejY84AV+/uPbWdw==}
 
   email-addresses@5.0.0:
     resolution: {integrity: sha512-4OIPYlA6JXqtVn8zpHpGiI7vE6EQOAg16aGnDMIAlZVinnoZ8208tW1hAbjWydgN/4PLTT9q+O1K6AH/vALJGw==}
@@ -3274,7 +3274,7 @@ snapshots:
     dependencies:
       path-type: 4.0.0
 
-  dompurify@3.4.2:
+  dompurify@3.4.11:
     optionalDependencies:
       '@types/trusted-types': 2.0.7
 
@@ -3944,7 +3944,7 @@ snapshots:
       d3-sankey: 0.12.3
       dagre-d3-es: 7.0.14
       dayjs: 1.11.19
-      dompurify: 3.4.2
+      dompurify: 3.4.11
       es-toolkit: 1.46.1
       katex: 0.16.27
       khroma: 2.1.0
