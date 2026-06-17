@@ -18,6 +18,18 @@ import scala.language.implicitConversions
 
 open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
 
+    /** What a term evaluates to as a `BigInt`, or `None` if it fails to evaluate or yields a
+      * non-integer.
+      *
+      * Random terms must be classified by their *evaluated* result, not their syntactic shape: e.g.
+      * `(lam _ (con integer 0)) x` is not a `Const(Integer)` but still evaluates to an integer, so
+      * an integer builtin applied to it succeeds instead of failing.
+      */
+    private def evaluatesToInteger(term: Term)(using PlutusVM): Option[BigInt] =
+        scala.util.Try(term.evaluate).toOption.collect { case Const(Constant.Integer(i), _) =>
+            i
+        }
+
     test("Lazy builtin evaluation") {
         assertTermEvalEq(AddInteger $ "wrong", Apply(Builtin(AddInteger), "wrong"))
     }
@@ -28,11 +40,11 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
         }
 
         forAll { (a: Term, b: Term) =>
-            (a, b) match
-                case (Const(Constant.Integer(aa), _), Const(Constant.Integer(bb), _)) =>
-                    val r = aa + bb
-                    assertTermEvalEq(AddInteger $ a $ b, Const(Constant.Integer(r)))
-                case _ => assertTermEvalThrows[Exception](AddInteger $ a $ b)
+            (evaluatesToInteger(a), evaluatesToInteger(b)) match
+                case (Some(aa), Some(bb)) =>
+                    assertTermEvalEq(AddInteger $ a $ b, Const(Constant.Integer(aa + bb)))
+                case _ =>
+                    assertTermEvalThrows[Exception](AddInteger $ a $ b)
         }
     }
 
@@ -42,11 +54,11 @@ open class CekBuiltinsTest extends AnyFunSuite with EvalTestKit:
         }
 
         forAll { (a: Term, b: Term) =>
-            (a, b) match
-                case (Const(Constant.Integer(aa), _), Const(Constant.Integer(bb), _)) =>
-                    val r = aa - bb
-                    assertTermEvalEq(SubtractInteger $ a $ b, Const(Constant.Integer(r)))
-                case _ => assertTermEvalThrows[Exception](AddInteger $ a $ b)
+            (evaluatesToInteger(a), evaluatesToInteger(b)) match
+                case (Some(aa), Some(bb)) =>
+                    assertTermEvalEq(SubtractInteger $ a $ b, Const(Constant.Integer(aa - bb)))
+                case _ =>
+                    assertTermEvalThrows[Exception](SubtractInteger $ a $ b)
         }
     }
 
