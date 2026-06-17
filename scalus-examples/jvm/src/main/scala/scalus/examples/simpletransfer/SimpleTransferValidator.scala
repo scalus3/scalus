@@ -45,7 +45,8 @@ object SimpleTransferValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val Parties(owner, recipient) = datum.get.to[Parties]
+        val datumData = datum.getOrFail("Datum not found")
+        val Parties(owner, recipient) = datumData.to[Parties]
         val contract = tx.findOwnInputOrFail(ownRef).resolved
         val contractAddress = contract.address.credential
         val contractInputs = tx.findOwnInputsByCredential(contractAddress)
@@ -73,7 +74,7 @@ object SimpleTransferValidator extends Validator {
                   contractOutput.value === balance + amount,
                   "Contract has received incorrect amount"
                 )
-                val expectedDatum = OutputDatum.OutputDatum(datum.get)
+                val expectedDatum = OutputDatum.OutputDatum(datumData)
                 require(contractOutput.datum === expectedDatum, "Output datum changed")
             case Action.Withdraw(withdraw) =>
                 require(tx.isSignedBy(recipient), "Withdraw must be signed by recipient")
@@ -92,7 +93,7 @@ object SimpleTransferValidator extends Validator {
                       contractOutput.value === balance - withdraw,
                       "Contract balance is incorrect"
                     )
-                    val expectedDatum = OutputDatum.OutputDatum(datum.get)
+                    val expectedDatum = OutputDatum.OutputDatum(datumData)
                     require(contractOutput.datum === expectedDatum, "Output datum changed")
                 else fail("Withdraw exceeds balance")
     }

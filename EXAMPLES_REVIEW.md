@@ -130,7 +130,7 @@ every example's tests build only honest transactions.
 | **Escrow** | Low | Balance/payout computed over credential-aggregated inputs/outputs → batching fails closed; fragile. |
 | **Betting** | Low | Beacon asset name unconstrained on mint. |
 | **PaymentSplitter** | Low | Payee outputs matched on payment credential only (staking-credential redirect of rewards). |
-| **SimpleTransfer** | Low | `datum.get` instead of `getOrFail` (opaque error on hash/none datum). Otherwise **on-chain logic is sound** — cleanest after HTLC. |
+| **SimpleTransfer** | Low | ✅ FIXED | `datum.get` instead of `getOrFail` (opaque error on hash/none datum). **Fixed** (this branch): single `datum.getOrFail("Datum not found")` reused. Otherwise on-chain logic is sound (single-own-input guard, value + datum preservation). No ExUnits change (`getOrFail` compiles to the same happy-path cost). |
 | **Vault / many** | Low | `d.get` on datum `Option` instead of `getOrFail(Msg)` in several validators. |
 | **HTLC** | Low | Two error-message strings have inclusive/exclusive wording swapped (`HtlcValidator.scala:81-82`); `finite`/`finiteOrFail` discard the bound's closure flag (relies on ledger convention). Logic is correct. |
 | **Storage** | Low | `availableUtxos = userUtxos ++ prevTx.utxos` relies on selection skipping spent inputs; `// 4-byte big-endian` comment wrong (`BigInt.toByteArray` is minimal-width). No runtime bug (tests pass). |
@@ -174,11 +174,15 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   error strings to `inline val`; Apache license; remove `// ???`/`// TODO` comments.
 - Refs: `BettingValidatorTest`, `BettingTransactionTest`, `docs/Examples.md`, `docs/design/cce-generalized-report.md`.
 
-### simpletransfer
-- Structure: rename datum `Parties`→`Config` (optional, per decision B); **add `SimpleTransferTransactions.scala`**
-  (deposit/withdraw builders) — currently no off-chain code; update README.
-- Bugs: `datum.get`→`getOrFail`; hoist + de-dup error strings; set Apache license; remove redundant `Validator` import.
-- Refs: `SimpleTransferValidatorTest`, `docs/design/cce-generalized-report.md:215`.
+### simpletransfer — ✅ Low `datum.get` FIXED (this branch)
+- Bug fixed: replaced the three `datum.get` uses with a single `datum.getOrFail("Datum not found")` (clear error on a
+  missing/hash datum). The on-chain logic was already sound — single-own-input guard, value + datum preservation,
+  positive-amount and all-vs-partial-withdraw checks. 8 tests pass, no ExUnits change (`getOrFail` is the same
+  happy-path cost as `.get`).
+- **Still open** (deferred, structural — keep domain name `Parties` per decision B): **add
+  `SimpleTransferTransactions.scala`** (deposit/withdraw builders — currently no off-chain code); remove the
+  redundant `Validator` import.
+- Refs: `SimpleTransferValidatorTest`.
 
 ### escrow — ✅ Med deposit-precondition bug FIXED (this branch)
 - Bug fixed (TDD): the deposit precondition was `contractBalance != escrowDatum.escrowAmount` — wrong operator and
