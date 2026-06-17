@@ -34,10 +34,7 @@ object FactoryExample extends Validator {
         val action = redeemer.to[FactoryAction]
         action match
             case FactoryAction.Create(tag, seedUtxo) =>
-                // Use first signatory as the creator
-                val creator = tx.signatories.head
                 Factory.validateCreate(
-                  creator = creator,
                   tag = tag,
                   seedUtxo = seedUtxo,
                   policyId = policyId,
@@ -45,9 +42,7 @@ object FactoryExample extends Validator {
                   tx = tx
                 )
             case FactoryAction.Destroy =>
-                val creator = tx.signatories.head
                 Factory.validateDestroy(
-                  creator = creator,
                   policyId = policyId,
                   tx = tx
                 )

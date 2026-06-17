@@ -361,14 +361,22 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 - **Proved the riskier structural pattern** (add missing Contract/blueprint object + file renames + compilation move)
   on top of vesting's security+style pattern. Ready to scale to the remaining examples.
 
-### factory
-- Structure: split `FactoryExample.scala` into `FactoryValidator.scala` (`object FactoryValidator`) +
-  `FactoryContract.scala` (`object FactoryContract extends Contract`); **add `FactoryTransactions.scala`**
-  (README overstates off-chain coverage — there is none); replace bare `getOrFail("…")` strings with named
-  constants. Error constants already mostly `inline val` ✅.
-- Bugs: value/min-ADA preservation on the product output + assert exactly one script output (remove `find`-first
-  ambiguity); guard `signatories.head`; reconsider redundant `validateDestroy` creator check / single-burn limit.
-- Refs: `FactoryTest`; `FactoryContract.compile(FactoryExample.validate)` call site.
+### factory — ✅ creator-authorization hardening DONE (this branch); core logic verified sound
+- Verified the on-chain logic is sound: one-shot NFT (token name = `blake2b_256(seedUtxo)`, seed consumed), and
+  burning the NFT requires spending the product UTxO, which `validateSpend` gates on `datum.creator` signing. No
+  exploitable hole — the review's items were hardening.
+- Hardened (this branch): both `validateCreate` and `validateDestroy` derived `creator = tx.signatories.head` and
+  did `isSignedBy(head)`, which is **vacuous** (head is always a signatory) and crashes opaquely on empty
+  signatories. Now `validateCreate` authorizes against the **product datum's creator** (`isSignedBy(productDatum.
+  creator)`) — order-independent and meaningful (can't attribute a product to a non-signer); the `===creator` field
+  check and the now-unused `DatumCreatorMismatch` constant were dropped. `validateDestroy` drops its vacuous creator
+  check entirely (authorization is enforced by `validateSpend`), keeping only the exactly-one-burn check. Both
+  `FactoryExample` mint branches no longer touch `signatories.head`. Replaced the (now-moot) "destroy creator must
+  sign" test with a burn-quantity test. 14 `EvalTestKit` tests pass (no ExUnits assertions in this suite).
+- **Still open** (deferred, structural): split `FactoryExample.scala` into `FactoryValidator` + keep `FactoryContract`;
+  **add `FactoryTransactions.scala`** (README overstates off-chain coverage — there is none); the single-burn limit
+  (can't batch-destroy) and the `find`-first product output (unambiguous given NFT uniqueness — left as-is).
+- Refs: `FactoryTest`.
 
 ### decentralizedidentity — ✅ High forged-delegation hole FIXED (this branch)
 - Bug fixed (TDD, RED→GREEN): **forged delegation**. `PublishAttribute` authenticated the delegation reference input

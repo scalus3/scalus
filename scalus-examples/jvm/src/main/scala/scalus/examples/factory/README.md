@@ -10,6 +10,8 @@ governs the product lifecycle. Each product NFT is locked at the script address 
 and the creator's public key hash.
 
 - **Create** — spends a seed UTxO, mints a product NFT, and locks it at the script address with the product datum.
-- **Destroy** — the creator burns the product NFT and reclaims the locked ADA.
+  The party named as `creator` in that datum must sign (so a product can't be attributed to a non-signer).
+- **Destroy** — the creator burns the product NFT and reclaims the locked ADA. Authorization comes from the spending
+  validator: burning the NFT means spending the product UTxO, which requires the datum's `creator` to sign.
 
 `Factory.scala` contains the on-chain validation logic. `FactoryExample.scala` demonstrates off-chain usage.

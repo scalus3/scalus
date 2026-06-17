@@ -134,7 +134,7 @@ class FactoryTest
               )
             )
 
-            Factory.validateCreate(creator, tag, seedUtxo, policyId, policyId, tx)
+            Factory.validateCreate(tag, seedUtxo, policyId, policyId, tx)
         }
     }
 
@@ -189,7 +189,7 @@ class FactoryTest
               )
             )
 
-            Factory.validateCreate(creator, tag, seedUtxo, policyId, policyId, tx)
+            Factory.validateCreate(tag, seedUtxo, policyId, policyId, tx)
         }
     }
 
@@ -233,7 +233,7 @@ class FactoryTest
               )
             )
 
-            Factory.validateCreate(creator, tag, seedUtxo, policyId, policyId, tx)
+            Factory.validateCreate(tag, seedUtxo, policyId, policyId, tx)
         }
     }
 
@@ -288,7 +288,7 @@ class FactoryTest
               )
             )
 
-            Factory.validateCreate(creator, tag, seedUtxo, policyId, policyId, tx)
+            Factory.validateCreate(tag, seedUtxo, policyId, policyId, tx)
         }
     }
 
@@ -334,7 +334,7 @@ class FactoryTest
               )
             )
 
-            Factory.validateCreate(creator, tag, seedUtxo, policyId, policyId, tx)
+            Factory.validateCreate(tag, seedUtxo, policyId, policyId, tx)
         }
     }
 
@@ -361,12 +361,15 @@ class FactoryTest
               )
             )
 
-            Factory.validateDestroy(creator, policyId, tx)
+            Factory.validateDestroy(policyId, tx)
         }
     }
 
-    test("validateDestroy fails when creator has not signed") {
-        assertEvalFailsWithMessage[RequirementError](Factory.CreatorMustSign) {
+    // Destroy authorization (creator must sign) is enforced by the spending validator, since
+    // burning the NFT requires spending the product UTxO that holds it — see the validateSpend
+    // tests. validateDestroy itself only checks the burn quantity.
+    test("validateDestroy fails when the burn quantity is not exactly -1") {
+        assertEvalFailsWithMessage[RequirementError](Factory.MustBurnExactlyOneToken) {
             val creator = PubKeyHash(
               ByteString.fromHex("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
             )
@@ -377,8 +380,8 @@ class FactoryTest
 
             val tx = TxInfo(
               inputs = List.empty,
-              mint = Value(policyId, someTokenName, BigInt(-1)),
-              signatories = List.empty, // no signatories
+              mint = Value(policyId, someTokenName, BigInt(-2)), // burns 2, not 1
+              signatories = List(creator),
               id = TxId(
                 ByteString.fromHex(
                   "0000000000000000000000000000000000000000000000000000000000000000"
@@ -386,7 +389,7 @@ class FactoryTest
               )
             )
 
-            Factory.validateDestroy(creator, policyId, tx)
+            Factory.validateDestroy(policyId, tx)
         }
     }
 

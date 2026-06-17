@@ -86,16 +86,12 @@ object Factory {
       *   The transaction info
       */
     def validateCreate(
-        creator: PubKeyHash,
         tag: ByteString,
         seedUtxo: TxOutRef,
         policyId: PolicyId,
         spendingScriptHash: ValidatorHash,
         tx: TxInfo
     ): Unit = {
-        // Creator must sign the transaction
-        require(tx.isSignedBy(creator), CreatorMustSign)
-
         // Seed UTxO must be consumed (one-shot guarantee)
         require(tx.inputs.exists(_.outRef === seedUtxo), SeedUtxoMustBeConsumed)
 
@@ -119,40 +115,37 @@ object Factory {
             }
             .getOrFail(MissingProductOutput)
 
-        // Verify inline datum matches expected ProductDatum
+        // Verify inline datum and authorize against the product's own creator. The creator is taken
+        // from the product datum (not the first signatory) so it is order-independent and the
+        // signature check is meaningful: a product can't be created attributed to a non-signer.
         productOutput.datum match
             case OutputDatum.OutputDatum(datum) =>
                 val productDatum = datum.to[ProductDatum]
                 require(productDatum.tag === tag, DatumTagMismatch)
-                require(productDatum.creator === creator, DatumCreatorMismatch)
+                require(tx.isSignedBy(productDatum.creator), CreatorMustSign)
             case _ => fail(MissingInlineDatum)
     }
 
     /** Validate product destruction (minting policy logic for `Destroy`).
       *
-      * Checks:
-      *   - Exactly 1 token burned (qty = -1) under this policy
-      *   - Tx is signed by the product's creator
+      * Checks exactly 1 token burned (qty = -1) under this policy.
       *
       * @note
-      *   Token name validation is handled by the spending validator (`validateSpend`), which
-      *   ensures the burned token matches the NFT held in the product UTxO.
+      *   Authorization is enforced by the spending validator ([[validateSpend]]): burning the NFT
+      *   requires spending the product UTxO that holds it, which requires the product's
+      *   `datum.creator` to sign. So no separate creator check is needed (or meaningful) here — the
+      *   old `isSignedBy(signatories.head)` was vacuous (head is always a signatory). Token-name
+      *   validation is likewise handled by [[validateSpend]].
       *
-      * @param creator
-      *   The creator's public key hash (first signatory)
       * @param policyId
       *   This minting policy's hash
       * @param tx
       *   The transaction info
       */
     def validateDestroy(
-        creator: PubKeyHash,
         policyId: PolicyId,
         tx: TxInfo
     ): Unit = {
-        // Creator must sign the transaction
-        require(tx.isSignedBy(creator), CreatorMustSign)
-
         // Check exactly 1 token burned under this policy
         val mintedTokens = tx.mint.toSortedMap.get(policyId).getOrFail(NoTokensMinted)
         val (_, quantity) = mintedTokens.toList match
@@ -205,7 +198,6 @@ object Factory {
     inline val MissingProductOutput = "No product output found at spending script"
     inline val MissingInlineDatum = "Product output must have an inline datum"
     inline val DatumTagMismatch = "Product datum tag does not match"
-    inline val DatumCreatorMismatch = "Product datum creator does not match"
     inline val MustBurnExactlyOneToken = "Must burn exactly one token"
     inline val NoFactoryToken = "No factory token found in input"
     inline val MustHaveExactlyOneFactoryToken = "Input must have exactly one factory token"
