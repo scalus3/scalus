@@ -841,7 +841,17 @@ lazy val scalusSbtPlugin = project
       name := "scalus-sbt-plugin",
       sbtPlugin := true,
       scalaVersion := "2.12.21",
-      crossScalaVersions := Seq("2.12.21"),
+      // Cross-build for sbt 1 (Scala 2.12) and sbt 2 (Scala 3). A single sbt 1.x launcher
+      // builds and publishes both axes via pluginCrossBuild.
+      crossScalaVersions := Seq("2.12.21", scala3NextVersion),
+      pluginCrossBuild / sbtVersion := {
+          scalaBinaryVersion.value match {
+              case "2.12" => "1.5.8" // minimum sbt 1.x baseline for max consumer compatibility
+              case _      => "2.0.0" // sbt 2.x
+          }
+      },
+      // shared-source shim so one source set compiles against both sbt 1 and sbt 2 APIs
+      addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.1.0"),
       scalacOptions ++= Seq("-deprecation", "-feature"),
     )
 

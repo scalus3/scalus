@@ -3,6 +3,9 @@ package scalus.sbt
 import sbt.*
 import sbt.Keys.*
 import sbt.complete.DefaultParsers.*
+// sbt2-compat shim: lets this single source set compile against both sbt 1 and sbt 2 APIs.
+// In particular `toFiles` bridges the sbt 2 Classpath type change (Attributed[HashedVirtualFileRef]).
+import sbtcompat.PluginCompat.*
 
 /** sbt plugin that adds `blueprint` and `deploy` tasks for Cardano smart contracts.
   *
@@ -32,7 +35,8 @@ object ScalusBlueprintPlugin extends AutoPlugin {
 
     lazy val blueprintTask: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
         val _ = (Compile / compile).value
-        val cp = (Compile / fullClasspath).value.files
+        implicit val conv: xsbti.FileConverter = fileConverter.value
+        val cp = toFiles((Compile / fullClasspath).value)
         val classesDir = (Compile / classDirectory).value
         val log = streams.value.log
 
@@ -49,7 +53,8 @@ object ScalusBlueprintPlugin extends AutoPlugin {
 
     lazy val deployTask: Def.Initialize[InputTask[Unit]] = Def.inputTask {
         val _ = (Compile / compile).value
-        val cp = (Compile / fullClasspath).value.files
+        implicit val conv: xsbti.FileConverter = fileConverter.value
+        val cp = toFiles((Compile / fullClasspath).value)
         val classesDir = (Compile / classDirectory).value
         val log = streams.value.log
         val args = spaceDelimited("<args>").parsed
@@ -104,8 +109,11 @@ object ScalusBlueprintPlugin extends AutoPlugin {
     import autoImport.*
 
     override lazy val projectSettings: Seq[Setting[_]] = Seq(
-      blueprint := blueprintTask.value,
-      deploy := deployTask.evaluated
+      // Def.uncached opts these out of sbt 2's task cache: `blueprint` returns Seq[File] (not a
+      // cacheable output type) and writes files, and `deploy` performs network I/O. No-op on sbt 1
+      // (via sbt2-compat).
+      blueprint := Def.uncached(blueprintTask.value),
+      deploy := Def.uncached(deployTask.evaluated)
     )
 
     /** Derive a simple file name from a fully qualified class name. */
