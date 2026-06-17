@@ -132,13 +132,22 @@ case class BettingTransactions(
             .collaterals(collateralUtxo)
             .references(scriptUtxo)
             .spend(betUtxo, Action.AnnounceWinner(payout, payoutOutputIdx))
+            // Burn the bet NFT so it can't be re-locked; the winner gets only the pot lovelace.
+            .mint(script.scriptHash, scala.collection.Map(betToken(betUtxo) -> -1L), Data.unit)
             .requireSignature(oraclePkh)
-            .payTo(payoutAddress, betUtxo.output.value)
+            .payTo(payoutAddress, Value(betUtxo.output.value.coin))
             .validFrom(java.time.Instant.ofEpochMilli(afterTime))
             .build(changeTo = changeAddress)
             .sign(signer)
             .transaction
     }
+
+    /** The bet NFT's asset name — the single token under this script's policy in the bet UTxO. */
+    private def betToken(utxo: Utxo): AssetName =
+        utxo.output.value.assets.assets
+            .get(script.scriptHash)
+            .flatMap(_.keys.headOption)
+            .getOrElse(throw IllegalStateException("Bet UTxO must hold a bet token"))
 
     /** Reclaim the bet after expiration when the oracle never announced a winner.
       *
@@ -164,21 +173,23 @@ case class BettingTransactions(
           delegation = ShelleyDelegationPart.Null
         )
 
-        val betValue = betUtxo.output.value
+        val potLovelace = Value(betUtxo.output.value.coin)
         val base = TxBuilder(env, evaluator)
             .spend(utxos)
             .collaterals(collateralUtxo)
             .references(scriptUtxo)
             .spend(betUtxo, Action.Timeout)
+            // Burn the bet NFT so a reclaimed bet's token can't be re-locked; refund lovelace only.
+            .mint(script.scriptHash, scala.collection.Map(betToken(betUtxo) -> -1L), Data.unit)
             .requireSignature(signerPkh)
             .validFrom(java.time.Instant.ofEpochMilli(afterTime))
 
         val withPayouts =
-            if player2.hash == hex"" then base.payTo(enterprise(player1), betValue)
+            if player2.hash == hex"" then base.payTo(enterprise(player1), potLovelace)
             else
                 base
-                    // player1 keeps their stake plus the beacon token; player2 gets their stake back
-                    .payTo(enterprise(player1), betValue - Value(bet))
+                    // Each player gets their stake back; the NFT is burned, not handed out.
+                    .payTo(enterprise(player1), Value(bet))
                     .payTo(enterprise(player2), Value(bet))
 
         withPayouts

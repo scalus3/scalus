@@ -41,8 +41,6 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             result
      */
 
-    // TODO: test wrong tx fails
-
     test("Verify that a bet can be properly initialized"):
         val player1 = TestUtil.mockPubKeyHash(1)
         // Create test betting config for a new bet
@@ -86,7 +84,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for initial minting")
         assert(
-          result.budget == (ExUnits(memory = 118344L, steps = 38647173L))
+          result.budget == (ExUnits(memory = 103300L, steps = 34421333L))
         )
 
     test("Verify that player2 can join an existing bet"):
@@ -161,7 +159,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for player2 joining spending")
         assert(
-          result.budget == (ExUnits(memory = 270184L, steps = 94791213L))
+          result.budget == (ExUnits(memory = 273912L, steps = 95411945L))
         )
 
     test("Verify that the oracle can announce winner and trigger payout"):
@@ -197,16 +195,13 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
           ),
           outputs = List(
             TxOut(
-              // Payout goes to player2's address
+              // Payout goes to player2's address — the pot lovelace; the NFT is burned, not paid out.
               address = Address.fromPubKeyHash(player2),
-              // Winner takes all
-              value = Value.lovelace(6_000_000) + Value(
-                cs = policyId,
-                tn = utf8"lucky_number_slevin",
-                v = 1
-              )
+              value = Value.lovelace(6_000_000)
             )
           ),
+          // The bet NFT is burned on payout (one-shot).
+          mint = Value(policyId, utf8"lucky_number_slevin", -1),
           // Oracle signs to announce the winner
           signatories = List(oracle),
           // 1st of August 2025 - for 5 minutes
@@ -227,7 +222,50 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for announce winner spending")
         assert(
-          result.budget == (ExUnits(memory = 175705L, steps = 60401575L))
+          result.budget == (ExUnits(memory = 248793L, steps = 80769961L))
+        )
+
+    test("Verify that announcing the winner fails if the bet token is not burned"):
+        val player1 = TestUtil.mockPubKeyHash(1)
+        val player2 = TestUtil.mockPubKeyHash(2)
+        val oracle = TestUtil.mockPubKeyHash(3)
+        val config = Config(player1, player2, oracle, expiration = 1753939940)
+        val policyId = TestUtil.mockScriptHash(1)
+        val tx = TestUtil.mockTxOutRef(1, 0)
+        // Same as the success case but the NFT is NOT burned (it rides along to the winner) — the
+        // bet must be one-shot, so this is rejected.
+        val testTransaction = TxInfo.placeholder.copy(
+          inputs = List(
+            TxInInfo(
+              outRef = tx,
+              resolved = TxOut(
+                address = Address.fromScriptHash(policyId),
+                value = Value.lovelace(6_000_000) + Value(policyId, utf8"lucky_number_slevin", 1),
+                datum = OutputDatum.OutputDatum(config.toData)
+              )
+            )
+          ),
+          outputs = List(
+            TxOut(
+              address = Address.fromPubKeyHash(player2),
+              value = Value.lovelace(6_000_000) + Value(policyId, utf8"lucky_number_slevin", 1)
+            )
+          ),
+          // No mint: the token is not burned.
+          signatories = List(oracle),
+          validRange = Interval.between(1754027120, 1754027420)
+        )
+        val result = contract.program.runWithDebug(
+          ScriptContext(
+            txInfo = testTransaction,
+            redeemer = (Action.AnnounceWinner(player2, BigInt(0)): Action).toData,
+            scriptInfo = ScriptInfo.SpendingScript(txOutRef = tx)
+          )
+        )
+        assert(result.isFailure, "Announcing without burning the bet token must fail")
+        assert(
+          result.logs.exists(_.contains("must be burned")),
+          s"Expected burn error, got: ${result.logs.mkString(", ")}"
         )
 
     /** Build a joined-bet timeout transaction with the given outputs and validity range. */
@@ -251,6 +289,8 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             )
           ),
           outputs = outputs,
+          // The bet NFT is burned on timeout (one-shot).
+          mint = Value(policyId, utf8"lucky_number_slevin", -1),
           signatories = List(signatory),
           validRange = validRange
         )
@@ -263,11 +303,11 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         val policyId = TestUtil.mockScriptHash(1)
         val tx = TestUtil.mockTxOutRef(1, 0)
 
-        // Each player is refunded their 3 ADA stake; the beacon rides with player1's output.
+        // Each player is refunded their 3 ADA stake; the NFT is burned (not handed out).
         val outputs = List(
           TxOut(
             address = Address.fromPubKeyHash(player1),
-            value = Value.lovelace(3_000_000) + Value(policyId, utf8"lucky_number_slevin", 1)
+            value = Value.lovelace(3_000_000)
           ),
           TxOut(
             address = Address.fromPubKeyHash(player2),
@@ -285,7 +325,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         if result.isFailure then result.logs.foreach(println)
         assert(result.isSuccess, "Reclaim after expiration should succeed")
         assert(
-          result.budget == (ExUnits(memory = 246934L, steps = 83506481L))
+          result.budget == (ExUnits(memory = 321286L, steps = 104089233L))
         )
 
     test("Verify that reclaim before expiration fails"):

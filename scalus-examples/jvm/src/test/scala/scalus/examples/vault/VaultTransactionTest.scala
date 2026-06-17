@@ -149,8 +149,6 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val result = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(result.isSuccess)
-        // TODO: review after changing PairData representations
-        // assert(result.budget == ExUnits(memory = 264301, steps = 78_973160))
         assert(
           result.budget == (ExUnits(memory = 191122L, steps = 64733791L))
         )
@@ -404,8 +402,6 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
-        // TODO: review after changing PairData representations
-        // assert(withdrawResult.budget == ExUnits(memory = 264301, steps = 78_973160))
         assert(
           withdrawResult.budget == (ExUnits(memory = 191122L, steps = 64733791L))
         )
@@ -453,8 +449,6 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
 
         val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
-        // TODO: review after changing PairData representations
-        // assert(finalizeResult.budget == ExUnits(memory = 324554, steps = 92_685932))
         assert(
           finalizeResult.budget == (ExUnits(memory = 216106, steps = 67544582))
         )

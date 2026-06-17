@@ -88,8 +88,6 @@ object BettingValidator extends Validator {
                     (scriptHash, address, value, currentDatum.to[Config])
                 case _ => fail("Initial bet datum must be inline")
 
-        // ???: player2 can spend extra token to create a malformed bet, e.g. oracle === player1
-        // TODO: minted token should be single
         redeemer.to[Action] match
             case Action.Join =>
                 val (
@@ -159,8 +157,6 @@ object BettingValidator extends Validator {
                   "Joining must happen before the bet expiration"
                 )
 
-            // ???: oracle can spend token to create a malformed bet, e.g. oracle === player1
-            // TODO: all minted tokens should be burnt
             case Action.AnnounceWinner(winner, payoutOutputIdx) =>
                 // V005 fix: Use indexed lookup to prevent double satisfaction
                 require(
@@ -194,6 +190,13 @@ object BettingValidator extends Validator {
                   txInfo.validRange.isEntirelyAfter(expiration),
                   "The bet must have been expired (no future bets allowed) before announcing"
                 )
+                // Burn the bet NFT so the bet is one-shot and cannot be re-locked into a forged bet.
+                require(
+                  txInfo.mint.quantityOf(scriptHash, betTokenName(value, scriptHash)) === BigInt(
+                    -1
+                  ),
+                  "The bet token must be burned when announcing the winner"
+                )
 
             case Action.Timeout =>
                 // Reclaim is only possible once the bet has expired without a winner announced.
@@ -213,6 +216,13 @@ object BettingValidator extends Validator {
                   txInfo.findOwnInputsByCredential(address.credential).length === BigInt(1),
                   "Reclaim must spend exactly one bet input"
                 )
+                // Burn the bet NFT so a reclaimed bet's token can't be re-locked into a forged bet.
+                require(
+                  txInfo.mint.quantityOf(scriptHash, betTokenName(value, scriptHash)) === BigInt(
+                    -1
+                  ),
+                  "The bet token must be burned on timeout"
+                )
                 if player2.hash.isEmpty then
                     // No opponent joined — refund the whole pot to player1.
                     require(
@@ -231,6 +241,12 @@ object BettingValidator extends Validator {
                       "Player2 must be refunded their stake on timeout"
                     )
 
+    /** The bet NFT's token name — the single asset under the bet's own policy in its UTxO value. */
+    private inline def betTokenName(value: Value, scriptHash: PolicyId): TokenName =
+        value.tokens(scriptHash).toList match
+            case List.Cons((name, _), List.Nil) => name
+            case _                              => fail("Bet UTxO must hold exactly one bet token")
+
     /** Sum the lovelace paid to a public key's (enterprise) address across all outputs. */
     private inline def totalPaidTo(txInfo: TxInfo, pkh: PubKeyHash): BigInt =
         txInfo.outputs.foldLeft(BigInt(0)) { (acc, out) =>
@@ -247,39 +263,44 @@ object BettingValidator extends Validator {
         policyId: PolicyId,
         tx: TxInfo
     ): Unit =
-        val Config(player1, player2, oracle, expiration) = tx.outputs
-            .filter:
-                _.address === Address.fromScriptHash(policyId)
-            .match
-                case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) => datum.to[Config]
-                case _ =>
-                    fail(
-                      "There must be a single output with inline initial betting config that goes to the script"
-                    )
-        // Validate exactly one token minted under this policy (V003/V011 fix)
-        val mintedTokens = tx.mint.tokens(policyId).toList
-        require(
-          mintedTokens.length === BigInt(1),
-          "Must mint exactly one token type under this policy"
-        )
-        require(
-          mintedTokens.head._2 === BigInt(1),
-          "Must mint exactly one token"
-        )
-        require(
-          tx.isSignedBy(player1),
-          "Player1 must sign the transaction (they're creating the bet)"
-        )
-        require(
-          player2.hash.isEmpty,
-          "Player2 must be empty (no one has joined yet)"
-        )
-        require(
-          oracle !== player1,
-          "Oracle cannot be the same as player1 (conflict of interest)"
-        )
-        require(
-          tx.validRange.isEntirelyBefore(expiration),
-          "The bet must have a valid expiration time (after the current time)"
-        )
+        // Exactly one token type under this policy, either minted (+1, a new bet) or burned (-1, a
+        // bet ending). (V003/V011 fix.)
+        val quantity = tx.mint.tokens(policyId).toList match
+            case List.Cons((_, qty), List.Nil) => qty
+            case _ => fail("Must mint or burn exactly one token type under this policy")
+
+        if quantity === BigInt(-1) then
+            // Burning the bet NFT at the end of a bet. The token can only ever sit in a bet UTxO at
+            // the script address, so consuming it to burn necessarily runs the spending validator
+            // (AnnounceWinner / Timeout), which authorizes the end. Allowing the burn here is what
+            // makes the token a true one-shot: a finished bet's NFT is destroyed, so it can never be
+            // re-locked at the script with a forged config to bypass the initialization checks.
+            ()
+        else
+            require(quantity === BigInt(1), "Must mint exactly one token")
+            val Config(player1, player2, oracle, expiration) = tx.outputs
+                .filter:
+                    _.address === Address.fromScriptHash(policyId)
+                .match
+                    case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) => datum.to[Config]
+                    case _ =>
+                        fail(
+                          "There must be a single output with inline initial betting config that goes to the script"
+                        )
+            require(
+              tx.isSignedBy(player1),
+              "Player1 must sign the transaction (they're creating the bet)"
+            )
+            require(
+              player2.hash.isEmpty,
+              "Player2 must be empty (no one has joined yet)"
+            )
+            require(
+              oracle !== player1,
+              "Oracle cannot be the same as player1 (conflict of interest)"
+            )
+            require(
+              tx.validRange.isEntirelyBefore(expiration),
+              "The bet must have a valid expiration time (after the current time)"
+            )
 }

@@ -50,8 +50,6 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     )
 
     test(s"Script size: ${compiled.script.script.size} bytes") {
-        // TODO: review after changing PairData representations
-        // assert(compiled.script.script.size == 1485)
         assert(
           compiled.script.script.size ==
               1387
@@ -59,7 +57,6 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     }
 
     // Expected execution budgets for success tests
-    // TODO: review after changing PairData representations
     private val expectedBudgets: Map[String, ExUnits] = Map(
       "deposit_successful" -> (ExUnits(memory = 55178L, steps = 23322865L)),
       // "accept_successful" -> ExUnits(memory = 73023, steps = 27249620),
@@ -82,7 +79,6 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
       "refund_with_multiple_outputs_to_buyer" -> (ExUnits(memory = 100436L, steps = 38903164L))
     )
 
-    // TODO: review after changing PairData representations
     private val expectedFees: Map[String, Coin] = Map(
       "deposit_successful" -> Coin(4866),
       "accept_successful" -> Coin(5640),
