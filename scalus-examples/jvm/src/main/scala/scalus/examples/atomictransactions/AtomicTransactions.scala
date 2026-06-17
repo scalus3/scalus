@@ -2,38 +2,35 @@ package scalus.examples.atomictransactions
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.txbuilder.*
-import scalus.uplc.builtin.ByteString
+import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 
-/** Illustrates Cardano's native transaction atomicity, as stated in a respective rosetta contract
-  * spec.
+/** Illustrates Cardano's native transaction atomicity (rosetta `atomic_transactions`).
   *
-  * On EVM chains, atomicity requires a smart contract to batch sub-calls and roll back on failure.
-  * On Cardano, every transaction is atomic by the ledger rules: all inputs are consumed and all
-  * outputs are created in one step, or nothing changes at all.
+  * On EVM chains, performing several actions atomically requires a contract that batches sub-calls
+  * and rolls back on failure. On Cardano every transaction is atomic by the ledger rules: all inputs
+  * are consumed and all outputs are created in a single step, or nothing changes at all. So
+  * "batching" needs no contract — it is just spending several UTxOs in one transaction.
   */
-object AtomicTransactions {
-    private val env: CardanoInfo = CardanoInfo.mainnet
+case class AtomicTransactions(env: CardanoInfo) {
 
-    private val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("aa" * 32))
-
-    private val aliceAddress: Address = ???
-    private val bobAddress: Address = ???
-
-    // The ledger rejects the transaction if this UTxO is already spent.
-    val utxo1: (TransactionInput, TransactionOutput) =
-        TransactionInput(genesisHash, 0) ->
-            TransactionOutput(aliceAddress, Value.ada(3L))
-
-    // Same guarantee -- both inputs are validated together, atomically.
-    val utxo2: (TransactionInput, TransactionOutput) =
-        TransactionInput(genesisHash, 1) ->
-            TransactionOutput(aliceAddress, Value.lovelace(7L))
-
-    val txBuilder: TxBuilder =
-        TxBuilder(env)
-            // _Batching_ doesn't take any additional effort and happens by way of spending several UTxOs at once.
-            .spend(Utxo(utxo1))
-            .spend(Utxo(utxo2))
-            .payTo(bobAddress, Value.lovelace(9L))
+    /** Build one transaction that spends every UTxO in `senderUtxos` and pays `amount` to
+      * `recipient`, returning change to `changeAddress`.
+      *
+      * Either all of those inputs are consumed and the payment is made, or the whole transaction is
+      * rejected by the ledger — there is no partial outcome. That all-or-nothing guarantee is the
+      * atomicity an EVM batching contract would have to implement by hand.
+      */
+    def batchPay(
+        senderUtxos: Utxos,
+        recipient: Address,
+        amount: Coin,
+        changeAddress: Address,
+        signer: TransactionSigner
+    ): Transaction =
+        senderUtxos
+            .foldLeft(TxBuilder(env)) { case (builder, entry) => builder.spend(Utxo(entry)) }
+            .payTo(recipient, Value(amount))
+            .complete(availableUtxos = senderUtxos, changeAddress)
+            .sign(signer)
+            .transaction
 }

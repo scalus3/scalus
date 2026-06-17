@@ -133,8 +133,8 @@ every example's tests build only honest transactions.
 | **SimpleTransfer** | Low | ✅ FIXED | `datum.get` instead of `getOrFail` (opaque error on hash/none datum). **Fixed** (this branch): single `datum.getOrFail("Datum not found")` reused. Otherwise on-chain logic is sound (single-own-input guard, value + datum preservation). No ExUnits change (`getOrFail` compiles to the same happy-path cost). |
 | **Vault / many** | Low | `d.get` on datum `Option` instead of `getOrFail(Msg)` in several validators. |
 | **HTLC** | Low | Two error-message strings have inclusive/exclusive wording swapped (`HtlcValidator.scala:81-82`); `finite`/`finiteOrFail` discard the bound's closure flag (relies on ledger convention). Logic is correct. |
-| **Storage** | Low | `availableUtxos = userUtxos ++ prevTx.utxos` relies on selection skipping spent inputs; `// 4-byte big-endian` comment wrong (`BigInt.toByteArray` is minimal-width). No runtime bug (tests pass). |
-| **SimpleWallet / AtomicTransactions** | Low | `???` placeholder addresses (objects throw on init, untested); `withdraw` comment says "withdraw all" but does one bare `.spend`; AtomicTransactions mixes `Value.ada`/`Value.lovelace` (7/9 lovelace, below min-UTxO) in a "same guarantee" demo. |
+| **Storage** | Low | ✅ FIXED | `// 4-byte big-endian` comment was wrong (`BigInt.toByteArray` is minimal-width) — corrected; bare `throw new Exception` → `IllegalStateException`. No runtime bug. |
+| **SimpleWallet / AtomicTransactions** | Low | ✅ FIXED | Were illustrative `object`s with `???` placeholder addresses + `CardanoInfo.mainnet` (untested, throw on init); the `withdraw` did one bare `.spend` (incomplete); the atomic demo mixed `Value.ada`/`Value.lovelace` (7/9 lovelace, below min-UTxO). **Fixed** (this branch): reshaped both into testable `case class …(env)` builders with real params + Emulator tests. |
 
 **Cross-cutting bug recommendation:** the recurring root causes are (1) **no value-preservation on continuing
 outputs** (validate lovelace only, or validate datum only), and (2) **no "exactly one own script input" guard**
@@ -276,16 +276,19 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
 > 2. **Exact `ExUnits` assertions re-baseline on every validator change.** Decide a suite-wide policy up front:
 >    relax to an upper bound, or re-baseline each time. This branch re-baselined to preserve the existing style.
 
-### storage (off-chain only)
-- Structure: ✅ already conforms (`case class StorageTransactions(env, …)`, tested). Fix `// 4-byte big-endian`
-  comment; consider passing only fresh UTxOs to the append loop; replace `throw new Exception` with `require`.
+### storage (off-chain only) — ✅ DONE (this branch)
+- Already conformed (`case class StorageTransactions(env, …)`, tested). Fixed the wrong `// 4-byte big-endian`
+  comment (`BigInt.toByteArray` is minimal-width) and replaced the two bare `throw new Exception` with
+  `IllegalStateException`. (Deferred: passing only fresh UTxOs to the append loop — no runtime bug.)
 - Refs: `StorageTest`, README.
 
-### simplewallet (off-chain only)
-- Structure: reshape `object` with `???`/`mainnet` into `case class SimpleWalletTransactions(env: CardanoInfo)`
-  (testable); rename file `SimpleWallet.scala`→`SimpleWalletTransactions.scala`. Complete `withdraw` (or fix its
-  comment). Standardize on `.complete(...).sign(...)` vs `.build(changeTo=...)` across the off-chain trio.
-- Refs: README only (no test today — add one).
+### simplewallet (off-chain only) — ✅ DONE (this branch)
+- Reshaped the `object SimpleWallet`/`MultiSigWallet` (with `???`/`CardanoInfo.mainnet`) into testable
+  `case class SimpleWalletTransactions(env)` (`transfer`, `withdrawAll`) and `case class MultiSigWallet(env, owners,
+  required)` (native-script m-of-n); renamed `SimpleWallet.scala`→`SimpleWalletTransactions.scala`; completed the
+  incomplete `withdraw` (now `withdrawAll`); standardized on `.complete(...).sign(...)`. New `SimpleWalletTest`
+  (transfer, withdrawAll, 2-of-3 multisig accept + 1-of-3 reject).
+- Refs: `SimpleWalletTest`, README.
 
 ### pricebet — ✅ Critical fake-oracle hole FIXED (this branch); checked vs rosetta spec
 - Bug fixed (TDD, RED→GREEN): **fake-oracle authentication**. `Win` checked only that the oracle reference input sat
@@ -436,10 +439,11 @@ shims needed — they're discovered by package, not enumerated in `build.sbt`).
   scope for this example.
 - Refs: `AnonymousDataTest`.
 
-### atomictransactions (off-chain only)
-- Structure: reshape `object`+`???`+`mainnet` into `case class AtomicTransactions(env: CardanoInfo)` returning a
-  completed `Transaction`; use consistent `Value.ada` units in the demo. Filename already fits the convention.
-- Refs: README only (add a test).
+### atomictransactions (off-chain only) — ✅ DONE (this branch)
+- Reshaped the `object`+`???`+`mainnet` into `case class AtomicTransactions(env)` with a `batchPay` method that
+  spends every sender UTxO and pays a recipient in one atomic transaction (consistent `Coin`/`Value.ada` units, no
+  sub-min-UTxO amounts). New `AtomicTransactionsTest` (verifies all sender UTxOs are inputs and the batch submits).
+- Refs: `AtomicTransactionsTest`, README.
 
 ### Token transfer (#3) — missing
 - No native-token transfer example exists. Decide whether to add one (a `TokenTransferTransactions` off-chain

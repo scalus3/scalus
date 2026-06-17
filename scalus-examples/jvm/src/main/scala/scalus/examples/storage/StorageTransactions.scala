@@ -65,7 +65,7 @@ case class StorageTransactions(
             .map { case (_, d) =>
                 d match
                     case Data.B(bytes) => bytes
-                    case _ => throw new Exception("Expected ByteString data in storage node")
+                    case _ => throw new IllegalStateException("Expected ByteString data in storage node")
             }
             .foldLeft(ByteString.empty)(_ ++ _)
 
@@ -86,7 +86,8 @@ case class StorageTransactions(
                 case ((txs, prevTx), (chunk, index)) =>
                     val availableUtxos = userUtxos ++ prevTx.utxos
                     val tailUtxo = findTailUtxo(prevTx)
-                    // Key: 4-byte big-endian index, unique per chunk
+                    // Key: minimal big-endian encoding of the 1-based index (BigInt.toByteArray is
+                    // minimal-width, not fixed 4 bytes), unique per chunk
                     val chunkKey = ByteString.fromArray(BigInt(index + 1).toByteArray)
                     val newTx = ll.appendUnordered(
                       utxos = availableUtxos,
@@ -107,4 +108,4 @@ case class StorageTransactions(
                 output.inlineDatum.exists(datum => datum.to[Element].link == OnchainOption.None)
             }
             .map(Utxo.apply)
-            .getOrElse(throw new Exception("Tail UTxO not found in transaction"))
+            .getOrElse(throw new IllegalStateException("Tail UTxO not found in transaction"))
