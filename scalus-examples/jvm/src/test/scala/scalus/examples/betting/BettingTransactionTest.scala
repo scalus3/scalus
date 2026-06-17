@@ -567,7 +567,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val betUtxo = Utxo(
           provider
-              .queryUtxos(u => u.output.address == scriptAddress && u.input.transactionId == initTx.id)
+              .queryUtxos(u =>
+                  u.output.address == scriptAddress && u.input.transactionId == initTx.id
+              )
               .execute()
               .await()
               .toOption
@@ -604,7 +606,9 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
 
         val joinedBetUtxo = Utxo(
           provider
-              .queryUtxos(u => u.output.address == scriptAddress && u.input.transactionId == joinTx.id)
+              .queryUtxos(u =>
+                  u.output.address == scriptAddress && u.input.transactionId == joinTx.id
+              )
               .execute()
               .await()
               .toOption

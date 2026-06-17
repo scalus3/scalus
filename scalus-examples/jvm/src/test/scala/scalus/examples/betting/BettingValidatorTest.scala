@@ -305,8 +305,14 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         // Validity entirely before expiration
         val result = contract.program.runWithDebug(
           ScriptContext(
-            txInfo =
-                timeoutTx(policyId, tx, config, outputs, player1, Interval.between(1752989540, 1752990020)),
+            txInfo = timeoutTx(
+              policyId,
+              tx,
+              config,
+              outputs,
+              player1,
+              Interval.between(1752989540, 1752990020)
+            ),
             redeemer = (Action.Timeout: Action).toData,
             scriptInfo = ScriptInfo.SpendingScript(txOutRef = tx)
           )

@@ -27,44 +27,56 @@ class OptimizedPaymentSplitterValidatorTest
     private val expectedRewardBudgets: Map[String, ExUnits] = ScalaCompilerVersion.baseline(
       pre38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 221310L, steps = 71183860L
+          memory = 221310L,
+          steps = 71183860L
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 297952L, steps = 97573439L
+          memory = 297952L,
+          steps = 97573439L
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 378692L, steps = 126202370L
+          memory = 378692L,
+          steps = 126202370L
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 378692L, steps = 126202370L
+          memory = 378692L,
+          steps = 126202370L
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 378692L, steps = 126202370L
+          memory = 378692L,
+          steps = 126202370L
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 378692L, steps = 126202370L
+          memory = 378692L,
+          steps = 126202370L
         ),
         "success between 5 payees" -> ExUnits(memory = 552466L, steps = 190178288L),
         "success with multiple contract UTxOs" -> ExUnits(memory = 523938L, steps = 177448748L)
       ),
       since38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 216394L, steps = 69441311L
+          memory = 216394L,
+          steps = 69441311L
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 293036L, steps = 95830890L
+          memory = 293036L,
+          steps = 95830890L
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 373776L, steps = 124459821L
+          memory = 373776L,
+          steps = 124459821L
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 373776L, steps = 124459821L
+          memory = 373776L,
+          steps = 124459821L
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 373776L, steps = 124459821L
+          memory = 373776L,
+          steps = 124459821L
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 373776L, steps = 124459821L
+          memory = 373776L,
+          steps = 124459821L
         ),
         "success between 5 payees" -> ExUnits(memory = 547550L, steps = 188435739L),
         "success with multiple contract UTxOs" -> ExUnits(memory = 519022L, steps = 175706199L)

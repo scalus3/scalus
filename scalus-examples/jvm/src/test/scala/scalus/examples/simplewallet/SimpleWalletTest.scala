@@ -16,8 +16,10 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
     private def aliceProvider(): Emulator =
         Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) -> TransactionOutput.Babbage(Alice.address, Value.ada(10)),
-            TransactionInput(genesisHash, 1) -> TransactionOutput.Babbage(Alice.address, Value.ada(10))
+            TransactionInput(genesisHash, 0) -> TransactionOutput
+                .Babbage(Alice.address, Value.ada(10)),
+            TransactionInput(genesisHash, 1) -> TransactionOutput
+                .Babbage(Alice.address, Value.ada(10))
           ),
           initialContext = Context.testMainnet()
         )
@@ -35,7 +37,9 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
         )
         assert(p.submit(tx).await().isRight, "transfer should submit")
         assert(
-          tx.utxos.exists { case (_, o) => o.address == Bob.address && o.value.coin.value == 3_000_000L },
+          tx.utxos.exists { case (_, o) =>
+              o.address == Bob.address && o.value.coin.value == 3_000_000L
+          },
           "Bob must receive 3 ADA"
         )
     }
@@ -44,7 +48,8 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
         val p = aliceProvider()
         val utxos = p.findUtxos(Alice.address).await().toOption.get
 
-        val tx = wallet.withdrawAll(ownerUtxos = utxos, recipient = Bob.address, signer = Alice.signer)
+        val tx =
+            wallet.withdrawAll(ownerUtxos = utxos, recipient = Bob.address, signer = Alice.signer)
         assert(p.submit(tx).await().isRight, "withdrawAll should submit")
 
         // Every owner UTxO is consumed and nothing is left at Alice's address.

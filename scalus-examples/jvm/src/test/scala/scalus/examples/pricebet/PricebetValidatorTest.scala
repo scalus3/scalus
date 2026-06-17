@@ -172,7 +172,12 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         )
 
         provider.setSlot(beforeSlot)
-        assertFailure(provider, winTx, joinedPricebetUtxo._1, "Oracle reference input must hold the beacon token")
+        assertFailure(
+          provider,
+          winTx,
+          joinedPricebetUtxo._1,
+          "Oracle reference input must hold the beacon token"
+        )
     }
 
     test("Fails to win with a low rate") {

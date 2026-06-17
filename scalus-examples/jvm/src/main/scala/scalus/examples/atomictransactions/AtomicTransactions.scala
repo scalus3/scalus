@@ -7,8 +7,8 @@ import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 /** Illustrates Cardano's native transaction atomicity (rosetta `atomic_transactions`).
   *
   * On EVM chains, performing several actions atomically requires a contract that batches sub-calls
-  * and rolls back on failure. On Cardano every transaction is atomic by the ledger rules: all inputs
-  * are consumed and all outputs are created in a single step, or nothing changes at all. So
+  * and rolls back on failure. On Cardano every transaction is atomic by the ledger rules: all
+  * inputs are consumed and all outputs are created in a single step, or nothing changes at all. So
   * "batching" needs no contract — it is just spending several UTxOs in one transaction.
   */
 case class AtomicTransactions(env: CardanoInfo) {

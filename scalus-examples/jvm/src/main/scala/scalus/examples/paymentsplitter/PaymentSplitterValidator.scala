@@ -69,8 +69,7 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
                           "Contract input must contain only ADA"
                         )
                         (optTxOut, sumContractInputs + input.resolved.value.getLovelace)
-                    else
-                        fail("Input not from the contract or payer")
+                    else fail("Input not from the contract or payer")
             }
 
         val payeeInputWithChange = optPayeeInputWithChange.getOrFail(

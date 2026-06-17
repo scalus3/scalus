@@ -241,7 +241,10 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
             .complete(availableUtxos = charlesUtxos, Charles.address)
             .sign(Charles.signer)
             .transaction
-        assert(provider.submit(plantTx).await().isRight, "Planting the forged delegation should succeed")
+        assert(
+          provider.submit(plantTx).await().isRight,
+          "Planting the forged delegation should succeed"
+        )
         val forgedDelegation = Utxo(plantTx.utxos.find(_._2.address == txCreator.scriptAddr).get)
 
         // Charles tries to publish an attribute about Alice's identity via the forged delegation.

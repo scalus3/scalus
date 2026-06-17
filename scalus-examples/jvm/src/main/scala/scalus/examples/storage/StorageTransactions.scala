@@ -65,7 +65,8 @@ case class StorageTransactions(
             .map { case (_, d) =>
                 d match
                     case Data.B(bytes) => bytes
-                    case _ => throw new IllegalStateException("Expected ByteString data in storage node")
+                    case _ =>
+                        throw new IllegalStateException("Expected ByteString data in storage node")
             }
             .foldLeft(ByteString.empty)(_ ++ _)
 

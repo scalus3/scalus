@@ -23,8 +23,10 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
     private def createProvider(): Emulator =
         Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) -> TransactionOutput.Babbage(Alice.address, Value.ada(5000)),
-            TransactionInput(genesisHash, 1) -> TransactionOutput.Babbage(Alice.address, Value.ada(5000))
+            TransactionInput(genesisHash, 0) -> TransactionOutput
+                .Babbage(Alice.address, Value.ada(5000)),
+            TransactionInput(genesisHash, 1) -> TransactionOutput
+                .Babbage(Alice.address, Value.ada(5000))
           ),
           initialContext = Context.testMainnet()
         )
@@ -32,32 +34,56 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
     private def storedUtxo(tx: Transaction, hash: DataHash): Utxo =
         tx.utxos
             .collectFirst {
-                case entry @ (_, out) if out.datumOption.contains(DatumOption.Hash(hash)) => Utxo(entry)
+                case entry @ (_, out) if out.datumOption.contains(DatumOption.Hash(hash)) =>
+                    Utxo(entry)
             }
-            .getOrElse(fail("Committed UTxO with the datum hash not found in the store transaction"))
+            .getOrElse(
+              fail("Committed UTxO with the datum hash not found in the store transaction")
+            )
 
     test("store writes only the datum hash — the data itself is not on-chain") {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
 
-        val tx = txs.store(utxos, data, nonce, Coin(2_000_000L), Alice.address, Alice.address, Alice.signer)
+        val tx = txs.store(
+          utxos,
+          data,
+          nonce,
+          Coin(2_000_000L),
+          Alice.address,
+          Alice.address,
+          Alice.signer
+        )
         val result = provider.submit(tx).await()
         assert(result.isRight, s"store should succeed: $result")
 
         val committed = storedUtxo(tx, txs.commitmentHash(nonce, data))
         // Only the 32-byte hash is present; the preimage (the data) is nowhere on-chain.
-        assert(committed.output.datumOption.contains(DatumOption.Hash(txs.commitmentHash(nonce, data))))
+        assert(
+          committed.output.datumOption.contains(DatumOption.Hash(txs.commitmentHash(nonce, data)))
+        )
         assert(committed.output.inlineDatum.isEmpty, "the data must not be stored inline")
     }
 
     test("retrieve: only the correct (nonce, data) preimage opens the entry") {
         val provider = createProvider()
         val utxos = provider.findUtxos(Alice.address).await().toOption.get
-        val tx = txs.store(utxos, data, nonce, Coin(2_000_000L), Alice.address, Alice.address, Alice.signer)
+        val tx = txs.store(
+          utxos,
+          data,
+          nonce,
+          Coin(2_000_000L),
+          Alice.address,
+          Alice.address,
+          Alice.signer
+        )
         provider.submit(tx).await()
         val committed = storedUtxo(tx, txs.commitmentHash(nonce, data))
 
-        assert(txs.open(committed, nonce, data).contains(data), "correct preimage must open the entry")
+        assert(
+          txs.open(committed, nonce, data).contains(data),
+          "correct preimage must open the entry"
+        )
         assert(txs.open(committed, utf8"wrong-nonce", data).isEmpty, "wrong nonce must not open it")
         assert(
           txs.open(committed, nonce, Data.B(utf8"vote: no")).isEmpty,

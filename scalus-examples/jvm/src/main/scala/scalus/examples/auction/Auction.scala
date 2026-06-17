@@ -796,7 +796,7 @@ class AuctionInstance(
                         .payTo(
                           sellerAddr,
                           LedgerValue.lovelace(currentDatum.highestBid.toLong),
-                          (scriptHash: ByteString)
+                          scriptHash: ByteString
                         )
                 case scala.None =>
                     // No bids - seller reclaims the NFT (auctioned item)
