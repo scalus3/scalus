@@ -65,7 +65,7 @@ object StakePoolCertificatesValidator extends STS.Validator {
                 )
             else this
 
-        def processCertificate(cert: Certificate): ValidationState = cert match
+        infix def processCertificate(cert: Certificate): ValidationState = cert match
             case Certificate.PoolRegistration(
                   operator,
                   _,

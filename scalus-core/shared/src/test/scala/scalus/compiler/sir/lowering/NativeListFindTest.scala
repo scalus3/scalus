@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.compiler.{compile, Compile, Options, UplcRepr, UplcRepresentation}
+import scalus.compiler.{compile, Compile, Options, UplcRepr}
 import scalus.compiler.UplcRepresentation.TypeVar
 import scalus.compiler.UplcRepresentation.TypeVarKind.Transparent
 import scalus.uplc.{Constant, Term}

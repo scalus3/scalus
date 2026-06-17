@@ -12,7 +12,7 @@ import scalus.cardano.onchain.plutus.v3.*
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{toData, FromData, ToData}
-import scalus.{show as _, *}
+import scalus.*
 
 // CAPE spec: datum is Constr(0, [state, depositTime])
 // state: Constr(0, []) = Deposited, Constr(1, []) = Accepted, Constr(2, []) = Refunded

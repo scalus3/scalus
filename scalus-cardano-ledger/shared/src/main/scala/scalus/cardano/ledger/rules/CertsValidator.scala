@@ -15,7 +15,7 @@ object CertsValidator extends STS.Validator {
         def hasErrors: Boolean =
             missingRewardAccounts.nonEmpty || nonDrainingWithdrawals.nonEmpty
 
-        def validateWithdrawal(withdrawal: (RewardAccount, Coin)): ValidationState = {
+        infix def validateWithdrawal(withdrawal: (RewardAccount, Coin)): ValidationState = {
             val (rewardAccount, amount) = withdrawal
             val credential = rewardAccount.address.credential
             rewards.get(credential) match

@@ -173,7 +173,7 @@ class DropListTest extends AnyFunSuite {
     // Budget tests - verify cost model behavior
     test("dropList budget: cost increases linearly with n") {
         import scalus.uplc.Term.*
-        import scalus.uplc.{Constant, DefaultFun, DefaultUni, Term}
+        import scalus.uplc.{Constant, DefaultFun, DefaultUni}
 
         val listConst = Constant.List(
           DefaultUni.Integer,

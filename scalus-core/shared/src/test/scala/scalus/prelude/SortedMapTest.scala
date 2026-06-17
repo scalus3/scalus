@@ -3,7 +3,7 @@ package scalus.prelude
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.RequirementError
 import scalus.cardano.onchain.plutus.prelude.{identity, Eq, List, Option, Ord, SortedMap, These}
-import scalus.uplc.builtin.Data.{fromData, toData, FromData, ToData}
+import scalus.uplc.builtin.Data.{fromData, toData, FromData}
 import scalus.cardano.ledger.ExUnits
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.*

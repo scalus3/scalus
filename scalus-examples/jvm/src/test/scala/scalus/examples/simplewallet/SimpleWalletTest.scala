@@ -5,7 +5,7 @@ import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.node.Emulator
 import scalus.testing.kit.Party.{Alice, Bob, Charles, Dave}
-import scalus.testing.kit.{ScalusTest, TestUtil}
+import scalus.testing.kit.ScalusTest
 import scalus.testing.kit.TestUtil.{genesisHash, testEnvironment}
 import scalus.utils.await
 

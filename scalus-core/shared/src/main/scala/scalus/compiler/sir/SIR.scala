@@ -60,7 +60,6 @@ case class AnnotationsDecl(
 }
 
 case object AnnotationsDecl {
-    import scala.quoted.*
 
     inline def empty: AnnotationsDecl = ${ SIRMacro.emptyAnnotationsDeclImpl }
 

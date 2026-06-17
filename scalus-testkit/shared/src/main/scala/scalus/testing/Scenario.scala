@@ -529,7 +529,7 @@ object Scenario {
                 WaitFuture(fa.transform {
                     case Success(a) => Success(Done(state, a))
                     case Failure(e) => Success(ScenarioError(state, e))
-                }(ExecutionContext.parasitic))
+                }(using ExecutionContext.parasitic))
             )
     }
 

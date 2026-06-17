@@ -88,7 +88,7 @@ object StakeCertificatesValidator extends STS.Validator {
                       deregisteredInTx = withRefundCheck.deregisteredInTx + credential
                     )
 
-        def processCertificate(cert: Certificate): ValidationState = cert match
+        infix def processCertificate(cert: Certificate): ValidationState = cert match
             case Certificate.RegCert(credential, suppliedDeposit) =>
                 handleRegistration(credential, suppliedDeposit)
             case Certificate.StakeRegDelegCert(credential, _, deposit) =>

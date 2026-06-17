@@ -116,7 +116,7 @@ object EscrowOffChain:
                 )
                 if scriptUtxo.isPresent then {
                     println("Found UTXO!")
-                    break
+                    break()
                 }
                 attempts += 1
                 Thread.sleep(15 * 1000)
@@ -175,7 +175,7 @@ object EscrowOffChain:
                         .get()
                         .getQuantity
                     println(s"Found UTXO with ${amount} lovelace!")
-                    break
+                    break()
                 }
                 attempts += 1
                 Thread.sleep(15 * 1000)

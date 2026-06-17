@@ -430,7 +430,7 @@ class ScenarioTest extends AnyFunSuite {
         import org.scalacheck.Gen
         val initial = mkState(Alice)
         val scenario = async[Scenario] {
-            val branch = Scenario.choices(1 to 10: _*).await
+            val branch = Scenario.choices((1 to 10)*).await
             val x = Scenario.sample(Gen.choose(1, 1000)).await
             (branch, x)
         }

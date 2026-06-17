@@ -203,7 +203,7 @@ trait BlockchainReader extends BlockchainReaderTF[Future] {
                     case Some((i, o)) => Right(Utxo(i, o))
                     case None => Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(Set(input))))
             }
-        }(executionContext)
+        }(using executionContext)
     }
 
     /** Find UTxOs by a set of transaction inputs.
@@ -219,7 +219,7 @@ trait BlockchainReader extends BlockchainReaderTF[Future] {
                 if foundUtxos.size == inputs.size then Right(foundUtxos)
                 else Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(inputs)))
             }
-        }(executionContext)
+        }(using executionContext)
     }
 
     /** Find all UTxOs at the given address.
@@ -257,7 +257,7 @@ trait BlockchainReader extends BlockchainReaderTF[Future] {
         findUtxos(UtxoQuery(UtxoSource.FromTransaction(txHash))).map {
             case Right(_) => TransactionStatus.Confirmed
             case Left(_)  => TransactionStatus.NotFound
-        }(executionContext)
+        }(using executionContext)
 
 }
 
@@ -320,8 +320,8 @@ trait BlockchainProvider extends BlockchainProviderTF[Future] with BlockchainRea
                             s"Transaction ${txHash.toHex} not confirmed, last status: $status"
                           )
                         )
-                }(executionContext)
-        }(executionContext)
+                }(using executionContext)
+        }(using executionContext)
 
 }
 
