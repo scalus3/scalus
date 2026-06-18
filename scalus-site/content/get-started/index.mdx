@@ -56,21 +56,28 @@ This guide will help you set up your Scalus development environment and create y
     ## Get Your First Cardano Validator
     
     ```sh copy
-   sbt new scalus3/hello.g8
+    sbt new scalus3/hello.g8
     ```
-    This ran the template scalus3/hello.g8 using [Giter8](https://www.foundweekends.org/giter8/). Let’s take a look at what just got generated:
+    This ran the template `scalus3/hello.g8` using [Giter8](https://www.foundweekends.org/giter8/). Let’s take a look at what just got generated:
     ```ansi
-    validator/
-    ├── HelloCardano.scala        # Simple validator
-    ├── HelloCardano.test.scala   # Simple tests
-    ├── project.scala             # Project configuration
-    └── README.md
+    hello-cardano/
+    ├── HelloCardano.scala               # Plutus V3 spending validator
+    ├── HelloCardano.test.scala          # Unit tests
+    ├── HelloCardanoIntegration.test.scala  # Submit-based tests
+    ├── HelloCardanoContract.scala       # Contract: compiled script + CIP-57 blueprint
+    ├── project.scala                    # Scala CLI build configuration
+    ├── build.sbt                        # sbt build configuration
+    └── Readme.md
     ```
 
+    Want the full DApp toolchain (CIP-57 blueprint generation and on-chain deployment) ready to go?
+    Generate the richer starter instead with `sbt new scalus3/validator.g8`. Both templates, and all
+    the commands their projects support, are covered in [Project Commands](/docs/get-started/project-commands).
+
     ## Run Your First Validator Tests
-    Run unit tests (MUnit, ScalaTest and ScalaCheck):
+    Run unit tests (ScalaTest and ScalaCheck):
     ```sh copy
-    scala-cli test hello
+    cd hello-cardano && scala-cli test .
     ```
     All is good if you see the following output:
     ```sh
@@ -111,31 +118,35 @@ This guide will help you set up your Scalus development environment and create y
 
 
     ```scala filename="HelloCardano.scala" copy showLineNumbers
-    import scalus.*
+    package hello
+
+    import scalus.compiler.Compile
     import scalus.uplc.builtin.Data
-    import scalus.cardano.onchain.plutus.v3.{PubKeyHash, TxInfo, TxOutRef}
+    import scalus.cardano.onchain.plutus.v3.*
     import scalus.cardano.onchain.plutus.prelude.*
 
     /** This validator demonstrates two key validation checks:
-        * 1. It verifies that the transaction is signed by the owner's public key hash (stored in the datum)
-        * 2. It confirms that the redeemer contains the exact string "Hello, Cardano!"
-        * 
-        * Both conditions must be met for the validator to approve spending the UTxO.
-          */
-
+      *   1. It verifies that the transaction is signed by the owner's public key
+      *      hash (stored in the datum).
+      *   1. It confirms that the redeemer contains the exact string "Hello,
+      *      Cardano!".
+      *
+      * Both conditions must be met for the validator to approve spending the UTxO.
+      */
     @Compile
-    object HelloCardano extends Validator:
+    object HelloCardano extends Validator {
         inline override def spend(
             datum: Option[Data],
             redeemer: Data,
             tx: TxInfo,
-            outRef: TxOutRef
-        ): Unit =
+            ownRef: TxOutRef
+        ): Unit = {
             val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
-            val signed = tx.signatories.contains(owner)
-            require(signed, "Must be signed")
+            require(tx.isSignedBy(owner), "Must be signed")
             val saysHello = redeemer.to[String] == "Hello, Cardano!"
             require(saysHello, "Invalid redeemer")
+        }
+    }
     ```
 
 </Steps>
@@ -145,6 +156,7 @@ This guide will help you set up your Scalus development environment and create y
 Now that your environment is ready, choose your path:
 
 **Learn the fundamentals:**
+- [Project Commands](/docs/get-started/project-commands) — Templates plus every sbt/Scala CLI command: test, profile, blueprint, deploy
 - [Write Smart Contracts](/docs/smart-contracts/developing-smart-contracts) — Validators, data conversion, compilation
 - [Build Transactions](/docs/transactions/building-first-transaction) — Construct and submit transactions
 - [Test Locally](/docs/testing/unit-testing) — Unit testing and debugging

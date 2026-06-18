@@ -10,6 +10,11 @@ The `ScalusBlueprintPlugin` adds two sbt tasks to your project: `blueprint` for 
 [CIP-57](https://cips.cardano.org/cip/CIP-57) blueprint JSON files into JARs, and `deploy`
 for publishing a contract as a reference script UTxO via Blockfrost.
 
+Projects scaffolded from the [`hello.g8` or `validator.g8` templates](/docs/get-started/project-commands)
+come with this plugin already wired in — along with `profile`, `emulator`, and `devkit` commands.
+If you're starting from a template, the `blueprint` and `deploy` tasks below work out of the box; the
+setup below is for adding the plugin to an existing project.
+
 ## Setup
 
 `project/plugins.sbt`:
