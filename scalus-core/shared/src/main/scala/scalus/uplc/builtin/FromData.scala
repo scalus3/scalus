@@ -2,7 +2,7 @@ package scalus.uplc.builtin
 
 import scalus.uplc.builtin.Builtins.{decodeUtf8, unBData, unConstrData, unIData}
 import scalus.compiler.Compile
-import scalus.CompileDerivations
+import scalus.compiler.CompileDerivations
 
 import scala.quoted.*
 

@@ -4,7 +4,7 @@ import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString.{fromString, utf8}
 import scalus.uplc.builtin.{BuiltinPair, ByteString, Data}
 import scalus.compiler.Compile
-import scalus.CompileDerivations
+import scalus.compiler.CompileDerivations
 
 /** * A typeclass for converting values of type `A` to a `String`.
   *

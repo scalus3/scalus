@@ -268,7 +268,7 @@ final class SIRCompiler(
     }
 
     private val CompileAnnot = requiredClassRef("scalus.compiler.Compile").symbol.asClass
-    private val ScalusDebugAnnot = requiredClassRef("scalus.ScalusDebug").symbol.asClass
+    private val ScalusDebugAnnot = requiredClassRef("scalus.compiler.ScalusDebug").symbol.asClass
     private val IgnoreAnnot = requiredClassRef("scalus.compiler.Ignore").symbol.asClass
 
     private val uplcIntrinsicAnnot = Symbols.requiredClass("scalus.uplc.builtin.uplcIntrinsic")
@@ -2520,7 +2520,7 @@ final class SIRCompiler(
                     val termSymbol = qual.tpe.termSymbol
                     if termSymbol.exists then
                         val scalusCompileDerivations =
-                            Symbols.requiredClass("scalus.CompileDerivations")
+                            Symbols.requiredClass("scalus.compiler.CompileDerivations")
                         val isDerived = termSymbol.name.toString.startsWith("derived$")
                         if isDerived && !qual.tpe.baseType(scalusCompileDerivations).exists then
                             error(

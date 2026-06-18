@@ -402,6 +402,21 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       },
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // ScalusDebug and CompileDerivations moved to scalus.compiler.*; deprecated type aliases
+        // kept in package scalus for source compat. The marker trait CompileDerivations has no
+        // members, so dropping it from these interfaces' hierarchy is binary-safe.
+        ProblemFilters.exclude[MissingClassProblem]("scalus.ScalusDebug"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.CompileDerivations"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.builtin.FromData"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.builtin.ToData"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Eq"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Ord"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Show"),
+        ProblemFilters.exclude[MissingTypesProblem](
+          "scalus.cardano.onchain.plutus.prelude.ShowByteString"
+        )
+      ),
 
       // enable when debug compilation of tests
       Test / scalacOptions += "-color:never",

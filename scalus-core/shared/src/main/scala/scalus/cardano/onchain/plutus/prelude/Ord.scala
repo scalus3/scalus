@@ -1,7 +1,7 @@
 package scalus.cardano.onchain.plutus.prelude
 
 import scalus.compiler.Compile
-import scalus.CompileDerivations
+import scalus.compiler.CompileDerivations
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.{BuiltinPair, Data}
 import scala.annotation.nowarn

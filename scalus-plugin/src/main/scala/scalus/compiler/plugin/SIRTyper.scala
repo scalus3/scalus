@@ -598,7 +598,7 @@ class SIRTyper(using Context) {
         @unused typeSymbol: Symbol,
         env: SIRTypeEnv
     ): Option[SIRType] = {
-        if originType <:< Symbols.requiredClassRef("scalus.CompileDerivations")
+        if originType <:< Symbols.requiredClassRef("scalus.compiler.CompileDerivations")
             || originType.typeSymbol.hasAnnotation(
               Symbols.requiredClass("java.lang.FunctionalInterface")
             )

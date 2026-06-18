@@ -1,12 +1,7 @@
 package scalus
 
-import scala.annotation.Annotation
+@deprecated("use scalus.compiler.ScalusDebug instead", "0.18.1")
+type ScalusDebug = scalus.compiler.ScalusDebug
 
-final class ScalusDebug(val debugLevel: Int) extends Annotation
-
-/** This is a marker trait for the compiler plugin to compile derivations of the instances of the
-  * type classes.
-  * @see
-  *   scalus.prelude.ToData, scalus.prelude.FromData
-  */
-trait CompileDerivations
+@deprecated("use scalus.compiler.CompileDerivations instead", "0.18.1")
+type CompileDerivations = scalus.compiler.CompileDerivations

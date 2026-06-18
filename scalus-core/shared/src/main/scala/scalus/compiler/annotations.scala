@@ -6,6 +6,16 @@ import scala.annotation.StaticAnnotation
 final class Compile extends Annotation
 final class Ignore extends Annotation
 
+/** Sets the debug level for compilation of a `@Compile`-annotated definition. */
+final class ScalusDebug(val debugLevel: Int) extends Annotation
+
+/** This is a marker trait for the compiler plugin to compile derivations of the instances of the
+  * type classes.
+  * @see
+  *   scalus.uplc.builtin.ToData, scalus.uplc.builtin.FromData
+  */
+trait CompileDerivations
+
 /** Marks a trait/class as having an on-chain substitute object.
   *
   * When the Scalus plugin compiles a method call on a type annotated with `@OnChainSubstitute`, it
