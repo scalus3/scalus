@@ -46,7 +46,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
 
         // Apply compressed accumulator as ByteString parameter
         val compressedAcc = bls12_381_G2_compress(acc)
-        val applied = AllowlistContract.withErrorTraces(compressedAcc)
+        val applied = AllowlistContract.compiled.withErrorTraces(compressedAcc)
         val script = Script.PlutusV3(applied.program.cborByteString)
         val scriptAddress = scriptAddr(script.scriptHash)
 
@@ -96,7 +96,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
         )
 
         val compressedAcc = bls12_381_G2_compress(acc)
-        val applied = AllowlistContract.withErrorTraces(compressedAcc)
+        val applied = AllowlistContract.compiled.withErrorTraces(compressedAcc)
         val script = Script.PlutusV3(applied.program.cborByteString)
         val scriptAddress = scriptAddr(script.scriptHash)
 

@@ -88,7 +88,7 @@ class PaymentSplitterTxBuilderTest
         // Use Party PKHs for the validator parameter (matches Party addresses we'll use for UTxOs)
         val payeePkhs: scalus.cardano.onchain.plutus.prelude.List[scalus.uplc.builtin.ByteString] =
             tc.payees.map(p => payeeParty(p).addrKeyHash)
-        val paramScript = applyParam(NaivePaymentSplitterContract, payeePkhs.toData)
+        val paramScript = applyParam(NaivePaymentSplitterContract.compiled, payeePkhs.toData)
         val (contractUtxos, feePayerUtxo, collateralUtxo) = buildUtxos(tc, paramScript.scriptHash)
         val emulator = Emulator((contractUtxos :+ feePayerUtxo :+ collateralUtxo).toMap)
 
@@ -156,7 +156,7 @@ class PaymentSplitterTxBuilderTest
         // AddrKeyHash is an opaque type extending ByteString, so it can be used directly
         val payeePkhs: scalus.cardano.onchain.plutus.prelude.List[scalus.uplc.builtin.ByteString] =
             tc.payees.map(p => payeeParty(p).addrKeyHash)
-        val paramScript = applyParam(OptimizedPaymentSplitterContract, payeePkhs.toData)
+        val paramScript = applyParam(OptimizedPaymentSplitterContract.compiled, payeePkhs.toData)
         val (contractUtxos, feePayerUtxo, collateralUtxo) = buildUtxos(tc, paramScript.scriptHash)
         // Extra UTxO for stake registration transaction
         val stakeRegUtxo = TransactionInput(genesisHash, 300) ->

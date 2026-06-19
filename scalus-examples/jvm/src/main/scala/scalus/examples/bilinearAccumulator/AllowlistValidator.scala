@@ -1,5 +1,6 @@
 package scalus.examples.bilinearAccumulator
 
+import scalus.cardano.blueprint.{Blueprint, Contract}
 import scalus.compiler.Compile
 import scalus.compiler.Options
 import scalus.uplc.PlutusV3
@@ -63,6 +64,21 @@ object AllowlistValidator extends ParameterizedValidator[ByteString] {
     }
 }
 
-private given Options = Options.release
+/** Blueprint and compiled script for the bilinear-accumulator allowlist contract. */
+object AllowlistContract extends Contract {
+    private given Options = Options.release
 
-lazy val AllowlistContract = PlutusV3.compile(AllowlistValidator.validate)
+    /** Compiled validator. Apply the compressed accumulator (ByteString) to get a usable script. */
+    lazy val compiled = PlutusV3.compile(AllowlistValidator.validate)
+
+    lazy val blueprint = Blueprint.plutusV3[ByteString, ByteString](
+      title = "Bilinear-accumulator allowlist",
+      description =
+          "Spend validator gated by a bilinear-accumulator membership proof. Parameterized by the " +
+              "compressed accumulator; the redeemer is a compressed G2 membership proof bound to " +
+              "the first transaction signatory.",
+      version = "1.0.0",
+      license = Some("Apache-2.0"),
+      compiled = compiled
+    )
+}

@@ -14,12 +14,18 @@ class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
 
     private val crowdfundingContract = CrowdfundingContract.compiled.withErrorTraces
 
-    test(s"Crowdfunding validator size is ${CrowdfundingContract.compiled.script.script.size} bytes") {
-        println(s"Crowdfunding validator size: ${CrowdfundingContract.compiled.script.script.size} bytes")
+    test(
+      s"Crowdfunding validator size is ${CrowdfundingContract.compiled.script.script.size} bytes"
+    ) {
+        println(
+          s"Crowdfunding validator size: ${CrowdfundingContract.compiled.script.script.size} bytes"
+        )
         assert(CrowdfundingContract.compiled.script.script.size > 0)
     }
 
-    test(s"Donation minting policy size is ${DonationMintingContract.compiled.script.script.size} bytes") {
+    test(
+      s"Donation minting policy size is ${DonationMintingContract.compiled.script.script.size} bytes"
+    ) {
         println(
           s"Donation minting policy size: ${DonationMintingContract.compiled.script.script.size} bytes"
         )

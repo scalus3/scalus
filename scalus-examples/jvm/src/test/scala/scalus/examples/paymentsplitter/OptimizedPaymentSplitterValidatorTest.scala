@@ -18,7 +18,7 @@ class OptimizedPaymentSplitterValidatorTest
     with ScalusTest
     with PaymentSplitterTestCases {
 
-    private val contract = OptimizedPaymentSplitterContract.withErrorTraces
+    private val contract = OptimizedPaymentSplitterContract.compiled.withErrorTraces
     private val lockTxId = random[TxId]
     private val payeesTxId = random[TxId]
     private val txId = random[TxId]

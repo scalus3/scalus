@@ -21,9 +21,9 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
     import DecentralizedIdentityTest.{*, given}
 
     test(
-      s"DecentralizedIdentity validator size is ${DecentralizedIdentityContract.script.script.size} bytes"
+      s"DecentralizedIdentity validator size is ${DecentralizedIdentityContract.compiled.script.script.size} bytes"
     ) {
-        info(s"Validator size: ${DecentralizedIdentityContract.script.script.size} bytes")
+        info(s"Validator size: ${DecentralizedIdentityContract.compiled.script.script.size} bytes")
     }
 
     test("Create identity: mints identity NFT at script address") {
@@ -532,7 +532,7 @@ class DecentralizedIdentityTest extends AnyFunSuite, ScalusTest {
 
 object DecentralizedIdentityTest extends ScalusTest {
     private given env: CardanoInfo = testEnvironment
-    private val compiledContract = DecentralizedIdentityContract.withErrorTraces
+    private val compiledContract = DecentralizedIdentityContract.compiled.withErrorTraces
 
     // Use slot-derived times so they fall within valid slots for the emulator
     val now: Instant = env.slotConfig.slotToInstant(0)

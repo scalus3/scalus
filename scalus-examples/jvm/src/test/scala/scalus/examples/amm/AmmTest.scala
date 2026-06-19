@@ -17,8 +17,8 @@ import scalus.utils.await
 class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
     import AmmTest.{*, given}
 
-    test(s"AmmValidator size: ${AmmContract.script.script.size} bytes") {
-        info(s"Validator size: ${AmmContract.script.script.size} bytes")
+    test(s"AmmValidator size: ${AmmContract.compiled.script.script.size} bytes") {
+        info(s"Validator size: ${AmmContract.compiled.script.script.size} bytes")
     }
 
     test("createPool: creates empty pool with zero reserves") {
@@ -284,7 +284,7 @@ object AmmTest extends ScalusTest {
       feeDenominator = BigInt(1000)
     )
 
-    private val compiledContract = AmmContract.withErrorTraces
+    private val compiledContract = AmmContract.compiled.withErrorTraces
 
     private def aliceTokenUtxos: Map[TransactionInput, TransactionOutput] = {
         val tokenValue =

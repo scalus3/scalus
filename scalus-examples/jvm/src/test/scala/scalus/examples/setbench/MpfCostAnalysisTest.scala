@@ -301,7 +301,7 @@ class MpfCostAnalysisTest extends AnyFunSuite {
 
     // --- Side-by-side full-validator comparison ---
 
-    private lazy val scalusLightProgram: Program = Mpf16oLightContract.program
+    private lazy val scalusLightProgram: Program = Mpf16oLightContract.compiled.program
 
     /** Build a minimal ScriptContext for a spending validator with the given datum and redeemer. */
     private def makeScriptContext(datumData: Data, redeemerData: Data): ScriptContext = {

@@ -19,8 +19,8 @@ import scalus.utils.await
 class LinkedListTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
     import LinkedListTest.{*, given}
 
-    test(s"LinkedListValidator size: ${LinkedListContract.script.script.size} bytes") {
-        info(s"Validator size: ${LinkedListContract.script.script.size} bytes")
+    test(s"LinkedListValidator size: ${LinkedListContract.compiled.script.script.size} bytes") {
+        info(s"Validator size: ${LinkedListContract.compiled.script.script.size} bytes")
     }
 
     test("init: valid empty list") {
@@ -986,7 +986,7 @@ object LinkedListTest extends ScalusTest {
     val rootKeyBytes: ByteString = ByteString.fromString("HEAD")
     val prefixBytes: ByteString = ByteString.fromString("N:")
 
-    private val compiledContract = LinkedListContract.withErrorTraces
+    private val compiledContract = LinkedListContract.compiled.withErrorTraces
 
     def nodeKey(label: String): ByteString = ByteString.fromString(label)
 

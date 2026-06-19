@@ -17,8 +17,10 @@ import scalus.utils.await
 class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
     import EditableNftValidatorTest.{*, given}
 
-    test(s"EditableNft validator size is ${EditableNftContract.script.script.size} bytes") {
-        info(s"Validator size: ${EditableNftContract.script.script.size} bytes")
+    test(
+      s"EditableNft validator size is ${EditableNftContract.compiled.script.script.size} bytes"
+    ) {
+        info(s"Validator size: ${EditableNftContract.compiled.script.script.size} bytes")
     }
 
     test("Mint: successful minting creates paired reference and user NFTs") {
@@ -90,7 +92,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
         // must reject this.
         val aliceUtxos = provider.findUtxos(Alice.address).await().toOption.get
         val decoy = Utxo(aliceUtxos.head)
-        val parameterizedScript = EditableNftContract.withErrorTraces.apply(
+        val parameterizedScript = EditableNftContract.compiled.withErrorTraces.apply(
           TxOutRef(TxId(seedUtxo.input.transactionId), BigInt(seedUtxo.input.index)).toData
         )
         val tokenId2 = utf8"forgery"
@@ -134,7 +136,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
         val seedUtxo = Utxo(utxos.head)
         val txCreator = createTxCreator(seedUtxo)
 
-        val parameterizedScript = EditableNftContract.withErrorTraces.apply(
+        val parameterizedScript = EditableNftContract.compiled.withErrorTraces.apply(
           TxOutRef(TxId(seedUtxo.input.transactionId), BigInt(seedUtxo.input.index)).toData
         )
         val tokenId2 = utf8"forged-via-burn"
@@ -435,7 +437,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
 
 object EditableNftValidatorTest extends ScalusTest {
     private given env: CardanoInfo = testEnvironment
-    private val compiledContract = EditableNftContract.withErrorTraces
+    private val compiledContract = EditableNftContract.compiled.withErrorTraces
 
     def createTxCreator(
         seedUtxo: Utxo,

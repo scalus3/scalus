@@ -19,7 +19,7 @@ class NaivePaymentSplitterValidatorTest
     with ScalusTest
     with PaymentSplitterTestCases {
 
-    private val contract = NaivePaymentSplitterContract.withErrorTraces
+    private val contract = NaivePaymentSplitterContract.compiled.withErrorTraces
     private val lockTxId = random[TxId]
     private val payeesTxId = random[TxId]
     private val txId = random[TxId]

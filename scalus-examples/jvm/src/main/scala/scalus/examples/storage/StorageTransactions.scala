@@ -24,7 +24,7 @@ case class StorageTransactions(
     private val ll = LinkedListOffchain(
       env = env,
       evaluator = evaluator,
-      mintingContract = LinkedListContract,
+      mintingContract = LinkedListContract.compiled,
       rootKey = rootKey,
       prefix = prefix
     )
