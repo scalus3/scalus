@@ -7,8 +7,18 @@ on:
       - '.github/workflows/**'
 jobs:
   test:
+    name: ${{ matrix.name }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      # Don't cancel the other Scala version's job when one fails.
+      fail-fast: false
+      matrix:
+        include:
+          # Full build/test on the default LTS (incl. format + mima checks).
+          - { name: lts, task: ci-jvm }
+          # Cross-build/test on Scala 3.8.4. Runs in parallel with `lts`.
+          - { name: next, task: ci-jvm-next }
     permissions:
       contents: read
       id-token: write
@@ -25,7 +35,7 @@ jobs:
       - name: Build and test in Nix devshell
         id: build
         run: |
-          nix develop .#ci --accept-flake-config --command bash -c "sbt ci-jvm" 2>&1 | tee build.log
+          nix develop .#ci --accept-flake-config --command bash -c "sbt ${{ matrix.task }}" 2>&1 | tee build.log
           BUILD_EXIT_CODE=${PIPESTATUS[0]}
           WARNINGS=$(grep -ci "warning:" build.log) || WARNINGS=0
           echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
@@ -37,7 +47,7 @@ jobs:
           WARNINGS: ${{ steps.build.outputs.warnings }}
         with:
           webhook: ${{ secrets.DISCORD_WEBHOOK }}
-          title: "[${{ github.event.repository.name }}] CI-JVM ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.actor }} on ${{ github.ref_name }}"
+          title: "[${{ github.event.repository.name }}] CI-JVM (${{ matrix.name }}) ${{ job.status == 'success' && '✅' || '❌' }} - ${{ github.actor }} on ${{ github.ref_name }}"
           description: "[${{ github.event.head_commit.message }}](${{ github.event.head_commit.url }})${{ steps.build.outputs.warnings > 0 && format('\n⚠️ Warnings: {0}', steps.build.outputs.warnings) || '' }}"
           url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
           username: "GitHub Actions"

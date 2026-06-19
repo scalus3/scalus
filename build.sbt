@@ -964,14 +964,18 @@ addCommandAlias(
 )
 addCommandAlias(
   "ci-jvm",
-  // First pass: full build/test on the default Scala 3.3.7 LTS.
-  // Second pass: cross-build on Scala 3.8.4 (scala3NextVersion). Requires JDK 17+ — the `ci`
-  // nix devshell pins JDK 21. We must NOT use the `jvm` aggregate here: modules that don't
-  // list 3.8.4 (scalusUplcJitCompiler, scalusUtxoCell, bench) fall back to 3.3.7 and then fail
-  // to read the 3.8.4 TASTy of scalus-core they depend on. So target only the modules that
-  // list 3.8.4 and whose dependency closure is entirely 3.8.4-capable.
-  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/test;mima;" +
-      "++3.8.4;scalusPlugin/Test/compile;scalusJVM/Test/compile;scalusCardanoLedgerJVM/Test/compile;" +
+  // Full build/test on the default LTS. Includes format/mima checks (version-independent, so they
+  // run only here). Runs in parallel with `ci-jvm-next` as separate CI-JVM matrix jobs.
+  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/test;mima"
+)
+addCommandAlias(
+  "ci-jvm-next",
+  // Cross-build/test on Scala 3.8.4 (scala3NextVersion). Requires JDK 17+ — the `ci` nix devshell
+  // pins JDK 21. We must NOT use the `jvm` aggregate here: modules that don't list 3.8.4
+  // (scalusUplcJitCompiler, scalusUtxoCell, bench) fall back to the LTS and then fail to read the
+  // 3.8.4 TASTy of scalus-core they depend on. So target only the modules that list 3.8.4 and whose
+  // dependency closure is entirely 3.8.4-capable.
+  "++3.8.4;clean;scalusPlugin/Test/compile;scalusJVM/Test/compile;scalusCardanoLedgerJVM/Test/compile;" +
       "scalusTestkitJVM/Test/compile;scalusExamplesJVM/Test/compile;scalusDesignPatterns/Test/compile;" +
       "scalus-bloxbean-cardano-client-lib/Test/compile;scalusEthereumKzgCeremony/Test/compile;" +
       "scalusJVM/test;scalusExamplesJVM/test"
