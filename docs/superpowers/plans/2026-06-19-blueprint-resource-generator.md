@@ -243,7 +243,7 @@ Expected: one or more lines, e.g. `META-INF/scalus/blueprints/HelloCardanoContra
 - [ ] **Step 6: `blueprint / skip := true` opt-out excludes the JSON:**
 
 ```bash
-direnv exec . sbt 'set scalusExamplesJVM / blueprint / skip := true' scalusExamplesJVM/clean scalusExamplesJVM/packageBin
+direnv exec . sbt 'set LocalProject("scalusExamplesJVM") / blueprint / skip := true' scalusExamplesJVM/clean scalusExamplesJVM/packageBin
 JAR=$(find scalus-examples/jvm/target -name 'scalus-examples*_3-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)
 unzip -l "$JAR" | grep -c 'META-INF/scalus/blueprints/.*\.json'
 ```
