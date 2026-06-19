@@ -644,7 +644,9 @@ object AuctionValidatorTest extends ScalusTest {
                       f => !f.contains("/scalus-core/") && !f.contains("/scalus-cardano-ledger/"),
                   title = if label.isEmpty then "AuctionValidator" else s"AuctionValidator — $label"
                 )
-                println("Wrote profile to target/auction-profile.html")
+                // Machine-readable sibling consumed by the Scalus VS Code extension.
+                ProfileFormatter.writeJson(p, "target/auction-profile.json")
+                println("Wrote profile to target/auction-profile.html and .json")
             }
 
         result

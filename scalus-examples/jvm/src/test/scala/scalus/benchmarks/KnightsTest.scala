@@ -60,7 +60,8 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                 result.profile.foreach { p =>
                     info(ProfileFormatter.summary(p))
                     ProfileFormatter.writeHtml(p, "target/knights-profile.html")
-                    info("Wrote profile to target/knights-profile.html")
+                    ProfileFormatter.writeJson(p, "target/knights-profile.json")
+                    info("Wrote profile to target/knights-profile.html and .json")
                 }
                 result
             else term.evaluateDebug

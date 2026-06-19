@@ -77,7 +77,9 @@ final case class EvaluatorReportConfig(
     def dumps(artifact: DumpArtifact): Boolean = enabled && artifacts.contains(artifact)
 
     /** The profile renderings to produce: explicit [[profileOutputs]] when set, otherwise derived
-      * from the [[profile]] level (Summary ⇒ compact text to the console; Full ⇒ HTML + CSV files).
+      * from the [[profile]] level (Summary ⇒ compact text to the console; Full ⇒ HTML + JSON + CSV
+      * files). The `profile.json` is the machine-readable rendering editors/tools consume — e.g.
+      * the Scalus VS Code extension annotates source lines with per-line cost from it.
       */
     def effectiveProfileOutputs: Seq[ProfileOutput] =
         if profileOutputs.nonEmpty then profileOutputs
@@ -89,6 +91,7 @@ final case class EvaluatorReportConfig(
                 case ProfileLevel.Full =>
                     Seq(
                       ProfileOutput(ProfileFormat.Html, ProfileDestination.File("profile.html")),
+                      ProfileOutput(ProfileFormat.Json, ProfileDestination.File("profile.json")),
                       ProfileOutput(ProfileFormat.Csv, ProfileDestination.File("profile.csv"))
                     )
 }

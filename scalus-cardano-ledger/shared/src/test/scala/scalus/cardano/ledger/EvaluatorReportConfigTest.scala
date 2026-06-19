@@ -59,6 +59,18 @@ class EvaluatorReportConfigTest extends AnyFunSuite {
         assert(cfg.profile == ProfileLevel.Full)
     }
 
+    test("Full level derives HTML, JSON and CSV file outputs") {
+        // The JSON sibling is the machine-readable rendering tools (e.g. the VS Code extension)
+        // consume; keep it in the default Full set alongside the human-facing HTML/CSV.
+        val outs = EvaluatorReportConfig(profile = ProfileLevel.Full).effectiveProfileOutputs
+        assert(
+          outs.map(_.format).toSet == Set(ProfileFormat.Html, ProfileFormat.Json, ProfileFormat.Csv)
+        )
+        assert(
+          outs.contains(ProfileOutput(ProfileFormat.Json, ProfileDestination.File("profile.json")))
+        )
+    }
+
     test("SCALUS_PROFILE=off clears level and derived outputs") {
         val base = EvaluatorReportConfig(
           enabled = true,
