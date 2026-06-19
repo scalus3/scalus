@@ -27,7 +27,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false,
-      warnListConversions = true
+      warnListConversions = false
     )
 
     val printComparison = true

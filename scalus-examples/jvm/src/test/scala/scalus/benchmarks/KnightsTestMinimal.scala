@@ -24,7 +24,7 @@ class KnightsTestMinimal extends AnyFunSuite, ScalusTest:
       generateErrorTraces = true,
       optimizeUplc = true,
       debug = false,
-      warnListConversions = true
+      warnListConversions = false
     )
 
     /** Evaluate `sir` and assert the script succeeds with `value` as a BigInt. Accepts both the
