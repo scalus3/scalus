@@ -124,7 +124,8 @@ object in your project:
 
 ```sh copy
 # Generate a CIP-57 blueprint under
-# target/scala-3.3.7/classes/META-INF/scalus/blueprints/
+# target/scala-3.3.7/resource_managed/main/META-INF/scalus/blueprints/
+# (sbt package / publish also embed it in the JAR automatically)
 sbt blueprint
 
 # Deploy the validator as a reference-script UTxO
