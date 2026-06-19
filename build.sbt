@@ -612,6 +612,18 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     )
     .jvmSettings(
       jvmReleaseTarget,
+      // ScalusTest.generateKeyPair references the platform-specific KeyPairGenerator,
+      // which lives in scalus-core's JVM test sources. Copy it into the published jar
+      // (it isn't part of the shared test sources copied above).
+      Compile / sourceGenerators += Def.task {
+          val source = (scalus.jvm / crossProjectBaseDirectory).value /
+              "jvm" / "src" / "test" / "scala" / "scalus" / "testing" / "kit" / "KeyPairGenerator.scala"
+          val target = (Compile / sourceManaged).value /
+              "scalus" / "testing" / "kit" / "KeyPairGenerator.scala"
+          if (source.exists) IO.copyFile(source, target)
+          else streams.value.log.error(s"KeyPairGenerator not found at $source")
+          Seq(target)
+      }.taskValue,
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
@@ -619,6 +631,18 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test
     )
     .jsSettings(jsModuleSettings *)
+    .jsSettings(
+      // JS counterpart of the KeyPairGenerator copy above (uses @noble/curves).
+      Compile / sourceGenerators += Def.task {
+          val source = (scalus.js / crossProjectBaseDirectory).value /
+              "js" / "src" / "test" / "scala" / "scalus" / "testing" / "kit" / "KeyPairGenerator.scala"
+          val target = (Compile / sourceManaged).value /
+              "scalus" / "testing" / "kit" / "KeyPairGenerator.scala"
+          if (source.exists) IO.copyFile(source, target)
+          else streams.value.log.error(s"KeyPairGenerator not found at $source")
+          Seq(target)
+      }.taskValue
+    )
 
 lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
