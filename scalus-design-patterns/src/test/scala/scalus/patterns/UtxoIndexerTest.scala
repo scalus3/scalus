@@ -446,7 +446,10 @@ class UtxoIndexerTest
     }
 
     test("failed multiOneToOneNoRedeemer with more script utxos than specified") {
-        assertEvalFails {
+        // Explicit [Throwable]: Scala 3.3.8 no longer defaults the abstract `E` of
+        // assertEvalFails[E <: Throwable: ClassTag] to Throwable, so an untyped call fails to
+        // summon ClassTag[E] (works on 3.3.7/3.8.4). See scala/scala3 LTS backport.
+        assertEvalFails[Throwable] {
             val txId = TxId(ByteString.empty)
             val scriptHash = ByteString.empty
             val scriptCredential = Credential.ScriptCredential(scriptHash)
