@@ -270,14 +270,17 @@ object ScalusSbtPlugin extends AutoPlugin {
     }
 }
 
-/** Deprecated alias for [[ScalusSbtPlugin]]. Existing builds that
-  * `enablePlugins(ScalusBlueprintPlugin)` keep working unchanged.
+/** Legacy alias for [[ScalusSbtPlugin]] — prefer `ScalusSbtPlugin` in new builds.
+  * Existing builds that `enablePlugins(ScalusBlueprintPlugin)` keep working unchanged.
+  *
+  * Intentionally not `@deprecated`: sbt auto-imports every AutoPlugin's `autoImport`,
+  * so deprecating this object would emit a warning in every downstream build — even
+  * ones already on `ScalusSbtPlugin`. The alias is kept silently for back-compat.
   *
   * The settings are delegated rather than expressed via `requires`: in sbt,
   * enabling a plugin whose required plugins are not separately enabled is an
   * error, so delegation is what preserves backwards compatibility.
   */
-@deprecated("Use ScalusSbtPlugin instead", "0.18.1")
 object ScalusBlueprintPlugin extends AutoPlugin {
     val autoImport = ScalusSbtPlugin.autoImport
     override lazy val projectSettings: Seq[Setting[_]] = ScalusSbtPlugin.projectSettings
