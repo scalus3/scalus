@@ -12,12 +12,12 @@
 
 - Single source file: `scalus-sbt-plugin/src/main/scala/scalus/sbt/ScalusSbtPlugin.scala`. The real plugin is `object ScalusSbtPlugin`; `object ScalusBlueprintPlugin` is a deprecated alias delegating `projectSettings` — **do not** duplicate settings into it.
 - Must compile on **both** cross axes: sbt 1 / Scala `2.12.21` and sbt 2 / Scala `3.8.4`. Verify with `+scalusSbtPlugin/compile`.
-- sbt is provided by the nix flake. Run every sbt command as `nix develop --command sbt <args>`. (`sbt`/`sbtn` are not on the bare `PATH`.)
+- sbt is provided by the nix flake. Run every sbt command as `direnv exec . sbt <args>`. (`sbt`/`sbtn` are not on the bare `PATH`.)
 - **Cycle rule:** any task registered in `resourceGenerators` MUST use `Compile / dependencyClasspath` plus `Compile / classDirectory`, NEVER `Compile / fullClasspath`. `fullClasspath` → `exportedProducts` → `products` → `copyResources` → `resources` → `resourceGenerators`, which closes a cycle once the task is itself a generator.
 - **Eager-`.value` rule:** the skip gate MUST use `Def.taskIf` (not `Def.task` with an inner `if`). `.value` lifts an unconditional dependency, so a plain `if` would still run generation when skipped. `Def.taskIf` is available on sbt 1.4+ (baseline 1.5.8) and sbt 2.
 - Keep `blueprint` and `blueprint / skip` at project (Zero) config — not `Compile`-scoped. This keeps bare `sbt blueprint` working and makes the natural opt-out `blueprint / skip := true` resolve correctly via Compile→Zero delegation. (A `Compile / blueprint / skip := false` default would shadow a Zero-scoped user override — footgun, avoid.)
 - In-JAR path is unchanged: `META-INF/scalus/blueprints/<Contract>.json`. Only the on-disk pre-package location moves (to `resource_managed/main/...`).
-- Formatting: `nix develop --command sbt scalusSbtPlugin/scalafmtCheck` must pass before each commit.
+- Formatting: `direnv exec . sbt scalusSbtPlugin/scalafmtCheck` must pass before each commit.
 - Commit style: conventional commits (`refactor:`, `feat:`, `docs:`). Never add a Claude/Anthropic co-author trailer.
 
 ---
@@ -79,12 +79,12 @@ Refactor only: pull the generation body out of `blueprintTask` into a private he
 
 - [ ] **Step 3: Verify formatting**
 
-Run: `nix develop --command sbt scalusSbtPlugin/scalafmtCheck`
+Run: `direnv exec . sbt scalusSbtPlugin/scalafmtCheck`
 Expected: ends with `[success]`, no "must be formatted" errors.
 
 - [ ] **Step 4: Verify both cross axes compile**
 
-Run: `nix develop --command sbt +scalusSbtPlugin/compile`
+Run: `direnv exec . sbt +scalusSbtPlugin/compile`
 Expected: `[success]` for the cross build (Scala 2.12 and 3.8.4); no errors.
 
 - [ ] **Step 5: Commit**
@@ -144,14 +144,14 @@ New:
 
 - [ ] **Step 3: Verify formatting and both cross axes compile**
 
-Run: `nix develop --command sbt scalusSbtPlugin/scalafmtCheck +scalusSbtPlugin/compile`
+Run: `direnv exec . sbt scalusSbtPlugin/scalafmtCheck +scalusSbtPlugin/compile`
 Expected: both end in `[success]`, no errors.
 
 - [ ] **Step 4: Verify `blueprint` now writes to `resource_managed`** using the real examples project (publishes the plugin locally into the build, then runs it):
 
 Run:
 ```bash
-nix develop --command sbt scalusExamplesJVM/clean scalusExamplesJVM/blueprint
+direnv exec . sbt scalusExamplesJVM/clean scalusExamplesJVM/blueprint
 find scalus-examples/jvm/target -path '*resource_managed/main/META-INF/scalus/blueprints/*.json' | head
 ```
 Expected: at least one path printed, e.g. `.../resource_managed/main/META-INF/scalus/blueprints/HelloCardanoContract.json`. Confirm NO new JSON appeared under `classes/META-INF/scalus/blueprints/` (old location):
@@ -183,7 +183,7 @@ Add the `Def.taskIf` wrapper and wire it into `Compile / resourceGenerators` wit
 - [ ] **Step 1 (RED): Confirm `package` does NOT yet embed the JSON.** With Task 2 applied but no generator, the JSON lives in `resource_managed` but nothing copies it into the JAR on a clean build:
 
 ```bash
-nix develop --command sbt scalusExamplesJVM/clean scalusExamplesJVM/packageBin
+direnv exec . sbt scalusExamplesJVM/clean scalusExamplesJVM/packageBin
 JAR=$(find scalus-examples/jvm/target -name 'scalus-examples*_3-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)
 unzip -l "$JAR" | grep -c 'META-INF/scalus/blueprints/.*\.json'
 ```
@@ -228,13 +228,13 @@ Expected: `0` (resource generators not yet registered, so the clean `packageBin`
 
 - [ ] **Step 4: Verify formatting and both cross axes compile**
 
-Run: `nix develop --command sbt scalusSbtPlugin/scalafmtCheck +scalusSbtPlugin/compile`
+Run: `direnv exec . sbt scalusSbtPlugin/scalafmtCheck +scalusSbtPlugin/compile`
 Expected: both `[success]`. (If a cycle were introduced, a later step — not compile — would fail with "Cyclic reference"; the compile guards syntax/types.)
 
 - [ ] **Step 5 (GREEN): `package` now embeds the JSON, and no cycle:**
 
 ```bash
-nix develop --command sbt scalusExamplesJVM/clean scalusExamplesJVM/packageBin
+direnv exec . sbt scalusExamplesJVM/clean scalusExamplesJVM/packageBin
 JAR=$(find scalus-examples/jvm/target -name 'scalus-examples*_3-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)
 unzip -l "$JAR" | grep 'META-INF/scalus/blueprints/.*\.json'
 ```
@@ -243,7 +243,7 @@ Expected: one or more lines, e.g. `META-INF/scalus/blueprints/HelloCardanoContra
 - [ ] **Step 6: `blueprint / skip := true` opt-out excludes the JSON:**
 
 ```bash
-nix develop --command sbt 'set scalusExamplesJVM / blueprint / skip := true' scalusExamplesJVM/clean scalusExamplesJVM/packageBin
+direnv exec . sbt 'set scalusExamplesJVM / blueprint / skip := true' scalusExamplesJVM/clean scalusExamplesJVM/packageBin
 JAR=$(find scalus-examples/jvm/target -name 'scalus-examples*_3-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)
 unzip -l "$JAR" | grep -c 'META-INF/scalus/blueprints/.*\.json'
 ```
@@ -252,7 +252,7 @@ Expected: `0`.
 - [ ] **Step 7: `SCALUS_SKIP_BLUEPRINT` env-var opt-out excludes the JSON:**
 
 ```bash
-SCALUS_SKIP_BLUEPRINT=1 nix develop --command sbt scalusExamplesJVM/clean scalusExamplesJVM/packageBin
+SCALUS_SKIP_BLUEPRINT=1 direnv exec . sbt scalusExamplesJVM/clean scalusExamplesJVM/packageBin
 JAR=$(find scalus-examples/jvm/target -name 'scalus-examples*_3-*.jar' ! -name '*-sources.jar' ! -name '*-javadoc.jar' | head -1)
 unzip -l "$JAR" | grep -c 'META-INF/scalus/blueprints/.*\.json'
 ```
@@ -384,7 +384,7 @@ Not required for correctness — Tasks 2-3 are verified end-to-end against the r
 - Create: `scalus-sbt-plugin/src/sbt-test/blueprint/package-embeds-blueprint/test` (script: `> package`, assert JSON present in jar; `> set blueprint / skip := true`, `> clean`, `> package`, assert absent)
 - Modify: `build.sbt` `scalusSbtPlugin` settings — add `scriptedLaunchOpts += "-Dplugin.version=" + version.value`, `scriptedLaunchOpts += "-Dscalus.version=" + version.value`, and `scriptedDependencies := scriptedDependencies.dependsOn(scalus.jvm / publishLocal, scalusPlugin / publishLocal).value`.
 
-**Note for the implementer:** spike this in isolation first — confirm `nix develop --command sbt scalusSbtPlugin/scripted` resolves the locally-published `org.scalus` artifacts at the templated version and that the compiler-plugin cross-version matches the test project's `scalaVersion` (use `3.3.7`, the LTS). If the version coupling proves brittle, leave the `scalusExamples`-based verification (Tasks 2-3) as the regression guard and drop this task.
+**Note for the implementer:** spike this in isolation first — confirm `direnv exec . sbt scalusSbtPlugin/scripted` resolves the locally-published `org.scalus` artifacts at the templated version and that the compiler-plugin cross-version matches the test project's `scalaVersion` (use `3.3.7`, the LTS). If the version coupling proves brittle, leave the `scalusExamples`-based verification (Tasks 2-3) as the regression guard and drop this task.
 
 ---
 
