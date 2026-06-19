@@ -20,7 +20,7 @@ import sbtcompat.PluginCompat.*
   *   - `BLOCKFROST_API_KEY` for `--blockfrost-key`
   *   - `CARDANO_MNEMONIC` for `--mnemonic`
   */
-object ScalusBlueprintPlugin extends AutoPlugin {
+object ScalusSbtPlugin extends AutoPlugin {
 
     object autoImport {
         val blueprint =
@@ -219,4 +219,17 @@ object ScalusBlueprintPlugin extends AutoPlugin {
               .getOrElse(sys.error("--mnemonic or CARDANO_MNEMONIC env var is required"))
         )
     }
+}
+
+/** Deprecated alias for [[ScalusSbtPlugin]]. Existing builds that
+  * `enablePlugins(ScalusBlueprintPlugin)` keep working unchanged.
+  *
+  * The settings are delegated rather than expressed via `requires`: in sbt,
+  * enabling a plugin whose required plugins are not separately enabled is an
+  * error, so delegation is what preserves backwards compatibility.
+  */
+@deprecated("Use ScalusSbtPlugin instead", "0.18.1")
+object ScalusBlueprintPlugin extends AutoPlugin {
+    val autoImport = ScalusSbtPlugin.autoImport
+    override lazy val projectSettings: Seq[Setting[_]] = ScalusSbtPlugin.projectSettings
 }

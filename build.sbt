@@ -621,7 +621,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
     .dependsOn(scalus, scalusTestkit)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
-    .enablePlugins(ScalusBlueprintPlugin)
+    .enablePlugins(ScalusSbtPlugin)
     .settings(
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       PluginDependency,

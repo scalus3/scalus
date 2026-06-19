@@ -6,7 +6,7 @@ description: Embed CIP-57 blueprints in JARs and deploy contracts as reference s
 
 # Scalus SBT Plugin
 
-The `ScalusBlueprintPlugin` adds two sbt tasks to your project: `blueprint` for embedding
+The `ScalusSbtPlugin` adds two sbt tasks to your project: `blueprint` for embedding
 [CIP-57](https://cips.cardano.org/cip/CIP-57) blueprint JSON files into JARs, and `deploy`
 for publishing a contract as a reference script UTxO via Blockfrost.
 
@@ -25,7 +25,7 @@ addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "<scalus-version>")
 `build.sbt`:
 ```scala copy
 lazy val myProject = (project in file("."))
-    .enablePlugins(ScalusBlueprintPlugin)
+    .enablePlugins(ScalusSbtPlugin)
     .settings(
       scalaVersion := "3.3.7",
       addCompilerPlugin("org.scalus" % "scalus-plugin" % "<scalus-version>" cross CrossVersion.full),
@@ -35,6 +35,9 @@ lazy val myProject = (project in file("."))
       ),
     )
 ```
+
+The plugin was previously named `ScalusBlueprintPlugin`. That name still works as a deprecated
+alias, so existing builds keep compiling; switch to `ScalusSbtPlugin` to clear the warning.
 
 The compiler plugin discovers objects extending `Contract` automatically. Each one needs
 a compiled validator and a blueprint:

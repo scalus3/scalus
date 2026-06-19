@@ -9,7 +9,7 @@
 #
 # Each ejected project is a self-contained sbt build that depends on published
 # Scalus artifacts, configures the Scalus compiler plugin, and enables
-# ScalusBlueprintPlugin (so `sbt blueprint` and `sbt deploy` work out of the box).
+# ScalusSbtPlugin (so `sbt blueprint` and `sbt deploy` work out of the box).
 
 set -euo pipefail
 
@@ -142,7 +142,7 @@ $(gen_snapshot_resolver)
 val scalusVersion = "$SCALUS_VERSION"
 
 lazy val root = (project in file("."))
-    .enablePlugins(ScalusBlueprintPlugin)
+    .enablePlugins(ScalusSbtPlugin)
     .settings(
         name := "$name",
         scalacOptions ++= Seq("-deprecation", "-feature"),
