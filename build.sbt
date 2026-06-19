@@ -33,9 +33,6 @@ val monocleVersion = "3.3.0"
 // compiler plugin (which depends on the unstable scala3-compiler internal API).
 val scala3LtsVersion = "3.3.7"
 val scala3NextVersion = "3.8.4"
-// Scala Native 0.5.12 (latest) supports Scala up to 3.8.3, not 3.8.4 — so the Native platform
-// targets 3.8.3 while JVM/JS use 3.8.4. Same desugaring as 3.8.4, so budgets/baselines match.
-val scala3NativeNextVersion = "3.8.3"
 ThisBuild / scalaVersion := scala3LtsVersion
 ThisBuild / organization := "org.scalus"
 ThisBuild / organizationName := "Scalus"
@@ -294,9 +291,9 @@ lazy val scalusPlugin = project
     .settings(
       name := "scalus-plugin",
       crossVersion := CrossVersion.full,
-      // Build the plugin for 3.8.3 too: the Native platform compiles on 3.8.3 and a Scala 3
-      // compiler plugin must match the compiler version.
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NativeNextVersion, scala3NextVersion),
+      // A Scala 3 compiler plugin must match the compiler version of every platform we target.
+      // All platforms (JVM/JS/Native) now build on the same versions, so this is just LTS + next.
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       // Plugin links scala3-compiler; the 3.8.x line is JDK-17 bytecode, the 3.3 LTS line is JDK 11.
       jvmReleaseTarget,
@@ -469,9 +466,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / doc / sources := Seq.empty
     )
     .nativeSettings(
-      // Native targets 3.8.3 (highest Scala that Scala Native 0.5.12 supports), not the 3.8.4
-      // used by JVM/JS. Run with `++3.8.3 scalusNative/test`.
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NativeNextVersion),
+      // Scala Native 0.5.12 supports 3.8.4, so Native tracks the same versions as JVM/JS.
+      // Run the next-version native tests with `++3.8.4 scalusNative/test`.
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       // Each native test group runs as its own statically-linked binary with its own
       // immix-GC heap. Running them in parallel exhausted RAM on 16GB CI runners and the
       // OOM-killer took down the job (SIGKILL/137). Serialize so only one native test
