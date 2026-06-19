@@ -18,8 +18,8 @@ EXAMPLES_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/main/scala/scalus/examples"
 TESTS_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/test/scala/scalus/examples"
 
 # Known good snapshot version (update on tagged releases).
-# SCALUS_VERSION="0.16.0+259-683121c7-SNAPSHOT"
-SCALUS_VERSION="0.18.1"
+SCALUS_VERSION="0.18.1+64-c92967b4-SNAPSHOT"
+#SCALUS_VERSION="0.18.1"
 
 # Ejected projects target sbt 2.0.0 (where `test` is cached and `testFull` runs
 # uncached, like sbt 1.x `test`). Pinned independently of the monorepo, which
@@ -27,7 +27,7 @@ SCALUS_VERSION="0.18.1"
 SBT_VERSION="2.0.0"
 SCALA_VERSION="3.3.7"
 
-EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist" 
+EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist bilinearAccumulator" 
 
 # Examples that need sources from other examples bundled in.
 # Format: "example:dep1,dep2"
@@ -72,12 +72,9 @@ kebab_name() {
         amm)                    echo "constant-product-amm" ;;
         anonymousdata)          echo "anonymous-data" ;;
         atomictransactions)     echo "atomic-transaction" ;;
-        bilinearAccumulator)    echo "bilinear-accumulator" ;;
-        buidlerfest)            echo "buidlerfest" ;;
         crowdfunding)           echo "crowdfund" ;;
         decentralizedidentity)  echo "decentralized-identity" ;;
         editablenft)            echo "editable-nft" ;;
-        linkedlist)             echo "linked-list" ;;
         paymentsplitter)        echo "payment-splitter" ;;
         simpletransfer)         echo "simple-transfer" ;;
         simplewallet)           echo "simple-wallet" ;;
