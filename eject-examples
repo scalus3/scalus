@@ -211,14 +211,13 @@ sbt compile
 sbt test
 \`\`\`
 
-## Generate a CIP-57 blueprint
+## CIP-57 blueprints
 
-\`\`\`sh
-sbt blueprint
-\`\`\`
-
-Blueprint JSON is written to
-\`target/scala-$SCALA_VERSION/classes/META-INF/scalus/blueprints/<Contract>.json\`.
+\`sbt package\` embeds a CIP-57 blueprint JSON for every Contract in the JAR at
+\`META-INF/scalus/blueprints/<Contract>.json\`. Run \`sbt blueprint\` to generate
+without packaging — output goes to
+\`target/scala-$SCALA_VERSION/resource_managed/main/META-INF/scalus/blueprints/<Contract>.json\`.
+Skip generation during \`package\` with \`blueprint / skip := true\` or \`SCALUS_SKIP_BLUEPRINT=1\`.
 
 ## Deploy as a reference script
 

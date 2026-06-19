@@ -78,12 +78,17 @@ JAR, or anyone who can build it from source, can independently confirm the on-ch
 hash.
 
 ```sh copy
-sbt blueprint package
+sbt package
 ```
+
+`blueprint` is a resource generator, so `package` (and `publish`) embed the JSON automatically:
 
 ```
 [info] Wrote META-INF/scalus/blueprints/MyContract.json
 ```
+
+Run `sbt blueprint` to generate without packaging. To skip generation during `package`,
+set `blueprint / skip := true` in `build.sbt`, or pass `SCALUS_SKIP_BLUEPRINT=1`.
 
 `sbt package` is the standard sbt command for producing a JAR. A JAR is just a ZIP archive, so
 standard tools work to inspect it:
@@ -95,6 +100,27 @@ unzip -p my-project.jar META-INF/scalus/blueprints/MyContract.json
 The `hash` field is the standard Cardano script hash: `blake2b_224(0x03 || compiledCode)`.
 If you have the JAR, you can verify that this hash matches what's deployed on-chain.
 No Scalus installation or JVM required for verification, just the JAR and a blake2b implementation.
+
+## Disabling blueprint generation
+
+Because `blueprint` is a resource generator, it runs whenever the resources are needed —
+`package`, `publish`, `run`, and `test`. There are two ways to turn it off.
+
+Disable it for a project in `build.sbt`:
+
+```scala copy
+blueprint / skip := true
+```
+
+Or skip it for a single command, without editing the build, via an environment variable:
+
+```sh copy
+SCALUS_SKIP_BLUEPRINT=1 sbt package
+```
+
+Both leave the explicit task untouched: `sbt blueprint` still generates on demand,
+regardless of `skip`. Use `skip` when you want fast `test`/`package` cycles and only
+generate blueprints deliberately (for example, in a release step or CI job).
 
 ## Deploying Contracts
 
