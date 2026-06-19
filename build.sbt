@@ -677,12 +677,15 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
 lazy val scalusDesignPatterns = project
     .in(file("scalus-design-patterns"))
     .dependsOn(scalus.jvm, scalusTestkit.jvm)
+    // MiMa disabled until the first release establishes a baseline artifact to compare against.
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
+      name := "scalus-design-patterns",
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
-      publish / skip := true,
+      jvmReleaseTarget,
+      publishOnlyLts,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       Test / fork := true
