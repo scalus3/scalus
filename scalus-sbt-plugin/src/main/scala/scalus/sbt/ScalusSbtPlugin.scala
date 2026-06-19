@@ -10,8 +10,11 @@ import sbtcompat.PluginCompat.*
 /** sbt plugin that adds `blueprint` and `deploy` tasks for Cardano smart contracts.
   *
   *
-  * - `sbt blueprint` writes each contract's blueprint to
-  *   `META-INF/scalus/blueprints/<ContractName>.json` in the classes directory.
+  * - `blueprint` generates each contract's CIP-57 JSON into
+  *   `resourceManaged/main/META-INF/scalus/blueprints/<ContractName>.json`. It is
+  *   registered as a resource generator, so `package`/`publish` embed it in the JAR at
+  *   `META-INF/scalus/blueprints/<ContractName>.json`. Opt out with
+  *   `blueprint / skip := true` or the `SCALUS_SKIP_BLUEPRINT` env var.
   * - `sbt "deploy <ContractName> --network preview --blockfrost-key <key> --mnemonic '<words>'"`
   *   deploys a validator as a reference script UTXO at the sender's own base address.
   *
@@ -36,10 +39,16 @@ object ScalusSbtPlugin extends AutoPlugin {
     lazy val blueprintTask: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
         val _ = (Compile / compile).value
         implicit val conv: xsbti.FileConverter = fileConverter.value
-        val cp = toFiles((Compile / fullClasspath).value)
         val classesDir = (Compile / classDirectory).value
+        // Use dependencyClasspath + classDirectory, NOT fullClasspath: fullClasspath pulls
+        // this project's exportedProducts -> products -> copyResources -> resources ->
+        // resourceGenerators, which cycles once this task is registered as a resource
+        // generator (Task 3). dependencyClasspath excludes the project's own products; we
+        // add classDirectory so the project's compiled Contract classes are loadable.
+        val cp = toFiles((Compile / dependencyClasspath).value) :+ classesDir
+        val resourceRoot = (Compile / resourceManaged).value
         val log = streams.value.log
-        writeBlueprints(classesDir, cp, classesDir, log)
+        writeBlueprints(classesDir, cp, resourceRoot, log)
     }
 
     lazy val deployTask: Def.Initialize[InputTask[Unit]] = Def.inputTask {
