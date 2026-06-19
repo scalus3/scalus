@@ -17,9 +17,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" &> /dev/null && pwd)"
 EXAMPLES_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/main/scala/scalus/examples"
 TESTS_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/test/scala/scalus/examples"
 
-# Known good snapshot version (update on tagged releases).
-SCALUS_VERSION="0.18.1+86-6298c153-SNAPSHOT"
-#SCALUS_VERSION="0.18.1"
+# Known good version (update on tagged releases).
+SCALUS_VERSION="0.18.2"
 
 # Ejected projects target sbt 2.0.0 (where `test` is cached and `testFull` runs
 # uncached, like sbt 1.x `test`). Pinned independently of the monorepo, which

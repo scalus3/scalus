@@ -1,5 +1,33 @@
 # Changelog
 
+## 0.18.2 (2026-06-19)
+
+### Added
+
+- CIP-57 blueprints embedded in the packaged JAR (`META-INF/scalus/blueprints/<Contract>.json`) on
+  `package`, with a skip opt-out (`SCALUS_SKIP_BLUEPRINT` / `blueprint / skip`)
+- `eject-examples` tool turns any bundled example into a standalone sbt project (build, compiler plugin,
+  `sbt blueprint`/`deploy` wired up)
+- profiling: `profile.json` in the Full report set; Scala 3 syntax highlighting in the annotated-source HTML
+
+### Changed
+
+- `scalus.js` published as an ES module (dropped `scalajs-bundler`), with `@noble` crypto inlined and
+  minification enabled
+- `ScalusBlueprintPlugin` renamed to `ScalusSbtPlugin` (old name kept as a back-compat alias);
+  `scalus-sbt-plugin` cross-built for sbt 1 and sbt 2
+- default LTS moved to Scala 3.3.8 (plugin still cross-builds 3.3.7/3.3.8/3.8.4); Scala Native unified on 3.8.4
+- `scalus-testkit` packages the shared test helpers it exposes (e.g. `KeyPairGenerator`) so downstream
+  projects compile
+- dependency updates: esbuild 0.28.1, dompurify 3.4.11, magnolia, jsoniter-scala, jackson-databind
+
+### Fixed
+
+- security-hardening sweep across the example validators (Cardano Blueprint rosetta set) — amm drain,
+  auction/lottery/vault/editablenft/crowdfunding/escrow and others
+- `Eq` no longer warns on `===` for an `Eq` received as a using parameter, and JVM-module compiler warnings
+  are cleared
+
 ## 0.18.1 (2026-06-15)
 
 ### Added
