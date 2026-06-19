@@ -18,7 +18,7 @@ EXAMPLES_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/main/scala/scalus/examples"
 TESTS_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/test/scala/scalus/examples"
 
 # Known good snapshot version (update on tagged releases).
-SCALUS_VERSION="0.18.1+64-c92967b4-SNAPSHOT"
+SCALUS_VERSION="0.18.1+85-5135b6fe-SNAPSHOT"
 #SCALUS_VERSION="0.18.1"
 
 # Ejected projects target sbt 2.0.0 (where `test` is cached and `testFull` runs
