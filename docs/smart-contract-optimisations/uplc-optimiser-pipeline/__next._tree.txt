@@ -2,4 +2,4 @@
 :HL["/_next/static/chunks/0xomvw0-9r-gw.css","style"]
 :HL["/_next/static/chunks/0fd7r92tb4h0h.css","style"]
 :HL["/scalus-logo-dark.png","image"]
-0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"docs","param":null,"prefetchHints":0,"slots":{"children":{"name":"mdxPath","param":{"type":"oc","key":"smart-contract-optimisations/uplc-optimiser-pipeline","siblings":null},"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}}}},"staleTime":300,"buildId":"0dRhUKifW57i-ilEpyBIQ"}
+0:{"tree":{"name":"","param":null,"prefetchHints":16,"slots":{"children":{"name":"docs","param":null,"prefetchHints":0,"slots":{"children":{"name":"mdxPath","param":{"type":"oc","key":"smart-contract-optimisations/uplc-optimiser-pipeline","siblings":null},"prefetchHints":0,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":0,"slots":null}}}}}}},"staleTime":300,"buildId":"bjTLcAB91p3Y_9RRAaz13"}
