@@ -77,12 +77,15 @@ This guide will help you set up your Scalus development environment and create y
     ## Run Your First Validator Tests
     Run unit tests (ScalaTest and ScalaCheck):
     ```sh copy
-    cd hello-cardano && scala-cli test .
+    cd hello-cardano && sbt test
     ```
     All is good if you see the following output:
     ```sh
     HelloCardanoTest:
     - Hello Cardano message is signed by the owner
+    HelloCardanoIntegrationTest:
+    - [emulator] owner can spend with the Hello redeemer
+    - [emulator] a non-owner cannot spend
     ```
 
     ## Set Up Your IDE for Cardano Development
