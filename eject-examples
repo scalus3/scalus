@@ -18,16 +18,16 @@ EXAMPLES_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/main/scala/scalus/examples"
 TESTS_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/test/scala/scalus/examples"
 
 # Known good snapshot version (update on tagged releases).
-SCALUS_VERSION="0.16.0+259-683121c7-SNAPSHOT"
+# SCALUS_VERSION="0.16.0+259-683121c7-SNAPSHOT"
+SCALUS_VERSION="0.18.1"
 
-# Read sbt version from this repo so ejected projects use the same.
-SBT_VERSION="$({ grep -E '^sbt\.version' "$SCRIPT_DIR/project/build.properties" \
-    || true; } | cut -d= -f2 | tr -d ' ')"
-SBT_VERSION="${SBT_VERSION:-1.12.9}"
-
+# Ejected projects target sbt 2.0.0 (where `test` is cached and `testFull` runs
+# uncached, like sbt 1.x `test`). Pinned independently of the monorepo, which
+# still builds on sbt 1.x — so we must NOT read it from project/build.properties.
+SBT_VERSION="2.0.0"
 SCALA_VERSION="3.3.7"
 
-EXCLUDED_EXAMPLES="cape"
+EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist" 
 
 # Examples that need sources from other examples bundled in.
 # Format: "example:dep1,dep2"
@@ -135,7 +135,7 @@ gen_build_sbt() {
     fi
     cat <<EOF
 ThisBuild / scalaVersion := "$SCALA_VERSION"
-ThisBuild / organization := "org.example"
+ThisBuild / organization := "org.scalus.examples"
 ThisBuild / version      := "0.1.0-SNAPSHOT"
 
 $(gen_snapshot_resolver)
@@ -145,19 +145,22 @@ lazy val root = (project in file("."))
     .enablePlugins(ScalusBlueprintPlugin)
     .settings(
         name := "$name",
-        Compile / scalaSource := baseDirectory.value,
-        Compile / unmanagedSourceDirectories := Seq(baseDirectory.value),
-        Compile / unmanagedSources / excludeFilter := new SimpleFileFilter(_.toPath.startsWith((baseDirectory.value / "test").toPath)),
-        Test / scalaSource := baseDirectory.value / "test",
-        Test / unmanagedSourceDirectories := Seq(baseDirectory.value / "test"),
         scalacOptions ++= Seq("-deprecation", "-feature"),
-        addCompilerPlugin(("org.scalus" %% "scalus-plugin" % scalusVersion).cross(CrossVersion.full)),
         libraryDependencies ++= Seq(
             "org.scalus" %% "scalus"                % scalusVersion,
             "org.scalus" %% "scalus-cardano-ledger" % scalusVersion,
             "org.scalus" %% "scalus-testkit"         % scalusVersion % Test,
-            "org.scalatest" %% "scalatest"           % "3.2.19"     % Test$extra_lines
-        )
+            "org.scalatest" %% "scalatest"           % "3.2.20"     % Test$extra_lines
+        ),
+        addCompilerPlugin(
+            ("org.scalus" %% "scalus-plugin" % scalusVersion).cross(CrossVersion.full)
+        ),
+        Compile / sources := (baseDirectory.value * "*.scala")
+            .get()
+            .toSeq,
+        Test / sources := ((baseDirectory.value / "test") * "*.scala")
+            .get()
+            .toSeq,
     )
 EOF
 }
@@ -247,12 +250,25 @@ address; the transaction hash is printed on success.
 EOF
 }
 
+# Portable in-place sed: plain POSIX sed + temp file. Avoids the `-i` flavor
+# difference (BSD/macOS needs a backup-suffix arg, GNU must not have one), so no
+# perl dependency and no flag detection — works on BSD, GNU, busybox alike.
+sed_i() {
+    local script="$1"; shift
+    local f tmp
+    for f in "$@"; do
+        tmp="$(mktemp "${TMPDIR:-/tmp}/eject.XXXXXX")"
+        sed "$script" "$f" > "$tmp" && mv "$tmp" "$f"
+    done
+}
+
 # Rewrites package declarations: scalus.examples.X -> X
 rewrite_packages() {
     local dir="$1"
     while IFS= read -r -d '' f; do
-        sed -i 's/^package scalus\.examples\./package /' "$f"
-        sed -i 's/import scalus\.examples\./import /' "$f"
+        # Strip the scalus.examples. prefix everywhere — package/import lines AND
+        # inline fully-qualified references (e.g. d.to[scalus.examples.pricebet.OracleState]).
+        sed_i 's/scalus\.examples\.//g' "$f"
     done < <(find "$dir" -name '*.scala' -print0)
 }
 
