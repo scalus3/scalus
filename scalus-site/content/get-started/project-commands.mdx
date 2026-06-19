@@ -87,34 +87,31 @@ directory:
 
 ## Test backends
 
-The integration tests (`*Integration.test.scala`) run against a selectable backend:
+The integration tests (`*Integration.test.scala`) run against a backend selected by the
+`SCALUS_TEST_ENV` environment variable — `emulator` (the default) or `yaci`:
 
 ```sh copy
-sbt emulator   # in-memory emulator (default, fast — same as `sbt test`)
-sbt devkit     # a local Yaci DevKit node (requires a running Docker daemon)
+sbt test                       # in-memory emulator (default, fast)
+SCALUS_TEST_ENV=yaci sbt test  # a local Yaci DevKit node (requires a running Docker daemon)
 ```
 
-`emulator` and `devkit` are convenience commands defined in the template's `build.sbt`. They set the
-backend (via the `scalus.testEnv` property) and then run the full test suite. The same selection
-works through an environment variable:
-
-```sh copy
-SCALUS_TEST_ENV=yaci sbt test
-```
+The same variable works with Scala CLI (`SCALUS_TEST_ENV=yaci scala-cli test .`), since the test
+code reads it directly rather than relying on an sbt-only command.
 
 See [Emulator](/docs/testing/emulator) and [Local Devnet](/docs/testing/local-devnet) for what each
 backend does and when to use it.
 
 ## Profiling
 
-`sbt profile` runs the tests with on-chain execution profiling enabled and writes an interactive
-HTML report (CPU and memory budget per source line) to `target/profile.html`:
+Set `SCALUS_PROFILE=1` to run the tests with on-chain execution profiling enabled. It writes an
+interactive HTML report (CPU and memory budget per source line) to `target/profile.html`:
 
 ```sh copy
-sbt profile
+SCALUS_PROFILE=1 sbt test
 ```
 
-Open `target/profile.html` in a browser to see where your validator spends its execution budget.
+The same variable works with Scala CLI (`SCALUS_PROFILE=1 scala-cli test .`). Open
+`target/profile.html` in a browser to see where your validator spends its execution budget.
 See [Profiling](/docs/testing/profiling) for how to read the report and optimise from it.
 
 ## Blueprint & deploy
