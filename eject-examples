@@ -152,10 +152,16 @@ lazy val root = (project in file("."))
         addCompilerPlugin(
             ("org.scalus" %% "scalus-plugin" % scalusVersion).cross(CrossVersion.full)
         ),
-        Compile / sources := (baseDirectory.value * "*.scala")
-            .get()
-            .toSeq,
-        Test / sources := ((baseDirectory.value / "test") * "*.scala")
+        Compile / sources := {
+            val base = baseDirectory.value
+            val testDir = base / "test"
+            val targetDir = target.value
+            (base ** "*.scala").get()
+                .filterNot(f => f.relativeTo(testDir).isDefined)
+                .filterNot(f => f.relativeTo(targetDir).isDefined)
+                .toSeq
+        },
+        Test / sources := ((baseDirectory.value / "test") ** "*.scala")
             .get()
             .toSeq,
     )
