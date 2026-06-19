@@ -536,7 +536,7 @@ lazy val scalusUplcJitCompiler = project
 // Scalus Testkit library for testing Scalus applications
 lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-testkit"))
-    .dependsOn(scalus % "compile->compile;compile->test", scalusCardanoLedger)
+    .dependsOn(scalus % "compile->compile", scalusCardanoLedger)
     .settings(
       name := "scalus-testkit",
       publishOnlyLts,
@@ -596,7 +596,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // which lives in scalus-core's JVM test sources. Copy it into the published jar
       // (it isn't part of the shared test sources copied above).
       Compile / sourceGenerators += Def.task {
-          val baseDir = (scalus.jvm / crossProjectBaseDirectory).value / "jvm" / "src" / "test" / "scala"
+          val baseDir =
+              (scalus.jvm / crossProjectBaseDirectory).value / "jvm" / "src" / "test" / "scala"
           val targetDir = (Compile / sourceManaged).value
           val files = Seq("scalus/testing/kit/KeyPairGenerator.scala")
           copyFiles(files, baseDir, targetDir, streams.value.log)
@@ -612,7 +613,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     .jsSettings(
       // JS counterpart of the KeyPairGenerator copy above (uses @noble/curves).
       Compile / sourceGenerators += Def.task {
-          val baseDir = (scalus.js / crossProjectBaseDirectory).value / "js" / "src" / "test" / "scala"
+          val baseDir =
+              (scalus.js / crossProjectBaseDirectory).value / "js" / "src" / "test" / "scala"
           val targetDir = (Compile / sourceManaged).value
           val files = Seq("scalus/testing/kit/KeyPairGenerator.scala")
           copyFiles(files, baseDir, targetDir, streams.value.log)
