@@ -9,9 +9,14 @@ package scalus
   * budget/size numbers change. The 3.3.x LTS keeps the older, larger baselines; 3.8.x and the next
   * LTS (which inherits the leaner desugaring) use the smaller ones.
   *
+  * Lives in `scalus-testkit` (not the example test sources) so that standalone projects ejected via
+  * `eject-examples` — which bundle the example tests but depend only on published artifacts — can
+  * still resolve `scalus.ScalaCompilerVersion`.
+  *
   * The active compiler version is injected by build.sbt (`-Dscalus.test.scalaVersion`). It can't be
   * read from `scala.util.Properties.versionNumberString`, which reports the 2.13 standard-library
-  * version (`2.13.x`) on the Scala 3.3 LTS rather than the compiler version.
+  * version (`2.13.x`) on the Scala 3.3 LTS rather than the compiler version. When the property is
+  * absent (e.g. an ejected project, which pins the 3.3.x LTS) it defaults to `"3.3.7"`.
   */
 object ScalaCompilerVersion {
 
