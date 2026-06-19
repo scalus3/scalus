@@ -785,6 +785,7 @@ object ProfileFormatter {
         val sb = new StringBuilder
         files.foreach { file =>
             val lines = sources(file)
+            val highlighted = highlightScala(lines)
             val perLine = byFile(file).map(e => e.line -> e).toMap
             val maxCpu = math.max(1L, byFile(file).map(_.cpu).max)
             sb.append(s"<h3>${escapeHtml(file)}</h3>\n<table class='src'>\n")
@@ -807,7 +808,7 @@ object ProfileFormatter {
                 // Anchor profiled lines so the By Source Location tab can jump straight here.
                 val anchor = if e.isDefined then s" id=\"${locAnchor(file, ln)}\"" else ""
                 sb.append(
-                  s"<tr$anchor$rowStyle><td class='ln'>$ln</td><td class='cost'>$gut</td><td class='code'>${escapeHtml(text)}</td></tr>\n"
+                  s"<tr$anchor$rowStyle><td class='ln'>$ln</td><td class='cost'>$gut</td><td class='code'>${highlighted(i)}</td></tr>\n"
                 )
             }
             sb.append("</table>\n")
@@ -985,6 +986,183 @@ object ProfileFormatter {
     private def escapeHtml(s: String): String =
         s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
 
+    /** Scala 3 keywords (incl. soft keywords like `given`/`using`/`end`/`then`) highlighted by
+      * [[highlightScala]]. Soft keywords are context-sensitive in the language but always coloured
+      * here — acceptable for a read-only cost view.
+      */
+    private val scalaKeywords: Set[String] = Set(
+      "abstract",
+      "case",
+      "catch",
+      "class",
+      "def",
+      "derives",
+      "do",
+      "else",
+      "end",
+      "enum",
+      "export",
+      "extends",
+      "extension",
+      "false",
+      "final",
+      "finally",
+      "for",
+      "forSome",
+      "given",
+      "if",
+      "implicit",
+      "import",
+      "infix",
+      "inline",
+      "lazy",
+      "match",
+      "new",
+      "null",
+      "object",
+      "opaque",
+      "open",
+      "override",
+      "package",
+      "private",
+      "protected",
+      "return",
+      "sealed",
+      "super",
+      "then",
+      "this",
+      "throw",
+      "trait",
+      "transparent",
+      "true",
+      "try",
+      "type",
+      "using",
+      "val",
+      "var",
+      "while",
+      "with",
+      "yield"
+    )
+
+    /** State carried across line boundaries while highlighting: inside a (possibly nested) block
+      * comment, inside a triple-quoted string, or neither.
+      */
+    private enum HMode { case Normal; case Triple; case Block(depth: Int) }
+
+    /** Cheap Scala 3 syntax highlighter for the annotated-source view: turns each raw source line
+      * into HTML with `<span class="…">` token wrappers (HTML-escaping the text as it goes). Token
+      * classes — `k` keyword, `t` Capitalized type, `s` string/char, `c` comment, `n` number, `a`
+      * annotation — are coloured by the `table.src td.code` rules in [[htmlStyle]].
+      *
+      * Multi-line constructs (nested block comments and triple-quoted strings) are threaded across
+      * lines via [[HMode]], with the wrapping span opened and closed per line so each table cell
+      * stays valid HTML. It is a lexer, not a parser: a few rare forms degrade gracefully, which is
+      * fine here.
+      */
+    private def highlightScala(lines: IndexedSeq[String]): IndexedSeq[String] = {
+        val out = IndexedSeq.newBuilder[String]
+        var mode: HMode = HMode.Normal
+        lines.foreach { line =>
+            val (html, next) = highlightScalaLine(line, mode)
+            out += html
+            mode = next
+        }
+        out.result()
+    }
+
+    private def highlightScalaLine(line: String, startMode: HMode): (String, HMode) = {
+        val sb = new StringBuilder
+        val len = line.length
+        var i = 0
+        var mode = startMode
+
+        def span(cls: String, text: String): Unit =
+            sb.append("<span class=\"")
+                .append(cls)
+                .append("\">")
+                .append(escapeHtml(text))
+                .append("</span>")
+        def isIdStart(c: Char): Boolean = c.isLetter || c == '_' || c == '$'
+        def isIdPart(c: Char): Boolean = c.isLetterOrDigit || c == '_' || c == '$'
+        def isHex(c: Char): Boolean = "0123456789abcdefABCDEF".indexOf(c) >= 0
+
+        // Re-open the span for a comment/string continued from a previous line.
+        if mode != HMode.Normal then
+            sb.append(if mode == HMode.Triple then "<span class=\"s\">" else "<span class=\"c\">")
+
+        while i < len do
+            mode match
+                case HMode.Block(depth) =>
+                    if i + 1 < len && line(i) == '/' && line(i + 1) == '*' then
+                        sb.append("/*"); i += 2; mode = HMode.Block(depth + 1)
+                    else if i + 1 < len && line(i) == '*' && line(i + 1) == '/' then
+                        sb.append("*/"); i += 2
+                        mode = if depth <= 1 then { sb.append("</span>"); HMode.Normal }
+                        else HMode.Block(depth - 1)
+                    else { sb.append(escapeHtml(line(i).toString)); i += 1 }
+                case HMode.Triple =>
+                    if i + 2 < len && line(i) == '"' && line(i + 1) == '"' && line(i + 2) == '"'
+                    then { sb.append("\"\"\"</span>"); i += 3; mode = HMode.Normal }
+                    else { sb.append(escapeHtml(line(i).toString)); i += 1 }
+                case HMode.Normal =>
+                    val c = line(i)
+                    if c == '/' && i + 1 < len && line(i + 1) == '/' then
+                        span("c", line.substring(i)); i = len
+                    else if c == '/' && i + 1 < len && line(i + 1) == '*' then
+                        sb.append("<span class=\"c\">/*"); i += 2; mode = HMode.Block(1)
+                    else if c == '"' && i + 2 < len && line(i + 1) == '"' && line(i + 2) == '"' then
+                        sb.append("<span class=\"s\">\"\"\""); i += 3; mode = HMode.Triple
+                    else if c == '"' then
+                        val start = i; i += 1
+                        while i < len && line(i) != '"' do
+                            i += (if line(i) == '\\' && i + 1 < len then 2 else 1)
+                        if i < len then i += 1
+                        span("s", line.substring(start, i))
+                    else if c == '\'' then
+                        // Char literal 'x' / '\n'; otherwise a lone quote (e.g. a macro splice) is
+                        // left as plain punctuation.
+                        val close = if i + 1 < len && line(i + 1) == '\\' then i + 3 else i + 2
+                        if close < len && line(close) == '\'' then
+                            span("s", line.substring(i, close + 1)); i = close + 1
+                        else { sb.append("'"); i += 1 }
+                    else if c == '@' && i + 1 < len && isIdStart(line(i + 1)) then
+                        val start = i; i += 1
+                        while i < len && isIdPart(line(i)) do i += 1
+                        span("a", line.substring(start, i))
+                    else if c.isDigit then
+                        val start = i
+                        if c == '0' && i + 1 < len && (line(i + 1) == 'x' || line(i + 1) == 'X')
+                        then
+                            i += 2
+                            while i < len && (isHex(line(i)) || line(i) == '_') do i += 1
+                        else
+                            while i < len && (line(i).isDigit || line(i) == '_') do i += 1
+                            if i < len && line(i) == '.' && i + 1 < len && line(i + 1).isDigit then
+                                i += 1
+                                while i < len && (line(i).isDigit || line(i) == '_') do i += 1
+                            if i < len && (line(i) == 'e' || line(i) == 'E') then
+                                var j = i + 1
+                                if j < len && (line(j) == '+' || line(j) == '-') then j += 1
+                                if j < len && line(j).isDigit then
+                                    i = j
+                                    while i < len && line(i).isDigit do i += 1
+                        if i < len && "lLfFdD".indexOf(line(i)) >= 0 then i += 1
+                        span("n", line.substring(start, i))
+                    else if isIdStart(c) then
+                        val start = i; i += 1
+                        while i < len && isIdPart(line(i)) do i += 1
+                        val word = line.substring(start, i)
+                        if scalaKeywords.contains(word) then span("k", word)
+                        else if word.head.isUpper then span("t", word)
+                        else sb.append(escapeHtml(word))
+                    else { sb.append(escapeHtml(c.toString)); i += 1 }
+
+        // Close a span left open by a comment/string that runs past the end of this line.
+        if mode != HMode.Normal then sb.append("</span>")
+        (sb.toString, mode)
+    }
+
     /** `num/denom` as a percentage with one decimal, computed with integer math so the result is
       * independent of the platform default locale (`f"%.1f"` would emit `,` on e.g. de_DE and break
       * the rendered tables / CSS).
@@ -1016,6 +1194,12 @@ table.src td { border: none; padding: 0 8px; }
 table.src td.ln { color: #999; text-align: right; user-select: none; }
 table.src td.cost { color: #b00; text-align: right; white-space: nowrap; }
 table.src td.code { text-align: left; white-space: pre; }
+table.src td.code .k { color: #07a; font-weight: 600; }
+table.src td.code .t { color: #1c5fa8; }
+table.src td.code .s { color: #690; }
+table.src td.code .c { color: #998; font-style: italic; }
+table.src td.code .n { color: #905; }
+table.src td.code .a { color: #b5651d; }
 nav.tabs { position: sticky; top: 0; background: #fafafa; padding: 8px 0; margin-bottom: 12px; border-bottom: 1px solid #ccc; z-index: 10; }
 .tab-btn { font-family: monospace; font-size: 0.95em; padding: 5px 12px; margin: 0 4px 0 0; border: 1px solid #ccc; background: #eee; color: #333; cursor: pointer; border-radius: 4px 4px 0 0; }
 .tab-btn:hover { background: #e0e8f0; }

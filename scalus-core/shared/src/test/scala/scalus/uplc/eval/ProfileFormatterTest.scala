@@ -227,9 +227,35 @@ class ProfileFormatterTest extends AnyFunSuite {
     test("toHtml with sources renders the annotated-source view") {
         val html = ProfileFormatter.toHtml(data, sources)
         assert(html.contains("Annotated Source"))
-        assert(html.contains("def add(a: BigInt, b: BigInt)"))
+        // source text is rendered with Scala 3 syntax highlighting: `def` as a keyword span,
+        // `BigInt` as a Capitalized-type span, and the surrounding text preserved.
+        assert(html.contains("""<span class="k">def</span> add(a: <span class="t">BigInt</span>"""))
         // a profiled line carries its cost in the gutter
         assert(html.contains("200 cpu / 100 mem"))
+    }
+
+    test("annotated source highlights multi-line comments and strings across line boundaries") {
+        val tq = "\"\"\""
+        val d = data.copy(
+          bySourceLocation = Seq(
+            SourceLocationProfile("M.scala", 1, memory = 1, cpu = 1, count = 1)
+          )
+        )
+        val src = Map(
+          "M.scala" -> IndexedSeq(
+            "/* block",
+            "   still comment */ val s = " + tq + "line1",
+            "line2" + tq
+          )
+        )
+        val html = ProfileFormatter.toHtml(d, src)
+        // The block comment opens on line 1 and closes mid-line 2 — each line carries its own
+        // open/close so every table cell is valid HTML, proving the lexer threads state across rows.
+        assert(html.contains("<span class=\"c\">/* block</span>"))
+        assert(html.contains("<span class=\"c\">   still comment */</span>"))
+        assert(html.contains("<span class=\"k\">val</span>"))
+        // The triple-quoted string runs from line 2 into line 3 and is re-wrapped on continuation.
+        assert(html.contains("<span class=\"s\">line2"))
     }
 
     test("By Source Location links to the Annotated Source line (cross-tab nav)") {
