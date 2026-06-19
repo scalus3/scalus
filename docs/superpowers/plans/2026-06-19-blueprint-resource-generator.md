@@ -272,7 +272,7 @@ git commit -m "feat: embed blueprints in the JAR via resourceGenerators, with sk
 Reflect the new output location and the auto-embed / opt-out behavior in user-facing docs.
 
 **Files:**
-- Modify: `scalus-site/content/dapp-development/sbt-plugin.mdx` (lines 80-86)
+- Modify: `scalus-site/content/dapp-development/sbt-plugin.mdx` (lines 80-86, and a new subsection after line 97)
 - Modify: `eject-examples` (lines 214-221, the `gen_getting_started` "Generate a CIP-57 blueprint" section)
 
 **Interfaces:** none (documentation only).
@@ -306,7 +306,32 @@ set `blueprint / skip := true` in `build.sbt`, or pass `SCALUS_SKIP_BLUEPRINT=1`
 ```
 (The `unzip -p my-project.jar META-INF/scalus/blueprints/MyContract.json` example below stays correct — the in-JAR path is unchanged.)
 
-- [ ] **Step 2: Update `eject-examples`.** Replace lines 214-221 (note the escaped backticks `\`\`\`` are literal heredoc bytes — match them exactly):
+- [ ] **Step 2: Add a dedicated "Disabling blueprint generation" subsection** to `sbt-plugin.mdx`. Insert it after the verification paragraph (after line 97, `No Scalus installation or JVM required...`) and before `## Deploying Contracts` (line 99):
+
+```mdx
+## Disabling blueprint generation
+
+Because `blueprint` is a resource generator, it runs whenever the resources are needed —
+`package`, `publish`, `run`, and `test`. There are two ways to turn it off.
+
+Disable it for a project in `build.sbt`:
+
+```scala copy
+blueprint / skip := true
+```
+
+Or skip it for a single command, without editing the build, via an environment variable:
+
+```sh copy
+SCALUS_SKIP_BLUEPRINT=1 sbt package
+```
+
+Both leave the explicit task untouched: `sbt blueprint` still generates on demand,
+regardless of `skip`. Use `skip` when you want fast `test`/`package` cycles and only
+generate blueprints deliberately (for example, in a release step or CI job).
+```
+
+- [ ] **Step 3: Update `eject-examples`.** Replace lines 214-221 (note the escaped backticks `\`\`\`` are literal heredoc bytes — match them exactly):
 
 Old:
 ```bash
@@ -330,7 +355,7 @@ without packaging — output goes to
 Skip generation during \`package\` with \`blueprint / skip := true\` or \`SCALUS_SKIP_BLUEPRINT=1\`.
 ```
 
-- [ ] **Step 3: Verify the eject template still renders.** Regenerate one example and confirm the README section is correct and the build still works:
+- [ ] **Step 4: Verify the eject template still renders.** Regenerate one example and confirm the README section is correct and the build still works:
 
 ```bash
 ./eject-examples --only hello /tmp/eject-check
@@ -339,7 +364,7 @@ grep -A6 "CIP-57 blueprints" /tmp/eject-check/hello/scalus/Readme.md 2>/dev/null
 ```
 Expected: the rendered README shows the new `resource_managed` path and the skip note. (If the ejected dir layout differs, just confirm a generated `Readme.md` contains `resource_managed`.)
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add scalus-site/content/dapp-development/sbt-plugin.mdx eject-examples
@@ -372,7 +397,7 @@ Not required for correctness — Tasks 2-3 are verified end-to-end against the r
 - Register as `resourceGenerators`, scoped correctly, keep `sbt blueprint` working → Task 3 + Global Constraints (Zero-config `blueprint`). ✅
 - Skip via `blueprint / skip` (using `Def.taskIf`) and via `SCALUS_SKIP_BLUEPRINT` → Task 3 (code + Steps 6-7). ✅
 - `deploy` untouched → not modified in any task. ✅
-- Doc/path updates (sbt-plugin.mdx + eject-examples) → Task 4. ✅
+- Doc/path updates (sbt-plugin.mdx + eject-examples), incl. a dedicated "Disabling blueprint generation" subsection with `blueprint / skip := true` and `SCALUS_SKIP_BLUEPRINT` examples → Task 4 (Steps 1-3). ✅
 - Lands in `ScalusSbtPlugin`, alias untouched → Global Constraints. ✅
 
 **Placeholder scan:** no TBD/TODO; every code and command step is concrete. ✅
