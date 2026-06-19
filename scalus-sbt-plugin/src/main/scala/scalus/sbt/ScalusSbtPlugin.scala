@@ -36,6 +36,8 @@ object ScalusSbtPlugin extends AutoPlugin {
             )
     }
 
+    import autoImport.*
+
     lazy val blueprintTask: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
         val _ = (Compile / compile).value
         implicit val conv: xsbti.FileConverter = fileConverter.value
@@ -49,6 +51,21 @@ object ScalusSbtPlugin extends AutoPlugin {
         val resourceRoot = (Compile / resourceManaged).value
         val log = streams.value.log
         writeBlueprints(classesDir, cp, resourceRoot, log)
+    }
+
+    /** Resource-generator wrapper around `blueprint`. Runs as part of `resources`
+      * (so `package`/`publish`/`run`/`test` embed the JSON), unless suppressed by
+      * `blueprint / skip := true` or the `SCALUS_SKIP_BLUEPRINT` env var.
+      *
+      * Uses `Def.taskIf` so the gated branch is genuinely not evaluated: a plain
+      * `Def.task { if (...) ... else blueprint.value }` would still run `blueprint`,
+      * because `.value` lifts an unconditional task dependency.
+      */
+    lazy val blueprintGenerator: Def.Initialize[Task[Seq[java.io.File]]] = Def.taskIf {
+        if ((blueprint / skip).value || sys.env.contains("SCALUS_SKIP_BLUEPRINT"))
+            Seq.empty[java.io.File]
+        else
+            blueprint.value
     }
 
     lazy val deployTask: Def.Initialize[InputTask[Unit]] = Def.inputTask {
@@ -106,13 +123,17 @@ object ScalusSbtPlugin extends AutoPlugin {
         }
     }
 
-    import autoImport.*
-
     override lazy val projectSettings: Seq[Setting[_]] = Seq(
       // Def.uncached opts these out of sbt 2's task cache: `blueprint` returns Seq[File] (not a
       // cacheable output type) and writes files, and `deploy` performs network I/O. No-op on sbt 1
       // (via sbt2-compat).
       blueprint := Def.uncached(blueprintTask.value),
+      // Default-on; opt out per project with `blueprint / skip := true`. Defined at project (Zero)
+      // config so the generator's Compile-scoped read delegates to it AND a user's Zero-scoped
+      // override is honored.
+      blueprint / skip := false,
+      // Embed blueprints in the JAR via the resources pipeline.
+      Compile / resourceGenerators += blueprintGenerator.taskValue,
       deploy := Def.uncached(deployTask.evaluated)
     )
 
