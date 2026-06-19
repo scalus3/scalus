@@ -1,6 +1,5 @@
 package scalus.examples.buidlerfest
 
-import scalus.bloxbean.Interop.??
 import scalus.uplc.builtin.Data.{toData, FromData, ToData}
 import scalus.cardano.address.Address
 import scalus.cardano.address.Address.addr
@@ -233,8 +232,8 @@ object BuidlerFest {
       */
     @main
     def main(buyerAddress: String): Unit = {
-        val apiKey = System.getenv("BLOCKFROST_API_KEY") ?? sys.error(
-          "BLOCKFROST_API_KEY is not set, please set it before running the test"
+        val apiKey = Option(System.getenv("BLOCKFROST_API_KEY")).getOrElse(
+          sys.error("BLOCKFROST_API_KEY is not set, please set it before running the test")
         )
         val provider = BlockfrostProvider.mainnet(apiKey).await()
 
