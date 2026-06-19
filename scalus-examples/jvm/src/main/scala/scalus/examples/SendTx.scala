@@ -14,8 +14,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 
 /** Off-chain runner for the hash-preimage lock contract on the Cardano preview testnet.
   *
-  * Uses the native Scalus TxBuilder stack together with [[BlockfrostProvider]] for UTxO querying and
-  * transaction submission. Replaces the previous bloxbean-based implementation.
+  * Uses the native Scalus TxBuilder stack together with [[BlockfrostProvider]] for UTxO querying
+  * and transaction submission. Replaces the previous bloxbean-based implementation.
   *
   * The contract ([[PreimageValidatorContract]], PlutusV3) locks funds with an inline datum
   * `(sha2_256(preimage), pubKeyHash)`. The funds can be claimed by a transaction that reveals the
