@@ -39,16 +39,7 @@ object ScalusSbtPlugin extends AutoPlugin {
         val cp = toFiles((Compile / fullClasspath).value)
         val classesDir = (Compile / classDirectory).value
         val log = streams.value.log
-
-        val outDir = classesDir / "META-INF" / "scalus" / "blueprints"
-        IO.createDirectory(outDir)
-
-        loadContracts(classesDir, cp, log).map { case (className, json) =>
-            val file = outDir / (simpleName(className) + ".json")
-            IO.write(file, json, java.nio.charset.StandardCharsets.UTF_8)
-            log.info(s"Wrote ${file.relativeTo(classesDir).getOrElse(file)}")
-            file
-        }
+        writeBlueprints(classesDir, cp, classesDir, log)
     }
 
     lazy val deployTask: Def.Initialize[InputTask[Unit]] = Def.inputTask {
@@ -119,6 +110,34 @@ object ScalusSbtPlugin extends AutoPlugin {
     /** Derive a simple file name from a fully qualified class name. */
     private def simpleName(className: String): String =
         className.stripSuffix("$").split('.').last
+
+    /** Generate and write CIP-57 blueprint JSON for every Contract listed in the
+      * compiled `blueprint-modules` manifest. Returns the files written.
+      *
+      * @param classesDir
+      *   the Compile classDirectory — holds the manifest and the project's own
+      *   compiled classes (loaded via reflection)
+      * @param cp
+      *   classpath for the reflection classloader (dependencies + classesDir)
+      * @param resourceRoot
+      *   root under which output is written, at
+      *   `resourceRoot/META-INF/scalus/blueprints/<Contract>.json`
+      */
+    private def writeBlueprints(
+        classesDir: java.io.File,
+        cp: Seq[java.io.File],
+        resourceRoot: java.io.File,
+        log: sbt.util.Logger
+    ): Seq[java.io.File] = {
+        val outDir = resourceRoot / "META-INF" / "scalus" / "blueprints"
+        IO.createDirectory(outDir)
+        loadContracts(classesDir, cp, log).map { case (className, json) =>
+            val file = outDir / (simpleName(className) + ".json")
+            IO.write(file, json, java.nio.charset.StandardCharsets.UTF_8)
+            log.info(s"Wrote ${file.relativeTo(resourceRoot).getOrElse(file)}")
+            file
+        }
+    }
 
     private def readManifestClassNames(classesDir: java.io.File): Seq[String] = {
         val manifest = classesDir / "META-INF" / "scalus" / "blueprint-modules"
