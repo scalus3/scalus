@@ -19,6 +19,8 @@ jobs:
           - { name: lts, task: ci-jvm }
           # Cross-build/test on Scala 3.8.4. Runs in parallel with `lts`.
           - { name: next, task: ci-jvm-next }
+          # Previous-LTS (3.3.7) plugin canary: plugin compile + scalus.compiler.* suite.
+          - { name: lts-prev, task: ci-jvm-lts-prev }
     permissions:
       contents: read
       id-token: write

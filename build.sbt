@@ -31,7 +31,11 @@ val monocleVersion = "3.3.0"
 //ThisBuild / scalaVersion := "3.7.3-RC1-bin-SNAPSHOT"
 // LTS is the default build version; the next series is used to cross-build the
 // compiler plugin (which depends on the unstable scala3-compiler internal API).
-val scala3LtsVersion = "3.3.7"
+val scala3LtsVersion = "3.3.8"
+// Previous LTS patch. The compiler plugin (and scalus-core, to test it) still cross-build here so
+// downstream projects pinned to 3.3.7 keep a published scalus-plugin_3.3.7. `publishOnlyLts` keeps
+// the (compiler-version-independent) `_3` library artifacts published from the current LTS only.
+val scala3LtsPrevVersion = "3.3.7"
 val scala3NextVersion = "3.8.4"
 ThisBuild / scalaVersion := scala3LtsVersion
 ThisBuild / organization := "org.scalus"
@@ -291,9 +295,9 @@ lazy val scalusPlugin = project
     .settings(
       name := "scalus-plugin",
       crossVersion := CrossVersion.full,
-      // A Scala 3 compiler plugin must match the compiler version of every platform we target.
-      // All platforms (JVM/JS/Native) now build on the same versions, so this is just LTS + next.
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      // A Scala 3 compiler plugin must match the compiler version of every version we support.
+      // Includes the previous LTS (3.3.7) so downstream projects on 3.3.7 get a published plugin.
+      crossScalaVersions := Seq(scala3LtsPrevVersion, scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       // Plugin links scala3-compiler; the 3.8.x line is JDK-17 bytecode, the 3.3 LTS line is JDK 11.
       jvmReleaseTarget,
@@ -385,7 +389,9 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       name := "scalus",
       publishOnlyLts,
       scalaVersion := scalaVersion.value,
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      // Includes the previous LTS (3.3.7) so the 3.3.7 plugin canary can build core + run
+      // scalus.compiler.* against it. publishOnlyLts still publishes the `_3` artifact from the LTS.
+      crossScalaVersions := Seq(scala3LtsPrevVersion, scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
       // scalacOptions += "-P:scalus:debugLevel=1",
@@ -635,7 +641,6 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     )
     .configurePlatform(JVMPlatform)(
       _.dependsOn(
-        `scalus-bloxbean-cardano-client-lib`,
         scalusDesignPatterns,
         scalusEthereumKzgCeremony
       )
@@ -644,8 +649,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       Test / fork := true,
       // Expose the compiler version to tests so they can pick version-specific baselines
       // (budgets / script sizes drift between the 3.3.x LTS and 3.8.x). See ScalaCompilerVersion.
-      Test / javaOptions += s"-Dscalus.test.scalaVersion=${scalaVersion.value}",
-      libraryDependencies += "com.bloxbean.cardano" % "cardano-client-backend-blockfrost" % cardanoClientLibVersion
+      Test / javaOptions += s"-Dscalus.test.scalaVersion=${scalaVersion.value}"
     )
     .jsSettings(jsModuleSettings *)
     .jsSettings(
@@ -725,7 +729,6 @@ lazy val docs = project // documentation project
       ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
         scalus.jvm,
         scalusCardanoLedger.jvm,
-        `scalus-bloxbean-cardano-client-lib`,
         scalusTestkit.jvm
       ),
       ScalaUnidoc / unidoc / target := (LocalRootProject / baseDirectory).value / "scalus-site" / "public" / "api",
@@ -967,6 +970,13 @@ addCommandAlias(
   // Full build/test on the default LTS. Includes format/mima checks (version-independent, so they
   // run only here). Runs in parallel with `ci-jvm-next` as separate CI-JVM matrix jobs.
   "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/test;mima"
+)
+addCommandAlias(
+  "ci-jvm-lts-prev",
+  // Previous-LTS (3.3.7) canary: prove the plugin builds against the 3.3.7 compiler and still emits
+  // correct contracts, via the scalus.compiler.* compile-and-evaluate suite. Cheaper than a full
+  // re-test — 3.3.7 and 3.3.8 share the `pre38` desugaring generation (verified byte-identical).
+  "++3.3.7;clean;scalusPlugin/Test/compile;scalusJVM/testOnly scalus.compiler.*"
 )
 addCommandAlias(
   "ci-jvm-next",
