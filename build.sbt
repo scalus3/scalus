@@ -555,7 +555,10 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       Test / scalacOptions += "-color:never",
       // Copy shared test files from scalus-core to managed sources
       Compile / sourceGenerators += Def.task {
-          val sharedFiles = Seq(
+          val baseDir =
+              (scalus.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala"
+          val targetDir = (Compile / sourceManaged).value
+          val files = Seq(
             "scalus/testing/ArbitraryDerivation.scala",
             "scalus/uplc/test/ArbitraryInstances.scala",
             "scalus/ledger/api/v1/ArbitraryInstances.scala",
@@ -565,21 +568,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
             "scalus/cardano/ledger/ArbitraryInstances.scala",
             "scalus/testing/kit/EvalTestKit.scala",
           )
-          val baseDir =
-              (scalus.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala"
-          val targetDir = (Compile / sourceManaged).value
-          val log = streams.value.log
-          sharedFiles.flatMap { file =>
-              val source = baseDir / file
-              val target = targetDir / file
-              if (source.exists) {
-                  IO.copyFile(source, target)
-                  Some(target)
-              } else {
-                  log.error(s"Shared file $file does not exist in $baseDir")
-                  None
-              }
-          }
+          copyFiles(files, baseDir, targetDir, streams.value.log)
+          files.map(targetDir / _)
       }.taskValue,
       PluginDependency,
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
@@ -592,22 +582,12 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           val baseDir =
               (scalusCardanoLedger.jvm / crossProjectBaseDirectory).value / "shared" / "src" / "test" / "scala"
           val targetDir = (Compile / sourceManaged).value
-          val log = streams.value.log
           val files = Seq(
             "scalus/testing/kit/Party.scala",
             "scalus/testing/kit/TestUtil.scala"
           )
-          files.flatMap { file =>
-              val source = baseDir / file
-              val target = targetDir / file
-              if (source.exists) {
-                  IO.copyFile(source, target)
-                  Some(target)
-              } else {
-                  log.error(s"$file does not exist at $source")
-                  None
-              }
-          }
+          copyFiles(files, baseDir, targetDir, streams.value.log)
+          files.map(targetDir / _)
       }.taskValue,
     )
     .jvmSettings(
@@ -616,13 +596,11 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // which lives in scalus-core's JVM test sources. Copy it into the published jar
       // (it isn't part of the shared test sources copied above).
       Compile / sourceGenerators += Def.task {
-          val source = (scalus.jvm / crossProjectBaseDirectory).value /
-              "jvm" / "src" / "test" / "scala" / "scalus" / "testing" / "kit" / "KeyPairGenerator.scala"
-          val target = (Compile / sourceManaged).value /
-              "scalus" / "testing" / "kit" / "KeyPairGenerator.scala"
-          if (source.exists) IO.copyFile(source, target)
-          else streams.value.log.error(s"KeyPairGenerator not found at $source")
-          Seq(target)
+          val baseDir = (scalus.jvm / crossProjectBaseDirectory).value / "jvm" / "src" / "test" / "scala"
+          val targetDir = (Compile / sourceManaged).value
+          val files = Seq("scalus/testing/kit/KeyPairGenerator.scala")
+          copyFiles(files, baseDir, targetDir, streams.value.log)
+          files.map(targetDir / _)
       }.taskValue,
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
@@ -634,13 +612,11 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     .jsSettings(
       // JS counterpart of the KeyPairGenerator copy above (uses @noble/curves).
       Compile / sourceGenerators += Def.task {
-          val source = (scalus.js / crossProjectBaseDirectory).value /
-              "js" / "src" / "test" / "scala" / "scalus" / "testing" / "kit" / "KeyPairGenerator.scala"
-          val target = (Compile / sourceManaged).value /
-              "scalus" / "testing" / "kit" / "KeyPairGenerator.scala"
-          if (source.exists) IO.copyFile(source, target)
-          else streams.value.log.error(s"KeyPairGenerator not found at $source")
-          Seq(target)
+          val baseDir = (scalus.js / crossProjectBaseDirectory).value / "js" / "src" / "test" / "scala"
+          val targetDir = (Compile / sourceManaged).value
+          val files = Seq("scalus/testing/kit/KeyPairGenerator.scala")
+          copyFiles(files, baseDir, targetDir, streams.value.log)
+          files.map(targetDir / _)
       }.taskValue
     )
 
