@@ -18,14 +18,14 @@ EXAMPLES_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/main/scala/scalus/examples"
 TESTS_ROOT="$SCRIPT_DIR/scalus-examples/jvm/src/test/scala/scalus/examples"
 
 # Known good snapshot version (update on tagged releases).
-SCALUS_VERSION="0.18.1+85-5135b6fe-SNAPSHOT"
+SCALUS_VERSION="0.18.1+86-6298c153-SNAPSHOT"
 #SCALUS_VERSION="0.18.1"
 
 # Ejected projects target sbt 2.0.0 (where `test` is cached and `testFull` runs
 # uncached, like sbt 1.x `test`). Pinned independently of the monorepo, which
 # still builds on sbt 1.x — so we must NOT read it from project/build.properties.
 SBT_VERSION="2.0.0"
-SCALA_VERSION="3.3.7"
+SCALA_VERSION="3.3.8"
 
 EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist bilinearAccumulator" 
 
@@ -311,7 +311,11 @@ eject_one() {
     # Copy main sources (flat, next to build.sbt)
     find "$src_dir" -maxdepth 1 -name '*.scala' -exec cp {} "$project_dir/" \;
 
-    # Copy bundled dependency sources into their own package dirs
+    # Copy bundled dependency sources into their own package dirs.
+    # Only the dependency's MAIN sources are bundled (the example's own code needs
+    # them to compile); its tests are intentionally NOT copied — they belong to the
+    # dependency, not to this example, and would otherwise run under the example's
+    # `sbt test` (e.g. storage pulling in LinkedListTest).
     local deps
     deps="$(get_bundled_deps "$name")"
     if [[ -n "$deps" ]]; then
@@ -320,11 +324,6 @@ eject_one() {
             if [[ -d "$dep_src" ]]; then
                 mkdir -p "$project_dir/$dep"
                 find "$dep_src" -maxdepth 1 -name '*.scala' -exec cp {} "$project_dir/$dep/" \;
-            fi
-            local dep_test="$TESTS_ROOT/$dep"
-            if [[ -d "$dep_test" ]]; then
-                mkdir -p "$project_dir/test/$dep"
-                find "$dep_test" -maxdepth 1 -name '*.scala' -exec cp {} "$project_dir/test/$dep/" \;
             fi
         done
     fi
