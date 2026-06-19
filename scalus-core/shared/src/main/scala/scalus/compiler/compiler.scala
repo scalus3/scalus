@@ -29,9 +29,8 @@ case class Options(
       */
     warnListConversions: Boolean = false,
     /** When true, suppresses all `LoweringContext.warn` output emitted during SIR lowering (e.g.
-      * the "Eq instance is not provably the structural type-default" advisory and the "Unification
-      * failure" / "casting unrelated types" diagnostics). Use to keep test logs clean when the
-      * warning is a known false positive that the heuristic can't suppress.
+      * the "Unification failure" / "casting unrelated types" diagnostics). Use to keep test logs
+      * clean when a warning is a known false positive.
       */
     noWarn: Boolean = false
 ) {

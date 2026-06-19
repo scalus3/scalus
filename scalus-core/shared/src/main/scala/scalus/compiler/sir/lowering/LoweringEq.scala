@@ -19,14 +19,6 @@ object LoweringEq {
     val EqualsReprName: String = "scalus.compiler.intrinsics.IntrinsicHelpers$.equalsRepr"
     val EqTypeName: String = "scalus.cardano.onchain.plutus.prelude.Eq"
 
-    /** Per-process set of source positions where we've already warned about an unrecognized Eq. The
-      * same `===` site can be inlined into many callers (e.g. `Eq.scala:13` is the body of the
-      * `===` extension method, re-broadcast at every use of `===` in the program). De-duping by
-      * call-site position keeps the warning informative without flooding the compile log.
-      */
-    private val warnedNonDerivedPositions =
-        java.util.concurrent.ConcurrentHashMap.newKeySet[String]()
-
     /** Peel off any number of `SIRType.Annotated` wrappers to expose the underlying type. */
     private def stripAnnotated(t: SIRType): SIRType = t match
         case SIRType.Annotated(inner, _) => stripAnnotated(inner)
@@ -75,88 +67,27 @@ object LoweringEq {
       * instance satisfies the equivalence-relation contract (reflexive / symmetric / transitive AND
       * structurally consistent — i.e. `a === b` iff `a.toData == b.toData`).
       *
-      * Custom Eq instances that violate this contract (notably `Eq.keyPairEq[A, B]` which compares
-      * only `_1`, ignoring `_2`) are buggy by definition: any code that relies on `===` to mean
-      * "structurally equal" — like `List.distinct` — will misbehave. We surface this by emitting a
-      * compile-time warning when the Eq is a concrete, named reference (a `def`/`val`/`given` such
-      * as `Eq.keyPairEq`, i.e. a `SIR.ExternalVar`) that is not one of the standard type-default
-      * forms (`Eq.derived[T]`, `summon[Eq[T]]`, or a prelude `given Eq[...]`). An Eq received
-      * abstractly as a `using` parameter is a `SIR.Var` use-site — we are *using* an instance, not
-      * creating one — so it is left alone (see `isConcreteNamedEq`) to avoid a noise-only false
-      * positive. The warning is reported against the operand's position (the caller), because the
-      * `eq(x, y)` apply node carries the inlined `===`/`!==` operator-body position from the
-      * prelude. The optimization itself proceeds uniformly in either case to keep the perf
-      * characteristics consistent.
+      * A custom Eq that violates this (one comparing only some fields) is silently ignored by the
+      * optimization. We do not emit a structural advisory for it: the only such prelude instance,
+      * `Eq.keyPairEq`, is `@deprecated`, so its use sites already get a deprecation warning; and
+      * from the lowering we only see the instance *reference* (its name), not its body, so we
+      * cannot tell a structural named `given` (e.g. `= Eq.derived`) from a non-structural one — any
+      * name-based heuristic would just flood the build with false positives.
       */
     def lowerEqIntrinsic(
         app: SIR.Apply,
         fallback: SIR.Apply => LoweringContext ?=> LoweredValue
     )(using lctx: LoweringContext): LoweredValue = {
         // Curried: Apply(Apply(eq, lhs, ...), rhs, ...)
-        val (eqRef, lhsSir, rhsSir) = app.f match
-            case innerApp: SIR.Apply => (innerApp.f, innerApp.arg, app.arg)
+        val (lhsSir, rhsSir) = app.f match
+            case innerApp: SIR.Apply => (innerApp.arg, app.arg)
             case _                   =>
                 // Not curried — fall back to normal apply
                 return fallback(app)
-        if !isTypeDefaultEq(eqRef) && isConcreteNamedEq(eqRef) then
-            // `app.anns.pos` is the inlined `eq(x, y)` body inside the `===`/`!==` operator, so it
-            // always resolves to the prelude's `Eq.scala` rather than the user's call site. The
-            // operands carry the caller's positions, so report against an operand instead.
-            val warnPos =
-                if lhsSir.anns.pos != SIRPosition.empty then lhsSir.anns.pos
-                else if rhsSir.anns.pos != SIRPosition.empty then rhsSir.anns.pos
-                else app.anns.pos
-            val posKey = warnPos.show
-            if warnedNonDerivedPositions.add(posKey) then
-                lctx.warn(
-                  "Eq instance is not provably the structural type-default " +
-                      "(e.g. `Eq.derived[T]`, `summon[Eq[T]]`, or a `given Eq[...]` from the prelude). " +
-                      "The repr-aware Eq optimization will inline structural equality regardless. " +
-                      "Custom Eq instances MUST satisfy the equivalence-relation contract " +
-                      "(reflexive / symmetric / transitive AND structurally consistent) — instances like " +
-                      "`Eq.keyPairEq` that compare only one component violate this and produce wrong " +
-                      "runtime results. Prefer `Eq.derived[T]` to make the type-default explicit.",
-                  warnPos
-                )
         val lhs = Lowering.lowerSIR(lhsSir)
         val rhs = Lowering.lowerSIR(rhsSir)
         generateEqualsForRepr(lhs, rhs, app.anns.pos)
     }
-
-    /** True when `eqRef` (the function position in `eq(lhs, rhs)`) is recognizably a type-default
-      * Eq — one of:
-      *   - `given Eq[...]` declarations from the prelude (synthetic name `*.given_Eq_*`)
-      *   - `Eq.apply` (= `summon[Eq[T]]`)
-      *   - `Eq.derived[T]`
-      *
-      * For unrecognized shapes (most importantly user-defined `def` / `val` like `Eq.keyPairEq`) we
-      * cannot prove the instance matches the type-default and the caller falls back to actually
-      * calling the Eq value.
-      */
-    private def isTypeDefaultEq(eqRef: SIR): Boolean = eqRef match
-        case SIR.ExternalVar(_, name, _, _) =>
-            name.contains(".given_Eq_") ||
-            name.endsWith("$Eq$.apply") ||
-            name.endsWith("$Eq$.derived")
-        case SIR.Var(name, _, _) =>
-            name.contains(".given_Eq_") ||
-            name.endsWith("$Eq$.apply") ||
-            name.endsWith("$Eq$.derived")
-        case SIR.Apply(f, _, _, _) =>
-            // `Eq[T]` (= `summon[Eq[T]]`) lowers to `Apply(<Eq.apply ref>, <implicit>)` — recurse.
-            isTypeDefaultEq(f)
-        case _ => false
-
-    /** True when `eqRef` is a concrete, named Eq instance the user can act on — a cross-module
-      * reference (`ExternalVar`) to a `def`/`val`/`given` such as `Eq.keyPairEq`. A bare `Var` is
-      * an Eq received abstractly (a `using eq: Eq[A]` parameter or other local binding): at that
-      * point we are *using* an instance, not creating one, so the "prefer `Eq.derived[T]`" advice
-      * doesn't apply and we stay silent rather than emit a use-site false positive.
-      */
-    private def isConcreteNamedEq(eqRef: SIR): Boolean = eqRef match
-        case _: SIR.ExternalVar    => true
-        case SIR.Apply(f, _, _, _) => isConcreteNamedEq(f)
-        case _                     => false
 
     /** Generate repr-specific equality comparison.
       *

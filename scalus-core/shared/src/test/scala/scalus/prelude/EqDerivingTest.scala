@@ -123,19 +123,18 @@ object EqBudgetStatus:
     def mkDone(r: BigInt): EqBudgetStatus = EqBudgetStatus.Done(r)
     def mkFailed(c: BigInt, m: String): EqBudgetStatus = EqBudgetStatus.Failed(c, m)
 
-// Exercises the two sides of the "not provably structural" Eq advisory in the lowering pass.
+// Used to guard that lowering `===` no longer prints any "not provably structural" Eq advisory.
 @Compile
 object EqUseSite:
     // Generic, non-inline: `a === b` resolves to the abstract `using Eq[A]` parameter — an Eq
-    // *received as a variable* (a use-site), not a created/named instance. The lowering must NOT
-    // emit the not-provably-default advisory here.
+    // received as a variable (a use-site).
     def genericEq[A](a: A, b: A)(using Eq[A]): Boolean = a === b
 
     def usePoints(x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt): Boolean =
         genericEq(EqTestPoint(x1, y1), EqTestPoint(x2, y2))
 
-// A concrete, named, non-structural Eq (it ignores its arguments) — the kind the advisory exists
-// to catch. Used via `===`, it exercises both the warning and its call-site position reporting.
+// A named, non-structural custom Eq (it ignores its arguments) — the named-instance case that
+// previously flooded the build log with one advisory line per `===` call-site.
 case class EqWrap(v: BigInt)
 
 @Compile
@@ -214,50 +213,30 @@ class EqDerivingTest extends AnyFunSuite {
 
     private val notProvablyDefault = "Eq instance is not provably the structural type-default"
 
-    test("=== via an abstract `using Eq` parameter is not flagged as not-provably-default") {
+    test("=== does not print the not-provably-structural Eq advisory") {
         given scalus.compiler.Options = scalus.compiler.Options(
           targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = false,
           optimizeUplc = false,
           debug = false
         )
+        // Both an Eq received abstractly as a `using` parameter and a named custom (non-structural)
+        // Eq used via `===` must stay silent: the advisory was removed (its only prelude target,
+        // `Eq.keyPairEq`, is `@deprecated`, and the lowering cannot tell a structural named `given`
+        // from a non-structural one without resolving the instance body).
         val output = captureLoweringOutput {
-            val sir = scalus.compiler.compile { (x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt) =>
-                EqUseSite.usePoints(x1, y1, x2, y2)
-            }
-            sir.toUplc(generateErrorTraces = false)
+            scalus.compiler
+                .compile { (x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt) =>
+                    EqUseSite.usePoints(x1, y1, x2, y2)
+                }
+                .toUplc(generateErrorTraces = false)
+            scalus.compiler
+                .compile { (a: BigInt, b: BigInt) => EqWrap(a) === EqWrap(b) }
+                .toUplc(generateErrorTraces = false)
         }
         assert(
           !output.contains(notProvablyDefault),
-          s"unexpected use-site Eq advisory (eq received as a `using` variable):\n$output"
-        )
-    }
-
-    test("=== with a concrete non-default Eq is flagged at the call site, not in Eq.scala") {
-        given scalus.compiler.Options = scalus.compiler.Options(
-          targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
-          generateErrorTraces = false,
-          optimizeUplc = false,
-          debug = false
-        )
-        val output = captureLoweringOutput {
-            val sir = scalus.compiler.compile { (a: BigInt, b: BigInt) =>
-                EqWrap(a) === EqWrap(b)
-            }
-            sir.toUplc(generateErrorTraces = false)
-        }
-        assert(
-          output.contains(notProvablyDefault),
-          s"expected a not-provably-default Eq advisory for a concrete named instance:\n$output"
-        )
-        // Position fix: the advisory is reported against the operand (the caller), not the inlined
-        // `===` operator body in the prelude's Eq.scala. (When `===` is reached through the
-        // `scalus.prelude` re-export, as here, Scala attributes the inlined operand to that export
-        // site rather than the literal call line; with a direct import it is the exact call site.
-        // Either way it must no longer point inside the operator definition.)
-        assert(
-          !output.contains("onchain/plutus/prelude/Eq.scala"),
-          s"advisory should not point at the inlined `===` operator body:\n$output"
+          s"=== must not print the structural Eq advisory:\n$output"
         )
     }
 
@@ -304,9 +283,8 @@ class EqDerivingTest extends AnyFunSuite {
 
     test("Eq.derived vs manual for case class - budget comparison") {
         given PlutusVM = PlutusVM.makePlutusV3VM()
-        // The custom-named givens (eqManualUnapply etc.) trip the not-provably-default Eq
-        // heuristic in the lowering pass; the warning is informational and not actionable
-        // for these tests, so silence it via `noWarn` to keep test output clean.
+        // Lowering may emit informational `LoweringContext.warn` diagnostics here; silence them
+        // via `noWarn` to keep test output clean.
         given scalus.compiler.Options = scalus.compiler.Options(
           targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = false,
@@ -394,9 +372,8 @@ class EqDerivingTest extends AnyFunSuite {
         import EqBudgetStatus.{mkDone, mkFailed}
 
         given PlutusVM = PlutusVM.makePlutusV3VM()
-        // The custom-named givens (eqManualUnapply etc.) trip the not-provably-default Eq
-        // heuristic in the lowering pass; the warning is informational and not actionable
-        // for these tests, so silence it via `noWarn` to keep test output clean.
+        // Lowering may emit informational `LoweringContext.warn` diagnostics here; silence them
+        // via `noWarn` to keep test output clean.
         given scalus.compiler.Options = scalus.compiler.Options(
           targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
           generateErrorTraces = false,
