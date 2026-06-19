@@ -103,8 +103,8 @@ class CrowdfundingScenarioTest extends AnyFunSuite {
 object CrowdfundingScenarioTest {
     import Scenario.futureToScenarioConversion
 
-    private val crowdfundingContract = CrowdfundingContract.withErrorTraces
-    private val donationMintingContract = DonationMintingContract.withErrorTraces
+    private val crowdfundingContract = CrowdfundingContract.compiled.withErrorTraces
+    private val donationMintingContract = DonationMintingContract.compiled.withErrorTraces
     private val crowdfundingScript = crowdfundingContract.script
     private val crowdfundingPolicyId = crowdfundingScript.scriptHash
 

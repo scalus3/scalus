@@ -71,8 +71,8 @@ class CrowdfundingEmulatorTest extends AnyFunSuite, ScalusTest {
 object CrowdfundingEmulatorTest extends ScalusTest {
     import scalus.cardano.address.Network
 
-    private val crowdfundingContract = CrowdfundingContract.withErrorTraces
-    private val donationMintingContract = DonationMintingContract.withErrorTraces
+    private val crowdfundingContract = CrowdfundingContract.compiled.withErrorTraces
+    private val donationMintingContract = DonationMintingContract.compiled.withErrorTraces
 
     // Party to role mapping
     private val recipientParty = Alice

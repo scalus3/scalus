@@ -29,7 +29,7 @@ class DoubleSatisfactionAttackTest extends AnyFunSuite, ScalusTest {
     private given Options = Options.release.copy(generateErrorTraces = true)
 
     private val vulnerableContract = PlutusV3.compile(UnfixedAuctionValidator.validate)
-    private val fixedContract = AuctionContract.withErrorTraces
+    private val fixedContract = AuctionContract.compiled.withErrorTraces
 
     private val seller = Alice
     private val buyer = Bob

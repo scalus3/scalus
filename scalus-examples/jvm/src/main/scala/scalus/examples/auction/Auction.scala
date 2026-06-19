@@ -1,6 +1,7 @@
 package scalus.examples.auction
 
 import scalus.compiler.Compile
+import scalus.cardano.blueprint.{Blueprint, Contract}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data, ToData}
 import scalus.cardano.address.{Address as CardanoAddress, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart}
@@ -465,13 +466,34 @@ object AuctionValidator extends DataParameterizedValidator {
         )
 }
 
-private given Options = Options.release
-
-/** Compiled parameterized auction validator. Apply a TxOutRef (as Data) to get a unique auction
-  * instance.
+/** Blueprint and compiled script for the auction contract.
+  *
+  * Apply a one-shot `TxOutRef` (as Data) to `compiled` to get a unique auction instance.
   */
-lazy val AuctionContract: PlutusV3[Data => Data => Unit] =
-    PlutusV3.compile(AuctionValidator.validate)
+object AuctionContract extends Contract {
+    private given Options = Options.release
+
+    /** Compiled parameterized auction validator. Apply a TxOutRef (as Data) to get a unique auction
+      * instance.
+      */
+    lazy val compiled: PlutusV3[Data => Data => Unit] =
+        PlutusV3.compile(AuctionValidator.validate)
+
+    lazy val blueprint = Blueprint.plutusV3[TxOutRef, Datum, Action](
+      title = "Auction",
+      description =
+          "First-price single-item auction parameterized by a one-shot UTxO that makes each " +
+              "instance's policy id unique. Bidders raise the standing bid before the deadline; " +
+              "the highest bidder claims the item and the seller is paid when the auction ends.",
+      version = "1.0.0",
+      license = Some("Apache-2.0"),
+      // AuctionValidator is a DataParameterizedValidator, so the one-shot TxOutRef parameter is
+      // applied as Data on the UPLC level and `compiled` is typed `Data => Data => Unit`. The cast
+      // only re-labels the phantom type so the parameter schema is derived as TxOutRef; the
+      // compiled program (and thus its hash and CBOR) is unchanged.
+      compiled = compiled.asInstanceOf[PlutusV3[TxOutRef => Data => Unit]]
+    )
+}
 
 /** Factory for creating auction instances with unique policyIds.
   *
@@ -487,7 +509,8 @@ lazy val AuctionContract: PlutusV3[Data => Data => Unit] =
 class AuctionFactory(provider: BlockchainProvider, withErrorTraces: Boolean = false) {
 
     private val baseContract =
-        if withErrorTraces then AuctionContract.withErrorTraces else AuctionContract
+        if withErrorTraces then AuctionContract.compiled.withErrorTraces
+        else AuctionContract.compiled
 
     /** Creates a new auction instance parameterized by the given one-shot UTxO.
       *

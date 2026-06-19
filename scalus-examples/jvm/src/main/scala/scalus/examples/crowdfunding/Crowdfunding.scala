@@ -9,6 +9,7 @@ import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.uplc.PlutusV3
 import scalus.compiler.Compile
+import scalus.cardano.blueprint.{Blueprint, Contract}
 
 // ============================================================================
 // DATA MODELS
@@ -779,7 +780,38 @@ object CrowdfundingValidator extends Validator {
 // COMPILATION
 // ============================================================================
 
-private given Options = Options.release
+/** Main crowdfunding script: mints the campaign NFT and guards campaign/donation spends. */
+object CrowdfundingContract extends Contract {
+    private given Options = Options.release
+    lazy val compiled = PlutusV3.compile(CrowdfundingValidator.validate)
+    lazy val blueprint = Blueprint.plutusV3[CampaignDatum, Action](
+      title = "Crowdfunding campaign",
+      description =
+          "Goal-based crowdfunding: donors lock funds with a per-donation token; the recipient " +
+              "withdraws once the goal is met after the deadline, otherwise donors reclaim their " +
+              "contributions by burning the donation tokens.",
+      version = "1.0.0",
+      license = Some("Apache-2.0"),
+      compiled = compiled
+    )
+}
 
-lazy val CrowdfundingContract = PlutusV3.compile(CrowdfundingValidator.validate)
-lazy val DonationMintingContract = PlutusV3.compile(DonationMintingPolicy.validate)
+/** Donation minting policy: mints one donation token per contribution, burns them on reclaim. */
+object DonationMintingContract extends Contract {
+    private given Options = Options.release
+    lazy val compiled: PlutusV3[Data => Data => Unit] =
+        PlutusV3.compile(DonationMintingPolicy.validate)
+    lazy val blueprint = Blueprint.plutusV3[ByteString, Action](
+      title = "Crowdfunding donation minting policy",
+      description =
+          "Parameterized by a campaign id. Mints a donation token for each contribution and only " +
+              "allows burning during withdraw/reclaim, proving how many donations a campaign " +
+              "received.",
+      version = "1.0.0",
+      license = Some("Apache-2.0"),
+      // DonationMintingPolicy applies its campaign-id parameter as Data on the UPLC level, so
+      // `compiled` is typed `Data => Data => Unit`. The cast only re-labels the phantom type so the
+      // parameter schema is derived as ByteString; the compiled program is unchanged.
+      compiled = compiled.asInstanceOf[PlutusV3[ByteString => Data => Unit]]
+    )
+}

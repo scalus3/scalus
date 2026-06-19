@@ -19,9 +19,9 @@ import scalus.utils.await
 class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
     import AuctionValidatorTest.*
 
-    test(s"Auction validator size is ${AuctionContract.script.script.size} bytes") {
-        println(s"Auction validator size: ${AuctionContract.script.script.size} bytes")
-        assert(AuctionContract.script.script.size > 0)
+    test(s"Auction validator size is ${AuctionContract.compiled.script.script.size} bytes") {
+        println(s"Auction validator size: ${AuctionContract.compiled.script.script.size} bytes")
+        assert(AuctionContract.compiled.script.script.size > 0)
     }
 
     test("seller can start auction") {

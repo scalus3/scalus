@@ -26,8 +26,8 @@ class CrossInstanceDoubleSatisfactionTest extends AnyFunSuite, ScalusTest {
     // Two distinct one-shot params => two distinct script hashes/addresses.
     private val oneShotA = TxOutRef(TxId(ByteString.fromHex("aa" * 32)), 0)
     private val oneShotB = TxOutRef(TxId(ByteString.fromHex("bb" * 32)), 0)
-    private val instA = AuctionContract.withErrorTraces.apply(oneShotA.toData)
-    private val instB = AuctionContract.withErrorTraces.apply(oneShotB.toData)
+    private val instA = AuctionContract.compiled.withErrorTraces.apply(oneShotA.toData)
+    private val instB = AuctionContract.compiled.withErrorTraces.apply(oneShotB.toData)
     private val hashA: ByteString = instA.script.scriptHash
     private val hashB: ByteString = instB.script.scriptHash
 

@@ -12,18 +12,18 @@ import scalus.testing.kit.ScalusTest
 
 class CrowdfundingValidatorTest extends AnyFunSuite, ScalusTest {
 
-    private val crowdfundingContract = CrowdfundingContract.withErrorTraces
+    private val crowdfundingContract = CrowdfundingContract.compiled.withErrorTraces
 
-    test(s"Crowdfunding validator size is ${CrowdfundingContract.script.script.size} bytes") {
-        println(s"Crowdfunding validator size: ${CrowdfundingContract.script.script.size} bytes")
-        assert(CrowdfundingContract.script.script.size > 0)
+    test(s"Crowdfunding validator size is ${CrowdfundingContract.compiled.script.script.size} bytes") {
+        println(s"Crowdfunding validator size: ${CrowdfundingContract.compiled.script.script.size} bytes")
+        assert(CrowdfundingContract.compiled.script.script.size > 0)
     }
 
-    test(s"Donation minting policy size is ${DonationMintingContract.script.script.size} bytes") {
+    test(s"Donation minting policy size is ${DonationMintingContract.compiled.script.script.size} bytes") {
         println(
-          s"Donation minting policy size: ${DonationMintingContract.script.script.size} bytes"
+          s"Donation minting policy size: ${DonationMintingContract.compiled.script.script.size} bytes"
         )
-        assert(DonationMintingContract.script.script.size > 0)
+        assert(DonationMintingContract.compiled.script.script.size > 0)
     }
 
     test("donationTokenName is fixed empty ByteString") {

@@ -1072,7 +1072,7 @@ object AuctionTestKitTest {
         val factory = AuctionFactory(emulator, withErrorTraces = true)
         val instance = factory.createInstance(oneShot)
 
-        val appliedContract = AuctionContract.withErrorTraces.apply(Data.toData(oneShot))
+        val appliedContract = AuctionContract.compiled.withErrorTraces.apply(Data.toData(oneShot))
         val script = appliedContract.script
         val scriptHash = script.scriptHash
         val scriptAddress = appliedContract.address(emulator.cardanoInfo.network)
