@@ -85,14 +85,31 @@ directory:
   </Tabs.Tab>
 </Tabs>
 
+### Speeding up sbt
+
+Each `sbt <command>` boots a fresh JVM. Two ways to avoid paying that startup cost every time:
+
+- **`sbtn`** — a thin native client that talks to a persistent sbt server, keeping the JVM warm
+  between invocations. Use it as a drop-in replacement: `sbtn compile`, `sbtn test`,
+  `sbtn "testOnly *HelloCardanoTest"`. Run `sbtn shutdown` to stop the background server.
+- **The sbt shell** — run `sbt` with no arguments to drop into its interactive prompt, then type
+  `compile`, `test`, `testOnly …` directly (no `sbt` prefix, no surrounding quotes). The JVM is
+  reused for the whole session.
+
+One caveat: a warm server or shell reads environment variables like `SCALUS_TEST_ENV` and
+`SCALUS_PROFILE` once, at startup, and reuses them for its whole life — so setting one on a later
+command has no effect. To switch backends or toggle profiling, set the variable on a plain
+`sbt <command>` (fresh JVM each time), or restart the server (`sbtn shutdown`) or shell first.
+
 ## Test backends
 
 The integration tests (`*Integration.test.scala`) run against a backend selected by the
 `SCALUS_TEST_ENV` environment variable — `emulator` (the default) or `yaci`:
 
 ```sh copy
-sbt test                       # in-memory emulator (default, fast)
-SCALUS_TEST_ENV=yaci sbt test  # a local Yaci DevKit node (requires a running Docker daemon)
+sbt test                           # in-memory emulator (the default)
+SCALUS_TEST_ENV=emulator sbt test  # in-memory emulator, named explicitly
+SCALUS_TEST_ENV=yaci sbt test      # a local Yaci DevKit node (auto-started; requires Docker)
 ```
 
 The same variable works with Scala CLI (`SCALUS_TEST_ENV=yaci scala-cli test .`), since the test
