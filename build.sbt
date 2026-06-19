@@ -22,7 +22,7 @@ val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.19.0"
 val borerVersion = "1.16.2"
 val slf4jVersion = "2.0.18"
-val magnoliaVersion = "1.3.20"
+val magnoliaVersion = "1.3.21"
 val pprintVersion = "0.9.6"
 val monocleVersion = "3.3.0"
 
@@ -428,8 +428,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "org.typelevel" %%% "cats-parse" % "1.1.0",
       libraryDependencies += "org.typelevel" %%% "paiges-core" % "0.4.4",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.14",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.14" % "compile",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.15",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.15" % "compile",
       libraryDependencies ++= Seq(
         "io.bullet" %%% "borer-core" % borerVersion,
         "io.bullet" %%% "borer-derivation" % borerVersion
@@ -762,7 +762,7 @@ lazy val bench = project
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.21.4",
+      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.0",
       libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )
@@ -882,8 +882,8 @@ lazy val scalusEthereumKzgCeremony = project
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       name := "scalus-ethereum-kzg-ceremony",
       scalacOptions ++= commonScalacOptions,
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.14",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.14" % "compile",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.15",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.15" % "compile",
     )
 
 lazy val scalusCardanoLedgerIt = project
