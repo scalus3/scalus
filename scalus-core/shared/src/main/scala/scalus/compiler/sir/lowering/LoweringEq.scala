@@ -78,10 +78,15 @@ object LoweringEq {
       * Custom Eq instances that violate this contract (notably `Eq.keyPairEq[A, B]` which compares
       * only `_1`, ignoring `_2`) are buggy by definition: any code that relies on `===` to mean
       * "structurally equal" — like `List.distinct` — will misbehave. We surface this by emitting a
-      * compile-time warning whenever the Eq instance is not provably one of the standard
-      * type-default forms (`Eq.derived[T]`, `summon[Eq[T]]`, or a prelude `given Eq[...]`). The
-      * warning steers users toward derived/summoned forms; the optimization itself proceeds
-      * uniformly in either case to keep the perf characteristics consistent.
+      * compile-time warning when the Eq is a concrete, named reference (a `def`/`val`/`given` such
+      * as `Eq.keyPairEq`, i.e. a `SIR.ExternalVar`) that is not one of the standard type-default
+      * forms (`Eq.derived[T]`, `summon[Eq[T]]`, or a prelude `given Eq[...]`). An Eq received
+      * abstractly as a `using` parameter is a `SIR.Var` use-site — we are *using* an instance, not
+      * creating one — so it is left alone (see `isConcreteNamedEq`) to avoid a noise-only false
+      * positive. The warning is reported against the operand's position (the caller), because the
+      * `eq(x, y)` apply node carries the inlined `===`/`!==` operator-body position from the
+      * prelude. The optimization itself proceeds uniformly in either case to keep the perf
+      * characteristics consistent.
       */
     def lowerEqIntrinsic(
         app: SIR.Apply,
@@ -93,8 +98,15 @@ object LoweringEq {
             case _                   =>
                 // Not curried — fall back to normal apply
                 return fallback(app)
-        if !isTypeDefaultEq(eqRef) then
-            val posKey = app.anns.pos.show
+        if !isTypeDefaultEq(eqRef) && isConcreteNamedEq(eqRef) then
+            // `app.anns.pos` is the inlined `eq(x, y)` body inside the `===`/`!==` operator, so it
+            // always resolves to the prelude's `Eq.scala` rather than the user's call site. The
+            // operands carry the caller's positions, so report against an operand instead.
+            val warnPos =
+                if lhsSir.anns.pos != SIRPosition.empty then lhsSir.anns.pos
+                else if rhsSir.anns.pos != SIRPosition.empty then rhsSir.anns.pos
+                else app.anns.pos
+            val posKey = warnPos.show
             if warnedNonDerivedPositions.add(posKey) then
                 lctx.warn(
                   "Eq instance is not provably the structural type-default " +
@@ -104,7 +116,7 @@ object LoweringEq {
                       "(reflexive / symmetric / transitive AND structurally consistent) — instances like " +
                       "`Eq.keyPairEq` that compare only one component violate this and produce wrong " +
                       "runtime results. Prefer `Eq.derived[T]` to make the type-default explicit.",
-                  app.anns.pos
+                  warnPos
                 )
         val lhs = Lowering.lowerSIR(lhsSir)
         val rhs = Lowering.lowerSIR(rhsSir)
@@ -134,6 +146,17 @@ object LoweringEq {
             // `Eq[T]` (= `summon[Eq[T]]`) lowers to `Apply(<Eq.apply ref>, <implicit>)` — recurse.
             isTypeDefaultEq(f)
         case _ => false
+
+    /** True when `eqRef` is a concrete, named Eq instance the user can act on — a cross-module
+      * reference (`ExternalVar`) to a `def`/`val`/`given` such as `Eq.keyPairEq`. A bare `Var` is
+      * an Eq received abstractly (a `using eq: Eq[A]` parameter or other local binding): at that
+      * point we are *using* an instance, not creating one, so the "prefer `Eq.derived[T]`" advice
+      * doesn't apply and we stay silent rather than emit a use-site false positive.
+      */
+    private def isConcreteNamedEq(eqRef: SIR): Boolean = eqRef match
+        case _: SIR.ExternalVar    => true
+        case SIR.Apply(f, _, _, _) => isConcreteNamedEq(f)
+        case _                     => false
 
     /** Generate repr-specific equality comparison.
       *

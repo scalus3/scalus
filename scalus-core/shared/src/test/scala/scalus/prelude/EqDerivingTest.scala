@@ -123,6 +123,25 @@ object EqBudgetStatus:
     def mkDone(r: BigInt): EqBudgetStatus = EqBudgetStatus.Done(r)
     def mkFailed(c: BigInt, m: String): EqBudgetStatus = EqBudgetStatus.Failed(c, m)
 
+// Exercises the two sides of the "not provably structural" Eq advisory in the lowering pass.
+@Compile
+object EqUseSite:
+    // Generic, non-inline: `a === b` resolves to the abstract `using Eq[A]` parameter — an Eq
+    // *received as a variable* (a use-site), not a created/named instance. The lowering must NOT
+    // emit the not-provably-default advisory here.
+    def genericEq[A](a: A, b: A)(using Eq[A]): Boolean = a === b
+
+    def usePoints(x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt): Boolean =
+        genericEq(EqTestPoint(x1, y1), EqTestPoint(x2, y2))
+
+// A concrete, named, non-structural Eq (it ignores its arguments) — the kind the advisory exists
+// to catch. Used via `===`, it exercises both the warning and its call-site position reporting.
+case class EqWrap(v: BigInt)
+
+@Compile
+object EqWrap:
+    given alwaysEqual: Eq[EqWrap] = (_: EqWrap, _: EqWrap) => true
+
 class EqDerivingTest extends AnyFunSuite {
 
     test("Eq.derived for case class - equal values") {
@@ -184,6 +203,62 @@ class EqDerivingTest extends AnyFunSuite {
         assert(p1 === p2)
         assert(!(p1 === p3))
         assert(p1 !== p3)
+    }
+
+    // Captures stdout (where `LoweringContext.warn` prints) while lowering `body` to UPLC. `noWarn`
+    // is left at its default `false`, so warnings are enabled and we can assert their (in)presence.
+    private def captureLoweringOutput(body: => Unit): String =
+        val out = new java.io.ByteArrayOutputStream()
+        Console.withOut(out)(body)
+        out.toString
+
+    private val notProvablyDefault = "Eq instance is not provably the structural type-default"
+
+    test("=== via an abstract `using Eq` parameter is not flagged as not-provably-default") {
+        given scalus.compiler.Options = scalus.compiler.Options(
+          targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
+          generateErrorTraces = false,
+          optimizeUplc = false,
+          debug = false
+        )
+        val output = captureLoweringOutput {
+            val sir = scalus.compiler.compile { (x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt) =>
+                EqUseSite.usePoints(x1, y1, x2, y2)
+            }
+            sir.toUplc(generateErrorTraces = false)
+        }
+        assert(
+          !output.contains(notProvablyDefault),
+          s"unexpected use-site Eq advisory (eq received as a `using` variable):\n$output"
+        )
+    }
+
+    test("=== with a concrete non-default Eq is flagged at the call site, not in Eq.scala") {
+        given scalus.compiler.Options = scalus.compiler.Options(
+          targetLoweringBackend = scalus.compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
+          generateErrorTraces = false,
+          optimizeUplc = false,
+          debug = false
+        )
+        val output = captureLoweringOutput {
+            val sir = scalus.compiler.compile { (a: BigInt, b: BigInt) =>
+                EqWrap(a) === EqWrap(b)
+            }
+            sir.toUplc(generateErrorTraces = false)
+        }
+        assert(
+          output.contains(notProvablyDefault),
+          s"expected a not-provably-default Eq advisory for a concrete named instance:\n$output"
+        )
+        // Position fix: the advisory is reported against the operand (the caller), not the inlined
+        // `===` operator body in the prelude's Eq.scala. (When `===` is reached through the
+        // `scalus.prelude` re-export, as here, Scala attributes the inlined operand to that export
+        // site rather than the literal call line; with a direct import it is the exact call site.
+        // Either way it must no longer point inside the operator definition.)
+        assert(
+          !output.contains("onchain/plutus/prelude/Eq.scala"),
+          s"advisory should not point at the inlined `===` operator body:\n$output"
+        )
     }
 
     test("Eq.derived compiles to UPLC and evaluates correctly") {
