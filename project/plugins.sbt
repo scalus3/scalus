@@ -9,7 +9,7 @@ addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.3.2")
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.1")
 addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.11.2")
 // show welcome message
-addSbtPlugin("com.github.reibitto" % "sbt-welcome" % "0.5.0")
+addSbtPlugin("com.github.reibitto" % "sbt-welcome" % "0.6.0")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 // sbt plugin to unify scaladoc/javadoc across multiple projects
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
