@@ -6,6 +6,7 @@ import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.{Network, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.rules.Context
 import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, TxBuilder}
 import scalus.testing.kit.Party.{Alice, Bob}
 import scalus.uplc.PlutusV3
@@ -350,6 +351,22 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val unregResult = emulator.submitSync(certTx(Certificate.UnregDRepCert(drepCred, deposit)))
         assert(unregResult.isRight, s"DRep deregistration should succeed: $unregResult")
         assert(!emulator.certState.vstate.dreps.contains(drepCred))
+    }
+
+    test("Emulator.setSlot preserves evaluatorMode and debugScripts (issue #314)") {
+        val emulator = Emulator(
+          initialContext =
+              Context.testMainnet().copy(evaluatorMode = EvaluatorMode.EvaluateAndComputeCost)
+        )
+        assert(emulator.evaluatorMode == EvaluatorMode.EvaluateAndComputeCost)
+
+        emulator.setSlot(100L)
+
+        assert(
+          emulator.evaluatorMode == EvaluatorMode.EvaluateAndComputeCost,
+          "setSlot must not silently revert evaluatorMode to Validate"
+        )
+        assert(emulator.currentSlot.await() == 100L)
     }
 
     test("Emulator derives the current epoch from the slot for retirement validation") {

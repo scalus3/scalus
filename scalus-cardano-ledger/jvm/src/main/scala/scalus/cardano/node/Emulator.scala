@@ -96,11 +96,8 @@ class Emulator(
     @tailrec
     final def setSlot(slot: SlotNo): Unit = {
         val ctx = contextRef.get()
-        val newContext = Context(
-          fee = ctx.fee,
-          env = ctx.env.copy(slot = slot),
-          slotConfig = ctx.slotConfig
-        )
+        // copy preserves evaluatorMode and debugScripts, which a fresh Context(...) would drop
+        val newContext = ctx.copy(env = ctx.env.copy(slot = slot))
         if !contextRef.compareAndSet(ctx, newContext) then setSlot(slot)
     }
 

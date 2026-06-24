@@ -113,6 +113,7 @@ object ImmutableEmulator {
           state = State(utxos = emulator.utxos),
           env = env,
           slotConfig = info.slotConfig,
+          evaluatorMode = emulator.evaluatorMode,
           validators = emulator.validators,
           mutators = emulator.mutators
         )
