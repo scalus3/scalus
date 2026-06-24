@@ -80,6 +80,19 @@ object UplcCli:
       */
     def uplcToFlat(program: String): Array[Byte] =
         val cmd = "uplc convert --of flat"
-        val outStream = new ByteArrayOutputStream()
-        cmd.#<(new ByteArrayInputStream(program.getBytes("UTF-8"))).#>(outStream).!
-        outStream.toByteArray
+        val out = new ByteArrayOutputStream()
+        val err = new ByteArrayOutputStream()
+        // Capture stdout as raw bytes, stderr separately, and check the exit code. Without this,
+        // a failed/killed `uplc` subprocess (e.g. OOM under CI memory pressure) silently yields
+        // truncated output that looks like a flat-encoding mismatch instead of a tooling failure.
+        val io = new ProcessIO(
+          in => { in.write(program.getBytes("UTF-8")); in.close() },
+          o => { o.transferTo(out); o.close() },
+          e => { e.transferTo(err); e.close() }
+        )
+        val code = Process(cmd).run(io).exitValue()
+        if code != 0 then
+            throw new RuntimeException(
+              s"`$cmd` failed with exit code $code: ${err.toString("UTF-8")}"
+            )
+        out.toByteArray
