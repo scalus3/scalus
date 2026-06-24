@@ -33,6 +33,12 @@ trait EmulatorBase extends BlockchainProvider {
     def setSlot(slot: SlotNo): Unit
     def snapshot(): Emulator
 
+    /** Evaluator mode the emulator runs Plutus scripts in (e.g. `Validate` vs
+      * `EvaluateAndComputeCost`). Exposed so snapshots such as `ImmutableEmulator.fromEmulator` can
+      * preserve it rather than silently reverting to the `Context` default.
+      */
+    def evaluatorMode: EvaluatorMode = currentContext.evaluatorMode
+
     def tick(n: Long): Unit = setSlot(currentContext.env.slot + n)
 
     def hasTx(txHash: TransactionHash): Boolean = appliedTxs.contains(txHash)

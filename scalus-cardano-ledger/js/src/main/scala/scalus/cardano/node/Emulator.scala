@@ -67,11 +67,8 @@ class Emulator(
     }
 
     def setSlot(slot: SlotNo): Unit = {
-        context = Context(
-          fee = context.fee,
-          env = context.env.copy(slot = slot),
-          slotConfig = context.slotConfig
-        )
+        // copy preserves evaluatorMode and debugScripts, which a fresh Context(...) would drop
+        context = context.copy(env = context.env.copy(slot = slot))
     }
 
     def snapshot(): Emulator = Emulator(
