@@ -26,6 +26,40 @@ trait BlockchainReaderTF[F[_]] {
       */
     def findUtxos(query: UtxoQuery): F[Either[UtxoQueryError, Utxos]]
 
+    /** Find a single UTxO by its transaction input.
+      *
+      * @return
+      *   Right(utxo) if found, Left(NotFound) otherwise
+      */
+    def findUtxo(input: TransactionInput): F[Either[UtxoQueryError, Utxo]] =
+        mapF(findUtxos(UtxoQuery(UtxoSource.FromInputs(Set(input))))) { result =>
+            result.flatMap { utxos =>
+                utxos.headOption match
+                    case Some((i, o)) => Right(Utxo(i, o))
+                    case None => Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(Set(input))))
+            }
+        }
+
+    /** Find UTxOs by a set of transaction inputs (fails with NotFound if not all are found). */
+    def findUtxos(inputs: Set[TransactionInput]): F[Either[UtxoQueryError, Utxos]] =
+        mapF(findUtxos(UtxoQuery(UtxoSource.FromInputs(inputs)))) { result =>
+            result.flatMap { foundUtxos =>
+                if foundUtxos.size == inputs.size then Right(foundUtxos)
+                else Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(inputs)))
+            }
+        }
+
+    /** Find all UTxOs at the given address. */
+    def findUtxos(address: Address): F[Either[UtxoQueryError, Utxos]] =
+        findUtxos(UtxoQuery(UtxoSource.FromAddress(address)))
+
+    /** Map over this reader's effect `F` — the one primitive needed to give the convenience lookups
+      * above ([[findUtxo]] and the `findUtxos` overloads) a single effect-polymorphic default,
+      * without imposing an external Functor/Monad constraint on `F`. Future-based readers map via
+      * their captured ExecutionContext; monadic effects map via their monad.
+      */
+    protected def mapF[A, B](fa: F[A])(f: A => B): F[B]
+
     /** Returns the current slot number.
       */
     def currentSlot: F[SlotNo]
@@ -189,49 +223,9 @@ trait BlockchainReader extends BlockchainReaderTF[Future] {
 
     def fetchLatestParams: Future[ProtocolParams]
 
-    /** Find a single UTxO by its transaction input.
-      *
-      * @param input
-      *   the transaction input to look up
-      * @return
-      *   Either a UtxoQueryError or the found Utxo
-      */
-    def findUtxo(input: TransactionInput): Future[Either[UtxoQueryError, Utxo]] = {
-        findUtxos(UtxoQuery(UtxoSource.FromInputs(Set(input)))).map { result =>
-            result.flatMap { utxos =>
-                utxos.headOption match
-                    case Some((i, o)) => Right(Utxo(i, o))
-                    case None => Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(Set(input))))
-            }
-        }(using executionContext)
-    }
-
-    /** Find UTxOs by a set of transaction inputs.
-      *
-      * @param inputs
-      *   the transaction inputs to look up
-      * @return
-      *   Either a UtxoQueryError or the found UTxOs (fails if not all inputs are found)
-      */
-    def findUtxos(inputs: Set[TransactionInput]): Future[Either[UtxoQueryError, Utxos]] = {
-        findUtxos(UtxoQuery(UtxoSource.FromInputs(inputs))).map { result =>
-            result.flatMap { foundUtxos =>
-                if foundUtxos.size == inputs.size then Right(foundUtxos)
-                else Left(UtxoQueryError.NotFound(UtxoSource.FromInputs(inputs)))
-            }
-        }(using executionContext)
-    }
-
-    /** Find all UTxOs at the given address.
-      *
-      * @param address
-      *   the address to query
-      * @return
-      *   Either a UtxoQueryError or the found UTxOs
-      */
-    def findUtxos(address: Address): Future[Either[UtxoQueryError, Utxos]] = {
-        findUtxos(UtxoQuery(UtxoSource.FromAddress(address)))
-    }
+    /** Map over the `Future` effect using this reader's captured ExecutionContext. */
+    override protected def mapF[A, B](fa: Future[A])(f: A => B): Future[B] =
+        fa.map(f)(using executionContext)
 
     /** Returns the current slot number.
       */

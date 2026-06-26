@@ -343,6 +343,9 @@ object Scenario {
             ): Scenario[Either[UtxoQueryError, Utxos]] =
                 leaf(s => Done(s, s.emulator.findUtxos(query)))
 
+            override protected def mapF[A, B](fa: Scenario[A])(f: A => B): Scenario[B] =
+                scenarioLogicMonad.map(fa)(f)
+
             override def currentSlot: Scenario[SlotNo] =
                 Scenario.now
 

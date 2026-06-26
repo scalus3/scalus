@@ -55,6 +55,23 @@ class ScenarioTest extends AnyFunSuite {
         assert(result.get._2 == initial.emulator.currentSlot + 5)
     }
 
+    test("provider.findUtxo and findUtxos(address) resolve through the Scenario monad") {
+        val initial = mkState(Alice, Bob)
+        val aliceInput = initial.emulator.utxos.collectFirst {
+            case (in, out) if out.address == Alice.address => in
+        }.get
+        val m = Scenario.scenarioLogicMonad
+        val scenario = m.flatMap(Scenario.provider) { p =>
+            m.flatMap(p.findUtxo(aliceInput)) { byInput =>
+                m.map(p.findUtxos(Alice.address))(byAddr => (byInput, byAddr))
+            }
+        }
+        val (byInput, byAddr) = awaitResult(Scenario.continueFirst(initial)(scenario)).get._2
+        assert(byInput.isRight, s"findUtxo should resolve: $byInput")
+        assert(byInput.toOption.get.output.address == Alice.address)
+        assert(byAddr.isRight && byAddr.toOption.exists(_.nonEmpty), s"findUtxos(address): $byAddr")
+    }
+
     // =========================================================================
     // Non-deterministic branching
     // =========================================================================
