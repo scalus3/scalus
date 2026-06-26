@@ -24,34 +24,45 @@ class Emulator(
     val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
     val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
     initialCertState: CertState = CertState.empty,
-    initialDatums: Map[DataHash, Data] = Map.empty
+    initialDatums: Map[DataHash, Data] = Map.empty,
+    initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
 ) extends EmulatorBase {
     private val stateRef =
         new AtomicReference[State](State(initialUtxos, certState = initialCertState))
     private val contextRef = new AtomicReference[Context](initialContext)
-    private val datumsRef = new AtomicReference[Map[DataHash, Data]](initialDatums)
-    private val appliedTxsRef = new AtomicReference[Set[TransactionHash]](Set.empty)
+    private val datumsRef = new AtomicReference[Map[DataHash, Data]](
+      initialAppliedTxLog.foldLeft(initialDatums)((acc, a) =>
+          acc ++ EmulatorBase.extractDatums(a.tx)
+      )
+    )
+    private val appliedTxLogRef = new AtomicReference[Vector[AppliedTx]](initialAppliedTxLog)
+    private val appliedTxIndexRef =
+        new AtomicReference[Map[TransactionHash, AppliedTx]](
+          EmulatorBase.indexAppliedTxs(initialAppliedTxLog)
+        )
+    private val appliedTxsRef =
+        new AtomicReference[Set[TransactionHash]](initialAppliedTxLog.map(_.tx.id).toSet)
 
     def utxos: Utxos = stateRef.get().utxos
     def certState: CertState = stateRef.get().certState
     protected def currentContext: Context = contextRef.get()
     def datums: Map[DataHash, Data] = datumsRef.get()
+    def appliedTxLog: Vector[AppliedTx] = appliedTxLogRef.get()
+    def appliedTxIndex: Map[TransactionHash, AppliedTx] = appliedTxIndexRef.get()
     def appliedTxs: Set[TransactionHash] = appliedTxsRef.get()
 
-    @tailrec
-    private def recordApplied(tx: Transaction): Unit = {
-        val cur = appliedTxsRef.get()
-        if !appliedTxsRef.compareAndSet(cur, cur + tx.id) then recordApplied(tx)
-        else {
-            val extracted = EmulatorBase.extractDatums(tx)
-            if extracted.nonEmpty then {
-                val curDatums = datumsRef.get()
-                if !datumsRef.compareAndSet(curDatums, curDatums ++ extracted) then {
-                    // retry just the datums merge
-                    var d = datumsRef.get()
-                    while !datumsRef.compareAndSet(d, d ++ extracted) do d = datumsRef.get()
-                }
-            }
+    private def recordApplied(applied: AppliedTx): Unit = {
+        var log = appliedTxLogRef.get()
+        while !appliedTxLogRef.compareAndSet(log, log :+ applied) do log = appliedTxLogRef.get()
+        var idx = appliedTxIndexRef.get()
+        while !appliedTxIndexRef.compareAndSet(idx, idx + (applied.txHash -> applied)) do
+            idx = appliedTxIndexRef.get()
+        var txs = appliedTxsRef.get()
+        while !appliedTxsRef.compareAndSet(txs, txs + applied.txHash) do txs = appliedTxsRef.get()
+        val extracted = EmulatorBase.extractDatums(applied.tx)
+        if extracted.nonEmpty then {
+            var d = datumsRef.get()
+            while !datumsRef.compareAndSet(d, d ++ extracted) do d = datumsRef.get()
         }
     }
 
@@ -65,7 +76,13 @@ class Emulator(
         processTransaction(ctx, currentState, transaction) match {
             case Right(newState) =>
                 if stateRef.compareAndSet(currentState, newState) then
-                    recordApplied(transaction)
+                    recordApplied(
+                      AppliedTx(
+                        transaction,
+                        ctx.env.slot,
+                        EmulatorBase.resolveSpent(currentState.utxos, transaction)
+                      )
+                    )
                     Right(transaction.id)
                 else submitSync(transaction)
             case Left(t: TransactionException) =>
@@ -85,7 +102,13 @@ class Emulator(
         processTransaction(ctxWithDebug, currentState, transaction) match {
             case Right(newState) =>
                 if stateRef.compareAndSet(currentState, newState) then
-                    recordApplied(transaction)
+                    recordApplied(
+                      AppliedTx(
+                        transaction,
+                        ctx.env.slot,
+                        EmulatorBase.resolveSpent(currentState.utxos, transaction)
+                      )
+                    )
                     Right(transaction.id)
                 else submitSync(transaction, debugScripts)
             case Left(t: TransactionException) =>
@@ -101,13 +124,20 @@ class Emulator(
         if !contextRef.compareAndSet(ctx, newContext) then setSlot(slot)
     }
 
+    def clearAppliedTxs(): Unit = {
+        appliedTxLogRef.set(Vector.empty)
+        appliedTxIndexRef.set(Map.empty)
+        appliedTxsRef.set(Set.empty)
+    }
+
     def snapshot(): Emulator = Emulator(
       initialUtxos = this.utxos,
       initialContext = this.contextRef.get(),
       validators = this.validators,
       mutators = this.mutators,
       initialCertState = this.stateRef.get().certState,
-      initialDatums = this.datumsRef.get()
+      initialDatums = this.datumsRef.get(),
+      initialAppliedTxLog = this.appliedTxLogRef.get()
     )
 }
 

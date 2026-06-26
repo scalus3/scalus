@@ -23,7 +23,18 @@ case class ImmutableEmulator(
     slotConfig: SlotConfig = SlotConfig.mainnet,
     evaluatorMode: EvaluatorMode = EvaluatorMode.Validate,
     validators: Iterable[STS.Validator] = Emulator.defaultValidators,
-    mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
+    mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
+    /** Ordered log of applied transactions (oldest first); maintained by [[submit]]. */
+    appliedTxLog: Vector[AppliedTx] = Vector.empty,
+    /** By-hash index of [[appliedTxLog]] for O(1) lookup. Invariant: the by-hash view of
+      * `appliedTxLog`; both advance together in [[submit]]. Build it via
+      * `EmulatorBase.indexAppliedTxs` rather than setting it independently.
+      */
+    appliedTxIndex: Map[TransactionHash, AppliedTx] = Map.empty,
+    /** Datum resolution cache (inline + witness datums of applied transactions). Maintained by
+      * [[submit]] so [[getDatum]] and [[asReader]] can resolve datum-hash references.
+      */
+    datums: Map[DataHash, Data] = Map.empty
 ) {
 
     /** Current UTxO set. */
@@ -46,11 +57,36 @@ case class ImmutableEmulator(
         val context = Context(env = env, slotConfig = slotConfig, evaluatorMode = evaluatorMode)
         STS.Mutator.transit(validators, mutators, context, state, tx) match {
             case Right(newState) =>
-                Right((tx.id, copy(state = newState)))
+                val applied = AppliedTx(tx, env.slot, EmulatorBase.resolveSpent(state.utxos, tx))
+                val next = copy(
+                  state = newState,
+                  appliedTxLog = appliedTxLog :+ applied,
+                  appliedTxIndex = appliedTxIndex + (applied.txHash -> applied),
+                  datums = datums ++ EmulatorBase.extractDatums(tx)
+                )
+                Right((tx.id, next))
             case Left(e: TransactionException) =>
                 Left(SubmitError.fromException(e))
         }
     }
+
+    /** True if the given transaction has been applied to this emulator. */
+    def hasTx(txHash: TransactionHash): Boolean = appliedTxIndex.contains(txHash)
+
+    /** Look up a previously applied transaction by hash, or `None` if it was never applied. */
+    def getTransaction(txHash: TransactionHash): Option[Transaction] =
+        appliedTxIndex.get(txHash).map(_.tx)
+
+    /** Look up the full applied-tx record (transaction + slot + spent inputs) by hash. */
+    def getAppliedTx(txHash: TransactionHash): Option[AppliedTx] =
+        appliedTxIndex.get(txHash)
+
+    /** Resolve a datum by its hash, or `None` if unknown. */
+    def getDatum(datumHash: DataHash): Option[Data] = datums.get(datumHash)
+
+    /** Clear the applied-transaction bookkeeping (log + index), keeping ledger state. */
+    def clearAppliedTxs: ImmutableEmulator =
+        copy(appliedTxLog = Vector.empty, appliedTxIndex = Map.empty)
 
     /** Advance the slot by the given number of slots. */
     def advanceSlot(n: Long): ImmutableEmulator = copy(env = env.copy(slot = env.slot + n))
@@ -78,7 +114,7 @@ case class ImmutableEmulator(
         override def currentSlot: Future[SlotNo] =
             Future.successful(env.slot)
         def getDatum(datumHash: DataHash): Future[Option[Data]] =
-            Future.successful(None)
+            Future.successful(ImmutableEmulator.this.datums.get(datumHash))
     }
 
     /** Convert to a mutable [[scalus.cardano.node.Emulator]]. */
@@ -88,7 +124,10 @@ case class ImmutableEmulator(
           initialUtxos = utxos,
           initialContext = context,
           validators = validators,
-          mutators = mutators
+          mutators = mutators,
+          initialCertState = state.certState,
+          initialDatums = datums,
+          initialAppliedTxLog = appliedTxLog
         )
     }
 }
@@ -106,16 +145,22 @@ object ImmutableEmulator {
         val env = UtxoEnv(
           slot = slot,
           params = info.protocolParams,
+          // ledger rules read cert state from `state.certState`, not `env.certState`; mirror the
+          // mutable Emulator and keep this empty (the real cert state lives in `state` below)
           certState = CertState.empty,
           network = info.network
         )
+        val log = emulator.appliedTxLog.toVector
         ImmutableEmulator(
-          state = State(utxos = emulator.utxos),
+          state = State(utxos = emulator.utxos, certState = emulator.certState),
           env = env,
           slotConfig = info.slotConfig,
           evaluatorMode = emulator.evaluatorMode,
           validators = emulator.validators,
-          mutators = emulator.mutators
+          mutators = emulator.mutators,
+          appliedTxLog = log,
+          appliedTxIndex = EmulatorBase.indexAppliedTxs(log),
+          datums = emulator.datums
         )
     }
 

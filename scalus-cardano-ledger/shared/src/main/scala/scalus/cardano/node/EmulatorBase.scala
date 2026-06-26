@@ -26,12 +26,37 @@ trait EmulatorBase extends BlockchainProvider {
     def certState: CertState
     protected def currentContext: Context
     def datums: Map[DataHash, Data]
+
+    /** Index of applied transactions by hash, for O(1) lookup. Platform-specific state. */
+    def appliedTxIndex: Map[TransactionHash, AppliedTx]
+
+    /** Ordered log of transactions applied to this emulator, in submission order (oldest first).
+      *
+      * Unlike [[appliedTxs]] (hashes only), each entry retains the full transaction together with
+      * the slot it was applied at and the inputs it consumed (resolved against the pre-application
+      * UTxO set). This lets callers reconstruct chain history — e.g. walk the continuing outputs of
+      * an asset — without keeping their own submitted-transaction bookkeeping.
+      *
+      * Ordering reflects submission order; under concurrent submission it is best-effort — the
+      * underlying ledger state transition is serialized, but the log append that follows it is not.
+      */
+    def appliedTxLog: Seq[AppliedTx]
+
+    /** Hashes of all applied transactions. Held as a materialized set (kept in sync with
+      * [[appliedTxIndex]] by the platform implementations) so access is a plain O(1) field read
+      * rather than a per-call key-set view.
+      */
     def appliedTxs: Set[TransactionHash]
 
     // Abstract - platform-specific state modification
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash]
     def setSlot(slot: SlotNo): Unit
     def snapshot(): Emulator
+
+    /** Clear the applied-transaction bookkeeping ([[appliedTxLog]] and [[appliedTxIndex]]), leaving
+      * the ledger state (`utxos`, `certState`, `datums`) untouched.
+      */
+    def clearAppliedTxs(): Unit
 
     /** Evaluator mode the emulator runs Plutus scripts in (e.g. `Validate` vs
       * `EvaluateAndComputeCost`). Exposed so snapshots such as `ImmutableEmulator.fromEmulator` can
@@ -41,7 +66,15 @@ trait EmulatorBase extends BlockchainProvider {
 
     def tick(n: Long): Unit = setSlot(currentContext.env.slot + n)
 
-    def hasTx(txHash: TransactionHash): Boolean = appliedTxs.contains(txHash)
+    def hasTx(txHash: TransactionHash): Boolean = appliedTxIndex.contains(txHash)
+
+    /** Look up a previously applied transaction by hash, or `None` if it was never applied. */
+    def getTransaction(txHash: TransactionHash): Option[Transaction] =
+        appliedTxIndex.get(txHash).map(_.tx)
+
+    /** Look up the full applied-tx record (transaction + slot + spent inputs) by hash. */
+    def getAppliedTx(txHash: TransactionHash): Option[AppliedTx] =
+        appliedTxIndex.get(txHash)
 
     def getDelegation(credential: Credential): DelegationInfo = {
         val st = certState.dstate
@@ -101,6 +134,23 @@ trait EmulatorBase extends BlockchainProvider {
     ): Either[TransactionException, State] = {
         STS.Mutator.transit(validators, mutators, context, state, transaction)
     }
+}
+
+/** A record of a transaction applied to the emulated ledger.
+  *
+  * Captures the parts of chain history that the live UTxO set no longer holds after application:
+  * the full transaction, the slot it was applied at, and the resolved inputs it consumed (which are
+  * removed from the UTxO set once the transaction is applied).
+  *
+  * @param tx
+  *   the applied transaction
+  * @param slot
+  *   the emulator slot at the time of application
+  * @param spent
+  *   the UTxOs consumed by `tx`, resolved against the pre-application UTxO set
+  */
+case class AppliedTx(tx: Transaction, slot: SlotNo, spent: Utxos) {
+    def txHash: TransactionHash = tx.id
 }
 
 case class DelegationInfo(poolId: Option[PoolKeyHash], rewards: Coin)
@@ -195,6 +245,23 @@ object EmulatorBase {
             Input(genesisHash, index) -> Output(address, initialValue)
         }.toMap
     }
+
+    /** Resolve the inputs a transaction consumes against a UTxO set.
+      *
+      * Returns the subset of `utxos` whose inputs appear in `transaction`'s input set — i.e. the
+      * UTxOs that applying the transaction will remove. Intended to be evaluated against the
+      * pre-application snapshot so the consumed values can be retained in [[AppliedTx]].
+      */
+    def resolveSpent(utxos: Utxos, transaction: Transaction): Utxos =
+        transaction.body.value.inputs.toSeq.view
+            .flatMap(input => utxos.get(input).map(input -> _))
+            .toMap
+
+    /** Build the by-hash index for an applied-tx log — the single place this derivation lives, so
+      * an emulator's index and its log cannot drift apart.
+      */
+    def indexAppliedTxs(log: Iterable[AppliedTx]): Map[TransactionHash, AppliedTx] =
+        log.iterator.map(a => a.txHash -> a).toMap
 
     def extractDatums(transaction: Transaction): Map[DataHash, Data] = {
         val fromWitness = transaction.witnessSet.plutusData.value.toMap.map {
