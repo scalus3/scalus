@@ -21,30 +21,42 @@ class Emulator(
     val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
     val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
     initialCertState: CertState = CertState.empty,
-    initialDatums: Map[DataHash, Data] = Map.empty
+    initialDatums: Map[DataHash, Data] = Map.empty,
+    initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
 ) extends EmulatorBase {
     // JavaScript is single-threaded, so simple vars are safe
     private var state: State = State(initialUtxos, certState = initialCertState)
     private var context: Context = initialContext
-    private var _datums: Map[DataHash, Data] = initialDatums
-    private var _appliedTxs: Set[TransactionHash] = Set.empty
+    private var _datums: Map[DataHash, Data] =
+        initialAppliedTxLog.foldLeft(initialDatums)((acc, a) =>
+            acc ++ EmulatorBase.extractDatums(a.tx)
+        )
+    private var _appliedTxLog: Vector[AppliedTx] = initialAppliedTxLog
+    private var _appliedTxIndex: Map[TransactionHash, AppliedTx] =
+        EmulatorBase.indexAppliedTxs(initialAppliedTxLog)
+    private var _appliedTxs: Set[TransactionHash] = initialAppliedTxLog.map(_.tx.id).toSet
 
     def utxos: Utxos = state.utxos
     def certState: CertState = state.certState
     def currentContext: Context = context
     def datums: Map[DataHash, Data] = _datums
+    def appliedTxLog: Vector[AppliedTx] = _appliedTxLog
+    def appliedTxIndex: Map[TransactionHash, AppliedTx] = _appliedTxIndex
     def appliedTxs: Set[TransactionHash] = _appliedTxs
 
-    private def recordApplied(tx: Transaction): Unit = {
-        _appliedTxs = _appliedTxs + tx.id
-        _datums = _datums ++ EmulatorBase.extractDatums(tx)
+    private def recordApplied(applied: AppliedTx): Unit = {
+        _appliedTxLog = _appliedTxLog :+ applied
+        _appliedTxIndex = _appliedTxIndex + (applied.txHash -> applied)
+        _appliedTxs = _appliedTxs + applied.txHash
+        _datums = _datums ++ EmulatorBase.extractDatums(applied.tx)
     }
 
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
         processTransaction(context, state, transaction) match {
             case Right(newState) =>
+                val spent = EmulatorBase.resolveSpent(state.utxos, transaction)
                 state = newState
-                recordApplied(transaction)
+                recordApplied(AppliedTx(transaction, context.env.slot, spent))
                 Right(transaction.id)
             case Left(t: TransactionException) =>
                 Left(SubmitError.fromException(t))
@@ -58,8 +70,9 @@ class Emulator(
         val ctxWithDebug = context.copy(debugScripts = debugScripts)
         processTransaction(ctxWithDebug, state, transaction) match {
             case Right(newState) =>
+                val spent = EmulatorBase.resolveSpent(state.utxos, transaction)
                 state = newState
-                recordApplied(transaction)
+                recordApplied(AppliedTx(transaction, context.env.slot, spent))
                 Right(transaction.id)
             case Left(t: TransactionException) =>
                 Left(SubmitError.fromException(t))
@@ -71,13 +84,20 @@ class Emulator(
         context = context.copy(env = context.env.copy(slot = slot))
     }
 
+    def clearAppliedTxs(): Unit = {
+        _appliedTxLog = Vector.empty
+        _appliedTxIndex = Map.empty
+        _appliedTxs = Set.empty
+    }
+
     def snapshot(): Emulator = Emulator(
       initialUtxos = this.utxos,
       initialContext = this.context,
       validators = this.validators,
       mutators = this.mutators,
       initialCertState = this.state.certState,
-      initialDatums = this._datums
+      initialDatums = this._datums,
+      initialAppliedTxLog = this._appliedTxLog
     )
 }
 

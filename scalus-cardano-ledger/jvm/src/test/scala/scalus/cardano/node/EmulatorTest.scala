@@ -52,6 +52,81 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         )
     }
 
+    test("Emulator records an applied-transaction log with slot and spent inputs") {
+        val initialUtxos = Map(
+          Input(genesisHash, 0) -> Output(Alice.address, Value.ada(100))
+        )
+        val provider =
+            Emulator(
+              initialUtxos = initialUtxos,
+              validators = Set.empty,
+              mutators = Emulator.defaultMutators
+            )
+        provider.setSlot(42L)
+
+        assert(provider.appliedTxLog.isEmpty, "log should start empty")
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .complete(provider, Alice.address)
+            .await()
+            .transaction
+
+        val submitResult = provider.submit(tx).await()
+        assert(submitResult.isRight, s"submit should succeed: $submitResult")
+
+        val log = provider.appliedTxLog
+        assert(log.size == 1, s"expected a single applied tx, got ${log.size}")
+        val applied = log.head
+        assert(applied.tx.id == tx.id)
+        assert(applied.slot == 42L, "applied slot should be the emulator slot at submission time")
+        // the transaction consumed Alice's genesis UTxO, which is gone from the live set
+        assert(applied.spent == initialUtxos, "spent should be the resolved consumed inputs")
+        assert(!provider.utxos.contains(Input(genesisHash, 0)), "spent input removed from live set")
+        assert(provider.getTransaction(tx.id).contains(tx), "getTransaction finds the applied tx")
+        assert(provider.getTransaction(genesisHash).isEmpty, "unknown hash resolves to None")
+        // index by hash-id
+        assert(provider.appliedTxIndex.keySet == Set(tx.id))
+        assert(provider.getAppliedTx(tx.id).contains(applied), "getAppliedTx returns the record")
+        assert(provider.hasTx(tx.id) && !provider.hasTx(genesisHash))
+        assert(provider.appliedTxs == Set(tx.id), "appliedTxs derives from the index")
+    }
+
+    test("Emulator.clearAppliedTxs resets the log/index but keeps ledger state") {
+        val initialUtxos = Map(
+          Input(genesisHash, 0) -> Output(Alice.address, Value.ada(100))
+        )
+        val provider =
+            Emulator(
+              initialUtxos = initialUtxos,
+              validators = Set.empty,
+              mutators = Emulator.defaultMutators
+            )
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10), (_: Transaction) => Data.unit)
+            .complete(provider, Alice.address)
+            .await()
+            .transaction
+        assert(provider.submit(tx).await().isRight)
+
+        val utxosBefore = provider.utxos
+        val datumsBefore = provider.datums
+        assert(provider.appliedTxLog.nonEmpty, "precondition: a tx was applied")
+        assert(provider.datums.nonEmpty, "precondition: the tx carried an inline datum")
+
+        provider.clearAppliedTxs()
+
+        // bookkeeping cleared
+        assert(provider.appliedTxLog.isEmpty)
+        assert(provider.appliedTxIndex.isEmpty)
+        assert(provider.appliedTxs.isEmpty)
+        assert(!provider.hasTx(tx.id))
+        assert(provider.getTransaction(tx.id).isEmpty)
+        // ledger state untouched
+        assert(provider.utxos == utxosBefore, "utxos must be preserved")
+        assert(provider.datums == datumsBefore, "datum cache must be preserved")
+    }
+
     test("Emulator.withRegisteredStakeCredentials allows zero-withdrawal without registration tx") {
         val alwaysOkScript = PlutusV3.alwaysOk
         val scriptHash = alwaysOkScript.script.scriptHash
