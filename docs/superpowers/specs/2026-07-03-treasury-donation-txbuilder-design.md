@@ -7,9 +7,9 @@
 
 Cardano's Conway era added two treasury-related fields to the transaction body:
 
-- **`donation`** (CDDL key 23, `positive_coin`) — an amount of ADA moved into the
+- **`donation`** (CDDL key 22, `positive_coin`) — an amount of ADA moved into the
   treasury. Anyone can attach a donation to a transaction.
-- **`current_treasury_value`** (CDDL key 22, `coin`) — a declared snapshot of the
+- **`current_treasury_value`** (CDDL key 21, `coin`) — a declared snapshot of the
   treasury pot at transaction time. The ledger checks it against the actual treasury,
   and it is surfaced in the Plutus script context of treasury-withdrawal governance
   actions.
@@ -62,7 +62,7 @@ The feature mirrors the existing single-field steps (`Fee`, `ValidityStartSlot`,
 File: `scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TransactionBuilderStep.scala`
 
 ```scala
-/** Donate ADA to the Cardano treasury (Conway `donation`, CDDL key 23).
+/** Donate ADA to the Cardano treasury (Conway `donation`, CDDL key 22).
   * Additive is NOT supported — the donation may be set only once.
   * The amount is reflected in value conservation, so the change output shrinks
   * by this amount automatically during balancing.
@@ -71,7 +71,7 @@ case class Donate(amount: Coin) extends TransactionBuilderStep {
     require(amount.value > 0, "Donation amount must be positive")
 }
 
-/** Declare the current treasury value (Conway `current_treasury_value`, CDDL key 22).
+/** Declare the current treasury value (Conway `current_treasury_value`, CDDL key 21).
   * Informational: the ledger checks it against the real treasury pot and exposes it
   * to treasury-withdrawal governance script contexts. Does not affect balancing.
   * May be set only once.
@@ -201,7 +201,7 @@ Integration / balancing test (existing `TxBuilder` + evaluator harness):
 The public method names were chosen for maximum familiarity to users coming from other
 Cardano tx-building libraries, verified against each library's source (2026-07-03):
 
-| Library | Donation (key 23) | Current treasury value (key 22) |
+| Library | Donation (key 22) | Current treasury value (key 21) |
 |---|---|---|
 | Lucid Evolution | `donateToTreasury(donation, currentTreasuryValue?)` (combined) | 2nd param of same call |
 | Blaze | `setDonation(bigint)` | not on builder |

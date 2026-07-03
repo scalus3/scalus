@@ -149,7 +149,7 @@ object TransactionBuilderStep {
         resolve: Utxos => Seq[TransactionBuilderStep]
     ) extends TransactionBuilderStep
 
-    /** Donate ADA to the Cardano treasury (Conway `donation`, CDDL key 23).
+    /** Donate ADA to the Cardano treasury (Conway `donation`, CDDL key 22).
       *
       * May be set only once. The amount participates in value conservation, so the change output
       * automatically shrinks by this amount during balancing.
@@ -161,7 +161,7 @@ object TransactionBuilderStep {
         require(amount.value > 0, "Donation amount must be positive")
     }
 
-    /** Declare the current treasury value (Conway `current_treasury_value`, CDDL key 22).
+    /** Declare the current treasury value (Conway `current_treasury_value`, CDDL key 21).
       *
       * Informational: the ledger checks it against the real treasury pot and exposes it to
       * treasury-withdrawal governance script contexts. Does not affect balancing. May be set only

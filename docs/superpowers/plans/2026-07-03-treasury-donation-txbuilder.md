@@ -77,21 +77,15 @@ test("Donate with zero amount throws IllegalArgumentException") {
         Donate(Coin.zero)
     }
 }
-
-test("donation and currentTreasuryValue survive a CBOR round-trip") {
-    val ctx = TransactionBuilder
-        .build(
-          Mainnet,
-          Seq(Donate(Coin.ada(5)), SetCurrentTreasuryValue(Coin.ada(1000)))
-        )
-        .toOption
-        .get
-    val bytes = Cbor.encode(ctx.transaction).toByteArray
-    val decoded = Cbor.decode(bytes).to[Transaction].value
-    assert(decoded.body.value.donation == Some(Coin.ada(5)))
-    assert(decoded.body.value.currentTreasuryValue == Some(Coin.ada(1000)))
-}
 ```
+
+> **Implementation note (resolved):** an earlier draft of this task also included a CBOR
+> round-trip test that encoded `TransactionBuilder.build(...).transaction` directly. That
+> was dropped: a non-finalized, from-scratch-built `Transaction` has empty `inputs` and
+> cannot be `Cbor.encode`'d/decoded at all — a pre-existing limitation orthogonal to
+> treasury (a `Fee`-only built tx fails identically). Treasury-field serialization is
+> verified in Task 2 on a completed, real-input donation tx via `tx.toCbor` /
+> `Transaction.fromCbor`.
 
 - [ ] **Step 2: Run tests to verify they fail**
 
@@ -103,7 +97,7 @@ Expected: FAIL — compilation error, `Donate`/`SetCurrentTreasuryValue`/`Donati
 In `TransactionBuilderStep.scala`, add these two cases inside `object TransactionBuilderStep`, immediately after the `Deferred` case class (before the closing `}` of the object):
 
 ```scala
-    /** Donate ADA to the Cardano treasury (Conway `donation`, CDDL key 23).
+    /** Donate ADA to the Cardano treasury (Conway `donation`, CDDL key 22).
       *
       * May be set only once. The amount participates in value conservation, so the change
       * output automatically shrinks by this amount during balancing.
@@ -115,7 +109,7 @@ In `TransactionBuilderStep.scala`, add these two cases inside `object Transactio
         require(amount.value > 0, "Donation amount must be positive")
     }
 
-    /** Declare the current treasury value (Conway `current_treasury_value`, CDDL key 22).
+    /** Declare the current treasury value (Conway `current_treasury_value`, CDDL key 21).
       *
       * Informational: the ledger checks it against the real treasury pot and exposes it to
       * treasury-withdrawal governance script contexts. Does not affect balancing. May be set
@@ -194,7 +188,7 @@ Expected: success, no diff on unrelated files.
 - [ ] **Step 8: Run tests to verify they pass**
 
 Run: `sbtn "scalusCardanoLedgerJVM/testOnly scalus.cardano.txbuilder.TransactionBuilderTest"`
-Expected: PASS — all six new tests green, no non-exhaustive-match warning.
+Expected: PASS — all five new tests green, no non-exhaustive-match warning.
 
 - [ ] **Step 9: Commit**
 
