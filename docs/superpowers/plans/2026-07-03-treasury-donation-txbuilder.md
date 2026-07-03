@@ -4,7 +4,7 @@
 
 **Goal:** Let the transaction builder set the Conway `donation` and `current_treasury_value` fields, so users can donate ADA to the Cardano treasury.
 
-**Architecture:** Add two single-field builder steps (`Donate`, `DeclareCurrentTreasuryValue`) mirroring the existing `Fee`/`ValidityStartSlot` pattern: a step case in `TransactionBuilderStep`, a dispatch case + handler in `TransactionStepsProcessor`, an "already set" `StepError`, and a fluent method on `TxBuilder`. The balancer already accounts for `donation` in value conservation, so no balancing changes are needed.
+**Architecture:** Add two single-field builder steps (`Donate`, `SetCurrentTreasuryValue`) mirroring the existing `Fee`/`ValidityStartSlot` pattern: a step case in `TransactionBuilderStep`, a dispatch case + handler in `TransactionStepsProcessor`, an "already set" `StepError`, and a fluent method on `TxBuilder`. The balancer already accounts for `donation` in value conservation, so no balancing changes are needed.
 
 **Tech Stack:** Scala 3, sbt (`sbtn`), ScalaTest (`AnyFunSuite`), monocle lenses, borer CBOR.
 
@@ -31,7 +31,7 @@
 - Consumes: `TransactionBuilder.build(network, steps): Either[SomeBuildError, Context]`; `Context.transaction.body.value.{donation, currentTreasuryValue}: Option[Coin]`; `modify0`, `unsafeCtxBodyL`, `ctx`, `Ok` (in-scope inside the processor); `Coin`, `Coin.zero`, `Coin.ada`.
 - Produces:
   - `TransactionBuilderStep.Donate(amount: Coin)` — sets body `donation`.
-  - `TransactionBuilderStep.DeclareCurrentTreasuryValue(value: Coin)` — sets body `currentTreasuryValue`.
+  - `TransactionBuilderStep.SetCurrentTreasuryValue(value: Coin)` — sets body `currentTreasuryValue`.
   - `StepError.DonationAlreadySet(current: Coin, step: TransactionBuilderStep)`.
   - `StepError.CurrentTreasuryValueAlreadySet(current: Coin, step: TransactionBuilderStep)`.
 
@@ -39,7 +39,7 @@ Note: adding a case to the sealed `TransactionBuilderStep` makes `processStep`'s
 
 - [ ] **Step 1: Write the failing tests**
 
-Add to `TransactionBuilderTests.scala`. `Donate`, `DeclareCurrentTreasuryValue`, `DonationAlreadySet`, `CurrentTreasuryValueAlreadySet` are already in scope via the existing `import ...TransactionBuilderStep.{Mint, *}` and `import ...StepError.*`. `Cbor`, `Mainnet`, `Coin`, `Transaction` are already imported in this file.
+Add to `TransactionBuilderTests.scala`. `Donate`, `SetCurrentTreasuryValue`, `DonationAlreadySet`, `CurrentTreasuryValueAlreadySet` are already in scope via the existing `import ...TransactionBuilderStep.{Mint, *}` and `import ...StepError.*`. `Cbor`, `Mainnet`, `Coin`, `Transaction` are already imported in this file.
 
 ```scala
 // ---- Treasury donation steps ----
@@ -49,9 +49,9 @@ test("Donate sets the transaction body donation field") {
     assert(ctx.transaction.body.value.donation == Some(Coin.ada(5)))
 }
 
-test("DeclareCurrentTreasuryValue sets the current treasury value field") {
+test("SetCurrentTreasuryValue sets the current treasury value field") {
     val ctx = TransactionBuilder
-        .build(Mainnet, Seq(DeclareCurrentTreasuryValue(Coin.ada(1000))))
+        .build(Mainnet, Seq(SetCurrentTreasuryValue(Coin.ada(1000))))
         .toOption
         .get
     assert(ctx.transaction.body.value.currentTreasuryValue == Some(Coin.ada(1000)))
@@ -64,12 +64,12 @@ testBuilderStepsFail(
 )
 
 testBuilderStepsFail(
-  label = "DeclareCurrentTreasuryValue twice fails with CurrentTreasuryValueAlreadySet",
+  label = "SetCurrentTreasuryValue twice fails with CurrentTreasuryValueAlreadySet",
   steps = Seq(
-    DeclareCurrentTreasuryValue(Coin(10)),
-    DeclareCurrentTreasuryValue(Coin(20))
+    SetCurrentTreasuryValue(Coin(10)),
+    SetCurrentTreasuryValue(Coin(20))
   ),
-  error = CurrentTreasuryValueAlreadySet(Coin(10), DeclareCurrentTreasuryValue(Coin(20)))
+  error = CurrentTreasuryValueAlreadySet(Coin(10), SetCurrentTreasuryValue(Coin(20)))
 )
 
 test("Donate with zero amount throws IllegalArgumentException") {
@@ -82,7 +82,7 @@ test("donation and currentTreasuryValue survive a CBOR round-trip") {
     val ctx = TransactionBuilder
         .build(
           Mainnet,
-          Seq(Donate(Coin.ada(5)), DeclareCurrentTreasuryValue(Coin.ada(1000)))
+          Seq(Donate(Coin.ada(5)), SetCurrentTreasuryValue(Coin.ada(1000)))
         )
         .toOption
         .get
@@ -96,7 +96,7 @@ test("donation and currentTreasuryValue survive a CBOR round-trip") {
 - [ ] **Step 2: Run tests to verify they fail**
 
 Run: `sbtn "scalusCardanoLedgerJVM/testOnly scalus.cardano.txbuilder.TransactionBuilderTest"`
-Expected: FAIL — compilation error, `Donate`/`DeclareCurrentTreasuryValue`/`DonationAlreadySet`/`CurrentTreasuryValueAlreadySet` not found.
+Expected: FAIL — compilation error, `Donate`/`SetCurrentTreasuryValue`/`DonationAlreadySet`/`CurrentTreasuryValueAlreadySet` not found.
 
 - [ ] **Step 3: Add the step case classes**
 
@@ -121,7 +121,7 @@ In `TransactionBuilderStep.scala`, add these two cases inside `object Transactio
       * treasury-withdrawal governance script contexts. Does not affect balancing. May be set
       * only once.
       */
-    case class DeclareCurrentTreasuryValue(value: Coin) extends TransactionBuilderStep
+    case class SetCurrentTreasuryValue(value: Coin) extends TransactionBuilderStep
 ```
 
 - [ ] **Step 4: Add the StepError variants**
@@ -152,8 +152,8 @@ In `TransactionStepsProcessor.scala`, in `processStep` (the `step match { ... }`
         case donate: Donate =>
             useDonate(donate)
 
-        case declare: DeclareCurrentTreasuryValue =>
-            useDeclareCurrentTreasuryValue(declare)
+        case setValue: SetCurrentTreasuryValue =>
+            useSetCurrentTreasuryValue(setValue)
 ```
 
 - [ ] **Step 6: Add processor handlers**
@@ -173,8 +173,8 @@ In `TransactionStepsProcessor.scala`, add these two private methods immediately 
                 Ok
         }
 
-    private def useDeclareCurrentTreasuryValue(
-        step: DeclareCurrentTreasuryValue
+    private def useSetCurrentTreasuryValue(
+        step: SetCurrentTreasuryValue
     ): Result[Unit] =
         ctx.transaction.body.value.currentTreasuryValue match {
             case Some(existing) => Left(CurrentTreasuryValueAlreadySet(existing, step))
@@ -215,10 +215,10 @@ git commit -m "feat(txbuilder): add treasury donation and current-treasury-value
 - Test: `scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TxBuilderTest.scala`
 
 **Interfaces:**
-- Consumes: `TransactionBuilderStep.Donate`, `TransactionBuilderStep.DeclareCurrentTreasuryValue` (from Task 1); `TxBuilder.addSteps(s: TransactionBuilderStep*): TxBuilder`; `txBuilder` factory (needs `given CardanoInfo`); `TxBuilder.build(changeTo: Address): TxBuilder`; `.transaction`; `genAdaOnlyPubKeyUtxo(party, min): Gen[Utxo]` where `Utxo(input, output)` (`utxo.output.value.coin.value`).
+- Consumes: `TransactionBuilderStep.Donate`, `TransactionBuilderStep.SetCurrentTreasuryValue` (from Task 1); `TxBuilder.addSteps(s: TransactionBuilderStep*): TxBuilder`; `txBuilder` factory (needs `given CardanoInfo`); `TxBuilder.build(changeTo: Address): TxBuilder`; `.transaction`; `genAdaOnlyPubKeyUtxo(party, min): Gen[Utxo]` where `Utxo(input, output)` (`utxo.output.value.coin.value`).
 - Produces:
   - `TxBuilder.donateToTreasury(amount: Coin): TxBuilder`.
-  - `TxBuilder.declareTreasuryValue(value: Coin): TxBuilder`.
+  - `TxBuilder.setCurrentTreasuryValue(value: Coin): TxBuilder`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -232,7 +232,7 @@ test("donateToTreasury sets donation and reduces change, conserving value") {
     val tx = txBuilder
         .spend(utxo)
         .donateToTreasury(donation)
-        .declareTreasuryValue(Coin.ada(1000))
+        .setCurrentTreasuryValue(Coin.ada(1000))
         .build(changeTo = Alice.address)
         .transaction
 
@@ -250,7 +250,7 @@ test("donateToTreasury sets donation and reduces change, conserving value") {
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `sbtn "scalusCardanoLedgerJVM/testOnly scalus.cardano.txbuilder.TxBuilderTest -- -z donateToTreasury"`
-Expected: FAIL — compilation error, `donateToTreasury`/`declareTreasuryValue` not members of `TxBuilder`.
+Expected: FAIL — compilation error, `donateToTreasury`/`setCurrentTreasuryValue` not members of `TxBuilder`.
 
 - [ ] **Step 3: Add the fluent methods**
 
@@ -270,14 +270,14 @@ In `TxBuilder.scala`, add immediately after the second `withdrawRewards` overloa
 
     /** Declare the current treasury value.
       *
-      * See [[TransactionBuilderStep.DeclareCurrentTreasuryValue]]. Informational only; does not
+      * See [[TransactionBuilderStep.SetCurrentTreasuryValue]]. Informational only; does not
       * affect balancing.
       *
       * @param value
       *   the declared treasury value
       */
-    def declareTreasuryValue(value: Coin): TxBuilder =
-        addSteps(TransactionBuilderStep.DeclareCurrentTreasuryValue(value))
+    def setCurrentTreasuryValue(value: Coin): TxBuilder =
+        addSteps(TransactionBuilderStep.SetCurrentTreasuryValue(value))
 ```
 
 - [ ] **Step 4: Format**
@@ -300,7 +300,7 @@ Expected: PASS — no incompatibilities (all changes are additive).
 ```bash
 git add scalus-cardano-ledger/shared/src/main/scala/scalus/cardano/txbuilder/TxBuilder.scala \
         scalus-cardano-ledger/jvm/src/test/scala/scalus/cardano/txbuilder/TxBuilderTest.scala
-git commit -m "feat(txbuilder): add donateToTreasury and declareTreasuryValue fluent methods"
+git commit -m "feat(txbuilder): add donateToTreasury and setCurrentTreasuryValue fluent methods"
 ```
 
 ---
@@ -308,14 +308,14 @@ git commit -m "feat(txbuilder): add donateToTreasury and declareTreasuryValue fl
 ## Self-Review
 
 **Spec coverage:**
-- Step cases `Donate` / `DeclareCurrentTreasuryValue` → Task 1, Step 3. ✅
+- Step cases `Donate` / `SetCurrentTreasuryValue` → Task 1, Step 3. ✅
 - Processor dispatch + handlers → Task 1, Steps 5-6. ✅
 - `StepError` variants → Task 1, Step 4. ✅
-- Fluent `donateToTreasury` / `declareTreasuryValue` → Task 2, Step 3. ✅
+- Fluent `donateToTreasury` / `setCurrentTreasuryValue` → Task 2, Step 3. ✅
 - No balancer change (donation already in `TxBalance.produced`) → asserted by Task 2 value-conservation test. ✅
 - Testing: field-set, double-set errors, zero rejection, CBOR round-trip (Task 1); fluent wiring + balancing/value-conservation (Task 2). ✅
 - MiMa compatibility → Task 2, Step 6. ✅
 
 **Placeholder scan:** none — every code step shows complete code and every run step shows the command and expected result.
 
-**Type consistency:** `Donate(amount: Coin)`, `DeclareCurrentTreasuryValue(value: Coin)`, `DonationAlreadySet(current, step)`, `CurrentTreasuryValueAlreadySet(current, step)`, `donateToTreasury(amount)`, `declareTreasuryValue(value)` are named identically across the spec, Task 1, and Task 2. Body fields `donation` / `currentTreasuryValue` match `TransactionBody`. ✅
+**Type consistency:** `Donate(amount: Coin)`, `SetCurrentTreasuryValue(value: Coin)`, `DonationAlreadySet(current, step)`, `CurrentTreasuryValueAlreadySet(current, step)`, `donateToTreasury(amount)`, `setCurrentTreasuryValue(value)` are named identically across the spec, Task 1, and Task 2. Body fields `donation` / `currentTreasuryValue` match `TransactionBody`. ✅

@@ -36,7 +36,7 @@ Give the builder first-class support for both Conway treasury fields, so users c
 TxBuilder(...)
   .spend(utxo)
   .donateToTreasury(Coin(5_000_000))       // 5 ADA to the treasury
-  .declareTreasuryValue(Coin(1_000_000_000)) // optional: declared pot snapshot
+  .setCurrentTreasuryValue(Coin(1_000_000_000)) // optional: declared pot snapshot
   .complete(...)
 ```
 
@@ -76,12 +76,14 @@ case class Donate(amount: Coin) extends TransactionBuilderStep {
   * to treasury-withdrawal governance script contexts. Does not affect balancing.
   * May be set only once.
   */
-case class DeclareCurrentTreasuryValue(value: Coin) extends TransactionBuilderStep
+case class SetCurrentTreasuryValue(value: Coin) extends TransactionBuilderStep
 ```
 
 - `Donate` uses a construction-time `require`, matching `Mint`'s zero-guard. The CBOR
   layer independently rejects zero donations, so this keeps behavior consistent.
-- `DeclareCurrentTreasuryValue` accepts any non-negative `Coin`.
+- `SetCurrentTreasuryValue` accepts any non-negative `Coin`. Named to pair with the
+  existing `SetCollateralReturn` step and the CML/cardano-sdk/CCL `setCurrentTreasuryValue`
+  token (see Naming rationale below).
 
 ### 2. `TransactionStepsProcessor` (dispatch + handlers)
 
@@ -93,8 +95,8 @@ Add two dispatch cases in `processStep`:
 case donate: Donate =>
     useDonate(donate)
 
-case declare: DeclareCurrentTreasuryValue =>
-    useDeclareCurrentTreasuryValue(declare)
+case setValue: SetCurrentTreasuryValue =>
+    useSetCurrentTreasuryValue(setValue)
 ```
 
 Add two handlers following the `useFee` pattern:
@@ -108,8 +110,8 @@ private def useDonate(step: Donate): Result[Unit] =
             Ok
     }
 
-private def useDeclareCurrentTreasuryValue(
-    step: DeclareCurrentTreasuryValue
+private def useSetCurrentTreasuryValue(
+    step: SetCurrentTreasuryValue
 ): Result[Unit] =
     ctx.transaction.body.value.currentTreasuryValue match {
         case Some(existing) => Left(CurrentTreasuryValueAlreadySet(existing, step))
@@ -150,10 +152,10 @@ def donateToTreasury(amount: Coin): TxBuilder =
     addSteps(TransactionBuilderStep.Donate(amount))
 
 /** Declare the current treasury value.
-  * See [[TransactionBuilderStep.DeclareCurrentTreasuryValue]].
+  * See [[TransactionBuilderStep.SetCurrentTreasuryValue]].
   */
-def declareTreasuryValue(value: Coin): TxBuilder =
-    addSteps(TransactionBuilderStep.DeclareCurrentTreasuryValue(value))
+def setCurrentTreasuryValue(value: Coin): TxBuilder =
+    addSteps(TransactionBuilderStep.SetCurrentTreasuryValue(value))
 ```
 
 ## Data Flow
@@ -163,7 +165,7 @@ def declareTreasuryValue(value: Coin): TxBuilder =
 3. During balancing, `TxBalance.produced` already includes the donation, so
    `calculateChangeValue` yields a smaller change and the change output shrinks by
    `amount`. No balancer change required.
-4. `declareTreasuryValue(value)` sets `body.currentTreasuryValue`; it does not
+4. `setCurrentTreasuryValue(value)` sets `body.currentTreasuryValue`; it does not
    participate in balancing.
 
 ## Error Handling
@@ -180,11 +182,11 @@ def declareTreasuryValue(value: Coin): TxBuilder =
 Unit tests (extend `TransactionBuilderTests` / `TxBuilderTest`):
 
 - `Donate` sets `body.donation`.
-- `DeclareCurrentTreasuryValue` sets `body.currentTreasuryValue`.
+- `SetCurrentTreasuryValue` sets `body.currentTreasuryValue`.
 - Two `Donate` steps → `DonationAlreadySet`.
-- Two `DeclareCurrentTreasuryValue` steps → `CurrentTreasuryValueAlreadySet`.
+- Two `SetCurrentTreasuryValue` steps → `CurrentTreasuryValueAlreadySet`.
 - `Donate(Coin.zero)` throws `IllegalArgumentException`.
-- Fluent `donateToTreasury` / `declareTreasuryValue` produce the expected steps.
+- Fluent `donateToTreasury` / `setCurrentTreasuryValue` produce the expected steps.
 
 Integration / balancing test (existing `TxBuilder` + evaluator harness):
 
@@ -194,11 +196,37 @@ Integration / balancing test (existing `TxBuilder` + evaluator harness):
 - Round-trip: build a donation transaction, serialize to CBOR, decode, and confirm
   `donation` / `currentTreasuryValue` survive.
 
+## Naming rationale
+
+The public method names were chosen for maximum familiarity to users coming from other
+Cardano tx-building libraries, verified against each library's source (2026-07-03):
+
+| Library | Donation (key 23) | Current treasury value (key 22) |
+|---|---|---|
+| Lucid Evolution | `donateToTreasury(donation, currentTreasuryValue?)` (combined) | 2nd param of same call |
+| Blaze | `setDonation(bigint)` | not on builder |
+| Cardano Client Lib | `TransactionBody.setDonation(BigInteger)` | `setCurrentTreasuryValue(BigInteger)` |
+| Evolution SDK | data model only (`donation`) | data model only (`currentTreasuryValue`) |
+| MeshJS | not supported | not supported |
+| CML (underlies Blaze/Lucid/cardano-sdk) | `set_donation` | `set_current_treasury_value` |
+
+The *field* names (`donation`, `currentTreasuryValue`) are universal across the
+ecosystem, so the data-model/step field names match everyone.
+
+For the fluent methods:
+
+- **`donateToTreasury`** matches Lucid Evolution — the closest analog to Scalus's
+  chainable `TxBuilder` — and its verb form fits Scalus's existing idiom (`payTo`,
+  `withdrawRewards`) better than the `setX` style used by Blaze/CML/CCL.
+- **`setCurrentTreasuryValue`** matches the exact CML / cardano-sdk / Cardano Client Lib
+  token, and the `SetCurrentTreasuryValue` step name pairs with the existing
+  `SetCollateralReturn` step.
+
+We keep two independent methods (rather than Lucid's single combined call) because the
+two Conway fields are independent concerns and this matches Scalus's one-field-per-step
+convention; the second is not forced whenever the first is used.
+
 ## Compatibility
 
 Additive only: new sealed-trait cases, new `StepError` cases, new `TxBuilder` methods.
 Binary-compatible (MiMa-safe). Verify with `sbtn mima`.
-```
-
-Note: the `docs/superpowers/specs/` folder is a project-standard location for these
-specs (see the existing blueprint-caching design doc). Run `git add` on the new file.
