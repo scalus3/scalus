@@ -244,8 +244,18 @@ test("donateToTreasury sets donation and reduces change, conserving value") {
     val outputsCoin = tx.body.value.outputs.map(_.value.value.coin.value).sum
     val fee = tx.body.value.fee.value
     assert(inputCoin == outputsCoin + fee + donation.value)
+
+    // The completed (submittable) transaction serializes with the donation intact.
+    // NOTE: only a COMPLETED tx round-trips — a raw from-scratch `TransactionBuilder.build`
+    // output cannot be Cbor.encode'd (empty inputs / KeepRaw), which is unrelated to treasury.
+    val decoded = Transaction.fromCbor(tx.toCbor)
+    assert(decoded.body.value.donation == Some(donation))
+    assert(decoded.body.value.currentTreasuryValue == Some(Coin.ada(1000)))
 }
 ```
+
+`Transaction` is already imported via `scalus.cardano.ledger.*`; `tx.toCbor` and
+`Transaction.fromCbor` are the production serialization path (used by `BlockfrostProvider`).
 
 - [ ] **Step 2: Run test to verify it fails**
 
@@ -283,7 +293,10 @@ In `TxBuilder.scala`, add immediately after the second `withdrawRewards` overloa
 - [ ] **Step 4: Format**
 
 Run: `sbtn scalafmtAll`
-Expected: success.
+Expected: success. NOTE: `scalafmtAll` formats the whole repo and reflows some
+pre-existing unrelated files (e.g. under `scalus-examples/platform/`). After formatting,
+run `git status --porcelain` and `git checkout --` any file outside the two in Step 7 so
+they are NOT part of this commit.
 
 - [ ] **Step 5: Run test to verify it passes**
 
