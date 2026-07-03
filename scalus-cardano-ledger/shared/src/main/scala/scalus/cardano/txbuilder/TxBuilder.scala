@@ -1111,6 +1111,28 @@ case class TxBuilder(
         )
     }
 
+    /** Donate ADA to the Cardano treasury.
+      *
+      * See [[TransactionBuilderStep.Donate]]. The donation reduces the change output during
+      * balancing.
+      *
+      * @param amount
+      *   the amount to donate (must be positive)
+      */
+    def donateToTreasury(amount: Coin): TxBuilder =
+        addSteps(TransactionBuilderStep.Donate(amount))
+
+    /** Declare the current treasury value.
+      *
+      * See [[TransactionBuilderStep.SetCurrentTreasuryValue]]. Informational only; does not affect
+      * balancing.
+      *
+      * @param value
+      *   the declared treasury value
+      */
+    def setCurrentTreasuryValue(value: Coin): TxBuilder =
+        addSteps(TransactionBuilderStep.SetCurrentTreasuryValue(value))
+
     /** Delegates voting power to a DRep. */
     def delegateVoteToDRep(stakeAddress: StakeAddress, drep: DRep): TxBuilder = {
         val credential = stakeAddress.credential

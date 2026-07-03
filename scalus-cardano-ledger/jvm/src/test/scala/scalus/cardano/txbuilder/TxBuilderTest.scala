@@ -1182,4 +1182,30 @@ class TxBuilderTest extends AnyFunSuite, scalus.cardano.ledger.ArbitraryInstance
         assert(output.isDefined, "No output to script address found")
         assert(output.get.value.datumOption == Some(Inline(Data.I(7))))
     }
+
+    test("donateToTreasury sets donation and reduces change, conserving value") {
+        val utxo = genAdaOnlyPubKeyUtxo(Alice, min = Coin.ada(50)).sample.get
+        val donation = Coin.ada(5)
+
+        val tx = txBuilder
+            .spend(utxo)
+            .donateToTreasury(donation)
+            .setCurrentTreasuryValue(Coin.ada(1000))
+            .build(changeTo = Alice.address)
+            .transaction
+
+        assert(tx.body.value.donation == Some(donation))
+        assert(tx.body.value.currentTreasuryValue == Some(Coin.ada(1000)))
+
+        // Value conservation: inputs == outputs + fee + donation
+        val inputCoin = utxo.output.value.coin.value
+        val outputsCoin = tx.body.value.outputs.map(_.value.value.coin.value).sum
+        val fee = tx.body.value.fee.value
+        assert(inputCoin == outputsCoin + fee + donation.value)
+
+        // The balanced (fee/change finalized) transaction serializes with the donation intact.
+        val decoded = Transaction.fromCbor(tx.toCbor)
+        assert(decoded.body.value.donation == Some(donation))
+        assert(decoded.body.value.currentTreasuryValue == Some(Coin.ada(1000)))
+    }
 }
