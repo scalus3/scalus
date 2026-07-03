@@ -154,6 +154,12 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         case requireSignature: TransactionBuilderStep.RequireSignature =>
             useRequireSignature(requireSignature)
 
+        case donate: Donate =>
+            useDonate(donate)
+
+        case setValue: SetCurrentTreasuryValue =>
+            useSetCurrentTreasuryValue(setValue)
+
         case _: TransactionBuilderStep.Deferred =>
             Left(
               UnexpectedDeferredStep(step)
@@ -566,6 +572,30 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
                 Ok
         }
     }
+
+    // -------------------------------------------------------------------------
+    // Treasury donation steps
+    // -------------------------------------------------------------------------
+
+    private def useDonate(step: Donate): Result[Unit] =
+        ctx.transaction.body.value.donation match {
+            case Some(existing) => Left(DonationAlreadySet(existing, step))
+            case None =>
+                modify0(unsafeCtxBodyL.refocus(_.donation).replace(Some(step.amount)))
+                Ok
+        }
+
+    private def useSetCurrentTreasuryValue(
+        step: SetCurrentTreasuryValue
+    ): Result[Unit] =
+        ctx.transaction.body.value.currentTreasuryValue match {
+            case Some(existing) => Left(CurrentTreasuryValueAlreadySet(existing, step))
+            case None =>
+                modify0(
+                  unsafeCtxBodyL.refocus(_.currentTreasuryValue).replace(Some(step.value))
+                )
+                Ok
+        }
 
     // -------------------------------------------------------------------------
     // AddCollateral step

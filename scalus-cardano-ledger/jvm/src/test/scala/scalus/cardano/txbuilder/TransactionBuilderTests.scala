@@ -1240,6 +1240,42 @@ class TransactionBuilderTest extends AnyFunSuite, ScalaCheckPropertyChecks {
       expected = Context.empty(Mainnet).toCtxTuple
     )
 
+    // ---- Treasury donation steps ----
+
+    test("Donate sets the transaction body donation field") {
+        val ctx = TransactionBuilder.build(Mainnet, Seq(Donate(Coin.ada(5)))).toOption.get
+        assert(ctx.transaction.body.value.donation == Some(Coin.ada(5)))
+    }
+
+    test("SetCurrentTreasuryValue sets the current treasury value field") {
+        val ctx = TransactionBuilder
+            .build(Mainnet, Seq(SetCurrentTreasuryValue(Coin.ada(1000))))
+            .toOption
+            .get
+        assert(ctx.transaction.body.value.currentTreasuryValue == Some(Coin.ada(1000)))
+    }
+
+    testBuilderStepsFail(
+      label = "Donate twice fails with DonationAlreadySet",
+      steps = Seq(Donate(Coin(1_000_000)), Donate(Coin(2_000_000))),
+      error = DonationAlreadySet(Coin(1_000_000), Donate(Coin(2_000_000)))
+    )
+
+    testBuilderStepsFail(
+      label = "SetCurrentTreasuryValue twice fails with CurrentTreasuryValueAlreadySet",
+      steps = Seq(
+        SetCurrentTreasuryValue(Coin(10)),
+        SetCurrentTreasuryValue(Coin(20))
+      ),
+      error = CurrentTreasuryValueAlreadySet(Coin(10), SetCurrentTreasuryValue(Coin(20)))
+    )
+
+    test("Donate with zero amount throws IllegalArgumentException") {
+        assertThrows[IllegalArgumentException] {
+            Donate(Coin.zero)
+        }
+    }
+
 }
 
 // ===========================================================================

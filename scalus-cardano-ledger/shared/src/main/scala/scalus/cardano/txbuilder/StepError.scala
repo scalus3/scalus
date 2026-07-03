@@ -235,6 +235,19 @@ object StepError {
             s"The validity end slot ($slot) is already set. You cannot set the validity end slot more than once."
     }
 
+    case class DonationAlreadySet(current: Coin, step: TransactionBuilderStep) extends StepError {
+        override def explain: String =
+            s"A treasury donation (${current.value}) is already set. " +
+                "You cannot set the donation more than once."
+    }
+
+    case class CurrentTreasuryValueAlreadySet(current: Coin, step: TransactionBuilderStep)
+        extends StepError {
+        override def explain: String =
+            s"The current treasury value (${current.value}) is already set. " +
+                "You cannot set it more than once."
+    }
+
     case class UnexpectedDeferredStep(step: TransactionBuilderStep) extends StepError {
         override def explain: String =
             "Deferred steps must be resolved before building. Use complete(reader, sponsor) or complete(utxos, sponsor) instead of build."
