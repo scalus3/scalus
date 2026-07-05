@@ -11,12 +11,13 @@ import scala.concurrent.duration.*
   * `CollateralGuardAgent` is a personal bot that watches *your own* lending position and tops it up
   * before it can be liquidated. It shows how little application code the runtime requires:
   *
-  *   1. A rich on-chain subscription — pay-to-script + carries an NFT + datum names my pubkey — in a
-  *      single fluent expression.
+  *   1. A rich on-chain subscription — pay-to-script + carries an NFT + datum names my pubkey — in
+  *      a single fluent expression.
   *   2. A reaction transaction submitted under a durable resubmission policy, reacting to its
   *      terminal outcome.
   *
-  * The runtime API it builds on lives in `ScalusPlatform.scala` (stubbed). This file is the user code.
+  * The runtime API it builds on lives in `ScalusPlatform.scala` (stubbed). This file is the user
+  * code.
   */
 
 /** Inline datum carried by a lending-vault UTxO. */
@@ -81,8 +82,8 @@ object CollateralGuardAgent extends ScalusApp {
                 alertOperator(reason)
     }
 
-    /** Construct the top-up transaction. Stubbed — building it with the Scalus `TxBuilder` (spend the
-      * vault UTxO, add collateral, return it with an updated datum) is orthogonal to this demo.
+    /** Construct the top-up transaction. Stubbed — building it with the Scalus `TxBuilder` (spend
+      * the vault UTxO, add collateral, return it with an updated datum) is orthogonal to this demo.
       */
     private def buildTopUpTx(position: TransactionOutput, datum: VaultDatum): Transaction = ???
 

@@ -9,7 +9,8 @@ import scala.concurrent.duration.*
   * This is the platform-provided surface that applications build on. It makes two things trivial:
   *
   *   1. Subscribing to a rich on-chain filter in a single fluent expression (see [[UtxoWatch]]).
-  *   2. Submitting a reaction transaction under a durable resubmission policy (see [[Runtime.submit]]).
+  *   2. Submitting a reaction transaction under a durable resubmission policy (see
+  *      [[Runtime.submit]]).
   *
   * The implementations here are stubs (`???`) — the goal is to compile and read as the intended
   * developer experience, not to run. Application code lives separately (see `App.scala`).
@@ -68,8 +69,8 @@ trait UtxoWatch {
     /** Only UTxOs whose value contains this asset (e.g. a beacon/position NFT). */
     def containingAsset(asset: Asset): UtxoWatch
 
-    /** Decode the inline datum as `D` and refine the subscription by it. The real runtime requires a
-      * `FromData[D]`; omitted here to keep the sketch self-contained.
+    /** Decode the inline datum as `D` and refine the subscription by it. The real runtime requires
+      * a `FromData[D]`; omitted here to keep the sketch self-contained.
       */
     def withInlineDatum[D]: TypedUtxoWatch[D]
 }
@@ -92,8 +93,10 @@ trait Runtime {
 
     /** Submit `tx` and follow it to a terminal outcome under the given resubmission policy.
       *
-      * @param retry         backoff schedule used while the tx is unconfirmed or evicted
-      * @param confirmations blocks required on top before reporting `Confirmed`
+      * @param retry
+      *   backoff schedule used while the tx is unconfirmed or evicted
+      * @param confirmations
+      *   blocks required on top before reporting `Confirmed`
       */
     def submit(tx: Transaction, retry: Backoff, confirmations: Int): SubmitOutcome
 }
