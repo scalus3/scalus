@@ -14,7 +14,7 @@ case class AssocMap[A, B](toList: List[(A, B)])
 object AssocMap {
     import List.*
     import Option.*
-    import PairList.{empty as _, from as _, single as _, *}
+    import PairList.*
 
     def empty[A, B]: AssocMap[A, B] = AssocMap(List.empty[(A, B)])
     def singleton[A, B](key: A, value: B): AssocMap[A, B] = AssocMap(List.single((key, value)))

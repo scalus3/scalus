@@ -5,7 +5,7 @@ import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.cardano.onchain.plutus.prelude.List.toScalaList
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.eval.ExBudgetCategory.BuiltinApp
-import scalus.uplc.eval.{BudgetSpender, ExBudgetCategory, Logger, MachineParams}
+import scalus.uplc.eval.{BudgetSpender, Logger, MachineParams}
 
 /** Pre-compiled builtin function implementations for NativeStack JIT.
   *

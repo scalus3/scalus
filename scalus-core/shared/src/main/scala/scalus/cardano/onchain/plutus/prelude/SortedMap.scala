@@ -20,7 +20,7 @@ case class SortedMap[A, B] private (toList: List[(A, B)])
 object SortedMap {
     import List.*
     import Option.*
-    import PairList.{empty as _, from as _, single as _, *}
+    import PairList.{empty as _, single as _, *}
 
     /** Constructs an empty `SortedMap`.
       *
