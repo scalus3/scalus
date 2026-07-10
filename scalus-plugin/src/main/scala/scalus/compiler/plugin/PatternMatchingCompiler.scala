@@ -1298,6 +1298,13 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
       * and splitStrategy. Return - Map[Key, (Value, List[Rows with this key])] and List of rest
       * rows (i,e. default specialized) Key and Value are extracted from pattern by checkPattern
       * function.
+      *
+      * With DuplicateRows, a default row (non-matching pattern in this column) is duplicated into
+      * every group at its source position, so first-match-wins is preserved: each group copies the
+      * default rows it has not seen yet before appending its next specialized row, and a group
+      * created later is seeded with all default rows collected so far. The returned rest is the
+      * full list of default rows — the default branch must see them too. Trailing default rows are
+      * not copied into groups: every group's subtree falls through to the rest.
       */
     private def collectSpecialized[P <: SirParsedCase.Pattern, K, V](
         rows: List[SirParsedCase.GroupedTupleRow],
@@ -1306,29 +1313,31 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         splitStrategy: SirCaseDecisionTree.SplitStrategy
     ): (Map[K, (V, List[SirParsedCase.GroupedTupleRow])], List[SirParsedCase.GroupedTupleRow]) = {
         var groupedRows: Map[K, (V, ListBuffer[SirParsedCase.GroupedTupleRow])] = Map.empty
-        val restPrefix: ListBuffer[SirParsedCase.GroupedTupleRow] = ListBuffer.empty
+        val defaultRows: ListBuffer[SirParsedCase.GroupedTupleRow] = ListBuffer.empty
+        var copiedDefaults: Map[K, Int] = Map.empty
         var cursor = rows
         var done = false
         while cursor.nonEmpty && !done do {
             val r = cursor.head
             checkPattern(r.patterns(colIndex)) match
                 case Some((pattern, key, value)) =>
-                    groupedRows.get(key) match
-                        case Some((v, buf)) =>
-                            buf.append(r)
+                    val buf = groupedRows.get(key) match
+                        case Some((_, existing)) => existing
                         case None =>
-                            val buf = ListBuffer.empty[SirParsedCase.GroupedTupleRow]
-                            buf.append(r)
-                            groupedRows = groupedRows + (key -> (value, buf))
+                            val created = ListBuffer.empty[SirParsedCase.GroupedTupleRow]
+                            groupedRows = groupedRows + (key -> (value, created))
+                            copiedDefaults = copiedDefaults + (key -> 0)
+                            created
                     if splitStrategy == SirCaseDecisionTree.SplitStrategy.DuplicateRows then
-                        if restPrefix.nonEmpty then
-                            groupedRows.foreach:
-                                case (k, (v, rows)) => rows.appendAll(restPrefix)
-                            restPrefix.clear()
+                        val copied = copiedDefaults(key)
+                        if copied < defaultRows.length then
+                            buf.appendAll(defaultRows.view.drop(copied))
+                            copiedDefaults = copiedDefaults.updated(key, defaultRows.length)
+                    buf.append(r)
                 case None =>
                     if splitStrategy == SirCaseDecisionTree.SplitStrategy.DuplicateRows then
-                        // we should duplicate this row in all groups, and continue
-                        restPrefix += r
+                        // duplicated into groups on their next specialized row and kept in rest
+                        defaultRows += r
                     else
                         // we should stop collecting, and put all next rows to rest
                         done = true
@@ -1339,7 +1348,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         }
         splitStrategy match {
             case SirCaseDecisionTree.SplitStrategy.DuplicateRows =>
-                (grouped, restPrefix.toList)
+                (grouped, defaultRows.toList)
             case SirCaseDecisionTree.SplitStrategy.DuplicateChecks =>
                 (grouped, cursor)
         }
