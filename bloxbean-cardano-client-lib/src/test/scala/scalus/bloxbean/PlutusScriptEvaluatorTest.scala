@@ -71,7 +71,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         assert(redeemers.size == 1)
         val redeemerResult = redeemers.head
         assert(redeemerResult.exUnits.memory == 13375L)
-        assert(redeemerResult.exUnits.steps == 3732764L)
+        assert(redeemerResult.exUnits.steps == 3732169L)
     }
 
     test("TxEvaluator PlutusV3") {
@@ -126,7 +126,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         assert(redeemers.size == 1)
         val redeemerResult = redeemers.head
         assert(redeemerResult.exUnits.memory == 12775L)
-        assert(redeemerResult.exUnits.steps == 3636764L)
+        assert(redeemerResult.exUnits.steps == 3636169L)
     }
 
     test("evaluate block 11544748") {
@@ -157,11 +157,21 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         }
     }
 
+    // The blocks under /blocks were produced around epoch 544 (Plomin); evaluating them with the
+    // current mainnet params (van Rossem cost models) would exceed the on-chain recorded budgets.
+    private lazy val blocksEraCardanoInfo = CardanoInfo(
+      ProtocolParams.fromBlockfrostJson(
+        getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
+      ),
+      Network.Mainnet,
+      SlotConfig.mainnet
+    )
+
     private def validateTransaction(tx: Transaction): Unit = {
 //        val utxos = bloxbeanResolveUtxo(tx)
         val utxos = resolveUtxoFromResources(tx)
         val evaluator = PlutusScriptEvaluator(
-          CardanoInfo.mainnet,
+          blocksEraCardanoInfo,
           EvaluatorMode.EvaluateAndComputeCost
         )
         //        DebugUtils.dumpTxInfo(tx, utxos)

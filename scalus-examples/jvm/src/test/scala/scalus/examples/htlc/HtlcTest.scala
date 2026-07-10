@@ -84,7 +84,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         assert(Try(contract(scriptCtx.toData).code).isSuccess)
         val result = contract(scriptCtx.toData).program.evaluateDebug
         assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 39946L, steps = 16434396L))
+        assert(result.budget == ExUnits(memory = 39946L, steps = 16433801L))
         assert(result.budget.fee == Coin(3490))
     }
 
@@ -104,7 +104,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        assertResult(ExUnits(memory = 39946L, steps = 16434396L)):
+        assertResult(ExUnits(memory = 39946L, steps = 16433801L)):
             revealTx.witnessSet.redeemers.get.value.totalExUnits
 
         provider.setSlot(beforeSlot)

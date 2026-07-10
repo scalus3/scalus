@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+### Changed
+
+- Cardano protocol parameters updated to the latest on-chain values: mainnet epoch 642 (still PV10;
+  includes the van Rossem cost models enacted 2026-06-18 — PlutusV1/V2 extended to 332 entries,
+  PlutusV3 to 350, `equalsByteString` and integer-division CPU coefficients repriced), preprod
+  epoch 300 and preview epoch 1354 (both PV11, van Rossem hard fork)
+
 ## 0.18.2 (2026-06-19)
 
 ### Added

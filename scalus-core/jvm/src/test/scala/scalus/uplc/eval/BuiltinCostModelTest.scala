@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{Language, MajorProtocolVersion, ProtocolParams}
+import scalus.cardano.ledger.{CardanoInfo, CostModels, Language, MajorProtocolVersion, ProtocolParams}
 import scalus.uplc.*
 import scalus.uplc.builtin.platform
 
@@ -28,12 +28,19 @@ class BuiltinCostModelTest extends AnyFunSuite:
     }
 
     test("van Rossem builtins fall back to Plutus reference costs when PV11 params are absent") {
-        // Today's mainnet (Plomin) cost model carries no PV11 builtin parameters, so reading them
-        // yields the 300_000_000 placeholder. At vanRossemPV the new builtins (dropList, value ops,
-        // expModInteger, multiScalarMul, ...) must instead be costed from the vendored Plutus
-        // reference model, while existing builtins keep their supplied (mainnet) costs.
-        val pv11 =
-            MachineParams.defaultParamsFor(Language.PlutusV3, MajorProtocolVersion.vanRossemPV)
+        // A pre-van-Rossem PlutusV3 cost model (297 entries) carries no PV11 builtin parameters,
+        // so reading them yields the 300_000_000 placeholder. At vanRossemPV the new builtins
+        // (dropList, value ops, expModInteger, multiScalarMul, ...) must instead be costed from
+        // the vendored Plutus reference model, while existing builtins keep their supplied costs.
+        // (Mainnet already carries the full 350-entry model, so simulate the legacy one.)
+        val mainnetV3 =
+            CardanoInfo.mainnet.protocolParams.costModels.models(Language.PlutusV3.languageId)
+        val legacyCostModels = CostModels(Map(Language.PlutusV3.languageId -> mainnetV3.take(297)))
+        val pv11 = MachineParams.fromCostModels(
+          legacyCostModels,
+          Language.PlutusV3,
+          MajorProtocolVersion.vanRossemPV
+        )
         assert(pv11.builtinCostModel.dropList == BuiltinCostModel.vanRossemReferenceE.dropList)
         assert(
           pv11.builtinCostModel.expModInteger == BuiltinCostModel.vanRossemReferenceE.expModInteger
@@ -43,11 +50,22 @@ class BuiltinCostModelTest extends AnyFunSuite:
         )
 
         // Existing builtins keep the supplied mainnet cost, not the reference value.
-        val plomin =
-            MachineParams.defaultParamsFor(Language.PlutusV3, MajorProtocolVersion.plominPV)
+        val plomin = MachineParams.fromCostModels(
+          legacyCostModels,
+          Language.PlutusV3,
+          MajorProtocolVersion.plominPV
+        )
         assert(pv11.builtinCostModel.addInteger == plomin.builtinCostModel.addInteger)
         // Pre-van-Rossem (variant C) does not apply the reference fallback.
         assert(plomin.builtinCostModel.dropList != BuiltinCostModel.vanRossemReferenceE.dropList)
+
+        // The current mainnet (epoch 642+) cost model supplies real PV11 values, so no fallback
+        // is needed and the supplied values are used directly.
+        val mainnetPv11 =
+            MachineParams.defaultParamsFor(Language.PlutusV3, MajorProtocolVersion.vanRossemPV)
+        assert(
+          mainnetPv11.builtinCostModel.dropList == BuiltinCostModel.vanRossemReferenceE.dropList
+        )
     }
 
     test("PlutusV3Params accepts PV11 350-parameter cost model tail") {
@@ -143,9 +161,11 @@ class BuiltinCostModelTest extends AnyFunSuite:
         BuiltinCostModel.fromPlutusParams(paramsV1, Language.PlutusV1, BuiltinSemanticsVariant.B)
         BuiltinCostModel.fromPlutusParams(paramsV2, Language.PlutusV2, BuiltinSemanticsVariant.B)
         BuiltinCostModel.fromPlutusParams(paramsV3, Language.PlutusV3, BuiltinSemanticsVariant.C)
-        assert(v1.size == 166)
-        assert(v2.size == 175)
-        assert(v3.size == 297)
+        // epoch 642: van Rossem cost models extend PlutusV1/V2 to 332 entries and PlutusV3 to 350
+        assert(v1.size == 332)
+        assert(v2.size == 332)
+        assert(v3.size == 350)
+        assert(paramsV3.`expModInteger-cpu-arguments-coefficient00` != 300_000_000L)
     }
 
     test("BuiltinCostModel from Blockfrost pre-Plomin HF Protocol Parameters epoch 507") {

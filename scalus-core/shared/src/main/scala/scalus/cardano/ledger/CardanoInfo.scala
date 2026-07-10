@@ -17,27 +17,33 @@ object CardanoInfo {
 
     /** Cardano info for current Cardano Mainnet
       *
-      * We use protocol params from epoch 616, major protocol version 10 (Plomin hard fork)
+      * We use protocol params from epoch 642, major protocol version 10 (Plomin hard fork) with the
+      * van Rossem cost models enacted on 2026-06-18 (PlutusV1/V2 extended to 332 entries, PlutusV3
+      * to 350)
       */
     @threadUnsafe lazy val mainnet: CardanoInfo =
         CardanoInfo(
-          inlineProtocolParams("blockfrost-params-epoch-616.json"),
+          inlineProtocolParams("blockfrost-params-epoch-642.json"),
           Network.Mainnet,
           SlotConfig.mainnet
         )
 
-    /** Cardano info for Preprod testnet */
+    /** Cardano info for Preprod testnet, epoch 300, major protocol version 11 (van Rossem hard
+      * fork)
+      */
     @threadUnsafe lazy val preprod: CardanoInfo =
         CardanoInfo(
-          inlineProtocolParams("blockfrost-params-preprod-258.json"),
+          inlineProtocolParams("blockfrost-params-preprod-300.json"),
           Network.Testnet,
           SlotConfig.preprod
         )
 
-    /** Cardano info for Preview testnet */
+    /** Cardano info for Preview testnet, epoch 1354, major protocol version 11 (van Rossem hard
+      * fork)
+      */
     @threadUnsafe lazy val preview: CardanoInfo =
         CardanoInfo(
-          inlineProtocolParams("blockfrost-params-preview-1145.json"),
+          inlineProtocolParams("blockfrost-params-preview-1354.json"),
           Network.Testnet,
           SlotConfig.preview
         )

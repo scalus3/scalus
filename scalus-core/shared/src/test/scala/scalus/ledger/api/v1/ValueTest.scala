@@ -487,7 +487,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value(utf8"PolicyId", utf8"TokenName", 2000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 3000),
-          ExUnits(memory = 104699L, steps = 28964010L)
+          ExUnits(memory = 104699L, steps = 28962635L)
         )
     }
 
@@ -514,7 +514,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value.lovelace(2000),
           Value.lovelace(1000),
           Value.lovelace(3000),
-          ExUnits(memory = 104699L, steps = 28963898L)
+          ExUnits(memory = 104699L, steps = 28962486L)
         )
     }
 
@@ -549,7 +549,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
           ),
-          ExUnits(memory = 138204L, steps = 37958627L)
+          ExUnits(memory = 138204L, steps = 37957921L)
         )
     }
 
@@ -558,7 +558,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value(utf8"PolicyId", utf8"TokenName", -1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
-          ExUnits(memory = 81895L, steps = 22197324L)
+          ExUnits(memory = 81895L, steps = 22195949L)
         )
     }
 
@@ -567,7 +567,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value.lovelace(-1000),
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 81895L, steps = 22197212L)
+          ExUnits(memory = 81895L, steps = 22195800L)
         )
     }
 
@@ -593,7 +593,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.zero,
-          ExUnits(memory = 281548L, steps = 77870211L)
+          ExUnits(memory = 281548L, steps = 77867424L)
         )
     }
 
@@ -618,7 +618,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.lovelace(1000),
-          ExUnits(memory = 214004L, steps = 58713123L)
+          ExUnits(memory = 214004L, steps = 58711748L)
         )
     }
 
@@ -640,7 +640,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 208808L, steps = 57199645L)
+          ExUnits(memory = 208808L, steps = 57198233L)
         )
     }
 
@@ -679,7 +679,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value(utf8"PolicyId", utf8"TokenName", 2000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", -1000),
-          ExUnits(memory = 104699L, steps = 28964010L)
+          ExUnits(memory = 104699L, steps = 28962635L)
         )
     }
 
@@ -706,7 +706,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value.lovelace(2000),
           Value.lovelace(1000),
           Value.lovelace(-1000),
-          ExUnits(memory = 104699L, steps = 28963898L)
+          ExUnits(memory = 104699L, steps = 28962486L)
         )
     }
 
@@ -741,7 +741,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(-1000))))
             )
           ),
-          ExUnits(memory = 138204L, steps = 37958627L)
+          ExUnits(memory = 138204L, steps = 37957921L)
         )
     }
 
@@ -750,7 +750,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
-          ExUnits(memory = 81895L, steps = 22197324L)
+          ExUnits(memory = 81895L, steps = 22195949L)
         )
     }
 
@@ -759,7 +759,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value.lovelace(1000),
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 81895L, steps = 22197212L)
+          ExUnits(memory = 81895L, steps = 22195800L)
         )
     }
 
@@ -785,7 +785,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.zero,
-          ExUnits(memory = 281548L, steps = 77870211L)
+          ExUnits(memory = 281548L, steps = 77867424L)
         )
     }
 
@@ -810,7 +810,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.lovelace(1000),
-          ExUnits(memory = 214004L, steps = 58713123L)
+          ExUnits(memory = 214004L, steps = 58711748L)
         )
     }
 
@@ -832,7 +832,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 208808L, steps = 57199645L)
+          ExUnits(memory = 208808L, steps = 57198233L)
         )
     }
 
@@ -942,7 +942,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.getLovelace,
           Value.lovelace(1000),
           BigInt(1000),
-          ExUnits(memory = 32012L, steps = 8591668L)
+          ExUnits(memory = 32012L, steps = 8590256L)
         )
     }
 
@@ -1089,7 +1089,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value.lovelace(1000),
           BigInt(1000),
-          ExUnits(memory = 32012L, steps = 8591668L)
+          ExUnits(memory = 32012L, steps = 8590256L)
         )
     }
 
@@ -1098,7 +1098,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(utf8"CS", utf8"TN"),
           Value.lovelace(1000),
           BigInt(0),
-          ExUnits(memory = 18194, steps = 4_398_522)
+          ExUnits(memory = 18194, steps = 4397816)
         )
     }
 
@@ -1116,7 +1116,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(utf8"PolicyId", utf8"TokenName"),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           BigInt(1000),
-          ExUnits(memory = 32012L, steps = 8591780L)
+          ExUnits(memory = 32012L, steps = 8590405L)
         )
     }
 
@@ -1140,7 +1140,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.withoutLovelace,
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 11196, steps = 2_914_767)
+          ExUnits(memory = 11196, steps = 2914061)
         )
     }
 
@@ -1166,7 +1166,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 11196, steps = 2_914_767)
+          ExUnits(memory = 11196, steps = 2914061)
         )
     }
 
@@ -1529,7 +1529,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           true,
-          ExUnits(memory = 241665L, steps = 69136916L)
+          ExUnits(memory = 241665L, steps = 69136210L)
         )
     }
 

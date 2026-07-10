@@ -8,7 +8,7 @@ import org.scalatest.funsuite.AnyFunSuite
 
 class BlocksLedgerRulesValidator(
     val rules: Map[String, STS],
-    val context: Context = Context.testMainnet(),
+    val context: Context = BlocksLedgerRulesValidator.blocksEraContext,
     val state: State = State()
 ) extends AnyFunSuite {
     import BlocksLedgerRulesValidator.utxoResolver
@@ -55,4 +55,16 @@ class BlocksLedgerRulesValidator(
 
 object BlocksLedgerRulesValidator {
     private val utxoResolver = ResourcesUtxoResolver()
+
+    /** The committed blocks under /blocks were produced around epoch 544 (Plomin), so they must be
+      * validated with the protocol parameters of that era: the current mainnet params carry the van
+      * Rossem cost models, which change the language view (script integrity hash) and execution
+      * costs.
+      */
+    val blocksEraContext: Context = {
+        val params = ProtocolParams.fromBlockfrostJson(
+          getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
+        )
+        Context(env = UtxoEnv(0, params, CertState.empty, scalus.cardano.address.Network.Mainnet))
+    }
 }

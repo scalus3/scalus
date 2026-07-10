@@ -58,6 +58,6 @@ class PubKeyValidatorTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         given PlutusVM = PlutusVM.makePlutusV1VM()
         val evalResult = appliedValidator.deBruijnedProgram.evaluateDebug
         assert(evalResult.isSuccess)
-        assert(evalResult.budget == ExUnits(memory = 12347, steps = 3_328493))
+        assert(evalResult.budget == ExUnits(memory = 12347, steps = 3327787))
         assert(PubKeyValidator.validator((), (), scriptContext.toData) == ())
     }

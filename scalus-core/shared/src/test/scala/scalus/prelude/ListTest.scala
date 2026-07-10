@@ -726,7 +726,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(1),
           SortedMap.singleton(BigInt(1), List.single(BigInt(1))),
           Seq(
-            compilerOptions -> ExUnits(memory = 40175, steps = 9_934_994)
+            compilerOptions -> ExUnits(memory = 40175, steps = 9935405)
           )
         )
 
@@ -739,7 +739,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
               Cons((BigInt(1), List.single(BigInt(1))), Nil)
             )
           ),
-          ExUnits(memory = 79482, steps = 20_690_572)
+          ExUnits(memory = 79482, steps = 20691394)
         )
 
     }
@@ -771,7 +771,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(1),
           SortedMap.singleton(BigInt(1), List.single(BigInt(1))),
           Seq(
-            compilerOptions -> ExUnits(memory = 41439, steps = 10_163_037)
+            compilerOptions -> ExUnits(memory = 41439, steps = 10163448)
           )
         )
 
@@ -784,7 +784,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
               Cons((BigInt(1), List.single(BigInt(1))), Nil)
             )
           ),
-          ExUnits(memory = 81810, steps = 21_114_658)
+          ExUnits(memory = 81810, steps = 21115480)
         )
     }
 
@@ -815,7 +815,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.single(1),
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 22939, steps = 5_351_790)
+            compilerOptions -> ExUnits(memory = 22939, steps = 5352201)
           )
         )
 
@@ -825,7 +825,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           SortedMap.unsafeFromList(
             Cons((BigInt(0), BigInt(6)), Cons((BigInt(1), BigInt(4)), Nil))
           ),
-          ExUnits(memory = 137460, steps = 36_947_311)
+          ExUnits(memory = 137460, steps = 36948955)
         )
     }
 

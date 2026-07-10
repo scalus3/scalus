@@ -29,30 +29,30 @@ class NaivePaymentSplitterValidatorTest
       pre38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
           memory = 270246L,
-          steps = 88513459L
+          steps = 88509929L
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
           memory = 423798L,
-          steps = 140569844L
+          steps = 140564902L
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
           memory = 602290L,
-          steps = 203482290L
+          steps = 203475936L
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
           memory = 602290L,
-          steps = 203482290L
+          steps = 203475936L
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
           memory = 602290L,
-          steps = 203482290L
+          steps = 203475936L
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
           memory = 602290L,
-          steps = 203482290L
+          steps = 203475936L
         ),
-        "success between 5 payees" -> ExUnits(memory = 1048500L, steps = 367017251L),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 754960L, steps = 258410320L)
+        "success between 5 payees" -> ExUnits(memory = 1048500L, steps = 367008073L),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 754960L, steps = 258399730L)
       ),
       since38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
