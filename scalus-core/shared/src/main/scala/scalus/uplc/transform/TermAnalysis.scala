@@ -15,15 +15,22 @@ object TermAnalysis:
       * Traverses the term structure to find the underlying builtin (if any) and counts how many
       * Force and Apply nodes wrap it, collecting the applied arguments.
       *
+      * Only well-ordered chains of the shape `Apply*(Force*(Builtin))` are recognized: all builtin
+      * type schemes are prenex (type arguments come first), so every Force must be applied before
+      * (i.e. sit inside) every Apply. An interleaved chain like `Force(Apply(…))` errors at runtime
+      * — the machine receives a term argument while expecting a type argument or vice versa — and
+      * is reported as None so callers treat it conservatively.
+      *
       * @param term
       *   the term to analyze
       * @return
-      *   Some((builtin, numForces, numApplies, appliedArgs)) if term contains a builtin, where:
+      *   Some((builtin, numForces, numApplies, appliedArgs)) if term is a well-ordered builtin
+      *   chain, where:
       *   - builtin: the DefaultFun found
       *   - numForces: number of Force nodes wrapping the builtin
       *   - numApplies: number of Apply nodes wrapping the builtin
       *   - appliedArgs: list of arguments applied to the builtin (in application order) Returns
-      *     None if no builtin is found.
+      *     None if no builtin is found or the chain is interleaved.
       */
     private[transform] def extractBuiltinInfo(
         term: Term
@@ -35,11 +42,24 @@ object TermAnalysis:
             args: List[Term]
         ): Option[(DefaultFun, Int, Int, List[Term])] =
             t match
-                case Builtin(bn, _)   => Some((bn, forces, applies, args.reverse))
-                case Force(inner, _)  => go(inner, forces + 1, applies, args)
-                case Apply(f, arg, _) => go(f, forces, applies + 1, arg :: args)
-                case _                => None
+                case Builtin(bn, _)  => Some((bn, forces, applies, args.reverse))
+                case Force(inner, _) => go(inner, forces + 1, applies, args)
+                // an Apply below a Force means the chain is interleaved (invalid)
+                case Apply(f, arg, _) if forces == 0 => go(f, forces, applies + 1, arg :: args)
+                case _                               => None
         go(term, 0, 0, List.empty)
+
+    /** Whether evaluating `[branch a1 … an]` is guaranteed not to fail, assuming the `n` arguments
+      * are pure values (as case branch applications are per the CEK machine). Peels one lambda per
+      * argument; any other shape is conservatively considered impure because applying a non-lambda
+      * value fails at runtime.
+      */
+    private def isPureWhenAppliedTo(branch: Term, argCount: Int): Boolean =
+        if argCount == 0 then branch.isPure
+        else
+            branch match
+                case LamAbs(_, body, _) => isPureWhenAppliedTo(body, argCount - 1)
+                case _                  => false
 
     extension (term: Term)
 
@@ -111,8 +131,8 @@ object TermAnalysis:
           *   - '''Builtins''' (`Builtin`): Builtin functions (unapplied)
           *   - '''Lambda abstractions''' (`LamAbs`): Function definitions
           *   - '''Delays''' (`Delay`): Suspended computations
-          *   - '''Force of Delay''': `Force(Delay(t))` is pure for any t because it's essentially a
-          *     no-op that evaluates to t
+          *   - '''Force of Delay''': `Force(Delay(t))` is pure iff `t` is pure, because
+          *     `(force (delay t))` reduces to `t` — the delayed body is evaluated
           *   - '''Forced polymorphic builtins''': `Force(Builtin(bn))` where the builtin expects
           *     type arguments (e.g., `Force(HeadList)` is pure because HeadList needs a type
           *     argument before it can be applied)
@@ -122,8 +142,9 @@ object TermAnalysis:
           *   - '''Beta-redexes with pure parts''': `Apply(LamAbs(_, body), arg)` where both `body`
           *     and `arg` are pure
           *   - '''Constructors with pure arguments''': `Constr(tag, args)` where all args are pure
-          *   - '''Case expressions with pure parts''': `Case(scrut, cases)` where the scrutinee and
-          *     all case branches are pure
+          *   - '''Case on a literal in-range constructor''': `Case(Constr(i, args), cases)` where
+          *     `i < cases.length`, all args are pure, and the selected branch is a lambda per
+          *     constructor argument with a pure body (`case` applies the branch to the args)
           *
           * ==Impure Terms (Can Fail)==
           *
@@ -133,14 +154,21 @@ object TermAnalysis:
           *   - '''Force of non-delayed, non-builtin terms''': `Force(t)` where t is not `Delay(_)`
           *     and not a builtin awaiting type arguments. Forcing a non-delayed term will error at
           *     runtime. For example, `Force(Const(1))` will fail because you cannot force a
-          *     constant. However, `Force(Delay(t))` is pure because it's a no-op.
+          *     constant. `Force(Delay(t))` is pure only when `t` is pure, since forcing evaluates
+          *     the delayed body.
           *   - '''Saturated partial builtin applications''': Builtin applications where all
           *     required type and value arguments are provided and the builtin is not total. These
           *     may fail depending on the arguments (e.g., `DivideInteger $ 1 $ 0` will error due to
           *     division by zero). Note: saturated ''total'' builtins like `AddInteger $ 1 $ 2` are
           *     pure.
+          *   - '''Ill-formed builtin applications''': under-forced (`Apply(Builtin(HeadList), xs)`
+          *     — a type argument is expected first), over-forced, or over-applied (`AddInteger $ 1
+          *     $ 2 $ 3`) builtin chains error at runtime.
           *   - '''Apply/Case with impure subterms''': If any subterm is impure, the whole term is
           *     considered impure
+          *   - '''Case with unknown scrutinee''': `Case(scrut, cases)` where the scrutinee is not a
+          *     literal `Constr` — a non-constructor or out-of-range tag halts evaluation, and the
+          *     selected branch is applied to the constructor arguments (which can also fail)
           *
           * ==Usage in Optimization Passes==
           *
@@ -165,8 +193,9 @@ object TermAnalysis:
           * Var(NamedDeBruijn("x", 0)).isPure      // true - variable
           * LamAbs("x", Var("x")).isPure           // true - lambda
           * Delay(Const(1)).isPure                 // true - delay
-          * Force(Delay(Const(1))).isPure          // true - Force(Delay) is a no-op
+          * Force(Delay(Const(1))).isPure          // true - reduces to Const(1)
           *
+          * Force(Delay(Error)).isPure             // false - reduces to Error
           * Force(Const(1)).isPure                 // false - forcing non-delayed term
           * Error.isPure                           // false - always fails
           *
@@ -197,14 +226,16 @@ object TermAnalysis:
             case app @ Apply(_, _, _) =>
                 extractBuiltinInfo(app) match
                     case Some((bn, numForces, numApplies, appliedArgs)) =>
-                        val meaning = Meaning.allBuiltins.getBuiltinRuntime(bn)
-                        val requiredTypeArgs = meaning.typeScheme.numTypeVars
-                        val requiredValueArgs = meaning.typeScheme.arity
-                        // Saturated if all type and value arguments are applied
-                        val isSaturated =
-                            numForces >= requiredTypeArgs && numApplies >= requiredValueArgs
-                        // Pure if (not saturated OR builtin is total) and all args are pure
-                        (!isSaturated || bn.isTotal) && appliedArgs.forall(_.isPure)
+                        val ts = Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme
+                        // All type args must be forced before value args are applied
+                        // (numApplies >= 1 here): under- or over-forcing errors at runtime
+                        numForces == ts.numTypeVars
+                        // Applying the result of a saturated builtin to more args errors
+                        && numApplies <= ts.arity
+                        // Saturated builtins compute: pure only if the builtin is total
+                        && (numApplies < ts.arity || bn.isTotal)
+                        // All applied arguments must themselves be pure
+                        && appliedArgs.forall(_.isPure)
                     case None => false
             // (lam x [(lam ...) x]) can be eta-reduced to (lam ...)
             case LamAbs(_, _, _) => true
@@ -222,14 +253,24 @@ object TermAnalysis:
             case Force(Builtin(bn, _), _)
                 if Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme.numTypeVars >= 1 =>
                 true // this is pure
-            // Force(Delay(x)) is pure - it's essentially a no-op that evaluates to x
-            case Force(Delay(_, _), _) => true
+            // (force (delay x)) → x per the spec, so it is exactly as pure as x
+            case Force(Delay(x, _), _) => x.isPure
             // force can halt the evaluation if the argument is not delayed
             // (lam x [(force t) x]) can't be eta-reduced in general
             // e.g. (lam x [(force (error)) x]) can't be eta-reduced to (force (error))
             // because (force (error)) will halt the evaluation and (lam x [(force (error)) x]) will not
             case Force(_, _) => false
             // (lam x [(builtin ..) x]) can be eta-reduced to (builtin ..)
-            case Builtin(_, _)         => true
-            case Constr(_, args, _)    => args.forall(_.isPure)
-            case Case(scrut, cases, _) => scrut.isPure && cases.forall(_.isPure)
+            case Builtin(_, _)      => true
+            case Constr(_, args, _) => args.forall(_.isPure)
+            // (case (constr i V…) U1…Un) → [U_{i+1} V…] when 0 ≤ i ≤ n−1, errors otherwise.
+            // Pure only when the scrutinee is a literal in-range Constr with pure args and the
+            // selected branch tolerates being applied to them; any other scrutinee may fail.
+            case Case(scrut, cases, _) =>
+                scrut match
+                    case Constr(tag, args, _) =>
+                        val i = tag.toLong
+                        0 <= i && i < cases.length
+                        && args.forall(_.isPure)
+                        && isPureWhenAppliedTo(cases(i.toInt), args.length)
+                    case _ => false

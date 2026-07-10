@@ -35,6 +35,11 @@ class EtaReduceTest extends AnyFunSuite:
     test("(lam x [(force f) x]) does not reduce"):
         assert(etaReduce(λ("x")(Force(vr"f") $ vr"x")) == λ("x")(Force(vr"f") $ vr"x"))
 
+    test("(lam x [(force (delay error)) x]) does not reduce"):
+        // (force (delay error)) fails immediately, the lambda only fails when applied
+        val term = λ("x")(Force(Delay(Error())) $ vr"x")
+        assert(etaReduce(term) == term)
+
     test("(lam x [(builtin divideInteger) 1 x]) reduces to [(builtin divideInteger) 1]"):
         assert(
           etaReduce(λ("x")(Builtin(DivideInteger) $ 1 $ vr"x")) == (Builtin(
@@ -215,11 +220,12 @@ class EtaReduceTest extends AnyFunSuite:
           etaReduce(input) == λ("a", "b", "c", "d")(Builtin(AddInteger) $ vr"a" $ vr"b")
         )
 
-    // Case with pure scrutinee and cases
-    test("(lam x [(case 1 [y, z]) x]) reduces to (case 1 [y, z])"):
-        assert(
-          etaReduce(λ("x")(Case(Const(Constant.Integer(1)), List(vr"y", vr"z")) $ vr"x")) == Case(
-            Const(Constant.Integer(1)),
-            List(vr"y", vr"z")
-          )
-        )
+    // (case 1 ...) errors at runtime: a case only matches constr values
+    test("(lam x [(case 1 [y, z]) x]) does not reduce"):
+        val term = λ("x")(Case(Const(Constant.Integer(1)), List(vr"y", vr"z")) $ vr"x")
+        assert(etaReduce(term) == term)
+
+    // (case (constr 0) [y, z]) evaluates the selected branch y, which is pure
+    test("(lam x [(case (constr 0) [y, z]) x]) reduces to the case term"):
+        val caseTerm = Case(Constr(Word64.Zero, Nil), List(vr"y", vr"z"))
+        assert(etaReduce(λ("x")(caseTerm $ vr"x")) == caseTerm)

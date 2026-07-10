@@ -61,11 +61,18 @@ class TermAnalysisTest extends AnyFunSuite:
         assert(!Force(λ("x")(vr"x")).isPure)
     }
 
-    test("Force of Delay is pure (no-op)") {
-        // Force(Delay(x)) is pure - it's a no-op that evaluates to x
+    test("Force of Delay of pure body is pure") {
+        // (force (delay M)) → M per the Plutus Core spec, so purity follows the body
         assert(Force(Delay(Const(Constant.Integer(1)))).isPure)
         assert(Force(Delay(vr"x")).isPure)
-        assert(Force(Delay(Error())).isPure) // Even Error inside Delay is fine
+    }
+
+    test("Force of Delay of impure body is impure") {
+        // (force (delay error)) → error: the delay body IS evaluated by force
+        assert(!Force(Delay(Error())).isPure)
+        assert(!Force(Delay(Force(Const(Constant.Integer(1))))).isPure)
+        // nested: (force (delay (force (delay error))))
+        assert(!Force(Delay(Force(Delay(Error())))).isPure)
     }
 
     // Builtins with Force - polymorphic builtins
@@ -134,6 +141,24 @@ class TermAnalysisTest extends AnyFunSuite:
         assert(!(Force(Builtin(HeadList)) $ list).isPure)
     }
 
+    test("Under-forced builtin application is impure") {
+        // [(builtin headList) xs] errors: the machine expects a type argument (force) first
+        val list = Const(Constant.List(DefaultUni.Integer, List()))
+        assert(!(Builtin(HeadList) $ list).isPure)
+        // MkCons needs 1 force before its 2 value args
+        assert(!(Builtin(MkCons) $ 1).isPure)
+    }
+
+    test("Over-forced builtin application is impure") {
+        // [(force (force (builtin mkCons))) 1]: MkCons has 1 type arg, the second force errors
+        assert(!(Force(Force(Builtin(MkCons))) $ 1).isPure)
+    }
+
+    test("Over-applied builtin is impure") {
+        // [[(builtin addInteger) 1 2] 3]: applying the resulting constant to 3 errors
+        assert(!(AddInteger $ 1 $ 2 $ 3).isPure)
+    }
+
     test("Saturated Trace is impure (side effect)") {
         // Trace has a side effect (logging), must not be eliminated
         assert(!(Force(Builtin(Trace)) $ "hello" $ 42).isPure)
@@ -187,10 +212,51 @@ class TermAnalysisTest extends AnyFunSuite:
     }
 
     // Case expressions
-    test("Case with pure scrutinee and cases is pure") {
+    // Per the spec: (case (constr i V…) U1…Un) → [U_{i+1} V…] when 0 ≤ i ≤ n−1,
+    // and errors on a non-constr scrutinee or an out-of-range tag.
+    test("Case with literal in-range Constr and lambda branch is pure") {
         val scrut = Constr(Word64.Zero, List[Term](42))
-        val cases = List[Term](vr"x", vr"y", 123)
+        val cases = List[Term](λ("a")(vr"a"), vr"y", 123)
         assert(Case(scrut, cases).isPure)
+    }
+
+    test("Case with zero-arg Constr and pure branch is pure") {
+        // no application happens: the branch is evaluated directly
+        assert(Case(Constr(Word64.Zero, Nil), List[Term](42)).isPure)
+        assert(!Case(Constr(Word64.Zero, Nil), List(Error())).isPure)
+    }
+
+    test("Case with non-constructor scrutinee is impure") {
+        // (case 1 …) errors: the machine only matches constr values
+        assert(!Case(Const(Constant.Integer(1)), List(λ("a")(vr"a"))).isPure)
+        // unknown scrutinee: could evaluate to anything, be conservative
+        assert(!Case(vr"x", List(λ("a")(vr"a"))).isPure)
+    }
+
+    test("Case with out-of-range tag is impure") {
+        // (case (constr 2) U1 U2) errors: tag must be < number of cases
+        assert(!Case(Constr(Word64(2), Nil), List[Term](42, 43)).isPure)
+        // boundary: tag 2 with 3 cases is in range
+        assert(Case(Constr(Word64(2), Nil), List[Term](42, 43, 44)).isPure)
+    }
+
+    test("Case applying constructor args to non-lambda branch is impure") {
+        // (case (constr 0 [42]) [(con 1)]) → [(con 1) 42] errors: constants are not applicable
+        assert(!Case(Constr(Word64.Zero, List[Term](42)), List[Term](1)).isPure)
+    }
+
+    test("Case with multi-arg Constr and matching lambda branch") {
+        val scrut = Constr(Word64.Zero, List[Term](1, 2))
+        assert(Case(scrut, List[Term](λ("a", "b")(vr"a"))).isPure)
+        // impure body of the selected branch
+        assert(!Case(scrut, List[Term](λ("a", "b")(Error()))).isPure)
+        // branch takes fewer lambdas than constructor args
+        assert(!Case(scrut, List[Term](λ("a")(vr"a"))).isPure)
+    }
+
+    test("Case with impure constructor args is impure") {
+        val scrut = Constr(Word64.Zero, List[Term](Error()))
+        assert(!Case(scrut, List[Term](λ("a")(vr"a"))).isPure)
     }
 
     test("Case with impure scrutinee is impure") {
@@ -515,6 +581,20 @@ class TermAnalysisTest extends AnyFunSuite:
     test("isValueForm: value arg applied before type arg is not a value") {
         // HeadList needs 1 type arg, applying a value arg without Force first is ill-formed
         assert(!(Builtin(HeadList) $ vr"x").isValueForm)
+    }
+
+    test("isValueForm: interleaved Force/Apply is not a value") {
+        // (force [(force (builtin chooseList)) xs]): the apply arrives while the machine
+        // still expects a second type argument, so it errors at runtime.
+        // Force/Apply counts alone (2 forces, 1 apply) would wrongly pass the checks.
+        val list = Const(Constant.List(DefaultUni.Integer, List()))
+        assert(!Force(Force(Builtin(ChooseList)) $ list).isValueForm)
+    }
+
+    test("Interleaved Force/Apply builtin chain is impure") {
+        // [(force [(force (builtin chooseList)) xs]) b] errors for the same reason
+        val list = Const(Constant.List(DefaultUni.Integer, List()))
+        assert(!(Force(Force(Builtin(ChooseList)) $ list) $ 1).isPure)
     }
 
     test("isValueForm: non-value forms") {
