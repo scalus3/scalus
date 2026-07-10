@@ -101,20 +101,25 @@ trait ArbitraryInstances:
         }
 
     given arbData: Arbitrary[Data] = Arbitrary {
+        // The size budget `sz` is distributed across children: a container with n
+        // children generates each child at size sz/n, keeping the total node count
+        // O(sz) in the worst case. The previous scheme (n in [sz/3, sz/2] children,
+        // EACH at size sz/2) had a multiplicative heavy tail that occasionally
+        // produced multi-million-node values and OOM'd the test JVM.
         def constrGen(sz: Int): Gen[Constr] = for
             c <- Gen.posNum[Long]
-            n <- Gen.choose(sz / 3, sz / 2)
-            args <- Gen.listOfN(n, sizedTree(sz / 2))
+            n <- Gen.choose(0, (sz / 4).max(1))
+            args <- Gen.listOfN(n, sizedTree(sz / n.max(2)))
         yield Constr(c, PList.from(args))
 
         def listGen(sz: Int): Gen[List] = for
-            n <- Gen.choose(sz / 3, sz / 2)
-            args <- Gen.listOfN(n, sizedTree(sz / 2))
+            n <- Gen.choose(0, (sz / 4).max(1))
+            args <- Gen.listOfN(n, sizedTree(sz / n.max(2)))
         yield List(PList.from(args))
 
         def mapGen(sz: Int): Gen[Map] = for
-            n <- Gen.choose(sz / 3, sz / 2)
-            tuple = Gen.zip(sizedTree(sz / 2), sizedTree(sz / 2))
+            n <- Gen.choose(0, (sz / 4).max(1))
+            tuple = Gen.zip(sizedTree(sz / (2 * n.max(1))), sizedTree(sz / (2 * n.max(1))))
             args <- Gen.mapOfN(n, tuple)
         yield Map(PList.from(args.toList))
 
@@ -169,15 +174,23 @@ trait ArbitraryInstances:
             case DefaultUni.Unit   => Gen.const(Constant.Unit)
             case DefaultUni.Bool   => Gen.oneOf(Constant.Bool(true), Constant.Bool(false))
             case DefaultUni.Apply(ProtoList, arg) =>
-                for
-                    n <- Gen.choose(0, 10)
-                    elems <- Gen.listOfN(n, arbConstantByType(arg))
-                yield Constant.List(arg, elems)
+                // Split the size budget across elements: each of the n elements is
+                // generated at size sz/n. Nested list/pair types would otherwise
+                // multiply full-size draws (e.g. List[List[Data]] -> up to 100
+                // full-size Data values) with pathological worst cases.
+                Gen.sized { sz =>
+                    for
+                        n <- Gen.choose(0, 10)
+                        elems <- Gen.listOfN(n, Gen.resize(sz / n.max(1), arbConstantByType(arg)))
+                    yield Constant.List(arg, elems)
+                }
             case DefaultUni.Apply(DefaultUni.Apply(ProtoPair, a), b) =>
-                for
-                    vala <- arbConstantByType(a)
-                    valb <- arbConstantByType(b)
-                yield Constant.Pair(vala, valb)
+                Gen.sized { sz =>
+                    for
+                        vala <- Gen.resize(sz / 2, arbConstantByType(a))
+                        valb <- Gen.resize(sz / 2, arbConstantByType(b))
+                    yield Constant.Pair(vala, valb)
+                }
             case DefaultUni.BLS12_381_G1_Element =>
                 Arbitrary
                     .arbitrary[scalus.uplc.builtin.bls12_381.G1Element]

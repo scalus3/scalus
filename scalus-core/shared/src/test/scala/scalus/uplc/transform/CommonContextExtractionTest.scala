@@ -561,14 +561,15 @@ class CommonContextExtractionTest
     // Property-based tests
     // ========================================================================
 
+    // NOTE: the failure messages below are built only on failure (via `fail`),
+    // not passed as assert clues — a clue is a by-value argument evaluated on
+    // EVERY iteration, and `.show` on a large generated term is expensive.
     test("property: CCE is idempotent on arbitrary terms") {
         forAll { (term: Term) =>
             val once = CommonContextExtraction(term)
             val twice = CommonContextExtraction(once)
-            assert(
-              once ~=~ twice,
-              s"Not idempotent:\n  once=${once.show}\n  twice=${twice.show}"
-            )
+            if !(once ~=~ twice) then
+                fail(s"Not idempotent:\n  once=${once.show}\n  twice=${twice.show}")
         }
     }
 
@@ -577,10 +578,10 @@ class CommonContextExtractionTest
             val result = CommonContextExtraction(term)
             val origFree = term.freeVars
             val resultFree = result.freeVars.filterNot(_.startsWith("__cce_"))
-            assert(
-              resultFree.subsetOf(origFree),
-              s"New free vars ${resultFree -- origFree} in:\n  input=${term.show}\n  output=${result.show}"
-            )
+            if !resultFree.subsetOf(origFree) then
+                fail(
+                  s"New free vars ${resultFree -- origFree} in:\n  input=${term.show}\n  output=${result.show}"
+                )
         }
     }
 
