@@ -853,7 +853,7 @@ class CompilerPluginBuiltinsToSIRTest extends AnyFunSuite with ScalaCheckPropert
         assert(compile(BigInt(1) + 2) ~=~ (AddInteger $ 1 $ 2))
         assert(compile(BigInt(1) - 2) ~=~ (SubtractInteger $ 1 $ 2))
         assert(compile(BigInt(1) * 2) ~=~ (MultiplyInteger $ 1 $ 2))
-        assert(compile(BigInt(1) / 2) ~=~ (DivideInteger $ 1 $ 2))
+        assert(compile(BigInt(1) / 2) ~=~ (QuotientInteger $ 1 $ 2))
         assert(compile(BigInt(1) % 2) ~=~ (RemainderInteger $ 1 $ 2))
         assert(compile(BigInt(1) < 2) ~=~ (LessThanInteger $ 1 $ 2))
         assert(compile(BigInt(1) <= 2) ~=~ (LessThanEqualsInteger $ 1 $ 2))

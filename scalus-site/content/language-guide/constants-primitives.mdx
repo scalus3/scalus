@@ -4,6 +4,8 @@ sidebarTitle: Primitive Types
 description: Work with Plutus V3 primitive types in Cardano smart contracts using Scalus. Learn Unit, Boolean, BigInt, ByteString, String, Data, and BLS12-381 cryptographic types.
 ---
 
+import { Callout } from 'nextra/components'
+
 # Primitive Types
 
 Scalus provides full support for Plutus V3 primitive types, enabling you to write Cardano smart contracts using familiar Scala syntax. These types map directly to Plutus Core primitives for efficient blockchain execution.
@@ -74,6 +76,13 @@ val greaterOrEqual = BigInt(10) >= BigInt(10)
 val lessOrEqual = BigInt(5) <= BigInt(10)
 val equals = BigInt(42) == BigInt(42)
 ```
+
+<Callout type="info">
+`/` and `%` follow Scala's semantics on-chain: truncated division (rounding toward zero),
+compiled to the `quotientInteger` and `remainderInteger` builtins. They satisfy
+`(a / b) * b + a % b == a`. If you need floor division (rounding toward negative infinity),
+use `Builtins.divideInteger` and `Builtins.modInteger` explicitly.
+</Callout>
 
 ### ByteString
 

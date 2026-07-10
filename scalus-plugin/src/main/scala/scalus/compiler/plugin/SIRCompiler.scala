@@ -2037,9 +2037,13 @@ final class SIRCompiler(
                   AnnotationsDecl.fromSourcePosition(lhs.sourcePos union rhs.sourcePos)
                 )
             case nme.DIV =>
+                // Scala's BigInt./ truncates toward zero = quotientInteger.
+                // divideInteger floors toward -infinity and would diverge from the
+                // JVM for opposite-sign operands (audit finding E1). Paired with
+                // %/remainderInteger this preserves (a/b)*b + a%b == a.
                 SIR.Apply(
                   SIR.Apply(
-                    SIRBuiltins.divideInteger,
+                    SIRBuiltins.quotientInteger,
                     compileExpr(env, lhs),
                     SIRType.Integer ->: SIRType.Integer,
                     AnnotationsDecl.fromSourcePosition(lhs.sourcePos)
