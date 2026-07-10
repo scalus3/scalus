@@ -106,9 +106,12 @@ object PrettyPrinter:
             inParens(text("list") & pretty(arg))
         case DefaultUni.Apply(DefaultUni.Apply(DefaultUni.ProtoPair, a), b) =>
             inParens(text("pair") & pretty(a) & pretty(b))
+        case DefaultUni.Apply(DefaultUni.ProtoArray, arg) =>
+            inParens(text("array") & pretty(arg))
         case DefaultUni.Data                 => text("data")
         case DefaultUni.BLS12_381_G1_Element => text("bls12_381_G1_element")
         case DefaultUni.BLS12_381_G2_Element => text("bls12_381_G2_element")
+        case DefaultUni.BLS12_381_MlResult   => text("bls12_381_mlresult")
         case DefaultUni.BuiltinValue         => text("value")
         case _                               => sys.error(s"Unexpected default uni: $du")
 

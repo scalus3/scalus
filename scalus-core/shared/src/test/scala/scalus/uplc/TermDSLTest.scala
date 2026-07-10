@@ -84,3 +84,9 @@ class TermDSLTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbitra
         val t = vr"f" $ vr"x" $ vr"y" $ vr"z"
         assert(t.show == "[f x y z]")
     }
+
+    test("pretty array constant") {
+        val t: Term =
+            Term.Const(Constant.Array(DefaultUni.Integer, IndexedSeq(Constant.Integer(1))))
+        assert(t.show == "(con (array integer) [1])")
+    }

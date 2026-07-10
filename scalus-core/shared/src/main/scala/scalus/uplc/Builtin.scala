@@ -13,6 +13,7 @@ import scalus.utils.Macros
 
 import scala.annotation.threadUnsafe
 import scala.collection.immutable.ArraySeq
+import scala.language.implicitConversions
 
 case class BuiltinRuntime(
     typeScheme: TypeScheme,
@@ -30,10 +31,13 @@ class CardanoBuiltins(
     platformSpecific: PlatformSpecific,
     semanticVariant: BuiltinSemanticsVariant
 ):
-    // local extension used to create a TypeScheme from a DefaultUni
+    // Local conversion so DefaultUni operands resolve to TypeScheme's right-associative `->:`
+    // member methods. Do NOT replace this with an `extension (x: DefaultUni) def ->:` — Scala 3.3
+    // and 3.4+ disagree on the operand order of right-associative extension methods, which
+    // silently swapped the last argument type with the result type in every scheme whose tail
+    // was built from two DefaultUni operands (e.g. EqualsInteger became Int -> Bool -> Int).
+    private given Conversion[DefaultUni, TypeScheme] = TypeScheme.Type(_)
     extension (x: DefaultUni)
-        def ->:(t: DefaultUni): TypeScheme =
-            TypeScheme.Arrow(TypeScheme.Type(t), TypeScheme.Type(x))
         infix def $(t: TypeScheme): TypeScheme = TypeScheme.Type(x) $ t
         infix def $(t: String): TypeScheme = TypeScheme.Type(x) $ t
 
