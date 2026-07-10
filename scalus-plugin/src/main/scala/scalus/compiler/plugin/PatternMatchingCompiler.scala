@@ -1235,12 +1235,15 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         optNextDecisionTree: Option[SirCaseDecisionTree.Reference]
     ): SirCaseDecisionTree = {
 
+        // group by the constant value (uplcConst), not the SIR.Const node: node equality
+        // includes anns with source positions, so equal literals in different cases
+        // would never share a group (see docs/local/audits/M1.md)
         def checkConstantPattern(
             p: SirParsedCase.Pattern
-        ): Option[(SirParsedCase.Pattern.PrimitiveConstant, SIR.Const, SIR.Const)] = {
+        ): Option[(SirParsedCase.Pattern.PrimitiveConstant, scalus.uplc.Constant, SIR.Const)] = {
             p match
                 case c: SirParsedCase.Pattern.PrimitiveConstant =>
-                    Some((c, c.value, c.value))
+                    Some((c, c.value.uplcConst, c.value))
                 case _ => None
         }
 
@@ -1276,7 +1279,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                 Some(SirCaseDecisionTree.Reference(nextIndex))
             }
 
-        val constEntries = withConstants.map { case (const, (_, rows)) =>
+        val constEntries = withConstants.map { case (_, (const, rows)) =>
             val newGroup = SirParsedCase.GroupedTuples(
               group.columnBindings,
               group.activeColumns - col,
