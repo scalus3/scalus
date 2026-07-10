@@ -40,6 +40,7 @@ Below is a comprehensive list of what Scala features are currently supported in 
 ## Unsupported Features
 
 * `var`s and `lazy val`s - use immutable `val` declarations instead
+* by-name parameters (`b: => T`) - rejected at compile time, because Scalus would evaluate the argument strictly, unlike Scala; use an `inline` method with an `inline` parameter, or an explicit function parameter `b: () => T`
 * `while` loops - use recursion or higher-order functions like `fold`
 * classes, inheritance and polymorphism aka virtual dispatch
     * you can't use `isInstanceOf` or runtime type checks

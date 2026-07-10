@@ -458,6 +458,14 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       Test / testOptions += Tests.Argument("-oF"),
       Test / testOptions += Tests.Argument("-l", "scalus.testing.Benchmark"),
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test,
+      // Negative-compilation tests (ByNameParamErrorTest) drive dotc in-process with the
+      // packaged Scalus plugin and the full scalus-core classpath, handed to the forked
+      // test JVM as system properties.
+      libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value % Test,
+      Test / javaOptions ++= Seq(
+        s"-Dscalus.plugin.jar=${(scalusPlugin / Compile / packageBin).value.getAbsolutePath}",
+        s"-Dscalus.test.classpath=${(Test / fullClasspath).value.files.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
+      ),
       libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",

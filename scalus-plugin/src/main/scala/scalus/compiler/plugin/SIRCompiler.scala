@@ -1349,6 +1349,22 @@ final class SIRCompiler(
                   s"compileDefDef: ${dd.symbol.fullName.toString}, params: ${dd.paramss.map(_.map(_.show))}, type: ${dd.tpe.show}, rhs: ${dd.rhs.show}"
                 )
             val params = dd.paramss.flatten.collect { case vd: ValDef => vd }
+            // By-name params would be compiled strictly (this phase runs before
+            // ElimByName and SIRTyper erases ExprType), silently diverging from
+            // Scala's call-by-name semantics on-chain (audit finding E2). Report and
+            // continue (don't use the throwing `error` helper) so every offending
+            // parameter is flagged and the diagnostic survives to the reporter.
+            params.foreach { vd =>
+                if vd.tpt.tpe.isInstanceOf[ExprType] then
+                    report.error(
+                      s"By-name parameter '${vd.name.show}: ${vd.tpt.tpe.show}' is not supported: " +
+                          "Scalus would evaluate the argument strictly at the call site, silently " +
+                          "diverging from Scala's call-by-name semantics on-chain. Use an `inline` " +
+                          "method with an `inline` parameter, or an explicit function parameter " +
+                          "`() => T`.",
+                      vd.srcPos
+                    )
+            }
             val typeParams = dd.paramss.flatten.collect { case td: TypeDef => td }
             val sirTypeParams = typeParams.map { td =>
                 val kind = typer
