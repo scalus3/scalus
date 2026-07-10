@@ -129,6 +129,33 @@ class TermAnalysisTest extends AnyFunSuite:
         assert(!(QuotientInteger $ 7 $ 2).isPure)
     }
 
+    test("Saturated total builtin with ill-typed constant arg is impure") {
+        // isTotal only guarantees no failure on well-typed input; the CEK still fails
+        // unlifting an ill-typed constant (KnownTypeUnliftingError)
+        assert(!(AddInteger $ 1 $ true).isPure)
+        assert(!(EqualsInteger $ true $ 1).isPure)
+        // ifThenElse unlifts its condition, which must be Bool
+        assert(!(Force(Builtin(IfThenElse)) $ 1 $ 1 $ 2).isPure)
+    }
+
+    test("Saturated total builtin with non-constant args is pure (well-typed assumption)") {
+        // x's static type is unknown; the analysis assumes the program is well-typed
+        // (optimizer input is lowered from typed SIR), so only provably ill-typed
+        // constants make a saturated total builtin impure
+        assert((AddInteger $ vr"x" $ 1).isPure)
+        assert((AddInteger $ vr"x" $ vr"y").isPure)
+    }
+
+    test("Saturated total builtin with opaque type-variable args stays pure") {
+        // ifThenElse never unlifts its branches: any pure term is fine there,
+        // including the ubiquitous delayed-branches pattern
+        assert((Force(Builtin(IfThenElse)) $ true $ Delay(vr"t") $ Delay(vr"f")).isPure)
+        assert((Force(Builtin(IfThenElse)) $ true $ vr"t" $ vr"f").isPure)
+        // chooseList branches likewise
+        val list = Const(Constant.List(DefaultUni.Integer, List()))
+        assert((Force(Force(Builtin(ChooseList))) $ list $ vr"a" $ vr"b").isPure)
+    }
+
     test("Saturated total builtin with impure arg is impure") {
         // AddInteger is total, but arg is impure
         assert(!(AddInteger $ Error() $ 2).isPure)

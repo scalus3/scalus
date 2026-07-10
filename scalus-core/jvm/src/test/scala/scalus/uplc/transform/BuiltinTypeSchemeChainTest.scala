@@ -187,6 +187,26 @@ class BuiltinTypeSchemeChainTest extends AnyFunSuite:
         assert(found.isEmpty, s"${found.size} discrepancies:\n${found.mkString("\n")}")
     }
 
+    test("ill-typed saturated chains are never classified pure") {
+        // For every builtin, wrong-type the first concrete-typed (i.e. unlifted) parameter.
+        // isTotal only covers well-typed inputs, so these must all be impure.
+        val errors = List.newBuilder[String]
+        val skipped = List.newBuilder[DefaultFun]
+        for Row(bn, tvs, arity, defaults) <- rows do
+            val params = argTypes(Meaning.allBuiltins.getBuiltinRuntime(bn).typeScheme)
+            params.indexWhere(!_.isInstanceOf[TypeScheme.TVar]) match
+                case -1 => skipped += bn
+                case i =>
+                    val wrong: Term =
+                        if uniOf(params(i)) == DefaultUni.Integer then Const(Constant.Bool(true))
+                        else Const(Constant.Integer(1))
+                    val t = chain(bn, tvs, defaults.updated(i, wrong))
+                    if t.isPure then errors += s"ill-typed saturated chain pure: ${safeShow(t)}"
+        assert(skipped.result().isEmpty, s"builtins with no concrete param: ${skipped.result()}")
+        val found = errors.result()
+        assert(found.isEmpty, s"${found.size} discrepancies:\n${found.mkString("\n")}")
+    }
+
     test("interleaved Force/Apply chains error and are classified non-value and impure") {
         val errors = List.newBuilder[String]
         for Row(bn, tvs, arity, defaults) <- rows if tvs >= 1 && arity >= 1 do

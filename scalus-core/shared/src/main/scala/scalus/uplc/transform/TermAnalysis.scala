@@ -1,6 +1,6 @@
 package scalus.uplc.transform
 
-import scalus.uplc.{DefaultFun, Meaning, NamedDeBruijn, Term}
+import scalus.uplc.{DefaultFun, DefaultUni, Meaning, NamedDeBruijn, Term, TypeScheme}
 import scalus.uplc.Term.*
 
 /** Static analysis utilities for UPLC terms.
@@ -42,12 +42,64 @@ object TermAnalysis:
             args: List[Term]
         ): Option[(DefaultFun, Int, Int, List[Term])] =
             t match
-                case Builtin(bn, _)  => Some((bn, forces, applies, args.reverse))
+                // args are consed outermost-first while descending, so the accumulator is
+                // already in application order (innermost Apply holds the first argument)
+                case Builtin(bn, _)  => Some((bn, forces, applies, args))
                 case Force(inner, _) => go(inner, forces + 1, applies, args)
                 // an Apply below a Force means the chain is interleaved (invalid)
                 case Apply(f, arg, _) if forces == 0 => go(f, forces, applies + 1, arg :: args)
                 case _                               => None
         go(term, 0, 0, List.empty)
+
+    /** Whether the applied arguments could conform to the builtin's declared parameter types.
+      *
+      * `isTotal` only guarantees a builtin cannot fail on well-typed input: a saturated total
+      * builtin applied to an ill-typed argument (e.g. `addInteger 1 True`) still fails at
+      * unlifting. This check rejects ''provably'' ill-typed applications: a constant argument in a
+      * concretely-typed (`Type`/`App` shaped, i.e. unlifted) parameter position must have a
+      * unifiable type, with type variables bound consistently across parameters.
+      *
+      * Non-constant arguments (variables, applications, …) have statically unknown types and are
+      * accepted: the analysis assumes the surrounding program is well-typed, which holds for the
+      * optimizer's input — UPLC lowered from typed SIR. A bare type-variable parameter is opaque —
+      * never unlifted — so any argument conforms there (e.g. `ifThenElse` branches, delayed or
+      * not).
+      */
+    private def argsConformToScheme(ts: TypeScheme, args: List[Term]): Boolean =
+        def unify(
+            p: TypeScheme,
+            u: DefaultUni,
+            env: Map[String, DefaultUni]
+        ): Option[Map[String, DefaultUni]] = p match
+            case TypeScheme.Type(pu) => if pu == u then Some(env) else None
+            case TypeScheme.TVar(n) =>
+                env.get(n) match
+                    case Some(bound) => if bound == u then Some(env) else None
+                    case None        => Some(env.updated(n, u))
+            case TypeScheme.App(f, a) =>
+                u match
+                    case DefaultUni.Apply(uf, ua) => unify(f, uf, env).flatMap(unify(a, ua, _))
+                    case _                        => None
+            case _ => None
+        def loop(t: TypeScheme, args: List[Term], env: Map[String, DefaultUni]): Boolean =
+            args match
+                case Nil => true
+                case arg :: rest =>
+                    t match
+                        case TypeScheme.All(_, body) => loop(body, args, env)
+                        case TypeScheme.Arrow(p, next) =>
+                            p match
+                                case TypeScheme.TVar(_) => loop(next, rest, env)
+                                case _ =>
+                                    arg match
+                                        case Const(c, _) =>
+                                            unify(p, c.tpe, env) match
+                                                case Some(env2) => loop(next, rest, env2)
+                                                case None       => false
+                                        // unknown static type: assume well-typed program
+                                        case _ => loop(next, rest, env)
+                        case _ => false
+        loop(ts, args, Map.empty)
 
     /** Whether evaluating `[branch a1 … an]` is guaranteed not to fail, assuming the `n` arguments
       * are pure values (as case branch applications are per the CEK machine). Peels one lambda per
@@ -232,8 +284,11 @@ object TermAnalysis:
                         numForces == ts.numTypeVars
                         // Applying the result of a saturated builtin to more args errors
                         && numApplies <= ts.arity
-                        // Saturated builtins compute: pure only if the builtin is total
-                        && (numApplies < ts.arity || bn.isTotal)
+                        // Saturated builtins compute: pure only if the builtin is total AND
+                        // the arguments are known well-typed (totality says nothing about
+                        // ill-typed input, which fails at unlifting)
+                        && (numApplies < ts.arity ||
+                            (bn.isTotal && argsConformToScheme(ts, appliedArgs)))
                         // All applied arguments must themselves be pure
                         && appliedArgs.forall(_.isPure)
                     case None => false
