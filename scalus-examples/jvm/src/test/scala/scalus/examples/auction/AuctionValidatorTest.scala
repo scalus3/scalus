@@ -93,7 +93,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
         ).runWithBudget()
         assert(
           budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 300686L, steps = 95166051L),
+            pre38 = ExUnits(memory = 304654L, steps = 96234298L),
             since38 = ExUnits(memory = 297630L, steps = 94088189L)
           )
         )

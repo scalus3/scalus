@@ -1910,7 +1910,9 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
             )
         val decisionsWithScrutinee =
             if needsScrutineeLet then
-                // For non-variable scrutinees, create a let binding
+                // Scala evaluates the scrutinee strictly, exactly once, even when no
+                // pattern inspects it — a Lazy let would let the lowering drop or
+                // re-evaluate it (audit findings X1/L7).
                 SIR.Let(
                   List(
                     Binding(
@@ -1920,7 +1922,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                     )
                   ),
                   decisions,
-                  SIR.LetFlags.Lazy,
+                  SIR.LetFlags.None,
                   AnnotationsDecl.fromSrcPos(ctx.topLevelPos)
                 )
             else

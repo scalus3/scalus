@@ -159,12 +159,12 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
                 case scalus.cardano.onchain.plutus.prelude.List.Cons(h, tl) => BigInt(2)
         }
 
-        // With LetFloating optimization, the scrutinee lazy let is floated into the case
-        // This becomes (lam scrutinee scrutinee) $ (constr 0) in the case scrutinee position
-        val expected = Term.Case(
-          λ(scrutinee => scrutinee) $ Term.Constr(Word64.Zero, List.empty),
-          List(BigInt(1), λ("h", "tl")(BigInt(2)))
-        )
+        // The scrutinee is bound with a strict (non-lazy) let, so LetFloating no longer
+        // floats it into the case scrutinee position; it stays a lambda wrapping the whole
+        // match: (lam scrutinee (case scrutinee ...)) $ (constr 0)
+        val matchOnScrutinee =
+            λ(scrutinee => Term.Case(scrutinee, List(BigInt(1), λ("h", "tl")(BigInt(2)))))
+        val expected = matchOnScrutinee $ Term.Constr(Word64.Zero, List.empty)
         val compiled = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
 
         val djExpected = DeBruijn.deBruijnTerm(expected)
@@ -191,9 +191,10 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
                 case TxId(id) => BigInt(1)
         }
 
-        // With LetFloating optimization, the scrutinee lazy let is floated
-        // The newtype unwrapping creates: (lam id BODY) ((lam scrutinee scrutinee) VALUE)
-        val expected = λ(id => BigInt(1)) $ (λ(scrutinee => scrutinee) $ hex"DEADBEEF")
+        // The scrutinee is bound with a strict (non-lazy) let, so LetFloating no longer
+        // floats/eliminates it; it stays a lambda wrapping the newtype-unwrapping body:
+        // (lam scrutinee ((lam id BODY) scrutinee)) $ VALUE
+        val expected = λ(scrutinee => λ(id => BigInt(1)) $ scrutinee) $ hex"DEADBEEF"
         val compiled = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
 
         val djExpected = DeBruijn.deBruijnTerm(expected)
@@ -214,8 +215,10 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
                 case _ => BigInt(1)
         }
 
-        // With let-floating enabled, the unused scrutinee binding is eliminated
-        sir lowersTo BigInt(1)
+        // The scrutinee is bound with a strict (non-lazy) let: even though no pattern
+        // inspects it, Scala match semantics require the scrutinee to be evaluated
+        // exactly once, so the binding must not be eliminated.
+        sir lowersTo (λ(scrutinee => BigInt(1)) $ hex"DEADBEEF")
     }
 
     test("lower Select") {

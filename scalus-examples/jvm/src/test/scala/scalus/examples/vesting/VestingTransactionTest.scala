@@ -172,7 +172,7 @@ class VestingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, withdrawTx, lockedUtxo.input)
         assert(result.isSuccess, s"Validator failed: $result")
         assert(
-          result.budget == (ExUnits(memory = 451295L, steps = 149072607L))
+          result.budget == (ExUnits(memory = 451895L, steps = 149168607L))
         )
 
         val submitResult = provider.submit(withdrawTx).await()
