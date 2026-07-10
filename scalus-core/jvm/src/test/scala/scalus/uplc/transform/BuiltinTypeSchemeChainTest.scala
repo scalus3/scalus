@@ -45,7 +45,10 @@ class BuiltinTypeSchemeChainTest extends AnyFunSuite:
     private lazy val g2 = G2.generator
     private lazy val ml = platform.bls12_381_millerLoop(g1, g2)
 
-    /** Term.show crashes on array constants (PrettyPrinter gap), so guard clue rendering */
+    /** MlResult constants are unprintable by design (no UPLC syntax), and some derived arguments
+      * here are MlResults — guard clue rendering so a failing chain still reports its discrepancy
+      * instead of crashing on Term.show.
+      */
     private def safeShow(t: Term): String =
         try t.show
         catch case _: Exception => t.toString
