@@ -270,6 +270,10 @@ object TermAnalysis:
           *   during evaluation
           *
           * @see
+          *   [[https://github.com/IntersectMBO/plutus/blob/master/plutus-core/untyped-plutus-core/src/UntypedPlutusCore/Purity.hs UntypedPlutusCore.Purity]]
+          *   — the UPLC-level counterpart of this analysis (note: it treats all saturated builtin
+          *   applications and all Case terms as impure; this analysis is deliberately more precise)
+          * @see
           *   [[https://github.com/IntersectMBO/plutus/blob/441b76d9e9745dfedb2afc29920498bdf632f162/plutus-core/plutus-ir/src/PlutusIR/Purity.hs#L272 Plutus IR Purity]]
           */
         def isPure: Boolean = term match
