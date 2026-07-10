@@ -1001,6 +1001,34 @@ final class SIRCompiler(
 
     }
 
+    /** Compile `obj.copy(args)`. The Scala compiler desugars copy to pass every field (explicit and
+      * defaulted) as an argument, so we build the new instance with `compileNewConstructor`. When
+      * every field is explicit there is no `copy$default$N` getter referencing `obj`, so the
+      * receiver would be dropped — but Scala evaluates it once, eagerly. Sequence a non-pure
+      * receiver before the Constr with a strict let so its traces/errors are preserved (audit
+      * finding E3). Pure receivers (local vals, and the synthetic stable receiver dotty lifts when
+      * default getters are used) need no sequencing.
+      */
+    private def compileCaseClassCopy(
+        env: Env,
+        obj: Tree,
+        nakedType: Type,
+        fullType: Type,
+        args: List[Tree],
+        tree: Tree
+    ): AnnotatedSIR = {
+        val constr = compileNewConstructor(env, nakedType, fullType, args, tree)
+        if tpd.isPureExpr(obj) then constr
+        else
+            val objSir = compileExpr(env, obj)
+            SIR.Let(
+              List(Binding(s"_copyReceiver_${tree.srcPos.line}", objSir.tp, objSir)),
+              constr,
+              SIR.LetFlags.None,
+              AnnotationsDecl.fromSrcPos(tree.srcPos)
+            )
+    }
+
     private def compileNewConstructorNoTuple(
         env: Env,
         nakedType: Type,
@@ -3344,9 +3372,9 @@ final class SIRCompiler(
             // The Scala compiler desugars copy to pass all arguments (explicit and defaulted)
             // We compile it as a Constr call
             case Apply(TypeApply(Select(obj, nme.copy), targs), args) if isCaseClassInstance(obj) =>
-                compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
+                compileCaseClassCopy(env, obj, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
             case Apply(Select(obj, nme.copy), args) if isCaseClassInstance(obj) =>
-                compileNewConstructor(env, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
+                compileCaseClassCopy(env, obj, obj.tpe.widen.dealias, tree.tpe.widen, args, tree)
             // typeProxy[V](x) — type-only cast, no repr change
             case Apply(TypeApply(f, targs), List(arg))
                 if f.symbol == typeProxyMethod && targs.size == 1 =>
