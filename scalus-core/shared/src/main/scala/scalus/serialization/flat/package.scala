@@ -82,11 +82,11 @@ package object flat:
     given Flat[Array[Byte]] = ArrayByteFlat()
 
     given Flat[Int] with
-        def bitSize(a: Int): Int = word7BytesCount(zigZag(a)) * 8
+        def bitSize(a: Int): Int = word7BytesCount(zigZag(a) & 0xffffffffL) * 8
 
         // Encoded as: data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList
         def encode(a: Int, encode: EncoderState): Unit =
-            val vs = word7Bytes(zigZag(a))
+            val vs = word7Bytes(zigZag(a) & 0xffffffffL)
             var i = 0
             while i < vs.length do
                 encode.bits(8, vs(i))
@@ -272,18 +272,21 @@ package object flat:
     @deprecated("Use word7Bytes instead", "0.18.2")
     def w7l(n: Long): List[Byte] = word7Bytes(n).toList
 
-    /** ZigZag encoding https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba Maps negative
-      * values to positive values while going back and forth (0 = 0, -1 = 1, 1 = 2, -2 = 3, 2 = 4,
-      * -3 = 5, 3 = 6 ...)
+    /** ZigZag encoding: maps signed values to unsigned so small magnitudes of either sign get short
+      * varint encodings (0 → 0, -1 → 1, 1 → 2, -2 → 3, 2 → 4, ...). Total over the whole Int/Long
+      * range: the doubling overflow is intentional and is inverted by [[zagZig]].
+      * https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba
       */
-    def zigZag(x: Int) =
-        assert(Math.abs(x) <= (1 << 30), "zigZag: value out or range: -2^31..2^31")
-        if x >= 0 then x << 1 else -(x << 1) - 1
-    def zigZag(x: Long) =
-        assert(Math.abs(x) <= (1L << 62), "zigZag: value out or range: -2^62..2^62")
-        if x >= 0 then x << 1 else -(x << 1) - 1
-    def zagZig(u: Int) = u >> 1 ^ -(u & 1)
-    def zagZig(u: Long) = u >> 1 ^ -(u & 1)
+    def zigZag(x: Int): Int = (x << 1) ^ (x >> 31)
+
+    /** Inverse of [[zigZag(x:Int)*]]. */
+    def zagZig(u: Int): Int = (u >>> 1) ^ -(u & 1)
+
+    /** See [[zigZag(x:Int)*]]. */
+    def zigZag(x: Long): Long = (x << 1) ^ (x >> 63)
+
+    /** Inverse of [[zigZag(x:Long)*]]. */
+    def zagZig(u: Long): Long = (u >>> 1) ^ -(u & 1)
 
     @deprecated("Use word7Bytes instead", "0.18.2")
     def w7l(n: BigInt): List[Byte] = word7Bytes(n).toList

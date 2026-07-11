@@ -152,8 +152,10 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
     }
 
     test("Zagzig/zigZag Int") {
-        forAll { (nn: Int) =>
-            val n = nn >> 1 // to avoid overflow
+        assert(zigZag(0) == 0 && zigZag(-1) == 1 && zigZag(1) == 2 && zigZag(-2) == 3)
+        for n <- List(Int.MinValue, Int.MaxValue, 1 << 30, -(1 << 30), (1 << 30) + 1) do
+            assert(zagZig(zigZag(n)) == n, s"for $n")
+        forAll { (n: Int) =>
             assert(zagZig(zigZag(n)) == n)
         }
     }
@@ -202,10 +204,30 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
     }
 
     test("Zagzig/zigZag Long") {
-        forAll { (nn: Long) =>
-            val n = nn >> 1 // to avoid overflow
+        for n <- List(Long.MinValue, Long.MaxValue, 1L << 62, -(1L << 62), (1L << 62) + 1) do
+            assert(zagZig(zigZag(n)) == n, s"for $n")
+        forAll { (n: Long) =>
             assert(zagZig(zigZag(n)) == n)
         }
+    }
+
+    test("encode/decode full Int and Long range") {
+        val fi = summon[Flat[Int]]
+        val fLong = summon[Flat[Long]]
+        def roundTripInt(x: Int): Int =
+            val enc = EncoderState(fi.bitSize(x) / 8 + 1)
+            fi.encode(x, enc)
+            fi.decode(DecoderState(enc.result))
+        def roundTripLong(x: Long): Long =
+            val enc = EncoderState(fLong.bitSize(x) / 8 + 1)
+            fLong.encode(x, enc)
+            fLong.decode(DecoderState(enc.result))
+        for x <- List(Int.MinValue, Int.MaxValue, 1 << 30, -(1 << 30) - 1) do
+            assert(roundTripInt(x) == x, s"for Int $x")
+        for x <- List(Long.MinValue, Long.MaxValue, 1L << 62, -(1L << 62) - 1) do
+            assert(roundTripLong(x) == x, s"for Long $x")
+        forAll { (x: Int) => assert(roundTripInt(x) == x) }
+        forAll { (x: Long) => assert(roundTripLong(x) == x) }
     }
 
     test("Zagzig/zigZag BigInt") {
