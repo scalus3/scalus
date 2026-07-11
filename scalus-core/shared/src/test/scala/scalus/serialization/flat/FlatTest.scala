@@ -122,6 +122,35 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
         }
     }
 
+    test("word7Bytes encodes 7-bit groups little-endian with continuation bits") {
+        assert(word7Bytes(0L).toList == List(0x00.toByte))
+        assert(word7Bytes(127L).toList == List(0x7f.toByte))
+        assert(word7Bytes(128L).toList == List(0x80.toByte, 0x01.toByte))
+        assert(word7Bytes(-1L).length == 10) // treated as unsigned 2^64 - 1
+        assert(word7BytesCount(0L) == 1)
+        assert(word7BytesCount(Long.MaxValue) == 9)
+        assert(word7BytesCount(-1L) == 10)
+        forAll { (n: Long) =>
+            // reference implementation: unsigned base-128, LSB group first
+            val expected = List.newBuilder[Byte]
+            var v = n
+            while
+                val low = (v & 0x7f).toByte
+                v = v >>> 7
+                if v == 0 then expected += low else expected += (low | 0x80).toByte
+                v != 0
+            do ()
+            assert(word7Bytes(n).toList == expected.result())
+            assert(word7BytesCount(n) == word7Bytes(n).length)
+        }
+        forAll { (n: BigInt) =>
+            whenever(n >= 0) {
+                assert(word7BytesCount(n) == word7Bytes(n).length)
+                if n.isValidLong then assert(word7Bytes(n).toList == word7Bytes(n.toLong).toList)
+            }
+        }
+    }
+
     test("Zagzig/zigZag Int") {
         forAll { (nn: Int) =>
             val n = nn >> 1 // to avoid overflow

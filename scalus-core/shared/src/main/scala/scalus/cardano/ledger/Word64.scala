@@ -1,7 +1,7 @@
 package scalus.cardano.ledger
 
 import io.bullet.borer.{Decoder, Encoder, Reader, Writer}
-import scalus.serialization.flat.{w7l, DecoderState, EncoderState, Flat}
+import scalus.serialization.flat.{word7Bytes, DecoderState, EncoderState, Flat}
 
 import java.math.BigInteger
 
@@ -306,7 +306,11 @@ object Word64 {
 
         // Encoded as: data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList
         inline def encode(a: Word64, encode: EncoderState): Unit =
-            for b <- w7l(a.value) do encode.bits(8, b)
+            val vs = word7Bytes(a.value)
+            var i = 0
+            while i < vs.length do
+                encode.bits(8, vs(i))
+                i += 1
 
         def decode(decode: DecoderState): Word64 = {
             var bs = List.empty[Byte]

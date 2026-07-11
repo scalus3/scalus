@@ -82,13 +82,11 @@ package object flat:
     given Flat[Array[Byte]] = ArrayByteFlat()
 
     given Flat[Int] with
-        def bitSize(a: Int): Int =
-            val vs = w7l(zigZag(a))
-            vs.length * 8
+        def bitSize(a: Int): Int = word7BytesCount(zigZag(a)) * 8
 
         // Encoded as: data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList
         def encode(a: Int, encode: EncoderState): Unit =
-            val vs = w7l(zigZag(a))
+            val vs = word7Bytes(zigZag(a))
             var i = 0
             while i < vs.length do
                 encode.bits(8, vs(i))
@@ -107,13 +105,11 @@ package object flat:
             zagZig(r)
 
     given Flat[Long] with
-        def bitSize(a: Long): Int =
-            val vs = w7l(zigZag(a))
-            vs.length * 8
+        def bitSize(a: Long): Int = word7BytesCount(zigZag(a)) * 8
 
         // Encoded as: data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList
         def encode(a: Long, encode: EncoderState): Unit =
-            val vs = w7l(zigZag(a))
+            val vs = word7Bytes(zigZag(a))
             var i = 0
             while i < vs.length do
                 encode.bits(8, vs(i))
@@ -131,13 +127,11 @@ package object flat:
             zagZig(r)
 
     given Flat[BigInt] with
-        def bitSize(a: BigInt): Int =
-            val vs = w7l(zigZag(a))
-            vs.length * 8
+        def bitSize(a: BigInt): Int = word7BytesCount(zigZag(a)) * 8
 
         // Encoded as: data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList
         def encode(a: BigInt, encode: EncoderState): Unit =
-            val vs = w7l(zigZag(a))
+            val vs = word7Bytes(zigZag(a))
             var i = 0
             while i < vs.length do
                 encode.bits(8, vs(i))
@@ -155,13 +149,11 @@ package object flat:
             zagZig(r)
 
     given Flat[Natural] with
-        def bitSize(a: Natural): Int =
-            val vs = w7l(a.n)
-            vs.length * 8
+        def bitSize(a: Natural): Int = word7BytesCount(a.n) * 8
 
         // Encoded as: data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList
         def encode(a: Natural, encode: EncoderState): Unit =
-            val vs = w7l(a.n)
+            val vs = word7Bytes(a.n)
             var i = 0
             while i < vs.length do
                 encode.bits(8, vs(i))
@@ -231,10 +223,54 @@ package object flat:
             val b = summon[Flat[B]].decode(decode)
             (a, b)
 
-    def w7l(n: Long): List[Byte] =
-        val low = n & 0x7f
-        val t = n >>> 7
-        if t == 0 then low.toByte :: Nil else (low | 0x80).toByte :: w7l(t)
+    /** Number of bytes in the variable-length 7-bit encoding of `n`, treating `n` as an unsigned
+      * 64-bit value.
+      */
+    def word7BytesCount(n: Long): Int =
+        if n == 0 then 1
+        else (63 - java.lang.Long.numberOfLeadingZeros(n)) / 7 + 1
+
+    /** Encodes `n` (treated as an unsigned 64-bit value) as a variable-length byte array: 7 payload
+      * bits per byte, least-significant group first, high bit set on every byte except the last.
+      * This is the byte layout of flat's
+      * `data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList`.
+      */
+    def word7Bytes(n: Long): Array[Byte] =
+        val size = word7BytesCount(n)
+        val result = new Array[Byte](size)
+        var v = n
+        var i = 0
+        while i < size - 1 do
+            result(i) = ((v & 0x7f) | 0x80).toByte
+            v >>>= 7
+            i += 1
+        result(size - 1) = (v & 0x7f).toByte
+        result
+
+    /** Number of bytes in the variable-length 7-bit encoding of a non-negative `n`. */
+    def word7BytesCount(n: BigInt): Int =
+        require(n >= 0, s"word7BytesCount: input must be non-negative, got $n")
+        if n == 0 then 1 else (n.bitLength - 1) / 7 + 1
+
+    /** Encodes a non-negative `n` as a variable-length byte array, as in [[word7Bytes(n:Long)*]].
+      */
+    def word7Bytes(n: BigInt): Array[Byte] =
+        require(n >= 0, s"word7Bytes: input must be non-negative, got $n")
+        if n.isValidLong then word7Bytes(n.toLong)
+        else
+            val size = word7BytesCount(n)
+            val result = new Array[Byte](size)
+            var v = n
+            var i = 0
+            while i < size - 1 do
+                result(i) = ((v & 0x7f).toInt | 0x80).toByte
+                v = v >> 7
+                i += 1
+            result(size - 1) = (v & 0x7f).toByte
+            result
+
+    @deprecated("Use word7Bytes instead", "0.18.2")
+    def w7l(n: Long): List[Byte] = word7Bytes(n).toList
 
     /** ZigZag encoding https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba Maps negative
       * values to positive values while going back and forth (0 = 0, -1 = 1, 1 = 2, -2 = 3, 2 = 4,
@@ -249,11 +285,8 @@ package object flat:
     def zagZig(u: Int) = u >> 1 ^ -(u & 1)
     def zagZig(u: Long) = u >> 1 ^ -(u & 1)
 
-    def w7l(n: BigInt): List[Byte] =
-        require(n >= 0, s"w7l: input must be non-negative, got $n")
-        val low = n & 0x7f
-        val t = n >> 7
-        if t == 0 then low.toByte :: Nil else (low | 0x80).toByte :: w7l(t)
+    @deprecated("Use word7Bytes instead", "0.18.2")
+    def w7l(n: BigInt): List[Byte] = word7Bytes(n).toList
 
     def zigZag(x: BigInt) = if x >= 0 then x << 1 else -(x << 1) - 1
     def zagZig(u: BigInt) = u >> 1 ^ -(u & 1)
