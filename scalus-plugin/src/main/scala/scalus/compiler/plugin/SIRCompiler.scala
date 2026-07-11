@@ -14,7 +14,7 @@ import dotty.tools.dotc.core.Symbols.*
 import dotty.tools.dotc.core.Types.*
 import dotty.tools.dotc.util.{NoSourcePosition, SourcePosition, SrcPos}
 import scalus.serialization.flat.FlatInstances.{ModuleHashSetReprFlat, given}
-import scalus.serialization.flat.{EncoderState, Flat}
+import scalus.serialization.flat.{DecoderState, EncoderState, Flat}
 import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, ConstrDecl, DataDecl, Module, SIR, SIRBuiltins, SIRDefaultOptions, SIRPosition, SIRType, SIRUnify, SIRVersion, TargetLoweringBackend, TypeBinding}
 import scalus.uplc.DefaultUni
 import scalus.*
@@ -764,8 +764,36 @@ final class SIRCompiler(
         val enc = EncoderState(bitSize / 8 + 1)
         fl.encode(module, enc)
         enc.filler()
+        verifyModuleRoundtrip(module, enc.buffer, className)
         output.write(enc.buffer)
         output.close()
+    }
+
+    /** The module file is linked into downstream compilation units, which cannot detect a
+      * mis-serialized module: a decode there produces a plausible but wrong SIR. So verify at write
+      * time that the bytes decode back to the same module.
+      */
+    private def verifyModuleRoundtrip(
+        module: Module,
+        bytes: Array[Byte],
+        className: String
+    ): Unit = {
+        val decoded = summon[Flat[Module]].decode(DecoderState(bytes))
+        if decoded.name != module.name || decoded.defs.size != module.defs.size then
+            report.error(
+              s"Scalus: module serialization self-check failed for $className: " +
+                  s"decoded name=${decoded.name} with ${decoded.defs.size} defs, " +
+                  s"expected name=${module.name} with ${module.defs.size} defs"
+            )
+        else
+            for (orig, dec) <- module.defs.zip(decoded.defs) do
+                SIRUnify.unifyBinding(orig, dec, SIRUnify.Env.empty) match
+                    case SIRUnify.UnificationSuccess(_, _) =>
+                    case SIRUnify.UnificationFailure(path, left, right) =>
+                        report.error(
+                          s"Scalus: module serialization self-check failed for $className, " +
+                              s"binding ${orig.name}: path=$path, left=$left, right=$right"
+                        )
     }
 
     /** Creates [[AdtTypeInfo]] based on a compiler Type.

@@ -189,6 +189,12 @@ object HashConsed {
 
     }
 
+    /** Key assigned to an object during encoding. The tag is remembered to detect an attempt to
+      * encode the same object under two different tag namespaces, which would leave the second
+      * namespace without an encoded body.
+      */
+    class KeyAssignment(val tag: Tag, val key: Int)
+
     /** @param forwardRefAcceptors
       *   \- set of forward references, which are not yet resolved from hashConded
       * @param refs
@@ -200,7 +206,15 @@ object HashConsed {
         forwardRefAcceptors: MutableMap[(Int, Int), ForwardRefAcceptor],
         refs: MutableMap[(Int, Int), CachedTaggedRef[?]],
         forwardValueAcceptors: MutableMap[(Int, Int), ForwardValueAcceptor]
-    )
+    ) {
+
+        /** Encoder-side only: key assigned to each object (by identity), see [[allocKey]]. */
+        val assignedKeys: IdentityHashMap[AnyRef, KeyAssignment] = new IdentityHashMap()
+
+        /** Encoder-side only: the object owning each assigned (key, tag) slot. */
+        val keyOwners: MutableMap[(Int, Int), AnyRef] = MutableMap.empty
+
+    }
 
     object State:
         def empty = State(MutableMap.empty, MutableMap.empty, MutableMap.empty)
@@ -231,6 +245,40 @@ object HashConsed {
                 )
             case Some(v) =>
                 v.setValueActions = acceptor.asInstanceOf[AnyRef => Unit] :: v.setValueActions
+
+    /** Allocate the wire key for `a` on the encoder side.
+      *
+      * The key written to the stream is an opaque identifier: the decoder only uses it to match
+      * references, so the encoder is free to choose any value. `a.hashCode` is only the starting
+      * point; if the slot is occupied by a structurally different object (a 32-bit hash collision,
+      * routine for recursive types whose hash passes through `TypeProxy.identityHashCode`), we
+      * probe successive keys until we find a free slot or an equal object. Without this, a
+      * collision would silently encode the second object as a reference to the first.
+      *
+      * Deterministic given the traversal order, so the bitSize and encode passes (each starting
+      * from an empty [[State]]) assign identical keys.
+      */
+    def allocKey(state: State, a: AnyRef, tag: Tag): Int =
+        val assigned = state.assignedKeys.get(a)
+        if assigned != null then
+            if assigned.tag != tag then
+                throw IllegalStateException(
+                  s"Object already has a key under tag ${assigned.tag}, requested under tag $tag: $a"
+                )
+            assigned.key
+        else
+            var key = a.hashCode
+            var done = false
+            while !done do
+                state.keyOwners.get((key, tag)) match
+                    case None =>
+                        state.keyOwners.put((key, tag), a)
+                        done = true
+                    case Some(owner) =>
+                        if (owner eq a) || owner == a then done = true
+                        else key += 1
+            state.assignedKeys.put(a, KeyAssignment(tag, key))
+            key
 
     def setRef[A <: AnyRef](state: State, ihc: Int, tag: Tag, ra: HashConsedRef[A]): Unit =
         if ra.isForward then throw IllegalStateException("Forward reference in setRef")
@@ -281,6 +329,9 @@ extension (s: HashConsed.State)
 
     def setRef[A <: AnyRef](ihc: Int, tag: HashConsed.Tag, a: HashConsedRef[A]): Unit =
         HashConsed.setRef(s, ihc, tag, a)
+
+    def allocKey(a: AnyRef, tag: HashConsed.Tag): Int =
+        HashConsed.allocKey(s, a, tag)
 
     def lookupValue(ihc: Int, tag: HashConsed.Tag): Option[HashConsedRef[?]] =
         HashConsed.lookupValue(s, ihc, tag)

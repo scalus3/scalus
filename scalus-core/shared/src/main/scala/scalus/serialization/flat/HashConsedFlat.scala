@@ -270,7 +270,7 @@ trait HashConsedMutRefReprFlat[A <: AnyRef, SA <: HashConsedRef[A]]
     def saFromRef(ref: HashConsedRef[A]): SA
 
     override def bitSizeHC(a: A, encoderState: HashConsed.State): Int = {
-        val ihc = a.hashCode
+        val ihc = encoderState.allocKey(a, tag)
         var retval = PlainIntFlat.bitSize(ihc)
         encoderState.lookup(ihc, tag) match
             case None =>
@@ -282,7 +282,7 @@ trait HashConsedMutRefReprFlat[A <: AnyRef, SA <: HashConsedRef[A]]
     }
 
     override def encodeHC(a: A, encoderState: HashConsedEncoderState): Unit = {
-        val ihc = a.hashCode
+        val ihc = encoderState.hashConsed.allocKey(a, tag)
         PlainIntFlat.encode(ihc, encoderState.encode)
         encoderState.hashConsed.lookup(ihc, tag) match
             case None =>

@@ -819,7 +819,7 @@ object FlatInstances:
                 throw new IllegalStateException(
                   "TypeProxy id is null, looks lise save or restore is invalid"
                 )
-            val ihc = ref.hashCode()
+            val ihc = hashConsed.allocKey(ref, tag)
             hashConsed.lookup(ihc, tag) match
                 case None =>
                     val preSize = PlainIntFlat.bitSize(ihc)
@@ -831,7 +831,7 @@ object FlatInstances:
                         case Some(_) =>
                     preSize + restSize
                 case Some(_) =>
-                    PlainIntFlat.bitSize(a.ref.hashCode())
+                    PlainIntFlat.bitSize(ihc)
 
         override def encodeHC(inA: SIRType, encode: HashConsedEncoderState): Unit =
             val a = inA match
@@ -842,7 +842,7 @@ object FlatInstances:
                 throw new IllegalStateException(
                   "TypeProxy id is null, looks lise save or restore is invalid"
                 )
-            val ihc = ref.hashCode()
+            val ihc = encode.hashConsed.allocKey(ref, tag)
             PlainIntFlat.encode(ihc, encode.encode)
             encode.hashConsed.lookup(ihc, tag) match
                 case None =>
