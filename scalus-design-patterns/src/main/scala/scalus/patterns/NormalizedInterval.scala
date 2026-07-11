@@ -140,24 +140,25 @@ object NormalizedInterval {
         case Always => "NormalizedInterval.Always"
     }
 
-    given Eq[NormalizedInterval] = (lhs: NormalizedInterval, rhs: NormalizedInterval) =>
-        lhs match
-            case ClosedRange(x1, x2) =>
-                rhs match
-                    case ClosedRange(y1, y2) => (x1 === y1) && (x2 === y2)
-                    case _                   => false
-            case FromNegInf(x1) =>
-                rhs match
-                    case FromNegInf(y1) => x1 === y1
-                    case _              => false
-            case ToPosInf(x1) =>
-                rhs match
-                    case ToPosInf(y1) => x1 === y1
-                    case _            => false
-            case Always =>
-                rhs match
-                    case Always => true
-                    case _      => false
+    given Eq[NormalizedInterval] = Eq.structural:
+        (lhs: NormalizedInterval, rhs: NormalizedInterval) =>
+            lhs match
+                case ClosedRange(x1, x2) =>
+                    rhs match
+                        case ClosedRange(y1, y2) => (x1 === y1) && (x2 === y2)
+                        case _                   => false
+                case FromNegInf(x1) =>
+                    rhs match
+                        case FromNegInf(y1) => x1 === y1
+                        case _              => false
+                case ToPosInf(x1) =>
+                    rhs match
+                        case ToPosInf(y1) => x1 === y1
+                        case _            => false
+                case Always =>
+                    rhs match
+                        case Always => true
+                        case _      => false
 
     given Ord[NormalizedInterval] = (lhs: NormalizedInterval, rhs: NormalizedInterval) =>
         lhs match

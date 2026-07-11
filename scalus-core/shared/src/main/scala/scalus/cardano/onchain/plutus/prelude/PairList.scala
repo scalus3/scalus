@@ -176,7 +176,7 @@ object PairList {
             loop(unMapData(d))
 
     given pairListEq[A: Eq, B: Eq]: Eq[PairList[A, B]] =
-        (lhs: PairList[A, B], rhs: PairList[A, B]) =>
+        Eq.structural: (lhs: PairList[A, B], rhs: PairList[A, B]) =>
             lhs match
                 case PairNil =>
                     rhs match

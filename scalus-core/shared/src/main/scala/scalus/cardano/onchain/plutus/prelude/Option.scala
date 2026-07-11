@@ -47,19 +47,20 @@ object Option {
       */
     inline def empty[A]: Option[A] = None
 
-    given optionEq[A](using eq: Eq[A]): Eq[Option[A]] = (a: Option[A], b: Option[A]) =>
-        a match
-            case None =>
-                b match
-                    case None    => true
-                    case Some(_) => false
-            case Some(value) =>
-                b match
-                    case None         => false
-                    case Some(value2) => value === value2
+    given optionEq[A](using eq: Eq[A]): Eq[Option[A]] = Eq.structural:
+        (a: Option[A], b: Option[A]) =>
+            a match
+                case None =>
+                    b match
+                        case None    => true
+                        case Some(_) => false
+                case Some(value) =>
+                    b match
+                        case None         => false
+                        case Some(value2) => value === value2
 
     // empties
-    given emptyOptionEq: Eq[Option[Nothing]] = (_, _) => true
+    given emptyOptionEq: Eq[Option[Nothing]] = Eq.structural((_, _) => true)
 
     given optionOrd[A](using ord: Ord[A]): Ord[Option[A]] = (a: Option[A], b: Option[A]) =>
         a match

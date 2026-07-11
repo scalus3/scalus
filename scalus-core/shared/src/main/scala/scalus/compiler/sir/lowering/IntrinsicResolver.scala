@@ -34,8 +34,10 @@ object IntrinsicResolver {
 
     /** Methods whose trailing implicit `Eq` argument is discarded during intrinsic resolution: the
       * V3 intrinsic compares structurally via `equalsRepr` instead of calling `eq`. Sound because
-      * non-structural types are excluded from `Eq` (see `RationalEq`/`AssocMapEq`), so every `Eq`
-      * type is structural — exactly what `equalsRepr` produces. See `tryResolveFull`.
+      * every `Eq` instance is structural by construction: non-structural types are excluded from
+      * `Eq` (see `RationalEq`/`AssocMapEq`), and the compiler plugin rejects hand-written instances
+      * — only `Eq.derived` and `Eq.structural(...)` can introduce one (audit 2026-07-10 I1). See
+      * `tryResolveFull`.
       */
     private val EqStripMethods: Set[String] = Set(
       ListModule + ".contains",

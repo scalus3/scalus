@@ -68,9 +68,10 @@ object EqBudgetPair:
     given eqDerived: Eq[EqBudgetPair] = Eq.derived
 
     // Manual implementation using pattern matching with unapply (for comparison)
-    given eqManualUnapply: Eq[EqBudgetPair] = (lhs: EqBudgetPair, rhs: EqBudgetPair) =>
-        (lhs, rhs) match
-            case (EqBudgetPair(x1, y1), EqBudgetPair(x2, y2)) => x1 === x2 && y1 === y2
+    given eqManualUnapply: Eq[EqBudgetPair] = Eq.structural:
+        (lhs: EqBudgetPair, rhs: EqBudgetPair) =>
+            (lhs, rhs) match
+                case (EqBudgetPair(x1, y1), EqBudgetPair(x2, y2)) => x1 === x2 && y1 === y2
 
 // Test enum for budget comparison: Eq.derived vs manual pattern matching
 enum EqBudgetStatus:
@@ -85,45 +86,47 @@ object EqBudgetStatus:
 
     // Manual implementation using nested pattern matching with binders (for comparison)
     // This extracts fields via pattern matching in the inner match
-    given eqWithBinders: Eq[EqBudgetStatus] = (lhs: EqBudgetStatus, rhs: EqBudgetStatus) =>
-        lhs match
-            case EqBudgetStatus.Pending =>
-                rhs match
-                    case EqBudgetStatus.Pending => true
-                    case _                      => false
-            case EqBudgetStatus.Done(r1) =>
-                rhs match
-                    case EqBudgetStatus.Done(r2) => r1 === r2
-                    case _                       => false
-            case EqBudgetStatus.Failed(c1, m1) =>
-                rhs match
-                    case EqBudgetStatus.Failed(c2, m2) => c1 === c2 && m1 === m2
-                    case _                             => false
+    given eqWithBinders: Eq[EqBudgetStatus] = Eq.structural:
+        (lhs: EqBudgetStatus, rhs: EqBudgetStatus) =>
+            lhs match
+                case EqBudgetStatus.Pending =>
+                    rhs match
+                        case EqBudgetStatus.Pending => true
+                        case _                      => false
+                case EqBudgetStatus.Done(r1) =>
+                    rhs match
+                        case EqBudgetStatus.Done(r2) => r1 === r2
+                        case _                       => false
+                case EqBudgetStatus.Failed(c1, m1) =>
+                    rhs match
+                        case EqBudgetStatus.Failed(c2, m2) => c1 === c2 && m1 === m2
+                        case _                             => false
 
     // Optimized implementation: type test in inner match, then direct field access
     // This avoids the binder extraction in the inner match
-    given eqDirectFieldAccess: Eq[EqBudgetStatus] = (lhs: EqBudgetStatus, rhs: EqBudgetStatus) =>
-        lhs match
-            case EqBudgetStatus.Pending =>
-                rhs match
-                    case EqBudgetStatus.Pending => true
-                    case _                      => false
-            case lhsDone: EqBudgetStatus.Done =>
-                rhs match
-                    case rhsDone: EqBudgetStatus.Done => lhsDone.result === rhsDone.result
-                    case _                            => false
-            case lhsFailed: EqBudgetStatus.Failed =>
-                rhs match
-                    case rhsFailed: EqBudgetStatus.Failed =>
-                        lhsFailed.code === rhsFailed.code && lhsFailed.message === rhsFailed.message
-                    case _ => false
+    given eqDirectFieldAccess: Eq[EqBudgetStatus] = Eq.structural:
+        (lhs: EqBudgetStatus, rhs: EqBudgetStatus) =>
+            lhs match
+                case EqBudgetStatus.Pending =>
+                    rhs match
+                        case EqBudgetStatus.Pending => true
+                        case _                      => false
+                case lhsDone: EqBudgetStatus.Done =>
+                    rhs match
+                        case rhsDone: EqBudgetStatus.Done => lhsDone.result === rhsDone.result
+                        case _                            => false
+                case lhsFailed: EqBudgetStatus.Failed =>
+                    rhs match
+                        case rhsFailed: EqBudgetStatus.Failed =>
+                            lhsFailed.code === rhsFailed.code && lhsFailed.message === rhsFailed.message
+                        case _ => false
 
     // Helper functions for creating values (needed for compile block)
     def mkPending: EqBudgetStatus = EqBudgetStatus.Pending
     def mkDone(r: BigInt): EqBudgetStatus = EqBudgetStatus.Done(r)
     def mkFailed(c: BigInt, m: String): EqBudgetStatus = EqBudgetStatus.Failed(c, m)
 
-// Used to guard that lowering `===` no longer prints any "not provably structural" Eq advisory.
+// Used to guard that lowering `===` prints no "not provably structural" Eq advisory.
 @Compile
 object EqUseSite:
     // Generic, non-inline: `a === b` resolves to the abstract `using Eq[A]` parameter — an Eq
@@ -133,13 +136,14 @@ object EqUseSite:
     def usePoints(x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt): Boolean =
         genericEq(EqTestPoint(x1, y1), EqTestPoint(x2, y2))
 
-// A named, non-structural custom Eq (it ignores its arguments) — the named-instance case that
-// previously flooded the build log with one advisory line per `===` call-site.
+// A named Eq instance introduced via the `Eq.structural` escape hatch — the named-instance case
+// that previously flooded the build log with one advisory line per `===` call-site. (A bare
+// non-structural lambda is no longer expressible: the plugin rejects hand-written Eq lambdas.)
 case class EqWrap(v: BigInt)
 
 @Compile
 object EqWrap:
-    given alwaysEqual: Eq[EqWrap] = (_: EqWrap, _: EqWrap) => true
+    given structuralWrap: Eq[EqWrap] = Eq.structural((a: EqWrap, b: EqWrap) => a.v === b.v)
 
 class EqDerivingTest extends AnyFunSuite {
 
@@ -220,10 +224,10 @@ class EqDerivingTest extends AnyFunSuite {
           optimizeUplc = false,
           debug = false
         )
-        // Both an Eq received abstractly as a `using` parameter and a named custom (non-structural)
-        // Eq used via `===` must stay silent: the advisory was removed (its only prelude target,
-        // `Eq.keyPairEq`, is `@deprecated`, and the lowering cannot tell a structural named `given`
-        // from a non-structural one without resolving the instance body).
+        // Both an Eq received abstractly as a `using` parameter and a named `Eq.structural`
+        // instance used via `===` must stay silent: non-structural instances are now rejected by
+        // the compiler plugin at creation (use Eq.derived / Eq.structural), so the lowering has
+        // nothing to warn about.
         val output = captureLoweringOutput {
             scalus.compiler
                 .compile { (x1: BigInt, y1: BigInt, x2: BigInt, y2: BigInt) =>

@@ -14,7 +14,7 @@ case class Item(value: BigInt, extra: BigInt)
 
 @Compile
 object QueueModule {
-    given Eq[Item] = (a: Item, b: Item) => a.value === b.value && a.extra === b.extra
+    given Eq[Item] = Eq.structural((a: Item, b: Item) => a.value === b.value && a.extra === b.extra)
 
     def mkItem(v: BigInt, e: BigInt): Item = Item(v, e)
 

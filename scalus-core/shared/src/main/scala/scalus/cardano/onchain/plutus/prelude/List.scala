@@ -275,7 +275,7 @@ object List {
             loop(unMapData(d))
 
     /** Provides an `Eq` instance for `List[A]` where value type is instances of `Eq`. */
-    given listEq[A: Eq]: Eq[List[A]] = (lhs: List[A], rhs: List[A]) =>
+    given listEq[A: Eq]: Eq[List[A]] = Eq.structural: (lhs: List[A], rhs: List[A]) =>
         lhs match
             case Nil =>
                 rhs match

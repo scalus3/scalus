@@ -63,16 +63,13 @@ object LoweringEq {
       *
       * The plugin annotates Apply nodes for FunctionalInterface types with
       * `"functionalInterfaceType"`. For Eq, we always inline an optimal comparison based on the
-      * argument representation instead of calling the Eq function. This is sound when the user's Eq
-      * instance satisfies the equivalence-relation contract (reflexive / symmetric / transitive AND
-      * structurally consistent — i.e. `a === b` iff `a.toData == b.toData`).
-      *
-      * A custom Eq that violates this (one comparing only some fields) is silently ignored by the
-      * optimization. We do not emit a structural advisory for it: the only such prelude instance,
-      * `Eq.keyPairEq`, is `@deprecated`, so its use sites already get a deprecation warning; and
-      * from the lowering we only see the instance *reference* (its name), not its body, so we
-      * cannot tell a structural named `given` (e.g. `= Eq.derived`) from a non-structural one — any
-      * name-based heuristic would just flood the build with false positives.
+      * argument representation instead of calling the Eq function. This is sound because every Eq
+      * instance is structurally consistent (`a === b` iff `a.toData == b.toData`) by construction:
+      * the compiler plugin rejects hand-written Eq lambdas at creation, so an instance can only
+      * come from `Eq.derived` (structural by generation) or `Eq.structural(...)` (an explicit
+      * assertion of structurality by the author). Non-structural types are excluded from the Eq
+      * system entirely (see `RationalEq`/`AssocMapEq`), and the non-structural combinators
+      * (`Eq.by`/`orElse`/`orElseBy`) are rejected in on-chain code (audit 2026-07-10 I1).
       */
     def lowerEqIntrinsic(
         app: SIR.Apply,

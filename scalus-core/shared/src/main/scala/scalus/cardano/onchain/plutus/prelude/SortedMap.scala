@@ -281,7 +281,7 @@ object SortedMap {
       * of `Eq`.
       */
     given sortedMapEq[A: Eq, B: Eq]: Eq[SortedMap[A, B]] =
-        (lhs: SortedMap[A, B], rhs: SortedMap[A, B]) => lhs.toList === rhs.toList
+        Eq.structural((lhs: SortedMap[A, B], rhs: SortedMap[A, B]) => lhs.toList === rhs.toList)
 
     /** Provides an `Ord` instance for `SortedMap[A, B]` where both key and value types are
       * instances of `Ord`.

@@ -11,7 +11,7 @@ import scala.annotation.nowarn
 @Compile
 object G2 {
 
-    given Eq[G2Element] = bls12_381_G2_equal
+    given Eq[G2Element] = Eq.structural(bls12_381_G2_equal)
 
     /** BLS12 G2 zero element.
       *

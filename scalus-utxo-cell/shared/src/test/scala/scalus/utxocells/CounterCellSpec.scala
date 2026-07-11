@@ -19,7 +19,8 @@ case class CounterState(count: BigInt) derives FromData, ToData
 
 @Compile
 object CounterState {
-    given Eq[CounterState] = (a: CounterState, b: CounterState) => a.count === b.count
+    given Eq[CounterState] =
+        Eq.structural((a: CounterState, b: CounterState) => a.count === b.count)
 }
 
 // -- Counter action --

@@ -36,7 +36,7 @@ enum IntervalBoundType:
 @Compile
 object IntervalBoundType {
 
-    given Eq[IntervalBoundType] = (x: IntervalBoundType, y: IntervalBoundType) =>
+    given Eq[IntervalBoundType] = Eq.structural: (x: IntervalBoundType, y: IntervalBoundType) =>
         x match
             case NegInf =>
                 y match
@@ -84,7 +84,7 @@ case class IntervalBound(boundType: IntervalBoundType, isInclusive: Closure)
 @Compile
 object IntervalBound {
 
-    given Eq[IntervalBound] = (x: IntervalBound, y: IntervalBound) =>
+    given Eq[IntervalBound] = Eq.structural: (x: IntervalBound, y: IntervalBound) =>
         (x.boundType === y.boundType) && (x.isInclusive === y.isInclusive)
 
     given Ord[IntervalBound] = (x: IntervalBound, y: IntervalBound) =>
@@ -147,7 +147,8 @@ case class Interval(from: IntervalBound, to: IntervalBound)
 @Compile
 object Interval:
 
-    given Eq[Interval] = (x: Interval, y: Interval) => (x.from === y.from) && (x.to === y.to)
+    given Eq[Interval] =
+        Eq.structural((x: Interval, y: Interval) => (x.from === y.from) && (x.to === y.to))
 
     given Ord[Interval] = (x: Interval, y: Interval) =>
         (x.from <=> y.from) ifEqualThen (x.to <=> y.to)
@@ -306,7 +307,7 @@ enum DCert:
 @Compile
 object DCert {
 
-    given Eq[DCert] = (x: DCert, y: DCert) =>
+    given Eq[DCert] = Eq.structural: (x: DCert, y: DCert) =>
         x match
             case DCert.DelegRegKey(cred) =>
                 y match
@@ -406,7 +407,7 @@ case class TxId(hash: Hash):
 @Compile
 object TxId:
 
-    given Eq[TxId] = (a: TxId, b: TxId) => a.hash === b.hash
+    given Eq[TxId] = Eq.structural((a: TxId, b: TxId) => a.hash === b.hash)
     given Ord[TxId] = (a: TxId, b: TxId) => a.hash <=> b.hash
 
     given ToData[TxId] = ToData.derived
@@ -423,7 +424,8 @@ case class TxOutRef(id: TxId, idx: BigInt)
 @Compile
 object TxOutRef {
 
-    given Eq[TxOutRef] = (a: TxOutRef, b: TxOutRef) => a.id === b.id && a.idx === b.idx
+    given Eq[TxOutRef] =
+        Eq.structural((a: TxOutRef, b: TxOutRef) => a.id === b.id && a.idx === b.idx)
 
     given Ord[TxOutRef] = (a: TxOutRef, b: TxOutRef) =>
         (a.id <=> b.id) ifEqualThen (a.idx <=> b.idx)
@@ -451,7 +453,7 @@ case class PubKeyHash(hash: Hash) {
 @Compile
 object PubKeyHash {
 
-    given Eq[PubKeyHash] = (a: PubKeyHash, b: PubKeyHash) => a.hash === b.hash
+    given Eq[PubKeyHash] = Eq.structural((a: PubKeyHash, b: PubKeyHash) => a.hash === b.hash)
 
     given Ord[PubKeyHash] = (a: PubKeyHash, b: PubKeyHash) => a.hash <=> b.hash
 
@@ -471,7 +473,7 @@ enum Credential:
 @Compile
 object Credential {
 
-    given Eq[Credential] = (a: Credential, b: Credential) =>
+    given Eq[Credential] = Eq.structural: (a: Credential, b: Credential) =>
         a match
             case Credential.PubKeyCredential(hash) =>
                 b match
@@ -514,7 +516,7 @@ enum StakingCredential:
 
 @Compile
 object StakingCredential {
-    given Eq[StakingCredential] = (lhs: StakingCredential, rhs: StakingCredential) =>
+    given Eq[StakingCredential] = Eq.structural: (lhs: StakingCredential, rhs: StakingCredential) =>
         lhs match
             case StakingCredential.StakingHash(cred) =>
                 rhs match
@@ -551,7 +553,7 @@ case class Address(
 @Compile
 object Address {
 
-    given Eq[Address] = (a: Address, b: Address) =>
+    given Eq[Address] = Eq.structural: (a: Address, b: Address) =>
         a.credential === b.credential && a.stakingCredential === b.stakingCredential
 
     given Ord[Address] = (a: Address, b: Address) =>
@@ -598,7 +600,7 @@ case class TxOut(address: Address, value: Value, datumHash: Option[DatumHash]) {
 
 @Compile
 object TxOut {
-    given Eq[TxOut] = (a: TxOut, b: TxOut) =>
+    given Eq[TxOut] = Eq.structural: (a: TxOut, b: TxOut) =>
         a.address === b.address && a.value === b.value && a.datumHash === b.datumHash
 
     given Ord[TxOut] = (a: TxOut, b: TxOut) =>
@@ -618,7 +620,7 @@ case class TxInInfo(
 
 @Compile
 object TxInInfo {
-    given Eq[TxInInfo] = (a: TxInInfo, b: TxInInfo) =>
+    given Eq[TxInInfo] = Eq.structural: (a: TxInInfo, b: TxInInfo) =>
         a.outRef === b.outRef && a.resolved === b.resolved
 
     given Ord[TxInInfo] = (a: TxInInfo, b: TxInInfo) =>
@@ -675,7 +677,7 @@ object TxInfo {
       id = TxId(hex"0000000000000000000000000000000000000000000000000000000000000000")
     )
 
-    given Eq[TxInfo] = (x: TxInfo, y: TxInfo) =>
+    given Eq[TxInfo] = Eq.structural: (x: TxInfo, y: TxInfo) =>
         x.inputs === y.inputs &&
             x.outputs === y.outputs &&
             x.fee === y.fee &&
@@ -738,7 +740,7 @@ enum ScriptPurpose:
 @Compile
 object ScriptPurpose {
 
-    given Eq[ScriptPurpose] = (x: ScriptPurpose, y: ScriptPurpose) =>
+    given Eq[ScriptPurpose] = Eq.structural: (x: ScriptPurpose, y: ScriptPurpose) =>
         x match
             case ScriptPurpose.Minting(curSymbol) =>
                 y match
@@ -792,7 +794,7 @@ case class ScriptContext(txInfo: TxInfo, purpose: ScriptPurpose)
 
 @Compile
 object ScriptContext:
-    given Eq[ScriptContext] = (x: ScriptContext, y: ScriptContext) =>
+    given Eq[ScriptContext] = Eq.structural: (x: ScriptContext, y: ScriptContext) =>
         x.txInfo === y.txInfo && x.purpose === y.purpose
 
     given Ord[ScriptContext] = (x: ScriptContext, y: ScriptContext) =>

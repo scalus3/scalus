@@ -557,7 +557,7 @@ object Value extends ValueOffchainOps {
       *   value1 === value2 // true, using derived Eq instance
       *   }}}
       */
-    given valueEq: Eq[Value] = (a, b) => eq(a, b)
+    given valueEq: Eq[Value] = Eq.structural((a, b) => eq(a, b))
 
     /** Implementation of the [[scalus.cardano.onchain.plutus.prelude.Ord]] type class for `Value`.
       * Only makes sense as a key for collections.

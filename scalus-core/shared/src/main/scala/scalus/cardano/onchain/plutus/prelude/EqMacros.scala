@@ -8,27 +8,33 @@ private object EqMacros {
         import quotes.reflect.*
         val tpe = TypeRepr.of[A].dealias.widen
 
-        if tpe <:< TypeRepr.of[AnyRef] then
-            val children = tpe.typeSymbol.children
-            if children.isEmpty then
-                if tpe.typeSymbol.flags.is(Flags.Trait) then
-                    report.errorAndAbort(
-                      s"Cannot derive Eq for trait ${tpe.typeSymbol.fullName} with no children"
-                    )
-                else if tpe.typeSymbol.flags.is(Flags.Case) || tpe.typeSymbol.flags.is(Flags.Enum)
-                then deriveEqCaseClass[A]
-                else
-                    report.errorAndAbort(
-                      s"Cannot derive Eq for ${tpe.typeSymbol.fullName} which is not a case class, enum, or sealed trait"
-                    )
-            else deriveEqSumType[A]
-        else
-            report.errorAndAbort(
-              s"Cannot derive Eq for ${tpe.typeSymbol.fullName}"
-            )
+        val eqFun =
+            if tpe <:< TypeRepr.of[AnyRef] then
+                val children = tpe.typeSymbol.children
+                if children.isEmpty then
+                    if tpe.typeSymbol.flags.is(Flags.Trait) then
+                        report.errorAndAbort(
+                          s"Cannot derive Eq for trait ${tpe.typeSymbol.fullName} with no children"
+                        )
+                    else if tpe.typeSymbol.flags
+                            .is(Flags.Case) || tpe.typeSymbol.flags.is(Flags.Enum)
+                    then deriveEqCaseClass[A]
+                    else
+                        report.errorAndAbort(
+                          s"Cannot derive Eq for ${tpe.typeSymbol.fullName} which is not a case class, enum, or sealed trait"
+                        )
+                else deriveEqSumType[A]
+            else
+                report.errorAndAbort(
+                  s"Cannot derive Eq for ${tpe.typeSymbol.fullName}"
+                )
+        // Wrap the derived comparison in `Eq.structural`: the compiler plugin rejects bare
+        // Eq-typed lambdas in on-chain code and recognizes this marker as the blessed,
+        // structural-by-construction path (see Eq.structural).
+        '{ Eq.structural[A]($eqFun) }
     }
 
-    private def deriveEqCaseClass[A: Type](using Quotes): Expr[Eq[A]] = {
+    private def deriveEqCaseClass[A: Type](using Quotes): Expr[(A, A) => Boolean] = {
         import quotes.reflect.*
 
         val tpeA = TypeRepr.of[A]
@@ -64,7 +70,7 @@ private object EqMacros {
             }
     }
 
-    private def deriveEqSumType[A: Type](using Quotes): Expr[Eq[A]] = {
+    private def deriveEqSumType[A: Type](using Quotes): Expr[(A, A) => Boolean] = {
         import quotes.reflect.*
 
         val typeSymbol = TypeRepr.of[A].widen.dealias.typeSymbol

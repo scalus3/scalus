@@ -47,7 +47,7 @@ case class TxId(hash: ByteString)
 
 @Compile
 object TxId:
-    given Eq[TxId] = (a: TxId, b: TxId) => a.hash === b.hash
+    given Eq[TxId] = Eq.structural((a: TxId, b: TxId) => a.hash === b.hash)
     given Ord[TxId] = (a: TxId, b: TxId) => a.hash <=> b.hash
     given FromData[TxId] = (d: Data) => TxId(d.toByteString)
     given ToData[TxId] = (x: TxId) => bData(x.hash)
@@ -59,7 +59,8 @@ case class TxOutRef(id: TxId, idx: BigInt)
 
 @Compile
 object TxOutRef:
-    given Eq[TxOutRef] = (a: TxOutRef, b: TxOutRef) => a.id === b.id && a.idx === b.idx
+    given Eq[TxOutRef] =
+        Eq.structural((a: TxOutRef, b: TxOutRef) => a.id === b.id && a.idx === b.idx)
     given Ord[TxOutRef] = (a: TxOutRef, b: TxOutRef) =>
         (a.id <=> b.id) ifEqualThen (a.idx <=> b.idx)
     given FromData[TxOutRef] = FromData.derived
@@ -81,7 +82,7 @@ enum DRep:
 object DRep:
 
     given Eq[scalus.cardano.onchain.plutus.v3.DRep] =
-        (lhs: scalus.cardano.onchain.plutus.v3.DRep, rhs: scalus.cardano.onchain.plutus.v3.DRep) =>
+        Eq.structural: (lhs, rhs) =>
             lhs match
                 case DRep(lhsCredential) =>
                     rhs match
@@ -129,7 +130,7 @@ enum Delegatee:
 @Compile
 object Delegatee:
 
-    given Eq[Delegatee] = (lhs: Delegatee, rhs: Delegatee) =>
+    given Eq[Delegatee] = Eq.structural: (lhs: Delegatee, rhs: Delegatee) =>
         lhs match
             case Stake(lhsPubKeyHash) =>
                 rhs match
@@ -185,7 +186,7 @@ enum TxCert:
 @Compile
 object TxCert:
 
-    given Eq[TxCert] = (lhs: TxCert, rhs: TxCert) =>
+    given Eq[TxCert] = Eq.structural: (lhs: TxCert, rhs: TxCert) =>
         lhs match
             case RegStaking(lhsCredential, lhsDeposit) =>
                 rhs match
@@ -365,7 +366,7 @@ enum Voter:
 @Compile
 object Voter:
 
-    given Eq[Voter] = (lhs: Voter, rhs: Voter) =>
+    given Eq[Voter] = Eq.structural: (lhs: Voter, rhs: Voter) =>
         lhs match
             case CommitteeVoter(lhsCredential) =>
                 rhs match
@@ -409,7 +410,7 @@ enum Vote:
 @Compile
 object Vote:
 
-    given Eq[Vote] = (lhs: Vote, rhs: Vote) =>
+    given Eq[Vote] = Eq.structural: (lhs: Vote, rhs: Vote) =>
         lhs match
             case No =>
                 rhs match
@@ -452,8 +453,9 @@ case class GovernanceActionId(txId: TxId, govActionIx: BigInt)
 @Compile
 object GovernanceActionId:
 
-    given Eq[GovernanceActionId] = (lhs: GovernanceActionId, rhs: GovernanceActionId) =>
-        lhs.txId === rhs.txId && lhs.govActionIx === rhs.govActionIx
+    given Eq[GovernanceActionId] = Eq.structural:
+        (lhs: GovernanceActionId, rhs: GovernanceActionId) =>
+            lhs.txId === rhs.txId && lhs.govActionIx === rhs.govActionIx
 
     given Ord[GovernanceActionId] = (x: GovernanceActionId, y: GovernanceActionId) =>
         (x.txId <=> y.txId) ifEqualThen (x.govActionIx <=> y.govActionIx)
@@ -470,7 +472,7 @@ case class Committee(
 
 @Compile
 object Committee:
-    given Eq[Committee] = (lhs: Committee, rhs: Committee) =>
+    given Eq[Committee] = Eq.structural: (lhs: Committee, rhs: Committee) =>
         lhs.members === rhs.members && lhs.quorum === rhs.quorum
 
     given Ord[Committee] = (x: Committee, y: Committee) =>
@@ -487,7 +489,7 @@ case class ProtocolVersion(pvMajor: BigInt, pvMinor: BigInt)
 
 @Compile
 object ProtocolVersion:
-    given Eq[ProtocolVersion] = (lhs: ProtocolVersion, rhs: ProtocolVersion) =>
+    given Eq[ProtocolVersion] = Eq.structural: (lhs: ProtocolVersion, rhs: ProtocolVersion) =>
         lhs.pvMajor === rhs.pvMajor && lhs.pvMinor === rhs.pvMinor
 
     given Ord[ProtocolVersion] = (x: ProtocolVersion, y: ProtocolVersion) =>
@@ -523,7 +525,7 @@ enum GovernanceAction:
 
 @Compile
 object GovernanceAction:
-    given Eq[GovernanceAction] = (lhs: GovernanceAction, rhs: GovernanceAction) =>
+    given Eq[GovernanceAction] = Eq.structural: (lhs: GovernanceAction, rhs: GovernanceAction) =>
         lhs match
             case ParameterChange(lhsId, lhsParameters, lhsConstitutionScript) =>
                 rhs match
@@ -639,7 +641,7 @@ case class ProposalProcedure(
 @Compile
 object ProposalProcedure:
 
-    given Eq[ProposalProcedure] = (lhs: ProposalProcedure, rhs: ProposalProcedure) =>
+    given Eq[ProposalProcedure] = Eq.structural: (lhs: ProposalProcedure, rhs: ProposalProcedure) =>
         lhs.deposit === rhs.deposit && lhs.returnAddress === rhs.returnAddress
             && lhs.governanceAction === rhs.governanceAction
 
@@ -663,7 +665,7 @@ enum ScriptPurpose:
 
 @Compile
 object ScriptPurpose:
-    given Eq[ScriptPurpose] = (lhs: ScriptPurpose, rhs: ScriptPurpose) =>
+    given Eq[ScriptPurpose] = Eq.structural: (lhs: ScriptPurpose, rhs: ScriptPurpose) =>
         lhs match
             case Minting(lhsCurrencySymbol) =>
                 rhs match
@@ -751,7 +753,7 @@ enum ScriptInfo:
 
 @Compile
 object ScriptInfo:
-    given Eq[ScriptInfo] = (lhs: ScriptInfo, rhs: ScriptInfo) =>
+    given Eq[ScriptInfo] = Eq.structural: (lhs: ScriptInfo, rhs: ScriptInfo) =>
         lhs match
             case MintingScript(lhsCurrencySymbol) =>
                 rhs match
@@ -838,7 +840,7 @@ case class TxInInfo(
 
 @Compile
 object TxInInfo:
-    given Eq[TxInInfo] = (a: TxInInfo, b: TxInInfo) =>
+    given Eq[TxInInfo] = Eq.structural: (a: TxInInfo, b: TxInInfo) =>
         a.outRef === b.outRef && a.resolved === b.resolved
 
     given Ord[TxInInfo] = (x: TxInInfo, y: TxInInfo) =>
@@ -871,7 +873,7 @@ case class TxInfo(
 @Compile
 object TxInfo {
 
-    given Eq[TxInfo] = (lhs: TxInfo, rhs: TxInfo) =>
+    given Eq[TxInfo] = Eq.structural: (lhs: TxInfo, rhs: TxInfo) =>
         lhs.inputs === rhs.inputs &&
             lhs.referenceInputs === rhs.referenceInputs &&
             lhs.outputs === rhs.outputs &&
@@ -1111,7 +1113,7 @@ case class ScriptContext(
 
 @Compile
 object ScriptContext {
-    given Eq[ScriptContext] = (lhs: ScriptContext, rhs: ScriptContext) =>
+    given Eq[ScriptContext] = Eq.structural: (lhs: ScriptContext, rhs: ScriptContext) =>
         lhs.txInfo === rhs.txInfo && lhs.redeemer === rhs.redeemer && lhs.scriptInfo === rhs.scriptInfo
 
     given Ord[ScriptContext] = (x: ScriptContext, y: ScriptContext) =>

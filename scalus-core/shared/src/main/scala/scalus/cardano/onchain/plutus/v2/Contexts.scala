@@ -16,10 +16,7 @@ enum OutputDatum:
 @Compile
 object OutputDatum {
     given Eq[scalus.cardano.onchain.plutus.v2.OutputDatum] =
-        (
-            a: scalus.cardano.onchain.plutus.v2.OutputDatum,
-            b: scalus.cardano.onchain.plutus.v2.OutputDatum
-        ) =>
+        Eq.structural: (a, b) =>
             a match
                 case NoOutputDatum =>
                     b match
@@ -70,7 +67,7 @@ case class TxOut(
 @Compile
 object TxOut {
 
-    given Eq[TxOut] = (a: TxOut, b: TxOut) =>
+    given Eq[TxOut] = Eq.structural: (a: TxOut, b: TxOut) =>
         a.address === b.address &&
             a.value === b.value &&
             a.datum === b.datum &&
@@ -93,7 +90,7 @@ case class TxInInfo(outRef: TxOutRef, resolved: TxOut)
 
 @Compile
 object TxInInfo {
-    given Eq[TxInInfo] = (a: TxInInfo, b: TxInInfo) =>
+    given Eq[TxInInfo] = Eq.structural: (a: TxInInfo, b: TxInInfo) =>
         a.outRef === b.outRef && a.resolved === b.resolved
 
     given Ord[TxInInfo] = (x: TxInInfo, y: TxInInfo) =>
@@ -139,7 +136,7 @@ object TxInfo {
       id = TxId(hex"0000000000000000000000000000000000000000000000000000000000000000")
     )
 
-    given Eq[TxInfo] = (a: TxInfo, b: TxInfo) =>
+    given Eq[TxInfo] = Eq.structural: (a: TxInfo, b: TxInfo) =>
         a.inputs === b.inputs &&
             a.referenceInputs === b.referenceInputs &&
             a.outputs === b.outputs &&
@@ -196,7 +193,7 @@ case class ScriptContext(
 
 @Compile
 object ScriptContext {
-    given Eq[ScriptContext] = (a: ScriptContext, b: ScriptContext) =>
+    given Eq[ScriptContext] = Eq.structural: (a: ScriptContext, b: ScriptContext) =>
         a.txInfo === b.txInfo && a.purpose === b.purpose
 
     given Ord[ScriptContext] = (x: ScriptContext, y: ScriptContext) =>

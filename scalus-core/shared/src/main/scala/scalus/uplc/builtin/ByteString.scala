@@ -73,7 +73,8 @@ object ByteString extends ByteStringOffchainApi, ByteStringFlatInstance {
           "\""
         )
 
-    given Eq[ByteString] = (x: ByteString, y: ByteString) => Builtins.equalsByteString(x, y)
+    given Eq[ByteString] =
+        Eq.structural((x: ByteString, y: ByteString) => Builtins.equalsByteString(x, y))
 
     given Ord[ByteString] = (x: ByteString, y: ByteString) =>
         if Builtins.lessThanByteString(x, y) then Order.Less

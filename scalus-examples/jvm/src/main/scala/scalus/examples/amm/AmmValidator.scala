@@ -28,7 +28,7 @@ case class AmmDatum(
 
 @Compile
 object AmmDatum {
-    given Eq[AmmDatum] = (a: AmmDatum, b: AmmDatum) =>
+    given Eq[AmmDatum] = Eq.structural: (a: AmmDatum, b: AmmDatum) =>
         a.r0 === b.r0 && a.r1 === b.r1 && a.lpSupply === b.lpSupply
 }
 

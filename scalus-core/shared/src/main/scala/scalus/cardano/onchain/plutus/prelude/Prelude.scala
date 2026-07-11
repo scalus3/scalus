@@ -170,10 +170,7 @@ enum These[+A, +B]:
 @Compile
 object These {
     given [A: Eq, B: Eq]: Eq[scalus.cardano.onchain.plutus.prelude.These[A, B]] =
-        (
-            lhs: scalus.cardano.onchain.plutus.prelude.These[A, B],
-            rhs: scalus.cardano.onchain.plutus.prelude.These[A, B]
-        ) =>
+        Eq.structural: (lhs, rhs) =>
             lhs match
                 case scalus.cardano.onchain.plutus.prelude.These.This(a) =>
                     rhs match

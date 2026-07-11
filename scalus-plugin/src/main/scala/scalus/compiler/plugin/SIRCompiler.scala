@@ -105,6 +105,15 @@ final class SIRCompiler(
         requiredClass("scalus.cardano.onchain.plutus.prelude.Rational")
     private val AssocMapClassSymbol =
         requiredClass("scalus.cardano.onchain.plutus.prelude.AssocMap")
+    private val EqClassSymbol = requiredClass("scalus.cardano.onchain.plutus.prelude.Eq")
+    private val EqModuleSymbol = requiredModule("scalus.cardano.onchain.plutus.prelude.Eq")
+    private val EqStructuralMethod = EqModuleSymbol.requiredMethod("structural")
+    // Combinators producing non-structural Eq instances — rejected in on-chain code.
+    private val EqNonStructuralMethods: Set[Symbol] = Set(
+      EqModuleSymbol.requiredMethod("by"),
+      EqModuleSymbol.requiredMethod("orElse"),
+      EqModuleSymbol.requiredMethod("orElseBy")
+    )
     private val DataModuleSymbol = requiredModule("scalus.uplc.builtin.Data")
     // Data case class companion apply methods (for Data.I(x), Data.B(x))
     private val DataIApplySymbol =
@@ -1266,7 +1275,7 @@ final class SIRCompiler(
                     )
                 then {
                     // TODO: check that interface is function
-                    tryFixFunctionalInterface(env, vd.rhs).getOrElse {
+                    fixFunctionalInterfaceChecked(env, vd.rhs, vd.tpe).getOrElse {
                         // report.error(
                         //  s"[1] Functional interface not found for ${vd.rhs.show}" + "\n" +
                         //      s"tree:  ${vd.rhs}" + "\n",
@@ -1320,6 +1329,40 @@ final class SIRCompiler(
                 calculateLocalBindingFlags(vd.tpe)
               )
             )
+    }
+
+    /** On-chain `Eq` is a marker for structural equality: `===` and Eq-based operations
+      * (List.contains, distinct, ...) are always lowered to structural comparison of the runtime
+      * representation and never call the instance body (see `LoweringEq.lowerEqIntrinsic` and
+      * `IntrinsicResolver.EqStripMethods`). A hand-written instance would therefore be silently
+      * ignored on-chain — reject its creation and point to the blessed paths. Called wherever a
+      * SAM-lambda creation is detected with the conversion's target type.
+      */
+    private def checkNotCustomEqInstance(tpe: Type, srcPos: SrcPos): Unit = {
+        if tpe.derivesFrom(EqClassSymbol) then
+            report.error(
+              s"""Hand-written Eq instances are not supported in on-chain code: `===` and
+                 |Eq-based operations (List.contains, distinct, ...) always compile to structural
+                 |equality and never call the instance body, so a custom Eq would be silently ignored.
+                 |
+                 |Use `Eq.derived` for a case class / enum / sealed trait, or wrap a function that
+                 |implements structural equality in `Eq.structural(...)`.
+                 |""".stripMargin,
+              srcPos
+            )
+    }
+
+    /** [[tryFixFunctionalInterface]] plus the custom-Eq creation guard: a `Some` result means the
+      * tree really was a SAM-lambda creation for `samType`, which is rejected for `Eq`.
+      */
+    private def fixFunctionalInterfaceChecked(
+        env: Env,
+        tree: Tree,
+        samType: Type
+    ): Option[Tree] = {
+        val fixed = tryFixFunctionalInterface(env, tree)
+        if fixed.isDefined then checkNotCustomEqInstance(samType, tree.srcPos)
+        fixed
     }
 
     private def tryFixFunctionalInterface(
@@ -1438,7 +1481,7 @@ final class SIRCompiler(
                 if dd.rhs.tpe.typeSymbol.isAnonymousClass && dd.rhs.tpe.baseClasses.exists(sym =>
                         isFunctionalInterfaceSymbol(sym)
                     )
-                then tryFixFunctionalInterface(env, dd.rhs).getOrElse(dd.rhs)
+                then fixFunctionalInterfaceChecked(env, dd.rhs, dd.rhs.tpe).getOrElse(dd.rhs)
                 else dd.rhs
             val selfKey =
                 if isGlobalDef then VariableKey.fromName(FullName(dd.symbol).name)
@@ -2569,6 +2612,18 @@ final class SIRCompiler(
             println(
               s"compileApply: ${f.show}, targs: $targs, args: $args, applyTpe: ${applyTpe.show}, applyTree: $applyTree"
             )
+        if EqNonStructuralMethods.contains(f.symbol) then
+            report.error(
+              s"""`Eq.${f.symbol.name.show}` produces a non-structural Eq instance and is not
+                 |available in on-chain code: on-chain, `===` and Eq-based operations always
+                 |compile to structural equality and never call the instance body.
+                 |""".stripMargin,
+              applyTree.srcPos
+            )
+            return SIR.Error(
+              s"Eq.${f.symbol.name.show} is not available in on-chain code",
+              AnnotationsDecl.fromSrcPos(applyTree.srcPos)
+            )
         val env = fillTypeParamInTypeApply(f.symbol, targs, env0)
         // val isNoSymApply = f match
         //    case Select(qual, nme.apply) if qual.symbol ==
@@ -3408,6 +3463,11 @@ final class SIRCompiler(
             case Apply(TypeApply(f, targs), List(arg))
                 if f.symbol == toDefaultTypeVarReprMethod && targs.size == 1 =>
                 compileToDefaultTypeVarRepr(env, targs, arg, tree)
+            // Eq.structural(f) — compile-time assertion that f is structural equality (also
+            // emitted by Eq.derived). Identity at runtime: compile the wrapped function directly,
+            // producing the same SIR as a bare lambda did before the custom-Eq guard existed.
+            case Apply(TypeApply(f, _), List(arg)) if f.symbol == EqStructuralMethod =>
+                compileExpr(env, arg)
             // Generic Apply
             case a @ Apply(pf @ TypeApply(f, targs), args) =>
                 compileApply(env, f, targs, args, tree.tpe, a)
@@ -3416,8 +3476,10 @@ final class SIRCompiler(
             // (x: T) => body
             case Block(
                   immutable.List(dd @ DefDef(nme.ANON_FUN, _, _, _)),
-                  Closure(_, Ident(nme.ANON_FUN), _)
+                  Closure(_, Ident(nme.ANON_FUN), closureTpt)
                 ) =>
+                // A non-empty closure tpt is a SAM conversion to that type — reject custom Eq.
+                if !closureTpt.isEmpty then checkNotCustomEqInstance(closureTpt.tpe, tree.srcPos)
                 compileStmt(env, dd) match
                     case CompileMemberDefResult.Compiled(b) => b.body
                     case ignored @ CompileMemberDefResult.Ignored(tp) =>
@@ -3450,7 +3512,7 @@ final class SIRCompiler(
                 }
                 val expr1 =
                     if isFunctionalInterface(tpTree.tpe) then
-                        tryFixFunctionalInterface(env, expr).getOrElse(expr)
+                        fixFunctionalInterfaceChecked(env, expr, tpTree.tpe).getOrElse(expr)
                     else expr
                 val term = expr1 match {
                     case m: Match if isUncheckedMatch => compileMatch(m, env, isUnchecked = true)

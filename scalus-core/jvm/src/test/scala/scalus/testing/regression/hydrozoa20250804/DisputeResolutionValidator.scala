@@ -54,17 +54,7 @@ object DisputeResolutionValidator extends Validator:
         case NoVote
         case Vote(voteDetails: VoteDetails)
 
-    given Eq[VoteStatus] = (a: VoteStatus, b: VoteStatus) =>
-        a match
-            case VoteStatus.NoVote =>
-                b match
-                    case VoteStatus.NoVote  => true
-                    case VoteStatus.Vote(_) => false
-            case VoteStatus.Vote(as) =>
-                a match {
-                    case VoteStatus.NoVote   => false
-                    case VoteStatus.Vote(bs) => as === bs
-                }
+    given Eq[VoteStatus] = Eq.derived
 
     given FromData[VoteStatus] = FromData.derived
     given ToData[VoteStatus] = ToData.derived
@@ -74,8 +64,7 @@ object DisputeResolutionValidator extends Validator:
         versionMinor: BigInt
     )
 
-    given Eq[VoteDetails] = (a: VoteDetails, b: VoteDetails) =>
-        a.utxosActive == b.utxosActive && a.versionMinor == b.versionMinor
+    given Eq[VoteDetails] = Eq.derived
 
     given FromData[VoteDetails] = FromData.derived
     given ToData[VoteDetails] = ToData.derived

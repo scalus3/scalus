@@ -7,7 +7,7 @@ enum Order:
 
 @Compile
 object Order:
-    given Eq[Order] = (lhs, rhs) =>
+    given Eq[Order] = Eq.structural: (lhs, rhs) =>
         lhs match
             case Less    => rhs.isLess
             case Greater => rhs.isGreater

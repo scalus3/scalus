@@ -38,7 +38,7 @@ enum ElementData derives FromData, ToData:
 
 @Compile
 object ElementData:
-    given Eq[ElementData] = (left, right) =>
+    given Eq[ElementData] = Eq.structural: (left, right) =>
         left match {
             case ElementData.Root(lData) =>
                 right match {
