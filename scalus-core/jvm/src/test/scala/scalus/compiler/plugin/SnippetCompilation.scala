@@ -23,7 +23,16 @@ trait SnippetCompilation {
     }
 
     /** Compile `source` with the Scalus plugin and return the error messages produced. */
-    protected def compileSnippet(source: String): List[String] = {
+    protected def compileSnippet(source: String): List[String] =
+        compileSnippetWithOutput(source)._1
+
+    /** Compile `source` with the Scalus plugin and return the error messages together with the
+      * class output directory, so tests can inspect the compiled classes (e.g. load the generated
+      * `sirModule`).
+      */
+    protected def compileSnippetWithOutput(
+        source: String
+    ): (List[String], java.nio.file.Path) = {
         val pluginJar = sys.props("scalus.plugin.jar")
         val classpath = sys.props("scalus.test.classpath")
         val dir = Files.createTempDirectory("scalus-plugin-neg-test")
@@ -42,6 +51,6 @@ trait SnippetCompilation {
           ),
           reporter
         )
-        reporter.collected.toList
+        (reporter.collected.toList, out)
     }
 }

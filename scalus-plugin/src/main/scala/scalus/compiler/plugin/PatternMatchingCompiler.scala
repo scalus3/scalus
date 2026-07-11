@@ -707,6 +707,15 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                 val paramTypes =
                     constrDecl.params.map(b => SIRType.substitute(b.tp, typeParamsMap, Map.empty))
 
+                if unapply.patterns.length != constrDecl.params.length then
+                    return SirParsedCase.Pattern.ErrorPattern(
+                      s"Unsupported unapply pattern for ${constrDecl.name}: expected ${constrDecl.params.length} " +
+                          s"subpattern(s), but got ${unapply.patterns.length}. " +
+                          "Custom extractors (e.g. boolean unapply) are not supported in Scalus scripts",
+                      unapply.srcPos,
+                      ctx
+                    )
+
                 val subpatterns = unapply.patterns
                     .zip(paramTypes)
                     .map { case (p, tp) =>
@@ -1133,7 +1142,10 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                 group2.activeColumns.contains(i) && {
                     p match {
                         case SirParsedCase.Pattern.Wildcard(_, _, _) => false
-                        case _                                       => true
+                        // an ErrorPattern matches anything: the error is already reported,
+                        // we only need to keep the decision tree constructible
+                        case _: SirParsedCase.Pattern.ErrorPattern => false
+                        case _                                     => true
                     }
                 }
             }
@@ -1740,19 +1752,11 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                                                           ctx
                                                         )
                                                 case _ =>
-                                                    println(s"scrutineeTp: ${scrutineeTp.show}")
-                                                    println(s"patCaseClass: ${patCaseClass.show}")
-                                                    println(
-                                                      s"ts.innerPattern: ${ts.innerPattern.show}"
-                                                    )
-                                                    throw new RuntimeException(
-                                                      "NonWildcardInnerPattern"
-                                                    )
-                                                    report.error(
+                                                    SirParsedCase.Pattern.ErrorPattern(
                                                       s"type selector inner pattern must be wildcard or constructor, we have ${ts.innerPattern.show}",
-                                                      pos
+                                                      pos,
+                                                      ctx
                                                     )
-                                                    ???
                                             }
                                         else
                                             patCaseClass.parent match

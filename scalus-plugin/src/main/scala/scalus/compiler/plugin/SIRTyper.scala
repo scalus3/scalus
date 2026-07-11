@@ -641,9 +641,8 @@ class SIRTyper(using Context) {
                         s"Case class ${typeSymbol.showFullName} has primary constructor with two type parametes list"
                     throw TypingException(typeSymbol.info, env.pos, msg)
                 else if frs.exists(_.isTerm) && snd.isEmpty then (Nil, frs)
-                else if frs.isEmpty && snd.exists(_.isType) then (Nil, snd)
-                else if frs.exists(_.isTerm) && snd.isEmpty then (Nil, frs)
-                else if frs.isEmpty && snd.exists(_.isTerm) then (snd, Nil)
+                else if frs.isEmpty && snd.exists(_.isType) then (snd, Nil)
+                else if frs.isEmpty && snd.exists(_.isTerm) then (Nil, snd)
                 else {
                     val msg =
                         s"Case class ${typeSymbol.showFullName} has strange primary constructor: ${frs} ${snd}"
