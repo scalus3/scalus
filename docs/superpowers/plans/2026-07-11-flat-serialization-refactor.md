@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Modernize `scalus-core/shared/src/main/scala/scalus/serialization/flat/package.scala`: fast array-based `w7a` varint encoder (deprecating `w7l`), full-range zigzag, fix audit findings S2–S5 plus two newly found bugs (`Flat[Long].decode` Int-shift truncation, `Word64` bitSize for values ≥ 2^63), convert the package object to top-level definitions, and document the code.
+**Goal:** Modernize `scalus-core/shared/src/main/scala/scalus/serialization/flat/package.scala`: fast array-based `word7Bytes` varint encoder (deprecating `w7l`), full-range zigzag, fix audit findings S2–S5 plus two newly found bugs (`Flat[Long].decode` Int-shift truncation, `Word64` bitSize for values ≥ 2^63), and document the code.
 
-**Architecture:** All behavior fixes land first as small, individually tested commits on the existing file layout; the mechanical package-object → top-level conversion (a pure move) lands second-to-last so every semantic change is reviewable in isolation. FlatInstances fixes (S2/S4) ride the same wire-format-versioning bump (`SIRVersion` (5,0) → (6,0)) because the TypeVar codec changes the SIR module format.
+**Architecture:** Behavior fixes land as small, individually tested commits on the existing file layout (the package object stays — the top-level-defs conversion was considered and **deferred**, see "Deferred" below). FlatInstances fixes (S2/S4) ride the same wire-format-versioning bump (`SIRVersion` (5,0) → (6,0)) because the TypeVar codec changes the SIR module format.
 
 **Tech Stack:** Scala 3.3.8 cross-compiled JVM/JS/Native (all code must avoid JVM-only APIs beyond what's already used: `System.arraycopy`, `java.lang.Long.numberOfLeadingZeros` are fine on all three). ScalaTest + ScalaCheck for tests. sbt via `sbtn`.
 
@@ -17,7 +17,7 @@
 - Commit directly on `master` (project convention), one commit per task.
 - Deprecation version string: `"0.18.2"` (latest git tag is `v0.18.2`).
 - `git add` every newly created file.
-- Wire-format compatibility: the `w7a`/zigzag changes MUST produce byte-identical output to the old code for all previously-encodable values (the old code either asserted or was broken outside those ranges). Only Task 6 (TypeVar codec) intentionally changes the format, gated by the `SIRVersion` bump.
+- Wire-format compatibility: the `word7Bytes`/zigzag changes MUST produce byte-identical output to the old code for all previously-encodable values (the old code either asserted or was broken outside those ranges). Only Task 6 (TypeVar codec) intentionally changes the format, gated by the `SIRVersion` bump.
 - Test commands used throughout:
   - `sbtn "scalusJVM/testOnly scalus.serialization.flat.FlatTest"`
   - `sbtn "scalusJVM/testOnly scalus.cardano.ledger.Word64FlatTest"`
@@ -26,9 +26,9 @@
 
 ---
 
-### Task 1: `w7a` — fast array-based varint encoder; deprecate `w7l`
+### Task 1: `word7Bytes` — fast array-based varint encoder; deprecate `w7l`
 
-The current `w7l(n: Long): List[Byte]` builds a cons list recursively, and every encoder then *indexes into the `List`* in a while loop (`vs(i)` — O(i) per access, O(n²) per value). Replace with `w7a` returning an exactly-sized `Array[Byte]`, plus `w7aSize` so `bitSize` needs no allocation at all.
+The current `w7l(n: Long): List[Byte]` builds a cons list recursively, and every encoder then *indexes into the `List`* in a while loop (`vs(i)` — O(i) per access, O(n²) per value). Replace with `word7Bytes` returning an exactly-sized `Array[Byte]`, plus `word7BytesCount` so `bitSize` needs no allocation at all.
 
 **Files:**
 - Modify: `scalus-core/shared/src/main/scala/scalus/serialization/flat/package.scala` (helpers at lines 234–256; `Flat[Int]`/`Flat[Long]`/`Flat[BigInt]`/`Flat[Natural]` instances at lines 84–180)
@@ -37,24 +37,24 @@ The current `w7l(n: Long): List[Byte]` builds a cons list recursively, and every
 
 **Interfaces:**
 - Produces (all in package `scalus.serialization.flat`, used by Tasks 2, 3, 5):
-  - `def w7aSize(n: Long): Int` — byte count of the unsigned-64-bit varint encoding
-  - `def w7a(n: Long): Array[Byte]` — the encoding itself (7 payload bits per byte, LSB group first, high bit = continuation)
-  - `def w7aSize(n: BigInt): Int`, `def w7a(n: BigInt): Array[Byte]` — same for non-negative BigInt
-  - `w7l(n: Long)` / `w7l(n: BigInt)` remain, `@deprecated("Use w7a instead", "0.18.2")`
+  - `def word7BytesCount(n: Long): Int` — byte count of the unsigned-64-bit varint encoding
+  - `def word7Bytes(n: Long): Array[Byte]` — the encoding itself (7 payload bits per byte, LSB group first, high bit = continuation)
+  - `def word7BytesCount(n: BigInt): Int`, `def word7Bytes(n: BigInt): Array[Byte]` — same for non-negative BigInt
+  - `w7l(n: Long)` / `w7l(n: BigInt)` remain, `@deprecated("Use word7Bytes instead", "0.18.2")`
 
 - [ ] **Step 1: Write the failing test**
 
 Add to `FlatTest.scala`:
 
 ```scala
-    test("w7a encodes 7-bit groups little-endian with continuation bits") {
-        assert(w7a(0L).toList == List(0x00.toByte))
-        assert(w7a(127L).toList == List(0x7f.toByte))
-        assert(w7a(128L).toList == List(0x80.toByte, 0x01.toByte))
-        assert(w7a(-1L).length == 10) // treated as unsigned 2^64 - 1
-        assert(w7aSize(0L) == 1)
-        assert(w7aSize(Long.MaxValue) == 9)
-        assert(w7aSize(-1L) == 10)
+    test("word7Bytes encodes 7-bit groups little-endian with continuation bits") {
+        assert(word7Bytes(0L).toList == List(0x00.toByte))
+        assert(word7Bytes(127L).toList == List(0x7f.toByte))
+        assert(word7Bytes(128L).toList == List(0x80.toByte, 0x01.toByte))
+        assert(word7Bytes(-1L).length == 10) // treated as unsigned 2^64 - 1
+        assert(word7BytesCount(0L) == 1)
+        assert(word7BytesCount(Long.MaxValue) == 9)
+        assert(word7BytesCount(-1L) == 10)
         forAll { (n: Long) =>
             // reference implementation: unsigned base-128, LSB group first
             val expected = List.newBuilder[Byte]
@@ -65,13 +65,13 @@ Add to `FlatTest.scala`:
                 if v == 0 then expected += low else expected += (low | 0x80).toByte
                 v != 0
             do ()
-            assert(w7a(n).toList == expected.result())
-            assert(w7aSize(n) == w7a(n).length)
+            assert(word7Bytes(n).toList == expected.result())
+            assert(word7BytesCount(n) == word7Bytes(n).length)
         }
         forAll { (n: BigInt) =>
             whenever(n >= 0) {
-                assert(w7aSize(n) == w7a(n).length)
-                if n.isValidLong then assert(w7a(n).toList == w7a(n.toLong).toList)
+                assert(word7BytesCount(n) == word7Bytes(n).length)
+                if n.isValidLong then assert(word7Bytes(n).toList == word7Bytes(n.toLong).toList)
             }
         }
     }
@@ -80,9 +80,9 @@ Add to `FlatTest.scala`:
 - [ ] **Step 2: Run test to verify it fails**
 
 Run: `sbtn "scalusJVM/testOnly scalus.serialization.flat.FlatTest"`
-Expected: COMPILE ERROR — `w7a` / `w7aSize` not found.
+Expected: COMPILE ERROR — `word7Bytes` / `word7BytesCount` not found.
 
-- [ ] **Step 3: Implement `w7a`/`w7aSize`, rewire encoders, deprecate `w7l`**
+- [ ] **Step 3: Implement `word7Bytes`/`word7BytesCount`, rewire encoders, deprecate `w7l`**
 
 In `package.scala`, replace the two `w7l` definitions (lines 234–237 and 252–256) with:
 
@@ -90,7 +90,7 @@ In `package.scala`, replace the two `w7l` definitions (lines 234–237 and 252�
     /** Number of bytes in the variable-length 7-bit encoding of `n`, treating `n` as an
       * unsigned 64-bit value.
       */
-    def w7aSize(n: Long): Int =
+    def word7BytesCount(n: Long): Int =
         if n == 0 then 1
         else (63 - java.lang.Long.numberOfLeadingZeros(n)) / 7 + 1
 
@@ -99,8 +99,8 @@ In `package.scala`, replace the two `w7l` definitions (lines 234–237 and 252�
       * except the last. This is the byte layout of flat's
       * `data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList`.
       */
-    def w7a(n: Long): Array[Byte] =
-        val size = w7aSize(n)
+    def word7Bytes(n: Long): Array[Byte] =
+        val size = word7BytesCount(n)
         val result = new Array[Byte](size)
         var v = n
         var i = 0
@@ -112,16 +112,16 @@ In `package.scala`, replace the two `w7l` definitions (lines 234–237 and 252�
         result
 
     /** Number of bytes in the variable-length 7-bit encoding of a non-negative `n`. */
-    def w7aSize(n: BigInt): Int =
-        require(n >= 0, s"w7aSize: input must be non-negative, got $n")
+    def word7BytesCount(n: BigInt): Int =
+        require(n >= 0, s"word7BytesCount: input must be non-negative, got $n")
         if n == 0 then 1 else (n.bitLength - 1) / 7 + 1
 
-    /** Encodes a non-negative `n` as a variable-length byte array, as in [[w7a(n:Long)*]]. */
-    def w7a(n: BigInt): Array[Byte] =
-        require(n >= 0, s"w7a: input must be non-negative, got $n")
-        if n.isValidLong then w7a(n.toLong)
+    /** Encodes a non-negative `n` as a variable-length byte array, as in [[word7Bytes(n:Long)*]]. */
+    def word7Bytes(n: BigInt): Array[Byte] =
+        require(n >= 0, s"word7Bytes: input must be non-negative, got $n")
+        if n.isValidLong then word7Bytes(n.toLong)
         else
-            val size = w7aSize(n)
+            val size = word7BytesCount(n)
             val result = new Array[Byte](size)
             var v = n
             var i = 0
@@ -132,35 +132,35 @@ In `package.scala`, replace the two `w7l` definitions (lines 234–237 and 252�
             result(size - 1) = (v & 0x7f).toByte
             result
 
-    @deprecated("Use w7a instead", "0.18.2")
-    def w7l(n: Long): List[Byte] = w7a(n).toList
+    @deprecated("Use word7Bytes instead", "0.18.2")
+    def w7l(n: Long): List[Byte] = word7Bytes(n).toList
 
-    @deprecated("Use w7a instead", "0.18.2")
-    def w7l(n: BigInt): List[Byte] = w7a(n).toList
+    @deprecated("Use word7Bytes instead", "0.18.2")
+    def w7l(n: BigInt): List[Byte] = word7Bytes(n).toList
 ```
 
 Rewire the four instances. `Flat[Int]` (lines 84–96) — `bitSize` and `encode` become:
 
 ```scala
     given Flat[Int] with
-        def bitSize(a: Int): Int = w7aSize(zigZag(a)) * 8
+        def bitSize(a: Int): Int = word7BytesCount(zigZag(a)) * 8
 
         // Encoded as: data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList
         def encode(a: Int, encode: EncoderState): Unit =
-            val vs = w7a(zigZag(a))
+            val vs = word7Bytes(zigZag(a))
             var i = 0
             while i < vs.length do
                 encode.bits(8, vs(i))
                 i += 1
 ```
 
-(`decode` unchanged in this task.) Apply the identical `bitSize`/`encode` rewrite to `Flat[Long]` (lines 110–120), `Flat[BigInt]` (lines 134–144), and `Flat[Natural]` (lines 158–168, using `w7a(a.n)`/`w7aSize(a.n)`).
+(`decode` unchanged in this task.) Apply the identical `bitSize`/`encode` rewrite to `Flat[Long]` (lines 110–120), `Flat[BigInt]` (lines 134–144), and `Flat[Natural]` (lines 158–168, using `word7Bytes(a.n)`/`word7BytesCount(a.n)`).
 
-In `Word64.scala` change line 4 to import `w7a` instead of `w7l`, and replace the encode body (line 309):
+In `Word64.scala` change line 4 to import `word7Bytes` instead of `w7l`, and replace the encode body (line 309):
 
 ```scala
         inline def encode(a: Word64, encode: EncoderState): Unit =
-            val vs = w7a(a.value)
+            val vs = word7Bytes(a.value)
             var i = 0
             while i < vs.length do
                 encode.bits(8, vs(i))
@@ -170,7 +170,7 @@ In `Word64.scala` change line 4 to import `w7a` instead of `w7l`, and replace th
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `sbtn "scalusJVM/testOnly scalus.serialization.flat.FlatTest scalus.cardano.ledger.Word64FlatTest"`
-Expected: PASS (all existing round-trip tests plus the new `w7a` test).
+Expected: PASS (all existing round-trip tests plus the new `word7Bytes` test).
 
 - [ ] **Step 5: Format and commit**
 
@@ -179,10 +179,10 @@ sbtn scalafmtAll
 git add scalus-core/shared/src/main/scala/scalus/serialization/flat/package.scala \
         scalus-core/shared/src/main/scala/scalus/cardano/ledger/Word64.scala \
         scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala
-git commit -m "perf(flat): add array-based w7a varint encoder, deprecate w7l
+git commit -m "perf(flat): add array-based word7Bytes varint encoder, deprecate w7l
 
 w7l built a List and encoders indexed it in a loop (O(n^2) per value).
-w7a returns an exactly-sized Array[Byte]; w7aSize makes bitSize
+word7Bytes returns an exactly-sized Array[Byte]; word7BytesCount makes bitSize
 allocation-free. Byte output is identical to w7l."
 ```
 
@@ -197,7 +197,7 @@ allocation-free. Byte output is identical to w7l."
 - Test: `scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala`
 
 **Interfaces:**
-- Consumes: `w7a`, `w7aSize` from Task 1.
+- Consumes: `word7Bytes`, `word7BytesCount` from Task 1.
 - Produces: correct `Flat[Long]` round-trip for |x| < 2^62 (full range comes in Task 3).
 
 - [ ] **Step 1: Write the failing test**
@@ -268,7 +268,7 @@ Audit S3: `zigZag(Int)`/`zigZag(Long)` overflow at exactly `2^30`/`2^62`, guarde
 - Test: `scalus-core/shared/src/test/scala/scalus/serialization/flat/FlatTest.scala` (tests at lines 125–130, 165–170)
 
 **Interfaces:**
-- Consumes: `w7a`, `w7aSize` (Task 1); fixed `Flat[Long].decode` (Task 2).
+- Consumes: `word7Bytes`, `word7BytesCount` (Task 1); fixed `Flat[Long].decode` (Task 2).
 - Produces: total `zigZag(x: Int): Int`, `zagZig(u: Int): Int`, `zigZag(x: Long): Long`, `zagZig(u: Long): Long`; `Flat[Int]`/`Flat[Long]` round-trip the **entire** Int/Long range.
 
 - [ ] **Step 1: Make the existing tests strict (failing first)**
@@ -346,18 +346,18 @@ Replace lines 239–250 of `package.scala`:
 
 ```scala
     given Flat[Int] with
-        def bitSize(a: Int): Int = w7aSize(zigZag(a) & 0xffffffffL) * 8
+        def bitSize(a: Int): Int = word7BytesCount(zigZag(a) & 0xffffffffL) * 8
 
         // Encoded as: data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList
         def encode(a: Int, encode: EncoderState): Unit =
-            val vs = w7a(zigZag(a) & 0xffffffffL)
+            val vs = word7Bytes(zigZag(a) & 0xffffffffL)
             var i = 0
             while i < vs.length do
                 encode.bits(8, vs(i))
                 i += 1
 ```
 
-(`Flat[Int].decode` is already correct: max 5 groups → `shl ≤ 28`, and Int arithmetic wraps as needed. `Flat[Long]` needs no mask: `w7a` treats its argument as unsigned.)
+(`Flat[Int].decode` is already correct: max 5 groups → `shl ≤ 28`, and Int arithmetic wraps as needed. `Flat[Long]` needs no mask: `word7Bytes` treats its argument as unsigned.)
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -462,7 +462,7 @@ DecoderState.dropBits."
 - Test: `scalus-core/shared/src/test/scala/scalus/cardano/ledger/Word64FlatTest.scala`
 
 **Interfaces:**
-- Consumes: `w7a` (Task 1).
+- Consumes: `word7Bytes` (Task 1).
 - Produces: `Flat[Word64].bitSize` correct for the full unsigned 64-bit range.
 
 - [ ] **Step 1: Write the failing test**
@@ -751,110 +751,18 @@ git commit -m "fix(flat): decode robustness and Data bitSize symmetry (audit S4)
 
 ---
 
-### Task 8: Convert `package object flat` to top-level definitions
+### Deferred: converting `package object flat` to top-level definitions
 
-Scala 3 style: replace the package object with top-level definitions in a file named `Flat.scala`. Source-compatible (all import paths unchanged); binary-incompatible (members move from `flat.package$`/`flat.package$Flat` etc. to `flat.Flat` etc.) — handled with MiMa filters. The plugin's generated copy must be renamed too (via `build.sbt`) and the stale copy deleted.
-
-**Files:**
-- Rename: `scalus-core/shared/src/main/scala/scalus/serialization/flat/package.scala` → `.../flat/Flat.scala`
-- Modify: `build.sbt:343` (copySharedFiles list), `build.sbt:408-422` (mimaBinaryIssueFilters)
-- Delete: `scalus-plugin/src/main/shared/scala/scalus/serialization/flat/package.scala` (stale generated copy)
-
-**Interfaces:**
-- Produces: identical Scala API under `scalus.serialization.flat` — `Flat`, `EncoderState`, `DecoderState`, `ArrayByteFlat`, `Natural`, `Uint8Array`, `encode`, `decode`, `w7a`, `w7aSize`, `w7l` (deprecated), `zigZag`, `zagZig`, `iterableFlat`, `listFlat`, `indexedSeqFlat`, `pairFlat`, `byteAsBitString`, and the given instances — now as top-level definitions.
-
-- [ ] **Step 1: Rename and convert the file**
-
-```bash
-git mv scalus-core/shared/src/main/scala/scalus/serialization/flat/package.scala \
-       scalus-core/shared/src/main/scala/scalus/serialization/flat/Flat.scala
-```
-
-In `Flat.scala` apply this exact mechanical transformation — the body content is otherwise unchanged:
-1. Replace the first two non-empty lines
-   ```scala
-   package scalus.serialization
-
-   package object flat:
-   ```
-   with
-   ```scala
-   package scalus.serialization.flat
-   ```
-2. Dedent every remaining line by one level (4 spaces).
-
-All members (trait `Flat`, `case class Natural`, `class ArrayByteFlat`, `class EncoderState`, `class DecoderState`, `type Uint8Array`, all `def`s and `given`s) become top-level definitions — legal Scala 3, same package, same import paths.
-
-- [ ] **Step 2: Update the build**
-
-In `build.sbt:343` change:
-
-```scala
-            "scalus/serialization/flat/package.scala",
-```
-
-to:
-
-```scala
-            "scalus/serialization/flat/Flat.scala",
-```
-
-Delete the stale generated plugin copy so it can't double-define the package's members:
-
-```bash
-rm scalus-plugin/src/main/shared/scala/scalus/serialization/flat/package.scala
-git rm --cached scalus-plugin/src/main/shared/scala/scalus/serialization/flat/package.scala 2>/dev/null || true
-```
-
-(If `git rm --cached` says the file isn't tracked, it's gitignored generated output — the plain `rm` sufficed.)
-
-- [ ] **Step 3: Verify compilation across modules**
-
-Run: `sbtn "scalusPlugin/compile; jvm/Test/compile"`
-Expected: success. (The plugin build re-copies `Flat.scala` via `copySharedFiles`.)
-
-- [ ] **Step 4: Run the affected test suites**
-
-Run: `sbtn "scalusJVM/testOnly scalus.serialization.flat.* scalus.cardano.ledger.Word64FlatTest scalus.compiler.sir.SIRTypeSerializationTest"`
-Expected: PASS.
-
-- [ ] **Step 5: Regenerate MiMa filters**
-
-Run: `sbtn "scalusJVM/mimaReportBinaryIssues"`
-Expected: FAILURES — every reported problem must be a rename fallout of `scalus.serialization.flat.package$*` (missing `package$` classes, plus signature problems on classes whose public members mention `Flat`/`EncoderState`/`DecoderState`, e.g. `scalus.uplc.Constant`, `scalus.uplc.DefaultUni`, `scalus.uplc.DefaultFun`, `scalus.serialization.flat.HashConsedFlat`, `scalus.cardano.ledger.Word64`).
-
-Add to `mimaBinaryIssueFilters` in `build.sbt` (after line 421), starting with:
-
-```scala
-        // flat package object converted to top-level definitions: source-compatible,
-        // but binary names moved from serialization.flat.package$* to serialization.flat.*
-        ProblemFilters.exclude[MissingClassProblem]("scalus.serialization.flat.package"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.serialization.flat.package$*"),
-```
-
-then append MiMa's own suggested `ProblemFilters.exclude[...]` lines for the remaining reported problems, verbatim, under the same comment. Re-run `sbtn "scalusJVM/mimaReportBinaryIssues"` until clean. **Do not add filters for any problem that is not explained by this rename** — investigate such a problem instead.
-
-- [ ] **Step 6: Format and commit**
-
-```bash
-sbtn scalafmtAll
-git add scalus-core/shared/src/main/scala/scalus/serialization/flat/Flat.scala build.sbt
-git add -u
-git commit -m "refactor(flat): convert package object to top-level definitions
-
-Scala 3 style: package.scala -> Flat.scala with top-level defs. Source
-compatible; binary names move from flat.package\$* to flat.*, covered by
-MiMa filters. copySharedFiles updated for the plugin's generated copy."
-```
+Considered and **deferred by user decision (2026-07-11)**. The conversion (rename `package.scala` → `Flat.scala`, drop the `package object flat:` wrapper, dedent) is source-compatible but binary-breaking: every member moves from `flat.package$`/`flat.package$Flat` etc. to `flat.Flat` etc., which ripples MiMa `IncompatibleMethTypeProblem`s across every public API mentioning `Flat`/`EncoderState`/`DecoderState` (`scalus.uplc.Constant`, `DefaultUni`, `DefaultFun`, `HashConsedFlat`, `Word64`, ...) and requires updating the `copySharedFiles` list in `build.sbt:343` plus deleting the stale plugin copy. Revisit alongside a release that already breaks binary compatibility.
 
 ---
 
-### Task 9: Documentation pass and final verification
+### Task 8: Documentation pass and final verification
 
-Add scaladoc to the public API of `Flat.scala` (the pieces not already documented by earlier tasks) and run the full gate.
+Add scaladoc to the public API of `package.scala` (the pieces not already documented by earlier tasks) and run the full gate.
 
 **Files:**
-- Modify: `scalus-core/shared/src/main/scala/scalus/serialization/flat/Flat.scala`
+- Modify: `scalus-core/shared/src/main/scala/scalus/serialization/flat/package.scala`
 
 **Interfaces:** none new — comments only. No behavior changes permitted in this task.
 
@@ -936,13 +844,13 @@ Run: `sbtn quick`
 Expected: formatting clean, compile clean, all JVM tests pass. If stale-class weirdness appears, `sbtn clean` and retry once.
 
 Run: `sbtn mima`
-Expected: PASS with the Task 8 filters.
+Expected: PASS — no binary-incompatible change is made by this plan (the deprecated `w7l` keeps its signature; all other changes are behavioral or additive).
 
 - [ ] **Step 3: Commit**
 
 ```bash
 sbtn scalafmtAll
-git add scalus-core/shared/src/main/scala/scalus/serialization/flat/Flat.scala
+git add scalus-core/shared/src/main/scala/scalus/serialization/flat/package.scala
 git commit -m "docs(flat): scaladoc for the flat codec public API"
 ```
 
@@ -963,7 +871,7 @@ Reported, intentionally NOT fixed here (out of scope / needs a decision):
 - `ArrayByteFlat.decode` reads `decode.buffer` directly without `ensureBits` — corrupt input can throw raw `ArrayIndexOutOfBoundsException` instead of a descriptive error.
 - `EncoderState` has a fixed-size buffer and every caller hand-computes `bitSize/8 + 1` — an auto-growing or checked variant would remove a recurring footgun.
 - `Natural` and its `Flat` given appear unused in-tree — candidates for deprecation.
-- A direct-write `encodeW7(n, enc)` (no array allocation at all) would be a further perf step beyond `w7a`.
+- A direct-write `encodeW7(n, enc)` (no array allocation at all) would be a further perf step beyond `word7Bytes`.
 - `Word64.decode` builds a `List[Byte]` and folds — could mirror the allocation-free style of the fixed decoders.
 
 Commendations (verified-good code worth keeping as-is):
