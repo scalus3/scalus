@@ -72,12 +72,6 @@ enum Recursivity:
     case NonRec
     case Rec
 
-case class TopLevelBinding(fullName: FullName, recursivity: Recursivity, body: SIR)
-
-enum CompileDef:
-    case Compiling
-    case Compiled(binding: TopLevelBinding)
-
 case class SIRCompilerOptions(
     backend: String = SIRDefaultOptions.targetLoweringBackend.toString,
     // universalDataRepresentation: Boolean =
@@ -246,8 +240,6 @@ final class SIRCompiler(
     //    pos: SourcePosition
     // ) extends LocalBindingOrSubmodule
 
-    private val globalDefs: mutable.LinkedHashMap[FullName, CompileDef] =
-        mutable.LinkedHashMap.empty
     private val globalDataDecls: mutable.LinkedHashMap[FullName, DataDecl] =
         mutable.LinkedHashMap.empty
 
@@ -1160,38 +1152,12 @@ final class SIRCompiler(
         val name = e.symbol.name.show
         val symbolId = e.symbol.id
         val variableKey = VariableKey(name, Some(symbolId))
-        val fullName = FullName(e.symbol)
         val isInLocalEnv = env.vars.contains(variableKey)
-        val isInGlobalEnv = globalDefs.contains(fullName)
 
-        // println( s"compileIdentOrQualifiedSelect1: ${e.symbol} $name $fullName, term: ${e.show}, loc/glob: $isInLocalEnv/$isInGlobalEnv, env: ${env}" )
-        val (sirVar, origType) = (isInLocalEnv, isInGlobalEnv) match
-            case (true, true) =>
-                val localType = env.vars(variableKey)
-                globalDefs(fullName) match
-                    case CompileDef.Compiled(TopLevelBinding(_, _, body)) =>
-                        val globalType = body.tp
-                        if globalType != localType then
-                            error(
-                              TypeMismatch(
-                                e.symbol.fullName.toString,
-                                localType,
-                                globalType,
-                                e.srcPos
-                              ),
-                              ()
-                            )
-                    case _ =>
-                (
-                  SIR.Var(
-                    e.symbol.fullName.toString,
-                    localType,
-                    AnnotationsDecl.fromSymIn(e.symbol, e.srcPos.sourcePos)
-                  ),
-                  localType
-                )
-            // local def, use the name without full qualification
-            case (true, false) =>
+        // println( s"compileIdentOrQualifiedSelect1: ${e.symbol} $name, term: ${e.show}, local: $isInLocalEnv, env: ${env}" )
+        val (sirVar, origType) =
+            if isInLocalEnv then
+                // local def, use the name without full qualification
                 val localType = env.vars(variableKey)
                 (
                   SIR.Var(
@@ -1201,24 +1167,7 @@ final class SIRCompiler(
                   ),
                   localType
                 )
-            // global def, use full name
-            case (false, true) =>
-                val origType0 = sirTypeInEnv(taTree.tpe.widen, e.srcPos, env)
-                val origType = wrapTypeWithUplcRepr(origType0, e.symbol, e.srcPos)
-                val varType =
-                    if isNoArgsMethod(e.symbol) then
-                        // TODO: if we have type parameters, then we should apply one
-                        SIRType.Fun(SIRType.Unit, origType)
-                    else origType
-                (
-                  SIR.Var(
-                    e.symbol.fullName.toString,
-                    varType,
-                    AnnotationsDecl.fromSymIn(e.symbol, e.srcPos.sourcePos)
-                  ),
-                  origType
-                )
-            case (false, false) =>
+            else
                 val origType0 = sirTypeInEnv(e.tpe.widen.dealias, e.srcPos, env)
                 val origType = wrapTypeWithUplcRepr(origType0, e.symbol, e.srcPos)
                 val valType =
@@ -1990,9 +1939,25 @@ final class SIRCompiler(
             if expr.symbol == ByteStringModuleSymbol.requiredMethod("fromHex") =>
             literal match
                 case Literal(c) if c.tag == Constants.StringTag =>
-                    scalus.uplc.Constant.ByteString(
-                      scalus.uplc.builtin.ByteString.fromHex(c.stringValue)
-                    )
+                    try
+                        scalus.uplc.Constant.ByteString(
+                          scalus.uplc.builtin.ByteString.fromHex(c.stringValue)
+                        )
+                    catch
+                        case NonFatal(e) =>
+                            // report and continue (don't use the throwing `error` helper) so
+                            // an invalid literal is a clean positioned error, not a compiler
+                            // crash (audit finding E9).
+                            report.error(
+                              s"""Hex string `${c.stringValue}` is not a valid hex string.
+                                 |Make sure it contains only hexadecimal characters (0-9, a-f, A-F)
+                                 |Error: ${e.getMessage}
+                                 |""".stripMargin,
+                              expr.srcPos
+                            )
+                            scalus.uplc.Constant.ByteString(
+                              scalus.uplc.builtin.ByteString.empty
+                            )
                 case _ =>
                     error(
                       GenericError(
@@ -2036,16 +2001,16 @@ final class SIRCompiler(
                 )
             catch
                 case NonFatal(e) =>
-                    error(
-                      GenericError(
-                        s"""Hex string `${c.stringValue}` is not a valid hex string.
-                           |Make sure it contains only hexadecimal characters (0-9, a-f, A-F)
-                           |Error: ${e.getMessage}
-                           |""".stripMargin,
-                        expr.srcPos
-                      ),
-                      scalus.uplc.Constant.Unit
+                    // report and continue (don't use the throwing `error` helper) so an
+                    // invalid literal is a clean positioned error, not a compiler crash.
+                    report.error(
+                      s"""Hex string `${c.stringValue}` is not a valid hex string.
+                         |Make sure it contains only hexadecimal characters (0-9, a-f, A-F)
+                         |Error: ${e.getMessage}
+                         |""".stripMargin,
+                      expr.srcPos
                     )
+                    scalus.uplc.Constant.ByteString(scalus.uplc.builtin.ByteString.empty)
         // utf8"hello" as ByteString using Scala 3 StringContext extension
         case expr @ Apply(
               Apply(
@@ -2729,7 +2694,10 @@ final class SIRCompiler(
                     Select(New(tpt), nme.CONSTRUCTOR),
                     immutable.List(SkipInline(arg), _*)
                   )
-                ) if tpt.tpe <:< defn.ThrowableType =>
+                ) if tpt.tpe <:< defn.ThrowableType && arg.tpe.widen <:< defn.StringType =>
+                // Only a String first argument is the error message. A non-String first
+                // arg (e.g. `new CodeException(BigInt(42))`) would produce an ill-typed
+                // message SIR (audit finding E10), so fall through to the expression text.
                 compileExpr(env, arg)
             case SkipInline(Apply(Select(New(tpt), nme.CONSTRUCTOR), Nil))
                 if tpt.tpe <:< defn.ThrowableType =>
