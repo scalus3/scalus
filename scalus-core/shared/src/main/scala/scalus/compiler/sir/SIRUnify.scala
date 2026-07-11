@@ -1395,20 +1395,23 @@ object SIRUnify {
     def retrieveTypeVarGenerationContext(env: Env): SIRType.SetBasedTypeVarGenerationContext = {
         env.optTypeVarGenerationContext match {
             case Some(ctx) => ctx
-            case None      =>
-
+            case None =>
+                val existing = env.filledTypes.keys.toSet ++ env.eqTypes.keys.toSet
+                if env.topLevelTypes.isEmpty then
+                    throw IllegalStateException(
+                      "top-level types should not be empty in unification context"
+                    )
+                val maxExisting =
+                    if existing.isEmpty then 0L
+                    else existing.maxBy(_.optId.getOrElse(0L)).optId.getOrElse(0L)
+                val ctx =
+                    SIRType.createMinimalTypeVarGenerationContext(
+                      maxExisting,
+                      env.topLevelTypes.toList
+                    )
+                env.optTypeVarGenerationContext = Some(ctx)
+                ctx
         }
-        val existing = env.filledTypes.keys.toSet ++ env.eqTypes.keys.toSet
-        if env.topLevelTypes.isEmpty then
-            throw IllegalStateException(
-              "top-level types should not be empty in unification context"
-            )
-        val maxExisting =
-            if existing.isEmpty then 0L
-            else existing.maxBy(_.optId.getOrElse(0L)).optId.getOrElse(0L)
-        val ctx =
-            SIRType.createMinimalTypeVarGenerationContext(maxExisting, env.topLevelTypes.toList)
-        ctx
     }
 
 }

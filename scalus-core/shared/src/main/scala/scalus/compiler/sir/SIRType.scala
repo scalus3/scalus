@@ -1619,7 +1619,7 @@ object SIRType {
                     case TypeVar(name, Some(id), kind) =>
                         if id > acc.maxCounter then acc.maxCounter = id
                         acc.typeVars += TypeVar(name, Some(id), kind)
-                        acc
+                        advance(acc, dataDeclNames, constrDeclNames, proxiedRefs, initTypes.tail)
                     case TypeLambda(params, body) =>
                         params.foreach { tv =>
                             if !acc.contains(tv) then
@@ -1647,7 +1647,14 @@ object SIRType {
                                   constrDecl.typeParams ++
                                   constrDecl.params.map(_.tp).to(LazyList) ++ initTypes.tail
                             )
-                        } else acc
+                        } else
+                            advance(
+                              acc,
+                              dataDeclNames,
+                              constrDeclNames,
+                              proxiedRefs,
+                              initTypes.tail
+                            )
                     case SumCaseClass(dataDecl, typeArgs) =>
                         if !dataDeclNames.contains(dataDecl.name) then {
                             val nDataDeclNames = dataDeclNames + dataDecl.name
@@ -1665,7 +1672,14 @@ object SIRType {
                                       }
                                       .to(LazyList) ++ initTypes.tail
                             )
-                        } else acc
+                        } else
+                            advance(
+                              acc,
+                              dataDeclNames,
+                              constrDeclNames,
+                              proxiedRefs,
+                              initTypes.tail
+                            )
                     case Fun(in, out) =>
                         advance(
                           acc,
@@ -1676,7 +1690,14 @@ object SIRType {
                         )
                     case TypeProxy(ref) =>
                         Option(proxiedRefs.get(ref)) match
-                            case Some(visited) => acc
+                            case Some(visited) =>
+                                advance(
+                                  acc,
+                                  dataDeclNames,
+                                  constrDeclNames,
+                                  proxiedRefs,
+                                  initTypes.tail
+                                )
                             case None =>
                                 proxiedRefs.put(ref, ref)
                                 advance(
