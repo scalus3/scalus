@@ -465,6 +465,14 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       *
       * Retrieves elements from an array at the specified indices.
       *
+      * ==FIXME (audit F1): do not use on-chain — not a real Plutus builtin==
+      * `multiIndexArray` is NOT implemented by any released Plutus version (checked 1.63.0.0 and
+      * master 2026-07) or by Aiken. Scalus serializes it with an invented flat tag (101), so any
+      * script using it FAILS to decode / evaluate under real Plutus tooling and would break (with a
+      * changed script hash) if IOG later standardizes the builtin. Build the list you need with
+      * [[indexArray]] instead. This method is kept only so the type/tag stay stable; it will be
+      * enabled once upstream Plutus defines the builtin.
+      *
       * @param indices
       *   A list of zero-based indices, in the order elements should be retrieved. In case of
       *   repeated indices, the same element is returned multiple times.

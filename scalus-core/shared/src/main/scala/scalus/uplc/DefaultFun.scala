@@ -1327,10 +1327,18 @@ enum DefaultFun extends Enum[DefaultFun]:
       *
       * Requires one `force` application. Returns elements at the specified indices in order.
       *
+      * ==FIXME (audit F1): do not use — not a real Plutus builtin==
+      * `MultiIndexArray` does NOT exist in any released Plutus version (checked 1.63.0.0 and
+      * master 2026-07), nor in Aiken. Scalus assigns it the invented flat tag 101 (Plutus's
+      * `DefaultFun` tags stop at `ScaleValue -> 100`), so any UPLC containing it FAILS to decode
+      * with Plutus tooling, and if IOG later standardizes it under a different tag the renumbering
+      * changes the script hash of anything already compiled with it. Nothing in Scalus's own
+      * lowering emits it (`arrayToList` uses `IndexArray`). Keep this case (removal is a breaking
+      * API change) but leave it unused until upstream Plutus defines the builtin and its tag; then
+      * align the flat tag below and drop this notice.
+      *
       * @throws scalus.uplc.eval.BuiltinException
       *   if any index is out of bounds
-      * @since Plutus
-      *   V4 (CIP-156)
       */
     case MultiIndexArray
 
@@ -1625,6 +1633,9 @@ object DefaultFun {
                 case LengthOfArray   => 89
                 case ListToArray     => 90
                 case IndexArray      => 91
+                // FIXME (audit F1): 101 is a Scalus-invented flat tag — MultiIndexArray is not in
+                // any Plutus release (tags stop at ScaleValue -> 100). UPLC encoded with it fails
+                // Plutus decode. Align this tag with upstream once Plutus defines the builtin.
                 case MultiIndexArray => 101
 
                 // MaryEraValue builtins (CIP-0153)
@@ -1736,6 +1747,9 @@ object DefaultFun {
                 case 89  => LengthOfArray
                 case 90  => ListToArray
                 case 91  => IndexArray
+                // FIXME (audit F1): 101 is a Scalus-invented flat tag not defined by Plutus; see
+                // the encode side above and the MultiIndexArray case doc. Realign once upstream
+                // Plutus defines the builtin.
                 case 101 => MultiIndexArray
                 // MaryEraValue builtins (CIP-0153)
                 case 94  => InsertCoin

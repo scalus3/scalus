@@ -267,11 +267,11 @@ object ScalusRuntime {
 
     /** Initialize arrayToList runtime function.
       *
-      * arrayToList converts a BuiltinArray[Data] to a BuiltinList[Data] by using multiIndexArray
-      * with indices [0, 1, 2, ..., length-1].
+      * arrayToList converts a BuiltinArray[Data] to a BuiltinList[Data] by indexing the array
+      * element-by-element with `indexArray` from front to back (see `genArrayToList`).
       *
-      * Implementation: arrayToList arr = multiIndexArray (mkIndices (lengthOfArray arr)) arr where
-      * mkIndices builds a list [0, 1, 2, ..., n-1]
+      * NOTE: this deliberately does NOT use `multiIndexArray` — that is a Scalus-invented builtin
+      * with a non-Plutus flat tag (audit F1); nothing in lowering emits it.
       */
     private def initArrayToList(using lctx: LoweringContext): Unit = {
         val name = ARRAY_TO_LIST_NAME

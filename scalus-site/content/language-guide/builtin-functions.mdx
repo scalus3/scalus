@@ -234,11 +234,14 @@ val len = Builtins.lengthOfArray(array)  // 3
 // Access element by index (O(1))
 val first = Builtins.indexArray(array, BigInt(0))   // iData(10)
 val second = Builtins.indexArray(array, BigInt(1))  // iData(20)
-
-// Access multiple elements at once
-val indices = BuiltinList(BigInt(0), BigInt(2))
-val selected = Builtins.multiIndexArray(indices, array)  // [iData(10), iData(30)]
 ```
+
+<Callout type="warning">
+Do **not** use `Builtins.multiIndexArray`. It is not a real Plutus builtin — no released Plutus
+version (or Aiken) implements it, and Scalus serializes it with an invented flat tag, so any script
+using it fails to decode/evaluate under real Plutus tooling. Access elements individually with
+`indexArray` instead. It will be enabled once upstream Plutus defines the builtin.
+</Callout>
 
 ## Pair Operations
 
