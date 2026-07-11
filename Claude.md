@@ -39,6 +39,41 @@ Prefer `sbtn` over `sbt`, when `sbtn` is aviable and not hangs.
 **Note:** sbt uses incremental compilation - only changed files and their dependents are recompiled.
 Use `sbtn clean` to force full recompilation if you encounter stale class issues.
 
+### Working in a git worktree with sbt
+
+When the repo is checked out in a **git worktree** (`git worktree add ...`, e.g. `.claude/worktrees/<name>`),
+sbt fails to load out of the box. Two one-time fixes are needed inside the worktree:
+
+1. **`sbt-git` / JGit cannot read the worktree's `.git` file.** Loading the build throws
+   `org.eclipse.jgit.errors.NoWorkTreeException: Bare Repository has neither a working tree, nor an index`
+   (the bundled JGit 5.13 does not understand a worktree's `gitdir:`-pointer `.git`). Work around it by
+   adding a local, **untracked** `.sbt` file at the worktree root that short-circuits the eager git
+   settings with constants (do NOT commit it):
+
+   ```scala
+   // zz-worktree-git-override.sbt  — local worktree workaround, do not commit
+   import com.github.sbt.git.SbtGit.git
+   ThisBuild / git.gitUncommittedChanges := false
+   ThisBuild / git.gitHeadCommit := Some("0000000000000000000000000000000000000000")
+   ThisBuild / git.gitCurrentTags := Nil
+   ThisBuild / git.gitCurrentBranch := "<your-branch>"
+   ThisBuild / git.gitHeadMessage := None
+   ```
+
+   Add `zz-worktree-git-override.sbt` to your worktree's `.git/info/exclude` (or just leave it unstaged)
+   so it never lands in a commit.
+
+2. **The `plutus-conformance` corpus is not present in the worktree.** `scalusJVM/Test/compile` fails with
+   `Plutus conformance corpus not found at .../plutus-conformance/test-cases/uplc/evaluation` (it is a
+   symlink into the nix store that only exists in the primary checkout). Recreate the symlink in the
+   worktree, pointing at the same target as the primary checkout:
+
+   ```bash
+   ln -s "$(readlink /path/to/primary/checkout/plutus-conformance)" <worktree>/plutus-conformance
+   ```
+
+   It is git-ignored, so it won't show up in `git status`.
+
 ## Architecture
 
 ### Compilation Pipeline
