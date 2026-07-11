@@ -1,15 +1,28 @@
 package scalus.serialization
 
 package object flat:
+    /** A non-negative integer, encoded as an unsigned varint (no zigzag), matching flat's
+      * `Natural`.
+      */
     case class Natural(n: BigInt)
 
+    /** Renders a byte as its 8-character binary string, e.g. `0x0b` → `"00001011"`. Debug aid for
+      * [[EncoderState.toString]]/[[DecoderState.toString]].
+      */
     def byteAsBitString(b: Byte): String =
         String.format("%8s", Integer.toBinaryString(b & 0xff)).replace(' ', '0')
 
     def encode[A: Flat](a: A, enc: EncoderState): Unit = summon[Flat[A]].encode(a, enc)
     def decode[A: Flat](dec: DecoderState): A = summon[Flat[A]].decode(dec)
 
+    /** Type class for the flat binary encoding (a bit-oriented serialization format, see
+      * https://hackage.haskell.org/package/flat and the Plutus Core specification, Appendix D).
+      * UPLC programs and SIR modules are serialized with instances of this trait.
+      */
     trait Flat[A]:
+        /** Exact size of the encoding of `a` in bits. Callers use it to size the [[EncoderState]]
+          * buffer, so it must never under-estimate.
+          */
         def bitSize(a: A): Int
         def encode(a: A, encode: EncoderState): Unit
         def decode(decode: DecoderState): A
@@ -183,6 +196,9 @@ package object flat:
             val bytes = baDecoder.decode(decode)
             new String(bytes, "UTF-8")
 
+    /** Flat encoding for collections as flat lists: each element is prefixed by a `1` bit,
+      * terminated by a `0` bit (`List a = Nil | Cons a (List a)` with one tag bit per node).
+      */
     def iterableFlat[A: Flat, C <: Iterable[A]](factory: scala.collection.Factory[A, C]): Flat[C] =
         new Flat[C]:
             def bitSize(a: C): Int =
@@ -302,6 +318,10 @@ package object flat:
         val numBytes = arr.length + arrayBlocks(arr.length) + 1 + 1 // +1 for pre-align, +1 for end
         8 * numBytes
 
+    /** Mutable bit-level output buffer for flat encoding. Bits are accumulated into `currentByte`
+      * (most-significant first) and flushed to `buffer` one byte at a time. The caller must
+      * pre-size `bufferSize` from `Flat.bitSize` — the buffer does not grow.
+      */
     class EncoderState(bufferSize: Int):
         val buffer: Array[Byte] = new Array(bufferSize)
         var nextPtr: Int = 0
@@ -344,6 +364,9 @@ package object flat:
             this.currentByte = 0
             this.usedBits = 0
 
+        /** Pads with zero bits to the next byte boundary, ending with a single one bit — flat's
+          * `Filler` (pre-alignment used before byte-aligned primitives).
+          */
         def filler(): Unit =
             this.currentByte |= 1;
             nextWord()
@@ -351,6 +374,9 @@ package object flat:
         def bitPosition(): Int =
             this.nextPtr * 8 + this.usedBits
 
+    /** Mutable bit-level cursor over a flat-encoded byte array. Mirrors [[EncoderState]]: bits are
+      * read most-significant first within each byte.
+      */
     class DecoderState(
         /** The buffer that contains a sequence of flat-encoded values */
         val buffer: Uint8Array
