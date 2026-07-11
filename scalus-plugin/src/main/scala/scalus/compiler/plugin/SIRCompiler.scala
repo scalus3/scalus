@@ -1415,7 +1415,7 @@ final class SIRCompiler(
         else
             // TODO store comments in the SIR
             // dd.rawComment
-            val debug = env.debug || dd.symbol.fullName.toString == "b"
+            val debug = env.debug
             if debug then
                 println(
                   s"compileDefDef: ${dd.symbol.fullName.toString}, params: ${dd.paramss.map(_.map(_.show))}, type: ${dd.tpe.show}, rhs: ${dd.rhs.show}"
