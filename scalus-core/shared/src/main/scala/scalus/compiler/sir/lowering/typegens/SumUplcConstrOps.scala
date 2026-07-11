@@ -154,6 +154,48 @@ object SumUplcConstrOps {
 
         val selfDeclName = extractDeclName(tp)
 
+        // Structural instantiation key: a field is self-referential only if its full
+        // instantiated type matches `tp`, not merely the decl name — in List[List[BigInt]] the
+        // Cons.head field (List[BigInt]) shares the decl but needs its own repr; recursing with
+        // the outer selfProxy would stamp head values with a list-of-lists shape (audit L1 at
+        // the representation level). Field types of recursive decls carry unsubstituted type
+        // params (tail: List[A]), so TypeVars render through `subst` — one-shot: vars inside a
+        // substituted (caller-level) arg must not re-substitute, or same-named params loop.
+        // Proxies are dereferenced with "<rec>" on cycles; constructor CaseClass types normalize
+        // to their instantiated parent (like `extractDeclName`).
+        def instantiationKey(
+            t: SIRType,
+            subst: Map[String, SIRType],
+            visited: scala.List[SIRType.TypeProxy]
+        ): String =
+            t match
+                case tv: SIRType.TypeVar =>
+                    subst.get(tv.name) match
+                        case Some(sub) if sub ne tv => instantiationKey(sub, Map.empty, visited)
+                        case _                      => tv.show
+                case SIRType.SumCaseClass(d, args) =>
+                    d.name + (if args.isEmpty then ""
+                              else
+                                  args
+                                      .map(instantiationKey(_, subst, visited))
+                                      .mkString("[", ",", "]"))
+                case SIRType.CaseClass(_, _, Some(parent)) =>
+                    instantiationKey(parent, subst, visited)
+                case SIRType.CaseClass(cd, args, None) =>
+                    cd.name + (if args.isEmpty then ""
+                               else
+                                   args
+                                       .map(instantiationKey(_, subst, visited))
+                                       .mkString("[", ",", "]"))
+                case SIRType.TypeLambda(_, body) => instantiationKey(body, subst, visited)
+                case SIRType.Annotated(inner, _) => instantiationKey(inner, subst, visited)
+                case p: SIRType.TypeProxy if p.ref != null =>
+                    if visited.exists(_ eq p) then "<rec>"
+                    else instantiationKey(p.ref, subst, p :: visited)
+                case other => other.show
+
+        lazy val tpInstantiationKey = instantiationKey(tp, typeSubstByName, Nil)
+
         // Use a mutable proxy for self-referential fields (e.g., tail: List[A]).
         // After building variants, set proxy.ref to the real SumUplcConstr.
         val selfProxy = SumCaseClassRepresentation.SumReprProxy(null)
@@ -176,7 +218,11 @@ object SumUplcConstrOps {
                         .getOrElse {
                             val isSelfRef = selfDeclName.exists { sn =>
                                 extractDeclName(paramType).contains(sn)
-                            }
+                            } && instantiationKey(
+                              paramType,
+                              typeSubstByName,
+                              Nil
+                            ) == tpInstantiationKey
                             if isSelfRef then selfProxy
                             else
                                 paramType match

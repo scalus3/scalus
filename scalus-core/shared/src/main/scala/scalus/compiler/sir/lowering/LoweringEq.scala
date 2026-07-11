@@ -195,7 +195,16 @@ object LoweringEq {
         // `lctx.typeVarReprEnv` and the unify env for parametric fields. Without this, the
         // first caller's env wins and later callers under different env state share a helper
         // whose RHS doesn't match — see sessions 11-15 alone-vs-combined Heisenbug.
-        val typeKey = sumEqKey(baseType) + "|" + lhsSum.stableKey +
+        val baseTypeKey = sumEqKey(baseType)
+        // Field types seen by `isOuterSumType` come from `genMatchUplcConstrAllVariants`, which
+        // substitutes only top-level TypeVar params — a composite field type like Cons.tail
+        // arrives as raw `List[A]`. Render it under the outer decl's param substitution so the
+        // genuine self-reference still keys equal to `baseType`.
+        val baseTypeParamSubst: Map[String, SIRType] = baseType match
+            case SIRType.SumCaseClass(decl, tArgs) =>
+                decl.typeParams.map(_.name).zip(tArgs).toMap
+            case _ => Map.empty
+        val typeKey = baseTypeKey + "|" + lhsSum.stableKey +
             "|" + lctx.captureFingerprint(baseType)
         val funType = SIRType.Fun(baseType, SIRType.Fun(baseType, SIRType.Boolean))
         val innerFunType = SIRType.Fun(baseType, SIRType.Boolean)
@@ -208,13 +217,16 @@ object LoweringEq {
           InOutRepresentationPair(lhsSum, innerFunRepr)
         )
         // Predicate: does this field type match the outer sum type? If yes, recurse via eqFnVar.
+        // Full instantiated types must match, not just decl name + arity: for List[List[BigInt]]
+        // the Cons.head field (List[BigInt]) shares both with the outer type, but self-recursing
+        // on it would eventually `Case` on the BigInt leaves.
         def isOuterSumType(t: SIRType): Boolean = {
             val st = stripAnnotated(t) match
                 case SIRType.TypeProxy(ref) if ref != null => ref.asInstanceOf[SIRType]
                 case other                                 => other
             (st, baseType) match
-                case (SIRType.SumCaseClass(d1, ta1), SIRType.SumCaseClass(d2, ta2)) =>
-                    d1.name == d2.name && ta1.length == ta2.length
+                case (SIRType.SumCaseClass(d1, _), SIRType.SumCaseClass(d2, _)) =>
+                    d1.name == d2.name && sumEqKey(st, baseTypeParamSubst) == baseTypeKey
                 case _ => false
         }
         val eqFnVar = lctx.defineCachedTopLevelHelper(
@@ -301,18 +313,38 @@ object LoweringEq {
         )
     }
 
-    /** Stable string key for caching `sumEq` helpers. Uses `decl.name` and a structural rendering
-      * of the type arguments — sufficient because two equal-keyed types produce identical helper
-      * code. Relies on `SIRType.show` as the stable fallback for primitives; if `show` formatting
-      * changes, cache lookup behavior changes (acceptable for a per-compile cache).
+    /** Stable string key for caching `sumEq` helpers and for `isOuterSumType`'s self-recursion
+      * test. Uses `decl.name` and a structural rendering of the type arguments — sufficient because
+      * two equal-keyed types produce identical helper code. TypeProxy is dereferenced (its `show`
+      * is an opaque "Proxy", which would render structurally-equal types unequal and distinct
+      * proxied types equal); a proxy revisited on the same path renders as "<rec>". TypeVars found
+      * in `subst` render as their substitution — used to key raw decl field types (e.g. `List[A]`)
+      * under the outer type's instantiation. Relies on `SIRType.show` as the stable fallback for
+      * primitives; if `show` formatting changes, cache lookup behavior changes (acceptable for a
+      * per-compile cache).
       */
-    private def sumEqKey(t: SIRType): String = t match
-        case SIRType.SumCaseClass(decl, args) =>
-            decl.name + (if args.isEmpty then "" else args.map(sumEqKey).mkString("[", ",", "]"))
-        case SIRType.CaseClass(cd, args, _) =>
-            cd.name + (if args.isEmpty then "" else args.map(sumEqKey).mkString("[", ",", "]"))
-        case SIRType.Annotated(inner, _) => sumEqKey(inner)
-        case other                       => other.show
+    private def sumEqKey(t: SIRType, subst: Map[String, SIRType] = Map.empty): String = {
+        // One-shot substitution: applies to `t`'s decl-level vars only — vars inside a
+        // substituted (caller-level) arg must not re-substitute, or same-named params loop.
+        def go(t: SIRType, subst: Map[String, SIRType], visited: List[SIRType.TypeProxy]): String =
+            t match
+                case tv: SIRType.TypeVar =>
+                    subst.get(tv.name) match
+                        case Some(sub) if sub ne tv => go(sub, Map.empty, visited)
+                        case _                      => tv.show
+                case SIRType.SumCaseClass(decl, args) =>
+                    decl.name + (if args.isEmpty then ""
+                                 else args.map(go(_, subst, visited)).mkString("[", ",", "]"))
+                case SIRType.CaseClass(cd, args, _) =>
+                    cd.name + (if args.isEmpty then ""
+                               else args.map(go(_, subst, visited)).mkString("[", ",", "]"))
+                case SIRType.Annotated(inner, _) => go(inner, subst, visited)
+                case p: SIRType.TypeProxy if p.ref != null =>
+                    if visited.exists(_ eq p) then "<rec>"
+                    else go(p.ref.asInstanceOf[SIRType], subst, p :: visited)
+                case other => other.show
+        go(t, subst, Nil)
+    }
 
     def generatePrimitiveEquals(
         builtin: SIR.Builtin,

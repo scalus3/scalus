@@ -87,6 +87,22 @@ object CodecModule {
             case None        => None
 }
 
+/** Container with a nested UplcConstr list. Regression for audit L1: the sumEq helper generated for
+  * `List[List[BigInt]]` must not treat the `Cons.head` field (`List[BigInt]`) as the outer type —
+  * decl name and arity match, but the instantiations differ.
+  */
+@UplcRepr(UplcRepresentation.UplcConstr)
+case class NestedLists(
+    @UplcRepr(UplcRepresentation.UplcConstr)
+    lists: List[List[BigInt]]
+)
+
+@Compile
+object NestedListsModule {
+    def mk(lists: List[List[BigInt]]): NestedLists = NestedLists(lists)
+    def eqLists(a: NestedLists, b: NestedLists): Boolean = a.lists === b.lists
+}
+
 /** Tests for UplcConstr representation — case classes/enums with function fields.
   *
   * Case classes containing function fields (like `BigInt => BigInt`) cannot use ProdDataConstr
@@ -203,6 +219,35 @@ class UplcConstrTest extends AnyFunSuite {
                 assert(v == 1, s"Expected 1, got $v")
             case Result.Failure(ex, _, _, _) =>
                 fail(s"UplcConstr equality failed: $ex")
+            case other => fail(s"Unexpected: $other")
+    }
+
+    test("UplcConstr: nested list equality (List[List[BigInt]])") {
+        // Element values >= 2 so a conflated sumEq (audit L1) fails loudly with
+        // case-on-integer out of bounds instead of accidentally mimicking Nil/Cons tags.
+        val sir = compile {
+            val a: List[List[BigInt]] = List.Cons(
+              List.Cons(BigInt(5), List.Cons(BigInt(6), List.Nil)),
+              List.Cons(List.Cons(BigInt(7), List.Nil), List.Nil)
+            )
+            val b: List[List[BigInt]] = List.Cons(
+              List.Cons(BigInt(5), List.Cons(BigInt(6), List.Nil)),
+              List.Cons(List.Cons(BigInt(7), List.Nil), List.Nil)
+            )
+            val c: List[List[BigInt]] = List.Cons(
+              List.Cons(BigInt(5), List.Cons(BigInt(6), List.Nil)),
+              List.Cons(List.Cons(BigInt(8), List.Nil), List.Nil)
+            )
+            val eqAB = NestedListsModule.eqLists(NestedListsModule.mk(a), NestedListsModule.mk(b))
+            val eqAC = NestedListsModule.eqLists(NestedListsModule.mk(a), NestedListsModule.mk(c))
+            if eqAB && !eqAC then BigInt(1) else BigInt(0)
+        }
+        val result = sir.toUplc().evaluateDebug
+        result match
+            case Result.Success(Term.Const(Constant.Integer(v), _), _, _, _) =>
+                assert(v == 1, s"Expected 1, got $v")
+            case Result.Failure(ex, _, _, _) =>
+                fail(s"UplcConstr nested list equality failed: $ex")
             case other => fail(s"Unexpected: $other")
     }
 
