@@ -1,5 +1,6 @@
 package scalus.compiler.sir.lowering.typegens
 
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.*
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRBuiltins, SIRPosition, SIRType}
 import scalus.compiler.sir.SIR.Pattern
@@ -14,7 +15,8 @@ import scalus.compiler.sir.SIR.Pattern
   *   - I(value: Integer)
   *   - B(value: ByteString)
   *
-  * Pattern matching on Data requires PlutusV4's Case on Data instruction.
+  * Pattern matching on Data uses the Case-on-Data instruction when the target protocol version
+  * supports it (>= vanRossemPV) and the chooseData builtin otherwise.
   */
 object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
     import LoweredValue.Builder.*
@@ -346,11 +348,39 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
             .orElse(wildcardCase)
             .getOrElse(SIR.Case(Pattern.Wildcard, errorBranch("Unmatched Data.B"), anns))
 
+        // Case-on-Data exists only from vanRossemPV on; earlier targets (including the default
+        // changPV) must dispatch via the chooseData builtin, extracting the bound values with
+        // unConstrData/unMapData/unListData/unIData/unBData inside the selected branch.
+        val useCaseOnData =
+            lctx.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV
+
+        // For chooseData, bind the scrutinee to a variable so branch extractions share one
+        // evaluation of it (same pattern as the list emitters' ChooseList path).
+        val optDataInputVar =
+            if useCaseOnData then None
+            else
+                val name = lctx.uniqueVarName("_data_scrutinee")
+                Some(
+                  new VariableLoweredValue(
+                    id = name,
+                    name = name,
+                    sir = SIR.Var(name, SIRType.Data.tp, AnnotationsDecl(anns.pos)),
+                    representation = SumCaseClassRepresentation.DataData,
+                    optRhs = Some(
+                      loweredScrutinee.toRepresentation(
+                        SumCaseClassRepresentation.DataData,
+                        anns.pos
+                      )
+                    )
+                  )
+                )
+
         val prevScope = lctx.scope
 
         // Generate bound variables and branches for each case
         // Constr: bindings are [tag, args] or [_, _] if wildcard
-        val (constrTagVar, constrArgsVar, constrBranch) = genConstrBranch(constrCase, anns.pos)
+        val (constrTagVar, constrArgsVar, constrBranch) =
+            genConstrBranch(constrCase, anns.pos, optDataInputVar)
 
         // Map: bindings are [entries] or [_] if wildcard
         val (mapEntriesVar, mapBranchLv) = genSingleArgBranch(
@@ -362,7 +392,19 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
             SumCaseClassRepresentation.DataData
           ),
           anns.pos,
-          optTargetType
+          optTargetType,
+          optDataInputVar.map(dataInput =>
+              lvBuiltinApply(
+                SIRBuiltins.unMapData,
+                dataInput,
+                SIRType.List(SIRType.Tuple2(SIRType.Data.tp, SIRType.Data.tp)),
+                SumCaseClassRepresentation.SumPairBuiltinList(
+                  SumCaseClassRepresentation.DataData,
+                  SumCaseClassRepresentation.DataData
+                ),
+                anns.pos
+              )
+          )
         )
 
         // List: bindings are [elements] or [_] if wildcard
@@ -372,7 +414,16 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
           SIRType.List(SIRType.Data.tp),
           SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
           anns.pos,
-          optTargetType
+          optTargetType,
+          optDataInputVar.map(dataInput =>
+              lvBuiltinApply(
+                SIRBuiltins.unListData,
+                dataInput,
+                SIRType.List(SIRType.Data.tp),
+                SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                anns.pos
+              )
+          )
         )
 
         // I: bindings are [value] or [_] if wildcard
@@ -382,7 +433,16 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
           SIRType.Integer,
           PrimitiveRepresentation.Constant,
           anns.pos,
-          optTargetType
+          optTargetType,
+          optDataInputVar.map(dataInput =>
+              lvBuiltinApply(
+                SIRBuiltins.unIData,
+                dataInput,
+                SIRType.Integer,
+                PrimitiveRepresentation.Constant,
+                anns.pos
+              )
+          )
         )
 
         // B: bindings are [value] or [_] if wildcard
@@ -392,35 +452,67 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
           SIRType.ByteString,
           PrimitiveRepresentation.Constant,
           anns.pos,
-          optTargetType
+          optTargetType,
+          optDataInputVar.map(dataInput =>
+              lvBuiltinApply(
+                SIRBuiltins.unBData,
+                dataInput,
+                SIRType.ByteString,
+                PrimitiveRepresentation.Constant,
+                anns.pos
+              )
+          )
         )
 
         lctx.scope = prevScope
 
-        lvCaseData(
-          loweredScrutinee,
-          constrTagVar,
-          constrArgsVar,
-          constrBranch,
-          mapEntriesVar,
-          mapBranchLv,
-          listElementsVar,
-          listBranchLv,
-          iValueVar,
-          iBranchLv,
-          bValueVar,
-          bBranchLv,
-          anns.pos,
-          optTargetType
-        )
+        optDataInputVar match {
+            case None =>
+                lvCaseData(
+                  loweredScrutinee,
+                  constrTagVar,
+                  constrArgsVar,
+                  constrBranch,
+                  mapEntriesVar,
+                  mapBranchLv,
+                  listElementsVar,
+                  listBranchLv,
+                  iValueVar,
+                  iBranchLv,
+                  bValueVar,
+                  bBranchLv,
+                  anns.pos,
+                  optTargetType
+                )
+            case Some(dataInputVar) =>
+                lvChooseData(
+                  dataInputVar,
+                  constrTagVar,
+                  constrArgsVar,
+                  constrBranch,
+                  mapEntriesVar,
+                  mapBranchLv,
+                  listElementsVar,
+                  listBranchLv,
+                  iValueVar,
+                  iBranchLv,
+                  bValueVar,
+                  bBranchLv,
+                  anns.pos,
+                  optTargetType
+                )
+        }
     }
 
-    /** Generate the Constr branch with two bound variables: tag and args. Lambda-bound variables
-      * for Case don't have an rhs - they receive their value from the Case instruction.
+    /** Generate the Constr branch with two bound variables: tag and args. For Case-on-Data
+      * (optDataInput is None) the variables are lambda-bound and have no rhs - they receive their
+      * values from the Case instruction. For chooseData, their rhs extracts the values via
+      * unConstrData + fstPair/sndPair, evaluated inside the branch when used.
       */
     private def genConstrBranch(
         sirCase: SIR.Case,
-        pos: SIRPosition
+        pos: SIRPosition,
+        optDataInput: Option[LoweredValue]
     )(using
         lctx: LoweringContext
     ): (IdentifiableLoweredValue, IdentifiableLoweredValue, LoweredValue) = {
@@ -435,13 +527,32 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
                 (lctx.uniqueVarName("_constr_tag"), lctx.uniqueVarName("_constr_args"))
         }
 
+        val pairType = SIRType.BuiltinPair(SIRType.Integer, SIRType.List(SIRType.Data.tp))
+
+        def unConstrPair(dataInput: LoweredValue): LoweredValue =
+            lvBuiltinApply(
+              SIRBuiltins.unConstrData,
+              dataInput,
+              pairType,
+              PrimitiveRepresentation.Constant,
+              pos
+            )
+
         val tagVarId = lctx.uniqueVarName(tagName)
         val tagVar = new VariableLoweredValue(
           id = tagVarId,
           name = tagName,
           sir = SIR.Var(tagName, SIRType.Integer, AnnotationsDecl(pos)),
           representation = PrimitiveRepresentation.Constant,
-          optRhs = None
+          optRhs = optDataInput.map(dataInput =>
+              lvBuiltinApply(
+                SIRBuiltins.fstPair,
+                unConstrPair(dataInput),
+                SIRType.Integer,
+                PrimitiveRepresentation.Constant,
+                pos
+              )
+          )
         )
         lctx.scope = lctx.scope.add(tagVar)
 
@@ -452,7 +563,15 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
           sir = SIR.Var(argsName, SIRType.List(SIRType.Data.tp), AnnotationsDecl(pos)),
           representation =
               SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
-          optRhs = None
+          optRhs = optDataInput.map(dataInput =>
+              lvBuiltinApply(
+                SIRBuiltins.sndPair,
+                unConstrPair(dataInput),
+                SIRType.List(SIRType.Data.tp),
+                SumCaseClassRepresentation.SumBuiltinList(SumCaseClassRepresentation.DataData),
+                pos
+              )
+          )
         )
         lctx.scope = lctx.scope.add(argsVar)
 
@@ -463,8 +582,10 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
         (tagVar, argsVar, body)
     }
 
-    /** Generate a branch with a single bound variable. Lambda-bound variables for Case don't have
-      * an rhs - they receive their value from the Case instruction.
+    /** Generate a branch with a single bound variable. For Case-on-Data (optRhs is None) the
+      * variable is lambda-bound and receives its value from the Case instruction. For chooseData,
+      * optRhs carries the un*Data extraction of the scrutinee, evaluated inside the branch when
+      * used.
       */
     private def genSingleArgBranch(
         sirCase: SIR.Case,
@@ -472,7 +593,8 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
         varType: SIRType,
         varRepr: LoweredValueRepresentation,
         pos: SIRPosition,
-        optTargetType: Option[SIRType]
+        optTargetType: Option[SIRType],
+        optRhs: Option[LoweredValue]
     )(using lctx: LoweringContext): (IdentifiableLoweredValue, LoweredValue) = {
         val prevScope = lctx.scope
 
@@ -489,7 +611,7 @@ object DataSirTypeGenerator extends SirTypeUplcConvertingGenerator {
           name = varName,
           sir = SIR.Var(varName, varType, AnnotationsDecl(pos)),
           representation = varRepr,
-          optRhs = None
+          optRhs = optRhs
         )
         lctx.scope = lctx.scope.add(boundVar)
 

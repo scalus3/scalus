@@ -1437,6 +1437,87 @@ case class ChooseListLoweredValue(
 
 }
 
+/** LoweredValue for ChooseData builtin (PlutusV1-V3).
+  *
+  * Uses the ChooseData builtin with delayed branches: Force(ChooseData data (Delay constr) (Delay
+  * map) (Delay list) (Delay i) (Delay b)).
+  *
+  * Unlike [[CaseDataLoweredValue]], the bound variables are not lambda parameters: each carries the
+  * corresponding un*Data extraction of the scrutinee as its rhs and is emitted inside the branch
+  * that uses it, so the extraction only runs when the branch is selected.
+  */
+case class ChooseDataLoweredValue(
+    dataInput: LoweredValue,
+    constrTagVar: IdentifiableLoweredValue,
+    constrArgsVar: IdentifiableLoweredValue,
+    constrBranch: LoweredValue,
+    mapEntriesVar: IdentifiableLoweredValue,
+    mapBranch: LoweredValue,
+    listElementsVar: IdentifiableLoweredValue,
+    listBranch: LoweredValue,
+    iValueVar: IdentifiableLoweredValue,
+    iBranch: LoweredValue,
+    bValueVar: IdentifiableLoweredValue,
+    bBranch: LoweredValue,
+    tp: SIRType,
+    repr: LoweredValueRepresentation,
+    inPos: SIRPosition
+) extends ComplexLoweredValue(
+      Set(
+        constrTagVar,
+        constrArgsVar,
+        mapEntriesVar,
+        listElementsVar,
+        iValueVar,
+        bValueVar
+      ),
+      dataInput,
+      constrBranch,
+      mapBranch,
+      listBranch,
+      iBranch,
+      bBranch
+    ) {
+
+    override def sirType: SIRType = tp
+
+    override def representation: LoweredValueRepresentation = repr
+
+    override def pos: SIRPosition = inPos
+
+    override def termInternal(gctx: TermGenerationContext): Term = {
+        import scalus.uplc.DefaultFun
+        import scalus.compiler.sir.lowering.Lowering.tpf
+        (!(DefaultFun.ChooseData.tpf $ dataInput.termWithNeededVars(gctx)
+            $ ~constrBranch.termWithNeededVars(gctx)
+            $ ~mapBranch.termWithNeededVars(gctx)
+            $ ~listBranch.termWithNeededVars(gctx)
+            $ ~iBranch.termWithNeededVars(gctx)
+            $ ~bBranch.termWithNeededVars(gctx))).withPosIfEmpty(pos)
+    }
+
+    override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
+        import Doc.*
+        ((text("chooseData") + space + dataInput.docRef(ctx) + space + text("of"))
+            + (line + text("Constr") + space + constrTagVar.docRef(ctx) + space + constrArgsVar
+                .docRef(ctx) + text(" ->") + (lineOrSpace + constrBranch.docRef(ctx)).nested(
+              2
+            )).grouped
+            + (line + text("Map") + space + mapEntriesVar.docRef(ctx) + text(
+              " ->"
+            ) + (lineOrSpace + mapBranch.docRef(ctx)).nested(2)).grouped
+            + (line + text("List") + space + listElementsVar.docRef(ctx) + text(
+              " ->"
+            ) + (lineOrSpace + listBranch.docRef(ctx)).nested(2)).grouped
+            + (line + text("I") + space + iValueVar.docRef(ctx) + text(
+              " ->"
+            ) + (lineOrSpace + iBranch.docRef(ctx)).nested(2)).grouped
+            + (line + text("B") + space + bValueVar.docRef(ctx) + text(
+              " ->"
+            ) + (lineOrSpace + bBranch.docRef(ctx)).nested(2)).grouped).aligned
+    }
+}
+
 object LoweredValue {
 
     class PrettyPrintingContext(
@@ -1841,8 +1922,89 @@ object LoweredValue {
             optTargetType: Option[SIRType] = None
         )(using lctx: LoweringContext): LoweredValue = {
 
-            val allBranches = Seq(constrBranch, mapBranch, listBranch, iBranch, bBranch)
+            val (resType, targetRepresentation, Seq(constrR, mapR, listR, iR, bR)) =
+                alignDataMatchBranches(
+                  Seq(constrBranch, mapBranch, listBranch, iBranch, bBranch),
+                  inPos,
+                  optTargetType
+                )
 
+            CaseDataLoweredValue(
+              scrutinee,
+              constrTagVar,
+              constrArgsVar,
+              constrR,
+              mapEntriesVar,
+              mapR,
+              listElementsVar,
+              listR,
+              iValueVar,
+              iR,
+              bValueVar,
+              bR,
+              resType,
+              targetRepresentation,
+              inPos
+            )
+        }
+
+        /** ChooseData analogue of [[lvCaseData]] for targets without Case-on-Data support (protocol
+          * version < vanRossemPV). The bound variables are expected to carry their un*Data
+          * extraction of the scrutinee as rhs.
+          */
+        def lvChooseData(
+            scrutinee: LoweredValue,
+            constrTagVar: IdentifiableLoweredValue,
+            constrArgsVar: IdentifiableLoweredValue,
+            constrBranch: LoweredValue,
+            mapEntriesVar: IdentifiableLoweredValue,
+            mapBranch: LoweredValue,
+            listElementsVar: IdentifiableLoweredValue,
+            listBranch: LoweredValue,
+            iValueVar: IdentifiableLoweredValue,
+            iBranch: LoweredValue,
+            bValueVar: IdentifiableLoweredValue,
+            bBranch: LoweredValue,
+            inPos: SIRPosition,
+            optTargetType: Option[SIRType] = None
+        )(using lctx: LoweringContext): LoweredValue = {
+
+            val (resType, targetRepresentation, Seq(constrR, mapR, listR, iR, bR)) =
+                alignDataMatchBranches(
+                  Seq(constrBranch, mapBranch, listBranch, iBranch, bBranch),
+                  inPos,
+                  optTargetType
+                )
+
+            ChooseDataLoweredValue(
+              scrutinee,
+              constrTagVar,
+              constrArgsVar,
+              constrR,
+              mapEntriesVar,
+              mapR,
+              listElementsVar,
+              listR,
+              iValueVar,
+              iR,
+              bValueVar,
+              bR,
+              resType,
+              targetRepresentation,
+              inPos
+            )
+        }
+
+        /** Unify branch types, upcast every branch to the common type and convert all branches to a
+          * common representation. Shared by [[lvCaseData]] and [[lvChooseData]].
+          */
+        private def alignDataMatchBranches(
+            allBranches: Seq[LoweredValue],
+            inPos: SIRPosition,
+            optTargetType: Option[SIRType]
+        )(using
+            lctx: LoweringContext
+        ): (SIRType, LoweredValueRepresentation, Seq[LoweredValue]) = {
             val resType = optTargetType.getOrElse {
                 allBranches.map(_.sirType).reduce { (t1, t2) =>
                     SIRUnify.topLevelUnifyType(t1, t2, SIRUnify.Env.empty.withUpcasting) match {
@@ -1868,26 +2030,9 @@ object LoweredValue {
               inPos
             )
 
-            val Seq(constrR, mapR, listR, iR, bR) =
-                branchesUpcasted.map(_.toRepresentation(targetRepresentation, inPos)).toSeq
+            val aligned = branchesUpcasted.map(_.toRepresentation(targetRepresentation, inPos))
 
-            CaseDataLoweredValue(
-              scrutinee,
-              constrTagVar,
-              constrArgsVar,
-              constrR,
-              mapEntriesVar,
-              mapR,
-              listElementsVar,
-              listR,
-              iValueVar,
-              iR,
-              bValueVar,
-              bR,
-              resType,
-              targetRepresentation,
-              inPos
-            )
+            (resType, targetRepresentation, aligned)
         }
 
         /** Low-level apply that skips automatic type/representation conversion.
