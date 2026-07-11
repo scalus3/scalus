@@ -124,6 +124,11 @@ final class SIRCompiler(
     private val StringContextSymbol = requiredModule("scala.StringContext")
     private val StringContextApplySymbol = StringContextSymbol.requiredMethod("apply")
     private val Tuple2Symbol = requiredClass("scala.Tuple2")
+    // scala.Predef.ArrowAssoc has no TASTy, so `a -> b` is special-cased to Tuple2(a, b).
+    // Match its `->` by symbol identity (there is no StdNames constant for `->`), so a
+    // user-defined `->` returning a Tuple2 is not caught by the special case (audit E7).
+    private val ArrowAssocClass = requiredClass("scala.Predef.ArrowAssoc")
+    private val ArrowAssocArrowMethod = ArrowAssocClass.requiredMethod("->")
     private val NothingSymbol = defn.NothingClass
     private val NullSymbol = defn.NullClass
     private val ByteStringModuleSymbol = requiredModule("scalus.uplc.builtin.ByteString")
@@ -3162,15 +3167,16 @@ final class SIRCompiler(
                 compileNewConstructor(env, f.tpe, tree.tpe.widen, args, tree)
             // a -> b (ArrowAssoc syntax for creating Tuple2)
             // ArrowAssoc is from scala-library 2.13.x (no TASTy),
-            // so we special-case it like Tuple2.apply
-            case Apply(Select(qual, name), immutable.List(rhs))
-                if name.show == "->" && tree.tpe.typeConstructor =:= Tuple2Symbol.typeRef =>
+            // so we special-case it like Tuple2.apply. Gate on the ArrowAssoc.-> symbol
+            // (not the name), so a user-defined `->` compiles by its own body (audit E7).
+            case Apply(sel @ Select(qual, _), immutable.List(rhs))
+                if sel.symbol == ArrowAssocArrowMethod =>
                 val lhs = qual match
                     case Apply(_, immutable.List(inner)) => inner // unwrap ArrowAssoc(a)
                     case _                               => qual
                 compileNewConstructor(env, tree.tpe, tree.tpe.widen, List(lhs, rhs), tree)
-            case Apply(TypeApply(Select(qual, name), _), immutable.List(rhs))
-                if name.show == "->" && tree.tpe.typeConstructor =:= Tuple2Symbol.typeRef =>
+            case Apply(TypeApply(sel @ Select(qual, _), _), immutable.List(rhs))
+                if sel.symbol == ArrowAssocArrowMethod =>
                 val lhs = qual match
                     case Apply(_, immutable.List(inner)) => inner
                     case _                               => qual
