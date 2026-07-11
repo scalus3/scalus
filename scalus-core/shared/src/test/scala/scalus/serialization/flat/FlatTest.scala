@@ -174,6 +174,16 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
         assert(l1 == lout1)
     }
 
+    test("encode/decode Long round-trips large values") {
+        val fl = summon[Flat[Long]]
+        def roundTrip(x: Long): Long =
+            val enc = EncoderState(fl.bitSize(x) / 8 + 1)
+            fl.encode(x, enc)
+            fl.decode(DecoderState(enc.result))
+        for x <- List(1L << 34, 1L << 40, 123456789012345L, -(1L << 40), (1L << 61) - 1) do
+            assert(roundTrip(x) == x, s"for $x")
+    }
+
     test("encode/decode two strings sequence") {
         val s1 = "A"
         val s2 = "B"

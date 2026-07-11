@@ -119,11 +119,11 @@ package object flat:
             var r = 0L
             var shl = 0
             while (w & 0x80) != 0 do
-                r = r | ((w & 0x7f) << shl)
+                r = r | ((w & 0x7f).toLong << shl)
                 shl += 7
                 w = decode.bits8(8)
 
-            r = r | ((w & 0x7f) << shl)
+            r = r | ((w & 0x7f).toLong << shl)
             zagZig(r)
 
     given Flat[BigInt] with
