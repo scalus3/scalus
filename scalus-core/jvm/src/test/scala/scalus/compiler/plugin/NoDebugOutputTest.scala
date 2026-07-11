@@ -4,12 +4,12 @@ import org.scalatest.funsuite.AnyFunSuite
 
 import java.io.{ByteArrayOutputStream, PrintStream}
 
-/** Audit finding M1 (compiler plugin audit): `SIRCompiler.compileDefDef` contained a leftover
-  * debug trigger `dd.symbol.fullName.toString == "b"` intended to flood stdout with compiler
-  * traces for a method named `b`. Investigation showed a method's `fullName` can never be exactly
-  * `"b"` from real source (local defs render as `V$._$b`, members as `Obj.b`), so the trigger was
-  * dead code; it was removed under this characterization test, which pins the general invariant:
-  * a clean compile with debug off produces no stdout at all.
+/** Audit finding M1 (compiler plugin audit): `SIRCompiler.compileDefDef` contained a leftover debug
+  * trigger `dd.symbol.fullName.toString == "b"` intended to flood stdout with compiler traces for a
+  * method named `b`. Investigation showed a method's `fullName` can never be exactly `"b"` from
+  * real source (local defs render as `V$._$b`, members as `Obj.b`), so the trigger was dead code;
+  * it was removed under this characterization test, which pins the general invariant: a clean
+  * compile with debug off produces no stdout at all.
   */
 class NoDebugOutputTest extends AnyFunSuite with SnippetCompilation {
 

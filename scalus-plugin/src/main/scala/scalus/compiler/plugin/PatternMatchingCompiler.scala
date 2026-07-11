@@ -1871,7 +1871,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                 if count <= 1 then SirCaseDecisionTree.EmbeddingType.Inline
                 else
                     val actionSize = SIR.size(a.sir)
-                    if actionSize * i <= 3 * a.bindedVariables.size + 4 then
+                    if actionSize * count <= 3 * a.bindedVariables.size + 4 then
                         // ApplyN(LamN(x1...xn, action(x1,..xn)) b1...bn),
                         SirCaseDecisionTree.EmbeddingType.Inline
                     else SirCaseDecisionTree.EmbeddingType.ByReference
@@ -1886,7 +1886,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                     if count <= 1 then SirCaseDecisionTree.EmbeddingType.Inline
                     else
                         val guardSize = SIR.size(g.sir)
-                        if guardSize * i <= 3 * g.bindedVariables.size + 4 then
+                        if guardSize * count <= 3 * g.bindedVariables.size + 4 then
                             // ApplyN(LamN(x1...xn, guard(x1,..xn)) b1...bn),
                             SirCaseDecisionTree.EmbeddingType.Inline
                         else SirCaseDecisionTree.EmbeddingType.ByReference

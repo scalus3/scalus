@@ -11,8 +11,8 @@ import java.nio.file.Files
   * before encoding and verifying the module, without try/finally — a failure in encode or the
   * roundtrip self-check leaked the stream and left a truncated `.sir` file that downstream units
   * would link against. The write was reordered to open the file only after a successful encode and
-  * self-check. This characterization test pins the happy path: a compiled `@Compile` trait writes
-  * a decodable `.sir` file.
+  * self-check. This characterization test pins the happy path: a compiled `@Compile` trait writes a
+  * decodable `.sir` file.
   */
 class SirFileWriteTest extends AnyFunSuite with SnippetCompilation {
 
