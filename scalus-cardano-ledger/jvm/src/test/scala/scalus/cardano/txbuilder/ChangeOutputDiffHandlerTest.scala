@@ -238,6 +238,55 @@ class ChangeOutputDiffHandlerTest extends AnyFunSuite with ScalaCheckPropertyChe
     }
 
     // ===================================
+    // Certificate deposit refund balancing
+    // ===================================
+
+    test("balances a transaction that deregisters a DRep registered in a prior tx") {
+        // A DRep registered in some previous transaction is being deregistered here.
+        // The deposit paid at registration (params.dRepDeposit) is refunded to the tx,
+        // so the balancer must count it on the consumed side or the change output ends up
+        // short by the deposit and the transaction fails value conservation.
+        val drepCred = Credential.KeyHash(AddrKeyHash.fromHex("dd" * 28))
+        val refund = Coin(params.dRepDeposit)
+
+        // The input alone is enough to fund a change output (so balancing succeeds either
+        // way); only value conservation against real ledger state reveals a missing refund.
+        val input = Input(Hash(platform.blake2b_256(utf8"drep-dereg")), 0)
+        val utxo = Map(input -> Output(address = testAddress, value = Value.ada(10)))
+
+        val tx = Transaction(
+          TransactionBody(
+            inputs = TaggedSortedSet(SortedSet(input)),
+            outputs = Vector(Sized(Output(testAddress, Value.zero))), // change output at index 0
+            fee = Coin.zero,
+            certificates = TaggedOrderedStrictSet(Certificate.UnregDRepCert(drepCred, refund))
+          ),
+          witnessSet = TransactionWitnessSet.empty
+        )
+
+        val balanced = TransactionBuilder
+            .balanceFeeAndChangeWithTokens(
+              tx,
+              Change.changeOutputDiffHandler(_, _, params, 0),
+              params,
+              utxo,
+              evaluator
+            )
+            .fold(err => fail(s"balancing failed: $err"), identity)
+
+        // The node validates conservation against real ledger state, where the DRep is
+        // registered with `refund` as its deposit.
+        val certState = CertState(vstate =
+            VotingState(dreps =
+                Map(drepCred -> DRepState(expiry = 0, anchor = None, refund, delegates = Set.empty))
+            )
+        )
+        val result =
+            ValueNotConservedUTxOValidator.validate(Context(), State(utxo, certState), balanced)
+        assert(result.isRight, s"transaction not balanced against real ledger state: $result")
+    }
+
+    // ===================================
     // FeesOkValidator tests
     // ===================================
 

@@ -957,11 +957,27 @@ object TransactionBuilder {
 
     def calculateChangeValue(tx: Transaction, utxo: Utxos, params: ProtocolParams): Value = {
         val produced = TxBalance.produced(tx, params)
-        // FIXME: CertState.empty means certificate refunds (UnregCert, UnregDRepCert, etc.)
-        // cannot be correctly calculated during balancing because the original deposit amounts
-        // are unknown. Consider adding certState parameter to balanceContext and propagating here.
-        val consumed = TxBalance.consumed(tx, CertState.empty, utxo, params).toTry.get
+        // During balancing we don't have the real ledger CertState, so DRep deregistration
+        // refunds (whose amounts live in ledger state) would be lost. Reconstruct the needed
+        // CertState from the amounts declared on the transaction's own deregistration
+        // certificates. The ledger enforces these declared amounts equal the actual deposits
+        // (GOVCERT `ConwayDRepIncorrectRefund`), so this yields exactly the refund a node
+        // computes. Stake-key refunds don't need this: `UnregCert` carries its refund explicitly
+        // and `TxBalance` already uses it.
+        val consumed = TxBalance.consumed(tx, certStateForBalancing(tx), utxo, params).toTry.get
         consumed - produced
+    }
+
+    /** Reconstructs the [[CertState]] needed to balance DRep deposit refunds from the
+      * deregistration certificates of `tx`. Only the deregistered DRep credentials are seeded,
+      * using the refund amount declared on each `UnregDRepCert`.
+      */
+    private def certStateForBalancing(tx: Transaction): CertState = {
+        val drepDeposits = tx.body.value.certificates.toSeq.collect {
+            case Certificate.UnregDRepCert(cred, refund) =>
+                cred -> DRepState(expiry = 0L, anchor = None, refund, delegates = Set.empty)
+        }.toMap
+        CertState(vstate = VotingState(dreps = drepDeposits))
     }
 
     // -------------------------------------------------------------------------
