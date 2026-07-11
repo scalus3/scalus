@@ -35,4 +35,14 @@ private[builtin] trait BuiltinValueApi {
     /** Convert from Data - stub, not used in plugin */
     def fromData(data: Data): BuiltinValue =
         throw new UnsupportedOperationException("BuiltinValue.fromData not available in plugin")
+
+    /** Entry-list view - stub, not used in plugin */
+    def toEntryList(value: BuiltinValue): List[(ByteString, List[(ByteString, BigInt)])] =
+        throw new UnsupportedOperationException("BuiltinValue.toEntryList not available in plugin")
+
+    /** Rebuild from entry list - stub, not used in plugin */
+    def fromEntryList(entries: List[(ByteString, List[(ByteString, BigInt)])]): BuiltinValue =
+        throw new UnsupportedOperationException(
+          "BuiltinValue.fromEntryList not available in plugin"
+        )
 }

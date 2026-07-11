@@ -41,6 +41,36 @@ private[builtin] trait BuiltinValueApi {
         s"BuiltinValue(${entries.mkString(", ")})"
     }
 
+    /** The value's entries in sorted key order: a list of `(currency, [(token, quantity)])`.
+      *
+      * This is the structure Plutus flat-encodes for a `Value` constant (`PlutusCore/Value.hs`,
+      * `Flat Value`) — used by the flat codec instead of the Data form (audit finding F2).
+      */
+    def toEntryList(value: BuiltinValue): List[(ByteString, List[(ByteString, BigInt)])] =
+        value.inner.iterator.map { case (currency, tokens) =>
+            (currency, tokens.iterator.toList)
+        }.toList
+
+    /** Rebuild a BuiltinValue from its entry list, maintaining the type invariants (no zero
+      * quantities, no empty inner maps) exactly like [[fromData]].
+      */
+    def fromEntryList(entries: List[(ByteString, List[(ByteString, BigInt)])]): BuiltinValue = {
+        val result = entries.foldLeft(
+          SortedMap.empty[ByteString, SortedMap[ByteString, BigInt]]
+        ) { case (acc, (currency, tokenList)) =>
+            val tokens = tokenList.foldLeft(SortedMap.empty[ByteString, BigInt]) {
+                case (tokenAcc, (token, amount)) =>
+                    // Skip zero amounts (maintain invariant)
+                    if amount != BigInt(0) then tokenAcc.updated(token, amount)
+                    else tokenAcc
+            }
+            // Skip empty token maps (maintain invariant)
+            if tokens.nonEmpty then acc.updated(currency, tokens)
+            else acc
+        }
+        unsafeFromInner(result)
+    }
+
     /** Convert BuiltinValue to Data representation.
       *
       * Data encoding: Map ByteString (Map ByteString Integer)

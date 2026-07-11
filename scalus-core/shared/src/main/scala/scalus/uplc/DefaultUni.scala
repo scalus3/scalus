@@ -102,21 +102,23 @@ object DefaultUni:
             def encode(a: Any, encode: scalus.serialization.flat.EncoderState): Unit = error()
             def decode(decode: scalus.serialization.flat.DecoderState): Any = error()
 
-    // Flat instance for BuiltinValue - serializes through Data encoding
-    private def builtinValueFlat(using Flat[builtin.Data]): Flat[builtin.BuiltinValue] =
+    // Flat instance for BuiltinValue - structural encoding matching Plutus `Flat Value`
+    // (PlutusCore/Value.hs): a list of (currency, list of (token, quantity)) in sorted key order,
+    // built from the existing list/pair/ByteString/Integer flat instances (audit finding F2).
+    private def builtinValueFlat: Flat[builtin.BuiltinValue] =
         new Flat[builtin.BuiltinValue]:
             import scalus.serialization.flat.{DecoderState, EncoderState}
-            val dataFlat = summon[Flat[builtin.Data]]
+            type Entries = List[(builtin.ByteString, List[(builtin.ByteString, BigInt)])]
+            val entriesFlat = summon[Flat[Entries]]
 
             def bitSize(a: builtin.BuiltinValue): Int =
-                dataFlat.bitSize(builtin.BuiltinValue.toData(a))
+                entriesFlat.bitSize(builtin.BuiltinValue.toEntryList(a))
 
             def encode(a: builtin.BuiltinValue, encoder: EncoderState): Unit =
-                dataFlat.encode(builtin.BuiltinValue.toData(a), encoder)
+                entriesFlat.encode(builtin.BuiltinValue.toEntryList(a), encoder)
 
             def decode(decoder: DecoderState): builtin.BuiltinValue =
-                val data = dataFlat.decode(decoder)
-                builtin.BuiltinValue.fromData(data)
+                builtin.BuiltinValue.fromEntryList(entriesFlat.decode(decoder))
 
     def encodeUni(uni: DefaultUni): List[Int] =
         uni match
