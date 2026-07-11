@@ -153,6 +153,54 @@ object Example {
 }
 ```
 
+## Cross-Language Interop Style
+
+New public code and refactorings in the **designated interop packages** (the
+ledger domain objects — `Transaction`, `TransactionOutput`, `Value`, … — plus
+`Data`/`ToData`/`FromData`, `TxBuilder`, `Emulator`, `PlutusVM`) must follow the
+cross-language interop guide so the API stays usable from Java/Kotlin/JavaScript.
+Full design: `docs/superpowers/specs/2026-07-11-cross-language-interop-style-guide-design.md`.
+
+**Decision rule:** if the interop-friendly form is equally good Scala, make it the
+only form (Tier 0). If it degrades Scala ergonomics, put it in a per-platform
+`<ClassName>Platform` trait instead.
+
+**Tier 0 — author directly into the shared public type (no Scala cost):**
+
+- No default parameters on public APIs — provide explicit overloads instead
+  (Java/Kotlin can't use `$default$`; Scala.js default-param export is buggy).
+- `@scala.annotation.varargs` on public vararg methods.
+- Keep symbolic operators (`+`, `unary_-`) but add named aliases (`def plus`,
+  `def negate`).
+- Public factories return concrete types (no `Product`/path-dependent/`IterableOnce`).
+- For every public `given` codec (`ToData`/`FromData`/`Encoder`/`Decoder`), also
+  expose a non-implicit entry (`Foo.toData(x)`, `Foo.fromData(d)`).
+- Public callback types are `@FunctionalInterface` single-method interfaces.
+- No `using`/context params on public entry points — take them as ordinary
+  parameters, with a Scala overload that supplies the `given` (see `fromCbor`).
+
+**Tier 1 — per-platform `<ClassName>Platform` mixin (only for divergent members):**
+
+`shared/` classes can't gain instance methods from platform-only files, so
+divergent Java/JS members go in a trait of the same FQN with a different body per
+platform (same idiom as `scalus.uplc.builtin.platform`):
+
+```scala
+case class Transaction(...) extends TransactionPlatform          // shared/
+// jvm/: full Java idiom (orNull getters, java.util.List, builders)
+// js/:  full JS idiom (@JSExport, js.Array, Long/BigInt -> String)
+// native/: empty
+private[ledger] trait TransactionPlatform extends InteropApi { self: Transaction => ... }
+```
+
+Every platform trait extends the shared marker `InteropApi` and must exist on
+every platform the class compiles to (empty is fine).
+
+**Stability:** interop packages are the MiMa-stable surface; route churn-prone
+additions into `*.internal` subpackages. `InteropSurfaceTest` mechanically
+enforces the rules. Internal/compiler/prelude code is out of scope — stays fully
+idiomatic Scala.
+
 ## Commit Guidelines
 
 - Use conventional commit style: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
