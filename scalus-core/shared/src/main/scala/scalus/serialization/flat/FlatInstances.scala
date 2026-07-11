@@ -490,21 +490,21 @@ object FlatInstances:
         }
 
         override def bitSizeHC(a: SIRType, hashConsed: HashConsed.State): Int =
-            // println(s"SIRTypeHashConsedFlat.bisSizeHC start ${a.hashCode()} ${a}")
-            var mute = true
-            val retval = a match
+            a match
                 case _: SIRType.Primitive =>
                     tagWidth
                 case cc: SIRType.CaseClass =>
                     tagWidth + SIRTypeCaseClassFlat.bitSizeHC(cc, hashConsed)
                 case scc: SIRType.SumCaseClass =>
-                    tagWidth + SIRTypeSumCaseClassFlat.bitSizeHC(scc, hashConsed)
+                    // The Data type is encoded as a bare tag (see encodeHC), so its size is
+                    // just the tag width — mirror that here.
+                    if scc.decl.name == SIRType.Data.name then tagWidth
+                    else tagWidth + SIRTypeSumCaseClassFlat.bitSizeHC(scc, hashConsed)
                 case fun: SIRType.Fun =>
                     val fromSize = SIRTypeHashConsedFlat.bitSizeHC(fun.in, hashConsed)
                     val toSize = SIRTypeHashConsedFlat.bitSizeHC(fun.out, hashConsed)
                     tagWidth + fromSize + toSize
                 case aType: SIRType.TypeVar =>
-                    mute = true
                     tagWidth +
                         summon[HashConsedFlat[SIRType.TypeVar]].bitSizeHC(aType, hashConsed)
                 case SIRType.TypeLambda(params, body) =>
@@ -512,7 +512,6 @@ object FlatInstances:
                         .bitSizeHC(params, hashConsed) +
                         bitSizeHC(body, hashConsed)
                 case SIRType.FreeUnificator =>
-                    mute = true
                     tagWidth
                 case tp: SIRType.TypeProxy =>
                     tagWidth + SIRTypeTypeProxyFlat.bitSizeHC(tp, hashConsed)
@@ -522,9 +521,6 @@ object FlatInstances:
                 case SIRType.Annotated(tp, anns) =>
                     tagWidth + bitSizeHC(tp, hashConsed) +
                         AnnotationsDeclFlat.bitSizeHC(anns, hashConsed)
-            if !mute then
-                println(s"SIRTypeHashConsedFlat.bisSizeHC end ${a.hashCode()} $a =${retval}")
-            retval
 
         override def encodeHC(a: SIRType, encode: HashConsedEncoderState): Unit =
             // println(s"SIRTypeHashConsedFlat.encodeHC:start ${a.hashCode()} $a, pos=${encode.encode.bitPosition()}")
@@ -642,7 +638,7 @@ object FlatInstances:
                     SIRTypeHashConsedRef.fromData(SIRType.BLS12_381_MlResult)
                 case `tagBuiltinValue` =>
                     SIRTypeHashConsedRef.fromData(SIRType.BuiltinValue)
-                case _ => throw new IllegalStateException(s"Invalid SIRType tag: $tag")
+                case _ => throw new IllegalStateException(s"Invalid SIRType tag: $ctag")
 
     object TypeBindingFlat extends HashConsedReprFlat[TypeBinding, HashConsedRef[TypeBinding]]:
 
@@ -669,11 +665,7 @@ object FlatInstances:
             val tp = SIRTypeHashConsedFlat.decodeHC(decode)
             val annotations = AnnotationsDeclFlat.decodeHC(decode)
             HashConsedRef.deferred((hs, l, p) =>
-                try TypeBinding(name, tp.finValue(hs, l, p), annotations.finValue(hs, l, p))
-                catch
-                    case NonFatal(ex) =>
-                        println(s"Can;t decopde TypeBinging $name")
-                        throw ex
+                TypeBinding(name, tp.finValue(hs, l, p), annotations.finValue(hs, l, p))
             )
         }
 
@@ -896,6 +888,7 @@ object FlatInstances:
                         val v = ref.finValue(hs, l + 1, ps)
                         v match
                             case proxy: SIRType.TypeProxy => proxy
+                            case p: SIRType.Primitive     => p
                             case _                        => SIRType.TypeProxy(v)
                     })
                 case Some(Right(a)) =>
@@ -903,6 +896,7 @@ object FlatInstances:
                         val v = a.finValue(hs, l + 1, ps).asInstanceOf[SIRType]
                         v match
                             case tpv: SIRType.TypeProxy => tpv
+                            case p: SIRType.Primitive   => p
                             case other                  => SIRType.TypeProxy(other)
                     })
 
@@ -1055,6 +1049,8 @@ object FlatInstances:
                           anns.finValue(hs, l, p)
                         )
                     )
+                case _ =>
+                    throw new IllegalStateException(s"Invalid SIR.Case pattern tag: $patternTag")
         }
     }
 
