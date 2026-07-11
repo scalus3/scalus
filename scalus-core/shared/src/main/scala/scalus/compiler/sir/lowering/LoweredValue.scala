@@ -3030,14 +3030,38 @@ object LoweredValue {
 
         }
 
-        val (alignedArg, changed) = alignWithChange(arg, targetType, targetRepresentation)
+        // A misaligned function value is rebuilt by `alignWithChange` as
+        // `λx. arg (convert x)` with `arg` embedded in the wrapper body. UPLC is
+        // call-by-value and Scala evaluates the expression exactly once, so a
+        // non-trivial `arg` (e.g. a partial application) must be bound to a strict
+        // variable outside the wrapper — otherwise its evaluation (errors, traces,
+        // cost) is deferred to the first call and repeated on every call (audit
+        // finding L3). Effortless values (variables, literal lambdas) are embedded
+        // as-is.
+        val needsStrictBinding = SIRType.isPolyFunOrFun(arg.sirType) && !arg.isEffortLess
+        val (alignInput, optHoistedVar) =
+            if needsStrictBinding then
+                val vId = lctx.uniqueVarName("alignedFun")
+                val v = VariableLoweredValue(
+                  id = vId,
+                  name = vId,
+                  sir = SIR.Var(vId, arg.sirType, AnnotationsDecl(inPos)),
+                  representation = arg.representation
+                )
+                (v, Some(v))
+            else (arg, None)
+
+        val (alignedArg, changed) = alignWithChange(alignInput, targetType, targetRepresentation)
 
         if lctx.debug then {
             lctx.log(
               s"alignTypeArgumentsAndRepresentations: alignedArg.type = ${alignedArg.sirType.show}, changed = $changed"
             )
         }
-        if changed then alignedArg
+        if changed then
+            optHoistedVar match
+                case Some(v) => LetNonRecLoweredValue(List((v, arg)), alignedArg, inPos)
+                case None    => alignedArg
         else arg
 
     }
