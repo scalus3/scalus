@@ -759,15 +759,17 @@ final class SIRCompiler(
         val pathParts = className.split('.')
         val dir = pathParts.init.foldLeft(outputDirectory)(_.subdirectoryNamed(_))
         val filename = pathParts.last
-        val output = dir.fileNamed(filename + suffix).bufferedOutput
         val fl = summon[Flat[Module]]
         val bitSize = fl.bitSize(module)
         val enc = EncoderState(bitSize / 8 + 1)
         fl.encode(module, enc)
         enc.filler()
         verifyModuleRoundtrip(module, enc.buffer, className)
-        output.write(enc.buffer)
-        output.close()
+        // open the file only after encoding and the self-check succeeded, so a failure
+        // cannot leak the stream or leave a truncated .sir for downstream units to link
+        val output = dir.fileNamed(filename + suffix).bufferedOutput
+        try output.write(enc.buffer)
+        finally output.close()
     }
 
     /** The module file is linked into downstream compilation units, which cannot detect a
