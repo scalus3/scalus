@@ -673,6 +673,17 @@ object FlatInstances:
 
     given HashConsedFlat[SIRType.TypeVar] with
 
+        // FIXME (audit S2, deferred to 0.19.0): the optId codec below is buggy.
+        //   1. `Some(0L)` encodes as 0 and decodes back as `None` (see decodeHC) — the two are
+        //      indistinguishable. Reachable today because `NoSymbol.hashCode == 0` (audit T3).
+        //   2. `bitSizeHC` sizes `optId.getOrElse(0L) + 1` while `encodeHC` writes `optId.getOrElse(0L)`,
+        //      so the size is under-estimated for negative ids (e.g. -65) → possible encode-time
+        //      buffer overflow if ids ever go negative.
+        // The fix is a presence-bit layout (1 bit "has id" + the id only when present), but that
+        // changes the SIR module wire format and so requires a major `SIRVersion` bump (5 -> 6),
+        // which is a breaking change. Deferred out of the 0.18.x patch line: apply together with
+        // the `SIRVersion` bump when cutting 0.19.0.
+
         // Two-bit kind tag: 0 = Transparent, 1 = Unwrapped, 2 = Fixed.
         // (Was a 1-bit Boolean before Unwrapped existed — all SIR modules must be
         // recompiled after this change.)
