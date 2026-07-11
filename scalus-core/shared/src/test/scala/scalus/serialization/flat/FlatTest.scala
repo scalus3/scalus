@@ -151,6 +151,14 @@ class FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryI
         }
     }
 
+    test("EncoderState.result includes the trailing partial byte") {
+        val enc = EncoderState(2)
+        enc.bits(4, 0x0b) // 1011____
+        val result = enc.result
+        assert(result.length == 1)
+        assert(result(0) == 0xb0.toByte)
+    }
+
     test("Zagzig/zigZag Int") {
         assert(zigZag(0) == 0 && zigZag(-1) == 1 && zigZag(1) == 2 && zigZag(-2) == 3)
         for n <- List(Int.MinValue, Int.MaxValue, 1 << 30, -(1 << 30), (1 << 30) + 1) do

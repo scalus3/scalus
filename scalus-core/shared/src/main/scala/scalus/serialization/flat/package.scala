@@ -308,10 +308,14 @@ package object flat:
         var usedBits: Int = 0
         var currentByte: Int = 0
 
+        /** The bytes encoded so far, including a trailing partially-filled byte if any (unused low
+          * bits are zero).
+          */
         def result: Array[Byte] =
             val len = if usedBits == 0 then nextPtr else nextPtr + 1
             val result = new Array[Byte](len)
-            System.arraycopy(buffer, 0, result, 0, len)
+            System.arraycopy(buffer, 0, result, 0, nextPtr)
+            if usedBits != 0 then result(nextPtr) = currentByte.toByte
             result
 
         override def toString: String =
@@ -419,4 +423,4 @@ package object flat:
         private def dropBits(numBits: Int): Unit =
             val totUsed = numBits + this.usedBits
             this.usedBits = totUsed % 8
-            this.currPtr += Math.floor(totUsed / 8).toInt
+            this.currPtr += totUsed / 8
