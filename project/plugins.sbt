@@ -9,12 +9,12 @@ addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.3.2")
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.1")
 addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.11.2")
 // show welcome message
-addSbtPlugin("com.github.reibitto" % "sbt-welcome" % "0.5.0")
+addSbtPlugin("com.github.reibitto" % "sbt-welcome" % "0.6.0")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
 // sbt plugin to unify scaladoc/javadoc across multiple projects
 addSbtPlugin("com.github.sbt" % "sbt-unidoc" % "0.6.1")
 // Migration Manager for Scala
-addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.5")
+addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.6")
 // buildinfo
 addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.13.1")
 // shared-source shim used by scalus-sbt-plugin (compiled here via unmanagedSourceDirectories below)

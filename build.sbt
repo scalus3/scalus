@@ -25,6 +25,7 @@ val slf4jVersion = "2.0.18"
 val magnoliaVersion = "1.3.21"
 val pprintVersion = "0.9.6"
 val monocleVersion = "3.3.0"
+val jsoniterScalaVersion = "2.38.16"
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
@@ -428,8 +429,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       libraryDependencies += "org.typelevel" %%% "cats-parse" % "1.1.0",
       libraryDependencies += "org.typelevel" %%% "paiges-core" % "0.4.4",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % "2.38.15",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % "2.38.15" % "compile",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-core" % jsoniterScalaVersion,
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %%% "jsoniter-scala-macros" % jsoniterScalaVersion % "compile",
       libraryDependencies ++= Seq(
         "io.bullet" %%% "borer-core" % borerVersion,
         "io.bullet" %%% "borer-derivation" % borerVersion
@@ -892,8 +893,8 @@ lazy val scalusEthereumKzgCeremony = project
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       name := "scalus-ethereum-kzg-ceremony",
       scalacOptions ++= commonScalacOptions,
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % "2.38.15",
-      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % "2.38.15" % "compile",
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterScalaVersion,
+      libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-macros" % jsoniterScalaVersion % "compile",
     )
 
 lazy val scalusCardanoLedgerIt = project
