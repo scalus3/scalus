@@ -1,6 +1,6 @@
 //resolvers += Resolver.sonatypeCentralSnapshots
 // Scala.js
-addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.21.0")
+addSbtPlugin("org.scala-js" % "sbt-scalajs" % "1.22.0")
 addSbtPlugin("org.portable-scala" % "sbt-scalajs-crossproject" % "1.3.2")
 // Scala Native
 addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.5.12")
