@@ -225,8 +225,8 @@ class SIRTyper(using Context) {
             case tpc: ConstantType =>
                 // hmm, widen should have taken care of this
                 sirTypeInEnvWithErr(tpc.widen, env)
-            case _: SuperType =>
-                ???
+            case tpc: SuperType =>
+                unsupportedType(tpc, "SuperType", env)
             case tpc: RefinedType =>
 //                println(s"RefinedType ${tpc.show}")
                 if tpc <:< defn.PolyFunctionType then {
@@ -407,7 +407,7 @@ class SIRTyper(using Context) {
 
     private def makeSIRClassTypeNoTypeArgs(tp: Type, env: SIRTypeEnv): SIRType = {
         // println(s"makeSIRClassTypeNoTypeArgs ${tp.show}")
-        if defn.isFunctionType(tp) then makeFunTypeLambda(tp)
+        if defn.isFunctionType(tp) then makeFunTypeLambda(tp, env)
         else makeSIRNonFunClassType(tp, Nil, env)
     }
 
@@ -471,7 +471,7 @@ class SIRTyper(using Context) {
                     retval
                 else unsupportedType(tp, "AppliedType as function", env)
             case _ =>
-                ???
+                unsupportedType(tp, "as function type", env)
     }
 
     private def findClassInAndType(andType: AndType): Option[Type] = {
@@ -1056,7 +1056,8 @@ class SIRTyper(using Context) {
         makeUnaryFun(params, res, env)
     }
 
-    private def makeFunTypeLambda(fn: Type): SIRType = ???
+    private def makeFunTypeLambda(fn: Type, env: SIRTypeEnv): SIRType =
+        unsupportedType(fn, "function type lambda", env)
 
     private def typeError(
         tpe: Type,

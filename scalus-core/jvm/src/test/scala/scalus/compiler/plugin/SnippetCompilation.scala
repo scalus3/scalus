@@ -26,6 +26,26 @@ trait SnippetCompilation {
     protected def compileSnippet(source: String): List[String] =
         compileSnippetWithOutput(source)._1
 
+    /** Like [[compileSnippet]], but tolerates an exception escaping the compiler (a plugin crash):
+      * returns the diagnostics collected before the crash together with the escaped exception, if
+      * any. Lets tests assert that an error was reported even while crash containment is not yet
+      * implemented.
+      */
+    protected def compileSnippetAllowingCrash(
+        source: String
+    ): (List[String], Option[Throwable]) = {
+        try
+            val (errors, _) = compileSnippetWithOutput(source)
+            (errors, None)
+        catch
+            case scala.util.control.NonFatal(ex) =>
+                (lastReporterErrors, Some(ex))
+    }
+
+    // stashed by compileSnippetWithOutput so compileSnippetAllowingCrash can recover
+    // diagnostics reported before a compiler crash
+    private var lastReporterErrors: List[String] = Nil
+
     /** Compile `source` with the Scalus plugin and return the error messages together with the
       * class output directory, so tests can inspect the compiled classes (e.g. load the generated
       * `sirModule`).
@@ -40,17 +60,19 @@ trait SnippetCompilation {
         Files.writeString(src, source)
         val out = Files.createDirectories(dir.resolve("out"))
         val reporter = new ErrorCollector
-        new Driver().process(
-          Array(
-            s"-Xplugin:$pluginJar",
-            "-classpath",
-            classpath,
-            "-d",
-            out.toString,
-            src.toString
-          ),
-          reporter
-        )
+        try
+            new Driver().process(
+              Array(
+                s"-Xplugin:$pluginJar",
+                "-classpath",
+                classpath,
+                "-d",
+                out.toString,
+                src.toString
+              ),
+              reporter
+            )
+        finally lastReporterErrors = reporter.collected.toList
         (reporter.collected.toList, out)
     }
 }
