@@ -1,6 +1,6 @@
 # Blueprint generation: committed pin artifacts (Aiken-style), caching, per-contract + aggregate
 
-Date: 2026-06-28 (revised 2026-07-03)
+Date: 2026-06-28 (revised 2026-07-11)
 Status: Design — decisions resolved, pending user review of this spec
 Scope: `scalus-sbt-plugin` + a small additive `scalus-core` helper
 
@@ -51,7 +51,14 @@ Blueprints should become **committed pin artifacts**, adopting Aiken's model whe
   `license?`. `compiler = CompilerInfo(name, version)` — currently `{name:"scalus", version:<BuildInfo>}`.
 - Aiken (`../aiken`): hard default `plutus.json` at project root; all validators in one file; compiler
   name+version (incl. git hash) recorded **inside** the file; filename always stable.
-- Scala version is available to the sbt plugin as `scalaVersion`; it is **not** currently in the JSON.
+- **Version provenance sources (settled):**
+  - *Scalus version* = `scalus.utils.BuildInfo.version` (sbt-buildinfo, `buildInfoPackage := "scalus.utils"`,
+    `build.sbt:444-447`). This is already what each per-contract preamble's `compiler.version` uses
+    (`CompilerInfo.currentScalus`), so the plugin does **not** parse it from JSON; the scalus-core
+    `BlueprintTool` reads `BuildInfo.version` directly for the aggregate.
+  - *Scala version* = the sbt plugin's `scalaVersion.value` (the toolchain compiling the **contracts**,
+    which sets the UPLC baseline). Note `BuildInfo.scalaVersion` is the version *scalus-core* was built
+    with — the wrong one — so it must not be used here.
 
 ## Design
 
@@ -72,8 +79,8 @@ Blueprints should become **committed pin artifacts**, adopting Aiken's model whe
      the JAR at resource root `/plutus.json` (so JVM consumers can load the aggregate by a known path).
      Both committed; same content. *(Decision A.)*
    - Project-level preamble: `title` = sbt `name`, `version` = sbt `version`,
-     `compiler = {name:"scalus", version:<scalusVersion>}`, `scalaVersion` = sbt `scalaVersion`,
-     `plutusVersion` from the contracts.
+     `compiler = {name:"scalus", version: BuildInfo.version}` (read inside `BlueprintTool`),
+     `scalaVersion` = sbt `scalaVersion.value`, `plutusVersion` from the contracts.
    - `validators` = concatenation of every contract's validators (each retains its own title/description).
 
 ### Generation, caching, pruning
@@ -110,16 +117,19 @@ scalus-core (already on the reflection classpath) and call it reflectively with 
 
 ```
 object BlueprintTool:
-  // returns merged CIP-57 JSON; java types for safe cross-classloader reflection
+  // merges validators into one CIP-57 doc; project preamble compiler = BuildInfo.version (internal).
+  // java types for safe cross-classloader reflection. scalaVersion is the downstream toolchain.
   def aggregate(jsons: java.util.List[String], title: String, version: String,
-                scalusVersion: String, scalaVersion: String): String
+                scalaVersion: String): String
   // returns the same per-contract blueprint JSON with preamble.scalaVersion stamped in
   def stampScalaVersion(json: String, scalaVersion: String): String
 ```
 
-Also add an optional `Preamble.scalaVersion: Option[String]` field (*Decision B*). Per-contract files are
-stamped via `stampScalaVersion`; the aggregate gets it from `aggregate`. So every blueprint records its
-full toolchain provenance (Scalus in `compiler.version`, Scala in `scalaVersion`).
+`aggregate` reads the Scalus version from `BuildInfo.version` itself (same source the per-contract
+preambles already use), so the plugin only supplies the downstream `scalaVersion` and the project
+title/version. Also add an optional `Preamble.scalaVersion: Option[String]` field (*Decision B*):
+per-contract files are stamped via `stampScalaVersion`; the aggregate sets it in `aggregate`. Every
+blueprint then records full toolchain provenance — Scalus in `compiler.version`, Scala in `scalaVersion`.
 
 ### Touched code
 
