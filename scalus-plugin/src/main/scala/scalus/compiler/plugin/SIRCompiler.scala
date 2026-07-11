@@ -391,10 +391,29 @@ final class SIRCompiler(
           debug = options.debugLevel > 0 || annotDebugLevel > 0,
         )
 
-        val bindings = tpl.body.flatMap { tree =>
-            compileTreeInModule(baseEnv, td, tree).map { lb =>
-                Binding(lb.fullName.name, lb.tp, lb.body)
+        val localBindings = tpl.body.flatMap { tree =>
+            compileTreeInModule(baseEnv, td, tree)
+        }
+        // Module bindings are keyed by FullName with no signature, so overloaded
+        // methods collide: the second silently overwrites the first, or lowering
+        // dies later with a baffling "Cannot unify result type of apply". Reject
+        // genuine overloads with a clear error (audit finding E5). Extension methods
+        // legitimately share a name (resolved by receiver type at the call site), so
+        // they are exempt; synthetic val getters are already filtered in
+        // compileTreeInModule.
+        localBindings
+            .filterNot(_.symbol.is(Flags.ExtensionMethod))
+            .groupBy(_.fullName.name)
+            .foreach { case (name, lbs) =>
+                if lbs.sizeIs > 1 then
+                    report.error(
+                      s"Overloaded definitions are not supported in a compiled object: '$name' " +
+                          s"has ${lbs.size} definitions. Give each a distinct name.",
+                      lbs.last.pos
+                    )
             }
+        val bindings = localBindings.map { lb =>
+            Binding(lb.fullName.name, lb.tp, lb.body)
         }
 
         // val bindings = localBindings.foldRight(List.empty[LocalBinding]) {
