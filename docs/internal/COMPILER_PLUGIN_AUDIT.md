@@ -72,14 +72,14 @@ Steps 1–2 + 5 are mechanical and mostly low-risk; step 3 is a small wrapper. T
 
 | # | Location | Finding | Fix risk |
 |---|---|---|---|
-| M1 | `SIRCompiler.scala:1375` **[verified]** | `val debug = env.debug \|\| dd.symbol.fullName.toString == "b"` — leftover debug trigger: any user method named `b` at root level floods stdout with compile traces. | **Low** — delete the `\|\| … == "b"` |
-| M2 | `PatternMatchingCompiler.scala:1870, 1885` **[verified]** | Inline/by-reference embedding heuristic multiplies size by the loop **index** `i` instead of the usage `count` (computed on the line above and only used for `count <= 1`). Action/guard #0 always inlines regardless of size; later ones get an index-dependent, meaningless decision. Script-size regression, not a semantic bug. | **Low** — change `i` to `count`. Note: re-measure pinned ExUnits baselines on both compiler generations after this |
+| M1 | `SIRCompiler.scala:1375` **[verified]** **[FIXED]** | `val debug = env.debug \|\| dd.symbol.fullName.toString == "b"` — leftover debug trigger. Follow-up investigation: a method's `fullName` can never be exactly `"b"` from real source (local defs render as `V$._$b`), so the trigger was dead; removed under the `NoDebugOutputTest` characterization (clean compile with debug off → zero stdout). | Fixed |
+| M2 | `PatternMatchingCompiler.scala:1870, 1885` **[verified]** **[FIXED]** | Inline/by-reference embedding heuristic multiplied size by the loop **index** `i` instead of the usage `count` — action/guard #0 always inlined regardless of size, duplicating large shared or-pattern actions. Fixed (`i` → `count` at both sites); regression test `PatternActionEmbeddingTest`. Clean `scalusExamplesJVM` run showed no ExUnits baseline drift. | Fixed |
 | M3 | `SIRCompiler.scala:3969-3984` | `extractResultType` doesn't recurse through curried `MethodType`s (the recursive version is commented out with a TODO), so `FromData`/`ToData`/functional-interface result detection inspects the wrong type for multi-parameter-list methods. | **Medium** — needs recursion + regression check of annotation-driven dispatch |
 | M4 | `Plugin.scala:238-243` | Blueprint manifest read swallows *any* `Exception` → returns empty set → one transient read failure silently wipes manifest entries contributed by all other source files. | **Low** — narrow catch, log a warning |
 | M5 | `Plugin.scala:204-251` | Deleted-source pruning never happens (doc comment claims it does): entries are only pruned when a file is *recompiled*; deleting a Contract source leaves a stale manifest line forever. | **Invasive** — needs reconciliation on full builds |
-| M6 | `SIRTyper.scala:229, 474, 1060` | Three `???` landmines (`SuperType`, `makeSIRFunType` fallback, `makeFunTypeLambda`) crash with unpositioned `NotImplementedError` instead of `unsupportedType`. | **Low** |
+| M6 | `SIRTyper.scala:229, 474, 1060` **[FIXED]** | Three `???` landmines (`SuperType`, `makeSIRFunType` fallback, `makeFunTypeLambda`) crashed with unpositioned `NotImplementedError` and no diagnostic. Replaced with `unsupportedType`; reachable repro (function type nested in an intersection of non-class components) covered by `UnsupportedTypeErrorTest`. The compile still aborts via the `TypingException` rethrow — full crash containment is the §1 work. | Fixed |
 | M7 | `SIRTyper.scala:375` | `TypeVar` symbol code is `binder.typeSymbol.hashCode() + idx` — distinct type params can collide, making unification treat two different type vars as equal. Known (adjacent `TODO: make SymCode long`; related to the deferred flat-serialization TypeVar fix). | **Invasive** — widen to Long across all TypeVar construction |
-| M8 | `SIRCompiler.scala:747-762` **[verified]** | `writeModule` opens `output` with no `try/finally`: if encode/roundtrip-verify/write throws, the stream leaks and a truncated `.sir` may be left for downstream units to link against. (Contrast the manifest write at `Plugin.scala:246-250`, which does use `try/finally`.) | **Low** — open the stream after encoding succeeds, wrap write/close in `try/finally` |
+| M8 | `SIRCompiler.scala:747-762` **[verified]** **[FIXED]** | `writeModule` opened `output` before encode/roundtrip-verify with no `try/finally` — a failure leaked the stream and left a truncated `.sir`. Fixed: the file is opened only after a successful encode + self-check, write/close in `try/finally`. Happy path pinned by `SirFileWriteTest`. | Fixed |
 
 ### Low
 
@@ -130,11 +130,11 @@ Ordered by value; all are small, behavior-narrow diffs:
 
 1. **H1** — ~~remove `RuntimeException("NonWildcardInnerPattern")` + printlns~~ **done** (incl. the reachable extractor-arity crash).
 2. **H2** — ~~fix swapped/duplicate branches in `SIRTyper.scala:636-646`~~ **done**.
-3. **M1** — remove the `== "b"` debug trigger.
-4. **M6** — replace the three `???` in SIRTyper with `unsupportedType`.
-5. **M8** — `try/finally` (encode-before-open) in `writeModule`.
+3. **M1** — ~~remove the `== "b"` debug trigger~~ **done**.
+4. **M6** — ~~replace the three `???` in SIRTyper with `unsupportedType`~~ **done**.
+5. **M8** — ~~`try/finally` (encode-before-open) in `writeModule`~~ **done**.
 6. **M4** — narrow the manifest-read catch + warn.
-7. **M2** — `i` → `count` in embedding heuristics. *Caveat: may change generated script sizes → re-measure dual ExUnits baselines (pre-3.8 and 3.8+) before merging.*
+7. **M2** — ~~`i` → `count` in embedding heuristics~~ **done** (clean examples run showed no ExUnits drift on 3.3.8; re-check on 3.8.x in CI).
 8. **L1-L4** — delete dead conditionals, the 330-line dead block, printlns on error paths, `printStackTrace` calls.
 9. **L9** — add positions to the unpositioned `report.warning`/`report.error` sites; fix user-visible typos (L14).
 10. **R1 + R2** — cache symbol lookups (pure perf, no behavior change).
