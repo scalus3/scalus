@@ -52,4 +52,13 @@ class Word64FlatTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     test("property: round trip flat for all Word64"):
         forAll(roundTripFlat)
 
+    test("flat bitSize and round-trip for values >= 2^63") {
+        val fl = summon[flat.Flat[Word64]]
+        for w <- List(Word64(-1L), Word64(Long.MinValue), Word64(Long.MinValue + 12345L)) do
+            assert(fl.bitSize(w) == 80, s"bitSize for $w")
+            val enc = EncoderState(fl.bitSize(w) / 8 + 1)
+            fl.encode(w, enc)
+            assert(fl.decode(DecoderState(enc.result)) == w, s"round-trip for $w")
+    }
+
 }
