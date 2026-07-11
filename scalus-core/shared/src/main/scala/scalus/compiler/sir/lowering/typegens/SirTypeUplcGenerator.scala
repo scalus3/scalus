@@ -283,6 +283,12 @@ object SirTypeUplcGenerator {
             case "ProductCase" => ProductCaseEmitter
             case "SumCase"     => DataConstrEmitter
             case "SumDataList" =>
+                // FIXME(X2 follow-up): PackedData hardcodes Data-packed list elements, which is
+                // impossible for BLS12-381 G1/G2 element lists (they cannot be Data-encoded). To
+                // enable on-chain `bls12_381_G{1,2}_multiScalarMul`, choose the element
+                // representation from the element type — native/Constant for BLS elements — and
+                // thread it through the emitter, mkCons lowering, and empty-list constant lowering.
+                // See docs/internal/UPLC_CORRECTNESS_AUDIT.md (X2).
                 new SumBuiltinListEmitter(PrimitiveRepresentation.PackedData)
             case "SumPairDataList"       => SumPairBuiltinListEmitter
             case "PackedDataMap"         => PackedDataMapEmitter

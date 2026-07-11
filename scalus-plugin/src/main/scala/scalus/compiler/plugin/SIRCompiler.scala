@@ -2094,6 +2094,12 @@ final class SIRCompiler(
         else if tpe.isList then
             val t1 = tpe.dealias.argInfos.head
             DefaultUni.List(typeReprToDefaultUni(t1, list))
+        // TODO(X2 follow-up): BLS12-381 G1Element/G2Element are valid builtin-list element types in
+        // Plutus (needed for bls12_381_G{1,2}_multiScalarMul), but they are intentionally NOT added
+        // here yet: V3 lowering can only represent Data-packed list elements, so accepting them
+        // would compile `BuiltinList[G1Element]` that then fails at runtime with a
+        // KnownTypeUnliftingError. Add DefaultUni.BLS12_381_G{1,2}_Element here together with the
+        // native-element list representation. See SirTypeUplcGenerator / SIRBuiltins (X2).
         else error(NotBuiltinTypeInBuiltinListConstruction(tpe, list), DefaultUni.Unit)
 
     private def compileBigIntOps(

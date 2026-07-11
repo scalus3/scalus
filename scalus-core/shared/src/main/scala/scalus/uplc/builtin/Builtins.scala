@@ -1334,6 +1334,11 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V4 (CIP-133)
       */
+    // TODO(X2 follow-up): these take `Seq` (off-chain use only); every other list-taking builtin
+    // takes `BuiltinList`. They cannot be called from on-chain code until the params become
+    // `BuiltinList[...]` AND V3 lowering gains native-representation builtin lists for BLS elements
+    // (see SIRBuiltins.bls12_381_G1_multiScalarMul and SirTypeUplcGenerator). Changing the signature
+    // is a breaking API change and also needs adapting off-chain callers (BilinearAccumulatorProver).
     def bls12_381_G1_multiScalarMul(
         scalars: Seq[BigInt],
         points: Seq[G1Element]
@@ -1356,6 +1361,7 @@ private[builtin] abstract class AbstractBuiltins(using ps: PlatformSpecific):
       * @since Plutus
       *   V4 (CIP-133)
       */
+    // TODO(X2 follow-up): `Seq` (off-chain only) → `BuiltinList`; see bls12_381_G1_multiScalarMul.
     def bls12_381_G2_multiScalarMul(
         scalars: Seq[BigInt],
         points: Seq[G2Element]

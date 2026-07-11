@@ -429,17 +429,31 @@ object SIRBuiltins {
       AnnotationsDecl.empty
     )
 
-    // Multi-scalar multiplication
+    // Multi-scalar multiplication.
+    //
+    // The list args are BuiltinList (matching the CEK TypeScheme's DefaultUni.List and Plutus's
+    // `Builtins.hs`), not the prelude sum `List` these used to declare (audit finding X2). This
+    // corrects the *declared* type, but these builtins are still NOT usable on-chain end-to-end:
+    //   - `Builtins.bls12_381_G{1,2}_multiScalarMul` take `Seq` (off-chain only, not compilable
+    //     on-chain); they must become `BuiltinList` params.
+    //   - the plugin rejects `BuiltinList[G1Element]`/`BuiltinList[G2Element]` construction
+    //     (`SIRCompiler.typeReprToDefaultUni` has no BLS element case).
+    //   - crucially, V3 lowering represents every BuiltinList with Data-packed elements
+    //     (`SirTypeUplcGenerator` → `SumBuiltinListEmitter(PrimitiveRepresentation.PackedData)`),
+    //     but BLS G1/G2 elements cannot be Data-encoded, so a native-element list representation is
+    //     needed or the CEK fails with a KnownTypeUnliftingError (Data expected, got G1/G2 element).
+    // TODO(X2 follow-up): implement native-representation builtin lists for BLS elements, then wire
+    // the API + plugin construction. See docs/internal/UPLC_CORRECTNESS_AUDIT.md (X2).
     val bls12_381_G1_multiScalarMul: SIR.Builtin = SIR.Builtin(
       DefaultFun.Bls12_381_G1_multiScalarMul,
-      SIRType.List(SIRType.Integer) ->: SIRType.List(
+      SIRType.BuiltinList(SIRType.Integer) ->: SIRType.BuiltinList(
         SIRType.BLS12_381_G1_Element
       ) ->: SIRType.BLS12_381_G1_Element,
       AnnotationsDecl.empty
     )
     val bls12_381_G2_multiScalarMul: SIR.Builtin = SIR.Builtin(
       DefaultFun.Bls12_381_G2_multiScalarMul,
-      SIRType.List(SIRType.Integer) ->: SIRType.List(
+      SIRType.BuiltinList(SIRType.Integer) ->: SIRType.BuiltinList(
         SIRType.BLS12_381_G2_Element
       ) ->: SIRType.BLS12_381_G2_Element,
       AnnotationsDecl.empty
