@@ -466,7 +466,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         s"-Dscalus.plugin.jar=${(scalusPlugin / Compile / packageBin).value.getAbsolutePath}",
         s"-Dscalus.test.classpath=${(Test / fullClasspath).value.files.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
       ),
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
@@ -919,7 +919,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84" % "test",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
