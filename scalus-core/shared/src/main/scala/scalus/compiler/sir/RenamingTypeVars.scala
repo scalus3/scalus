@@ -242,17 +242,15 @@ object RenamingTypeVars {
             case SIRType.TypeLambda(typeVars, body) =>
                 // if no intersection, we can just rename type variables
                 // if there is an intersection, we renaming in the new context where intersection is excluded.
-                val (intersection, nonIntersection) = typeVars.partition(ctx.renames.contains)
+                val intersection = typeVars.filter(ctx.renames.contains)
                 if intersection.isEmpty then SIRType.TypeLambda(typeVars, inType(body, ctx))
                 else
+                    // A shadowing binder must stay as is: the body's occurrences refer to this
+                    // lambda's parameter, not to the outer variable being renamed.
                     val newContext = ctx.copy(
                       renames = ctx.renames.removedAll(intersection)
                     )
-                    val newBody = inType(body, newContext)
-                    SIRType.TypeLambda(
-                      typeVars.map(tv => ctx.renames.getOrElse(tv, tv)),
-                      newBody
-                    )
+                    SIRType.TypeLambda(typeVars, inType(body, newContext))
             case SIRType.Annotated(tp, anns)     => SIRType.Annotated(inType(tp, ctx), anns)
             case SIRType.FreeUnificator          => SIRType.FreeUnificator
             case SIRType.TypeNothing             => SIRType.TypeNothing

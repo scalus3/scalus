@@ -1244,8 +1244,30 @@ object SIRType {
                     case None    => tv
             case TypeLambda(params, body) =>
                 val intersected = params.filter(tv => env.contains(tv))
-                if intersected.isEmpty then TypeLambda(params, substitute(body, env, proxyEnv))
-                else TypeLambda(params, substitute(body, env -- intersected, proxyEnv))
+                val reducedEnv = if intersected.isEmpty then env else env -- intersected
+                // Capture avoidance (audit T5): a binder occurring in a replacement value
+                // would capture it — alpha-rename such binders before substituting,
+                // e.g. [B] =>> Fun(A, B) under A -> List[B] must not become
+                // [B] =>> Fun(List[B], B).
+                val replacementVars = {
+                    val acc = new SetBasedTypeVarGenerationContext(Set.empty, 0L)
+                    reducedEnv.values.foreach(acc.importSetFromType)
+                    acc.typeVars
+                }
+                val captured = params.filter(replacementVars.contains)
+                if captured.isEmpty then TypeLambda(params, substitute(body, reducedEnv, proxyEnv))
+                else
+                    val tvGen = createMinimalTypeVarGenerationContext(
+                      0L,
+                      body :: (params ++ reducedEnv.keys ++ reducedEnv.values)
+                    )
+                    val renames = captured.map(p => (p, tvGen.freshCopy(p))).toMap
+                    val renamedBody =
+                        RenamingTypeVars.inType(body, RenamingTypeVars.makeContext(renames, tvGen))
+                    TypeLambda(
+                      params.map(p => renames.getOrElse(p, p)),
+                      substitute(renamedBody, reducedEnv, proxyEnv)
+                    )
             case CaseClass(constrDecl, typeArgs, optParent) =>
                 CaseClass(
                   constrDecl,
