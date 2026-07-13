@@ -1625,18 +1625,22 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         }
         if typeSelectors.isEmpty then List(row)
         else {
-            // make new rows with all possible unrollings of type selectors
-            val newRows = typeSelectors.map { case (ts, i) =>
+            // Unroll every type selector of the row in place. The column patterns of one
+            // row are conjunctive, so they must stay in a single row: one partially
+            // unrolled copy per column would behave as a disjunction and silently drop
+            // the still-selector columns once the unrolled column is specialized away.
+            val newPatterns = typeSelectors.foldLeft(row.patterns) { case (pats, (ts, i)) =>
                 val scrutineeTp = columnBindings(i).tp
-                val unrolledPattern = unrollTypeSelector(ctx, ts, ts.pos, scrutineeTp)
-                SirParsedCase.GroupedTupleRow(
-                  row.patterns.updated(i, unrolledPattern),
-                  row.guardRef,
-                  row.actionRef,
-                  row.pos
-                )
+                pats.updated(i, unrollTypeSelector(ctx, ts, ts.pos, scrutineeTp))
             }
-            newRows
+            List(
+              SirParsedCase.GroupedTupleRow(
+                newPatterns,
+                row.guardRef,
+                row.actionRef,
+                row.pos
+              )
+            )
         }
     }
 
