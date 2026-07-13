@@ -1898,7 +1898,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
             og.map(g => (g, embedding, ctx.freshName(s"caseGuard${i}_")))
         }
         val dcRefs = ctx.decisionTreeRefs.zipWithIndex.foldLeft(
-          IndexedSeq.empty[(AnnotatedSIR, SirCaseDecisionTree.EmbeddingType, String)]
+          IndexedSeq.empty[DcRefRecord]
         ) { (prevDc, treeIndex) =>
             val (decisionTree, index) = treeIndex
             val compiledDecisionTree = compileDecisions(
@@ -1917,7 +1917,17 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                 if treeSize >= 10 then SirCaseDecisionTree.EmbeddingType.ByReference
                 else SirCaseDecisionTree.EmbeddingType.Inline
             val name = ctx.freshName(s"caseDTRef${index}_")
-            prevDc.appended((compiledDecisionTree, embedding, name))
+            val params = embedding match
+                case SirCaseDecisionTree.EmbeddingType.ByReference =>
+                    collectDcRefParams(
+                      ctx,
+                      compiledDecisionTree,
+                      actionsRecords,
+                      guardsRecords,
+                      prevDc
+                    )
+                case SirCaseDecisionTree.EmbeddingType.Inline => List.empty
+            prevDc.appended(DcRefRecord(compiledDecisionTree, embedding, name, params))
         }
         val decisions =
             compileDecisions(
@@ -1958,13 +1968,56 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         sir
     }
 
+    /** A compiled shared decision subtree. A ByReference subtree is let-bound above the decision
+      * tree, where the match-internal variables (columns, scrutinee) it reads are not yet in scope
+      * — so its lambda abstracts over them (`params`) and every reference site applies the in-scope
+      * variables back.
+      */
+    private case class DcRefRecord(
+        sir: AnnotatedSIR,
+        embedding: SirCaseDecisionTree.EmbeddingType,
+        name: String,
+        params: List[SIR.Var]
+    )
+
+    /** Free variables of `sir` that are internal to this match compilation (generated with
+      * `ctx.globalPrefix`), except the action/guard/dcRef let-names, which stay in scope at the
+      * top-level lets. Ordered by first occurrence.
+      */
+    private def collectDcRefParams(
+        ctx: PatternMatchingContext,
+        sir: AnnotatedSIR,
+        actions: IndexedSeq[(AnnotatedSIR, SirCaseDecisionTree.EmbeddingType, String)],
+        guards: IndexedSeq[Option[(SirParsedGuard, SirCaseDecisionTree.EmbeddingType, String)]],
+        prevDc: IndexedSeq[DcRefRecord]
+    ): List[SIR.Var] = {
+        val topLevelNames =
+            actions.map(_._3).toSet ++ guards.flatten.map(_._3) ++ prevDc.map(_.name)
+        val anns = AnnotationsDecl.apply(pos = sir.anns.pos)
+        SIR.accumulate[Vector[SIR.Var]](
+          sir,
+          Vector.empty,
+          Set.empty,
+          (s, localNames, acc) =>
+              s match {
+                  case v: SIR.Var
+                      if v.name.startsWith(ctx.globalPrefix)
+                          && !localNames.contains(v.name)
+                          && !topLevelNames.contains(v.name)
+                          && !acc.exists(_.name == v.name) =>
+                      acc :+ SIR.Var(v.name, v.tp, anns)
+                  case _ => acc
+              }
+        ).toList
+    }
+
     private def compileDecisions(
         ctx: PatternMatchingContext,
         tree: SirCaseDecisionTree,
         parsedMatch: SirParsedMatch,
         actions: IndexedSeq[(AnnotatedSIR, SirCaseDecisionTree.EmbeddingType, String)],
         guards: IndexedSeq[Option[(SirParsedGuard, SirCaseDecisionTree.EmbeddingType, String)]],
-        dcRefs: IndexedSeq[(AnnotatedSIR, SirCaseDecisionTree.EmbeddingType, String)]
+        dcRefs: IndexedSeq[DcRefRecord]
     ): AnnotatedSIR = {
         tree match {
             case SirCaseDecisionTree.Leaf(bindingMap, actionRef, pos) =>
@@ -2032,6 +2085,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                                 generateActionRefApply(
                                   name,
                                   action,
+                                  bindingMap,
                                   pos
                                 )
                         }
@@ -2188,24 +2242,48 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                   matchAnns
                 )
             case SirCaseDecisionTree.Reference(index) =>
-                val (sir, embedding, name) = dcRefs(index)
-                embedding match {
+                val record = dcRefs(index)
+                record.embedding match {
                     case SirCaseDecisionTree.EmbeddingType.Inline =>
                         if ctx.env.debug then
                             println(s"compileDecisions: inlining decision tree ref $index")
-                        sir
+                        record.sir
                     case SirCaseDecisionTree.EmbeddingType.ByReference =>
                         if ctx.env.debug then
                             println(
                               s"compileDecisions: referencing decision tree ref $index by name"
                             )
-                        val posAnns = sir.anns
-                        SIR.Apply(
-                          SIR.Var(name, SIRType.Fun(SIRType.Unit, sir.tp), posAnns),
-                          SIR.Const.unit(posAnns),
-                          sir.tp,
-                          posAnns
-                        )
+                        val posAnns = record.sir.anns
+                        if record.params.isEmpty then
+                            SIR.Apply(
+                              SIR.Var(
+                                record.name,
+                                SIRType.Fun(SIRType.Unit, record.sir.tp),
+                                posAnns
+                              ),
+                              SIR.Const.unit(posAnns),
+                              record.sir.tp,
+                              posAnns
+                            )
+                        else
+                            val refTp = record.params.foldRight(record.sir.tp) { (p, acc) =>
+                                SIRType.Fun(p.tp, acc)
+                            }
+                            val refVar: AnnotatedSIR = SIR.Var(record.name, refTp, posAnns)
+                            record.params.foldLeft(refVar) { (acc, p) =>
+                                SIR.Apply(
+                                  acc,
+                                  p,
+                                  acc.tp match {
+                                      case SIRType.Fun(_, retTp) => retTp
+                                      case _ =>
+                                          throw IllegalStateException(
+                                            s"Expected function type in dcRef application, but got ${acc.tp.show}"
+                                          )
+                                  },
+                                  posAnns
+                                )
+                            }
                 }
         }
     }
@@ -2215,23 +2293,36 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         decisions: AnnotatedSIR,
         actions: IndexedSeq[(AnnotatedSIR, SirCaseDecisionTree.EmbeddingType, String)],
         guards: IndexedSeq[Option[(SirParsedGuard, SirCaseDecisionTree.EmbeddingType, String)]],
-        dcRefs: IndexedSeq[(AnnotatedSIR, SirCaseDecisionTree.EmbeddingType, String)]
+        dcRefs: IndexedSeq[DcRefRecord]
     ): AnnotatedSIR = {
         val s0 = decisions
-        val s1 = dcRefs.zipWithIndex.foldLeft(s0) { case (acc, ((sir, embedding, name), i)) =>
-            embedding match {
+        // foldRight so that dcRef 0 ends up outermost: a later subtree can reference an
+        // earlier one, and lexical scoping must see it.
+        val s1 = dcRefs.foldRight(s0) { (record, acc) =>
+            record.embedding match {
                 case SirCaseDecisionTree.EmbeddingType.Inline => acc
                 case SirCaseDecisionTree.EmbeddingType.ByReference =>
-                    val tp = SIRType.Fun(SIRType.Unit, decisions.tp)
-                    val posAnns = AnnotationsDecl.apply(pos = sir.anns.pos)
-                    val dtreeLambda = SIR.LamAbs(
-                      SIR.Var("u", SIRType.Unit, posAnns),
-                      sir,
-                      List.empty,
-                      posAnns
-                    )
+                    val posAnns = AnnotationsDecl.apply(pos = record.sir.anns.pos)
+                    val (tp, dtreeLambda) =
+                        if record.params.isEmpty then
+                            val t: SIRType = SIRType.Fun(SIRType.Unit, record.sir.tp)
+                            val l = SIR.LamAbs(
+                              SIR.Var("u", SIRType.Unit, posAnns),
+                              record.sir,
+                              List.empty,
+                              posAnns
+                            )
+                            (t, l)
+                        else
+                            val t = record.params.foldRight(record.sir.tp) { (p, a) =>
+                                SIRType.Fun(p.tp, a)
+                            }
+                            val l = record.params.foldRight(record.sir: AnnotatedSIR) { (p, b) =>
+                                SIR.LamAbs(p, b, List.empty, posAnns)
+                            }
+                            (t, l)
                     val dtreeLet = SIR.Let(
-                      List(Binding(name, tp, dtreeLambda)),
+                      List(Binding(record.name, tp, dtreeLambda)),
                       acc,
                       SIR.LetFlags.Lazy,
                       posAnns
@@ -2246,8 +2337,27 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                     val action = ctx.parsedActions(i)
                     val tp = generateActionSirType(action)
                     val posAnns = AnnotationsDecl.apply(pos = sir.anns.pos)
+                    // The binding's value must be a lambda matching tp: leaves apply the
+                    // reference (generateActionRefApply), so the raw body would be ill-typed.
+                    val actionLambda =
+                        if action.bindedVariables.isEmpty then
+                            SIR.LamAbs(
+                              SIR.Var("u", SIRType.Unit, posAnns),
+                              sir,
+                              List.empty,
+                              posAnns
+                            )
+                        else
+                            action.typeBindings.foldRight(sir: AnnotatedSIR) { (b, body) =>
+                                SIR.LamAbs(
+                                  SIR.Var(b.name, b.tp, posAnns),
+                                  body,
+                                  List.empty,
+                                  posAnns
+                                )
+                            }
                     val actionLet = SIR.Let(
-                      List(Binding(name, tp, sir)),
+                      List(Binding(name, tp, actionLambda)),
                       acc,
                       SIR.LetFlags.Lazy,
                       posAnns
@@ -2264,9 +2374,26 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                         case SirCaseDecisionTree.EmbeddingType.ByReference =>
                             val tp = buildGuardType(guard.typeBindings)
                             val posAnns = AnnotationsDecl.apply(pos = guard.sir.anns.pos)
-
+                            val guardLambda =
+                                if guard.bindedVariables.isEmpty then
+                                    SIR.LamAbs(
+                                      SIR.Var("u", SIRType.Unit, posAnns),
+                                      guard.sir,
+                                      List.empty,
+                                      posAnns
+                                    )
+                                else
+                                    guard.typeBindings.foldRight(guard.sir: AnnotatedSIR) {
+                                        (b, body) =>
+                                            SIR.LamAbs(
+                                              SIR.Var(b.name, b.tp, posAnns),
+                                              body,
+                                              List.empty,
+                                              posAnns
+                                            )
+                                    }
                             val guardLet = SIR.Let(
-                              List(Binding(name, tp, guard.sir)),
+                              List(Binding(name, tp, guardLambda)),
                               acc,
                               SIR.LetFlags.Lazy,
                               posAnns
@@ -2282,6 +2409,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
     private def generateActionRefApply(
         name: String,
         action: SirParsedAction,
+        bindingMap: Map[VariableKey, SirCaseDecisionTree.BindingTarget],
         pos: SrcPos
     ): AnnotatedSIR = {
         if action.bindedVariables.isEmpty then
@@ -2299,11 +2427,13 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         else
             val actionType = generateActionSirType(action)
             val actionVar = SIR.Var(name, actionType, AnnotationsDecl.fromSrcPos(pos))
-            val typeBinding = action.bindedVariables.map { case (n, b) =>
-                TypeBinding(n, b.tp)
-            }.toList
-            val applySir = buildApplySeq(actionVar, typeBinding, pos)
-            applySir
+            buildRefApplySeq(
+              actionVar,
+              action.typeBindings,
+              action.bindedVariables,
+              bindingMap,
+              pos
+            )
     }
 
     private def generateGuardCondition(
@@ -2332,13 +2462,14 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                           renameMap
                         ).asInstanceOf[AnnotatedSIR]
                     case SirCaseDecisionTree.EmbeddingType.ByReference =>
-                        generateGuardApply(name, guard, pos)
+                        generateGuardApply(name, guard, bindingMap, pos)
                 }
     }
 
     private def generateGuardApply(
         name: String,
         guard: SirParsedGuard,
+        bindingMap: Map[VariableKey, SirCaseDecisionTree.BindingTarget],
         pos: SrcPos
     ): AnnotatedSIR = {
         if guard.bindedVariables.isEmpty then
@@ -2356,8 +2487,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         else
             val guardType = buildGuardType(guard.typeBindings)
             val guardVar = SIR.Var(name, guardType, AnnotationsDecl.fromSrcPos(pos))
-            val applySir = buildApplySeq(guardVar, guard.typeBindings, pos)
-            applySir
+            buildRefApplySeq(guardVar, guard.typeBindings, guard.bindedVariables, bindingMap, pos)
     }
 
     private def buildGuardType(bindedVariables: List[TypeBinding]): SIRType = {
@@ -2368,13 +2498,40 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
             }
     }
 
-    private def buildApplySeq(
+    /** Builds `Apply(...(Apply(s0, arg1), ...), argN)` where each argument resolves a binder of the
+      * referenced action/guard through the leaf's `bindingMap`: the leaf's column variable, cast
+      * when the pattern narrowed the binder's type. A binder without a matching entry refers to an
+      * enclosing-scope variable of the same name, mirroring the Inline path, which leaves such
+      * names unrenamed.
+      */
+    private def buildRefApplySeq(
         s0: AnnotatedSIR,
-        args: List[TypeBinding],
+        typeBindings: List[TypeBinding],
+        bindedVariables: Map[String, BindingNameInfo],
+        bindingMap: Map[VariableKey, SirCaseDecisionTree.BindingTarget],
         pos: SrcPos
     ): AnnotatedSIR = {
-        args.foldLeft(s0) { (acc, b) =>
-            val arg = SIR.Var(b.name, b.tp, AnnotationsDecl.fromSrcPos(pos))
+        val anns = AnnotationsDecl.fromSrcPos(pos)
+        typeBindings.foldLeft(s0) { (acc, b) =>
+            val optTarget =
+                bindedVariables.get(b.name).flatMap(info => bindingMap.get(info.variableKey))
+            val arg = optTarget match
+                case Some(target) =>
+                    target.narrowedType match
+                        case Some(narrowedType) =>
+                            val parentType =
+                                SIRType.collectProdCaseClass(narrowedType) match
+                                    case Some((_, cc)) => cc.parent.getOrElse(narrowedType)
+                                    case None          => narrowedType
+                            SIR.Cast(
+                              SIR.Var(target.columnName, parentType, anns),
+                              narrowedType,
+                              anns
+                            )
+                        case None =>
+                            SIR.Var(target.columnName, b.tp, anns)
+                case None =>
+                    SIR.Var(b.name, b.tp, anns)
             SIR.Apply(
               acc,
               arg,
@@ -2385,7 +2542,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                         s"Expected function type in application, but got ${acc.tp.show}"
                       )
               },
-              AnnotationsDecl.fromSrcPos(pos)
+              anns
             )
         }
     }
