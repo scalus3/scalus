@@ -16,6 +16,19 @@ class LedgerRulesValidationTest extends AnyFunSuite {
     private lazy val stakeStateResolver =
         StakeStateResolver(apiKey, resourcesPath.resolve("stake"))
 
+    /** The it-data blocks were produced around epoch 544 (Plomin), so they must be validated with
+      * the protocol parameters of that era: the current mainnet params carry the van Rossem cost
+      * models, which change the language view (script integrity hash) and execution costs.
+      */
+    private lazy val blocksEraParams = ProtocolParams.fromBlockfrostJson(
+      getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
+    )
+
+    private def blocksEraContext(slot: SlotNo): Context =
+        Context(env =
+            UtxoEnv(slot, blocksEraParams, CertState.empty, scalus.cardano.address.Network.Mainnet)
+        )
+
     test("validate transactions") {
         val transactionsCount = AtomicInteger()
         val utxosResolvedCount = AtomicInteger()
@@ -35,7 +48,7 @@ class LedgerRulesValidationTest extends AnyFunSuite {
             certState = stakeStateResolver.resolveForTx(transaction, epochMagic)
             state = State(utxos = utxos, certState = certState)
             result <- CardanoMutator
-                .transit(Context.testMainnet(block.slot), state, transaction)
+                .transit(blocksEraContext(block.slot), state, transaction)
                 .swap
                 .toOption
         yield (path.getFileName, transaction, result)
