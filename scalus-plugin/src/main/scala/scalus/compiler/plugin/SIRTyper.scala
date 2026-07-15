@@ -29,6 +29,27 @@ class SIRTyper(using Context) {
 
     private val cachedDataDecl: MutableSymbolMap[DataDecl] = new MutableSymbolMap()
 
+    /** Ids for binder-scoped type variables (audit T3). A `TypeParamRef`'s `typeSymbol` resolves
+      * through the param's *upper bound*, so ids derived from `typeSymbol.hashCode` collapsed:
+      * every unbounded `[A]` program-wide got `id(AnyClass)`, and params of unsymbolized binders
+      * got `NoSymbol.id == 0`. Instead, allocate a unique id block per binder instance — dotty
+      * interns structurally identical `LambdaType`s, so merged binders are genuinely
+      * alpha-identical while distinct signatures get distinct ids, and all references to one
+      * binder's param agree. The base starts above `Int.MaxValue` so these ids can never collide
+      * with symbol-id-based or `hashCode`-based TypeVar ids (both `Int`-valued).
+      */
+    private val binderIdBases = new java.util.IdentityHashMap[LambdaType, java.lang.Long]()
+    private var nextBinderIdBase: Long = 1L << 33
+
+    private def binderParamId(binder: LambdaType, paramNum: Int): Long = {
+        var base = binderIdBases.get(binder)
+        if base == null then
+            base = java.lang.Long.valueOf(nextBinderIdBase)
+            binderIdBases.put(binder, base)
+            nextBinderIdBase += math.max(binder.paramNames.length, 1)
+        base.longValue() + paramNum
+    }
+
     private val uplcReprAnnotation = Symbols.requiredClass("scalus.compiler.UplcRepr")
     private val uplcRepresentationClass =
         Symbols.requiredClass("scalus.compiler.UplcRepresentation")
@@ -321,7 +342,7 @@ class SIRTyper(using Context) {
                         .show // TODO: better way to get the name as string
                 SIRType.TypeVar(
                   paramName,
-                  Some(tp.typeSymbol.hashCode),
+                  Some(binderParamId(binder, tp.paramNum)),
                   extractTypeVarKindFromUplcRepr(tp.typeSymbol)
                       .getOrElse(SIRType.TypeVarKind.Fixed)
                 )
@@ -337,7 +358,7 @@ class SIRTyper(using Context) {
                 val params = (tpp.paramNames zip tpp.paramRefs).map { (name, ref) =>
                     SIRType.TypeVar(
                       name.show,
-                      Some(ref.typeSymbol.hashCode()),
+                      Some(binderParamId(tpp, ref.paramNum)),
                       extractTypeVarKindFromUplcRepr(ref.typeSymbol)
                           .getOrElse(SIRType.TypeVarKind.Fixed)
                     )
@@ -347,7 +368,7 @@ class SIRTyper(using Context) {
                 val params = (tpl.paramNames zip tpl.paramRefs).map { (name, ref) =>
                     SIRType.TypeVar(
                       name.show,
-                      Some(ref.typeSymbol.hashCode()),
+                      Some(binderParamId(tpl, ref.paramNum)),
                       extractTypeVarKindFromUplcRepr(ref.typeSymbol)
                           .getOrElse(SIRType.TypeVarKind.Fixed)
                     )
@@ -369,14 +390,7 @@ class SIRTyper(using Context) {
                         typeVar.stripped match
                             case TypeParamRef(binder, idx) =>
                                 val paramName = binder.paramNames(idx).show
-                                val symCode =
-                                    if typeVar.typeSymbol == Symbols.NoSymbol then
-                                        // (binder.typeSymbol.hashCode().toLong << 32) + idx
-                                        binder.typeSymbol.hashCode() + idx
-                                    else typeVar.typeSymbol.hashCode()
-                                //  not sure, if typeVar,typeSymbol is exista and is unique.
-                                // code as binding symbol ?
-                                // TODO: make SymCode long to accept such encoding
+                                val symCode = binderParamId(binder, idx)
                                 // Look for `@UplcRepr(TypeVar(kind))` on the referenced
                                 // type parameter. For method-level params the binder's
                                 // paramRef symbol carries the annotation; for class-level
