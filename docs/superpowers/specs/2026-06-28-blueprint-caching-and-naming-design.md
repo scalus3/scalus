@@ -1,170 +1,190 @@
-# Blueprint generation: committed pin artifacts (Aiken-style), caching, per-contract + aggregate
+# Blueprint generation: cached fresh-in-JAR output + explicit pin (Aiken-informed)
 
-Date: 2026-06-28 (revised 2026-07-11)
-Status: Design — decisions resolved, pending user review of this spec
-Scope: `scalus-sbt-plugin` + a small additive `scalus-core` helper
+Date: 2026-06-28 (revised 2026-07-16)
+Status: Design – all decisions resolved, pending user review
+Scope: `scalus-sbt-plugin` + small additive `scalus-core` changes
 
 ## Problem
 
 The `blueprint` task today:
 
-1. **Regenerates on every build** (`Def.uncached`) — each build reflectively loads every contract and
+1. **Regenerates on every build** (`Def.uncached`) – each build reflectively loads every contract and
    re-runs `blueprintJson()` (SIR→UPLC per contract). Slow.
-2. **Writes flat, throwaway output** to `target/.../resourceManaged/META-INF/scalus/blueprints/<SimpleClassName>.json` —
-   git-ignored, so it can't be committed; two same-simple-named validators in different packages
-   silently overwrite each other.
+2. **Writes flat, throwaway output** to `target/.../resourceManaged/META-INF/scalus/blueprints/<SimpleClassName>.json` –
+   git-ignored, so nothing can be committed/pinned; two same-simple-named validators in different
+   packages silently overwrite each other.
 
-## What we actually want (clarified during design)
+## Goals (clarified during design)
 
-Blueprints should become **committed pin artifacts**, adopting Aiken's model where it fits:
+- **Pin the UPLC in git** when there is a usable version: a blueprint's compiled code / script hash is a
+  function of `(source, contract version, Scalus version, Scala version)`; a committed blueprint locks
+  that output, and git history is the version history.
+- **Always ship fresh blueprints in the JAR** – an artifact must describe the code it actually contains.
+- **Cache generation** – no SIR→UPLC work when nothing changed.
+- **No same-name clashes** – layout keyed by the validator's fully-qualified name.
+- **Ecosystem interop** – Aiken-style stable names with versions *inside* the file; a root `plutus.json`
+  at the path external tooling expects.
 
-- **Pin the UPLC in git.** A blueprint's compiled code / script hash is a function of
-  `(source, contract version, Scalus version, Scala version)`. Committing the blueprint locks that
-  output; git history is the version history (`git show <rev>:plutus.json`), and a clean content diff
-  shows exactly what a toolchain bump or source edit did to the on-chain script.
-- **Always shipped in the JAR.**
-- **Ecosystem interop.** Aiken emits a single stable `plutus.json` (never versioned filenames; version
-  lives in `preamble.compiler`), consumed by off-chain tooling by that known path. We adopt this
-  *philosophy*: **stable names, version-in-preamble, committed, regenerated every build**.
+## User-model analysis (drove the final shape)
 
-### Why not copy Aiken verbatim (single aggregate file only)
+- **Aiken migrants** expect `aiken build` semantics: stable root `plutus.json`, committed; version info
+  inside the file, never in filenames.
+- **Scala/Java developers** (the plugin's main audience) expect the opposite invariant: **the build never
+  mutates tracked files**. Generated-and-committed artifacts on the JVM are produced by an *explicit*
+  command plus a CI freshness check, not as a side effect of `compile`. Concretely:
+  - IDE (Metals/bloop) imports trigger resource generation; auto-writing tracked files means the repo
+    changes while browsing code.
+  - sbt-dynver/sbt-git derive the version from git *dirty state*; a build that dirties the worktree can
+    flip its own version to `-dirty`/`SNAPSHOT` mid-build. Scalus itself uses a git-derived version.
+- **Snapshot churn:** `preamble.compiler.version` is git-derived for snapshot builds
+  (`0.18.1+66-aa9cc792+…`), changing every commit. Auto-committed blueprints would churn perpetually in
+  this repo and for downstream snapshot users; only released-version downstream would be stable.
 
-- **Cross-compilation.** Scalus cross-builds Scala 3.3.7 and 3.8.4, which emit *different* UPLC (the
-  dual-ExUnits baselines). One `plutus.json` cannot hold two Scala baselines.
-- **Multi-contract repos.** `scalus-examples` has ~21 unrelated contracts; one 21-contract file means
-  noisy diffs and merge conflicts. Per-contract files diff cleanly and scale.
-- **Per-contract preamble.** Each Scalus `Contract` carries its own title/version/description; a single
-  aggregate must hoist one project-level preamble, losing per-contract version granularity.
-
-**Decision (confirmed): emit BOTH** — per-contract files *and* a merged aggregate.
+Hence: automatic output goes to `target` (fresh, in JAR); committing is a deliberate act (`blueprintPin`).
 
 ## Confirmed facts
 
-- Filename/layout decided in `writeBlueprints` (`ScalusSbtPlugin.scala:156-170`); the plugin has the full
-  class name and each contract's JSON string.
-- **No in-repo consumer reads these files by name** — renaming/relayout is non-breaking.
-- `scalus.cardano.blueprint.Blueprint` = `preamble: Preamble` + `validators: Seq[Validator]`, with
-  `addValidator` and a jsoniter codec (`Blueprint.scala:23-45`). It already supports multiple validators
-  per document, so aggregation is a natural fit. Per-contract `title`/`description` already live on each
-  `Validator`, so flattening loses little.
-- `Preamble` (`Blueprint.scala:285`): `title`, `description?`, `version?`, `compiler?`, `plutusVersion?`,
-  `license?`. `compiler = CompilerInfo(name, version)` — currently `{name:"scalus", version:<BuildInfo>}`.
+- Filename/layout decided in `writeBlueprints` (`ScalusSbtPlugin.scala:156-170`); the plugin has each
+  contract's fully-qualified class name and its JSON string.
+- **No in-repo consumer reads these files by name** – renaming/relayout is non-breaking.
+- `scalus.cardano.blueprint.Blueprint` = `preamble: Preamble` + `validators: Seq[Validator]` with a
+  jsoniter codec (`Blueprint.scala:23-45`); multi-validator documents are natively supported, and
+  per-contract `title`/`description` already live on each `Validator`, so aggregation loses little.
+- The Scalus version is already baked into each per-contract preamble's `compiler.version`
+  (`CompilerInfo.currentScalus`, set at contract-compile time). Nothing needs to parse or recompute it.
+- The downstream *Scala* version (the toolchain compiling the contracts, which sets the UPLC baseline)
+  is `scalaVersion.value` in the plugin; it appears nowhere in the JSON today.
+- **CIP-57 official schema** (`CIPs/CIP-0057/schemas/plutus-blueprint.json`): `preamble` and `compiler`
+  set `additionalProperties: false` – extra keys there are *invalid*. The document **root** does not –
+  extra top-level keys are valid CIP-57. (Aiken's parser also ignores unknown fields: serde default, no
+  `deny_unknown_fields`.)
+- **sbt resource collision:** the same relative path in both `src/main/resources` and `resourceManaged`
+  makes JAR content ambiguous. Committed copies must therefore live *outside* resource directories.
 - Aiken (`../aiken`): hard default `plutus.json` at project root; all validators in one file; compiler
-  name+version (incl. git hash) recorded **inside** the file; filename always stable.
-- **Version provenance sources (settled):**
-  - *Scalus version* is already baked into each per-contract preamble's `compiler.version`
-    (`CompilerInfo.currentScalus`, set at contract-compile time). The plugin does **not** parse or
-    recompute it; the aggregate helper carries the compiler info over from the blueprints it merges.
-  - *Scala version* = the sbt plugin's `scalaVersion.value` — the toolchain compiling the **contracts**,
-    which sets the UPLC baseline.
+  name+version recorded inside the file; filename always stable.
 
 ## Design
 
-### Outputs (both stable-named, committed, regenerated-when-changed, cached)
+### Layer 1 – automatic, every build, cached (JAR contents)
 
-1. **Per-contract files** — one per `Contract`, nested by package, keeping its own preamble:
+Generated into `resourceManaged` (as today) via the resource generator, so every built JAR embeds
+blueprints describing exactly its own code. Git is never touched.
+
+1. **Per-contract files**, nested by package to prevent clashes:
    ```
-   src/main/resources/META-INF/scalus/blueprints/<packagePath>/<SimpleClassName>.json
-   e.g. src/main/resources/META-INF/scalus/blueprints/scalus/examples/auction/AuctionContract.json
+   resourceManaged/main/META-INF/scalus/blueprints/<packagePath>/<SimpleClassName>.json
+   e.g. .../META-INF/scalus/blueprints/scalus/examples/auction/AuctionContract.json
    ```
-   - `src/main/resources` is committed by the user AND packaged into the JAR by sbt's default resource
-     handling → satisfies both "committed" and "in JAR" from one location.
-   - Package path from the full class name; simple class name for the file (filesystem-safe, no title
-     spaces). Nesting prevents same-name clashes.
+   Stable names – no versions in filenames; provenance lives inside the JSON (Aiken model).
+2. **Aggregate** at resource root `/plutus.json`: one CIP-57 document merging every contract's
+   validators. Project-level preamble: `title` = sbt `name`, `version` = sbt `version`, `compiler`
+   carried over from the merged blueprints, `plutusVersion` from the contracts.
 
-2. **Aggregate `plutus.json`** — one merged CIP-57 document with every contract's validators:
-   - Location: **project root `plutus.json`** (Aiken drop-in for external tooling) **and** embedded in
-     the JAR at resource root `/plutus.json` (so JVM consumers can load the aggregate by a known path).
-     Both committed; same content. *(Decision A.)*
-   - Project-level preamble: `title` = sbt `name`, `version` = sbt `version`,
-     `compiler` carried over from the merged blueprints' preambles, `scalaVersion` = sbt
-     `scalaVersion.value`, `plutusVersion` from the contracts.
-   - `validators` = concatenation of every contract's validators (each retains its own title/description).
+**Caching** via `FileFunction.cached` (store: `streams.value.cacheDirectory / "scalus-blueprints"`):
 
-### Generation, caching, pruning
+- Inputs: every regular file under `classDirectory`, plus a marker file holding
+  `scheme=<N>;scala=<scalaVersion>;projectVersion=<version>` (rewritten only when its content differs,
+  so no spurious invalidation; `<N>` bumped when the layout/format changes).
+- Cache hit → skip entirely (no classloading, no SIR→UPLC).
+- Cache miss → regenerate all, then **prune** any file under the blueprints output that is no longer
+  produced (renamed/deleted contracts), leaving exactly the current set.
+- Cross-building is naturally safe: each Scala version has its own `target/scala-<v>/resource_managed`.
 
-A single task (run as part of the build so JAR/commit stay current), wrapped in `FileFunction.cached`:
+### Layer 2 – explicit `blueprintPin` task (committed pins)
 
-- **Inputs (cache key):** every regular file under `classDirectory`, plus a marker file holding
-  `scheme=<N>;scala=<scalaVersion>;projectVersion=<version>` (rewritten only when its content changes, so
-  no spurious invalidation). `<N>` is a naming/format-scheme constant bumped when this layout changes.
-- **On cache hit:** skip entirely (no class loading, no SIR→UPLC) → no git churn.
-- **On cache miss (run):**
-  1. Load contracts (existing reflection path), get each `blueprintJson()`.
-  2. Stamp each with `scalaVersion` and write the per-contract files to the committed resource dir.
-  3. Build the aggregate via `BlueprintTool.aggregate` (reflectively) and write it to **both** repo-root
-     `plutus.json` and `src/main/resources/plutus.json` (Decision A).
-  4. **Prune** per-contract files under the blueprints root that are no longer produced (renamed/deleted
-     contracts), leaving exactly the current set.
-- Because content is deterministic, an unchanged rebuild rewrites identical bytes → git stays clean; a
-  fresh clone that already has committed files regenerates matching content → clean `git status`.
+A deliberate task, run "whenever there is a usable version":
 
-**Cross-build enforcement (Decision C).** A `blueprintScalaVersion` setting names the one Scala version
-whose output is committed (defaults to the project's primary/LTS — e.g. the first of `crossScalaVersions`).
-When `scalaVersion.value == blueprintScalaVersion`, generation writes to the committed
-`src/main/resources` (and repo-root `plutus.json`). For any other cross-build, generation instead writes
-to `resourceManaged`/`target` — so that build's JAR still embeds blueprints ("always in JAR" holds for
-every cross-build), but git is never touched by a non-primary build.
-- **Freshness gate (recommended):** a `blueprintCheck` mode for CI that fails if regeneration would change
-  committed files — catches stale commits, the standard price of committed-generated artifacts.
+- Copies the current generated set to committed, non-resource locations at the project base directory:
+  ```
+  <projectBase>/plutus.json                              (aggregate – Aiken drop-in path)
+  <projectBase>/blueprints/<packagePath>/<SimpleClassName>.json
+  ```
+- Replaces the `blueprints/` directory content (prunes stale files) – safe because it is an explicit act.
+- The user commits the result; git history is the pin history.
+- **`blueprintCheck`** task: fails if pinned files differ from freshly generated ones. For release
+  pipelines – not regular CI, which cannot stay green under git-derived snapshot versions.
+- **Cross-build guard:** optional `blueprintScalaVersion` setting; when set (e.g. to the LTS version in
+  cross-built projects), `blueprintPin` refuses to run under any other `scalaVersion`. Single-version
+  projects need not set it.
+
+### Scala-version provenance – top-level extension key
+
+CIP-57 forbids extra preamble keys but allows extra root keys, so record downstream toolchain info in a
+namespaced top-level object:
+
+```json
+{
+  "preamble": { ... },
+  "validators": [ ... ],
+  "scalus": { "scalaVersion": "3.3.7" }
+}
+```
+
+Valid CIP-57, ignored by Aiken/JS consumers, extensible (room for e.g. plugin/SIR versions later).
+Stamped into both per-contract files and the aggregate at generation time. Full provenance is then:
+Scalus version in `preamble.compiler.version`, Scala version in `scalus.scalaVersion`.
 
 ### scalus-core additions (additive, backwards-compatible)
 
-Robust JSON merging in a Scala-2.13 sbt plugin without a JSON lib is fragile; instead add a helper to
-scalus-core (already on the reflection classpath) and call it reflectively with Java-friendly types:
+Robust JSON manipulation in a Scala-2.13 sbt plugin without a JSON lib is fragile; add helpers to
+scalus-core (already on the reflection classpath), called reflectively with Java-friendly signatures:
 
 ```
+case class Blueprint(preamble, validators, scalus: Option[ScalusInfo] = None)  // new optional field
+case class ScalusInfo(scalaVersion: Option[String] = None)
+
 object BlueprintTool:
-  // merges validators into one CIP-57 doc; project preamble compiler is carried over from the inputs.
-  // java types for safe cross-classloader reflection. scalaVersion is the downstream toolchain.
+  // merges validators into one CIP-57 doc; compiler info carried over from the inputs
   def aggregate(jsons: java.util.List[String], title: String, version: String,
                 scalaVersion: String): String
-  // returns the same per-contract blueprint JSON with preamble.scalaVersion stamped in
+  // returns the per-contract blueprint JSON with the top-level scalus.scalaVersion stamped in
   def stampScalaVersion(json: String, scalaVersion: String): String
 ```
 
-`aggregate` carries the Scalus `compiler` info over from the input blueprints (same value the
-per-contract preambles already hold), so the plugin only supplies the downstream `scalaVersion` and the
-project title/version. Also add an optional `Preamble.scalaVersion: Option[String]` field (*Decision B*):
-per-contract files are stamped via `stampScalaVersion`; the aggregate sets it in `aggregate`. Every
-blueprint then records full toolchain provenance — Scalus in `compiler.version`, Scala in `scalaVersion`.
+Verify the `Blueprint(show) == blueprint` roundtrip still holds with the new optional field, and that
+documents *without* the `scalus` key still deserialize (back-compat with existing files).
 
 ### Touched code
 
-- `scalus-core`: new `BlueprintTool.aggregate` (+ optional `Preamble.scalaVersion`).
-- `scalus-sbt-plugin` `ScalusSbtPlugin.scala`: write to the committed resource dir; add the aggregate;
-  thread `scalaVersion` / `name` / `version`; wrap in `FileFunction.cached`; add prune + `blueprintCheck`.
+- `scalus-core`: `Blueprint.scalus` optional field + `ScalusInfo` + `BlueprintTool`.
+- `scalus-sbt-plugin` `ScalusSbtPlugin.scala`: nested layout, aggregate, `FileFunction.cached` + marker +
+  prune, new `blueprintPin` / `blueprintCheck` tasks, optional `blueprintScalaVersion` setting.
 - Existing `blueprint / skip` and `SCALUS_SKIP_BLUEPRINT` opt-outs preserved.
 
 ## Resolved decisions
 
-- **A. Aggregate location = project root + in JAR.** Write `plutus.json` to the repo root (Aiken drop-in,
-  committed) and to `src/main/resources/plutus.json` (committed + embedded at `/plutus.json` in the JAR).
-  Same content, two locations.
-- **B. Record Scala version = yes.** Add optional `Preamble.scalaVersion`, stamped at generation. Extra
-  optional key; verify the CIP-57 roundtrip still holds.
-- **C. Cross-Scala-build = primary version only.** Committed generation targets the project's primary/LTS
-  Scala version; secondary cross-builds write to `target` only (not committed). `scalus-examples` commits
-  its LTS baseline. (A `scala-<ver>/` path segment can be added later if a project must commit multiple
-  baselines, but that is out of scope here.)
+- **Write model = explicit pin.** Automatic generation stays in `resourceManaged` (fresh in every JAR,
+  git untouched); committing is the deliberate `blueprintPin`. Reverses the earlier lockfile choice for
+  the reasons in the user-model analysis. (Aiken-style auto-commit could later be offered as opt-in
+  `blueprint / autoPin := true`; out of scope now.)
+- **Granularity = both.** Per-contract files (nested by package) *and* a merged aggregate `plutus.json`.
+- **Filenames = stable.** No versions in names; provenance inside the JSON; git history = pin history.
+- **Aggregate locations.** In-JAR at `/plutus.json` (always fresh) + pinned at project root (Aiken
+  drop-in). They intentionally differ between pins: the JAR describes itself, the pin is the blessing.
+- **Scala version = top-level `scalus.scalaVersion` key.** CIP-57-valid (root allows extra keys;
+  preamble does not).
+- **Cross-build = primary version only for pins**, guarded by optional `blueprintScalaVersion`; the
+  automatic layer runs for every cross-build into its own per-version target.
 
 ## Risks / to verify in implementation
 
-- **Build mutates tracked files** (the lockfile pattern). Mitigated by caching (rewrite only on real
-  change) + the `blueprintCheck` CI gate.
-- **sbt 1 vs sbt 2**: confirm `FileFunction.cached` / `PathFinder#allPaths` compile under both via the
+- **sbt 1 vs sbt 2:** confirm `FileFunction.cached` / `PathFinder#allPaths` compile under both via the
   `sbtcompat` shim; fall back to a manual fingerprint-file cache if sbt 2 diverges.
-- **Cross-classloader reflection** into `BlueprintTool.aggregate` — keep the signature Java-typed.
-- **CIP-57 strictness** if adding `Preamble.scalaVersion` (decision B) — extra optional key; verify the
-  `Blueprint(show) == blueprint` roundtrip still holds.
-- **Aggregate forces one project version** — per-contract files retain their own versions; the aggregate
-  is a project-level view.
+- **Cross-classloader reflection** into `BlueprintTool` – keep signatures Java-typed.
+- **Jsoniter roundtrip / back-compat** with the new optional `scalus` field (old files must still parse).
+- **Aggregate forces one project version** – per-contract files retain their own preamble versions; the
+  aggregate is a project-level view.
+- **Pin staleness between releases** is by design; `blueprintCheck` exists for the moments it matters.
 
 ## Verification plan
 
-- `scalusExamplesJVM/clean` + build → per-contract files land at nested paths and a merged `plutus.json`
-  is produced; committed content matches (clean `git status`).
-- Rebuild with no changes → generation skipped (cache hit), no "Wrote…" logs, clean git.
-- Edit one contract → only its per-contract file and the aggregate change; no stale files remain.
-- Rename/delete a contract → its per-contract file is pruned; aggregate drops it.
-- `blueprintCheck` fails when committed files are stale, passes when current.
+- `scalusExamplesJVM/clean` + build → per-contract files at nested paths under `resourceManaged`, plus
+  `/plutus.json` aggregate; packaged JAR contains both; `git status` untouched.
+- Rebuild with no changes → cache hit, no regeneration logs, git untouched.
+- Edit one contract → regeneration; changed contract's file and the aggregate updated; no stale files.
+- Rename/delete a contract → its file pruned; aggregate drops it.
+- `blueprintPin` → root `plutus.json` + `blueprints/<pkg>/...` written; re-running after a contract
+  change updates them; `blueprintCheck` fails when pins are stale, passes right after a pin.
+- With `blueprintScalaVersion` set, `blueprintPin` refuses under a non-primary Scala version.
+- A blueprint with the `scalus` top-level key validates against the official CIP-57 schema and loads in
+  existing consumers (jsoniter roundtrip + an Aiken-fixture-style parse).
