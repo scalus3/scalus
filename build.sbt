@@ -584,8 +584,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion,
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.3",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.3",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.4",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.4",
       // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
       Compile / sourceGenerators += Def.task {
           val baseDir =
@@ -680,7 +680,7 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.3",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.4",
       publish / skip := true
     )
     .jvmSettings(Test / fork := true)
