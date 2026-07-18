@@ -7,7 +7,7 @@ addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.5.12")
 addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.3.2")
 // other
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.1")
-addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.11.2")
+addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.12.0")
 // show welcome message
 addSbtPlugin("com.github.reibitto" % "sbt-welcome" % "0.6.0")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
