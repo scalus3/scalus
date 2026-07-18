@@ -56,6 +56,10 @@ private[txbuilder] class UtxoPool(
       *   - First selects UTXOs containing required tokens (these are mandatory)
       *   - Then for remaining ADA: finds smallest sufficient single UTxO, or multiple largest-first
       *
+      * UTXOs carrying a reference script are only used as a last resort: spending one destroys the
+      * deployed script for everyone who references it, and also incurs the Conway tiered ref-script
+      * fee.
+      *
       * @param required
       *   the value to cover
       * @return
@@ -67,8 +71,12 @@ private[txbuilder] class UtxoPool(
         var remainingAda = required.coin.value
         var remainingTokens = required.assets
 
-        // First, select UTXOs that have required tokens (mandatory - tokens are constrained)
-        remaining.foreach { case (input, output) =>
+        // First, select UTXOs that have required tokens (mandatory - tokens are constrained).
+        // Plain UTXOs are considered before ref-script ones.
+        val tokenCandidates = remaining.toSeq.sortBy { case (_, output) =>
+            output.scriptRef.isDefined
+        }
+        tokenCandidates.foreach { case (input, output) =>
             if !selected.contains(input) then {
                 val hasNeededTokens = remainingTokens.assets.exists { case (policy, assets) =>
                     output.value.assets.assets.get(policy).exists { outputAssets =>
@@ -85,16 +93,10 @@ private[txbuilder] class UtxoPool(
             }
         }
 
-        // Then, select UTXOs for ADA if still needed
-        if remainingAda > 0 then {
-            // Get unselected UTXOs sorted by ADA ascending
-            val unselectedSorted = remaining
-                .filterNot { case (input, _) => selected.contains(input) }
-                .toSeq
-                .sortBy { case (_, output) => output.value.coin.value }
-
-            // Try to find smallest sufficient single UTxO
-            val smallestSufficient = unselectedSorted.find { case (_, output) =>
+        // Selects UTXOs for ADA from candidates (sorted by ADA ascending):
+        // smallest sufficient single UTxO, or multiple largest-first
+        def selectForAda(sortedCandidates: Seq[(TransactionInput, TransactionOutput)]): Unit = {
+            val smallestSufficient = sortedCandidates.find { case (_, output) =>
                 output.value.coin.value >= remainingAda
             }
 
@@ -102,16 +104,31 @@ private[txbuilder] class UtxoPool(
                 case Some((input, output)) =>
                     // Found a single UTxO that covers the requirement
                     selected = selected + (input -> output)
+                    remainingAda -= output.value.coin.value
 
                 case None =>
                     // No single UTxO covers it, select multiple starting with largest
-                    unselectedSorted.reverse.foreach { case (input, output) =>
+                    sortedCandidates.reverse.foreach { case (input, output) =>
                         if remainingAda > 0 then {
                             selected = selected + (input -> output)
                             remainingAda -= output.value.coin.value
                         }
                     }
             }
+        }
+
+        // Then, select UTXOs for ADA if still needed: plain UTXOs first,
+        // ref-script UTXOs only if plain ones cannot cover the requirement
+        if remainingAda > 0 then {
+            val (refScriptUtxos, plainUtxos) = remaining
+                .filterNot { case (input, _) => selected.contains(input) }
+                .partition { case (_, output) => output.scriptRef.isDefined }
+
+            selectForAda(plainUtxos.toSeq.sortBy { case (_, output) => output.value.coin.value })
+            if remainingAda > 0 && refScriptUtxos.nonEmpty then
+                selectForAda(refScriptUtxos.toSeq.sortBy { case (_, output) =>
+                    output.value.coin.value
+                })
         }
 
         selected
@@ -128,6 +145,8 @@ private[txbuilder] class UtxoPool(
       *   2. Otherwise finds smallest sufficient single UTxO
       *   3. If no single UTxO covers it, selects multiple starting with largest
       *   4. Falls back to UTxOs with tokens if ADA-only UTxOs are insufficient
+      *   5. UTXOs carrying a reference script are the absolute last resort: if the scripts fail
+      *      on-chain, collateral is consumed and the deployed script is destroyed
       *
       * @param requiredAmount
       *   the amount of ADA required for collateral
@@ -139,8 +158,12 @@ private[txbuilder] class UtxoPool(
     def selectForCollateral(requiredAmount: Coin, protocolParams: ProtocolParams): Utxos = {
         val required = requiredAmount.value
 
-        // All UTxOs are candidates (can reuse inputs for collateral)
-        val adaOnlyUtxos = available.filter { case (_, output) =>
+        // All UTxOs are candidates (can reuse inputs for collateral),
+        // but ref-script UTXOs are deferred to the last-resort strategy 5
+        val (refScriptUtxos, plainUtxos) = available.partition { case (_, output) =>
+            output.scriptRef.isDefined
+        }
+        val adaOnlyUtxos = plainUtxos.filter { case (_, output) =>
             output.value.assets.isEmpty
         }
 
@@ -194,7 +217,7 @@ private[txbuilder] class UtxoPool(
 
         // Strategy 4: Need to use UTxOs with tokens as well
         // Sort token UTxOs by ADA ascending to find smallest sufficient first
-        val tokenUtxosSorted = available
+        val tokenUtxosSorted = plainUtxos
             .filter { case (_, output) => output.value.assets.nonEmpty }
             .toSeq
             .sortBy { case (_, output) => output.value.coin.value } // ascending
@@ -213,6 +236,30 @@ private[txbuilder] class UtxoPool(
 
         // Otherwise, select multiple starting with largest
         tokenUtxosSorted.reverse.foreach { case (input, output) =>
+            if accumulated < required then {
+                selected = selected + (input -> output)
+                accumulated += output.value.coin.value
+            }
+        }
+
+        if accumulated >= required then {
+            return selected
+        }
+
+        // Strategy 5: Last resort - UTxOs carrying reference scripts
+        val refScriptSorted = refScriptUtxos.toSeq
+            .sortBy { case (_, output) => output.value.coin.value } // ascending
+
+        val remainingAfterPlain = required - accumulated
+        val smallestSufficientRefScript = refScriptSorted.find { case (_, output) =>
+            output.value.coin.value >= remainingAfterPlain
+        }
+
+        if smallestSufficientRefScript.isDefined then {
+            return selected + smallestSufficientRefScript.get
+        }
+
+        refScriptSorted.reverse.foreach { case (input, output) =>
             if accumulated < required then {
                 selected = selected + (input -> output)
                 accumulated += output.value.coin.value
