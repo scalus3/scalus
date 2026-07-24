@@ -1,20 +1,21 @@
 # Scalus — Smart contract & dApps Development Platform for Cardano
 
-<p>
-  <img src="scalus-site/public/scalus-logo-dark.png" alt="Scalus" width="420">
-</p>
-
-![CI/Release](https://github.com/scalus3/scalus/actions/workflows/release.yml/badge.svg)
-![Maven Central](https://img.shields.io/maven-central/v/org.scalus/scalus_3)
-[![Discord](https://img.shields.io/discord/1105852427346911252.svg?label=&logo=discord&logoColor=ffffff&color=404244&labelColor=6A7EC2)](https://discord.gg/ygwtuBybsy)
+<img src="scalus-site/public/scalus-logo-dark.png" alt="Scalus" width="600">
 
 *Built by [Lantr Engineering](https://lantr.io) · in continuous development since 2024*
+
+
+![CI/Release](https://github.com/scalus3/scalus/actions/workflows/release.yml/badge.svg) ![Maven Central](https://img.shields.io/maven-central/v/org.scalus/scalus_3) [![Discord](https://img.shields.io/discord/1105852427346911252.svg?label=&logo=discord&logoColor=ffffff&color=404244&labelColor=6A7EC2)](https://discord.gg/ygwtuBybsy) 
+
+
 
 ## Vision
 
 Scalus is a production-ready Smart contract & dApps development platform for Cardano built in Scala 3. It covers the full development journey: build, test, debug, optimise, integrate, deploy, and operate a protocol/application in one integrated stack. 
 
 It's built for teams shipping L2s, bridges, DEXs, and other systems where the contract is only one part of what has to be correct.
+
+
 
 --- 
 
@@ -48,7 +49,9 @@ Scalus is not just a Scala-to-UPLC compiler. It is an integrated Cardano develop
 | Performance tooling | UPLC optimizer, low-level UPLC Term DSL, CEK/JIT evaluation, JMH benchmarks | Reduce script size/cost and measure evaluator/compiler performance. | [`scalus-uplc-jit-compiler`](scalus-uplc-jit-compiler), [`bench`](bench) |
 | Application runtime *(in development)* | Chain follower, typed UTxO indexing, durable reactive workers, scheduler, persistence | Operate full Cardano applications, not just compile scripts. | [`scalus-utxo-cell`](scalus-utxo-cell), [`docs`](docs) |
 
-### Multiplatform support
+--- 
+
+## Multiplatform support
 
 ![Scalus off-chain and multiplatform architecture](scalus-site/public/scalus-off-chain.png)
 
@@ -66,7 +69,7 @@ Scalus has a different center of gravity: it aims to be a full JVM-based Cardano
 
 That matters for teams building non-trivial protocols, because the hard part is rarely only writing a validator. The hard part is keeping contracts, off-chain code, tests, transaction flows, deployment artifacts, and long-term operations coherent as the protocol evolves.
 
-Read more: [Cardano Smart Contract Development Platform](https://scalus.org/docs/cardano-smart-contract-development-platform).
+Read more: [How Scalus Differs](https://scalus.org/docs/cardano-smart-contract-development-platform).
 
 ---
 
