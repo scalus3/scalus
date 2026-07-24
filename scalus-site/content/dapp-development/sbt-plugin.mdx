@@ -6,8 +6,9 @@ description: Embed CIP-57 blueprints in JARs and deploy contracts as reference s
 
 # Scalus SBT Plugin
 
-The `ScalusSbtPlugin` adds two sbt tasks to your project: `blueprint` for embedding
-[CIP-57](https://cips.cardano.org/cip/CIP-57) blueprint JSON files into JARs, and `deploy`
+The `ScalusSbtPlugin` adds sbt tasks to your project: `blueprint` for embedding
+[CIP-57](https://cips.cardano.org/cip/CIP-57) blueprint JSON files into JARs,
+`blueprintPin`/`blueprintCheck` for committing pinned blueprints to git, and `deploy`
 for publishing a contract as a reference script UTxO via Blockfrost.
 
 Projects scaffolded from the [`hello.g8` or `validator.g8` templates](/docs/get-started/project-commands)
@@ -73,10 +74,16 @@ When a Cardano smart contract is deployed on-chain, only its script hash is visi
 you verify that a given source code produced that hash?
 
 The verifiable artifact is the **JAR**. The `blueprint` task generates a CIP-57 blueprint JSON
-for every `Contract` in the project and writes it to `META-INF/scalus/blueprints/`. Each
+for every `Contract` in the project, nested under its package at
+`META-INF/scalus/blueprints/<package>/<Contract>.json`, plus a single aggregate document at
+`/plutus.json` (the file name Aiken tooling expects) that merges all validators. Each
 blueprint contains the `compiledCode` (CBOR hex) and `hash` (script hash), so anyone with the
 JAR, or anyone who can build it from source, can independently confirm the on-chain script
 hash.
+
+Version provenance lives inside the JSON, never in file names: the Scalus version in
+`preamble.compiler.version` and the Scala version in the top-level `scalus.scalaVersion`
+extension key (different Scala versions can produce different UPLC, so both matter).
 
 ```sh copy
 sbt package
@@ -85,17 +92,21 @@ sbt package
 `blueprint` is a resource generator, so `package` (and `publish`) embed the JSON automatically:
 
 ```
-[info] Wrote META-INF/scalus/blueprints/MyContract.json
+[info] Wrote META-INF/scalus/blueprints/com/example/MyContract.json
+[info] Wrote plutus.json
 ```
 
-Run `sbt blueprint` to generate without packaging. To skip generation during `package`,
-set `blueprint / skip := true` in `build.sbt`, or pass `SCALUS_SKIP_BLUEPRINT=1`.
+Generation is cached: when the compiled classes have not changed, the task skips all work, so
+repeated `package`/`test` runs cost nothing. Run `sbt blueprint` to generate without packaging.
+To skip generation during `package`, set `blueprint / skip := true` in `build.sbt`, or pass
+`SCALUS_SKIP_BLUEPRINT=1`.
 
 `sbt package` is the standard sbt command for producing a JAR. A JAR is just a ZIP archive, so
 standard tools work to inspect it:
 
 ```sh copy
-unzip -p my-project.jar META-INF/scalus/blueprints/MyContract.json
+unzip -p my-project.jar META-INF/scalus/blueprints/com/example/MyContract.json
+unzip -p my-project.jar plutus.json
 ```
 
 The `hash` field is the standard Cardano script hash: `blake2b_224(0x03 || compiledCode)`.
@@ -122,6 +133,26 @@ SCALUS_SKIP_BLUEPRINT=1 sbt package
 Both leave the explicit task untouched: `sbt blueprint` still generates on demand,
 regardless of `skip`. Use `skip` when you want fast `test`/`package` cycles and only
 generate blueprints deliberately (for example, in a release step or CI job).
+
+## Pinning Blueprints in Git
+
+The automatic `blueprint` output lives under `target/` and is rebuilt as your code changes.
+When you reach a usable version whose on-chain scripts you want to lock down, pin it:
+
+```sh copy
+sbt blueprintPin
+```
+
+This copies the current set to committed locations – `plutus.json` at the project root (the
+stable path off-chain tooling expects) and `blueprints/<package>/<Contract>.json` per
+contract. Commit them; git history is your pin history, and a diff shows exactly how a code
+or toolchain change affected each `compiledCode` and `hash`.
+
+`sbt blueprintCheck` fails when the pinned files no longer match freshly generated ones – use
+it in release pipelines to catch forgotten pins. If your project cross-builds several Scala
+versions, set `blueprintScalaVersion := Some("3.3.7")` so pins are only written (and checked)
+under your primary Scala baseline; other versions still embed their own blueprints in their
+JARs.
 
 ## Deploying Contracts
 
