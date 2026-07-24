@@ -7,18 +7,33 @@ import sbt.complete.DefaultParsers.*
 // In particular `toFiles` bridges the sbt 2 Classpath type change (Attributed[HashedVirtualFileRef]).
 import sbtcompat.PluginCompat.*
 
-/** sbt plugin that adds `blueprint` and `deploy` tasks for Cardano smart contracts.
+/** sbt plugin that adds blueprint generation, pinning and deploy tasks for Cardano smart
+  * contracts.
   *
+  * Blueprint output has two layers:
   *
-  * - `blueprint` generates each contract's CIP-57 JSON into
-  *   `resourceManaged/main/META-INF/scalus/blueprints/<ContractName>.json`. It is
-  *   registered as a resource generator, so `package`/`publish` embed it in the JAR at
-  *   `META-INF/scalus/blueprints/<ContractName>.json`. Opt out with
-  *   `blueprint / skip := true` or the `SCALUS_SKIP_BLUEPRINT` env var.
-  * - `sbt "deploy <ContractName> --network preview --blockfrost-key <key> --mnemonic '<words>'"`
-  *   deploys a validator as a reference script UTXO at the sender's own base address.
+  *   - `blueprint` (automatic, cached): generates each contract's CIP-57 JSON into
+  *     `resourceManaged/main/META-INF/scalus/blueprints/<package>/<Contract>.json` plus an
+  *     aggregate document at `resourceManaged/main/plutus.json`. Registered as a resource
+  *     generator, so `package`/`publish` embed both in the JAR (aggregate at `/plutus.json`);
+  *     every JAR describes exactly its own code. Generation is skipped when a content
+  *     fingerprint of `classDirectory` is unchanged. Git is never touched. Opt out with
+  *     `blueprint / skip := true` or the `SCALUS_SKIP_BLUEPRINT` env var.
+  *   - `blueprintPin` (deliberate): copies the current set to committed locations –
+  *     `<base>/plutus.json` (the path Aiken tooling expects) and
+  *     `<base>/blueprints/<package>/<Contract>.json`. Run it when a usable version should be
+  *     pinned, then commit; git history is the pin history. `blueprintCheck` fails when pins
+  *     are stale (for release pipelines). In cross-built projects set
+  *     `blueprintScalaVersion := Some("3.3.7")` so only the primary Scala baseline is pinned.
   *
-  * Environment variables can substitute CLI flags:
+  * Version provenance lives inside the JSON, never in filenames: Scalus version in
+  * `preamble.compiler.version`, Scala version in the top-level `scalus.scalaVersion`
+  * extension key (valid CIP-57: the schema allows extra root keys).
+  *
+  * `sbt "deploy <ContractName> --network preview --blockfrost-key <key> --mnemonic '<words>'"`
+  * deploys a validator as a reference script UTXO at the sender's own base address.
+  *
+  * Environment variables can substitute deploy CLI flags:
   *   - `CARDANO_NETWORK` for `--network` (default: "preview")
   *   - `BLOCKFROST_API_KEY` for `--blockfrost-key`
   *   - `CARDANO_MNEMONIC` for `--mnemonic`
@@ -29,6 +44,18 @@ object ScalusSbtPlugin extends AutoPlugin {
         val blueprint =
             taskKey[Seq[java.io.File]](
               "Generate CIP-57 blueprint JSON for all Contract implementations"
+            )
+        val blueprintPin =
+            taskKey[Seq[java.io.File]](
+              "Copy generated blueprints to the committed pin locations (plutus.json and blueprints/)"
+            )
+        val blueprintCheck =
+            taskKey[Unit](
+              "Fail if the committed blueprint pins differ from freshly generated blueprints"
+            )
+        val blueprintScalaVersion =
+            settingKey[Option[String]](
+              "If set, blueprintPin refuses to run (and blueprintCheck skips) under any other Scala version"
             )
         val deploy =
             inputKey[Unit](
@@ -76,6 +103,92 @@ object ScalusSbtPlugin extends AutoPlugin {
             Seq.empty[java.io.File]
         else
             blueprint.value
+    }
+
+    /** Copy the freshly generated blueprints to the committed pin locations:
+      * `<base>/plutus.json` (aggregate, the path Aiken tooling expects) and
+      * `<base>/blueprints/<package>/<Contract>.json`. A deliberate act – run it when a
+      * usable version should be pinned, then commit the result; git history is the pin
+      * history. Stale pins of renamed/deleted contracts are pruned.
+      */
+    lazy val blueprintPinTask: Def.Initialize[Task[Seq[java.io.File]]] = Def.task {
+        val generated = blueprint.value
+        val log = streams.value.log
+        blueprintScalaVersion.value.foreach { required =>
+            if (scalaVersion.value != required)
+                sys.error(
+                  s"blueprintPin is restricted to Scala $required (blueprintScalaVersion), " +
+                      s"but the current scalaVersion is ${scalaVersion.value}. " +
+                      s"Run `++$required blueprintPin` instead."
+                )
+        }
+        val resourceRoot = (Compile / resourceManaged).value
+        val genDir = resourceRoot / "META-INF" / "scalus" / "blueprints"
+        val base = baseDirectory.value
+        val pinDir = base / "blueprints"
+        val copied = scala.collection.mutable.ListBuffer.empty[java.io.File]
+        val genAgg = resourceRoot / "plutus.json"
+        if (genAgg.isFile) {
+            IO.copyFile(genAgg, base / "plutus.json")
+            copied += base / "plutus.json"
+        }
+        val perContract = generated.flatMap(f => IO.relativize(genDir, f).map(rel => (f, rel)))
+        perContract.foreach { case (f, rel) =>
+            val dest = pinDir / rel
+            IO.copyFile(f, dest)
+            copied += dest
+        }
+        BlueprintLayout
+            .pruneStale(pinDir, perContract.map { case (_, rel) => pinDir / rel }.toSet)
+            .foreach(f => log.info(s"Pruned stale pin $f"))
+        log.info(
+          s"Pinned ${copied.size} blueprint file(s); review and commit plutus.json and blueprints/"
+        )
+        copied.toList
+    }
+
+    /** Fail when the committed pins differ from freshly generated blueprints. Intended for
+      * release pipelines (it cannot stay green between pins under git-derived snapshot
+      * versions). Skips with a note under a non-primary Scala version in cross-builds, so
+      * `+blueprintCheck` does not produce false failures.
+      *
+      * `Def.taskIf` so the skipped branch genuinely does not evaluate `blueprint`.
+      */
+    lazy val blueprintCheckTask: Def.Initialize[Task[Unit]] = Def.taskIf {
+        if (blueprintScalaVersion.value.exists(_ != scalaVersion.value)) {
+            streams.value.log.info(
+              s"blueprintCheck skipped: pins are maintained under Scala " +
+                  s"${blueprintScalaVersion.value.getOrElse("?")}, current is ${scalaVersion.value}"
+            )
+        } else {
+            val generated = blueprint.value
+            val log = streams.value.log
+            val resourceRoot = (Compile / resourceManaged).value
+            val genDir = resourceRoot / "META-INF" / "scalus" / "blueprints"
+            val base = baseDirectory.value
+            val pinDir = base / "blueprints"
+            def sameBytes(a: java.io.File, b: java.io.File): Boolean =
+                a.isFile && b.isFile && java.util.Arrays.equals(IO.readBytes(a), IO.readBytes(b))
+            val problems = scala.collection.mutable.ListBuffer.empty[String]
+            val genAgg = resourceRoot / "plutus.json"
+            if (genAgg.isFile && !sameBytes(genAgg, base / "plutus.json"))
+                problems += s"${base / "plutus.json"} is missing or stale"
+            val perContract = generated.flatMap(f => IO.relativize(genDir, f).map(rel => (f, rel)))
+            perContract.foreach { case (f, rel) =>
+                if (!sameBytes(f, pinDir / rel)) problems += s"${pinDir / rel} is missing or stale"
+            }
+            val expected = perContract.map { case (_, rel) => (pinDir / rel).getCanonicalFile }.toSet
+            BlueprintLayout.listFilesRecursively(pinDir).foreach { f =>
+                if (f.getName.endsWith(".json") && !expected.contains(f.getCanonicalFile))
+                    problems += s"$f is pinned but no longer generated"
+            }
+            if (problems.nonEmpty)
+                sys.error(
+                  ("Pinned blueprints are stale; run `blueprintPin` and commit:" +: problems.toList)
+                      .mkString("\n  ")
+                )
+            log.info("Pinned blueprints are up to date")
+        }
     }
 
     lazy val deployTask: Def.Initialize[InputTask[Unit]] = Def.inputTask {
@@ -134,14 +247,18 @@ object ScalusSbtPlugin extends AutoPlugin {
     }
 
     override lazy val projectSettings: Seq[Setting[_]] = Seq(
-      // Def.uncached opts these out of sbt 2's task cache: `blueprint` returns Seq[File] (not a
-      // cacheable output type) and writes files, and `deploy` performs network I/O. No-op on sbt 1
-      // (via sbt2-compat).
+      // Def.uncached opts these out of sbt 2's task cache: they return Seq[File] (not a
+      // cacheable output type) and write files, and `deploy` performs network I/O. No-op on
+      // sbt 1 (via sbt2-compat). Work-skipping for `blueprint` comes from its own content
+      // fingerprint of classDirectory, not from sbt's task cache.
       blueprint := Def.uncached(blueprintTask.value),
       // Default-on; opt out per project with `blueprint / skip := true`. Defined at project (Zero)
       // config so the generator's Compile-scoped read delegates to it AND a user's Zero-scoped
       // override is honored.
       blueprint / skip := false,
+      blueprintScalaVersion := None,
+      blueprintPin := Def.uncached(blueprintPinTask.value),
+      blueprintCheck := Def.uncached(blueprintCheckTask.value),
       // Embed blueprints in the JAR via the resources pipeline.
       Compile / resourceGenerators += blueprintGenerator.taskValue,
       deploy := Def.uncached(deployTask.evaluated)
