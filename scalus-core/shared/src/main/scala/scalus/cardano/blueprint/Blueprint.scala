@@ -23,6 +23,7 @@ import scala.annotation.targetName
 case class Blueprint(
     preamble: Preamble,
     validators: Seq[Validator] = Nil,
+    scalus: Option[ScalusInfo] = None,
 ) {
 
     /** @return
@@ -356,6 +357,23 @@ case class Validator(
 
 object Validator {
     given JsonValueCodec[Validator] = JsonCodecMaker.make
+}
+
+/** Scalus-specific toolchain provenance, stored as a top-level extension key of the blueprint
+  * document. CIP-57 sets `additionalProperties: false` on `preamble` and `compiler`, but not on the
+  * document root, so an extra root key keeps the blueprint valid against the official schema.
+  *
+  * The Scalus version already lives in `preamble.compiler.version`; this records what the JSON has
+  * no other slot for – the Scala toolchain that compiled the contracts, which determines the
+  * generated UPLC (different Scala versions can produce different scripts and hashes).
+  *
+  * @param scalaVersion
+  *   the full Scala version the contracts were compiled with (e.g. "3.3.7")
+  */
+case class ScalusInfo(scalaVersion: Option[String] = None)
+
+object ScalusInfo {
+    given JsonValueCodec[ScalusInfo] = JsonCodecMaker.make
 }
 
 /** Type class for types that can provide a [[TypeDescription]] for CIP-57 blueprints.

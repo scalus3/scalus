@@ -322,6 +322,34 @@ class BlueprintTest extends AnyFunSuite {
         assert(schema.title.contains("PubKeyHash"))
     }
 
+    test("Blueprint JSON roundtrip preserves the top-level scalus toolchain info") {
+        val bp = Blueprint(
+          Preamble("Stamped", "with scalus info", Language.PlutusV3),
+          Seq(Validator(title = "Stamped")),
+          scalus = Some(ScalusInfo(scalaVersion = Some("3.3.7")))
+        )
+        val json = bp.toJson()
+        assert(json.contains("\"scalaVersion\": \"3.3.7\""))
+        assert(Blueprint.fromJson(json) == bp)
+    }
+
+    test("Blueprint without scalus info serializes without the scalus key") {
+        val bp = Blueprint(
+          Preamble("Plain", "no scalus info", Language.PlutusV3),
+          Seq(Validator(title = "Plain"))
+        )
+        // the key "scalus": must be absent (the compiler *name* value "scalus" is still present)
+        assert(!bp.toJson().contains("\"scalus\":"))
+    }
+
+    test("Blueprint JSON without a scalus key parses with scalus = None (back-compat)") {
+        val json =
+            """{ "preamble": { "title": "Old", "plutusVersion": "v3" }, "validators": [] }"""
+        val bp = Blueprint.fromJson(json)
+        assert(bp.scalus.isEmpty)
+        assert(bp.preamble.title == "Old")
+    }
+
     test("Blueprint.plutusV3 methods should produce valid JSON") {
         val compiled = PlutusV3.compile((ctx: Data) => ())
         val bp = Blueprint.plutusV3[ContractDatum, Action](

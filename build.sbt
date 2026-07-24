@@ -419,7 +419,12 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Show"),
         ProblemFilters.exclude[MissingTypesProblem](
           "scalus.cardano.onchain.plutus.prelude.ShowByteString"
-        )
+        ),
+        // Blueprint gained the optional `scalus` toolchain-provenance field (extra top-level
+        // CIP-57 key). Constructor/apply/copy arity changed; source-compatible via the default.
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.blueprint.Blueprint.copy"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.blueprint.Blueprint.apply"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.blueprint.Blueprint.this")
       ),
 
       // enable when debug compilation of tests
