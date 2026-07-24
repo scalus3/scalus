@@ -1,0 +1,108 @@
+---
+asIndexPage: true
+title: Cardano Smart Contract Development Platform - How Scalus Differs
+description: Learn how Scalus differs from focused Cardano smart contract languages and SDKs by combining Scala 3 contracts, transaction building, emulator testing, blueprints, and JVM-based dApp development.
+sidebarTitle: Why Scalus
+---
+
+import { Callout } from 'nextra/components'
+
+# Cardano Smart Contract Development Platform
+
+Scalus is a **JVM-based Cardano development platform** built around Scala 3. It combines smart contracts, transaction building, local emulator testing, debugging, profiling, blueprints, examples, and multiplatform tooling in one stack.
+
+It is not only a smart-contract language or a transaction SDK. Scalus connects smart-contract development, the compiler pipeline, optimization controls, transaction building, ledger/emulator workflows, testing, debugging, profiling, CIP-57 blueprints, example contracts, and multiplatform JVM/JavaScript/Native tooling.
+
+<Callout type="info">
+  This page is a positioning guide, not a claim that one tool is universally better than another. Aiken, Plutarch, Yaci DevKit, Balius, Hardhat, and Foundry solve different problems with different tradeoffs.
+</Callout>
+
+## In One Sentence
+
+Scalus is for teams that want a coherent Cardano stack where contracts, off-chain code, transaction flows, tests, blueprints, and local execution environments can evolve together.
+
+## Smart Contract Development
+
+Cardano teams are not only choosing a contract syntax. They are choosing how quickly they can write, understand, optimize, test, debug, and maintain protocols over time.
+
+| Capability | Scalus | Aiken | Plutarch |
+|---|---|---|---|
+| Primary model | JVM-based Scala 3 platform | Cardano-focused smart-contract language | Haskell eDSL for Plutus |
+| Contract authoring | Scala 3 with `@Compile` | Aiken language | Haskell / Plutarch DSL |
+| Plutus support | V1, V2, V3 | V3-focused | V1, V2, V3 |
+| Standard library | Yes | Yes | Yes |
+| Low-level UPLC control | Yes | Compiler-driven | Yes |
+| Custom optimizations | Compiler and UPLC-level options | Mostly compiler-driven | Manual / DSL-level |
+| Off-chain type/code reuse | Native Scala/JVM model | Code generation and external integrations | External off-chain stack |
+| Developer ecosystem | Scala/JVM ecosystem | Cardano-native ecosystem | Haskell ecosystem |
+| Custom data representation | Annotations and compiler support | Limited compared with low-level DSLs | Manual control |
+| Debugging | IDE breakpoints, source positions, traces | Logs and toolchain support | Haskell/toolchain support |
+| Transaction building | Native JVM and JS/TS APIs | External SDKs such as Lucid or Mesh | External SDKs |
+| Testing | ScalaTest, ScalaCheck, emulator, boundary/scenario/state-machine testing | Built-in test tooling | Haskell ecosystem tooling |
+
+**Aiken** is an excellent focused smart-contract language for Cardano. **Plutarch** is powerful when a Haskell team wants precise low-level control. **Scalus** is different: it aims to connect the contract language, compiler, off-chain transactions, local execution, testing, blueprints, and examples into one Scala/JVM-centered development platform.
+
+## Development Environment and Testing
+
+Scalus is designed to shorten the local development loop. Its in-memory emulator gives developers a fast, in-process Cardano execution environment for transaction and script validation. It can be used from the JVM and exposed to JavaScript/TypeScript through the `scalus` npm package.
+
+This gives Cardano developers something closer to the local execution loops common in Ethereum tooling: build a transaction, evaluate scripts, inspect failures, advance time, and iterate without always stitching together a separate network, provider, and testing stack.
+
+| Capability | Scalus | Yaci DevKit | Hardhat | Foundry |
+|---|---|---|---|---|
+| Ecosystem | Cardano | Cardano | Ethereum | Ethereum |
+| In-memory blockchain | Yes, in-process emulator | No, local devnet process | Yes, Hardhat Network | Yes, Anvil |
+| Local devnet | Yes, via Yaci DevKit integration | Yes | Yes | Yes |
+| Slot/block/time control | Slot and epoch workflows | Devnet configuration | Block/time controls | Block/time controls |
+| Test language | Scala / JVM types | Java / external clients | JavaScript / TypeScript | Solidity |
+| Property-based testing | ScalaCheck | Depends on caller stack | Available through ecosystem | Forge fuzzing |
+| Multi-party / wallet testing | Native helpers | Devnet accounts and clients | Yes | Yes |
+| Smart-contract debugging | Source positions, IDE debugging, traces | Transaction-level logs | Stack traces and console logs | Stack traces |
+| Typical use | Fast local Cardano protocol tests and emulator workflows | Real local Cardano network and integration testing | Ethereum dApp testing | Ethereum contract testing |
+
+Yaci DevKit remains valuable when a real local Cardano node/devnet is needed. Scalus complements that with an in-process emulator and integrated testing tools for faster inner-loop development.
+
+## Application Framework
+
+The application layer is where Scalus moves beyond contract tooling. The goal is to support complete Cardano applications and protocol backends: transaction building, typed UTxO indexing, reactive workers, scheduling, persistence, and crash recovery.
+
+In the Cardano ecosystem, **Balius** is a close conceptual neighbor because it focuses on headless dApps and workers. Scalus approaches the problem from the Scala/JVM side and connects that runtime direction to its existing compiler, transaction builder, emulator, testing, and blueprint tooling.
+
+| Capability | Scalus | Balius |
+|---|---|---|
+| Primary focus | JVM-based application platform plus contracts, transactions, emulator, testing, and blueprints | Headless Cardano dApps and workers |
+| Runtime model | Scala/JVM-oriented, with Native and JS/TS tooling in the wider stack | Rust/WASM-oriented |
+| Reactive workers | In development | Yes |
+| Persistence layer | In development, crash-consistent direction | Runtime-managed |
+| Job / time scheduling | In development | Runtime-managed |
+| Crash recovery | In development, event-log replay direction | Runtime-managed |
+| L1 access | External node/provider integrations | External node/provider integrations |
+| Production maturity | Core compiler/transaction/testing stack available; application runtime in development | In development |
+
+<Callout type="warning">
+  Scalus's compiler, transaction builder, emulator, testing stack, blueprint tooling, examples, and JS package are available today. The application runtime layer is under active development.
+</Callout>
+
+## What This Means for Teams
+
+For small contracts, a focused contract language can be enough. For larger protocols, the hard part is keeping all moving pieces aligned:
+
+- Smart-contract source code
+- Generated UPLC and optimization choices
+- Datum, redeemer, and transaction schemas
+- Off-chain transaction builders
+- Local emulator and devnet tests
+- Scenario, property, and boundary tests
+- Deployment blueprints and reference scripts
+- Long-term maintenance and operations
+
+Scalus is designed around that larger workflow. It gives teams a single JVM-based foundation for building, testing, and evolving Cardano protocols while still supporting JavaScript/TypeScript and Native tooling where those platforms make sense.
+
+## References
+
+- [Aiken](https://aiken-lang.org/)
+- [Plutarch](https://plutarch-plutus.org/)
+- [Yaci DevKit](https://devkit.yaci.xyz/)
+- [Hardhat](https://hardhat.org/)
+- [Foundry](https://www.getfoundry.sh/)
+- [Balius](https://docs.txpipe.io/balius)

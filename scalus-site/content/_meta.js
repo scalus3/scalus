@@ -1,5 +1,6 @@
 export default {
   index: '',
+  'cardano-smart-contract-development-platform': 'Why Scalus',
   'get-started': 'Getting Started',
   'multiplatform': 'Multiplatform',
   'language-guide': 'Language Guide',

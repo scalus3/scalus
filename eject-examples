@@ -26,7 +26,7 @@ SCALUS_VERSION="0.18.2"
 SBT_VERSION="2.0.0"
 SCALA_VERSION="3.3.8"
 
-EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist bilinearAccumulator" 
+EXCLUDED_EXAMPLES="cape setbench buidlerfest linkedlist bilinearAccumulator platform" 
 
 # Examples that need sources from other examples bundled in.
 # Format: "example:dep1,dep2"
@@ -198,19 +198,39 @@ gen_getting_started() {
     cat <<EOF
 # Getting Started
 
-Standalone Scalus example, ejected from
-[scalus3/scalus](https://github.com/scalus3/scalus).
+Standalone Scalus example, also available in the [scalus3/scalus](https://github.com/scalus3/scalus) monorepo.
+Set up your Scala 3 Development environment: https://scalus.org/docs/get-started#install-scala-3-development-environment 
 
 ## Build
 
+Compile the on-chain and off-chain sources:
+	
 \`\`\`sh
 sbt compile
 \`\`\`
 
 ## Test
 
+Run all tests (unit + integration; uses the emulator backend).
+
 \`\`\`sh
 sbt test
+\`\`\`
+
+Test backends:
+
+\`\`\`sh
+sbt test                           # in-memory emulator (the default)
+SCALUS_TEST_ENV=emulator sbt test  # in-memory emulator, named explicitly
+SCALUS_TEST_ENV=yaci sbt test      # a local Yaci DevKit node (auto-started; requires Docker)
+\`\`\`
+
+## Profiling
+
+Run the tests with on-chain execution profiling enabled. It writes an interactive HTML report (CPU and memory budget per source line) to target/profile.html
+
+\`\`\`sh
+SCALUS_PROFILE=1 sbt test
 \`\`\`
 
 ## CIP-57 blueprints
