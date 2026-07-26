@@ -4,10 +4,40 @@
 
 ### Changed
 
-- Cardano protocol parameters updated to the latest on-chain values: mainnet epoch 642 (still PV10;
-  includes the van Rossem cost models enacted 2026-06-18 — PlutusV1/V2 extended to 332 entries,
-  PlutusV3 to 350, `equalsByteString` and integer-division CPU coefficients repriced), preprod
-  epoch 300 and preview epoch 1354 (both PV11, van Rossem hard fork)
+- **BREAKING**: protocol version 11 (van Rossem, live on mainnet since 2026-07-18) is now the
+  default everywhere. The default compile target (`Options.default`/`debug`/`release`) moved from
+  `changPV` (PV9) to `vanRossemPV`, enabling case-on-builtins, `dropList` field access and the
+  batch6 builtins in generated code — **every script hash changes**. To reproduce pre-van-Rossem
+  output (e.g. to verify an already-deployed contract), use the new `Options.plomin` preset or set
+  `targetProtocolVersion = MajorProtocolVersion.plominPV`. `PlutusVM` factories, the Emulator,
+  ledger rules and testkit defaults follow `CardanoInfo.mainnet` and now evaluate at PV11 with
+  builtin semantics variants D (V1/V2) and E (V3/V4). Re-measured across the test suite, the PV11
+  target cuts execution budgets by roughly a third (452 of 453 pinned budgets improved; mean
+  −28% memory / −35% CPU steps; the one outlier is a BLS12-381 accumulator at +3% CPU from the
+  PV11 integer-division repricing) and shrinks scripts ~17–26% (e.g. HelloCardano 445 → 338
+  bytes, HTLC 525 → 387, TwoPartyEscrow 1387 → 1142)
+- Cardano protocol parameters updated to the latest on-chain values: mainnet epoch 645 (PV11,
+  van Rossem hard fork enacted 2026-07-18; cost models unchanged since the 2026-06-18 update —
+  PlutusV1/V2 at 332 entries, PlutusV3 at 350; `committee_min_size` lowered 7 → 5 at epoch 643),
+  preprod epoch 300 and preview epoch 1354 (both PV11)
+- ledger rules now accept the full van Rossem batch6 builtin set (`expModInteger`, `dropList`,
+  array operations, `bls12_381_G1/G2_multiScalarMul`, and the `Value` builtins), matching Plutus
+  1.63 `builtinsIntroducedIn` — scripts using them pass `ScriptsWellFormedValidator` on all of
+  PlutusV1/V2/V3 at PV11
+
+### Fixed
+
+- `PlutusVM.makePlutusV3VM(params)` ignored the mainnet protocol version when constructing the VM,
+  silently disabling case-on-builtins; `PlutusScriptEvaluator` built its V1/V2 VMs with the mainnet
+  default instead of the evaluator's protocol version, which would mis-select semantics variants
+  when replaying blocks from earlier eras
+- CEK machine `Case`/`Constr` step costs fell back to a 300M placeholder for PlutusV1/V2 cost
+  models (whose param classes don't carry the PV11-appended `cekCaseCost`/`cekConstrCost`
+  entries), making any Case step cost ~300M CPU+mem; they now fall back to the Plutus reference
+  values, matching the on-chain PV11 cost model
+- the PV11 `List.at`/`!!` lowering (`headList(dropList(i, xs))`) returned element 0 for negative
+  indices on-chain while the JVM implementation throws — the intrinsic now guards negative and
+  past-the-end indices, keeping JVM/UPLC semantics and the documented error message aligned
 
 ## 0.18.2 (2026-06-19)
 

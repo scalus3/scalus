@@ -36,13 +36,13 @@ import scalus.cardano.ledger.MajorProtocolVersion
 // Use Options to select the backend and protocol version
 given Options = Options(
   targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering, // default
-  targetProtocolVersion = MajorProtocolVersion.changPV,               // default (V3)
+  targetProtocolVersion = MajorProtocolVersion.vanRossemPV,           // default (PV11)
   generateErrorTraces = true,
   optimizeUplc = true
 )
 ```
 
-There are also convenient presets: `Options.default`, `Options.debug`, `Options.release`, and `Options.vanRossem` (for protocol version 11).
+There are also convenient presets: `Options.default`, `Options.debug`, `Options.release`, and `Options.plomin` (targets protocol version 10, reproducing pre-van-Rossem output and script hashes).
 
 The same `given Options` is picked up by `PlutusV3.compile`:
 
