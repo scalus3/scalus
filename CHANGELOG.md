@@ -19,7 +19,8 @@
 - Cardano protocol parameters updated to the latest on-chain values: mainnet epoch 645 (PV11,
   van Rossem hard fork enacted 2026-07-18; cost models unchanged since the 2026-06-18 update —
   PlutusV1/V2 at 332 entries, PlutusV3 at 350; `committee_min_size` lowered 7 → 5 at epoch 643),
-  preprod epoch 300 and preview epoch 1354 (both PV11)
+  preprod epoch 303 and preview epoch 1370 (both PV11; preview also raised
+  `max_tx_ex_mem` to 17.5M and `max_block_ex_mem` to 77.5M and lowered `min_pool_cost` to 75 ADA)
 - ledger rules now accept the full van Rossem batch6 builtin set (`expModInteger`, `dropList`,
   array operations, `bls12_381_G1/G2_multiScalarMul`, and the `Value` builtins), matching Plutus
   1.63 `builtinsIntroducedIn` — scripts using them pass `ScriptsWellFormedValidator` on all of

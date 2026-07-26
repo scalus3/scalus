@@ -28,22 +28,22 @@ object CardanoInfo {
           SlotConfig.mainnet
         )
 
-    /** Cardano info for Preprod testnet, epoch 300, major protocol version 11 (van Rossem hard
+    /** Cardano info for Preprod testnet, epoch 303, major protocol version 11 (van Rossem hard
       * fork)
       */
     @threadUnsafe lazy val preprod: CardanoInfo =
         CardanoInfo(
-          inlineProtocolParams("blockfrost-params-preprod-300.json"),
+          inlineProtocolParams("blockfrost-params-preprod-303.json"),
           Network.Testnet,
           SlotConfig.preprod
         )
 
-    /** Cardano info for Preview testnet, epoch 1354, major protocol version 11 (van Rossem hard
+    /** Cardano info for Preview testnet, epoch 1370, major protocol version 11 (van Rossem hard
       * fork)
       */
     @threadUnsafe lazy val preview: CardanoInfo =
         CardanoInfo(
-          inlineProtocolParams("blockfrost-params-preview-1354.json"),
+          inlineProtocolParams("blockfrost-params-preview-1370.json"),
           Network.Testnet,
           SlotConfig.preview
         )
