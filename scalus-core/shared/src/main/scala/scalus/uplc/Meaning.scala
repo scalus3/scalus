@@ -8,6 +8,9 @@ object Meaning {
     lazy val allBuiltins: CardanoBuiltins = CardanoBuiltins(
       fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV3).builtinCostModel,
       platform,
-      BuiltinSemanticsVariant.C
+      BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
+        CardanoInfo.mainnet.majorProtocolVersion,
+        Language.PlutusV3
+      )
     )
 }

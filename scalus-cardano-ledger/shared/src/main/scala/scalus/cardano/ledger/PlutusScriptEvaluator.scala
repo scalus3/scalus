@@ -404,7 +404,8 @@ object PlutusScriptEvaluator {
                 costModels,
                 PlutusV1,
                 protocolMajorVersion
-              )
+              ),
+              protocolMajorVersion
             )
 
         private lazy val plutusV2VM =
@@ -413,7 +414,8 @@ object PlutusScriptEvaluator {
                 costModels,
                 PlutusV2,
                 protocolMajorVersion
-              )
+              ),
+              protocolMajorVersion
             )
 
         private lazy val plutusV3VM =

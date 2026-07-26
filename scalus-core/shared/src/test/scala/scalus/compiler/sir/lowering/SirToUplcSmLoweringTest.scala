@@ -3,6 +3,7 @@ package scalus.compiler.sir.lowering
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data.I
 import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
@@ -24,10 +25,18 @@ class SirToUplcSmLoweringTest
     with ScalaCheckPropertyChecks
     with ArbitraryInstances:
 
+    // The expected terms in this suite document the pre-van-Rossem lowering (ifThenElse
+    // instead of case-on-builtins), so the target is pinned to plominPV.
     extension (sir: SIR)
         infix def lowersTo(r: Term): Unit =
             // assert(SimpleSirToUplcLowering(sir, generateErrorTraces = false).lower() == r)
-            assert(SirToUplcV3Lowering(sir, generateErrorTraces = false).lower().alphaEq(r))
+            assert(
+              SirToUplcV3Lowering(
+                sir,
+                generateErrorTraces = false,
+                targetProtocolVersion = MajorProtocolVersion.plominPV
+              ).lower().alphaEq(r)
+            )
 
     def lower(
         sir: SIR,
@@ -40,6 +49,7 @@ class SirToUplcSmLoweringTest
           generateErrorTraces = generateErrorTraces,
           upcastTo = upcastTo,
           representation = representation,
+          targetProtocolVersion = MajorProtocolVersion.plominPV,
           debug = false,
         ).lower()
 

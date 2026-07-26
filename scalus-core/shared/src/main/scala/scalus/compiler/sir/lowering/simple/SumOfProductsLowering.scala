@@ -29,7 +29,7 @@ class SumOfProductsLowering(
     sir: SIR,
     generateErrorTraces: Boolean = false,
     targetLanguage: Language = Language.PlutusV3,
-    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV
 ) extends BaseSimpleLowering(sir, generateErrorTraces, targetLanguage, targetProtocolVersion):
 
     /** For wildcard patterns in SumOfProductsLowering, use unused binding names */

@@ -8,7 +8,7 @@ import scalus.utils.Macros
 case class Options(
     targetLoweringBackend: TargetLoweringBackend = SIRDefaultOptions.targetLoweringBackend,
     targetLanguage: Language = Language.PlutusV3,
-    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV,
     generateErrorTraces: Boolean = SIRDefaultOptions.generateErrorTraces,
     removeTraces: Boolean = SIRDefaultOptions.removeTraces,
     optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
@@ -67,9 +67,20 @@ object Options {
 
     /** Preset for van Rossem hard fork (protocol version 11) features. Enables case-on-builtins,
       * batch6 builtins, and dropList field access.
+      *
+      * Since the van Rossem hard fork (2026-07-18) this is the default, so this preset equals
+      * [[default]]; it is kept for source compatibility.
       */
     val vanRossem: Options = Options(
       targetProtocolVersion = MajorProtocolVersion.vanRossemPV
+    )
+
+    /** Preset targeting protocol version 10 (Plomin hard fork). Use to reproduce pre-van-Rossem
+      * output — e.g. to keep the script hash of a contract compiled before the PV11 default switch.
+      * PV11-only lowering (case-on-builtins, batch6 builtins, dropList field access) is disabled.
+      */
+    val plomin: Options = Options(
+      targetProtocolVersion = MajorProtocolVersion.plominPV
     )
 }
 

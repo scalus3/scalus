@@ -20,6 +20,14 @@ import scalus.utils.Hex
   */
 class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
 
+    /** The conformance vectors were produced around epoch 544 (Plomin, PV10), so vectors without
+      * their own pparams must not fall back to the current mainnet params (PV11, van Rossem cost
+      * models) — that would change the language view and execution costs.
+      */
+    private lazy val blocksEraParams = ProtocolParams.fromBlockfrostJson(
+      getClass.getResourceAsStream("/blockfrost-params-epoch-544.json")
+    )
+
     override def afterEach(): Unit = {
         // Clean up dump artifacts created by debugDumpFilesForTesting:
         // <scriptHash>-<language>-<tag>-<index>.flat plus the manifest / budget log.
@@ -66,7 +74,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
                 )
                 .map(_.toProtocolParams)
 
-            val params = paramsOpt.getOrElse(UtxoEnv.default.params)
+            val params = paramsOpt.getOrElse(blocksEraParams)
             println(s"Protocol version: ${params.protocolVersion}")
             println(s"Cost models available: ${params.costModels.models.keys.toSeq.sorted}")
 
@@ -206,7 +214,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
                 )
                 .map(_.toProtocolParams)
 
-            val params = paramsOpt.getOrElse(UtxoEnv.default.params)
+            val params = paramsOpt.getOrElse(blocksEraParams)
 
             // Create evaluator with debug dump enabled
             val evaluator = PlutusScriptEvaluator(
@@ -284,7 +292,7 @@ class ScriptContextComparisonTest extends AnyFunSuite with BeforeAndAfterEach {
                 )
                 .map(_.toProtocolParams)
 
-            val params = paramsOpt.getOrElse(UtxoEnv.default.params)
+            val params = paramsOpt.getOrElse(blocksEraParams)
 
             // Get original redeemer budgets
             val originalRedeemers = tx.witnessSet.redeemers.map(_.value.toMap).getOrElse(Map.empty)

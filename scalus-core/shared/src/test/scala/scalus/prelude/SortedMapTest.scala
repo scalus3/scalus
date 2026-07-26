@@ -70,7 +70,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
             applied.evaluateDebug match
                 case Result.Success(_, exunits, _, _) =>
                     assert(
-                      exunits == ExUnits(memory = 19588, steps = 5_584670),
+                      exunits == ExUnits(memory = 15868, steps = 4_014255),
                       s"Budget mismatch: got $exunits"
                     )
                 case Result.Failure(e, _, _, _) => fail(s"Expected success: $e")
@@ -97,7 +97,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
             applied.evaluateDebug match
                 case Result.Success(_, exunits, _, _) =>
                     val expected =
-                        ExUnits(memory = 61364L, steps = 16554940L)
+                        ExUnits(memory = 48751, steps = 11_717342)
                     assert(
                       exunits == expected,
                       s"Budget mismatch: got $exunits, expected $expected"
@@ -140,7 +140,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
             (BigInt(1), BigInt(1)),
             List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
           ),
-          ExUnits(memory = 60117, steps = 17_696430)
+          ExUnits(memory = 44462, steps = 10_627475)
         )
 
         assertEvalFails[RequirementError](
@@ -215,7 +215,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 77805L, steps = 22884961L)
+          ExUnits(memory = 61286, steps = 15_422018)
         )
 
         assertEvalWithBudget(
@@ -243,7 +243,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 76641, steps = 22_551_344)
+          ExUnits(memory = 60454, steps = 15_269395)
         )
 
         assertEvalWithBudget(
@@ -280,7 +280,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 104790, steps = 29_772_991)
+          ExUnits(memory = 77245, steps = 18_411877)
         )
     }
 
@@ -344,7 +344,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 78905L, steps = 23060961L)
+          ExUnits(memory = 62386, steps = 15_598018)
         )
 
         assertEvalWithBudget(
@@ -373,7 +373,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 77741, steps = 22_727_344)
+          ExUnits(memory = 61554, steps = 15_445395)
         )
 
         assertEvalWithBudget(
@@ -411,7 +411,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 105890, steps = 29_948_991)
+          ExUnits(memory = 78345, steps = 18_587877)
         )
     }
 
@@ -456,7 +456,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 29185, steps = 8_136_659)
+          ExUnits(memory = 21201, steps = 5_065969)
         )
 
         assertEvalNotEq(
@@ -635,7 +635,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   )
                 )
               ),
-          ExUnits(memory = 43289, steps = 12_532_020)
+          ExUnits(memory = 31646, steps = 7_901141)
         )
 
     }
@@ -733,7 +733,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 3164, steps = 637717)
+            compilerOptions -> ExUnits(memory = 2432, steps = 392723)
           )
         )
 
@@ -742,7 +742,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 6030, steps = 1_401_582)
+            compilerOptions -> ExUnits(memory = 4434, steps = 813931)
           )
         )
 
@@ -756,7 +756,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .length,
           BigInt(3),
-          ExUnits(memory = 53151, steps = 15_173_232)
+          ExUnits(memory = 39284, steps = 9_445388)
         )
     }
 
@@ -773,7 +773,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 3164, steps = 637717)
+            compilerOptions -> ExUnits(memory = 2432, steps = 392723)
           )
         )
 
@@ -782,7 +782,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 6030, steps = 1_401_582)
+            compilerOptions -> ExUnits(memory = 4434, steps = 813931)
           )
         )
 
@@ -796,7 +796,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .size,
           BigInt(3),
-          ExUnits(memory = 53151, steps = 15_173_232)
+          ExUnits(memory = 39284, steps = 9_445388)
         )
     }
 
@@ -812,7 +812,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           (m: SortedMap[BigInt, BigInt]) => m.keys,
           SortedMap.empty[BigInt, BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 5696L, steps = 1063650L)
+          ExUnits(memory = 4964, steps = 818656)
         )
 
         assertEvalWithBudgets(
@@ -820,7 +820,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           List.single(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 16168, steps = 4_214_568)
+            compilerOptions -> ExUnits(memory = 13876, steps = 3_163880)
           )
         )
 
@@ -834,7 +834,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .keys,
           List.Cons(BigInt(1), List.Cons(BigInt(2), List.Cons(BigInt(3), List.Nil))),
-          ExUnits(memory = 76301, steps = 22_408_324)
+          ExUnits(memory = 60646, steps = 15_339369)
         )
     }
 
@@ -850,7 +850,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           (m: SortedMap[BigInt, BigInt]) => m.values,
           SortedMap.empty[BigInt, BigInt],
           List.empty[BigInt],
-          ExUnits(memory = 5696L, steps = 1063650L)
+          ExUnits(memory = 4964, steps = 818656)
         )
 
         assertEvalWithBudgets(
@@ -858,7 +858,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           List.single(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 16400, steps = 4_328_231)
+            compilerOptions -> ExUnits(memory = 14108, steps = 3_277543)
           )
         )
 
@@ -872,7 +872,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .values,
           List.Cons("1", List.Cons("2", List.Cons("3", List.Nil))),
-          ExUnits(memory = 76997, steps = 22_749_313)
+          ExUnits(memory = 61342, steps = 15_680358)
         )
     }
 
@@ -979,7 +979,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           SortedMap.empty[BigInt, BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 5196, steps = 1_025963)
+            compilerOptions -> ExUnits(memory = 4064, steps = 716969)
           )
         )
 
@@ -987,7 +987,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           (m: SortedMap[BigInt, BigInt]) => m.mapValues(_ + 1),
           SortedMap.singleton(BigInt(1), BigInt(1)),
           SortedMap.fromStrictlyAscendingList(List.single((BigInt(1), BigInt(2)))),
-          ExUnits(memory = 12946L, steps = 3389503L)
+          ExUnits(memory = 10254, steps = 2_274815)
         )
 
         assertEvalWithBudget(
@@ -1005,7 +1005,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               List.Cons((BigInt(2), BigInt(3)), List.Cons((BigInt(3), BigInt(4)), List.Nil))
             )
           ),
-          ExUnits(memory = 68935, steps = 20_216_503)
+          ExUnits(memory = 53280, steps = 13_147548)
         )
     }
 
@@ -1023,7 +1023,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           SortedMap.empty[BigInt, BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 5496, steps = 1_073963)
+            compilerOptions -> ExUnits(memory = 3364, steps = 604969)
           )
         )
 
@@ -1032,7 +1032,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 12682L, steps = 3352276L)
+            compilerOptions -> ExUnits(memory = 8425, steps = 1_755239)
           )
         )
 
@@ -1046,7 +1046,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .filter(_._1 > 2),
           SortedMap.fromStrictlyAscendingList(List.Cons((BigInt(3), BigInt(3)), List.Nil)),
-          ExUnits(memory = 65915, steps = 19_457_798)
+          ExUnits(memory = 48729, steps = 11_604096)
         )
 
         assertEvalWithBudget(
@@ -1059,7 +1059,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .filter(_._1 < 0),
           SortedMap.empty[BigInt, BigInt],
-          ExUnits(memory = 65251, steps = 19_206_286)
+          ExUnits(memory = 48297, steps = 11_467734)
         )
     }
 
@@ -1077,7 +1077,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           SortedMap.empty[BigInt, BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 6096, steps = 1_169_963)
+            compilerOptions -> ExUnits(memory = 3964, steps = 700969)
           )
         )
 
@@ -1086,7 +1086,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           SortedMap.empty[BigInt, BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 13419L, steps = 3400813L)
+            compilerOptions -> ExUnits(memory = 9093, steps = 1_794877)
           )
         )
 
@@ -1102,7 +1102,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.fromStrictlyAscendingList(
             List.Cons((BigInt(1), BigInt(1)), List.Cons((BigInt(2), BigInt(2)), List.Nil))
           ),
-          ExUnits(memory = 69582, steps = 20_417_457)
+          ExUnits(memory = 51261, steps = 12_076458)
         )
 
         assertEvalWithBudget(
@@ -1120,7 +1120,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
             )
           ),
-          ExUnits(memory = 70246, steps = 20_668_969)
+          ExUnits(memory = 51693, steps = 12_212820)
         )
     }
 
@@ -1137,7 +1137,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Option.None,
           Seq(
-            compilerOptions -> ExUnits(memory = 5664, steps = 1_037717)
+            compilerOptions -> ExUnits(memory = 3132, steps = 504723)
           )
         )
 
@@ -1146,7 +1146,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.Some((BigInt(1), BigInt(1))),
           Seq(
-            compilerOptions -> ExUnits(memory = 12410, steps = 3_568_479)
+            compilerOptions -> ExUnits(memory = 7657, steps = 1_610338)
           )
         )
 
@@ -1155,7 +1155,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.None,
           Seq(
-            compilerOptions -> ExUnits(memory = 11986L, steps = 3039561L)
+            compilerOptions -> ExUnits(memory = 8061, steps = 1_573674)
           )
         )
 
@@ -1169,7 +1169,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .find(_._1 === BigInt(2)),
           Option.Some((BigInt(2), BigInt(2))),
-          ExUnits(memory = 59521, steps = 17_718_243)
+          ExUnits(memory = 43732, steps = 10_516330)
         )
 
         assertEvalWithBudget(
@@ -1182,7 +1182,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .find(_._1 === BigInt(4)),
           Option.None,
-          ExUnits(memory = 65019, steps = 19_127_169)
+          ExUnits(memory = 48965, steps = 11_532617)
         )
     }
 
@@ -1203,7 +1203,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Option.None,
           Seq(
-            compilerOptions -> ExUnits(memory = 5664, steps = 1_037_717)
+            compilerOptions -> ExUnits(memory = 4232, steps = 680723)
           )
         )
 
@@ -1215,7 +1215,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.Some(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 13912, steps = 3_887_600)
+            compilerOptions -> ExUnits(memory = 10881, steps = 2_719138)
           )
         )
 
@@ -1227,7 +1227,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.None,
           Seq(
-            compilerOptions -> ExUnits(memory = 13920L, steps = 3555276L)
+            compilerOptions -> ExUnits(memory = 9925, steps = 2_028157)
           )
         )
 
@@ -1241,7 +1241,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .findMap { case (k, v) => if k === BigInt(2) then Option.Some(v) else Option.None },
           Option.Some(BigInt(2)),
-          ExUnits(memory = 62957, steps = 18_553_079)
+          ExUnits(memory = 46420, steps = 11_695613)
         )
 
         assertEvalWithBudget(
@@ -1254,7 +1254,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .findMap { case (k, v) => if k === BigInt(4) then Option.Some(v) else Option.None },
           Option.None,
-          ExUnits(memory = 70821, steps = 20_674_314)
+          ExUnits(memory = 50957, steps = 12_320066)
         )
     }
 
@@ -1272,7 +1272,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 5696L, steps = 1058461L)
+            compilerOptions -> ExUnits(memory = 4964, steps = 813467)
           )
         )
 
@@ -1282,7 +1282,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           BigInt(2),
           Seq(
-            compilerOptions -> ExUnits(memory = 18068, steps = 4_786_250)
+            compilerOptions -> ExUnits(memory = 15776, steps = 3_735562)
           )
         )
 
@@ -1296,7 +1296,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .foldLeft(BigInt(0)) { case (acc, (k, v)) => acc + k + v },
           BigInt(12),
-          ExUnits(memory = 83201, steps = 24_325_748)
+          ExUnits(memory = 67546, steps = 17_256793)
         )
     }
 
@@ -1314,7 +1314,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 5696L, steps = 1058461L)
+            compilerOptions -> ExUnits(memory = 4964, steps = 813467)
           )
         )
 
@@ -1324,7 +1324,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           BigInt(2),
           Seq(
-            compilerOptions -> ExUnits(memory = 17768, steps = 4_738_250)
+            compilerOptions -> ExUnits(memory = 15476, steps = 3_687562)
           )
         )
 
@@ -1338,7 +1338,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .foldRight(BigInt(0)) { case ((k, v), acc) => acc + k + v },
           BigInt(12),
-          ExUnits(memory = 82301, steps = 24_181_748)
+          ExUnits(memory = 66646, steps = 17_112793)
         )
     }
 
@@ -1357,7 +1357,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           Option.None,
           Seq(
-            compilerOptions -> ExUnits(memory = 5064, steps = 941717)
+            compilerOptions -> ExUnits(memory = 2132, steps = 344723)
           )
         )
 
@@ -1366,7 +1366,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.Some(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 12228, steps = 3_193_936)
+            compilerOptions -> ExUnits(memory = 6294, steps = 1_357043)
           )
         )
 
@@ -1375,7 +1375,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Option.None,
           Seq(
-            compilerOptions -> ExUnits(memory = 9328, steps = 2_259_710)
+            compilerOptions -> ExUnits(memory = 4729, steps = 977240)
           )
         )
 
@@ -1389,7 +1389,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .get(BigInt(2)),
           Option.Some(BigInt(2)),
-          ExUnits(memory = 65413, steps = 18_445_715)
+          ExUnits(memory = 46102, steps = 10_873379)
         )
 
         assertEvalWithBudget(
@@ -1402,7 +1402,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .get(BigInt(4)),
           Option.None,
-          ExUnits(memory = 76145, steps = 21_250_982)
+          ExUnits(memory = 52468, steps = 12_085417)
         )
     }
 
@@ -1425,7 +1425,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)).getOrFail(BigInt(1)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 3130, steps = 980263)
+            compilerOptions -> ExUnits(memory = 2128, steps = 691881)
           )
         )
 
@@ -1443,7 +1443,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .getOrFail(BigInt(2)),
           BigInt(2),
-          ExUnits(memory = 67975, steps = 19_370_466)
+          ExUnits(memory = 47762, steps = 11_525748)
         )
 
         assertEvalFails[NoSuchElementException](
@@ -1477,7 +1477,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)).at(BigInt(1)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 3130, steps = 980263)
+            compilerOptions -> ExUnits(memory = 2128, steps = 691881)
           )
         )
 
@@ -1495,7 +1495,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .at(BigInt(2)),
           BigInt(2),
-          ExUnits(memory = 67975, steps = 19_370_466)
+          ExUnits(memory = 47762, steps = 11_525748)
         )
 
         assertEvalFails[NoSuchElementException](
@@ -1571,7 +1571,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 4896, steps = 977963)
+            compilerOptions -> ExUnits(memory = 2764, steps = 508969)
           )
         )
 
@@ -1582,7 +1582,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               .fromStrictlyAscendingList(
                 List.Cons((BigInt(1), BigInt(1)), List.Cons((BigInt(2), BigInt(2)), List.Nil))
               ),
-          ExUnits(memory = 14260, steps = 3_632_696)
+          ExUnits(memory = 8294, steps = 1_723138)
         )
 
         assertEvalWithBudget(
@@ -1598,7 +1598,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                   List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(3), BigInt(3)), List.Nil))
                 )
               ),
-          ExUnits(memory = 52861, steps = 14_534_055)
+          ExUnits(memory = 38844, steps = 9_124331)
         )
     }
 
@@ -1620,7 +1620,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.empty[BigInt, BigInt],
           SortedMap.empty[BigInt, BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 4896, steps = 977963)
+            compilerOptions -> ExUnits(memory = 2364, steps = 444969)
           )
         )
 
@@ -1629,7 +1629,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           SortedMap.empty[BigInt, BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 11196, steps = 2_947_340)
+            compilerOptions -> ExUnits(memory = 5562, steps = 1_218776)
           )
         )
 
@@ -1638,7 +1638,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
           SortedMap.singleton(BigInt(1), BigInt(1)),
           SortedMap.singleton(BigInt(1), BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 13760, steps = 3_552_696)
+            compilerOptions -> ExUnits(memory = 7494, steps = 1_595138)
           )
         )
 
@@ -1649,7 +1649,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               )
               .delete(BigInt(2)),
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          ExUnits(memory = 50809, steps = 13_956_120)
+          ExUnits(memory = 35357, steps = 8_036302)
         )
 
         assertEvalWithBudget(
@@ -1662,7 +1662,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
               .fromStrictlyAscendingList(
                 List.Cons((BigInt(1), BigInt(1)), List.Cons((BigInt(2), BigInt(2)), List.Nil))
               ),
-          ExUnits(memory = 53173, steps = 14_529_476)
+          ExUnits(memory = 37189, steps = 8_396664)
         )
     }
 

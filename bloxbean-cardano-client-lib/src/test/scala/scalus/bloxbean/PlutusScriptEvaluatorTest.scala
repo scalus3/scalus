@@ -70,8 +70,8 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val redeemers = evaluator.evalPlutusScripts(tx, utxo)
         assert(redeemers.size == 1)
         val redeemerResult = redeemers.head
-        assert(redeemerResult.exUnits.memory == 13375L)
-        assert(redeemerResult.exUnits.steps == 3732169L)
+        assert(redeemerResult.exUnits.memory == 11973L)
+        assert(redeemerResult.exUnits.steps == 3356071L)
     }
 
     test("TxEvaluator PlutusV3") {
@@ -125,8 +125,8 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val redeemers = evaluator.evalPlutusScripts(tx, utxo)
         assert(redeemers.size == 1)
         val redeemerResult = redeemers.head
-        assert(redeemerResult.exUnits.memory == 12775L)
-        assert(redeemerResult.exUnits.steps == 3636169L)
+        assert(redeemerResult.exUnits.memory == 11373L)
+        assert(redeemerResult.exUnits.steps == 3260071L)
     }
 
     test("evaluate block 11544748") {

@@ -11,7 +11,7 @@ class LoweringContext(
     var varIdSeq: Int = 0,
     var scope: LocalScope = LocalScope.empty,
     val targetLanguage: Language = Language.PlutusV3,
-    val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
+    val targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV,
     val generateErrorTraces: Boolean = false,
     val warnListConversions: Boolean = false,
     val noWarn: Boolean = false,

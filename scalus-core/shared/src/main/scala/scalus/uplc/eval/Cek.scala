@@ -127,14 +127,26 @@ object CekMachineCosts {
             memory = params.`cekBuiltinCost-exBudgetMemory`,
             steps = params.`cekBuiltinCost-exBudgetCPU`
           ),
-          constrCost = ExUnits(
-            memory = params.`cekConstrCost-exBudgetMemory`,
-            steps = params.`cekConstrCost-exBudgetCPU`
-          ),
-          caseCost = ExUnits(
-            memory = params.`cekCaseCost-exBudgetMemory`,
-            steps = params.`cekCaseCost-exBudgetCPU`
-          )
+          // PlutusV1Params/PlutusV2Params never carry the constr/case machine costs (they are
+          // PV11-appended parameters, read as the 300_000_000 placeholder), so fall back to the
+          // Plutus reference values — same approach as fromMap and the new-builtin cost fallback
+          // in MachineParams.fromCostModels. The on-chain PV11 V1/V2 values equal the reference.
+          constrCost =
+              if params.`cekConstrCost-exBudgetCPU` == 300_000_000L then
+                  defaultMachineCosts.constrCost
+              else
+                  ExUnits(
+                    memory = params.`cekConstrCost-exBudgetMemory`,
+                    steps = params.`cekConstrCost-exBudgetCPU`
+                  )
+          ,
+          caseCost =
+              if params.`cekCaseCost-exBudgetCPU` == 300_000_000L then defaultMachineCosts.caseCost
+              else
+                  ExUnits(
+                    memory = params.`cekCaseCost-exBudgetMemory`,
+                    steps = params.`cekCaseCost-exBudgetCPU`
+                  )
         )
     }
 

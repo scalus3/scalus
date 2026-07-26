@@ -16,7 +16,7 @@ class SirToUplcV3Lowering(
     warnListConversions: Boolean = false,
     noWarn: Boolean = false,
     targetLanguage: Language = Language.PlutusV3,
-    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV,
     intrinsicModules: Map[String, Module] = Map.empty,
     supportModules: Map[String, Module] = Map.empty
 ) {

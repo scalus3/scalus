@@ -68,11 +68,12 @@ class PlutusUseCasesBenchmarkTest extends AnyFunSuite {
         }
     }
 
-    // Verify that Case-on-Bool scripts specifically fail with PlutusV1VM
-    // (documenting the root cause of the benchmark failures)
+    // Verify that Case-on-Bool scripts specifically fail with a pre-van-Rossem PlutusV1VM
+    // (documenting the root cause of the benchmark failures; since PV11 the default VM
+    // supports Case-on-builtins, so the old behavior needs an explicit plominPV pin)
     for name <- caseOnBoolScripts.toSeq.sorted do {
         test(s"CEK PlutusV1 rejects Case-on-Bool in $name") {
-            val v1vm = PlutusVM.makePlutusV1VM()
+            val v1vm = PlutusVM.makePlutusV1VM(MajorProtocolVersion.plominPV)
             val bytes = Files.readAllBytes(dataDir.resolve(s"$name.flat"))
             val program = DeBruijnedProgram.fromFlatEncoded(bytes)
             assertThrows[NonConstrScrutinized] {

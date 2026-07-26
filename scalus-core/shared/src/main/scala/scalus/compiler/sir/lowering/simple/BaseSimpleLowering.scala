@@ -28,7 +28,7 @@ abstract class BaseSimpleLowering(
     sir: SIR,
     generateErrorTraces: Boolean = false,
     protected val targetLanguage: Language = Language.PlutusV3,
-    private val _targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV
+    private val _targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV
 ) extends DataLowering:
 
     // Backward compat: if targetLanguage == PlutusV4, force vanRossemPV

@@ -4,6 +4,7 @@ package simple
 import scalus.*
 import scalus.uplc.builtin.ByteString.*
 import scalus.compiler.sir.*
+import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.SIRType.{FreeUnificator, SumCaseClass, TypeNothing}
 import scalus.uplc.DefaultFun.*
@@ -19,7 +20,11 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
 
     // Implement lower method for Scott encoding
     override def lower(sir: SIR): Term =
-        ScottEncodingLowering(sir, generateErrorTraces = false).lower()
+        ScottEncodingLowering(
+          sir,
+          generateErrorTraces = false,
+          targetProtocolVersion = MajorProtocolVersion.plominPV
+        ).lower()
 
     // Provide PlutusVM for evaluation
     override given vm: PlutusVM = PlutusVM.makePlutusV3VM()
@@ -27,7 +32,13 @@ class ScottEncodingLoweringTest extends SimpleLoweringTestBase:
     // Extension for structural comparison tests
     extension (sir: SIR)
         infix def lowersTo(r: Term): Unit =
-            assert(ScottEncodingLowering(sir, generateErrorTraces = false).lower() ~=~ r)
+            assert(
+              ScottEncodingLowering(
+                sir,
+                generateErrorTraces = false,
+                targetProtocolVersion = MajorProtocolVersion.plominPV
+              ).lower() ~=~ r
+            )
 
     test("lower constant") {
         forAll { (c: Constant) =>

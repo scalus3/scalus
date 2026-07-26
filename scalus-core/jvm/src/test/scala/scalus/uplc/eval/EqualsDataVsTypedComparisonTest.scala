@@ -237,7 +237,8 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         info(formatLine("===", eqFieldsBudget, eqFieldsSize))
         assert(eqFieldsBudget.steps < eqDataBudget.steps)
         assert(eqFieldsBudget.memory > eqDataBudget.memory)
-        assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+        // Since PV11 (case-on-builtins lowering) the typed === is cheaper overall here
+        assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
     }
 
     test("equalsData vs === for v2.TxOut (4 fields)") {
@@ -264,7 +265,8 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         info(formatLine("===", eqFieldsBudget, eqFieldsSize))
         assert(eqFieldsBudget.steps < eqDataBudget.steps)
         assert(eqFieldsBudget.memory > eqDataBudget.memory)
-        assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+        // Since PV11 (case-on-builtins lowering) the typed === is cheaper overall here
+        assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
     }
 
     test("equalsData vs === for TxInInfo (6 leaf fields: TxOutRef + v2.TxOut)") {
@@ -297,7 +299,8 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         info(formatLine("===", eqFieldsBudget, eqFieldsSize))
         assert(eqFieldsBudget.steps < eqDataBudget.steps)
         assert(eqFieldsBudget.memory > eqDataBudget.memory)
-        assert(eqFieldsBudget.fee(prices) > eqDataBudget.fee(prices))
+        // Since PV11 (case-on-builtins lowering) the typed === is cheaper overall here
+        assert(eqFieldsBudget.fee(prices) < eqDataBudget.fee(prices))
     }
 
     test("pack+equalsData vs Case+equalsInteger for 2-field UplcConstr type") {

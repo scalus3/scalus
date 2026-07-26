@@ -10,7 +10,9 @@ import scala.language.implicitConversions
 class CaseOnBuiltinsTest extends AnyFunSuite:
 
     val v4vm: PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.vanRossemPV)
-    val v3vm: PlutusVM = PlutusVM.makePlutusV3VM()
+    // The "V3: ..." tests document the pre-van-Rossem behavior (case-on-builtins rejected),
+    // so this VM pins plominPV — the default V3 VM is PV11 now and accepts them.
+    val v3vm: PlutusVM = PlutusVM.makePlutusV3VM(MajorProtocolVersion.plominPV)
 
     def evalV4(term: Term): Term =
         v4vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(term))

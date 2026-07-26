@@ -90,8 +90,8 @@ class TxEvaluatorTest extends AnyFunSuite:
         val redeemers = evaluator.evaluateTx(tx, utxo)
         assert(redeemers.size == 1)
         val redeemerResult = redeemers.head
-        assert(redeemerResult.getExUnits.getMem.longValue == 13375L)
-        assert(redeemerResult.getExUnits.getSteps.longValue == 3732650L)
+        assert(redeemerResult.getExUnits.getMem.longValue == 11973L)
+        assert(redeemerResult.getExUnits.getSteps.longValue == 3356552L)
     }
 
     test("TxEvaluator PlutusV3") {
@@ -161,6 +161,6 @@ class TxEvaluatorTest extends AnyFunSuite:
         val redeemers = evaluator.evaluateTx(tx, utxo)
         assert(redeemers.size == 1)
         val redeemerResult = redeemers.head
-        assert(redeemerResult.getExUnits.getMem.longValue == 12775L)
-        assert(redeemerResult.getExUnits.getSteps.longValue == 3636650L)
+        assert(redeemerResult.getExUnits.getMem.longValue == 11373L)
+        assert(redeemerResult.getExUnits.getSteps.longValue == 3260552L)
     }
