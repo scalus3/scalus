@@ -55,12 +55,12 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
         val redeemer = Data.B(compressedProof)
 
         // Create initial UTXOs
-        val scriptUtxoEntry = TransactionInput(genesisHash, 0) ->
-            TransactionOutput(scriptAddress, Value.lovelace(10_000_000L), Data.unit)
-        val feePayerUtxo = TransactionInput(genesisHash, 1) ->
-            TransactionOutput(Party.Alice.address, Value.lovelace(100_000_000L))
-        val collateralUtxo = TransactionInput(genesisHash, 2) ->
-            TransactionOutput(Party.Alice.address, Value.lovelace(50_000_000L))
+        val scriptUtxoEntry = Input(genesisHash, 0) ->
+            Output(scriptAddress, Value.lovelace(10_000_000L), Data.unit)
+        val feePayerUtxo = Input(genesisHash, 1) ->
+            Output(Party.Alice.address, Value.lovelace(100_000_000L))
+        val collateralUtxo = Input(genesisHash, 2) ->
+            Output(Party.Alice.address, Value.lovelace(50_000_000L))
 
         val emulator = Emulator(Map(scriptUtxoEntry, feePayerUtxo, collateralUtxo))
 
@@ -70,7 +70,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
             .requireSignature(alicePkh)
             .spend(Utxo(feePayerUtxo))
             .payTo(Party.Bob.address, Value.lovelace(10_000_000L))
-            .changeTo(TransactionOutput(Party.Alice.address, Value.lovelace(0L)))
+            .changeTo(Output(Party.Alice.address, Value.lovelace(0L)))
             .complete(emulator, Party.Alice.address)
             .await()
             .sign(Party.Alice.signer)
@@ -106,12 +106,12 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
         val redeemer = Data.B(compressedProof)
         val davePkh = Party.Dave.addrKeyHash
 
-        val scriptUtxoEntry = TransactionInput(genesisHash, 0) ->
-            TransactionOutput(scriptAddress, Value.lovelace(10_000_000L), Data.unit)
-        val feePayerUtxo = TransactionInput(genesisHash, 1) ->
-            TransactionOutput(Party.Dave.address, Value.lovelace(100_000_000L))
-        val collateralUtxo = TransactionInput(genesisHash, 2) ->
-            TransactionOutput(Party.Dave.address, Value.lovelace(50_000_000L))
+        val scriptUtxoEntry = Input(genesisHash, 0) ->
+            Output(scriptAddress, Value.lovelace(10_000_000L), Data.unit)
+        val feePayerUtxo = Input(genesisHash, 1) ->
+            Output(Party.Dave.address, Value.lovelace(100_000_000L))
+        val collateralUtxo = Input(genesisHash, 2) ->
+            Output(Party.Dave.address, Value.lovelace(50_000_000L))
 
         val emulator = Emulator(Map(scriptUtxoEntry, feePayerUtxo, collateralUtxo))
 
@@ -121,7 +121,7 @@ class AllowlistValidatorE2ETest extends AnyFunSuite with ScalusTest {
                 .requireSignature(davePkh)
                 .spend(Utxo(feePayerUtxo))
                 .payTo(Party.Alice.address, Value.lovelace(10_000_000L))
-                .changeTo(TransactionOutput(Party.Dave.address, Value.lovelace(0L)))
+                .changeTo(Output(Party.Dave.address, Value.lovelace(0L)))
                 .complete(emulator, Party.Dave.address)
                 .await()
         }

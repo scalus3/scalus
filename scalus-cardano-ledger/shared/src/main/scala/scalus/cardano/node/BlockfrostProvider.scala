@@ -909,7 +909,7 @@ class BlockfrostProvider(
                         val json = ujson.read(body, trace = false)
                         val outputs = json("outputs").arr
                         val utxos = outputs.zipWithIndex.map { case (outputJson, index) =>
-                            val input = TransactionInput(txId, index)
+                            val input = Input(txId, index)
                             BlockfrostProvider.parseUtxoOutput(input, outputJson)
                         }.toMap
                         Right(utxos)
@@ -1055,7 +1055,7 @@ object BlockfrostProvider {
     /** Parse a sequence of UTxO JSON values into a Utxos map. */
     private[node] def parseUtxoItems(items: Seq[ujson.Value]): Utxos = {
         items.map { utxoJson =>
-            val txInput = TransactionInput(
+            val txInput = Input(
               TransactionHash.fromHex(utxoJson("tx_hash").str),
               utxoJson("output_index").num.toInt
             )
@@ -1074,7 +1074,7 @@ object BlockfrostProvider {
         // reference_script_hash is present in the JSON but we cannot reconstruct
         // the full ScriptRef without fetching the script bytes via /scripts/{hash}/cbor.
         // Use BlockfrostProvider.resolveScriptRefs to enrich UTxOs with script references.
-        val txOutput = TransactionOutput(
+        val txOutput = Output(
           address = address,
           value = value,
           datumOption = datumOption,

@@ -177,7 +177,7 @@ private[txbuilder] class UtxoPool(
         val optimalUtxo = adaOnlySorted.find { case (_, output) =>
             val ada = output.value.coin.value
             // Compute minAda for a potential return output to this address
-            val minimalReturnOutput = TransactionOutput(output.address, Value.zero)
+            val minimalReturnOutput = Output(output.address, Value.zero)
             val minAdaForReturn =
                 MinCoinSizedTransactionOutput.ensureMinAda(
                   Sized(minimalReturnOutput),

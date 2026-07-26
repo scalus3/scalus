@@ -488,7 +488,7 @@ object SubmitError {
                 try {
                     val txHash = TransactionHash.fromHex(m.group(1))
                     val index = m.group(2).toInt
-                    Some(TransactionInput(txHash, index))
+                    Some(Input(txHash, index))
                 } catch {
                     case _: Exception => None
                 }

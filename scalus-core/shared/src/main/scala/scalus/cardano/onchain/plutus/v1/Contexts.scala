@@ -2,7 +2,7 @@ package scalus.cardano.onchain.plutus.v1
 
 import scalus.compiler.{Compile, Ignore}
 import scalus.compiler.{UplcRepr, UplcRepresentation}
-import scalus.cardano.ledger.{TransactionHash, TransactionInput}
+import scalus.cardano.ledger.{Input, TransactionHash, TransactionInput}
 import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Builtins.*
 import scalus.cardano.onchain.plutus.prelude.{<=>, ===, Eq, List, Option, Ord, Order}
@@ -438,7 +438,7 @@ object TxOutRef {
 
         /** Converts this TxOutRef into the off-chain ledger TransactionInput. */
         @Ignore
-        def toOffchain: TransactionInput = TransactionInput(
+        def toOffchain: TransactionInput = Input(
           TransactionHash.fromByteString(outRef.id.hash),
           outRef.idx.toInt
         )

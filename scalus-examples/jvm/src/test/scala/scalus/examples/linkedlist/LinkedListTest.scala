@@ -1021,10 +1021,10 @@ object LinkedListTest extends ScalusTest {
 
         val provider = Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-            TransactionInput(genesisHash, 1) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-            TransactionInput(genesisHash, 2) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-            TransactionInput(genesisHash, 3) -> TransactionOutput(Bob.address, Value.ada(10_000))
+            Input(genesisHash, 0) -> Output(Alice.address, Value.ada(10_000)),
+            Input(genesisHash, 1) -> Output(Alice.address, Value.ada(10_000)),
+            Input(genesisHash, 2) -> Output(Alice.address, Value.ada(10_000)),
+            Input(genesisHash, 3) -> Output(Bob.address, Value.ada(10_000))
           ),
           initialContext =
               Context.testMainnet().copy(evaluatorMode = EvaluatorMode.EvaluateAndComputeCost),

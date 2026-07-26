@@ -779,19 +779,19 @@ object LotteryValidatorTest extends ScalusTest {
         // Create multiple UTXOs per player so they have funds after initiate tx
         val initialUtxos = Map(
           // Alice gets 2 UTXOs
-          TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(5000)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(
+          Input(genesisHash, 0) -> Output(Alice.address, Value.ada(5000)),
+          Input(genesisHash, 1) -> Output(
             Alice.address,
             Value.ada(5000)
           ),
           // Bob gets 2 UTXOs
-          TransactionInput(genesisHash, 2) -> TransactionOutput(Bob.address, Value.ada(5000)),
-          TransactionInput(genesisHash, 3) -> TransactionOutput(
+          Input(genesisHash, 2) -> Output(Bob.address, Value.ada(5000)),
+          Input(genesisHash, 3) -> Output(
             Bob.address,
             Value.ada(5000)
           ),
           // Eve gets 1 UTXO
-          TransactionInput(genesisHash, 4) -> TransactionOutput(Eve.address, Value.ada(10000))
+          Input(genesisHash, 4) -> Output(Eve.address, Value.ada(10000))
         )
         Emulator(
           initialUtxos = initialUtxos,

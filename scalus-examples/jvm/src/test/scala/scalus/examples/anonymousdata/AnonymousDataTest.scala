@@ -23,9 +23,9 @@ class AnonymousDataTest extends AnyFunSuite with ScalusTest {
     private def createProvider(): Emulator =
         Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) -> TransactionOutput
+            Input(genesisHash, 0) -> TransactionOutput
                 .Babbage(Alice.address, Value.ada(5000)),
-            TransactionInput(genesisHash, 1) -> TransactionOutput
+            Input(genesisHash, 1) -> TransactionOutput
                 .Babbage(Alice.address, Value.ada(5000))
           ),
           initialContext = Context.testMainnet()

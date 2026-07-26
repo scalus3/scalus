@@ -60,12 +60,12 @@ object ScriptFeeComparison {
           delegation = ShelleyDelegationPart.Null
         )
 
-        val scriptUtxoInput = TransactionInput(
+        val scriptUtxoInput = Input(
           TransactionHash.fromByteString(ByteString.fromHex("aa" * 32)),
           0
         )
 
-        val scriptUtxoOutput = TransactionOutput(
+        val scriptUtxoOutput = Output(
           address = scriptAddress,
           value = scriptValue,
           datumOption = datum,
@@ -74,11 +74,11 @@ object ScriptFeeComparison {
         val scriptUtxo = Utxo(scriptUtxoInput, scriptUtxoOutput)
 
         // Create funding UTXO to cover transaction fees
-        val fundingUtxoInput = TransactionInput(
+        val fundingUtxoInput = Input(
           TransactionHash.fromByteString(ByteString.fromHex("cc" * 32)),
           0
         )
-        val fundingUtxoOutput = TransactionOutput(
+        val fundingUtxoOutput = Output(
           address = arbAddress(env),
           value = Value.ada(100),
           datumOption = None,
@@ -87,11 +87,11 @@ object ScriptFeeComparison {
         val fundingUtxo = Utxo(fundingUtxoInput, fundingUtxoOutput)
 
         // Create collateral UTXO for script execution
-        val collateralUtxoInput = TransactionInput(
+        val collateralUtxoInput = Input(
           TransactionHash.fromByteString(ByteString.fromHex("dd" * 32)),
           0
         )
-        val collateralUtxoOutput = TransactionOutput(
+        val collateralUtxoOutput = Output(
           address = arbAddress(env),
           value = Value.ada(5),
           datumOption = None,
@@ -111,11 +111,11 @@ object ScriptFeeComparison {
         }
 
         def createRef = {
-            val refScriptUtxoInput = TransactionInput(
+            val refScriptUtxoInput = Input(
               TransactionHash.fromByteString(ByteString.fromHex("bb" * 32)),
               0
             )
-            val refScriptUtxoOutput = TransactionOutput(
+            val refScriptUtxoOutput = Output(
               address = arbAddress(env),
               value = Value.ada(5),
               datumOption = None,

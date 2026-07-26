@@ -291,11 +291,11 @@ object AmmTest extends ScalusTest {
             Value.asset(t0PolicyId, t0Name, 1_000_000L, Coin.ada(100)) +
                 Value.asset(t1PolicyId, t1Name, 1_000_000L)
         Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(Alice.address, tokenValue),
-          TransactionInput(genesisHash, 3) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-          TransactionInput(genesisHash, 4) -> TransactionOutput(Bob.address, Value.ada(10_000))
+          Input(genesisHash, 0) -> Output(Alice.address, Value.ada(10_000)),
+          Input(genesisHash, 1) -> Output(Alice.address, Value.ada(10_000)),
+          Input(genesisHash, 2) -> Output(Alice.address, tokenValue),
+          Input(genesisHash, 3) -> Output(Alice.address, Value.ada(10_000)),
+          Input(genesisHash, 4) -> Output(Bob.address, Value.ada(10_000))
         )
     }
 

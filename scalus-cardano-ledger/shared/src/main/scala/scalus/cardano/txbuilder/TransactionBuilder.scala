@@ -916,7 +916,7 @@ object TransactionBuilder {
         val potentialReturnValue = Value(Coin(potentialReturnAda), totalCollateralVal.assets)
         val minAdaForReturn = MinCoinSizedTransactionOutput
             .computeMinAda(
-              Sized(TransactionOutput(returnAddr, potentialReturnValue)),
+              Sized(Output(returnAddr, potentialReturnValue)),
               protocolParams
             )
             .value
@@ -944,7 +944,7 @@ object TransactionBuilder {
         val actualTotalCollateral = Coin(totalCollateralVal.coin.value - returnAda)
 
         val returnValue = Value(Coin(returnAda), totalCollateralVal.assets)
-        val returnOutput = TransactionOutput(returnAddr, returnValue)
+        val returnOutput = Output(returnAddr, returnValue)
 
         val newTx = tx.withBody(
           _.copy(

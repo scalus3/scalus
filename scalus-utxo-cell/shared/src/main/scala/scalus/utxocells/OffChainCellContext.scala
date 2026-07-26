@@ -3,7 +3,7 @@ package scalus.utxocells
 import scala.collection.mutable.ListBuffer
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Network
-import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, TransactionOutput, Utxo, Value as LedgerValue}
+import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Output, Utxo, Value as LedgerValue}
 import scalus.cardano.txbuilder.{ScriptSource, TransactionBuilderStep, TwoArgumentPlutusScriptWitness}
 import scalus.cardano.onchain.plutus.v1 as onchain
 
@@ -129,6 +129,6 @@ class OffChainCellOutputs(
     override def add(address: onchain.Address, value: onchain.Value): Unit = {
         val offchainAddr = UtxoCellBuilder.toOffchainAddress(address, network)
         val offchainValue = value.toLedgerValue
-        steps += TransactionBuilderStep.Send(TransactionOutput(offchainAddr, offchainValue))
+        steps += TransactionBuilderStep.Send(Output(offchainAddr, offchainValue))
     }
 }

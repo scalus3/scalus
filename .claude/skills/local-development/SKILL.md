@@ -102,9 +102,9 @@ object MyValidatorTest extends ScalusTest {
     private def createProvider(): Emulator = {
         // genesisHash is a zero-hash sentinel used as the "genesis" input
         val initialUtxos = Map(
-            TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(5000)),
-            TransactionInput(genesisHash, 1) -> TransactionOutput(Alice.address, Value.ada(5000)),
-            TransactionInput(genesisHash, 2) -> TransactionOutput(Bob.address,   Value.ada(5000)),
+            Input(genesisHash, 0) -> Output(Alice.address, Value.ada(5000)),
+            Input(genesisHash, 1) -> Output(Alice.address, Value.ada(5000)),
+            Input(genesisHash, 2) -> Output(Bob.address,   Value.ada(5000)),
         )
         Emulator(initialUtxos = initialUtxos, initialContext = Context.testMainnet())
     }

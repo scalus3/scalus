@@ -128,7 +128,7 @@ utxosResult match {
 }
 
 // Find a specific UTXO by transaction input
-val specificUtxo = provider.findUtxo(TransactionInput(txHash, 0)).await(30.seconds)
+val specificUtxo = provider.findUtxo(Input(txHash, 0)).await(30.seconds)
 ```
 
 ### Query DSL

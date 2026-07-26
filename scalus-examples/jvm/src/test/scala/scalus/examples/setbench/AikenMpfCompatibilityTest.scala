@@ -47,7 +47,7 @@ class AikenMpfCompatibilityTest extends AnyFunSuite with ScalusTest {
         sponsor: Address,
         signer: TransactionSigner
     ): Transaction = {
-        val scriptOutput = TransactionOutput(
+        val scriptOutput = Output(
           holder,
           Value.lovelace(10_000_000L),
           None,

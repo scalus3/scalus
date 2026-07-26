@@ -24,7 +24,7 @@ class RefScriptUtxoSelectionTest extends AnyFunSuite {
 
     val refScript: Script.PlutusV3 = PlutusV3.alwaysOk.script
 
-    val refScriptUtxo: TransactionOutput = TransactionOutput(
+    val refScriptUtxo: TransactionOutput = Output(
       Alice.address,
       Value.ada(20),
       None,
@@ -40,7 +40,7 @@ class RefScriptUtxoSelectionTest extends AnyFunSuite {
     test("complete does not spend a reference script UTxO when plain funds suffice") {
         val provider = Emulator(
           Map(
-            input(0) -> TransactionOutput(Alice.address, Value.ada(100)),
+            input(0) -> Output(Alice.address, Value.ada(100)),
             input(1) -> refScriptUtxo
           )
         )
@@ -61,11 +61,11 @@ class RefScriptUtxoSelectionTest extends AnyFunSuite {
     test("complete does not use a reference script UTxO as collateral when alternatives exist") {
         val lockedUtxo = Utxo(
           input(2),
-          TransactionOutput(scriptAddress, Value.ada(5), DatumOption.Inline(Data.I(42)))
+          Output(scriptAddress, Value.ada(5), DatumOption.Inline(Data.I(42)))
         )
         val provider = Emulator(
           Map(
-            input(0) -> TransactionOutput(Alice.address, Value.ada(100)),
+            input(0) -> Output(Alice.address, Value.ada(100)),
             input(1) -> refScriptUtxo,
             lockedUtxo.input -> lockedUtxo.output
           )
@@ -105,7 +105,7 @@ class RefScriptUtxoSelectionTest extends AnyFunSuite {
     test("complete uses reference script UTxOs when plain funds only partially cover") {
         val provider = Emulator(
           Map(
-            input(0) -> TransactionOutput(Alice.address, Value.ada(8)),
+            input(0) -> Output(Alice.address, Value.ada(8)),
             input(1) -> refScriptUtxo
           )
         )

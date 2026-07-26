@@ -16,9 +16,9 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
     private def aliceProvider(): Emulator =
         Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) -> TransactionOutput
+            Input(genesisHash, 0) -> TransactionOutput
                 .Babbage(Alice.address, Value.ada(10)),
-            TransactionInput(genesisHash, 1) -> TransactionOutput
+            Input(genesisHash, 1) -> TransactionOutput
                 .Babbage(Alice.address, Value.ada(10))
           ),
           initialContext = Context.testMainnet()
@@ -63,7 +63,7 @@ class SimpleWalletTest extends AnyFunSuite, ScalusTest {
           owners = IndexedSeq(Alice.addrKeyHash, Bob.addrKeyHash, Charles.addrKeyHash),
           required = 2
         )
-        val walletInput = TransactionInput(genesisHash, 0)
+        val walletInput = Input(genesisHash, 0)
         val p = Emulator(
           initialUtxos = Map(
             walletInput -> TransactionOutput.Babbage(multisig.address, Value.ada(10))

@@ -464,7 +464,7 @@ case class TxBuilder(
     def payTo(address: Address, value: Value): TxBuilder =
         addSteps(
           TransactionBuilderStep.Send(
-            TransactionOutput(address, value, None, None)
+            Output(address, value, None, None)
           )
         )
 
@@ -480,7 +480,7 @@ case class TxBuilder(
     def payTo[T: ToData](address: Address, value: Value, datum: T): TxBuilder =
         addSteps(
           TransactionBuilderStep.Send(
-            TransactionOutput(address, value, datum.toData)
+            Output(address, value, datum.toData)
           )
         )
 
@@ -498,7 +498,7 @@ case class TxBuilder(
     def payTo(address: Address, value: Value, datumHash: DataHash): TxBuilder =
         addSteps(
           TransactionBuilderStep.Send(
-            TransactionOutput(address, value, Some(DatumOption.Hash(datumHash)), None)
+            Output(address, value, Some(DatumOption.Hash(datumHash)), None)
           )
         )
 
@@ -562,7 +562,7 @@ case class TxBuilder(
     def payTo(address: Address, value: Value, datumBuilder: Transaction => Data): TxBuilder =
         addSteps(
           TransactionBuilderStep.SendWithDatumBuilder(
-            TransactionOutput(address, value, None, None),
+            Output(address, value, None, None),
             datumBuilder
           )
         )
@@ -1483,7 +1483,7 @@ case class TxBuilder(
 
             case None =>
                 // No explicit change output - add implicit one at change address
-                val implicitChangeOutput = TransactionOutput(changeTo, Value.zero)
+                val implicitChangeOutput = Output(changeTo, Value.zero)
                 val implicitChangeStep = TransactionBuilderStep.Send(implicitChangeOutput)
                 (steps :+ implicitChangeStep, sendStepCount)
         }
@@ -1682,7 +1682,7 @@ case class TxBuilder(
 
             case None =>
                 // No explicit change output - add implicit one at sponsor address
-                val implicitChangeOutput = TransactionOutput(sponsor, Value.zero)
+                val implicitChangeOutput = Output(sponsor, Value.zero)
                 val implicitChangeStep = TransactionBuilderStep.Send(implicitChangeOutput)
                 (steps ++ spendSteps ++ collateralSteps :+ implicitChangeStep, sendStepCount)
         }

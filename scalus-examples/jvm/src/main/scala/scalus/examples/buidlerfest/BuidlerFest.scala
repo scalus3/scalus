@@ -197,7 +197,7 @@ object BuidlerFest {
             )
             // Output 1: Updated issuer UTxO with new datum
             .output(
-              TransactionOutput(
+              Output(
                 address = issuer,
                 value = issuerUtxo.output.value, // Same value (beacon token + min ADA)
                 datumOption = DatumOption.Inline(newDatum.toData)

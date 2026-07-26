@@ -171,7 +171,7 @@ class PrettyTest extends AnyFunSuite {
     // === TransactionInput Tests ===
 
     test("Pretty[TransactionInput] shows txHash#index format") {
-        val input = TransactionInput(testTxHash, 5)
+        val input = Input(testTxHash, 5)
         val result = input.show
         assert(result.contains("#5"))
         assert(result.contains("0123456789abcdef"))
@@ -323,7 +323,7 @@ class PrettyTest extends AnyFunSuite {
     }
 
     test("Pretty XTerm styling applies colors to TransactionInput") {
-        val input = TransactionInput(testTxHash, 0)
+        val input = Input(testTxHash, 0)
         val highlighted = input.showHighlighted
         assert(highlighted.contains("\u001b["), s"Expected ANSI codes in: $highlighted")
     }

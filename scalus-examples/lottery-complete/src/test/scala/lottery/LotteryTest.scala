@@ -729,23 +729,23 @@ object LotteryTest extends ScalusTest {
 
     private def createProvider(): Emulator = {
         val initialUtxos = Map(
-          TransactionInput(TestUtil.genesisHash, 0) -> TransactionOutput(
+          Input(TestUtil.genesisHash, 0) -> Output(
             Alice.address,
             Value.ada(5000)
           ),
-          TransactionInput(TestUtil.genesisHash, 1) -> TransactionOutput(
+          Input(TestUtil.genesisHash, 1) -> Output(
             Alice.address,
             Value.ada(5000)
           ),
-          TransactionInput(TestUtil.genesisHash, 2) -> TransactionOutput(
+          Input(TestUtil.genesisHash, 2) -> Output(
             Bob.address,
             Value.ada(5000)
           ),
-          TransactionInput(TestUtil.genesisHash, 3) -> TransactionOutput(
+          Input(TestUtil.genesisHash, 3) -> Output(
             Bob.address,
             Value.ada(5000)
           ),
-          TransactionInput(TestUtil.genesisHash, 4) -> TransactionOutput(
+          Input(TestUtil.genesisHash, 4) -> Output(
             Eve.address,
             Value.ada(10000)
           )
