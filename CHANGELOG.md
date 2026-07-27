@@ -4,6 +4,14 @@
 
 ### Added
 
+- the Emulator is now fully usable from Java (the cross-language interop guide's pilot):
+  factories accept `java.util.List`, state accessors return Java collections (`getUtxos`,
+  `getDatums`, `getAppliedTxLog`), lookups return `null` instead of `Option`
+  (`getTransactionOrNull`, `getDatumOrNull`), submission reports a `SubmitResult` instead of
+  `Either` (`trySubmit`), and `submitAsync`/`findUtxosForAddressAsync` return
+  `CompletableFuture`. `EmulatorInitialState.builder()` replaces Scala default arguments for
+  Java callers; default parameters on Emulator/Context factories became explicit overloads.
+  Adds the `scalus.InteropApi` marker trait; proven by a real-Java interop test
 - `FlatCodec`/`Flats` Java facade for the flat codec (cross-platform, in `shared`):
   `byte[]`/primitive static methods (`encodeLong`, `decodeString`, `word7Bytes`, `zigZag`,
   `byteAsBitString`, generic `encode`/`decode` with an explicit `Flat` instance, ...) and named

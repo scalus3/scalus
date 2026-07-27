@@ -76,8 +76,11 @@ class Emulator(
     initialUtxos: Utxos = Map.empty,
     initialContext: Context = Context.testMainnet(),
     val validators: Iterable[STS.Validator] = Emulator.defaultValidators,
-    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators
-) extends Provider
+    val mutators: Iterable[STS.Mutator] = Emulator.defaultMutators,
+    initialCertState: CertState = CertState.empty,
+    initialDatums: Map[DataHash, Data] = Map.empty,
+    initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
+) extends EmulatorBase // which extends BlockchainProvider
 ```
 
 ### Factory Methods
@@ -109,10 +112,10 @@ When a transaction fails validation, you get detailed error information:
 emulator.submit(tx).await() match {
   case Right(txHash) =>
     println(s"Transaction submitted: $txHash")
-  case Left(NodeError(message, Some(exception: TransactionException))) =>
-    println(s"Validation failed: ${exception.explain}")
+  case Left(error: NodeSubmitError) =>
+    println(s"Rejected by ledger rules: ${error.message}")
   case Left(error) =>
-    println(s"Error: $error")
+    println(s"Error: ${error.message}")
 }
 ```
 
@@ -122,12 +125,12 @@ Use `setSlot()` to test time-dependent validators:
 
 ```scala
 // Set slot to test validity intervals
-emulator.setSlot(SlotNo(1000))
+emulator.setSlot(1000L)
 
 // Transaction with validity range [500, 1500] will pass
 val tx = TxBuilder(testEnv)
-  .validFrom(SlotNo(500))
-  .validTo(SlotNo(1500))
+  .validFrom(500L)
+  .validTo(1500L)
   .payTo(Bob.address, Value.ada(10))
   .complete(emulator, Alice.address)
   .await()
@@ -135,8 +138,8 @@ val tx = TxBuilder(testEnv)
 
 // Transaction with validity range [2000, 3000] will fail
 val invalidTx = TxBuilder(testEnv)
-  .validFrom(SlotNo(2000))
-  .validTo(SlotNo(3000))
+  .validFrom(2000L)
+  .validTo(3000L)
   // ...
 ```
 
@@ -173,6 +176,54 @@ val customEmulator = Emulator(
   validators = Emulator.defaultValidators + MyCustomValidator,
   mutators = Emulator.defaultMutators
 )
+```
+
+## Using the Emulator from Java
+
+The Emulator has a Java-friendly surface: factories take `java.util.List`, state accessors return
+Java collections, lookups return `null` instead of `Option`, and submission reports a
+`SubmitResult` instead of `Either` — so expected failures need no try/catch. `CompletableFuture`
+variants (`submitAsync`, `findUtxosForAddressAsync`) mirror the asynchronous
+`BlockchainProvider` shape; for the Emulator they complete immediately.
+
+```java
+import scalus.cardano.address.Address;
+import scalus.cardano.ledger.*;
+import scalus.cardano.node.*;
+import java.util.List;
+import java.util.Map;
+
+// Create an emulator with two funded addresses (10,000 ADA each)
+Emulator emulator = Emulator.withAddresses(List.of(alice, bob));
+
+// Or build the initial state explicitly
+EmulatorInitialState state = EmulatorInitialState.builder()
+        .putUtxo(input, output)
+        .addStakeRegistration(EmulatorStakeRegistration.of(credential, Coin.zero()))
+        .build();
+Emulator emulator2 = Emulator.withState(state);
+
+// Submit and inspect the outcome — no Either, no exceptions for rejections
+SubmitResult result = emulator.trySubmit(signedTx);
+if (result.isSuccess()) {
+    System.out.println("Applied: " + result.getTxHashOrNull().toHex());
+} else {
+    System.out.println("Rejected: " + result.getErrorMessageOrNull());
+}
+
+// Query state with Java collections
+Map<TransactionInput, TransactionOutput> utxos = emulator.getUtxos();
+List<Utxo> aliceUtxos = emulator.findUtxosForAddress(alice);
+Transaction applied = emulator.getTransactionOrNull(result.getTxHashOrNull());
+
+// Control time
+emulator.setSlot(1000L);
+emulator.tick(5);
+long slot = emulator.getCurrentSlot();
+
+// CompletableFuture variant — same shape as asynchronous providers
+emulator.submitAsync(anotherTx).thenAccept(r ->
+    System.out.println("async result: " + r.isSuccess()));
 ```
 
 ## When to Use Emulator

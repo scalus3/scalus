@@ -157,13 +157,10 @@ object TxBuilderException {
   *
   * ==Platform Support==
   *
-  * TxBuilder supports both JVM and JavaScript platforms:
-  *   - `complete(provider, sponsor)`: Returns `Future[TxBuilder]`. Available on all platforms.
-  *   - `complete(provider, sponsor, timeout)`: JVM-only blocking version with timeout parameter.
-  *
-  * On JVM, you can also use the `await` extension method on Future:
+  * TxBuilder supports both JVM and JavaScript platforms. `complete(provider, sponsor)` returns
+  * `Future[TxBuilder]` on all platforms; on the JVM, block on it with the `await` extension:
   * {{{
-  * import scalus.cardano.txbuilder.await
+  * import scalus.utils.await
   * builder.complete(provider, sponsor).await()
   * }}}
   *
@@ -175,11 +172,12 @@ object TxBuilderException {
   *   .complete(provider, sponsorAddress)
   *   .map(_.sign(signer).transaction)
   *
-  * // JVM-only - blocking with timeout
-  * import scala.concurrent.duration.*
+  * // JVM - block with the await extension
+  * import scalus.utils.await
   * val tx = TxBuilder(env)
   *   .payTo(recipientAddress, Value.ada(10))
-  *   .complete(provider, sponsorAddress, 30.seconds)
+  *   .complete(provider, sponsorAddress)
+  *   .await()
   *   .sign(signer)
   *   .transaction
   * }}}
