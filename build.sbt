@@ -430,7 +430,58 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ),
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.blueprint.Blueprint.this"
-        )
+        ),
+        // 0.19.0: flat package object converted to top-level definitions (Java compat).
+        // Binary names moved from serialization.flat.package$* to serialization.flat.*; every
+        // signature mentioning Flat/EncoderState/DecoderState/Natural changed. The whole
+        // scalus.serialization.flat package is covered by one wildcard; out-of-package members
+        // whose signatures mention the moved types are listed individually.
+        ProblemFilters.exclude[Problem]("scalus.serialization.flat.*"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.Word64#given_Flat_Word64.decode"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.Word64#given_Flat_Word64.encode"
+        ),
+        ProblemFilters.exclude[MissingTypesProblem](
+          "scalus.cardano.ledger.Word64$given_Flat_Word64$"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.compiler.sir.ToExprHSSIRFlat.decode"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.compiler.sir.ToExprHSSIRFlat.encode"
+        ),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.compiler.sir.ToExprHSSIRFlat$"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.compiler.sir.ToExprHSSIRTypeFlat.decode"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.compiler.sir.ToExprHSSIRTypeFlat.encode"
+        ),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.compiler.sir.ToExprHSSIRTypeFlat$"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.uplc.Constant.flatConstant"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.uplc.DefaultUni.flatForUni"),
+        ProblemFilters.exclude[Problem]("scalus.uplc.Term#given_Flat_Term.*"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.Term$given_Flat_Term$"),
+        ProblemFilters.exclude[Problem]("scalus.uplc.DefaultFun#given_Flat_DefaultFun.*"),
+        ProblemFilters.exclude[MissingTypesProblem](
+          "scalus.uplc.DefaultFun$given_Flat_DefaultFun$"
+        ),
+        ProblemFilters.exclude[Problem](
+          "scalus.uplc.DeBruijnedProgram#given_Flat_DeBruijnedProgram.*"
+        ),
+        ProblemFilters.exclude[MissingTypesProblem](
+          "scalus.uplc.DeBruijnedProgram$given_Flat_DeBruijnedProgram$"
+        ),
+        ProblemFilters.exclude[Problem](
+          "scalus.uplc.builtin.ByteStringFlatInstance#given_Flat_ByteString.*"
+        ),
+        ProblemFilters.exclude[MissingTypesProblem](
+          "scalus.uplc.builtin.ByteStringFlatInstance$given_Flat_ByteString$"
+        ),
+        ProblemFilters.exclude[Problem]("scalus.uplc.builtin.DataApi#given_Flat_Data.*"),
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.builtin.DataApi$given_Flat_Data$")
       ),
 
       // enable when debug compilation of tests
