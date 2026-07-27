@@ -2,7 +2,21 @@
 
 ## Unreleased
 
+### Added
+
+- JVM-only `FlatCodec`/`Flats` Java facade for the flat codec: `@static` `byte[]`/primitive
+  methods (`encodeLong`, `decodeString`, `word7Bytes`, ...) and named `Flat` instance accessors,
+  so Java can encode/decode and implement `Flat[A]` without `summon` or `MODULE$`
+
 ### Changed
+
+- **BREAKING**: the `scalus.serialization.flat` package object was converted to top-level
+  definitions so `EncoderState`/`DecoderState`/`Flat`/`Natural` are plain Java-usable classes.
+  Import paths are unchanged for Scala (source-compatible), but binary names moved from
+  `serialization.flat.package$*` — recompile against 0.19
+- **BREAKING**: `SIRVersion` bumped (5,0) → (6,0): the `SIRType.TypeVar` `optId` codec now uses a
+  presence-bit layout so `Some(0)` and negative ids round-trip correctly (audit S2). All
+  precompiled SIR modules must be recompiled with the 0.19 compiler plugin
 
 - **BREAKING**: protocol version 11 (van Rossem, live on mainnet since 2026-07-18) is now the
   default everywhere. The default compile target (`Options.default`/`debug`/`release`) moved from
