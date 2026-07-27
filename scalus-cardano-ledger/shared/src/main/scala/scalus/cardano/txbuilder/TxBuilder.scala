@@ -6,6 +6,7 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{Data, ToData}
 import scalus.cardano.address.*
 import scalus.cardano.ledger.*
+import scalus.cardano.ledger.utils.CollateralSufficient
 import scalus.cardano.node.{BlockchainReader, UtxoQueryError}
 import scalus.cardano.txbuilder.SomeBuildError
 
@@ -113,6 +114,24 @@ object TxBuilderException {
         sponsorAddress: Address
     ) extends TxBuilderException(
           s"Insufficient tokens at $sponsorAddress: need $required of ${policyId.toHex}.${assetName.toString}, found only $available"
+        )
+
+    /** Sufficient collateral cannot be selected within the protocol's collateral input limit.
+      *
+      * Thrown when the required collateral cannot be covered by at most
+      * [[ProtocolParams.maxCollateralInputs]] UTxOs at the sponsor address (e.g. the wallet is
+      * fragmented into many small UTxOs). Consolidate UTxOs or provide explicit collateral via
+      * `collaterals(...)`.
+      */
+    final case class CollateralUnavailableException(
+        required: Coin,
+        bestAvailable: Coin,
+        maxCollateralInputs: Long,
+        sponsorAddress: Address
+    ) extends TxBuilderException(
+          s"Cannot select sufficient collateral at $sponsorAddress: need ${required.value} lovelace, " +
+              s"but the best selection within maxCollateralInputs=$maxCollateralInputs UTxOs has only " +
+              s"${bestAvailable.value} lovelace. Consolidate UTxOs or provide explicit collateral via collaterals(...)."
         )
 
     /** Deferred step resolution failed.
@@ -1714,7 +1733,7 @@ case class TxBuilder(
                             val minimalInput = pool.selectForValue(Value.lovelace(1))
                             completeLoop(pool.withInputs(minimalInput), sponsor, maxIterations - 1)
                         } else {
-                            copy(context = balancedCtx)
+                            validateCollateral(balancedCtx, pool, sponsor, maxIterations)
                         }
 
                     case Left(SomeBuildError.BalancingError(balancingError, errorCtx)) =>
@@ -1791,24 +1810,110 @@ case class TxBuilder(
                 )
 
             case TxBalancingError.InsufficientCollateralForReturn(totalAda, required, minAda) =>
-                // Need more collateral ADA
-                val neededMore = Coin(required.value - totalAda.value + minAda.value)
-                val additionalCollateral = pool.selectForCollateral(neededMore, env.protocolParams)
-
-                if additionalCollateral.isEmpty || additionalCollateral == pool.collateral then {
-                    throw TxBuilderException.BalancingException(error, errorCtx)
-                }
-
-                completeLoop(
-                  pool.withCollateral(additionalCollateral),
-                  sponsor,
-                  maxIterations - 1
-                )
+                // Need more collateral ADA: enough for the required collateral plus a
+                // min-ADA return output. Re-select from scratch (replacing the previous
+                // selection) so the set stays minimal and within maxCollateralInputs -
+                // merging fresh selections with the old one can exceed the limit.
+                reselectCollateral(
+                  target = Coin(required.value + minAda.value),
+                  currentCollateralAda = totalAda,
+                  pool = pool,
+                  sponsor = sponsor,
+                  maxIterations = maxIterations
+                )(onNoProgress = throw TxBuilderException.BalancingException(error, errorCtx))
 
             case _ =>
                 // Other balancing errors - cannot recover
                 throw TxBuilderException.BalancingException(error, errorCtx)
         }
+    }
+
+    /** Validates the balanced transaction's collateral against protocol limits.
+      *
+      * Balancing itself does not enforce these: `ensureCollateralReturn` only fails for
+      * token-bearing collateral, so ADA-only collateral below the required amount passes balancing
+      * silently, and nothing checks maxCollateralInputs - the node would reject the transaction on
+      * submission. Retries with a larger (replaced) selection when the collateral is insufficient.
+      */
+    private def validateCollateral(
+        balancedCtx: TransactionBuilder.Context,
+        pool: UtxoPool,
+        sponsor: Address,
+        maxIterations: Int
+    ): TxBuilder = {
+        val tx = balancedCtx.transaction
+        val body = tx.body.value
+        val collateralInputs = body.collateralInputs.toSet
+        val maxCollateralInputs = env.protocolParams.maxCollateralInputs
+
+        if collateralInputs.size > maxCollateralInputs then
+            throw TxBuilderException.LedgerValidationException(
+              TransactionException.TooManyCollateralInputsException(
+                tx.id,
+                collateralInputs.size,
+                maxCollateralInputs
+              ),
+              balancedCtx
+            )
+
+        if collateralInputs.isEmpty then return copy(context = balancedCtx)
+
+        val totalCollateral =
+            TransactionBuilder.totalCollateralValue(tx, balancedCtx.resolvedUtxos.utxos)
+        val requiredCollateral = CollateralSufficient.calculateRequiredCollateral(
+          body.fee,
+          env.protocolParams.collateralPercentage
+        )
+
+        if totalCollateral.coin.value >= requiredCollateral.value then copy(context = balancedCtx)
+        else
+            reselectCollateral(
+              target = requiredCollateral,
+              currentCollateralAda = totalCollateral.coin,
+              pool = pool,
+              sponsor = sponsor,
+              maxIterations = maxIterations
+            )(onNoProgress =
+                throw TxBuilderException.CollateralUnavailableException(
+                  requiredCollateral,
+                  totalCollateral.coin,
+                  env.protocolParams.maxCollateralInputs,
+                  sponsor
+                )
+            )
+    }
+
+    /** Replaces the pool's collateral with a fresh selection covering `target`.
+      *
+      * Collateral added by explicit user steps stays in the transaction, so the pool only needs to
+      * cover the remainder. Throws [[TxBuilderException.CollateralUnavailableException]] when even
+      * the best selection within maxCollateralInputs cannot cover it, and `onNoProgress` when
+      * re-selection returns the already-selected set.
+      */
+    private def reselectCollateral(
+        target: Coin,
+        currentCollateralAda: Coin,
+        pool: UtxoPool,
+        sponsor: Address,
+        maxIterations: Int
+    )(onNoProgress: => Nothing): TxBuilder = {
+        def totalAda(utxos: Utxos): Long = utxos.values.foldLeft(0L)(_ + _.value.coin.value)
+
+        val explicitAda = currentCollateralAda.value - totalAda(pool.collateral)
+        val poolTarget = Coin(math.max(0L, target.value - explicitAda))
+        val newCollateral = pool.selectForCollateral(poolTarget, env.protocolParams)
+        val newTotal = totalAda(newCollateral)
+
+        if newTotal < poolTarget.value then
+            throw TxBuilderException.CollateralUnavailableException(
+              poolTarget,
+              Coin(newTotal),
+              env.protocolParams.maxCollateralInputs,
+              sponsor
+            )
+        if newCollateral == pool.collateral then onNoProgress
+
+        completeLoop(pool.replaceCollateral(newCollateral), sponsor, maxIterations - 1)
     }
 
     /** Extract sponsor's expected signer from address if it's a pubkey address. */
