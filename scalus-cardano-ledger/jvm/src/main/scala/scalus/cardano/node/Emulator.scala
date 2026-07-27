@@ -26,7 +26,8 @@ class Emulator(
     initialCertState: CertState = CertState.empty,
     initialDatums: Map[DataHash, Data] = Map.empty,
     initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
-) extends EmulatorBase {
+) extends EmulatorBase
+    with EmulatorJavaApi {
     private val stateRef =
         new AtomicReference[State](State(initialUtxos, certState = initialCertState))
     private val contextRef = new AtomicReference[Context](initialContext)
@@ -145,19 +146,22 @@ object Emulator {
     val defaultValidators: Set[STS.Validator] = DefaultValidators.all
     val defaultMutators: Set[STS.Mutator] = DefaultMutators.all
 
+    /** Creates an Emulator with the specified addresses, each funded with 10,000 ADA (like Yaci
+      * Devkit).
+      */
+    def withAddresses(addresses: Seq[Address]): Emulator =
+        withAddresses(addresses, Value.ada(10_000L))
+
     /** Creates an Emulator with the specified addresses, each with the given initial value.
       *
       * @param addresses
       *   The addresses to initialize with funds
       * @param initialValue
-      *   Initial value per address (default: 10,000 ADA like Yaci Devkit)
+      *   Initial value per address
       * @return
       *   An Emulator instance with the addresses funded
       */
-    def withAddresses(
-        addresses: Seq[Address],
-        initialValue: Value = Value.ada(10_000L)
-    ): Emulator = {
+    def withAddresses(addresses: Seq[Address], initialValue: Value): Emulator = {
         Emulator(
           initialUtxos = EmulatorBase.createInitialUtxos(addresses, initialValue),
           initialContext = Context.testMainnet(),
@@ -165,10 +169,22 @@ object Emulator {
         )
     }
 
-    def withState(
-        initState: EmulatorInitialState,
-        context: Context = Context.testMainnet()
-    ): Emulator = {
+    /** Java-friendly overload of [[withAddresses]]. */
+    def withAddresses(addresses: java.util.List[Address]): Emulator = {
+        import scala.jdk.CollectionConverters.*
+        withAddresses(addresses.asScala.toSeq)
+    }
+
+    /** Java-friendly overload of [[withAddresses]]. */
+    def withAddresses(addresses: java.util.List[Address], initialValue: Value): Emulator = {
+        import scala.jdk.CollectionConverters.*
+        withAddresses(addresses.asScala.toSeq, initialValue)
+    }
+
+    def withState(initState: EmulatorInitialState): Emulator =
+        withState(initState, Context.testMainnet())
+
+    def withState(initState: EmulatorInitialState, context: Context): Emulator = {
         val (certState, datums) = EmulatorBase.buildInitialState(initState, context)
         Emulator(
           initialUtxos = initState.utxos,
@@ -195,8 +211,14 @@ object Emulator {
       */
     def withRegisteredStakeCredentials(
         initialUtxos: Utxos,
+        initialStakeRewards: Map[Credential, Coin]
+    ): Emulator =
+        withRegisteredStakeCredentials(initialUtxos, initialStakeRewards, Context.testMainnet())
+
+    def withRegisteredStakeCredentials(
+        initialUtxos: Utxos,
         initialStakeRewards: Map[Credential, Coin],
-        initialContext: Context = Context.testMainnet()
+        initialContext: Context
     ): Emulator = {
         Emulator(
           initialUtxos = initialUtxos,

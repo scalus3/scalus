@@ -5,6 +5,7 @@ type Utxos = Map[TransactionInput, TransactionOutput]
 
 object Utxos:
     def empty: Utxos = Map.empty
+    @scala.annotation.varargs
     def apply(utxos: Utxo*): Utxos = Map(utxos.map(_.toTuple)*)
 
     extension (utxos: Utxos) {

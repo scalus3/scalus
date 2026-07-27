@@ -21,7 +21,8 @@ case class Context(
 )
 
 object Context {
-    def testMainnet(slot: SlotNo = 0): Context = Context(env = UtxoEnv.testMainnet(slot))
+    def testMainnet(): Context = testMainnet(0)
+    def testMainnet(slot: SlotNo): Context = Context(env = UtxoEnv.testMainnet(slot))
 }
 
 case class State(
@@ -41,7 +42,8 @@ object UtxoEnv {
     @threadUnsafe lazy val default: UtxoEnv = UtxoEnvDefaults.default
 
     // TODO: remove
-    def testMainnet(slot: SlotNo = 0): UtxoEnv = UtxoEnvDefaults.testMainnet(slot)
+    def testMainnet(): UtxoEnv = testMainnet(0)
+    def testMainnet(slot: SlotNo): UtxoEnv = UtxoEnvDefaults.testMainnet(slot)
 }
 
 sealed trait STS {
