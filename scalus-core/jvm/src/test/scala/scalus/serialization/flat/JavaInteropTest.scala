@@ -14,4 +14,12 @@ class JavaInteropTest extends AnyFunSuite {
         for v <- List(0L, -1L, 1L << 40, Long.MinValue, Long.MaxValue) do
             assert(FlatCodec.decodeLong(FlatCodec.encodeLong(v)) == v, s"for $v")
     }
+
+    test("Java can call the low-level helpers and generic encode/decode") {
+        for v <- List(0L, -1L, 42L, Long.MinValue, Long.MaxValue) do
+            assert(JavaFlatInterop.zigZagRoundTrip(v) == v, s"for $v")
+        assert(JavaFlatInterop.word7(300L).sameElements(word7Bytes(300L)))
+        assert(JavaFlatInterop.bitString(0x0b.toByte) == "00001011")
+        assert(JavaFlatInterop.genericStringRoundTrip("hello flat") == "hello flat")
+    }
 }

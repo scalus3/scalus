@@ -4,9 +4,12 @@
 
 ### Added
 
-- JVM-only `FlatCodec`/`Flats` Java facade for the flat codec: `@static` `byte[]`/primitive
-  methods (`encodeLong`, `decodeString`, `word7Bytes`, ...) and named `Flat` instance accessors,
-  so Java can encode/decode and implement `Flat[A]` without `summon` or `MODULE$`
+- `FlatCodec`/`Flats` Java facade for the flat codec (cross-platform, in `shared`):
+  `byte[]`/primitive static methods (`encodeLong`, `decodeString`, `word7Bytes`, `zigZag`,
+  `byteAsBitString`, generic `encode`/`decode` with an explicit `Flat` instance, ...) and named
+  `Flat` instance accessors, so Java can encode/decode and implement `Flat[A]` without `summon`
+  or `MODULE$`. The scalar helpers now live in `FlatCodec`; the top-level functions
+  (`zigZag`, `word7Bytes`, ...) delegate to it
 
 ### Changed
 

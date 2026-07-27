@@ -7,8 +7,7 @@ case class Natural(n: BigInt)
 /** Renders a byte as its 8-character binary string, e.g. `0x0b` → `"00001011"`. Debug aid for
   * [[EncoderState.toString]]/[[DecoderState.toString]].
   */
-def byteAsBitString(b: Byte): String =
-    String.format("%8s", Integer.toBinaryString(b & 0xff)).replace(' ', '0')
+def byteAsBitString(b: Byte): String = FlatCodec.byteAsBitString(b)
 
 def encode[A: Flat](a: A, enc: EncoderState): Unit = summon[Flat[A]].encode(a, enc)
 def decode[A: Flat](dec: DecoderState): A = summon[Flat[A]].decode(dec)
@@ -240,25 +239,13 @@ given pairFlat[A: Flat, B: Flat]: Flat[(A, B)] with
 /** Number of bytes in the variable-length 7-bit encoding of `n`, treating `n` as an unsigned 64-bit
   * value.
   */
-def word7BytesCount(n: Long): Int =
-    if n == 0 then 1
-    else (63 - java.lang.Long.numberOfLeadingZeros(n)) / 7 + 1
+def word7BytesCount(n: Long): Int = FlatCodec.word7BytesCount(n)
 
 /** Encodes `n` (treated as an unsigned 64-bit value) as a variable-length byte array: 7 payload
   * bits per byte, least-significant group first, high bit set on every byte except the last. This
   * is the byte layout of flat's `data NonEmptyList = Elem Word7 | Cons Word7 NonEmptyList`.
   */
-def word7Bytes(n: Long): Array[Byte] =
-    val size = word7BytesCount(n)
-    val result = new Array[Byte](size)
-    var v = n
-    var i = 0
-    while i < size - 1 do
-        result(i) = ((v & 0x7f) | 0x80).toByte
-        v >>>= 7
-        i += 1
-    result(size - 1) = (v & 0x7f).toByte
-    result
+def word7Bytes(n: Long): Array[Byte] = FlatCodec.word7Bytes(n)
 
 /** Number of bytes in the variable-length 7-bit encoding of a non-negative `n`. */
 def word7BytesCount(n: BigInt): Int =
@@ -290,16 +277,16 @@ def w7l(n: Long): List[Byte] = word7Bytes(n).toList
   * range: the doubling overflow is intentional and is inverted by [[zagZig]].
   * https://gist.github.com/mfuerstenau/ba870a29e16536fdbaba
   */
-def zigZag(x: Int): Int = (x << 1) ^ (x >> 31)
+def zigZag(x: Int): Int = FlatCodec.zigZag(x)
 
 /** Inverse of [[zigZag(x:Int)*]]. */
-def zagZig(u: Int): Int = (u >>> 1) ^ -(u & 1)
+def zagZig(u: Int): Int = FlatCodec.zagZig(u)
 
 /** See [[zigZag(x:Int)*]]. */
-def zigZag(x: Long): Long = (x << 1) ^ (x >> 63)
+def zigZag(x: Long): Long = FlatCodec.zigZag(x)
 
 /** Inverse of [[zigZag(x:Long)*]]. */
-def zagZig(u: Long): Long = (u >>> 1) ^ -(u & 1)
+def zagZig(u: Long): Long = FlatCodec.zagZig(u)
 
 @deprecated("Use word7Bytes instead", "0.18.2")
 def w7l(n: BigInt): List[Byte] = word7Bytes(n).toList

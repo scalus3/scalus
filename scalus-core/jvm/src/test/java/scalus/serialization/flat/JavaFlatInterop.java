@@ -19,6 +19,25 @@ public final class JavaFlatInterop {
         return fl.decode(new DecoderState(wire));
     }
 
+    // Low-level helpers as plain statics (mirror-class forwarders of object FlatCodec).
+    public static long zigZagRoundTrip(long v) {
+        return FlatCodec.zagZig(FlatCodec.zigZag(v));
+    }
+
+    public static byte[] word7(long v) {
+        return FlatCodec.word7Bytes(v);
+    }
+
+    public static String bitString(byte b) {
+        return FlatCodec.byteAsBitString(b);
+    }
+
+    // Generic encode/decode with an explicit instance from Flats — no summon needed.
+    public static String genericStringRoundTrip(String s) {
+        byte[] wire = FlatCodec.encode(s, Flats.stringFlat());
+        return FlatCodec.decode(wire, Flats.stringFlat());
+    }
+
     // Implements a custom Flat[A] in Java (proves the trait is Java-implementable).
     public static int customFlatBitSize() {
         Flat<String> constFlat = new Flat<String>() {

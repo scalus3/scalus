@@ -342,6 +342,7 @@ lazy val scalusPlugin = project
             "scalus/compiler/sir/RemoveRecursivity.scala",
             "scalus/compiler/sir/RenamingTypeVars.scala",
             "scalus/serialization/flat/Flat.scala",
+            "scalus/serialization/flat/FlatCodec.scala",
             "scalus/serialization/flat/FlatInstances.scala",
             "scalus/serialization/flat/HashConsed.scala",
             "scalus/serialization/flat/HashConsedFlat.scala",
