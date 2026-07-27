@@ -4,7 +4,7 @@ package scalus.compiler.sir
 import scalus.uplc.{Constant, DefaultFun}
 import scalus.utils.ScalusSourcePos
 
-val SIRVersion: (Int, Int) = (5, 0)
+val SIRVersion: (Int, Int) = (6, 0)
 
 case class Module(
     version: (Int, Int),

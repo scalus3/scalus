@@ -19,4 +19,20 @@ class FlatInstancesCodecTest extends AnyFunSuite {
         val size = SIRTypeHashConsedFlat.bitSizeHC(SIRType.Data.tp, HashConsed.State.empty)
         assert(size == SIRTypeHashConsedFlat.tagWidth)
     }
+
+    test("TypeVar optId round-trips, including Some(0) and negative ids (audit S2)") {
+        import FlatInstances.given
+        val fl = summon[HashConsedFlat[SIRType.TypeVar]]
+        for optId <- List(None, Some(0L), Some(1L), Some(-65L), Some(Long.MinValue)) do
+            val tv = SIRType.TypeVar("A", optId, SIRType.TypeVarKind.Fixed)
+            val state = HashConsed.State.empty
+            val enc = HashConsedEncoderState(
+              EncoderState(fl.bitSizeHC(tv, state) / 8 + 1),
+              state
+            )
+            fl.encodeHC(tv, enc)
+            val dec =
+                HashConsedDecoderState(DecoderState(enc.encode.result), HashConsed.State.empty)
+            assert(fl.decodeHC(dec) == tv, s"for optId=$optId")
+    }
 }
