@@ -76,6 +76,29 @@ trait PlutusScriptEvaluator {
 
 object PlutusScriptEvaluator {
 
+    /** One rendered profile run: what was profiled and which report files were written. `files`
+      * holds (format label, path) pairs — paths relative to the manifest's directory for
+      * [[ProfileDestination.File]] outputs, absolute for [[ProfileDestination.AbsoluteFile]].
+      */
+    private final case class ProfileRun(
+        scriptHash: String,
+        language: Language,
+        tag: RedeemerTag,
+        index: Int,
+        mem: Long,
+        cpu: Long,
+        files: Seq[(String, String)]
+    )
+
+    /** Rendered profile runs keyed by (outputDir, scriptHash, tag, index) — the same stable key the
+      * overwriting file names use, so fee-balancing re-evaluations replace their entry instead of
+      * accumulating. Process-wide (not per evaluator instance) because callers such as the
+      * transaction builder and the emulator create a fresh evaluator per evaluation: every instance
+      * writing into the same output directory contributes to one manifest that mirrors the profile
+      * files present there.
+      */
+    private val profileRuns = TrieMap.empty[(String, String, String, Int), ProfileRun]
+
     /** Reject a Plutus V4 script with a non-fatal `UnsupportedOperationException`. Plutus V4
       * (Dijkstra) evaluation, context building, and diagnostic replay are all out of scope until
       * the upstream `plutus-core` V4 work lands; this helper centralises the rejection so all three
@@ -356,26 +379,6 @@ object PlutusScriptEvaluator {
 
         private def budgetLogPath: String = reportPath("budget.log")
 
-        /** One rendered profile run: what was profiled and which report files were written. `files`
-          * holds (format label, path) pairs — paths relative to the manifest's directory for
-          * [[ProfileDestination.File]] outputs, absolute for [[ProfileDestination.AbsoluteFile]].
-          */
-        private final case class ProfileRun(
-            scriptHash: String,
-            language: Language,
-            tag: RedeemerTag,
-            index: Int,
-            mem: Long,
-            cpu: Long,
-            files: Seq[(String, String)]
-        )
-
-        /** Rendered profile runs keyed by (scriptHash, tag, index) — the same stable key the
-          * overwriting file names use, so fee-balancing re-evaluations replace their entry instead
-          * of accumulating. Mirrors the profile files this evaluator wrote to disk.
-          */
-        private val profileRuns = TrieMap.empty[(String, String, Int), ProfileRun]
-
         /** Render a script's profile to each configured [[ProfileOutput]] (console / files). File
           * destinations are prefixed with the script key so per-redeemer profiles don't collide,
           * and are also recorded in `profile-manifest.json` (see [[writeProfileManifest]]). The
@@ -417,7 +420,9 @@ object PlutusScriptEvaluator {
             }
             val files = written.result()
             if files.nonEmpty then
-                profileRuns((scriptHash.toHex, redeemer.tag.toString, redeemer.index)) = ProfileRun(
+                profileRuns(
+                  (report.outputDir, scriptHash.toHex, redeemer.tag.toString, redeemer.index)
+                ) = ProfileRun(
                   scriptHash.toHex,
                   language,
                   redeemer.tag,
@@ -433,11 +438,13 @@ object PlutusScriptEvaluator {
         private def formatLabel(format: ProfileFormat): String = format.toString.toLowerCase
 
         /** Write `profile-manifest.json`: the machine-readable entry point (schema version 1)
-          * listing every profile run this evaluator has rendered to files, so tools (e.g. the
-          * Scalus VS Code extension) can discover profiles without guessing file names.
+          * listing every profile run rendered to files in this report's output directory (by any
+          * evaluator instance of this process), so tools (e.g. the Scalus VS Code extension) can
+          * discover profiles without guessing file names.
           */
         private def writeProfileManifest(): Unit = {
-            val runs = profileRuns.values.toSeq
+            val runs = profileRuns.toSeq
+                .collect { case ((dir, _, _, _), run) if dir == report.outputDir => run }
                 .sortBy(r => (r.scriptHash, r.tag.toString, r.index))
                 .map { r =>
                     val files = r.files
