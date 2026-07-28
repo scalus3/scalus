@@ -1,6 +1,11 @@
 # Changelog
 
-## Unreleased
+## 1.0.0-M1 (2026-07-28)
+
+First milestone of the 1.0 line. Protocol version 11 (van Rossem) is the default compile and
+evaluation target, all previously deprecated API is removed, and `scalus-core`,
+`scalus-cardano-ledger` and `scalus-bloxbean-cardano-client-lib` become the MiMa-checked stable
+surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 
 ### Added
 
