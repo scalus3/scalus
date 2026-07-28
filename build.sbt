@@ -11,16 +11,13 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.18.0"
-val scalusCompatibleVersion = scalusStableVersion
+val scalusStableVersion = "1.0.0-M1"
 // The MiMa-checked stable surface is scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib (see docs/superpowers/specs/2026-07-28-1.0.0-m1-release-plan-design.md).
-// Master is a deliberately breaking line until 1.0.0-M1 is published, so core and ledger
-// have no comparable baseline yet and their check is disarmed. After the 1.0.0-M1 artifacts
-// are on Maven Central: set scalusCompatibleVersion to "1.0.0-M1", flip this to true, and
-// delete the stale 0.18.0-era mimaBinaryIssueFilters. Re-baseline the same way at each
-// subsequent milestone; intentional breaks then require a reviewed, commented filter.
-val mimaCoreAndLedgerArmed = false
+// Re-baseline at each milestone: bump scalusStableVersion after the release artifacts are on
+// Maven Central and delete the then-obsolete mimaBinaryIssueFilters. Between releases,
+// intentional breaks require a reviewed mimaBinaryIssueFilters entry with a comment.
+val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
 val cardanoClientLibVersion = "0.7.2"
@@ -414,88 +411,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
               .withRecompileOnMacroDef(false)
       },
       // scalacOptions += "-Yretain-trees",
-      mimaPreviousArtifacts := (
-        if (mimaCoreAndLedgerArmed)
-            Set(organization.value %%% name.value % scalusCompatibleVersion)
-        else Set.empty
-      ),
-      mimaBinaryIssueFilters ++= Seq(
-        // ScalusDebug and CompileDerivations moved to scalus.compiler.*; deprecated type aliases
-        // kept in package scalus for source compat. The marker trait CompileDerivations has no
-        // members, so dropping it from these interfaces' hierarchy is binary-safe.
-        ProblemFilters.exclude[MissingClassProblem]("scalus.ScalusDebug"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.CompileDerivations"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.builtin.FromData"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.builtin.ToData"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Eq"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Ord"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Show"),
-        ProblemFilters.exclude[MissingTypesProblem](
-          "scalus.cardano.onchain.plutus.prelude.ShowByteString"
-        ),
-        // Blueprint gained the optional `scalus` toolchain-provenance field (extra top-level
-        // CIP-57 key). Constructor/apply/copy arity changed; source-compatible via the default.
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.blueprint.Blueprint.copy"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.blueprint.Blueprint.apply"
-        ),
-        ProblemFilters.exclude[DirectMissingMethodProblem](
-          "scalus.cardano.blueprint.Blueprint.this"
-        ),
-        // 0.19.0: flat package object converted to top-level definitions (Java compat).
-        // Binary names moved from serialization.flat.package$* to serialization.flat.*; every
-        // signature mentioning Flat/EncoderState/DecoderState/Natural changed. The whole
-        // scalus.serialization.flat package is covered by one wildcard; out-of-package members
-        // whose signatures mention the moved types are listed individually.
-        ProblemFilters.exclude[Problem]("scalus.serialization.flat.*"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.Word64#given_Flat_Word64.decode"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.cardano.ledger.Word64#given_Flat_Word64.encode"
-        ),
-        ProblemFilters.exclude[MissingTypesProblem](
-          "scalus.cardano.ledger.Word64$given_Flat_Word64$"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.compiler.sir.ToExprHSSIRFlat.decode"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.compiler.sir.ToExprHSSIRFlat.encode"
-        ),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.compiler.sir.ToExprHSSIRFlat$"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.compiler.sir.ToExprHSSIRTypeFlat.decode"
-        ),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem](
-          "scalus.compiler.sir.ToExprHSSIRTypeFlat.encode"
-        ),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.compiler.sir.ToExprHSSIRTypeFlat$"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.uplc.Constant.flatConstant"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.uplc.DefaultUni.flatForUni"),
-        ProblemFilters.exclude[Problem]("scalus.uplc.Term#given_Flat_Term.*"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.Term$given_Flat_Term$"),
-        ProblemFilters.exclude[Problem]("scalus.uplc.DefaultFun#given_Flat_DefaultFun.*"),
-        ProblemFilters.exclude[MissingTypesProblem](
-          "scalus.uplc.DefaultFun$given_Flat_DefaultFun$"
-        ),
-        ProblemFilters.exclude[Problem](
-          "scalus.uplc.DeBruijnedProgram#given_Flat_DeBruijnedProgram.*"
-        ),
-        ProblemFilters.exclude[MissingTypesProblem](
-          "scalus.uplc.DeBruijnedProgram$given_Flat_DeBruijnedProgram$"
-        ),
-        ProblemFilters.exclude[Problem](
-          "scalus.uplc.builtin.ByteStringFlatInstance#given_Flat_ByteString.*"
-        ),
-        ProblemFilters.exclude[MissingTypesProblem](
-          "scalus.uplc.builtin.ByteStringFlatInstance$given_Flat_ByteString$"
-        ),
-        ProblemFilters.exclude[Problem]("scalus.uplc.builtin.DataApi#given_Flat_Data.*"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.builtin.DataApi$given_Flat_Data$")
-      ),
+      mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
 
       // enable when debug compilation of tests
       Test / scalacOptions += "-color:never",
@@ -790,14 +706,6 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
-      mimaBinaryIssueFilters ++= Seq(
-        // The legacy TxEvaluator (experimental API, superseded by PlutusScriptEvaluator /
-        // ScalusTransactionEvaluator) was removed for 1.0.0-M1. Drop these filters when the
-        // MiMa baseline moves to 1.0.0-M1.
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$*"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluationException")
-      ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
@@ -867,11 +775,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     .dependsOn(scalus % "compile->compile;test->test")
     .settings(
       name := "scalus-cardano-ledger",
-      mimaPreviousArtifacts := (
-        if (mimaCoreAndLedgerArmed)
-            Set(organization.value %%% name.value % scalusCompatibleVersion)
-        else Set.empty
-      ),
+      mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
@@ -1043,8 +947,7 @@ def copyFiles(files: Seq[String], baseDir: File, targetDir: File, log: ManagedLo
 // =============================================================================
 
 // ABI compatibility gate for the stable surface: scalus-core, scalus-cardano-ledger and
-// scalus-bloxbean-cardano-client-lib. Core and ledger are disarmed (empty baseline) until
-// 1.0.0-M1 is published — see mimaCoreAndLedgerArmed above.
+// scalus-bloxbean-cardano-client-lib, checked against scalusCompatibleVersion.
 addCommandAlias(
   "mima",
   "scalusJVM/mimaReportBinaryIssues;" +
