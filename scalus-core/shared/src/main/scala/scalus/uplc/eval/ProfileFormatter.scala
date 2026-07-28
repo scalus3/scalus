@@ -377,8 +377,15 @@ object ProfileFormatter {
         sb.toString
     }
 
-    /** Renders the full profiling data as JSON (machine-readable). When the data carries execution
-      * unit prices, every entry and the total also include a derived `"fee"` in lovelace.
+    /** Version of the `profile.json` document produced by [[toJson]] (emitted as its
+      * `"schemaVersion"` field). Bump on any incompatible change to the JSON shape so consumers
+      * (e.g. the Scalus VS Code extension) can detect and reject profiles they don't understand.
+      */
+    val JsonSchemaVersion: Int = 1
+
+    /** Renders the full profiling data as JSON (machine-readable, schema version
+      * [[JsonSchemaVersion]]). When the data carries execution unit prices, every entry and the
+      * total also include a derived `"fee"` in lovelace.
       */
     def toJson(data: ProfilingData): String = {
         // `,"fee":<lovelace>` for an entry's (mem, cpu), or "" when no prices are attached.
@@ -386,6 +393,7 @@ object ProfileFormatter {
             feeLovelace(data.prices, mem, cpu).map(f => s""","fee":$f""").getOrElse("")
         val sb = new StringBuilder
         sb.append("{\n")
+        sb.append(s"""  "schemaVersion": $JsonSchemaVersion,\n""")
         sb.append(
           s"""  "totalBudget": { "mem": ${data.totalBudget.memory}, "cpu": ${data.totalBudget.steps}${feeJson(
                 data.totalBudget.memory,

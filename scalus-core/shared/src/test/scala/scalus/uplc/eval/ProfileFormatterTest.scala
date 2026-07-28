@@ -117,6 +117,14 @@ class ProfileFormatterTest extends AnyFunSuite {
         assert(json.contains("\"fromLine\":3"))
     }
 
+    test("toJson carries the profile.json schema version") {
+        assert(ProfileFormatter.JsonSchemaVersion == 1)
+        val json = ProfileFormatter.toJson(data)
+        assert(json.contains(s""""schemaVersion": ${ProfileFormatter.JsonSchemaVersion}"""))
+        // schemaVersion must be the first field so consumers can gate on it cheaply
+        assert(json.linesIterator.drop(1).next().contains("schemaVersion"))
+    }
+
     test("a derived fee column/field appears across formats when prices are attached") {
         // mainnet-like prices: 0.0577 / mem unit, 0.0000721 / cpu step.
         // fee = ceil(0.0577*mem + 0.0000721*cpu): Foo:3 (100,200) -> 6, total (150,260) -> 9.
