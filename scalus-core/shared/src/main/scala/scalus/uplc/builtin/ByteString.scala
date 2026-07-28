@@ -117,8 +117,8 @@ object ByteString extends ByteStringOffchainApi, ByteStringFlatInstance {
     inline def fromBigIntLittleEndian(value: BigInt, size: BigInt = 0): ByteString =
         Builtins.integerToByteString(false, size, value)
 
-    // TODO it's not truly overriding and doesn't work in generic function,
-    //  see extension methods <, <=, >, >=, equiv, nonEquiv for [A: Ord]
+    // Monomorphic fast path, chosen over the generic [A: Ord] extension by static overload
+    // resolution only — generic code goes through Ord[A].compare with the same results.
 
     // These methods are available onchain
     // Because we make them inline and those are builtins
