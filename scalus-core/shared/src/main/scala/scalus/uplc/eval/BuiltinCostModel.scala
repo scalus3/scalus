@@ -129,7 +129,6 @@ case class BuiltinCostModel(
     lengthOfArray: DefaultCostingFun[OneArgument],
     listToArray: DefaultCostingFun[OneArgument],
     indexArray: DefaultCostingFun[TwoArguments],
-    multiIndexArray: DefaultCostingFun[TwoArguments],
     // MaryEraValue builtins (CIP-0153) - from Plutus builtinCostModelC.json
     insertCoin: DefaultCostingFun[FourArguments] = DefaultCostingFun(
       FourArguments.LinearInU(
@@ -371,7 +370,6 @@ object BuiltinCostModel {
             "lengthOfArray" -> writeJs(model.lengthOfArray),
             "listToArray" -> writeJs(model.listToArray),
             "indexArray" -> writeJs(model.indexArray),
-            "multiIndexArray" -> writeJs(model.multiIndexArray),
             // MaryEraValue builtins (CIP-0153)
             "insertCoin" -> writeJs(model.insertCoin),
             "lookupCoin" -> writeJs(model.lookupCoin),
@@ -603,10 +601,6 @@ object BuiltinCostModel {
             indexArray =
                 if json.obj.keySet.contains("indexArray") then
                     read[DefaultCostingFun[TwoArguments]](json("indexArray"))
-                else null,
-            multiIndexArray =
-                if json.obj.keySet.contains("multiIndexArray") then
-                    read[DefaultCostingFun[TwoArguments]](json("multiIndexArray"))
                 else null,
             // MaryEraValue builtins (CIP-0153)
             insertCoin =
@@ -1724,10 +1718,6 @@ object BuiltinCostModel {
           indexArray = DefaultCostingFun(
             cpu = TwoArguments.ConstantCost(params.`indexArray-cpu-arguments`),
             memory = TwoArguments.ConstantCost(params.`indexArray-memory-arguments`)
-          ),
-          multiIndexArray = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
-            memory = TwoArguments.ConstantCost(CostingInteger(4L))
           ),
           insertCoin = DefaultCostingFun(
             cpu = FourArguments.LinearInU(

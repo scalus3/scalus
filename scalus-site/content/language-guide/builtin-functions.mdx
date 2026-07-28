@@ -236,13 +236,6 @@ val first = Builtins.indexArray(array, BigInt(0))   // iData(10)
 val second = Builtins.indexArray(array, BigInt(1))  // iData(20)
 ```
 
-<Callout type="warning">
-Do **not** use `Builtins.multiIndexArray`. It is not a real Plutus builtin — no released Plutus
-version (or Aiken) implements it, and Scalus serializes it with an invented flat tag, so any script
-using it fails to decode/evaluate under real Plutus tooling. Access elements individually with
-`indexArray` instead. It will be enabled once upstream Plutus defines the builtin.
-</Callout>
-
 ## Pair Operations
 
 Operations on pairs (2-tuples).

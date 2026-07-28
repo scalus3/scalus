@@ -270,7 +270,6 @@ object MachineParams {
                   lengthOfArray = ref.lengthOfArray,
                   listToArray = ref.listToArray,
                   indexArray = ref.indexArray,
-                  multiIndexArray = ref.multiIndexArray,
                   bls12_381_G1_multiScalarMul = ref.bls12_381_G1_multiScalarMul,
                   bls12_381_G2_multiScalarMul = ref.bls12_381_G2_multiScalarMul,
                   insertCoin = ref.insertCoin,

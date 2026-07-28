@@ -27,6 +27,8 @@
   `scalus.CompileDerivations` aliases, `w7l`
 - legacy experimental `scalus.bloxbean.TxEvaluator` – use `ScalusTransactionEvaluator` or
   `PlutusScriptEvaluator`
+- the `multiIndexArray` builtin – a Scalus invention that no Plutus release implements; scripts
+  using it could not decode under real Plutus tooling. Use `indexArray` per element
 
 ### Fixed
 

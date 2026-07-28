@@ -167,8 +167,6 @@ object Builtins {
             )
 
         // Matches Plutus 1.63 (cardano-node 11.0.1, van Rossem / PV11).
-        // Note: MultiIndexArray is intentionally absent — it is a Scalus experiment that
-        // does not exist in released Plutus and must never reach on-chain scripts.
         val batch6: Set[DefaultFun] =
             Set(
               DefaultFun.ExpModInteger,

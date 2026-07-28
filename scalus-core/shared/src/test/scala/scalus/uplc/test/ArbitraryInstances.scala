@@ -260,7 +260,6 @@ trait ArbitraryInstances:
         val supportedBuiltins = DefaultFun.values.filterNot(b =>
             b == DefaultFun.ListToArray ||
                 b == DefaultFun.IndexArray ||
-                b == DefaultFun.MultiIndexArray ||
                 b == DefaultFun.LengthOfArray
         )
         val builtinGen: Gen[Term] =
