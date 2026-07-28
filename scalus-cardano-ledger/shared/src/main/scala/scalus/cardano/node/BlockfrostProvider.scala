@@ -414,9 +414,11 @@ class BlockfrostProvider(
         order: String = "asc"
     ): Future[Either[UtxoQueryError, Utxos]] =
         fetchPaginated(s"/accounts/$stakeAddress/utxos", page, count, order)
-            .map { items =>
-                if items.isEmpty then Right(Map.empty)
-                else Right(BlockfrostProvider.parseUtxoItems(items))
+            .flatMap { items =>
+                if items.isEmpty then Future.successful(Right(Map.empty))
+                else
+                    val (utxos, refHashes) = BlockfrostProvider.parseUtxoItemsWithRefHashes(items)
+                    enrichWithScriptRefs(utxos, refHashes).map(Right(_))
             }
             .recover { case e: Throwable =>
                 Left(UtxoQueryError.NetworkError(e.getMessage, Some(e)))
@@ -871,6 +873,71 @@ class BlockfrostProvider(
                 fetchUtxosFromBech32Address(bech32, Some(asset))
     }
 
+    // ── Reference script resolution ─────────────────────────────────────────
+
+    /** Cache of resolved reference scripts. Script hashes are immutable, so entries never expire;
+      * failed resolutions are evicted so transient errors can be retried.
+      */
+    private val scriptRefCache =
+        scala.collection.concurrent.TrieMap.empty[ScriptHash, Future[ScriptRef]]
+
+    /** Resolve a script by hash into a [[ScriptRef]] via `GET /scripts/{hash}` plus
+      * `/scripts/{hash}/cbor` (Plutus) or `/scripts/{hash}/json` (timelock). The reconstructed
+      * script is verified to hash back to `scriptHash`. Results are cached per provider.
+      */
+    def resolveScriptRef(scriptHash: ScriptHash): Future[ScriptRef] =
+        scriptRefCache.getOrElseUpdate(
+          scriptHash, {
+              val hex = scriptHash.toHex
+              val resolved = fetchScriptInfo(hex).flatMap { info =>
+                  info.scriptType match
+                      case "timelock" =>
+                          fetchScriptJson(hex).map { json =>
+                              ScriptRef(
+                                BlockfrostProvider.buildNativeScript(scriptHash, json("json"))
+                              )
+                          }
+                      case plutusType =>
+                          fetchScriptCbor(hex).map { cbor =>
+                              ScriptRef(
+                                BlockfrostProvider.buildPlutusScript(plutusType, scriptHash, cbor)
+                              )
+                          }
+              }
+              resolved.failed.foreach(_ => scriptRefCache.remove(scriptHash))
+              resolved
+          }
+        )
+
+    /** Attach resolved reference scripts to outputs that declare a `reference_script_hash`. Fails
+      * the whole result if any script cannot be resolved: a silently missing scriptRef would
+      * corrupt reference-script fee calculation and UTxO selection downstream.
+      */
+    private def enrichWithScriptRefs(
+        utxos: Utxos,
+        refHashes: Map[TransactionInput, ScriptHash]
+    ): Future[Utxos] =
+        if refHashes.isEmpty then Future.successful(utxos)
+        else
+            Future
+                .traverse(refHashes.values.toSet.toSeq) { hash =>
+                    resolveScriptRef(hash).map(hash -> _)
+                }
+                .map { resolved =>
+                    val byHash = resolved.toMap
+                    utxos.map { case (input, output) =>
+                        refHashes.get(input) match
+                            case Some(hash) =>
+                                input -> Output(
+                                  address = output.address,
+                                  value = output.value,
+                                  datumOption = output.datumOption,
+                                  scriptRef = Some(byHash(hash))
+                                )
+                            case None => input -> output
+                    }
+                }
+
     /** Internal helper to fetch UTxOs from a Bech32 address, optionally filtered by asset.
       *
       * Automatically paginates to fetch all UTxOs (Blockfrost returns max 100 per page).
@@ -883,9 +950,11 @@ class BlockfrostProvider(
             case Some(a) => s"/addresses/$bech32/utxos/$a"
             case None    => s"/addresses/$bech32/utxos"
         fetchAllPages(path)
-            .map { items =>
-                if items.isEmpty then Right(Map.empty)
-                else Right(BlockfrostProvider.parseUtxoItems(items))
+            .flatMap { items =>
+                if items.isEmpty then Future.successful(Right(Map.empty))
+                else
+                    val (utxos, refHashes) = BlockfrostProvider.parseUtxoItemsWithRefHashes(items)
+                    enrichWithScriptRefs(utxos, refHashes).map(Right(_))
             }
             .recover { case e: Throwable =>
                 Left(UtxoQueryError.NetworkError(e.getMessage, Some(e)))
@@ -902,24 +971,35 @@ class BlockfrostProvider(
               .get(uri"$url")
               .headers(headers)
               .send(backend)
-        ).map { response =>
+        ).flatMap { response =>
             if response.code.isSuccess then {
                 response.body match {
                     case Right(body) =>
                         val json = ujson.read(body, trace = false)
                         val outputs = json("outputs").arr
-                        val utxos = outputs.zipWithIndex.map { case (outputJson, index) =>
+                        val parsed = outputs.zipWithIndex.map { case (outputJson, index) =>
                             val input = Input(txId, index)
-                            BlockfrostProvider.parseUtxoOutput(input, outputJson)
+                            (
+                              BlockfrostProvider.parseUtxoOutput(input, outputJson),
+                              BlockfrostProvider.referenceScriptHash(outputJson)
+                            )
+                        }
+                        val utxos = parsed.map(_._1).toMap
+                        val refHashes = parsed.collect { case ((input, _), Some(hash)) =>
+                            input -> hash
                         }.toMap
-                        Right(utxos)
+                        enrichWithScriptRefs(utxos, refHashes).map(Right(_))
                     case Left(error) =>
-                        Left(UtxoQueryError.NetworkError(s"Failed to fetch tx UTxOs: $error"))
+                        Future.successful(
+                          Left(UtxoQueryError.NetworkError(s"Failed to fetch tx UTxOs: $error"))
+                        )
                 }
             } else if response.code == StatusCode.NotFound then {
-                Left(UtxoQueryError.NotFound(UtxoSource.FromTransaction(txId)))
+                Future.successful(Left(UtxoQueryError.NotFound(UtxoSource.FromTransaction(txId))))
             } else {
-                Left(UtxoQueryError.NetworkError(s"Failed to fetch tx UTxOs: ${response.body}"))
+                Future.successful(
+                  Left(UtxoQueryError.NetworkError(s"Failed to fetch tx UTxOs: ${response.body}"))
+                )
             }
         }.recover { case e: Throwable =>
             Left(UtxoQueryError.NetworkError(e.getMessage, Some(e)))
@@ -1047,23 +1127,44 @@ object BlockfrostProvider {
     /** Local Yaci DevKit admin API URL */
     val localAdminUrl = "http://localhost:10000/local-cluster/api"
 
+    /** Parse UTxO JSON into a Utxos map. Reference scripts are NOT resolved here: the JSON only
+      * carries `reference_script_hash`, so outputs have `scriptRef = None`. Use the provider's
+      * async fetch methods (which enrich via `resolveScriptRef`) when script refs matter.
+      */
     def parseUtxos(json: String): Utxos = {
         val utxosArray = ujson.read(json, trace = false).arr.toSeq
         parseUtxoItems(utxosArray)
     }
 
-    /** Parse a sequence of UTxO JSON values into a Utxos map. */
-    private[node] def parseUtxoItems(items: Seq[ujson.Value]): Utxos = {
-        items.map { utxoJson =>
+    /** Parse a sequence of UTxO JSON values into a Utxos map (without reference scripts). */
+    private[node] def parseUtxoItems(items: Seq[ujson.Value]): Utxos =
+        parseUtxoItemsWithRefHashes(items)._1
+
+    /** Parse UTxO JSON values, also collecting each output's `reference_script_hash`. */
+    private[node] def parseUtxoItemsWithRefHashes(
+        items: Seq[ujson.Value]
+    ): (Utxos, Map[TransactionInput, ScriptHash]) = {
+        val parsed = items.map { utxoJson =>
             val txInput = Input(
               TransactionHash.fromHex(utxoJson("tx_hash").str),
               utxoJson("output_index").num.toInt
             )
-            parseUtxoOutput(txInput, utxoJson)
-        }.toMap
+            (parseUtxoOutput(txInput, utxoJson), referenceScriptHash(utxoJson))
+        }
+        val utxos = parsed.map(_._1).toMap
+        val refHashes = parsed.collect { case ((input, _), Some(hash)) => input -> hash }.toMap
+        (utxos, refHashes)
     }
 
-    /** Parse a single UTxO JSON into a (TransactionInput, TransactionOutput) pair. */
+    /** Extract the optional `reference_script_hash` field from a UTxO/output JSON object. */
+    private[node] def referenceScriptHash(json: ujson.Value): Option[ScriptHash] =
+        json.obj.get("reference_script_hash").collect { case ujson.Str(hex) =>
+            ScriptHash.fromHex(hex)
+        }
+
+    /** Parse a single UTxO JSON into a (TransactionInput, TransactionOutput) pair. The output's
+      * `scriptRef` is left empty; see [[referenceScriptHash]] and `resolveScriptRef`.
+      */
     private def parseUtxoOutput(
         input: TransactionInput,
         json: ujson.Value
@@ -1071,9 +1172,6 @@ object BlockfrostProvider {
         val address = Address.fromBech32(json("address").str)
         val value = parseValue(json("amount").arr)
         val datumOption = parseDatumOption(json.obj)
-        // reference_script_hash is present in the JSON but we cannot reconstruct
-        // the full ScriptRef without fetching the script bytes via /scripts/{hash}/cbor.
-        // Use BlockfrostProvider.resolveScriptRefs to enrich UTxOs with script references.
         val txOutput = Output(
           address = address,
           value = value,
@@ -1081,6 +1179,58 @@ object BlockfrostProvider {
           scriptRef = None
         )
         input -> txOutput
+    }
+
+    /** Build a Plutus [[Script]] from Blockfrost `/scripts/{hash}/cbor` bytes, verifying it hashes
+      * to `expectedHash`. Depending on the script's origin the returned bytes may carry an extra
+      * CBOR bytestring wrapping; both layouts are accepted and disambiguated by the hash check.
+      */
+    private[node] def buildPlutusScript(
+        scriptType: String,
+        expectedHash: ScriptHash,
+        cbor: ByteString
+    ): Script = {
+        def mk(bytes: ByteString): Script = scriptType match
+            case "plutusV1" => Script.PlutusV1(bytes)
+            case "plutusV2" => Script.PlutusV2(bytes)
+            case "plutusV3" => Script.PlutusV3(bytes)
+            case other =>
+                throw RuntimeException(s"Unsupported Blockfrost script type: $other")
+        val direct = mk(cbor)
+        if direct.scriptHash == expectedHash then direct
+        else
+            scala.util
+                .Try(
+                  ByteString.unsafeFromArray(
+                    io.bullet.borer.Cbor.decode(cbor.bytes).to[Array[Byte]].value
+                  )
+                )
+                .toOption
+                .map(mk)
+                .filter(_.scriptHash == expectedHash)
+                .getOrElse(
+                  throw RuntimeException(
+                    s"Blockfrost $scriptType script does not hash to ${expectedHash.toHex}"
+                  )
+                )
+    }
+
+    /** Build a native [[Script]] from Blockfrost `/scripts/{hash}/json` timelock JSON, verifying it
+      * hashes to `expectedHash`.
+      */
+    private[node] def buildNativeScript(
+        expectedHash: ScriptHash,
+        timelockJson: ujson.Value
+    ): Script = {
+        val timelock = upickle.default.read[Timelock](timelockJson)(using
+          Timelock.blockfrostReadWriter
+        )
+        val script = Script.Native(timelock)
+        if script.scriptHash != expectedHash then
+            throw RuntimeException(
+              s"Blockfrost timelock script does not hash to ${expectedHash.toHex}"
+            )
+        script
     }
 
     /** Create a BlockfrostProvider for Cardano mainnet.

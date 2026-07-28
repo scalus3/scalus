@@ -32,6 +32,9 @@
 
 ### Fixed
 
+- `BlockfrostProvider.findUtxos` resolves reference scripts (previously `scriptRef` was always
+  `None`, breaking reference-script fee calculation and UTxO selection); resolved scripts are
+  hash-verified and cached per provider
 - `PlutusVM` factories and `PlutusScriptEvaluator` now respect the target protocol version when
   selecting builtin semantics
 - PlutusV1/V2 `Case`/`Constr` CEK step costs fell back to a ~300M placeholder instead of the
