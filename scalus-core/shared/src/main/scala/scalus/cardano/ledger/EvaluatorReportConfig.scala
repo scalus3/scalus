@@ -50,8 +50,9 @@ final case class ProfileOutput(format: ProfileFormat, destination: ProfileDestin
   *   master switch; when `false` the evaluator writes nothing
   * @param outputDir
   *   directory artifacts are written to (plain string so the type stays cross-platform; created via
-  *   `platform.createDirectories`). Default `"."` is the current working directory, matching the
-  *   historical dump location.
+  *   `platform.createDirectories`). Default `"target/scalus"` follows the build-output convention
+  *   (git-ignored, swept by `clean` in sbt projects); set `"."` (or `SCALUS_DUMP_DIR=.`) for the
+  *   pre-1.0 behaviour of dumping into the working directory.
   * @param artifacts
   *   which [[DumpArtifact]]s to write
   * @param profile
@@ -65,7 +66,7 @@ final case class ProfileOutput(format: ProfileFormat, destination: ProfileDestin
   */
 final case class EvaluatorReportConfig(
     enabled: Boolean = false,
-    outputDir: String = ".",
+    outputDir: String = "target/scalus",
     artifacts: Set[DumpArtifact] = Set(DumpArtifact.Flat),
     profile: ProfileLevel = ProfileLevel.Off,
     profileOutputs: Seq[ProfileOutput] = Nil,
@@ -107,8 +108,8 @@ object EvaluatorReportConfig {
       *
       * `true` reproduces the historical artifact set: the fully-applied `.flat` files plus the
       * per-builtin budget log (the latter only takes effect in `VALIDATE` mode). The on-disk layout
-      * changes — stable, overwriting filenames plus a `manifest.json` — but the set of artifacts is
-      * unchanged.
+      * changes — stable, overwriting filenames plus a `manifest.json`, written under the default
+      * `target/scalus` instead of the working directory — but the set of artifacts is unchanged.
       */
     def fromLegacyBoolean(debugDumpFilesForTesting: Boolean): EvaluatorReportConfig =
         if debugDumpFilesForTesting then

@@ -74,7 +74,7 @@ SCALUS_PROFILE=full sbt test
 ```
 
 For each profiled script run this writes, into the report output directory (`SCALUS_DUMP_DIR`,
-default: the working directory):
+default: `target/scalus`):
 
 - `<scriptHash>-<tag>-<index>.profile.html` – the interactive report
 - `<scriptHash>-<tag>-<index>.profile.json` – machine-readable data (`"schemaVersion": 1`)

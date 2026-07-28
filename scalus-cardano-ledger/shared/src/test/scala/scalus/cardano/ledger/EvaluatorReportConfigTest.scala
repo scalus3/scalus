@@ -10,6 +10,10 @@ class EvaluatorReportConfigTest extends AnyFunSuite {
         DumpArtifact.values.foreach(a => assert(!cfg.dumps(a)))
     }
 
+    test("artifacts default to target/scalus, not the working directory") {
+        assert(EvaluatorReportConfig().outputDir == "target/scalus")
+    }
+
     test("fromLegacyBoolean reproduces the historical artifact set") {
         val on = EvaluatorReportConfig.fromLegacyBoolean(true)
         assert(on.enabled)
