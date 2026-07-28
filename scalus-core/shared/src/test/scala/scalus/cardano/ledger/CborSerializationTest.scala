@@ -20,6 +20,11 @@ class CborSerializationTest extends AnyFunSuite, ScalaCheckPropertyChecks, Arbit
     test(s"Coin should serialize and deserialize correctly"):
         testSerializationRoundTrip[Coin]
 
+    test(s"Coin decoding should reject negative values"):
+        // CBOR -1000000 (major type 1); Conway CDDL requires coin = uint
+        val negative = io.bullet.borer.Cbor.encode(-1000000L).toByteArray
+        assertThrows[io.bullet.borer.Borer.Error[?]](Cbor.decode[Coin](negative))
+
     test(s"ScriptHash should serialize and deserialize correctly"):
         testSerializationRoundTrip[ScriptHash]
 

@@ -24,10 +24,13 @@ enum Era(val value: Int) extends Enumeration {
     case Conway extends Era(7)
 }
 
-// FIXME: make sure we validate the Coin is non-negative in ledger rules
 /** Represents an amount of Cardano's native currency (ADA)
+  *
+  * On the wire a coin is unsigned (Conway CDDL `coin = uint`), and the CBOR decoder rejects
+  * negative values. The constructor deliberately allows negative amounts: balancing and `Value`
+  * arithmetic produce transient negative differences.
   */
-final case class Coin(value: Long) derives Codec {
+final case class Coin(value: Long) {
 
     /** Add another coin amount */
     @targetName("plus")
@@ -56,6 +59,15 @@ object Coin {
 
     /** Create lovelace amount from ADA amount, e.g.  ada(2) = 2_000_000 lovelace */
     def ada(amount: Long): Coin = Coin(amount * 1_000_000L)
+
+    given Codec[Coin] = Codec(
+      Encoder((w, coin) => w.writeLong(coin.value)),
+      Decoder { r =>
+          val value = r.readLong()
+          if value < 0 then r.validationFailure(s"Coin must be non-negative, got $value")
+          Coin(value)
+      }
+    )
 
     given CommutativeGroup[Coin] with
         def combine(x: Coin, y: Coin): Coin = x + y
