@@ -1,5 +1,7 @@
 package scalus.cardano.ledger
 
+import com.github.plokhotnyuk.jsoniter_scala.core.*
+import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.Language.*
 import scalus.cardano.ledger.LedgerToPlutusTranslation.*
@@ -14,7 +16,6 @@ import scalus.utils.ScalusSourcePos
 import scribe.Logger
 
 import scala.annotation.threadUnsafe
-import scala.collection.concurrent.TrieMap
 import scala.util.control.NonFatal
 
 enum EvaluatorMode extends Enum[EvaluatorMode] {
@@ -76,28 +77,32 @@ trait PlutusScriptEvaluator {
 
 object PlutusScriptEvaluator {
 
-    /** One rendered profile run: what was profiled and which report files were written. `files`
-      * holds (format label, path) pairs — paths relative to the manifest's directory for
-      * [[ProfileDestination.File]] outputs, absolute for [[ProfileDestination.AbsoluteFile]].
+    /** Schema version of `profile-manifest.json`. Bump on any incompatible change to its shape so
+      * consumers (e.g. the Scalus VS Code extension) can detect and reject manifests they don't
+      * understand.
       */
-    private final case class ProfileRun(
-        scriptHash: String,
-        language: Language,
-        tag: RedeemerTag,
-        index: Int,
-        mem: Long,
-        cpu: Long,
-        files: Seq[(String, String)]
-    )
+    private val ProfileManifestSchemaVersion = 1
 
-    /** Rendered profile runs keyed by (outputDir, scriptHash, tag, index) — the same stable key the
-      * overwriting file names use, so fee-balancing re-evaluations replace their entry instead of
-      * accumulating. Process-wide (not per evaluator instance) because callers such as the
-      * transaction builder and the emulator create a fresh evaluator per evaluation: every instance
-      * writing into the same output directory contributes to one manifest that mirrors the profile
-      * files present there.
+    // The profile-manifest.json document, mirrored 1:1 by jsoniter. `file` paths are relative to
+    // the manifest's directory for ProfileDestination.File outputs, absolute for AbsoluteFile.
+    private final case class ProfileManifest(schemaVersion: Int, runs: Seq[ProfileManifestRun])
+    private final case class ProfileManifestRun(
+        scriptHash: String,
+        language: String,
+        redeemer: ProfileManifestRedeemer,
+        budget: ProfileManifestBudget,
+        files: Seq[ProfileManifestFile]
+    )
+    private final case class ProfileManifestRedeemer(tag: String, index: Int)
+    private final case class ProfileManifestBudget(mem: Long, cpu: Long)
+    private final case class ProfileManifestFile(format: String, file: String)
+    private given JsonValueCodec[ProfileManifest] = JsonCodecMaker.make
+
+    /** Serializes in-process read-merge-write cycles on `profile-manifest.json`, so concurrent
+      * evaluations don't lose each other's runs. The manifest on disk is the only registry —
+      * nothing is retained in memory between writes.
       */
-    private val profileRuns = TrieMap.empty[(String, String, String, Int), ProfileRun]
+    private val profileManifestLock = new Object
 
     /** Reject a Plutus V4 script with a non-fatal `UnsupportedOperationException`. Plutus V4
       * (Dijkstra) evaluation, context building, and diagnostic replay are all out of scope until
@@ -420,51 +425,46 @@ object PlutusScriptEvaluator {
             }
             val files = written.result()
             if files.nonEmpty then
-                profileRuns(
-                  (report.outputDir, scriptHash.toHex, redeemer.tag.toString, redeemer.index)
-                ) = ProfileRun(
-                  scriptHash.toHex,
-                  language,
-                  redeemer.tag,
-                  redeemer.index,
-                  data.totalBudget.memory,
-                  data.totalBudget.steps,
-                  files
+                writeProfileManifest(
+                  ProfileManifestRun(
+                    scriptHash.toHex,
+                    language.toString,
+                    ProfileManifestRedeemer(redeemer.tag.toString, redeemer.index),
+                    ProfileManifestBudget(data.totalBudget.memory, data.totalBudget.steps),
+                    files.map((fmt, f) => ProfileManifestFile(fmt, f))
+                  )
                 )
-                writeProfileManifest()
         }
 
         /** Lower-case manifest label for a profile format: "text", "csv", "html", "json". */
         private def formatLabel(format: ProfileFormat): String = format.toString.toLowerCase
 
-        /** Write `profile-manifest.json`: the machine-readable entry point (schema version 1)
-          * listing every profile run rendered to files in this report's output directory (by any
-          * evaluator instance of this process), so tools (e.g. the Scalus VS Code extension) can
-          * discover profiles without guessing file names.
+        /** Merge `run` into `profile-manifest.json`: the machine-readable entry point (schema
+          * version 1) listing every profile run rendered to files in this report's output
+          * directory, so tools (e.g. the Scalus VS Code extension) can discover profiles without
+          * guessing file names. The manifest on disk is the only registry: each write re-reads it
+          * and replaces the entry with the same (scriptHash, tag, index) key — the key the
+          * overwriting file names use — so fee-balancing re-evaluations update in place while other
+          * scripts' runs (from any evaluator instance or earlier process) are preserved. An absent,
+          * foreign or unsupported-version manifest is started fresh.
           */
-        private def writeProfileManifest(): Unit = {
-            val runs = profileRuns.toSeq
-                .collect { case ((dir, _, _, _), run) if dir == report.outputDir => run }
-                .sortBy(r => (r.scriptHash, r.tag.toString, r.index))
-                .map { r =>
-                    val files = r.files
-                        .map { case (fmt, f) => s"""{ "format": "$fmt", "file": "$f" }""" }
-                        .mkString(", ")
-                    s"""    { "scriptHash": "${r.scriptHash}", "language": "${r.language}", """ +
-                        s""""redeemer": { "tag": "${r.tag}", "index": ${r.index} }, """ +
-                        s""""budget": { "mem": ${r.mem}, "cpu": ${r.cpu} }, """ +
-                        s""""files": [$files] }"""
-                }
-            val json =
-                s"""{
-                   |  "schemaVersion": 1,
-                   |  "runs": [
-                   |${runs.mkString(",\n")}
-                   |  ]
-                   |}
-                   |""".stripMargin
-            platform.writeFile(reportPath("profile-manifest.json"), json.getBytes("UTF-8"))
-        }
+        private def writeProfileManifest(run: ProfileManifestRun): Unit =
+            profileManifestLock.synchronized {
+                val path = reportPath("profile-manifest.json")
+                val existing =
+                    try
+                        val parsed = readFromArray[ProfileManifest](platform.readFile(path))
+                        if parsed.schemaVersion == ProfileManifestSchemaVersion then parsed.runs
+                        else Seq.empty
+                    catch case NonFatal(_) => Seq.empty
+                def key(r: ProfileManifestRun) = (r.scriptHash, r.redeemer.tag, r.redeemer.index)
+                val runs = (existing.filterNot(r => key(r) == key(run)) :+ run).sortBy(key)
+                val manifest = ProfileManifest(ProfileManifestSchemaVersion, runs)
+                platform.writeFile(
+                  path,
+                  writeToArray(manifest, WriterConfig.withIndentionStep(2))
+                )
+            }
 
         private val log = Logger()
         //        .withHandler(minimumLevel = Some(Level.Debug))
