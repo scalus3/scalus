@@ -778,6 +778,14 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // The legacy TxEvaluator (experimental API, superseded by PlutusScriptEvaluator /
+        // ScalusTransactionEvaluator) was removed for 1.0.0-M1. Drop these filters when the
+        // MiMa baseline moves to 1.0.0-M1.
+        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluator$*"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.bloxbean.TxEvaluationException")
+      ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",

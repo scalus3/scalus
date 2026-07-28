@@ -51,6 +51,16 @@
   1.63 `builtinsIntroducedIn` — scripts using them pass `ScriptsWellFormedValidator` on all of
   PlutusV1/V2/V3 at PV11
 
+### Removed
+
+- all previously deprecated API: the `ReprTag` aliases (deprecated 0.16.0; use
+  `scalus.compiler.UplcRepresentation`), the top-level `scalus.ScalusDebug` and
+  `scalus.CompileDerivations` type aliases (0.18.1; use the `scalus.compiler.*` types) and
+  `w7l` in `scalus.serialization.flat` (0.18.2; use `word7Bytes`)
+- the legacy experimental `scalus.bloxbean.TxEvaluator` (and `TxEvaluationException`):
+  use `ScalusTransactionEvaluator` (CCL `TransactionEvaluator`) or
+  `scalus.cardano.ledger.PlutusScriptEvaluator` directly
+
 ### Fixed
 
 - `PlutusVM.makePlutusV3VM(params)` ignored the mainnet protocol version when constructing the VM,

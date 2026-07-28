@@ -19,7 +19,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
       "BLOCKFROST_API_KEY is not set, please set it before running the test"
     )
 
-    test("TxEvaluator PlutusV2") {
+    test("PlutusScriptEvaluator PlutusV2") {
         val evaluator = PlutusScriptEvaluator(
           CardanoInfo.mainnet,
           EvaluatorMode.EvaluateAndComputeCost
@@ -74,7 +74,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         assert(redeemerResult.exUnits.steps == 3356071L)
     }
 
-    test("TxEvaluator PlutusV3") {
+    test("PlutusScriptEvaluator PlutusV3") {
         val evaluator = PlutusScriptEvaluator(
           CardanoInfo.mainnet,
           EvaluatorMode.EvaluateAndComputeCost

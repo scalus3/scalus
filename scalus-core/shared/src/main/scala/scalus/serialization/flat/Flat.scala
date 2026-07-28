@@ -269,9 +269,6 @@ def word7Bytes(n: BigInt): Array[Byte] =
         result(size - 1) = (v & 0x7f).toByte
         result
 
-@deprecated("Use word7Bytes instead", "0.18.2")
-def w7l(n: Long): List[Byte] = word7Bytes(n).toList
-
 /** ZigZag encoding: maps signed values to unsigned so small magnitudes of either sign get short
   * varint encodings (0 → 0, -1 → 1, 1 → 2, -2 → 3, 2 → 4, ...). Total over the whole Int/Long
   * range: the doubling overflow is intentional and is inverted by [[zagZig]].
@@ -287,9 +284,6 @@ def zigZag(x: Long): Long = FlatCodec.zigZag(x)
 
 /** Inverse of [[zigZag(x:Long)*]]. */
 def zagZig(u: Long): Long = FlatCodec.zagZig(u)
-
-@deprecated("Use word7Bytes instead", "0.18.2")
-def w7l(n: BigInt): List[Byte] = word7Bytes(n).toList
 
 def zigZag(x: BigInt) = if x >= 0 then x << 1 else -(x << 1) - 1
 def zagZig(u: BigInt) = u >> 1 ^ -(u & 1)

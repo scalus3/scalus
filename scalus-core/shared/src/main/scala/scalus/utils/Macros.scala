@@ -289,10 +289,10 @@ object Macros {
                         for (typeSymbolOfA, fieldName) <- collectSymbolsAndFields(select) do {
                             val fields = typeSymbolOfA.caseFields.filter(_.isValDef)
                             val fieldOpt: Option[(Symbol, Int)] =
-                                // OMG, don't ask me why, but Scala 3.3.3 adds a trailing space to the field name
-                                // specifically in the case _1, _2, etc in Tuples.
-                                // it's fixed in 3.4.2
-                                // FIXME: remove stripTrailing when we upgrade to 3.4.2
+                                // Scala 3.3.x adds a trailing space to tuple field names
+                                // (_1, _2, ...); fixed in 3.4.2 but not backported to the
+                                // 3.3 LTS line we build with, so stripTrailing must stay
+                                // until the LTS baseline moves past 3.4.2.
                                 fields.zipWithIndex.find(_._1.name.stripTrailing == fieldName)
                             // report.info(s"$typeSymbolOfA => ${fields.map(s => s"'${s.name}'")}")
                             fieldOpt match
