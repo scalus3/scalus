@@ -64,6 +64,44 @@ result.profile.foreach { profile =>
 }
 ```
 
+## Machine-Readable Output (profile.json + manifest)
+
+`PlutusScriptEvaluator` can render profiles to files on every evaluation. The easiest switch is
+the environment variable (see [Project Commands](/docs/get-started/project-commands)):
+
+```sh copy
+SCALUS_PROFILE=full sbt test
+```
+
+For each profiled script run this writes, into the report output directory (`SCALUS_DUMP_DIR`,
+default: the working directory):
+
+- `<scriptHash>-<tag>-<index>.profile.html` – the interactive report
+- `<scriptHash>-<tag>-<index>.profile.json` – machine-readable data (`"schemaVersion": 1`)
+- `<scriptHash>-<tag>-<index>.profile.csv` – flat table for spreadsheets
+- `profile-manifest.json` – the discovery entry point listing every run
+
+File names are stable per `(scriptHash, redeemer tag, index)`, so repeated evaluations (e.g.
+during fee balancing) overwrite rather than accumulate. The manifest maps each run to its files:
+
+```json
+{
+  "schemaVersion": 1,
+  "runs": [
+    { "scriptHash": "ab12…", "language": "PlutusV3",
+      "redeemer": { "tag": "Spend", "index": 0 },
+      "budget": { "mem": 185927967, "cpu": 49131853260 },
+      "files": [ { "format": "html", "file": "ab12…-Spend-0.profile.html" },
+                 { "format": "json", "file": "ab12…-Spend-0.profile.json" },
+                 { "format": "csv",  "file": "ab12…-Spend-0.profile.csv" } ] }
+  ]
+}
+```
+
+Tools should start from `profile-manifest.json` and check `schemaVersion` (currently `1` for
+both the manifest and `profile.json`). The Scalus VS Code extension consumes `profile.json` to
+annotate source lines with per-line cost.
+
 ## Toggle Profiling in Tests
 
 Add a flag to switch between `evaluateDebug` and `evaluateProfile` without changing test assertions:
