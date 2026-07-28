@@ -100,6 +100,53 @@ class EvalPlutusScriptsTest extends AnyFunSuite {
             Files.deleteIfExists(dir)
     }
 
+    test("profile = Full writes schemaVersion'd profile.json and a profile-manifest.json") {
+        val dir = Files.createTempDirectory("scalus-profile-manifest-test")
+        try {
+            val report = EvaluatorReportConfig(
+              enabled = true,
+              outputDir = dir.toString,
+              artifacts = Set.empty, // profile only, no .flat dump
+              profile = ProfileLevel.Full
+            )
+            // Two evaluations of the same tx must overwrite manifest runs, not duplicate them.
+            evalPlutusScripts(tx7430, utxo7430, SlotConfig.mainnet, report)
+            evalPlutusScripts(tx7430, utxo7430, SlotConfig.mainnet, report)
+
+            val files = Option(dir.toFile.listFiles())
+                .getOrElse(Array.empty[java.io.File])
+                .map(_.getName)
+
+            val jsonName = files.find(_.endsWith(".profile.json")).get
+            val profileJson = new String(Files.readAllBytes(dir.resolve(jsonName)), "UTF-8")
+            assert(profileJson.contains("\"schemaVersion\": 1"))
+
+            val manifest = new String(
+              Files.readAllBytes(dir.resolve("profile-manifest.json")),
+              "UTF-8"
+            )
+            assert(manifest.contains("\"schemaVersion\": 1"))
+            // The tx runs 2 scripts; re-evaluation must not duplicate the runs.
+            assert(
+              "\"scriptHash\"".r.findAllIn(manifest).size == 2,
+              s"expected 2 runs in manifest:\n$manifest"
+            )
+            assert(manifest.contains("\"language\""))
+            assert(manifest.contains("\"redeemer\""))
+            assert(manifest.contains("\"budget\""))
+            // Every file the manifest lists must exist on disk.
+            val listed = "\"file\": \"([^\"]+)\"".r.findAllMatchIn(manifest).map(_.group(1)).toSeq
+            assert(listed.nonEmpty)
+            listed.foreach { f =>
+                assert(Files.exists(dir.resolve(f)), s"manifest lists missing file $f")
+            }
+        } finally
+            Option(dir.toFile.listFiles())
+                .getOrElse(Array.empty[java.io.File])
+                .foreach(_.delete())
+            Files.deleteIfExists(dir)
+    }
+
     private lazy val tx7430: Array[Byte] = platform.readFile(
       "scalus-examples/js/src/main/ts/tx-743042177a25ed7675d6258211df87cd7dcc208d2fa82cb32ac3c77221bd87c3.cbor"
     )

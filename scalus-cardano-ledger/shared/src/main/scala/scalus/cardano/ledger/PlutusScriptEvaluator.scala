@@ -14,6 +14,7 @@ import scalus.utils.ScalusSourcePos
 import scribe.Logger
 
 import scala.annotation.threadUnsafe
+import scala.collection.concurrent.TrieMap
 import scala.util.control.NonFatal
 
 enum EvaluatorMode extends Enum[EvaluatorMode] {
@@ -355,9 +356,30 @@ object PlutusScriptEvaluator {
 
         private def budgetLogPath: String = reportPath("budget.log")
 
+        /** One rendered profile run: what was profiled and which report files were written. `files`
+          * holds (format label, path) pairs — paths relative to the manifest's directory for
+          * [[ProfileDestination.File]] outputs, absolute for [[ProfileDestination.AbsoluteFile]].
+          */
+        private final case class ProfileRun(
+            scriptHash: String,
+            language: Language,
+            tag: RedeemerTag,
+            index: Int,
+            mem: Long,
+            cpu: Long,
+            files: Seq[(String, String)]
+        )
+
+        /** Rendered profile runs keyed by (scriptHash, tag, index) — the same stable key the
+          * overwriting file names use, so fee-balancing re-evaluations replace their entry instead
+          * of accumulating. Mirrors the profile files this evaluator wrote to disk.
+          */
+        private val profileRuns = TrieMap.empty[(String, String, Int), ProfileRun]
+
         /** Render a script's profile to each configured [[ProfileOutput]] (console / files). File
-          * destinations are prefixed with the script key so per-redeemer profiles don't collide.
-          * The actual rendering is delegated to the platform-specific [[ProfileReporting]] so that
+          * destinations are prefixed with the script key so per-redeemer profiles don't collide,
+          * and are also recorded in `profile-manifest.json` (see [[writeProfileManifest]]). The
+          * actual rendering is delegated to the platform-specific [[ProfileReporting]] so that
           * [[scalus.uplc.eval.ProfileFormatter]] (HTML/CSS/JS templates, Tarjan pass) stays out of
           * the JS bundle; HTML output annotates source lines when the source file is readable from
           * the CWD (JVM only — [[ProfileReporting]] returns `None` on JS).
@@ -371,9 +393,11 @@ object PlutusScriptEvaluator {
         private def renderProfile(
             result: Result,
             scriptHash: ScriptHash,
-            redeemer: Redeemer
+            redeemer: Redeemer,
+            language: Language
         ): Unit = result.profile.foreach { data =>
             val key = s"${scriptHash.toHex}-${redeemer.tag}-${redeemer.index}"
+            val written = Seq.newBuilder[(String, String)]
             report.effectiveProfileOutputs.foreach { out =>
                 ProfileReporting.render(data, out.format, report.profile, report.maxRows).foreach {
                     content =>
@@ -381,16 +405,58 @@ object PlutusScriptEvaluator {
                             case ProfileDestination.Console =>
                                 log.info(s"Profile $key:\n$content")
                             case ProfileDestination.File(name) =>
-                                platform.writeFile(
-                                  reportPath(s"$key.$name"),
-                                  content.getBytes("UTF-8")
-                                )
+                                val file = s"$key.$name"
+                                platform.writeFile(reportPath(file), content.getBytes("UTF-8"))
+                                written += formatLabel(out.format) -> file
                             case ProfileDestination.AbsoluteFile(path) =>
                                 val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
                                 if sep > 0 then platform.createDirectories(path.substring(0, sep))
                                 platform.writeFile(path, content.getBytes("UTF-8"))
+                                written += formatLabel(out.format) -> path
                 }
             }
+            val files = written.result()
+            if files.nonEmpty then
+                profileRuns((scriptHash.toHex, redeemer.tag.toString, redeemer.index)) = ProfileRun(
+                  scriptHash.toHex,
+                  language,
+                  redeemer.tag,
+                  redeemer.index,
+                  data.totalBudget.memory,
+                  data.totalBudget.steps,
+                  files
+                )
+                writeProfileManifest()
+        }
+
+        /** Lower-case manifest label for a profile format: "text", "csv", "html", "json". */
+        private def formatLabel(format: ProfileFormat): String = format.toString.toLowerCase
+
+        /** Write `profile-manifest.json`: the machine-readable entry point (schema version 1)
+          * listing every profile run this evaluator has rendered to files, so tools (e.g. the
+          * Scalus VS Code extension) can discover profiles without guessing file names.
+          */
+        private def writeProfileManifest(): Unit = {
+            val runs = profileRuns.values.toSeq
+                .sortBy(r => (r.scriptHash, r.tag.toString, r.index))
+                .map { r =>
+                    val files = r.files
+                        .map { case (fmt, f) => s"""{ "format": "$fmt", "file": "$f" }""" }
+                        .mkString(", ")
+                    s"""    { "scriptHash": "${r.scriptHash}", "language": "${r.language}", """ +
+                        s""""redeemer": { "tag": "${r.tag}", "index": ${r.index} }, """ +
+                        s""""budget": { "mem": ${r.mem}, "cpu": ${r.cpu} }, """ +
+                        s""""files": [$files] }"""
+                }
+            val json =
+                s"""{
+                   |  "schemaVersion": 1,
+                   |  "runs": [
+                   |${runs.mkString(",\n")}
+                   |  ]
+                   |}
+                   |""".stripMargin
+            platform.writeFile(reportPath("profile-manifest.json"), json.getBytes("UTF-8"))
         }
 
         private val log = Logger()
@@ -720,7 +786,8 @@ object PlutusScriptEvaluator {
                     renderProfile(
                       vm.evaluateScriptProfile(applied),
                       plutusScript.scriptHash,
-                      redeemer
+                      redeemer,
+                      vm.language
                     )
                 Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
             catch
