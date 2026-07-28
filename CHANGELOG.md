@@ -4,76 +4,37 @@
 
 ### Added
 
-- the Emulator is now fully usable from Java (the cross-language interop guide's pilot):
-  factories accept `java.util.List`, state accessors return Java collections (`getUtxos`,
-  `getDatums`, `getAppliedTxLog`), lookups return `null` instead of `Option`
-  (`getTransactionOrNull`, `getDatumOrNull`), submission reports a `SubmitResult` instead of
-  `Either` (`trySubmit`), and `submitAsync`/`findUtxosForAddressAsync` return
-  `CompletableFuture`. `EmulatorInitialState.builder()` replaces Scala default arguments for
-  Java callers; default parameters on Emulator/Context factories became explicit overloads.
-  Adds the `scalus.InteropApi` marker trait; proven by a real-Java interop test
-- `FlatCodec`/`Flats` Java facade for the flat codec (cross-platform, in `shared`):
-  `byte[]`/primitive static methods (`encodeLong`, `decodeString`, `word7Bytes`, `zigZag`,
-  `byteAsBitString`, generic `encode`/`decode` with an explicit `Flat` instance, ...) and named
-  `Flat` instance accessors, so Java can encode/decode and implement `Flat[A]` without `summon`
-  or `MODULE$`. The scalar helpers now live in `FlatCodec`; the top-level functions
-  (`zigZag`, `word7Bytes`, ...) delegate to it
+- Java-friendly Emulator API: Java collection accessors, `*OrNull` lookups, `SubmitResult`,
+  `CompletableFuture`-based async methods, `EmulatorInitialState.builder()`
+- `FlatCodec`/`Flats` Java facade for the flat codec with static encode/decode helpers and named
+  `Flat` instances
 
 ### Changed
 
-- **BREAKING**: the `scalus.serialization.flat` package object was converted to top-level
-  definitions so `EncoderState`/`DecoderState`/`Flat`/`Natural` are plain Java-usable classes.
-  Import paths are unchanged for Scala (source-compatible), but binary names moved from
-  `serialization.flat.package$*` — recompile against 0.19
-- **BREAKING**: `SIRVersion` bumped (5,0) → (6,0): the `SIRType.TypeVar` `optId` codec now uses a
-  presence-bit layout so `Some(0)` and negative ids round-trip correctly (audit S2). All
-  precompiled SIR modules must be recompiled with the 0.19 compiler plugin
-
-- **BREAKING**: protocol version 11 (van Rossem, live on mainnet since 2026-07-18) is now the
-  default everywhere. The default compile target (`Options.default`/`debug`/`release`) moved from
-  `changPV` (PV9) to `vanRossemPV`, enabling case-on-builtins, `dropList` field access and the
-  batch6 builtins in generated code — **every script hash changes**. To reproduce pre-van-Rossem
-  output (e.g. to verify an already-deployed contract), use the new `Options.plomin` preset or set
-  `targetProtocolVersion = MajorProtocolVersion.plominPV`. `PlutusVM` factories, the Emulator,
-  ledger rules and testkit defaults follow `CardanoInfo.mainnet` and now evaluate at PV11 with
-  builtin semantics variants D (V1/V2) and E (V3/V4). Re-measured across the test suite, the PV11
-  target cuts execution budgets by roughly a third (452 of 453 pinned budgets improved; mean
-  −28% memory / −35% CPU steps; the one outlier is a BLS12-381 accumulator at +3% CPU from the
-  PV11 integer-division repricing) and shrinks scripts ~17–26% (e.g. HelloCardano 445 → 338
-  bytes, HTLC 525 → 387, TwoPartyEscrow 1387 → 1142)
-- Cardano protocol parameters updated to the latest on-chain values: mainnet epoch 645 (PV11,
-  van Rossem hard fork enacted 2026-07-18; cost models unchanged since the 2026-06-18 update —
-  PlutusV1/V2 at 332 entries, PlutusV3 at 350; `committee_min_size` lowered 7 → 5 at epoch 643),
-  preprod epoch 303 and preview epoch 1370 (both PV11; preview also raised
-  `max_tx_ex_mem` to 17.5M and `max_block_ex_mem` to 77.5M and lowered `min_pool_cost` to 75 ADA)
-- ledger rules now accept the full van Rossem batch6 builtin set (`expModInteger`, `dropList`,
-  array operations, `bls12_381_G1/G2_multiScalarMul`, and the `Value` builtins), matching Plutus
-  1.63 `builtinsIntroducedIn` — scripts using them pass `ScriptsWellFormedValidator` on all of
-  PlutusV1/V2/V3 at PV11
+- **BREAKING**: `scalus.serialization.flat` package object converted to top-level definitions –
+  source-compatible, but binary names changed
+- **BREAKING**: `SIRVersion` bumped to 6.0 (`TypeVar` `optId` codec fix) – recompile precompiled
+  SIR modules
+- **BREAKING**: protocol version 11 (van Rossem) is now the default compile and evaluation
+  target – every script hash changes; budgets drop ~30% and scripts shrink ~20%; use
+  `Options.plomin` to reproduce pre-PV11 output
+- Cardano protocol parameters updated: mainnet epoch 645, preprod 303, preview 1370
+- ledger rules accept the van Rossem batch6 builtins on PlutusV1/V2/V3 at PV11
 
 ### Removed
 
-- all previously deprecated API: the `ReprTag` aliases (deprecated 0.16.0; use
-  `scalus.compiler.UplcRepresentation`), the top-level `scalus.ScalusDebug` and
-  `scalus.CompileDerivations` type aliases (0.18.1; use the `scalus.compiler.*` types) and
-  `w7l` in `scalus.serialization.flat` (0.18.2; use `word7Bytes`)
-- the legacy experimental `scalus.bloxbean.TxEvaluator` (and `TxEvaluationException`):
-  use `ScalusTransactionEvaluator` (CCL `TransactionEvaluator`) or
-  `scalus.cardano.ledger.PlutusScriptEvaluator` directly
+- all previously deprecated API: `ReprTag`, top-level `scalus.ScalusDebug` and
+  `scalus.CompileDerivations` aliases, `w7l`
+- legacy experimental `scalus.bloxbean.TxEvaluator` – use `ScalusTransactionEvaluator` or
+  `PlutusScriptEvaluator`
 
 ### Fixed
 
-- `PlutusVM.makePlutusV3VM(params)` ignored the mainnet protocol version when constructing the VM,
-  silently disabling case-on-builtins; `PlutusScriptEvaluator` built its V1/V2 VMs with the mainnet
-  default instead of the evaluator's protocol version, which would mis-select semantics variants
-  when replaying blocks from earlier eras
-- CEK machine `Case`/`Constr` step costs fell back to a 300M placeholder for PlutusV1/V2 cost
-  models (whose param classes don't carry the PV11-appended `cekCaseCost`/`cekConstrCost`
-  entries), making any Case step cost ~300M CPU+mem; they now fall back to the Plutus reference
-  values, matching the on-chain PV11 cost model
-- the PV11 `List.at`/`!!` lowering (`headList(dropList(i, xs))`) returned element 0 for negative
-  indices on-chain while the JVM implementation throws — the intrinsic now guards negative and
-  past-the-end indices, keeping JVM/UPLC semantics and the documented error message aligned
+- `PlutusVM` factories and `PlutusScriptEvaluator` now respect the target protocol version when
+  selecting builtin semantics
+- PlutusV1/V2 `Case`/`Constr` CEK step costs fell back to a ~300M placeholder instead of the
+  Plutus reference values
+- `List.at`/`!!` rejects negative and past-the-end indices on-chain, matching JVM semantics
 
 ## 0.18.2 (2026-06-19)
 
