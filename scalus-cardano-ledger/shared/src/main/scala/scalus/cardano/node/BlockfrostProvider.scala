@@ -10,9 +10,13 @@ import sttp.model.StatusCode
 import scalus.cardano.blockfrost.*
 import upickle.default.read
 
+import io.bullet.borer.Cbor
+
 import scala.annotation.nowarn
+import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
+import scala.util.Try
 
 /** Blockfrost-based Provider for Cardano blockchain operations.
   *
@@ -878,8 +882,7 @@ class BlockfrostProvider(
     /** Cache of resolved reference scripts. Script hashes are immutable, so entries never expire;
       * failed resolutions are evicted so transient errors can be retried.
       */
-    private val scriptRefCache =
-        scala.collection.concurrent.TrieMap.empty[ScriptHash, Future[ScriptRef]]
+    private val scriptRefCache = TrieMap.empty[ScriptHash, Future[ScriptRef]]
 
     /** Resolve a script by hash into a [[ScriptRef]] via `GET /scripts/{hash}` plus
       * `/scripts/{hash}/cbor` (Plutus) or `/scripts/{hash}/json` (timelock). The reconstructed
@@ -1199,13 +1202,7 @@ object BlockfrostProvider {
         val direct = mk(cbor)
         if direct.scriptHash == expectedHash then direct
         else
-            scala.util
-                .Try(
-                  ByteString.unsafeFromArray(
-                    io.bullet.borer.Cbor.decode(cbor.bytes).to[Array[Byte]].value
-                  )
-                )
-                .toOption
+            Try(ByteString.unsafeFromArray(Cbor.decode(cbor.bytes).to[Array[Byte]].value)).toOption
                 .map(mk)
                 .filter(_.scriptHash == expectedHash)
                 .getOrElse(
@@ -1222,9 +1219,7 @@ object BlockfrostProvider {
         expectedHash: ScriptHash,
         timelockJson: ujson.Value
     ): Script = {
-        val timelock = upickle.default.read[Timelock](timelockJson)(using
-          Timelock.blockfrostReadWriter
-        )
+        val timelock = read[Timelock](timelockJson)(using Timelock.blockfrostReadWriter)
         val script = Script.Native(timelock)
         if script.scriptHash != expectedHash then
             throw RuntimeException(

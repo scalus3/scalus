@@ -1,6 +1,7 @@
 package scalus.cardano.node
 
 import org.scalatest.funsuite.AnyFunSuite
+import io.bullet.borer.Cbor
 import scalus.cardano.ledger.*
 import scalus.uplc.builtin.ByteString
 
@@ -31,8 +32,7 @@ class BlockfrostScriptRefTest extends AnyFunSuite {
     }
 
     test("buildPlutusScript unwraps an extra CBOR bytestring layer") {
-        val wrapped =
-            ByteString.unsafeFromArray(io.bullet.borer.Cbor.encode(singleCbor.bytes).toByteArray)
+        val wrapped = ByteString.unsafeFromArray(Cbor.encode(singleCbor.bytes).toByteArray)
         val script =
             BlockfrostProvider.buildPlutusScript("plutusV2", expectedV2.scriptHash, wrapped)
         assert(script == expectedV2)
