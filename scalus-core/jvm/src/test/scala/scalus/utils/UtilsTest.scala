@@ -39,4 +39,17 @@ class UtilsTest
         )
         assert(serialized == alwaysFails)
     }
+
+    test("readPlutusFileContent rejects unknown envelope types") {
+        val content =
+            """{"type":"PaymentSigningKeyShelley_ed25519","description":"","cborHex":"4746010000222601"}"""
+        assertThrows[IllegalArgumentException](Utils.readPlutusFileContent(content))
+    }
+
+    test("readPlutusFileContent rejects a Plutus Core version unsupported by the envelope type") {
+        // A Plutus Core 1.1.0 program is only valid in PlutusScriptV3 envelopes
+        val program = Program((1, 1, 0), λ("i0")(Term.Error())).deBruijnedProgram
+        val content = Utils.programToPlutusFileContent(program, Language.PlutusV1)
+        assertThrows[IllegalArgumentException](Utils.readPlutusFileContent(content))
+    }
 }

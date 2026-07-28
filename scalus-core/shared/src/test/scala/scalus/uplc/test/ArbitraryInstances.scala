@@ -150,8 +150,9 @@ trait ArbitraryInstances:
               DefaultUni.ByteString,
               DefaultUni.Data,
               DefaultUni.Integer,
-              // FIXME: don't generate strings because we don't handle Haskell style escapes
-              // and we get errors parsing results of calling uplc on generated terms
+              // Strings stay disabled: the parser handles Haskell-style escapes since 0.18.1,
+              // but round-tripping generated strings through the external `uplc` tool still
+              // depends on our pretty-printer escaping matching Haskell `show` exactly.
 //        DefaultUni.String,
               DefaultUni.Unit
             )
