@@ -38,7 +38,7 @@ object YaciContainer:
     }
 
     private def createContainer(config: YaciConfig): YaciCardanoContainer = {
-        val container = new YaciCardanoContainer()
+        val container = new YaciCardanoContainer(config.imageTag)
         // Don't set container name when not reusing - allows fresh containers each run
         if config.reuseContainer then
             container.withCreateContainerCmdModifier(cmd => cmd.withName(config.containerName))
