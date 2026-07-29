@@ -1297,7 +1297,14 @@ object BlockfrostProvider {
     )(using ec: ExecutionContext): Future[BlockfrostProvider] = {
         given backend: Backend[Future] = BlockfrostProviderPlatform.defaultBackend
         val paramsFuture = fetchProtocolParams("", baseUrl)
-        val slotConfigFuture = fetchYaciSlotConfig(adminUrl)
+        // slotLength comes from the admin API; slot-zero time is re-anchored on the chain's
+        // latest block, because the admin `startTime` is the cluster creation time, which
+        // diverges from the actual chain zero time when the devnet bootstrap shifts it
+        // (e.g. Yaci DevKit companion node mode).
+        val slotConfigFuture = fetchYaciSlotConfig(adminUrl).flatMap { adminSlotConfig =>
+            anchorSlotZeroOnLatestBlock(baseUrl, adminSlotConfig)
+                .recover { case _ => adminSlotConfig }
+        }
         paramsFuture.zip(slotConfigFuture).map { case (params, slotConfig) =>
             new BlockfrostProvider(
               "",
@@ -1305,6 +1312,38 @@ object BlockfrostProvider {
               maxConcurrentRequests,
               CardanoInfo(params, Network.Testnet, slotConfig)
             )
+        }
+    }
+
+    /** Re-anchor a slot config's zero time on the chain's latest block.
+      *
+      * Fetches `{baseUrl}/blocks/latest` and derives `zeroTime = time - slot * slotLength` from its
+      * `time` (epoch seconds) and `slot` fields, so slot/time conversions match the ledger
+      * regardless of how the devnet's start time was shifted at bootstrap.
+      */
+    @nowarn("msg=long2double")
+    private def anchorSlotZeroOnLatestBlock(baseUrl: String, base: SlotConfig)(using
+        backend: Backend[Future],
+        ec: ExecutionContext
+    ): Future[SlotConfig] = {
+        val url = s"${baseUrl.stripSuffix("/")}/blocks/latest"
+        basicRequest.get(uri"$url").send(backend).map { response =>
+            response.body match
+                case Right(body) =>
+                    val json = ujson.read(body, trace = false)
+                    val slot = json("slot").num.toLong
+                    val time = json("time").num.toLong
+                    SlotConfig(
+                      zeroTime = base.zeroTime + (time * 1000 - base.slotToTime(slot)),
+                      zeroSlot = base.zeroSlot,
+                      slotLength = base.slotLength,
+                      epochLength = base.epochLength,
+                      zeroEpoch = base.zeroEpoch
+                    )
+                case Left(error) =>
+                    throw RuntimeException(
+                      s"Failed to fetch latest block from $url. Body: $error"
+                    )
         }
     }
 

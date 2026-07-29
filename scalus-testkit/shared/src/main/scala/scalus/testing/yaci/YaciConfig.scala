@@ -13,12 +13,16 @@ package scalus.testing.yaci
   *   node. Note: when [[reuseContainer]] is enabled, changing the tag while a container created
   *   from the old tag still exists causes a Docker name conflict - remove the old container
   *   (`docker rm -f <containerName>`) first.
+  * @param startupTimeoutSeconds
+  *   How long to wait for the devnet API to come up. Companion node mode boots the chain via the
+  *   Yano bootstrap before the Haskell node takes over, which takes a few minutes.
   */
 case class YaciConfig(
     enableLogs: Boolean = false,
     containerName: String = "scalus-yaci-devkit",
     reuseContainer: Boolean = false,
-    imageTag: String = YaciConfig.DefaultImageTag
+    imageTag: String = YaciConfig.DefaultImageTag,
+    startupTimeoutSeconds: Long = 300
 )
 
 object YaciConfig {
@@ -26,10 +30,9 @@ object YaciConfig {
     /** Default `bloxbean/yaci-cli` image tag.
       *
       * 0.12.0-beta5 is the newest multi-arch image and runs a protocol version 11 (van Rossem)
-      * devnet node, matching current mainnet. Caveat: its genesis still ships the pre-PV11 PlutusV3
-      * cost model (the image's own cost-model governance bootstrap is broken), so PV11-only script
-      * constructs fail on-chain with maxBound costs - compile contracts run against the devnet with
-      * a PV10 target (`Options.plomin`) until a fixed image is released.
+      * devnet node, matching current mainnet. [[YaciContainer]] starts it in companion node mode,
+      * where the Yano bootstrap installs the full PV11 cost models, so PV11-compiled scripts run on
+      * the devnet.
       */
     val DefaultImageTag: String = "0.12.0-beta5"
 }

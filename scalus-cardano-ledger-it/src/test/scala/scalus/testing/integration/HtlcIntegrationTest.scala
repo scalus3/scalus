@@ -81,10 +81,15 @@ class HtlcIntegrationTest extends AnyFunSuite with IntegrationTest {
         val result = s.ctx.submit(lockTx).await()
         assert(result.isRight, s"Lock transaction failed: $result")
 
-        // Find locked UTxO at script address
+        // Find the UTxO created by our lock transaction. On shared environments (Yaci,
+        // Blockfrost) the script address accumulates locked UTxOs from earlier tests with
+        // older timeouts, so picking an arbitrary one breaks the timeout-sensitive tests.
         val scriptAddr = contract.address(s.ctx.cardanoInfo.network)
         val scriptUtxos = s.ctx.provider.findUtxos(scriptAddr).await().toOption.get
-        Utxo(scriptUtxos.head)
+        val locked = scriptUtxos
+            .find { case (input, _) => input.transactionId == lockTx.id }
+            .getOrElse(fail(s"Locked UTxO from tx ${lockTx.id.toHex} not found at $scriptAddr"))
+        Utxo(locked)
     }
 
     // ===== Success Tests =====
