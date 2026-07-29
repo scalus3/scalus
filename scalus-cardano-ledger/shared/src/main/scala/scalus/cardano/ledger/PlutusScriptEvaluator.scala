@@ -77,33 +77,6 @@ trait PlutusScriptEvaluator {
 
 object PlutusScriptEvaluator {
 
-    /** Schema version of `profile-manifest.json`. Bump on any incompatible change to its shape so
-      * consumers (e.g. the Scalus VS Code extension) can detect and reject manifests they don't
-      * understand.
-      */
-    private val ProfileManifestSchemaVersion = 1
-
-    // The profile-manifest.json document, mirrored 1:1 by jsoniter. `file` paths are relative to
-    // the manifest's directory for ProfileDestination.File outputs, absolute for AbsoluteFile.
-    private final case class ProfileManifest(schemaVersion: Int, runs: Seq[ProfileManifestRun])
-    private final case class ProfileManifestRun(
-        scriptHash: String,
-        language: String,
-        redeemer: ProfileManifestRedeemer,
-        budget: ProfileManifestBudget,
-        files: Seq[ProfileManifestFile]
-    )
-    private final case class ProfileManifestRedeemer(tag: String, index: Int)
-    private final case class ProfileManifestBudget(mem: Long, cpu: Long)
-    private final case class ProfileManifestFile(format: String, file: String)
-    private given JsonValueCodec[ProfileManifest] = JsonCodecMaker.make
-
-    /** Serializes in-process read-merge-write cycles on `profile-manifest.json`, so concurrent
-      * evaluations don't lose each other's runs. The manifest on disk is the only registry —
-      * nothing is retained in memory between writes.
-      */
-    private val profileManifestLock = new Object
-
     /** Reject a Plutus V4 script with a non-fatal `UnsupportedOperationException`. Plutus V4
       * (Dijkstra) evaluation, context building, and diagnostic replay are all out of scope until
       * the upstream `plutus-core` V4 work lands; this helper centralises the rejection so all three
@@ -398,73 +371,32 @@ object PlutusScriptEvaluator {
           *   but does not enforce the redeemer's execution-unit limit, so it is only run after the
           *   real (budget-enforcing) evaluation has already succeeded.
           */
+        /** Render a script's profile to the configured destinations and index the written files in
+          * `profile-manifest.json`. Delegated to [[ProfileReportWriter]], which is shared with
+          * test-side profiling (`ScalusTest.runWithProfileReport`) so both produce the same layout.
+          *
+          * @note
+          *   This is fed by a *separate* profiling evaluation of the script (see the call site), so
+          *   enabling profiling roughly doubles evaluation cost. That profiling pass counts budget
+          *   but does not enforce the redeemer's execution-unit limit, so it is only run after the
+          *   real (budget-enforcing) evaluation has already succeeded.
+          */
         private def renderProfile(
             result: Result,
             scriptHash: ScriptHash,
             redeemer: Redeemer,
             language: Language
         ): Unit = result.profile.foreach { data =>
-            val key = s"${scriptHash.toHex}-${redeemer.tag}-${redeemer.index}"
-            val written = Seq.newBuilder[(String, String)]
-            report.effectiveProfileOutputs.foreach { out =>
-                ProfileReporting.render(data, out.format, report.profile, report.maxRows).foreach {
-                    content =>
-                        out.destination match
-                            case ProfileDestination.Console =>
-                                log.info(s"Profile $key:\n$content")
-                            case ProfileDestination.File(name) =>
-                                val file = s"$key.$name"
-                                platform.writeFile(reportPath(file), content.getBytes("UTF-8"))
-                                written += formatLabel(out.format) -> file
-                            case ProfileDestination.AbsoluteFile(path) =>
-                                val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-                                if sep > 0 then platform.createDirectories(path.substring(0, sep))
-                                platform.writeFile(path, content.getBytes("UTF-8"))
-                                written += formatLabel(out.format) -> path
-                }
-            }
-            val files = written.result()
-            if files.nonEmpty then
-                writeProfileManifest(
-                  ProfileManifestRun(
-                    scriptHash.toHex,
-                    language.toString,
-                    ProfileManifestRedeemer(redeemer.tag.toString, redeemer.index),
-                    ProfileManifestBudget(data.totalBudget.memory, data.totalBudget.steps),
-                    files.map((fmt, f) => ProfileManifestFile(fmt, f))
-                  )
-                )
+            ProfileReportWriter.write(
+              data,
+              report,
+              scriptHash.toHex,
+              language.toString,
+              redeemer.tag.toString,
+              redeemer.index,
+              log.info(_)
+            )
         }
-
-        /** Lower-case manifest label for a profile format: "text", "csv", "html", "json". */
-        private def formatLabel(format: ProfileFormat): String = format.toString.toLowerCase
-
-        /** Merge `run` into `profile-manifest.json`: the machine-readable entry point (schema
-          * version 1) listing every profile run rendered to files in this report's output
-          * directory, so tools (e.g. the Scalus VS Code extension) can discover profiles without
-          * guessing file names. The manifest on disk is the only registry: each write re-reads it
-          * and replaces the entry with the same (scriptHash, tag, index) key — the key the
-          * overwriting file names use — so fee-balancing re-evaluations update in place while other
-          * scripts' runs (from any evaluator instance or earlier process) are preserved. An absent,
-          * foreign or unsupported-version manifest is started fresh.
-          */
-        private def writeProfileManifest(run: ProfileManifestRun): Unit =
-            profileManifestLock.synchronized {
-                val path = reportPath("profile-manifest.json")
-                val existing =
-                    try
-                        val parsed = readFromArray[ProfileManifest](platform.readFile(path))
-                        if parsed.schemaVersion == ProfileManifestSchemaVersion then parsed.runs
-                        else Seq.empty
-                    catch case NonFatal(_) => Seq.empty
-                def key(r: ProfileManifestRun) = (r.scriptHash, r.redeemer.tag, r.redeemer.index)
-                val runs = (existing.filterNot(r => key(r) == key(run)) :+ run).sortBy(key)
-                val manifest = ProfileManifest(ProfileManifestSchemaVersion, runs)
-                platform.writeFile(
-                  path,
-                  writeToArray(manifest, WriterConfig.withIndentionStep(2))
-                )
-            }
 
         private val log = Logger()
         //        .withHandler(minimumLevel = Some(Level.Debug))

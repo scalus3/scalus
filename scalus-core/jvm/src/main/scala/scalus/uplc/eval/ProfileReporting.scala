@@ -1,15 +1,15 @@
-package scalus.cardano.ledger
+package scalus.uplc.eval
 
-import scalus.uplc.eval.{ProfileFormatter, ProfilingData}
+import scalus.cardano.ledger.{ProfileFormat, ProfileLevel}
 
-/** JVM renderer for [[PlutusScriptEvaluator]]'s built-in profile report.
+/** JVM renderer for [[scalus.cardano.ledger.PlutusScriptEvaluator]]'s built-in profile report.
   *
   * Lives in the platform layer (rather than inline in the shared evaluator) so the JS build can
-  * substitute a no-op and keep [[scalus.uplc.eval.ProfileFormatter]] — including its HTML/CSS/JS
-  * templates and the Tarjan inclusive-cost pass — dead-code-eliminated from the published
-  * `scalus.js` bundle, which transaction builders depend on and which must stay small.
+  * substitute a no-op and keep [[ProfileFormatter]] — including its HTML/CSS/JS templates and the
+  * Tarjan inclusive-cost pass — dead-code-eliminated from the published `scalus.js` bundle, which
+  * transaction builders depend on and which must stay small.
   */
-private[ledger] object ProfileReporting {
+private[scalus] object ProfileReporting {
 
     /** Render `data` in `format` (always `Some` on the JVM). For HTML, profiled source files
       * readable from the working directory are annotated with per-line cost.

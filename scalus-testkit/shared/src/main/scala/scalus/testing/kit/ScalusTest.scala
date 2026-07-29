@@ -5,8 +5,10 @@ import org.scalatest.Assertions
 import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.platform
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{EvaluatorReportConfig, ExUnits, Language, ProfileLevel, RedeemerTag}
+import scalus.cardano.ledger.Script
 import scalus.cardano.ledger.Transaction
 import scalus.cardano.txbuilder.TxBuilderException
 import scalus.cardano.onchain.plutus.v1.Credential.PubKeyCredential
@@ -75,6 +77,51 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
         /** Like [[runWithDebug]] but also collects profiling data (`result.profile`). */
         def runWithProfile(scriptContext: ScriptContext)(using vm: PlutusVM): Result =
             vm.evaluateScriptProfile((self $ scriptContext.toData).deBruijnedProgram)
+
+        /** Like [[runWithProfile]], and additionally writes the reports the Scalus VS Code
+          * extension reads: the HTML/JSON/CSV renderings plus a `profile-manifest.json`, into
+          * `SCALUS_DUMP_DIR` (default `target/scalus`).
+          *
+          * Suites that evaluate UPLC directly bypass `PlutusScriptEvaluator`, which is what
+          * normally emits those files, so `SCALUS_PROFILE=full` alone produces nothing for them.
+          * File names and the manifest schema copy the evaluator's, so the extension consumes
+          * profiles from either source identically.
+          *
+          * Which renderings are produced follows [[scalus.cardano.ledger.EvaluatorReportConfig]]:
+          * calling this asks for the full set, and `SCALUS_PROFILE` / `SCALUS_PROFILE_OUT` /
+          * `SCALUS_DUMP_DIR` override it as they do for the ledger. Manifest entries are merged by
+          * (scriptHash, tag, index), so several profiled tests accumulate rather than overwrite.
+          */
+        def runWithProfileReport(scriptContext: ScriptContext)(using vm: PlutusVM): Result = {
+            val result = runWithProfile(scriptContext)
+            result.profile.foreach { data =>
+                ProfileReportWriter.write(
+                  data,
+                  EvaluatorReportConfig.fromEnv(profileReportDefaults),
+                  Script.PlutusV3(self.cborByteString).scriptHash.toHex,
+                  Language.PlutusV3.toString,
+                  redeemerTag(scriptContext.scriptInfo),
+                  0,
+                  println
+                )
+            }
+            result
+        }
+
+    /** The redeemer tag [[scalus.cardano.ledger.PlutusScriptEvaluator]] would record for this
+      * script purpose, so test-side reports key their files the same way ledger-side ones do.
+      */
+    private def redeemerTag(scriptInfo: ScriptInfo): String = scriptInfo match
+        case _: ScriptInfo.MintingScript    => RedeemerTag.Mint.toString
+        case _: ScriptInfo.SpendingScript   => RedeemerTag.Spend.toString
+        case _: ScriptInfo.RewardingScript  => RedeemerTag.Reward.toString
+        case _: ScriptInfo.CertifyingScript => RedeemerTag.Cert.toString
+        case _: ScriptInfo.VotingScript     => RedeemerTag.Voting.toString
+        case _: ScriptInfo.ProposingScript  => RedeemerTag.Proposing.toString
+
+    /** Base report config for [[runWithProfileReport]]: full renderings, overridable by env. */
+    private def profileReportDefaults: EvaluatorReportConfig =
+        EvaluatorReportConfig(enabled = true, profile = ProfileLevel.Full)
 
     protected def random[A: Arbitrary]: A = {
         Arbitrary.arbitrary[A].sample.get
