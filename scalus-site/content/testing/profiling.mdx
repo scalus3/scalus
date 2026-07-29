@@ -4,6 +4,8 @@ sidebarTitle: Profiling
 description: Profile CEK machine execution to find expensive source lines and builtin functions in your Cardano smart contracts.
 ---
 
+import { Callout } from 'nextra/components'
+
 # Profiling Cardano Smart Contracts
 
 Scalus includes a built-in CEK machine profiler that shows where execution budget is spent — by source location and by builtin function.
@@ -66,8 +68,11 @@ result.profile.foreach { profile =>
 
 ## Machine-Readable Output (profile.json + manifest)
 
-`PlutusScriptEvaluator` can render profiles to files on every evaluation. The easiest switch is
-the environment variable (see [Project Commands](/docs/get-started/project-commands)):
+`PlutusScriptEvaluator` can render profiles to files on every evaluation — that covers everything
+that runs through the ledger: `Emulator`, `TxBuilder`, transaction validation. (For tests that
+evaluate a compiled program directly, see [Profiling Direct UPLC Runs](#profiling-direct-uplc-runs)
+below.) The easiest switch is the environment variable (see
+[Project Commands](/docs/get-started/project-commands)):
 
 ```sh copy
 SCALUS_PROFILE=full sbt test
@@ -82,7 +87,9 @@ default: `target/scalus`):
 - `profile-manifest.json` – the discovery entry point listing every run
 
 File names are stable per `(scriptHash, redeemer tag, index)`, so repeated evaluations (e.g.
-during fee balancing) overwrite rather than accumulate. The manifest maps each run to its files:
+during fee balancing) overwrite rather than accumulate. Manifest entries are merged on that same
+key: a re-evaluated script updates its entry in place, while every other run already in the
+directory is preserved. The manifest maps each run to its files:
 
 ```json
 {
@@ -101,6 +108,38 @@ during fee balancing) overwrite rather than accumulate. The manifest maps each r
 Tools should start from `profile-manifest.json` and check `schemaVersion` (currently `1` for
 both the manifest and `profile.json`). The Scalus VS Code extension consumes `profile.json` to
 annotate source lines with per-line cost.
+
+<Callout type="info">
+  The report directory lives under `target/`, which is git-ignored. Editor tooling that discovers
+  files through the workspace search index will not see it — VS Code's `findFiles` honours ignore
+  files. The Scalus Profiler extension handles this from 0.2.2 onwards; older versions find
+  nothing unless you point `SCALUS_DUMP_DIR` at a directory that is not ignored.
+</Callout>
+
+## Profiling Direct UPLC Runs
+
+Suites that evaluate a compiled program themselves — `runScript`, `evaluateDebug`,
+`runWithDebug` — never reach `PlutusScriptEvaluator`, so `SCALUS_PROFILE=full` writes no files for
+them. `ScalusTest` provides `runWithProfileReport` for that case: it evaluates with profiling on
+and emits the same renderings, into the same directory, indexed in the same manifest.
+
+```scala
+class VestingValidatorTest extends AnyFunSuite, ScalusTest {
+  test("Successful multiple partial withdrawals") {
+    val result = compiled.scriptV3().runWithProfileReport(scriptContext)
+    assert(result.isSuccess)
+  }
+}
+```
+
+The redeemer tag in the file name follows the script purpose in the `ScriptContext`, so a spending
+validator lands in `<scriptHash>-Spend-0.profile.*` just as it would from the ledger.
+
+Calling the method is itself the request for a report, so it writes the full set by default.
+`SCALUS_PROFILE`, `SCALUS_PROFILE_OUT` and `SCALUS_DUMP_DIR` override that exactly as they do for
+the ledger — `SCALUS_PROFILE=off` silences the output without touching the test. Because manifest
+entries merge, ledger- and test-produced runs accumulate side by side and the extension lists them
+together.
 
 ## Toggle Profiling in Tests
 
@@ -126,6 +165,9 @@ class MyValidatorTest extends AnyFunSuite, ScalusTest {
 ```
 
 The `result.profile.foreach` line is safe to leave permanently — when profiling is off, `profile` is `None`.
+
+This prints to the test log. When you want files an editor can read instead, use
+[`runWithProfileReport`](#profiling-direct-uplc-runs).
 
 ## PlutusVM Methods
 
