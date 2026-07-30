@@ -11,7 +11,7 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "1.0.0-M1"
+val scalusStableVersion = "1.0.0-M2"
 // The MiMa-checked stable surface is scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib (see docs/superpowers/specs/2026-07-28-1.0.0-m1-release-plan-design.md).
 // Re-baseline at each milestone: bump scalusStableVersion after the release artifacts are on
@@ -776,30 +776,6 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     .settings(
       name := "scalus-cardano-ledger",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
-      // Profile report writing moved to scalus.uplc.eval.ProfileReportWriter in scalus-core, so
-      // test-side profiling (ScalusTest.runWithProfileReport) produces the same files and shares
-      // the manifest merge. Every class below was implementation-private and unreachable from user
-      // code: the ProfileManifest* models were `private` inside the PlutusScriptEvaluator object,
-      // and ProfileReporting was `private[ledger]`. Delete when re-baselining past 1.0.0-M1.
-      mimaBinaryIssueFilters ++= Seq(
-        "ProfileManifest",
-        "ProfileManifestBudget",
-        "ProfileManifestFile",
-        "ProfileManifestRedeemer",
-        "ProfileManifestRun"
-      ).flatMap { cls =>
-          Seq(
-            ProblemFilters.exclude[MissingClassProblem](
-              s"scalus.cardano.ledger.PlutusScriptEvaluator$$$cls"
-            ),
-            ProblemFilters.exclude[MissingClassProblem](
-              s"scalus.cardano.ledger.PlutusScriptEvaluator$$$cls$$"
-            )
-          )
-      } ++ Seq(
-        ProblemFilters.exclude[MissingClassProblem]("scalus.cardano.ledger.ProfileReporting"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.cardano.ledger.ProfileReporting$")
-      ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
