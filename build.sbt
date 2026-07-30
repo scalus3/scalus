@@ -11,7 +11,7 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "1.0.0-M2"
+val scalusStableVersion = "1.0.0"
 // The MiMa-checked stable surface is scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib (see docs/superpowers/specs/2026-07-28-1.0.0-m1-release-plan-design.md).
 // Re-baseline at each milestone: bump scalusStableVersion after the release artifacts are on
