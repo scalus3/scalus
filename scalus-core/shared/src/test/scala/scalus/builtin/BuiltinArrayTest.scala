@@ -6,7 +6,7 @@ import scalus.uplc.builtin.{BuiltinArray, BuiltinList, ByteString, Data}
 import scalus.uplc.builtin.Builtins.*
 import scalus.compiler.compile
 import scalus.uplc.eval.{PlutusVM, Result}
-import scalus.uplc.{Constant, DeBruijnedProgram, DefaultUni, Term}
+import scalus.uplc.{Constant, DeBruijnedProgram, Term}
 
 class BuiltinArrayTest extends AnyFunSuite {
 

@@ -5,7 +5,6 @@ import org.scalatest.Assertions
 import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.platform
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.{EvaluatorReportConfig, ExUnits, Language, ProfileLevel, RedeemerTag}
 import scalus.cardano.ledger.Script
