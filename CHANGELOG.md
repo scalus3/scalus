@@ -1,5 +1,39 @@
 # Changelog
 
+## 1.0.0-M2 (2026-07-30)
+
+The Yaci DevKit devnet now runs a protocol version 11 (van Rossem) node and executes
+PV11-compiled scripts, so integration tests exercise the same protocol version as mainnet.
+Profiling reports work for direct UPLC evaluation, not just ledger-driven runs.
+
+### Added
+
+- `ScalusTest.runWithProfileReport`: suites that evaluate UPLC programs directly emit the same
+  profiling report set (`profile.json`, annotated-source HTML, `profile-manifest.json`) as
+  ledger-driven evaluations under `SCALUS_PROFILE=full`
+- `YaciConfig.imageTag` and `YaciConfig.startupTimeoutSeconds` to configure the Yaci DevKit
+  container image and startup wait
+
+### Changed
+
+- **BREAKING**: profile rendering and profile-manifest writing moved from `PlutusScriptEvaluator`
+  internals into `scalus.uplc.eval.ProfileReportWriter` in scalus-core – every removed class was
+  implementation-private and unreachable from user code (reviewed MiMa filters)
+- the Yaci DevKit devnet defaults to `bloxbean/yaci-cli:0.12.0-beta5` (protocol version 11 node;
+  was the PV9 `0.10.0-preview2`) and starts in companion node mode, where the Yano bootstrap
+  installs the full van Rossem cost models – the image's default haskell-only bootstrap is broken
+  (bloxbean/yaci-devkit#184, #185) and left devnets unable to run PV11 scripts
+- dependency updates: yaci 0.4.5
+
+### Fixed
+
+- `BlockfrostProvider.localYaci` re-anchors slot-zero time on the chain's latest block instead of
+  the Yaci admin API's cluster-creation `startTime`, so local slot/time conversions match the
+  ledger's Plutus clock when the devnet bootstrap shifts the chain start
+- the testkit waits for the yaci-store index to catch up with the node tip before handing the
+  devnet to tests, eliminating stale-UTxO "All inputs are spent" submission failures right after
+  startup
+
 ## 1.0.0-M1 (2026-07-28)
 
 First milestone of the 1.0 line. Protocol version 11 (van Rossem) is the default compile and
