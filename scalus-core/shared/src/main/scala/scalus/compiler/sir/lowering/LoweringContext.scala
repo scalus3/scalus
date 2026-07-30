@@ -151,7 +151,11 @@ class LoweringContext(
 
     def uniqueVarName(prefix: String = "_v"): String = {
         varIdSeq += 1
-        s"$prefix$varIdSeq"
+        // The apostrophe separator keeps (prefix, seq) -> name injective (audit L5: "t1" + 2 and
+        // "t" + 12 both concatenated to "t12", conflating ids) and cannot appear in a Scala
+        // identifier, so generated names can never capture user variables. `'` is legal in
+        // UPLC/Plutus textual names.
+        s"$prefix'$varIdSeq"
     }
 
     def lower(sir: SIR, optTargetType: Option[SIRType] = None): LoweredValue = {

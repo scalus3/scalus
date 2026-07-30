@@ -46,7 +46,35 @@ object TypeVarOps {
                 // call sites (e.g. SumUplcConstrOps's removed local helper) always wrapped;
                 // dropping the no-op wrapper is a strict simplification.
                 if input.representation == target then input
-                else new RepresentationProxyLoweredValue(input, target, pos)
+                // Checked relabel (audit L8): a Transparent source's bytes are only in `target`
+                // form when the TypeVar's registered/derivable byte shape says so - the previous
+                // unconditional relabel was a byte-shape-lie channel that compiled silently.
+                else if input.representation.isCompatibleOn(input.sirType, target, pos) then
+                    new RepresentationProxyLoweredValue(input, target, pos)
+                else
+                    // Byte shape is known and differs from `target`: do a real conversion via
+                    // the actual repr instead of lying with a relabel.
+                    val actualRepr = (input.sirType match
+                        case tv: SIRType.TypeVar => lctx.typeVarReprEnv.get(tv)
+                        case _                   => None
+                    ).orElse {
+                        lctx.resolveTypeVarIfNeeded(input.sirType) match
+                            case _: SIRType.TypeVar => None
+                            case concrete =>
+                                Some(SirTypeUplcGenerator.defaultRepresentation(concrete))
+                    }
+                    actualRepr match
+                        case Some(repr) =>
+                            new RepresentationProxyLoweredValue(input, repr, pos)
+                                .toRepresentation(target, pos)
+                        case None =>
+                            throw LoweringException(
+                              s"Cannot convert Transparent TypeVar value of type " +
+                                  s"${input.sirType.show} to representation $target: the byte " +
+                                  s"shape is unknown (no typeVarReprEnv binding and the type " +
+                                  s"does not resolve to a concrete type)",
+                              pos
+                            )
             case Unwrapped =>
                 val sourceUnderlying =
                     SirTypeUplcGenerator.defaultRepresentation(input.sirType)
