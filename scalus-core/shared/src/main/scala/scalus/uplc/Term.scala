@@ -117,8 +117,11 @@ enum Term:
                 .map(_.effectivePos)
                 .find(!_.isEffectivelyEmpty)
                 .getOrElse(ScalusSourcePos.empty)
+        // Keys on the position alone, and keeps the rest of the annotation: a term that lowering
+        // stamped with its enclosing function name (but no position) still needs a position here.
         def stamp(t: Term, rep: ScalusSourcePos): UplcAnnotation =
-            if t.annotation.isEffectivelyEmpty && !rep.isEffectivelyEmpty then UplcAnnotation(rep)
+            if t.annotation.pos.isEffectivelyEmpty && !rep.isEffectivelyEmpty then
+                t.annotation.copy(pos = rep)
             else t.annotation
         this match
             case t: Var     => (t, t.annotation.pos)
@@ -196,10 +199,12 @@ enum Term:
       * profiling and source traces should attribute their cost to.
       */
     def fillEmptyPosTopDown(inherited: ScalusSourcePos): Term =
-        val eff = if annotation.isEffectivelyEmpty then inherited else annotation.pos
+        // Keys on the position alone, and keeps the rest of the annotation, for the same reason as
+        // `stamp` in [[fillEmptyPosBottomUp]].
+        val posIsEmpty = annotation.pos.isEffectivelyEmpty
+        val eff = if posIsEmpty then inherited else annotation.pos
         val selfAnn =
-            if annotation.isEffectivelyEmpty && !inherited.isEffectivelyEmpty then
-                UplcAnnotation(inherited)
+            if posIsEmpty && !inherited.isEffectivelyEmpty then annotation.copy(pos = inherited)
             else annotation
         this match
             case t: Var     => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
