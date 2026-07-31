@@ -42,7 +42,7 @@ object ProductCaseUplcConstrOnlyEmitter extends SirTypeUplcGenerator {
     override def genSelect(sel: SIR.Select, loweredScrutinee: LoweredValue)(using
         lctx: LoweringContext
     ): LoweredValue = {
-        import scalus.uplc.{Term, UplcAnnotation}
+        import scalus.uplc.Term
 
         val pos = sel.anns.pos
         val constrDecl = ProductCaseEmitter.retrieveConstrDecl(
@@ -96,15 +96,15 @@ object ProductCaseUplcConstrOnlyEmitter extends SirTypeUplcGenerator {
                 val innerCtx = gctx.copy(generatedVars = gctx.generatedVars ++ fieldNames)
                 val body = Term.Var(scalus.uplc.NamedDeBruijn(selectedFieldName))
                 val branch = fieldNames.foldRight(body: Term) { (name, inner) =>
-                    Term.LamAbs(name, inner, UplcAnnotation(sel.anns.pos))
+                    Term.LamAbs(name, inner, ann(sel.anns.pos))
                 }
                 // Pad with Error branches for tags < this constructor's tag
                 val errorBranches =
-                    scala.List.fill(puc.tag)(Term.Error(UplcAnnotation(sel.anns.pos)))
+                    scala.List.fill(puc.tag)(Term.Error(ann(sel.anns.pos)))
                 Term.Case(
                   loweredScrutinee.termWithNeededVars(gctx),
                   errorBranches :+ branch,
-                  UplcAnnotation(sel.anns.pos)
+                  ann(sel.anns.pos)
                 )
             }
 

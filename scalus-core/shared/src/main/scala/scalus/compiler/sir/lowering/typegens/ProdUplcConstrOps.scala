@@ -4,7 +4,7 @@ package typegens
 import org.typelevel.paiges.Doc
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.*
 import scalus.compiler.sir.*
-import scalus.uplc.{Term, UplcAnnotation}
+import scalus.uplc.Term
 
 /** Emitter for `ProductCaseClassRepresentation.ProdUplcConstr` — native UPLC
   * `Constr(tag, [t1, t2, ...])` emission for product values.
@@ -89,7 +89,7 @@ object ProdUplcConstrOps {
                 Term.Constr(
                   scalus.cardano.ledger.Word64(constrIndex.toLong),
                   adoptedArgs.map(_.termWithNeededVars(gctx)).toList,
-                  UplcAnnotation(constr.anns.pos)
+                  ann(constr.anns.pos)
                 )
             }
 

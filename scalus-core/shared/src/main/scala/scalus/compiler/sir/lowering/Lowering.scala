@@ -515,13 +515,13 @@ object Lowering {
     /** Trailing `-<symbolId>` that the plugin's `VariableKey` appends to local binding names so
       * shadowed variables stay distinct.
       */
-    private val LocalBindingIdSuffix = """^(.+)-\d+$""".r
+    private[lowering] val LocalBindingIdSuffix = """^(.+)-\d+$""".r
 
     /** The source-level name of a binding, for display in the UPLC source view. Strips the package
       * and owner prefix that linked top-level defs carry (`scalus.examples.Foo$.bar` -> `bar`) and
       * the symbol id that local defs carry (`double-432208` -> `double`).
       */
-    private def simpleBindingName(name: String): String = {
+    private[lowering] def simpleBindingName(name: String): String = {
         val dotIdx = name.lastIndexOf('.')
         val simple = if dotIdx >= 0 then name.substring(dotIdx + 1) else name
         simple match
@@ -535,7 +535,7 @@ object Lowering {
       * Only function-shaped right-hand sides open a new scope. A plain value binding is part of the
       * code of whatever function encloses it, so it keeps the enclosing name.
       */
-    private def loweringBinding[A](name: String, rhs: SIR)(
+    private[lowering] def loweringBinding[A](name: String, rhs: SIR)(
         body: => A
     )(using lctx: LoweringContext): A =
         rhs match

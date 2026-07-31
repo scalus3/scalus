@@ -63,34 +63,42 @@ enum Term:
     /** Returns a copy of this term with the given source position. */
     def withPos(pos: ScalusSourcePos): Term = withAnnotation(UplcAnnotation(pos))
 
-    /** Sets the annotation on this term and recursively on subterms, but only where the annotation
-      * is currently empty. Recursion stops at terms that already have an annotation.
+    /** Sets the annotation on this term and recursively on subterms, but only where the position is
+      * currently empty. Recursion stops at terms that already have a position.
+      *
+      * Keys on the position alone, and keeps a `functionName` the term already carries: lowering
+      * stamps the enclosing function on terms that have no position of their own, and those still
+      * need a position. Keying on whole-annotation emptiness would treat them as already annotated
+      * and stop the recursion into their whole subtree.
       */
     def withAnnotationIfEmpty(ann: UplcAnnotation): Term =
-        if !annotation.isEmpty then this
+        if !annotation.pos.isEmpty then this
         else
+            val self =
+                if annotation.functionName.isEmpty then ann
+                else annotation.copy(pos = ann.pos)
             this match
-                case t: Var => t.copy(annotation = ann)
+                case t: Var => t.copy(annotation = self)
                 case t: LamAbs =>
-                    t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = ann)
+                    t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = self)
                 case t: Apply =>
                     t.copy(
                       f = t.f.withAnnotationIfEmpty(ann),
                       arg = t.arg.withAnnotationIfEmpty(ann),
-                      annotation = ann
+                      annotation = self
                     )
-                case t: Force => t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = ann)
-                case t: Delay => t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = ann)
-                case t: Const => t.copy(annotation = ann)
-                case t: Builtin => t.copy(annotation = ann)
-                case t: Error   => t.copy(annotation = ann)
+                case t: Force => t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = self)
+                case t: Delay => t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = self)
+                case t: Const => t.copy(annotation = self)
+                case t: Builtin => t.copy(annotation = self)
+                case t: Error   => t.copy(annotation = self)
                 case t: Constr =>
-                    t.copy(args = t.args.map(_.withAnnotationIfEmpty(ann)), annotation = ann)
+                    t.copy(args = t.args.map(_.withAnnotationIfEmpty(ann)), annotation = self)
                 case t: Case =>
                     t.copy(
                       arg = t.arg.withAnnotationIfEmpty(ann),
                       cases = t.cases.map(_.withAnnotationIfEmpty(ann)),
-                      annotation = ann
+                      annotation = self
                     )
 
     /** Sets the source position on this term and recursively on subterms, but only where the
