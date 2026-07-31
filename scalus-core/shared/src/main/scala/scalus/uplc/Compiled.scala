@@ -124,13 +124,14 @@ sealed abstract class CompiledPlutus[A](
                 options.uplcOptimizers.foldLeft(uplc)((term, opt) => opt(term))
             else if options.optimizeUplc then optimizer(uplc)
             else uplc
-        // Give every still-position-less node a source location, so profiling and source-traces can
-        // attribute the cost of generated/optimized spines (the UPLC optimizer rebuilds Apply/Case/
-        // Constr nodes without positions). Run on the FINAL term, after optimization: bottom-up so a
-        // spine node inherits the location of the leaf it operates on (where positions actually sit),
-        // then top-down to fill any node with no positioned descendant from its nearest positioned
-        // ancestor. Positions never affect flat encoding, budget, or evaluation — only diagnostics.
-        optimized.fillEmptyPosBottomUp._1.fillEmptyPosTopDown(scalus.utils.ScalusSourcePos.empty)
+        // Give every still-un-annotated node a source location and an enclosing function name, so
+        // profiling and source-traces can attribute the cost of generated/optimized spines (the UPLC
+        // optimizer rebuilds Apply/Case/Constr nodes without annotations). Run on the FINAL term,
+        // after optimization: bottom-up so a spine node inherits the annotation of the leaf it
+        // operates on (where annotations actually sit), then top-down to fill any node with no
+        // annotated descendant from its nearest annotated ancestor. Annotations never affect flat
+        // encoding, budget, or evaluation — only diagnostics.
+        optimized.fillEmptyAnnotationsBottomUp._1.fillEmptyAnnotationsTopDown(UplcAnnotation.empty)
     }
 }
 

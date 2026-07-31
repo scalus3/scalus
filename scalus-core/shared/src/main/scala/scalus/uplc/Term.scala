@@ -106,77 +106,80 @@ enum Term:
       */
     def withPosIfEmpty(pos: ScalusSourcePos): Term = withAnnotationIfEmpty(UplcAnnotation(pos))
 
-    /** Bottom-up pass: gives every position-less subterm the source position of its nearest
-      * positioned *descendant*, and returns that representative position for this subtree (its own
-      * if positioned, else the first positioned child, preferring the function/scrutinee side).
+    /** Bottom-up pass: gives every un-annotated subterm the annotation of its nearest annotated
+      * *descendant*, and returns that representative annotation for this subtree (its own if
+      * annotated, else the first annotated child, preferring the function/scrutinee side).
       *
-      * This is the main filler for lowered code: source positions sit on the leaves (the `Var`/
-      * `Const`/`Builtin` a value references), while the `Apply`/`Case`/`Constr` spine that combines
-      * them is built position-less. A spine node here inherits the location of what it operates on
-      * — e.g. an application inherits the position of the function being applied — so its cost is
-      * attributed to that code rather than vanishing. Never overwrites an existing position.
+      * This is the main filler for lowered code: annotations sit on the leaves (the `Var`/`Const`/
+      * `Builtin` a value references), while the `Apply`/`Case`/`Constr` spine that combines them is
+      * built un-annotated. A spine node here inherits the location and enclosing function name of
+      * what it operates on — e.g. an application inherits the annotation of the function being
+      * applied — so its cost is attributed to that code rather than vanishing.
+      *
+      * Fields are filled independently and an existing one is never overwritten: a term that
+      * lowering stamped with its enclosing function name (but no position) still gets a position,
+      * and keeps its own name.
       */
-    def fillEmptyPosBottomUp: (Term, ScalusSourcePos) =
+    private[scalus] def fillEmptyAnnotationsBottomUp: (Term, UplcAnnotation) =
         // Resolve each candidate's effective position first (a synthetic compile-boundary root
-        // becomes the real user call it was inlined from), then take the first real one — so
-        // provenance wins over the structural descendant/ancestor fallback.
-        def firstNonEmpty(ps: ScalusSourcePos*): ScalusSourcePos =
-            ps.iterator
-                .map(_.effectivePos)
-                .find(!_.isEffectivelyEmpty)
-                .getOrElse(ScalusSourcePos.empty)
-        // Keys on the position alone, and keeps the rest of the annotation: a term that lowering
-        // stamped with its enclosing function name (but no position) still needs a position here.
-        def stamp(t: Term, rep: ScalusSourcePos): UplcAnnotation =
-            if t.annotation.pos.isEffectivelyEmpty && !rep.isEffectivelyEmpty then
-                t.annotation.copy(pos = rep)
-            else t.annotation
+        // becomes the real user call it was inlined from), then take the first candidate that
+        // resolves to a real position — so provenance wins over the structural descendant/ancestor
+        // fallback. The winner's *whole* annotation becomes the representative, so a filled node's
+        // function name always describes the same code as its position.
+        def firstNonEmpty(as: UplcAnnotation*): UplcAnnotation =
+            as.iterator
+                .map { a =>
+                    val p = a.pos.effectivePos
+                    if p eq a.pos then a else a.copy(pos = p)
+                }
+                .find(!_.pos.isEffectivelyEmpty)
+                .getOrElse(UplcAnnotation.empty)
         this match
-            case t: Var     => (t, t.annotation.pos)
-            case t: Const   => (t, t.annotation.pos)
-            case t: Builtin => (t, t.annotation.pos)
-            case t: Error   => (t, t.annotation.pos)
+            case t: Var     => (t, t.annotation)
+            case t: Const   => (t, t.annotation)
+            case t: Builtin => (t, t.annotation)
+            case t: Error   => (t, t.annotation)
             case t: LamAbs =>
-                val (b, bp) = t.term.fillEmptyPosBottomUp
-                val rep = firstNonEmpty(t.annotation.pos, bp)
-                val ann = stamp(t, rep)
+                val (b, ba) = t.term.fillEmptyAnnotationsBottomUp
+                val rep = firstNonEmpty(t.annotation, ba)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 (
                   if (b eq t.term) && (ann eq t.annotation) then t
                   else t.copy(term = b, annotation = ann),
                   rep
                 )
             case t: Force =>
-                val (b, bp) = t.term.fillEmptyPosBottomUp
-                val rep = firstNonEmpty(t.annotation.pos, bp)
-                val ann = stamp(t, rep)
+                val (b, ba) = t.term.fillEmptyAnnotationsBottomUp
+                val rep = firstNonEmpty(t.annotation, ba)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 (
                   if (b eq t.term) && (ann eq t.annotation) then t
                   else t.copy(term = b, annotation = ann),
                   rep
                 )
             case t: Delay =>
-                val (b, bp) = t.term.fillEmptyPosBottomUp
-                val rep = firstNonEmpty(t.annotation.pos, bp)
-                val ann = stamp(t, rep)
+                val (b, ba) = t.term.fillEmptyAnnotationsBottomUp
+                val rep = firstNonEmpty(t.annotation, ba)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 (
                   if (b eq t.term) && (ann eq t.annotation) then t
                   else t.copy(term = b, annotation = ann),
                   rep
                 )
             case t: Apply =>
-                val (f, fp) = t.f.fillEmptyPosBottomUp
-                val (arg, ap) = t.arg.fillEmptyPosBottomUp
-                val rep = firstNonEmpty(t.annotation.pos, fp, ap)
-                val ann = stamp(t, rep)
+                val (f, fa) = t.f.fillEmptyAnnotationsBottomUp
+                val (arg, aa) = t.arg.fillEmptyAnnotationsBottomUp
+                val rep = firstNonEmpty(t.annotation, fa, aa)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 (
                   if (f eq t.f) && (arg eq t.arg) && (ann eq t.annotation) then t
                   else t.copy(f = f, arg = arg, annotation = ann),
                   rep
                 )
             case t: Constr =>
-                val processed = t.args.map(_.fillEmptyPosBottomUp)
-                val rep = firstNonEmpty((t.annotation.pos +: processed.map(_._2))*)
-                val ann = stamp(t, rep)
+                val processed = t.args.map(_.fillEmptyAnnotationsBottomUp)
+                val rep = firstNonEmpty((t.annotation +: processed.map(_._2))*)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 val args = processed.map(_._1)
                 (
                   if args.corresponds(t.args)(_ eq _) && (ann eq t.annotation) then t
@@ -184,10 +187,10 @@ enum Term:
                   rep
                 )
             case t: Case =>
-                val (arg, ap) = t.arg.fillEmptyPosBottomUp
-                val processed = t.cases.map(_.fillEmptyPosBottomUp)
-                val rep = firstNonEmpty((t.annotation.pos +: ap +: processed.map(_._2))*)
-                val ann = stamp(t, rep)
+                val (arg, aa) = t.arg.fillEmptyAnnotationsBottomUp
+                val processed = t.cases.map(_.fillEmptyAnnotationsBottomUp)
+                val rep = firstNonEmpty((t.annotation +: aa +: processed.map(_._2))*)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 val cases = processed.map(_._1)
                 (
                   if (arg eq t.arg) && cases.corresponds(t.cases)(_ eq _) && (ann eq t.annotation)
@@ -196,56 +199,66 @@ enum Term:
                   rep
                 )
 
-    /** Top-down pass: stamps every position-less subterm with the source position of its nearest
-      * enclosing positioned ancestor (`inherited` at the root). Positioned subterms keep their own
-      * position and become the inherited position for their descendants.
+    /** Top-down pass: stamps every un-annotated subterm with the annotation of its nearest
+      * enclosing annotated ancestor (`inherited` at the root). Annotated subterms keep what they
+      * have and become the inherited annotation for their descendants; as in the bottom-up pass,
+      * position and function name are filled independently and never overwritten.
       *
-      * This completes [[fillEmptyPosBottomUp]]: per-value stamping during lowering can only place a
-      * position a lowered value actually knows, but many `Apply`/`Let` SIR nodes carry no position
-      * at all (the plugin doesn't stamp them), so the spines they build stay position-less. Here
-      * those nodes inherit the source location of the surrounding code — which is exactly what
-      * profiling and source traces should attribute their cost to.
+      * This completes [[fillEmptyAnnotationsBottomUp]]: per-value stamping during lowering can only
+      * place an annotation a lowered value actually knows, but many `Apply`/`Let` SIR nodes carry
+      * no position at all (the plugin doesn't stamp them), so the spines they build stay
+      * un-annotated. Here those nodes inherit the source location of the surrounding code — which
+      * is exactly what profiling and source traces should attribute their cost to.
       */
-    def fillEmptyPosTopDown(inherited: ScalusSourcePos): Term =
-        // Keys on the position alone, and keeps the rest of the annotation, for the same reason as
-        // `stamp` in [[fillEmptyPosBottomUp]].
-        val posIsEmpty = annotation.pos.isEffectivelyEmpty
-        val eff = if posIsEmpty then inherited else annotation.pos
-        val selfAnn =
-            if posIsEmpty && !inherited.isEffectivelyEmpty then annotation.copy(pos = inherited)
-            else annotation
+    private[scalus] def fillEmptyAnnotationsTopDown(inherited: UplcAnnotation): Term =
+        // What this term ends up with is also what its descendants inherit: its own fields where it
+        // has them, the ancestor's where it does not.
+        val selfAnn = Term.fillEmptyFields(annotation, inherited)
         this match
             case t: Var     => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
             case t: Const   => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
             case t: Builtin => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
             case t: Error   => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
             case t: LamAbs =>
-                val b = t.term.fillEmptyPosTopDown(eff)
+                val b = t.term.fillEmptyAnnotationsTopDown(selfAnn)
                 if (selfAnn eq t.annotation) && (b eq t.term) then t
                 else t.copy(term = b, annotation = selfAnn)
             case t: Force =>
-                val b = t.term.fillEmptyPosTopDown(eff)
+                val b = t.term.fillEmptyAnnotationsTopDown(selfAnn)
                 if (selfAnn eq t.annotation) && (b eq t.term) then t
                 else t.copy(term = b, annotation = selfAnn)
             case t: Delay =>
-                val b = t.term.fillEmptyPosTopDown(eff)
+                val b = t.term.fillEmptyAnnotationsTopDown(selfAnn)
                 if (selfAnn eq t.annotation) && (b eq t.term) then t
                 else t.copy(term = b, annotation = selfAnn)
             case t: Apply =>
-                val f = t.f.fillEmptyPosTopDown(eff)
-                val arg = t.arg.fillEmptyPosTopDown(eff)
+                val f = t.f.fillEmptyAnnotationsTopDown(selfAnn)
+                val arg = t.arg.fillEmptyAnnotationsTopDown(selfAnn)
                 if (selfAnn eq t.annotation) && (f eq t.f) && (arg eq t.arg) then t
                 else t.copy(f = f, arg = arg, annotation = selfAnn)
             case t: Constr =>
-                val args = t.args.map(_.fillEmptyPosTopDown(eff))
+                val args = t.args.map(_.fillEmptyAnnotationsTopDown(selfAnn))
                 if (selfAnn eq t.annotation) && args.corresponds(t.args)(_ eq _) then t
                 else t.copy(args = args, annotation = selfAnn)
             case t: Case =>
-                val arg = t.arg.fillEmptyPosTopDown(eff)
-                val cases = t.cases.map(_.fillEmptyPosTopDown(eff))
+                val arg = t.arg.fillEmptyAnnotationsTopDown(selfAnn)
+                val cases = t.cases.map(_.fillEmptyAnnotationsTopDown(selfAnn))
                 if (selfAnn eq t.annotation) && (arg eq t.arg) && cases.corresponds(t.cases)(_ eq _)
                 then t
                 else t.copy(arg = arg, cases = cases, annotation = selfAnn)
+
+    /** Bottom-up position fill: see [[fillEmptyAnnotationsBottomUp]], of which this is the
+      * position-only view. Returns the representative position of this subtree.
+      */
+    def fillEmptyPosBottomUp: (Term, ScalusSourcePos) =
+        val (t, rep) = fillEmptyAnnotationsBottomUp
+        (t, rep.pos)
+
+    /** Top-down position fill: see [[fillEmptyAnnotationsTopDown]], of which this is the
+      * position-only view. The root inherits `inherited` and no function name.
+      */
+    def fillEmptyPosTopDown(inherited: ScalusSourcePos): Term =
+        fillEmptyAnnotationsTopDown(UplcAnnotation(inherited))
 
     /** Applies the argument to the term. */
     infix def $(rhs: Term): Term = Term.Apply(this, rhs)
@@ -426,6 +439,24 @@ enum Term:
     def plutusV3: Program = Program.plutusV3(this)
 
 object Term {
+
+    /** Returns `own` with each of its empty fields filled from `rep`, leaving the fields it already
+      * has untouched. Used by both annotation fill passes, so they never overwrite anything the
+      * lowering knew: a term stamped with only its enclosing function name gains a position, and a
+      * term that has a position of its own keeps it.
+      *
+      * Returns `own` itself (reference-equal) when there is nothing to fill, so callers can detect
+      * that with `eq` and keep the node as is instead of rebuilding it.
+      */
+    private def fillEmptyFields(own: UplcAnnotation, rep: UplcAnnotation): UplcAnnotation =
+        val fillPos = own.pos.isEffectivelyEmpty && !rep.pos.isEffectivelyEmpty
+        val fillName = own.functionName.isEmpty && rep.functionName.nonEmpty
+        if !fillPos && !fillName then own
+        else
+            UplcAnnotation(
+              if fillPos then rep.pos else own.pos,
+              if fillName then rep.functionName else own.functionName
+            )
 
     /** Truncate a string to a maximum length, showing only first line if multiline */
     private[uplc] def truncateForDisplay(s: String, maxLength: Int = 60): String =
