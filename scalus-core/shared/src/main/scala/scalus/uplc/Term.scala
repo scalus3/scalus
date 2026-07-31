@@ -604,96 +604,132 @@ object Term {
     /** Pretty[Term] instance with rainbow brackets based on nesting depth */
     given Pretty[Term] with
         def pretty(term: Term, style: Style): Doc =
-            prettyTermWithDepth(TermSanitizer.sanitizeNames(term), style, depth = 0)
+            TermPrinter.prettySanitized(TermSanitizer.sanitizeNames(term), style, (_, d) => d)
 
-        private def prettyTermWithDepth(term: Term, style: Style, depth: Int): Doc =
-            import Pretty.{kw, rainbowChar}
+}
 
-            // Local extension that captures 'style' from enclosing scope
-            extension (d: Doc)
-                def styled(s: paiges.Style): Doc =
-                    if style == Style.XTerm then d.style(s) else d
+/** Pretty-printer for [[Term]] with a per-node decorator hook.
+  *
+  * This is the implementation behind `given Pretty[Term]`, exposed so callers that need to attach
+  * extra information to individual nodes (source positions, cost annotations, ...) can reuse the
+  * exact same layout.
+  */
+private[scalus] object TermPrinter {
+    import Term.*
 
-            term match
-                case Var(name, _) => text(name.name)
+    /** Pretty-print an already-sanitized term, passing every printed node's Doc through `decorate`.
+      *
+      * `(term, doc) => doc` reproduces `Term.pretty` exactly. Inner `Apply` nodes of a flattened
+      * application chain are not printed individually and are not decorated.
+      *
+      * @param term
+      *   a term whose names are already sanitized (see [[TermSanitizer.sanitizeNames]]); this
+      *   method does not sanitize
+      * @param style
+      *   plain or XTerm-highlighted output
+      * @param decorate
+      *   applied to the Doc of every printed node, together with that node
+      */
+    def prettySanitized(term: Term, style: Style, decorate: (Term, Doc) => Doc): Doc =
+        prettyTermWithDepth(term, style, depth = 0, decorate)
 
-                case LamAbs(name, body, _) =>
-                    // (lam name body) with rainbow parens at current depth
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    val prefix = openP + kw("lam", style) & text(name)
-                    ((prefix / prettyTermWithDepth(body, style, depth + 1))
+    private def prettyTermWithDepth(
+        term: Term,
+        style: Style,
+        depth: Int,
+        decorate: (Term, Doc) => Doc
+    ): Doc =
+        import Pretty.{kw, rainbowChar}
+
+        // Local extension that captures 'style' from enclosing scope
+        extension (d: Doc)
+            def styled(s: paiges.Style): Doc =
+                if style == Style.XTerm then d.style(s) else d
+
+        val doc = term match
+            case Var(name, _) => text(name.name)
+
+            case LamAbs(name, body, _) =>
+                // (lam name body) with rainbow parens at current depth
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                val prefix = openP + kw("lam", style) & text(name)
+                ((prefix / prettyTermWithDepth(body, style, depth + 1, decorate))
+                    .nested(2)
+                    .grouped + closeP).grouped
+
+            case a @ Apply(_, _, _) =>
+                // [f arg1 arg2 ...] with rainbow brackets
+                val (t, args) = a.applyToList
+                val openB = rainbowChar('[', depth, style)
+                val closeB = rainbowChar(']', depth, style)
+                val allTerms =
+                    (t :: args).map(prettyTermWithDepth(_, style, depth + 1, decorate))
+                val body = intercalate(lineOrSpace, allTerms)
+                ((openB + body).nested(2).grouped + closeB).grouped
+
+            case Force(t, _) =>
+                // (force term)
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                (openP + kw("force", style) & prettyTermWithDepth(
+                  t,
+                  style,
+                  depth + 1,
+                  decorate
+                )).grouped + closeP
+
+            case Delay(t, _) =>
+                // (delay term)
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                (openP + kw("delay", style) & prettyTermWithDepth(
+                  t,
+                  style,
+                  depth + 1,
+                  decorate
+                )).grouped + closeP
+
+            case Const(const, _) =>
+                // (con type value) - no depth increase, leaf node
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                openP + kw("con", style) & const.pretty.styled(Fg.colorCode(64)) + closeP
+
+            case Builtin(bn, _) =>
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                openP + kw("builtin", style) & PrettyPrinter
+                    .pretty(bn)
+                    .styled(Fg.colorCode(176)) + closeP
+
+            case Error(_) =>
+                kw("(error)", style)
+
+            case Constr(tag, args, _) =>
+                // (constr tag arg1 arg2 ...)
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                val argDocs = args.map(prettyTermWithDepth(_, style, depth + 1, decorate))
+                val body = kw("constr", style) & str(tag.value)
+                if argDocs.isEmpty then openP + body + closeP
+                else
+                    ((openP + body & intercalate(lineOrSpace, argDocs))
                         .nested(2)
                         .grouped + closeP).grouped
 
-                case a @ Apply(_, _, _) =>
-                    // [f arg1 arg2 ...] with rainbow brackets
-                    val (t, args) = a.applyToList
-                    val openB = rainbowChar('[', depth, style)
-                    val closeB = rainbowChar(']', depth, style)
-                    val allTerms = (t :: args).map(prettyTermWithDepth(_, style, depth + 1))
-                    val body = intercalate(lineOrSpace, allTerms)
-                    ((openB + body).nested(2).grouped + closeB).grouped
+            case Case(arg, cases, _) =>
+                // (case scrutinee branch1 branch2 ...)
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                val argDoc = prettyTermWithDepth(arg, style, depth + 1, decorate)
+                val caseDocs = cases.map(prettyTermWithDepth(_, style, depth + 1, decorate))
+                val body = kw("case", style) & argDoc
+                if caseDocs.isEmpty then openP + body + closeP
+                else
+                    ((openP + body & intercalate(lineOrSpace, caseDocs))
+                        .nested(2)
+                        .grouped + closeP).grouped
 
-                case Force(t, _) =>
-                    // (force term)
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    (openP + kw("force", style) & prettyTermWithDepth(
-                      t,
-                      style,
-                      depth + 1
-                    )).grouped + closeP
-
-                case Delay(t, _) =>
-                    // (delay term)
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    (openP + kw("delay", style) & prettyTermWithDepth(
-                      t,
-                      style,
-                      depth + 1
-                    )).grouped + closeP
-
-                case Const(const, _) =>
-                    // (con type value) - no depth increase, leaf node
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    openP + kw("con", style) & const.pretty.styled(Fg.colorCode(64)) + closeP
-
-                case Builtin(bn, _) =>
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    openP + kw("builtin", style) & PrettyPrinter
-                        .pretty(bn)
-                        .styled(Fg.colorCode(176)) + closeP
-
-                case Error(_) =>
-                    kw("(error)", style)
-
-                case Constr(tag, args, _) =>
-                    // (constr tag arg1 arg2 ...)
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    val argDocs = args.map(prettyTermWithDepth(_, style, depth + 1))
-                    val body = kw("constr", style) & str(tag.value)
-                    if argDocs.isEmpty then openP + body + closeP
-                    else
-                        ((openP + body & intercalate(lineOrSpace, argDocs))
-                            .nested(2)
-                            .grouped + closeP).grouped
-
-                case Case(arg, cases, _) =>
-                    // (case scrutinee branch1 branch2 ...)
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    val argDoc = prettyTermWithDepth(arg, style, depth + 1)
-                    val caseDocs = cases.map(prettyTermWithDepth(_, style, depth + 1))
-                    val body = kw("case", style) & argDoc
-                    if caseDocs.isEmpty then openP + body + closeP
-                    else
-                        ((openP + body & intercalate(lineOrSpace, caseDocs))
-                            .nested(2)
-                            .grouped + closeP).grouped
-
+        decorate(term, doc)
 }
