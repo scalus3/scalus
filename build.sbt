@@ -413,6 +413,20 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       },
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // `LoweredValue.functionName` is a new trait `val` that records the enclosing source
+        // function while lowering, so compiled UPLC can be grouped by function (UPLC source view).
+        // A trait val adds an abstract accessor to the interface, which MiMa reports as a break for
+        // anything implementing `LoweredValue` outside the library. `scalus.compiler.sir.lowering`
+        // is compiler-internal machinery with no supported external implementors; every caller-side
+        // use stays source- and binary-compatible. Drop at the next MiMa re-baseline.
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.compiler.sir.lowering.LoweredValue.functionName"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.compiler.sir.lowering.LoweredValue.scalus$compiler$sir$lowering$LoweredValue$_setter_$functionName_="
+        )
+      ),
 
       // enable when debug compilation of tests
       Test / scalacOptions += "-color:never",
