@@ -6,7 +6,7 @@ import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.ProductCaseClassRepresentation.*
 import scalus.compiler.sir.*
-import scalus.uplc.{Term, UplcAnnotation}
+import scalus.uplc.Term
 
 /** Product with one element without parent, represented as an element.
   */
@@ -317,7 +317,7 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
                         Term.Constr(
                           scalus.cardano.ledger.Word64(puc.tag.toLong),
                           fields.map(_.termWithNeededVars(gctx)).toList,
-                          UplcAnnotation(inPos)
+                          ann(inPos)
                         )
                     override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
                         Doc.text("DataList→UplcConstr")
@@ -429,15 +429,15 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
                             gctx.copy(generatedVars = gctx.generatedVars ++ fieldVars.map(_.id))
                         val body = dataList.termWithNeededVars(innerCtx)
                         val branch = fieldVars.foldRight(body) { (fv, inner) =>
-                            Term.LamAbs(fv.id, inner, UplcAnnotation(pos))
+                            Term.LamAbs(fv.id, inner, ann(pos))
                         }
                         // Pad with Error branches for tags < this constructor's tag
                         val errorBranches =
-                            scala.List.fill(puc.tag)(Term.Error(UplcAnnotation(pos)))
+                            scala.List.fill(puc.tag)(Term.Error(ann(pos)))
                         Term.Case(
                           input.termWithNeededVars(gctx),
                           errorBranches :+ branch,
-                          UplcAnnotation(pos)
+                          ann(pos)
                         )
                     }
                     override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
@@ -488,17 +488,17 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
                             val body = Term.Constr(
                               scalus.cardano.ledger.Word64(outPuc.tag.toLong),
                               convertedFields.map(_.termWithNeededVars(innerCtx)).toList,
-                              UplcAnnotation(inPos)
+                              ann(inPos)
                             )
                             val branch = fieldVars.foldRight(body: Term) { (fv, inner) =>
-                                Term.LamAbs(fv.id, inner, UplcAnnotation(inPos))
+                                Term.LamAbs(fv.id, inner, ann(inPos))
                             }
                             val errorBranches =
-                                scala.List.fill(inPuc.tag)(Term.Error(UplcAnnotation(inPos)))
+                                scala.List.fill(inPuc.tag)(Term.Error(ann(inPos)))
                             Term.Case(
                               input.termWithNeededVars(gctx),
                               errorBranches :+ branch,
-                              UplcAnnotation(inPos)
+                              ann(inPos)
                             )
                         }
                         override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
