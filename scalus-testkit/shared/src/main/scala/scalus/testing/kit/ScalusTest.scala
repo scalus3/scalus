@@ -22,6 +22,9 @@ import scalus.compiler.sir.SIR
 import scalus.uplc.*
 import scalus.uplc.eval.*
 
+// `prelude.Option.*` above shadows the standard Some; alias it for the off-chain APIs that take one.
+import scala.Some as ScalaSome
+
 trait ScalusTest extends ArbitraryInstances, Assertions {
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
     protected given PlutusVM = plutusVM
@@ -90,6 +93,10 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
           * calling this asks for the full set, and `SCALUS_PROFILE` / `SCALUS_PROFILE_OUT` /
           * `SCALUS_DUMP_DIR` override it as they do for the ledger. Manifest entries are merged by
           * (scriptHash, tag, index), so several profiled tests accumulate rather than overwrite.
+          *
+          * A `<key>.uplc.json` source map is written alongside them when this program still carries
+          * the compiler's source annotations, i.e. it was compiled in this process rather than
+          * decoded from CBOR.
           */
         def runWithProfileReport(scriptContext: ScriptContext)(using vm: PlutusVM): Result = {
             val result = runWithProfile(scriptContext)
@@ -101,7 +108,8 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
                   Language.PlutusV3.toString,
                   redeemerTag(scriptContext.scriptInfo),
                   0,
-                  println
+                  println,
+                  ScalaSome(self.term)
                 )
             }
             result
