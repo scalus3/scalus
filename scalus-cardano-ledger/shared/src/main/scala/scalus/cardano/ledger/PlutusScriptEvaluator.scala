@@ -379,6 +379,11 @@ object PlutusScriptEvaluator {
           * `profile-manifest.json`. Delegated to [[ProfileReportWriter]], which is shared with
           * test-side profiling (`ScalusTest.runWithProfileReport`) so both produce the same layout.
           *
+          * @param uplcTerm
+          *   the script's term, for the `<key>.uplc.json` source map. By name because it can force
+          *   a CBOR decode, which is wasted work when no profile was produced. A decoded term
+          *   carries no annotations, so scripts that did not come from an in-memory `Program` get
+          *   no source map.
           * @note
           *   This is fed by a *separate* profiling evaluation of the script (see the call site), so
           *   enabling profiling roughly doubles evaluation cost. That profiling pass counts budget
@@ -389,7 +394,8 @@ object PlutusScriptEvaluator {
             result: Result,
             scriptHash: ScriptHash,
             redeemer: Redeemer,
-            language: Language
+            language: Language,
+            uplcTerm: => Term
         ): Unit = result.profile.foreach { data =>
             ProfileReportWriter.write(
               data.withPrices(prices),
@@ -398,7 +404,8 @@ object PlutusScriptEvaluator {
               language.toString,
               redeemer.tag.toString,
               redeemer.index,
-              log.info(_)
+              log.info(_),
+              Some(uplcTerm)
             )
         }
 
@@ -730,7 +737,8 @@ object PlutusScriptEvaluator {
                       vm.evaluateScriptProfile(applied),
                       plutusScript.scriptHash,
                       redeemer,
-                      vm.language
+                      vm.language,
+                      plutusScript.program.term
                     )
                 Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
             catch
