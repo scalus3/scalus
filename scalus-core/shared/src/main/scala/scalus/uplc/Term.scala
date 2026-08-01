@@ -113,8 +113,8 @@ enum Term:
       * This is the main filler for lowered code: annotations sit on the leaves (the `Var`/`Const`/
       * `Builtin` a value references), while the `Apply`/`Case`/`Constr` spine that combines them is
       * built un-annotated. A spine node here inherits the location and enclosing function name of
-      * what it operates on — e.g. an application inherits the annotation of the function being
-      * applied — so its cost is attributed to that code rather than vanishing.
+      * what it operates on – e.g. an application inherits the annotation of the function being
+      * applied – so its cost is attributed to that code rather than vanishing.
       *
       * Fields are filled independently and an existing one is never overwritten: a term that
       * lowering stamped with its enclosing function name (but no position) still gets a position,
@@ -123,7 +123,7 @@ enum Term:
     private[scalus] def fillEmptyAnnotationsBottomUp: (Term, UplcAnnotation) =
         // Resolve each candidate's effective position first (a synthetic compile-boundary root
         // becomes the real user call it was inlined from), then take the first candidate that
-        // resolves to a real position — so provenance wins over the structural descendant/ancestor
+        // resolves to a real position – so provenance wins over the structural descendant/ancestor
         // fallback. The winner's *whole* annotation becomes the representative, so a filled node's
         // function name always describes the same code as its position.
         def firstNonEmpty(as: UplcAnnotation*): UplcAnnotation =
@@ -207,7 +207,7 @@ enum Term:
       * This completes [[fillEmptyAnnotationsBottomUp]]: per-value stamping during lowering can only
       * place an annotation a lowered value actually knows, but many `Apply`/`Let` SIR nodes carry
       * no position at all (the plugin doesn't stamp them), so the spines they build stay
-      * un-annotated. Here those nodes inherit the source location of the surrounding code — which
+      * un-annotated. Here those nodes inherit the source location of the surrounding code – which
       * is exactly what profiling and source traces should attribute their cost to.
       */
     private[scalus] def fillEmptyAnnotationsTopDown(inherited: UplcAnnotation): Term =

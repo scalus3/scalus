@@ -130,7 +130,7 @@ sealed abstract class CompiledPlutus[A](
         // after optimization: bottom-up so a spine node inherits the annotation of the leaf it
         // operates on (where annotations actually sit), then top-down to fill any node with no
         // annotated descendant from its nearest annotated ancestor. Annotations never affect flat
-        // encoding, budget, or evaluation — only diagnostics.
+        // encoding, budget, or evaluation – only diagnostics.
         optimized.fillEmptyAnnotationsBottomUp._1.fillEmptyAnnotationsTopDown(UplcAnnotation.empty)
     }
 }
