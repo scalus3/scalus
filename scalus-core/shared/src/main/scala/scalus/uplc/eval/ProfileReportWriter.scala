@@ -60,11 +60,12 @@ private[scalus] object ProfileReportWriter {
       *   their own logger.
       * @param uplcTerm
       *   the evaluated program's term, when the caller has it in annotated form. With
-      *   [[scalus.cardano.ledger.ProfileLevel.Full]] it adds a `<key>.uplc.json` source map (the
-      *   UPLC text plus text-range → Scala-source spans) to the report, indexed as format `"uplc"`.
-      *   It is not a [[scalus.cardano.ledger.ProfileFormat]] because those are rendered from
-      *   [[ProfilingData]], which carries no term. Terms decoded from CBOR carry no annotations,
-      *   and nothing is written for them.
+      *   [[scalus.cardano.ledger.ProfileLevel.Full]], and only alongside at least one rendered
+      *   profile file, it adds a `<key>.uplc.json` source map (the UPLC text plus text-range →
+      *   Scala-source spans) to the report, indexed as format `"uplc"`. It is not a
+      *   [[scalus.cardano.ledger.ProfileFormat]] because those are rendered from [[ProfilingData]],
+      *   which carries no term. Terms decoded from CBOR carry no annotations, and nothing is
+      *   written for them.
       */
     def write(
         data: ProfilingData,
@@ -100,19 +101,25 @@ private[scalus] object ProfileReportWriter {
                             written += formatLabel(out.format) -> path
             }
         }
-        uplcTerm.foreach { term =>
-            if report.profile == ProfileLevel.Full && UplcSourceMapRenderer.hasSourceInfo(term)
-            then {
+        val profileFiles = written.result()
+        // The source map only ever accompanies rendered profile files. A run that wrote none (a
+        // console-only report) must stay off disk entirely: writing one would create the output
+        // directory unasked and, worse, replace this script's manifest run – keyed by
+        // (scriptHash, tag, index) – with an entry listing the source map alone, hiding the
+        // profile files an earlier run had indexed there.
+        val uplcFiles = uplcTerm match
+            case Some(term)
+                if profileFiles.nonEmpty && report.profile == ProfileLevel.Full &&
+                    UplcSourceMapRenderer.hasSourceInfo(term) =>
                 val file = s"$key.uplc.json"
                 platform.createDirectories(report.outputDir)
                 platform.writeFile(
                   reportPath(report, file),
                   UplcSourceMapRenderer.toJson(UplcSourceMapRenderer.render(term))
                 )
-                written += "uplc" -> file
-            }
-        }
-        val files = written.result()
+                Seq("uplc" -> file)
+            case _ => Nil
+        val files = profileFiles ++ uplcFiles
         if files.nonEmpty then
             writeManifest(
               report,

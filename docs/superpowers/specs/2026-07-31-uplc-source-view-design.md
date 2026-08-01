@@ -111,9 +111,10 @@ New file per run, next to the profile files (default `target/scalus/`):
 Wiring:
 
 - `ProfileReportWriter.write` takes the evaluated term as an optional parameter and
-  writes the artifact when the profile level is `Full` and the term carries source
-  info (no new `ProfileFormat` case: those are rendered from `ProfilingData`, which
-  has no `Term`).
+  writes the artifact when the profile level is `Full`, the term carries source info,
+  and the run rendered at least one profile file (a console-only report stays off
+  disk, and never replaces a manifest run that indexes profile files). No new
+  `ProfileFormat` case: those are rendered from `ProfilingData`, which has no `Term`.
 - The file registers in the existing `profile-manifest.json` run as
   `{ "format": "uplc", "file": "..." }`. Manifest `schemaVersion` stays 1; the
   extension's `parseManifest` ignores unknown formats, so old extension versions are
