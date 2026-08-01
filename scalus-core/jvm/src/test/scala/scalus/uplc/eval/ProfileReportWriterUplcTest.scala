@@ -1,7 +1,7 @@
 package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{EvaluatorReportConfig, ExUnits, ProfileLevel}
+import scalus.cardano.ledger.{EvaluatorReportConfig, ExUnits, ProfileDestination, ProfileFormat, ProfileLevel, ProfileOutput}
 import scalus.uplc.*
 import scalus.uplc.DefaultFun.AddInteger
 import scalus.utils.ScalusSourcePos
@@ -86,6 +86,30 @@ class ProfileReportWriterUplcTest extends AnyFunSuite {
           Some(annotated)
         )
         assert(!Files.exists(dir.resolve("cafe03-Spend-0.uplc.json")))
+    }
+
+    test("no artifact, and no manifest, for a console-only report") {
+        val dir = Files.createTempDirectory("scalus-uplc-test5")
+        val consoleOnly = EvaluatorReportConfig(
+          enabled = true,
+          outputDir = dir.toString,
+          profile = ProfileLevel.Full,
+          profileOutputs = Seq(ProfileOutput(ProfileFormat.Text, ProfileDestination.Console))
+        )
+        var consoleOutput = ""
+        ProfileReportWriter.write(
+          emptyProfile,
+          consoleOnly,
+          "cafe05",
+          "PlutusV3",
+          "Spend",
+          0,
+          line => consoleOutput += line,
+          Some(annotated)
+        )
+        assert(consoleOutput.nonEmpty, "the console rendering itself must still happen")
+        assert(!Files.exists(dir.resolve("cafe05-Spend-0.uplc.json")))
+        assert(!Files.exists(dir.resolve("profile-manifest.json")))
     }
 
     test("no artifact when no term is passed") {
