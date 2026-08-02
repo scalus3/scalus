@@ -1,5 +1,5 @@
 ---
-name: local-development-loop
+name: local-development
 description: Use when developing or testing Scalus smart contracts with the local Emulator and TxBuilder. Covers how to create an Emulator provider, submit transactions, and test negative validator cases.
 ---
 
