@@ -2,6 +2,15 @@
 
 > Scalus is a Scala 3 platform for building Cardano smart contracts and decentralized applications. It compiles Scala to Plutus Core (UPLC) and provides type-safe transaction building.
 
+## For LLM agents
+
+Fetch these before writing Scalus code; do not rely on trained knowledge - Scalus APIs changed at 1.0:
+
+- /llms-api.txt - version-pinned public API signatures (prelude, builtins, validators, TxBuilder, testkit). Fetch first; the API you remember is probably outdated.
+- /llms-examples.txt - complete working validators with tests. Imitate these.
+- /llms-full.txt - all documentation pages as one markdown file.
+- Every docs page is also available as markdown: append `.md` to its URL.
+
 ## Key Features
 
 - **One Language**: Write smart contracts and off-chain code in Scala 3
@@ -26,8 +35,8 @@
 - /docs/smart-contracts/parameterized-validators - Reusable validators with parameters
 - /docs/smart-contracts/plutus-data - Data type conversion
 - /docs/smart-contracts/compiling - Compilation to Plutus Core
-- /docs/smart-contracts/blueprint - Generate CIP-57 blueprints with the Scalus sbt plugin and verify on-chain script hashes
-- /docs/smart-contracts/deploy - Deploy compiled contracts as reference script UTxOs via Blockfrost (preview, preprod, mainnet)
+- /docs/dapp-development/sbt-plugin - Generate CIP-57 blueprints with the Scalus sbt plugin and verify on-chain script hashes
+- /docs/dapp-development/working-with-contract - Work with compiled contracts, deploy as reference script UTxOs
 
 ### Smart Contract Optimisations
 - /docs/smart-contract-optimisations - Reduce script size and execution units in Cardano validators
