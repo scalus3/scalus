@@ -259,6 +259,7 @@ lazy val jvm: Project = project
       scalusUtxoCell.jvm,
       scalusDesignPatterns,
       bench,
+      llmApiGen,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
     )
@@ -768,6 +769,31 @@ lazy val bench = project
       libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )
+
+// Generates scalus-site/public/llms-api.txt - the LLM-facing public API cheatsheet
+lazy val llmApiGen = project
+    .in(file("llm-api-gen"))
+    .dependsOn(scalus.jvm, scalusCardanoLedger.jvm, scalusTestkit.jvm)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "llm-api-gen",
+      publish / skip := true,
+      run / fork := true,
+      libraryDependencies += "org.scala-lang" %% "scala3-tasty-inspector" % scalaVersion.value
+    )
+
+lazy val generateLlmsApi = taskKey[Unit]("Generate scalus-site/public/llms-api.txt")
+generateLlmsApi := Def.taskDyn {
+    val dirs = Seq(
+      (scalus.jvm / Compile / classDirectory).value,
+      (scalusCardanoLedger.jvm / Compile / classDirectory).value,
+      (scalusTestkit.jvm / Compile / classDirectory).value
+    ).map(_.getAbsolutePath)
+    val outFile =
+        ((ThisBuild / baseDirectory).value / "scalus-site" / "public" / "llms-api.txt").getAbsolutePath
+    val argLine = (Seq(outFile, version.value) ++ dirs).mkString(" ")
+    (llmApiGen / Compile / runMain).toTask(s" scalus.llmapi.LlmApiGen $argLine")
+}.value
 
 // Cardano Ledger domain model and CBOR serialization
 lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
