@@ -4,7 +4,9 @@
 
 **Goal:** A scripted eval that proves an LLM agent with only the shipped context (AGENTS.md, skills, scalus.org artifacts) produces Scalus code that compiles and passes tests.
 
-**Architecture:** One bash script scaffolds a fresh project from `validator.g8`, runs `claude -p` for each canonical task, and after each task requires `scala-cli compile .` and `scala-cli test .` to pass. A manual-dispatch GitHub workflow runs it with `ANTHROPIC_API_KEY`.
+**Architecture:** One bash script scaffolds a fresh project from `validator.g8`, runs `claude -p` for each canonical task, and after each task requires `scala-cli compile .` and `scala-cli test .` to pass.
+
+**Amendment 2026-08-02:** no `ANTHROPIC_API_KEY` will be available, so Task 2 (GitHub workflow) is dropped. The script is a local release-checklist tool; the local Claude Code login authenticates it.
 
 **Tech Stack:** bash, giter8 via `sbt new`, Claude Code CLI (headless `-p`), scala-cli.
 

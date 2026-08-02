@@ -3,10 +3,13 @@
 # drive a headless Claude Code agent through canonical tasks, and require the
 # result to compile and pass tests after every task.
 #
+# Local release-checklist tool - run it on your machine before a release; the
+# local Claude Code login is used, no API key needed.
+#
 # Usage:
 #   TEMPLATE_DIR=/path/to/validator.g8 [EVAL_TASKS=N] scripts/llm-smoke-eval.sh
 #
-# Requires: sbt, scala-cli, claude (Claude Code CLI), ANTHROPIC_API_KEY (in CI).
+# Requires: sbt, scala-cli, claude (Claude Code CLI, logged in).
 # Exit code 0 = all tasks passed.
 set -uo pipefail
 
