@@ -1,0 +1,140 @@
+Source: https://scalus.org/docs/smart-contracts/in-depth-validator-look
+
+## Overview
+
+A Scalus validator is an object that extends the `Validator` trait, annotated with `@Compile` to compile your Scala code to Plutus Core bytecode.
+
+When defining a contract, you can define logic for 6 distinct purposes by overriding a corresponding method. Each
+method corresponds to a respective Plutus Redeemer Tag type:
+
+- `spend`
+- `mint`
+- `reward`
+- `certify`
+- `vote`
+- `propose`
+
+A typical contract defines these functions, often just one. A successful contract returns
+`Unit`, while errors are indicated by throwing exceptions (we'll explore this in more detail below).
+
+## Sample Validator
+
+Let's take a look at an example contract, `HTLCValidator`, to illustrate the concepts above.
+
+```scala
+import scalus.Compile
+import scalus.uplc.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+
+type Preimage = ByteString
+type Image = ByteString
+
+// Contract Datum
+case class Config(
+    committer: PubKeyHash,
+    receiver: PubKeyHash,
+    image: Image,
+    timeout: PosixTime
+) derives FromData, ToData
+
+// Redeemer
+enum Action derives FromData, ToData:
+  case Timeout
+  case Reveal(preimage: Preimage)
+
+@Compile
+object HtlcValidator {
+
+  inline def validate(scData: Data): Unit = {
+    val ctx = scData.to[ScriptContext]
+    ctx.scriptInfo match
+      case ScriptInfo.SpendingScript(txOutRef, datum) =>
+        spend(datum, ctx.redeemer, ctx.txInfo, txOutRef)
+      case _ => fail(MustBeSpending)
+  }
+
+  /** Spending script purpose validation */
+  inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit = {
+    val config = datum.getOrFail(InvalidDatum).to[Config]
+    redeemer.to[Action] match
+      case Action.Timeout =>
+        val validFrom = tx.validRange.from.finite(0)
+        require(config.timeout <= validFrom, InvalidCommitterTimePoint)
+        require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
+
+      case Action.Reveal(preimage) =>
+        val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+        require(validTo <= config.timeout, InvalidReceiverTimePoint)
+        require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
+        require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
+  }
+
+  // Error messages
+  inline val MustBeSpending = "Must be a spending script"
+  inline val InvalidDatum = "Invalid Datum"
+  inline val ValidRangeMustBeBound = "ValidTo must be set"
+  inline val UnsignedCommitterTransaction = "Must be signed by a committer"
+  inline val UnsignedReceiverTransaction = "Must be signed by a receiver"
+  inline val InvalidCommitterTimePoint = "Must be exclusively after timeout"
+  inline val InvalidReceiverTimePoint = "Must be inclusively before timeout"
+  inline val InvalidReceiverPreimage = "Invalid preimage"
+}
+```
+
+### Import section and type definitions
+
+At the very top of the file, you can see imports, which are present in most Scala programs.
+Then, we declare *type aliases*, which enhance our types with semantics relevant to the contract.
+
+After that, we define the Datum and Redeemer types. `Derives` syntax allows us to convert the `Data` values from
+the script context into `Config` and `Action` types to utilize the Scala type system.
+
+### Validator code
+
+In the body of the `object HtlcValidator`, where `object` is a Scala keyword that defines a singleton instance,
+we can see the `inline def spend` declaration, which contains the logic of the contract.
+
+###### Decoding
+
+First, we turn the redeemer Data instance into the type that we're going to be working with: `Action`. This is available
+thanks to the `FromData` that we derived automatically. Scalus can automatically derive `FromData` instances for most
+types that you're going to use for Datums and Redeemers.
+
+The behavior of the validator then branches based on the redeemer type. To implement the branching, we use pattern
+matching.
+
+###### Pattern matching
+Pattern matching is a Scala language feature that, for enumerable types with known variants, such as `Action`,
+allows to handle every possible option. In this case, it's `Timeout` and `Reveal`.
+
+##### `require()`
+
+For each of the two redeemers, we define the requirements necessary for the `Spend` transaction to be successful.
+If any of the required conditions don't hold true, the validator execution ends with an error. The list of all errors
+is enumerated at the bottom of the contract, each containing a message describing why the spending was forbidden.
+
+> [!NOTE]
+>
+> `require` is an inline function, meaning that the compiler will not generate a method call and instead insert
+> the body of `require` directly into validator body.
+
+#### Summary
+
+Each validator is, in essence, a boolean function — it either allows performing the desired action (e.g., spending
+the script-locked funds) or forbids it.
+
+Thus, the logic is just a sequence of binary checks.
+In Scalus, this usually means a series of `require` calls, where the first parameter is the boolean invariant to check,
+and the second parameter is the error that is thrown if the condition is false.
+
+In the `HtlcValidator`, you can see this clearly: the timeout is only valid if the initiating transaction is signed by the
+correct key and the necessary amount of time has passed.
+This is neatly expressed in 2 lines of Scala code:
+
+```scala
+require(config.timeout <= validFrom, InvalidCommitterTimePoint)
+require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
+```

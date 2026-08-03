@@ -1,0 +1,200 @@
+Source: https://scalus.org/docs/smart-contract-optimisations
+
+# Advanced Smart Contract Optimisations
+
+So you have a working smart contract and now want to make it efficient. First, let's understand the compilation pipeline:
+
+**Scala Source -> SIR -> (lowering) -> UPLC -> (optimize) -> UPLC -> Plutus Script**
+
+In most cases the default pipeline works well out of the box. But when you're working on a highly specific protocol or hitting transaction budget limits, understanding the low-level details lets you take control and squeeze out the performance you need.
+
+## Compilation Backends
+
+Scalus has three backends for lowering SIR to UPLC:
+
+| | **V3 Lowering** (default) | **Scott Encoding** | **Sum of Products** |
+|---|---|---|---|
+| Enum value | `SirToUplcV3Lowering` | `ScottEncodingLowering` | `SumOfProductsLowering` |
+| Architecture | Sea-of-nodes, data-flow based | Template-based | Template-based |
+| Data handling | Types stay as `Data` internally (`toData` is a NOOP in most cases) | Scott-encodes constructors as lambdas | Uses PlutusV3 `Constr`/`Case` nodes |
+| Best for | Most validators (default choice) | Legacy code, PlutusV1/V2 scripts | When `Constr`/`Case` encoding is preferred |
+
+How your code is compiled depends on the `given Options` in scope. The `Options` case class controls the backend, target protocol version, optimization, and error traces:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.compiler.Options
+import scalus.compiler.sir.TargetLoweringBackend
+import scalus.cardano.ledger.MajorProtocolVersion
+
+// Use Options to select the backend and protocol version
+given Options = Options(
+  targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering, // default
+  targetProtocolVersion = MajorProtocolVersion.vanRossemPV,           // default (PV11)
+  generateErrorTraces = true,
+  optimizeUplc = true
+)
+```
+
+There are also convenient presets: `Options.default`, `Options.debug`, `Options.release`, and `Options.plomin` (targets protocol version 10, reproducing pre-van-Rossem output and script hashes).
+
+The same `given Options` is picked up by `PlutusV3.compile`:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.compiler.Options
+import scalus.uplc.PlutusV3
+
+// Options in scope control how the validator is compiled
+given Options = Options.release
+val compiled = PlutusV3.compile(MyValidator.validate)
+```
+
+## Inspecting Your Compiled Output
+
+Before optimizing, learn to read what the compiler produces. There are three stages in the pipeline you can inspect. Let's use a simple validator as an example:
+
+```scala mdoc:compile-only copy showLineNumbers
+import scalus.*, scalus.compiler.{compile, Options}
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Builtins.*
+
+@Compile
+object SimpleValidator {
+    def validator(datum: Data, redeemer: Data, ctx: Data): Unit = {
+        val hash = datum.toByteString
+        val preimage = redeemer.toByteString
+        sha2_256(preimage) == hash || (throw new RuntimeException("Wrong"))
+    }
+}
+
+given Options = Options(generateErrorTraces = true)
+val sir = compile(SimpleValidator.validator)
+```
+
+### SIR (Scalus Intermediate Representation)
+
+SIR is a typed lambda calculus that closely mirrors your Scala code. Print it with `sir.show` (or `sir.showHighlighted` for terminal colors):
+
+```scala mdoc:compile-only copy showLineNumbers
+println(sir.show)
+```
+
+```ocaml
+let SimpleValidator$.validator =
+  {λ datum redeemer ctx ->
+    let hash: ByteString = unBData(datum) in
+    let preimage: ByteString = unBData(redeemer) in
+    let _: Boolean =
+      equalsByteString(sha2_256(preimage), hash) or ERROR "Wrong"
+    in
+    ()
+  }
+in
+{λ datum redeemer ctx ->
+  SimpleValidator$.validator(datum, redeemer, ctx)
+}
+```
+
+You can see the structure: `let` bindings, builtin calls (`unBData`, `sha2_256`, `equalsByteString`), and the `or ERROR` short-circuit.
+
+SIR-level optimizations are applied automatically during the pipeline: `RemoveRecursivity` runs during linking, `RemoveTraces` strips trace calls when `Options.removeTraces = true` (e.g. `Options.release`), and `LetFloating` is used by the template-based backends.
+
+### Lowered Value (V3 Backend intermediate form)
+
+The V3 Lowering Backend has an intermediate representation between SIR and UPLC. Inspect it with `sir.toLoweredValue().show`:
+
+```scala mdoc:compile-only copy showLineNumbers
+val lowered = sir.toLoweredValue()
+println(lowered.show)
+```
+
+```
+let SimpleValidator$.validator =
+  (lam datum: Data -> Data -> Data -> Unit.
+    (lam redeemer: Data -> Data -> Unit.
+      (lam ctx: Data -> Unit.
+        let hash = App((builtin unBData) datum) in
+          let preimage = App((builtin unBData) redeemer) in
+            let _ = if App(App((builtin equalsByteString)
+                           App((builtin sha2_256) preimage))
+                         hash)
+                    then (con bool True)
+                    else force(Trace("Wrong" (delay (error))))
+            in (con unit ()))))
+in ...
+```
+
+This is the V3 Lowering Backend's intermediate form. You can see how it maps closely to the final UPLC but still retains type annotations and named bindings. Notice that `datum` and `redeemer` stay as `Data` — no conversion happens.
+
+### Final UPLC
+
+The final output -- Untyped Plutus Core. This is what runs on-chain:
+
+```scala mdoc:compile-only copy showLineNumbers
+// Unoptimized -- see the full structure
+val uplc = sir.toUplc(optimizeUplc = false)
+println(uplc.show)
+```
+
+```
+[(lam validator20
+  (lam datum21
+    (lam redeemer22
+      (lam ctx23
+        [validator20 datum21 redeemer22 ctx23]))))
+  (lam datum13
+    (lam redeemer14
+      (lam ctx15
+        [(lam hash16
+          [(lam preimage17
+            [(lam _19 (con unit ()))
+              (force [(force (builtin ifThenElse))
+                [(builtin equalsByteString)
+                  [(builtin sha2_256) preimage17] hash16]
+                (delay (con bool True))
+                (delay (force [(force (builtin trace))
+                  (con string "Wrong") (delay (error))]))])])
+            [(builtin unBData) redeemer14]])
+          [(builtin unBData) datum13]])))]
+```
+
+After optimization (`sir.toUplc(optimizeUplc = true)`), the optimizer inlines the outer let-binding, hoists common builtins, and applies `CaseConstrApply`:
+
+```
+[(lam __IfThenElse
+  (lam __Trace
+    (lam datum21
+      (lam redeemer22
+        (lam ctx23
+          [(lam _19 (con unit ()))
+            (force (case (constr 0
+              [(builtin equalsByteString)
+                [(builtin sha2_256) [(builtin unBData) redeemer22]]
+                [(builtin unBData) datum21]]
+              (delay (con bool True))
+              (delay (force [__Trace (con string "Wrong")
+                (delay (error))])))
+              __IfThenElse))])))))
+  (force (builtin ifThenElse)) (force (builtin trace))]
+```
+
+Notice how the optimized version:
+- Inlined the `validator` let-binding and the `hash`/`preimage` bindings
+- Hoisted `(force (builtin ifThenElse))` and `(force (builtin trace))` as shared lambdas
+- Converted `ifThenElse` application to a `case`/`constr` node (via `CaseConstrApply`)
+
+## Optimization Techniques
+
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** -- script evaluation, emulator-based transaction fees
+- **[Algorithmic Optimisations](/docs/smart-contract-optimisations/algorithmic-optimisations)** -- design patterns for the biggest wins
+- **[Scala Metaprogramming](/docs/smart-contract-optimisations/scala-metaprogramming)** -- inlining, loop unrolling, constants, compile-time evaluation, conditional compilation
+- **[Low-Level Builtins](/docs/smart-contract-optimisations/low-level-builtins)** -- manual Data access, script context macros, budget comparison
+- **[Lowering Backends](/docs/smart-contract-optimisations/lowering-backends)** -- `@UplcRepr`, V3 Lowering vs template-based backends
+- **[UPLC Term DSL](/docs/smart-contract-optimisations/uplc-term-dsl)** -- hand-craft validators with full AST control (Plutarch-style)
+- **[UPLC Optimiser Pipeline](/docs/smart-contract-optimisations/uplc-optimiser-pipeline)** -- apply low-level optimiser passes to reduce execution costs
+
+## When to Optimize
+
+1. **After functionality is correct** -- get it working first, then optimize
+2. **When hitting limits** -- transaction size or execution budget constraints
+3. **For production deployment** -- reduce user costs and improve UX
+4. **Iteratively** -- inspect, optimize, measure, repeat

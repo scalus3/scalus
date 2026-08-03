@@ -1,0 +1,167 @@
+Source: https://scalus.org/docs/testing
+
+# Cardano Smart Contract Testing
+
+Scalus provides comprehensive testing tools for Cardano smart contracts — from unit tests through property-based testing to automated attack simulation.
+
+## Testing Tools Overview
+
+| Tool | Purpose | Best For |
+|------|---------|----------|
+| **[TDD & ATDD Workflow](/docs/testing/tdd-atdd-workflow)** | Test-first development methodology | Defining behavior before implementation |
+| **[Unit Testing](/docs/testing/unit-testing)** | ScalusTest trait, assertScriptFail, budget testing | Validator logic, script context, execution costs |
+| **[Property-Based Testing](/docs/testing/property-based-testing)** | ScalaCheck forAll with random Cardano types | Edge cases, invariant verification |
+| **[Boundary Testing](/docs/testing/boundary-testing)** | Transaction variations & attack simulation | Vulnerabilities, multi-step state exploration |
+| **[Debugging](/docs/testing/debugging)** | IDE debugging, logging, error traces | Finding and fixing bugs |
+| **[Profiling](/docs/testing/profiling)** | CEK machine budget profiling | Finding expensive code paths |
+| **[Emulator](/docs/testing/emulator)** | In-memory Cardano node | Fast iteration, CI/CD |
+| **[JS/TS Emulator](/docs/testing/js-emulator)** | Emulator for JavaScript/TypeScript | Browser DApps, Node.js tooling |
+| **[Local Devnet](/docs/testing/local-devnet)** | Docker-based real Cardano node | Integration tests, pre-deployment |
+
+## Unit Testing
+
+Mix `ScalusTest` into your test suite for validator testing with script context builders, result checking, and budget assertions:
+
+```scala
+class MyValidatorTest extends AnyFunSuite, ScalusTest {
+
+  test("validator accepts valid input") {
+    val result = contract(scriptCtx.toData).program.evaluateDebug
+    assert(result.isSuccess)
+    assert(result.budget == ExUnits(memory = 42970, steps = 16_307848))
+  }
+
+  test("reject invalid input") {
+    assertScriptFail("Expected error message") {
+      txCreator.buildTx(invalidInput)
+    }
+  }
+}
+```
+
+See [Unit Testing](/docs/testing/unit-testing) for the full guide including Party helpers, Emulator setup, and budget tracking.
+
+## Property-Based Testing
+
+Use ScalaCheck `forAll` to verify invariants across hundreds of random inputs:
+
+```scala
+class MyValidatorTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
+
+  test("bids at or below current highest are rejected") {
+    forAll(Gen.choose(0L, state.currentBid)) { lowBid =>
+      val result = Try(evaluateValidator(lowBid))
+      assert(result.isFailure)
+    }
+  }
+}
+```
+
+Scalus provides `Arbitrary` instances for all Cardano types — `TxInfo`, `Value`, `Address`, `PubKeyHash`, and more. See [Property-Based Testing](/docs/testing/property-based-testing) for custom generators and validator property examples.
+
+## Boundary & Attack Testing
+
+Automatically explore transaction variations around boundary values and run pre-built attack patterns:
+
+```scala
+object AuctionStep extends ContractStepVariations[AuctionState] {
+    def extractState(reader: BlockchainReader)(using ExecutionContext) = ...
+    def makeBaseTx(reader: BlockchainReader, state: AuctionState)(using ExecutionContext) = ...
+    def variations = TxVariations.standard.default[AuctionState](
+        extractUtxo = _.auctionUtxo,
+        extractDatum = s => updatedDatum(s.currentBid + 1, Alice),
+        redeemer = _ => BidRedeemer.toData,
+        script = auctionScript
+    )
+}
+```
+
+Includes steal, partial theft, corrupted datum, double satisfaction, and more. Run with ScalaCheck Commands (random multi-step sequences) or Scenario (exhaustive exploration). See [Boundary Testing](/docs/testing/boundary-testing) for the full guide.
+
+## Debugging
+
+Debug validators as regular Scala code — use IDE breakpoints, step through execution, and inspect variables:
+
+```scala
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(...): Unit = {
+    log("Starting validation")
+    val owner = datum.getOrFail("No datum").to[PubKeyHash]
+    // Set breakpoint here, inspect variables
+    require(tx.signatories.contains(owner), "Not signed")
+  }
+```
+
+See [Debugging](/docs/testing/debugging) for IDE setup and logging.
+
+## Local Execution Environments
+
+### Emulator — Fast In-Memory Testing
+
+The [Emulator](/docs/testing/emulator) validates transactions and executes Plutus scripts instantly — no Docker required:
+
+```scala
+val emulator = Emulator.withAddresses(Seq(Alice.address, Bob.address))
+
+val tx = TxBuilder(testEnv)
+  .payTo(Bob.address, Value.ada(10))
+  .complete(emulator, Alice.address)
+  .await()
+  .sign(Alice.signer)
+  .transaction
+
+emulator.submit(tx).await() // Instant validation + script execution
+```
+
+### Local Devnet — Real Cardano Node
+
+[Local Devnet](/docs/testing/local-devnet) runs a real Cardano node (Yaci DevKit) in Docker:
+
+```scala
+class MyTest extends AnyFunSuite with YaciDevKit {
+  test("submit transaction to local devnet") {
+    val ctx = createTestContext()
+    val tx = TxBuilder(ctx.cardanoInfo)
+      .payTo(recipient, Value.ada(10))
+      .complete(ctx.provider, ctx.address)
+      .await(30.seconds)
+      .sign(ctx.signer)
+      .transaction
+
+    ctx.submitTx(tx) // Real Cardano node validation
+  }
+}
+```
+
+## Recommended Workflow
+
+**Test pyramid:** Tests → Emulator → Local Devnet → Testnet → Mainnet
+
+```
+1. Write acceptance tests (ATDD) — full transaction scenarios
+2. Write unit tests (TDD) — validator behavior per action
+3. Implement validator — iterate until tests pass
+4. Add boundary & attack testing — catch what you didn't think of
+5. Deploy — Emulator → Devnet → Testnet → Mainnet
+```
+
+See [TDD & ATDD Workflow](/docs/testing/tdd-atdd-workflow) for the full methodology.
+
+## See Also
+
+- [TDD & ATDD Workflow](/docs/testing/tdd-atdd-workflow) — Test-first development for smart contracts
+- [Unit Testing](/docs/testing/unit-testing) — ScalusTest, assertScriptFail, budget testing
+- [Property-Based Testing](/docs/testing/property-based-testing) — ScalaCheck forAll with random Cardano types
+- [Boundary Testing](/docs/testing/boundary-testing) — Transaction variations and attack simulation
+- [Debugging](/docs/testing/debugging) — IDE debugging and logging
+- [Profiling](/docs/testing/profiling) — CEK machine budget profiling
+- [Emulator](/docs/testing/emulator) — In-memory testing with instant feedback
+- [JS/TS Emulator](/docs/testing/js-emulator) — Emulator for JavaScript and TypeScript
+- [Local Devnet](/docs/testing/local-devnet) — Integration testing with real Cardano node
+
+## Related
+
+- [Smart Contracts](/docs/smart-contracts) — Write validators to test
+- [Security](/docs/security) — Security testing considerations
+- [DApp Starter Tutorial](/docs/dapp-development/dapp-starter-tutorial) — Complete testing example

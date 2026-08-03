@@ -1,0 +1,235 @@
+Source: https://scalus.org/docs/design-patterns/linked-list
+
+# On-Chain Linked List
+
+Distribute data across multiple UTxOs to overcome datum size limits and enable uniqueness proofs on-chain.
+
+```
+  ╭──────╮  ╭───────╮  ╭────────╮  ╭────────╮  ╭───────╮
+  │ Root ├─>│ Apple ├─>│ Banana ├─>│ Orange ├─>│ Peach │
+  ╰──────╯  ╰───────╯  ╰────────╯  ╰────────╯  ╰───────╯
+```
+
+## The Challenge
+
+Two fundamental limitations in Cardano's UTxO model:
+
+1. **Datum size limits** - Storing lists in datums is impractical. As a list grows, it can lead to unspendable UTxOs due to limited on-chain resources and transaction size limits.
+
+2. **Non-existence proofs** - Validating that something *doesn't* exist on-chain is impossible with standard UTxOs. You only have access to transaction inputs, so detecting duplicates (e.g., preventing double votes) requires a data structure that guarantees uniqueness on insertion.
+
+## How It Works
+
+Each element in the list is a UTxO containing:
+1. A **unique NFT** identifying the element (the asset name encodes the node key)
+2. An **inline datum** of type `Element` with the element's data and a `link` to the next node
+
+The list starts with a **root element** — a special UTxO whose NFT asset name is the `rootKey`. Node elements have asset names prefixed with a configurable `prefix` followed by the node key.
+
+Every mutating operation consumes an **anchor** — the element immediately before the affected position — and reproduces it with an updated `link`. The anchor's NFT and payload are preserved.
+
+For **ordered insertion** (`insert`), proving uniqueness is simple: inspect two adjacent keys and verify the new key fits between them according to byte-string ordering. This guarantees no duplicate exists.
+
+## When to Use This Pattern
+
+**Best for:**
+- Preventing duplicates (e.g., one vote per user, unique registrations)
+- Growing collections that would exceed datum size limits
+- Registries requiring uniqueness guarantees
+- On-chain state that needs membership proofs
+
+**Not ideal for:**
+- High-frequency updates (each operation is a transaction)
+- Random access lookups (requires sequential traversal)
+- Small, fixed-size collections (simpler to use datum lists)
+
+## Data Structures
+
+```scala
+import scalus.patterns.*
+
+// Type aliases
+type RootKey = TokenName        // Asset name of the root element's NFT
+type NodeKey = ByteString       // Raw key for a node (asset name minus prefix)
+type NodeKeyPrefix = ByteString // Prefix prepended to every node's asset name
+type Link = Option[NodeKey]     // Next-element pointer (None = end of list)
+
+// Datum variant for linked-list UTxOs
+enum ElementData derives FromData, ToData:
+    case Root(data: Data)  // Marks the start of the list
+    case Node(data: Data)  // Regular data node
+
+// Full datum stored in every linked-list UTxO
+case class Element(data: ElementData, link: Link) derives FromData, ToData
+```
+
+## API Reference
+
+The `LinkedList` object provides validation functions for all list operations. Each function validates invariants but does not build transactions — it is called from your minting or spending validator.
+
+| Operation | Ordering | Description |
+|-----------|:--------:|-------------|
+| `init` | — | Create an empty list (mint root NFT) |
+| `deinit` | — | Destroy an empty list (burn root NFT) |
+| `insert` | Ordered | Insert node at sorted position (ascending by key) |
+| `prependUnordered` | Unordered | Insert immediately after the root |
+| `appendUnordered` | Unordered | Insert at the tail of the list |
+| `remove` | — | Remove a node (burn its NFT) |
+| `removeHead` | — | Remove the first node after root (root data may change) |
+| `validateElementUpdate` | — | Update a node's data without structural changes |
+| `requireListTokensMintedOrBurned` | — | Spending guard: require minting activity |
+
+## Implementation Guide
+
+### How Insert Works (Ordered)
+
+```
+           ╭────────╮  ╭────────╮
+           │ Banana ├─>│ Orange │   INPUTS (anchor + successor)
+           ╰───┬────╯  ╰────┬───╯
+               │            │
+           ┏━━━V━━━━━━━━━━━━V━━━━━━━━━━━━━━┓
+           ┃   Insert "Kiwi" Transaction   ┃
+           ┗━━━┯━━━━━━━━━━┯━━━━━━━━━━┯━━━━━┛
+               │          │          │
+           ╭───V────╮  ╭──V───╮  ╭───V────╮
+           │ Banana ├─>│ Kiwi ├─>│ Orange │  OUTPUTS
+           ╰────────╯  ╰──────╯  ╰────────╯
+
+           (Banana < Kiwi < Orange maintained)
+```
+
+**Validation ensures:**
+- Anchor node is reproduced at the same address with the same NFT and data
+- Anchor's `link` is updated to point to the new node
+- New node's `link` points to what the anchor previously referenced
+- Strict ordering: `anchorAssetName < newAssetName` and `newKey < linkKey`
+- Exactly one NFT is minted for the new node
+- New node's asset name has the correct prefix
+
+### Using LinkedList in a Minting Validator
+
+The `LinkedList` functions are designed to be called from your minting policy. You pass the relevant UTxO inputs and outputs extracted from `TxInfo`:
+
+```scala
+import scalus.*
+import scalus.uplc.builtin.{Data, FromData, ToData}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.patterns.*
+
+// Define redeemer actions for your list
+enum ListAction derives FromData, ToData:
+    case Init
+    case Deinit
+    case Insert(
+        anchorInputIndex: BigInt,
+        contAnchorOutputIndex: BigInt,
+        newElementOutputIndex: BigInt
+    )
+    case Remove(
+        anchorInputIndex: BigInt,
+        removingInputIndex: BigInt,
+        contAnchorOutputIndex: BigInt
+    )
+
+@Compile
+object ListAction
+
+@Compile
+object MyListValidator extends DataParameterizedValidator {
+
+    inline override def mint(cfgData: Data, redeemer: Data, tx: TxInfo): Unit = {
+        // Extract configuration (rootKey, prefix, etc.)
+        val rootKey: RootKey = ??? // from cfgData
+        val prefix: NodeKeyPrefix = ???
+        val prefixLen: BigInt = ???
+        val policyId = tx.findOwnMintingPolicyHash
+
+        redeemer.to[ListAction] match
+            case ListAction.Init =>
+                // Find the root output in tx.outputs
+                val rootOut = tx.outputs.at(BigInt(0))
+                LinkedList.init(rootOut, tx.mint, policyId, rootKey)
+
+            case ListAction.Deinit =>
+                // Find the root input
+                val rootInput = tx.inputs.at(BigInt(0))
+                LinkedList.deinit(rootInput, tx.mint, policyId, rootKey)
+
+            case ListAction.Insert(anchorIdx, contAnchorIdx, newElemIdx) =>
+                val anchorInput = tx.inputs.at(anchorIdx)
+                val contAnchorOutput = tx.outputs.at(contAnchorIdx)
+                val newElementOutput = tx.outputs.at(newElemIdx)
+                LinkedList.insert(
+                    anchorInput, contAnchorOutput, newElementOutput,
+                    tx.mint, policyId, rootKey, prefix, prefixLen
+                )
+
+            case ListAction.Remove(anchorIdx, removingIdx, contAnchorIdx) =>
+                val anchorInput = tx.inputs.at(anchorIdx)
+                val removingInput = tx.inputs.at(removingIdx)
+                val contAnchorOutput = tx.outputs.at(contAnchorIdx)
+                LinkedList.remove(
+                    anchorInput, removingInput, contAnchorOutput,
+                    tx.mint, policyId, rootKey, prefix, prefixLen
+                )
+    }
+}
+```
+
+### Spending Validator (Coupling Pattern)
+
+The linked list uses a **coupling pattern** where the spending validator delegates structural checks to the minting policy. The spending validator only needs to verify that list tokens are being minted or burned:
+
+```scala
+@Compile
+object MyListSpendingValidator extends Validator {
+
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val policyId: PolicyId = ??? // your list's minting policy ID
+
+        // Delegate structural validation to the minting policy
+        LinkedList.requireListTokensMintedOrBurned(policyId, tx.mint)
+    }
+}
+```
+
+### Updating Element Data
+
+To update a node's payload without changing the list structure, use `validateElementUpdate`. This ensures the element preserves its NFT, address, and link — only the `data` field may change:
+
+```scala
+LinkedList.validateElementUpdate(
+    elementInputIndex = BigInt(0),
+    contElementOutputIndex = BigInt(0),
+    elementInputOutref = myOutRef,
+    txInputs = tx.inputs,
+    txOutputs = tx.outputs,
+    txMint = tx.mint,
+    policyId = policyId,
+    rootKey = rootKey,
+    prefix = prefix,
+    prefixLen = prefixLen
+)
+```
+
+**Key Uniqueness:** For ordered insertion (`insert`), keys are guaranteed unique by the strict ordering invariant (`anchorKey < newKey < linkKey`). Unordered operations (`appendUnordered`, `prependUnordered`) do not enforce ordering but still require unique NFT asset names via minting.
+
+**NFT Management:** Each element is identified by a unique NFT under the list's `policyId`. Structural operations (`init`/`insert`/`appendUnordered`/`prependUnordered`) mint exactly one NFT, while `deinit`/`remove`/`removeHead` burn exactly one. The `validateElementUpdate` operation requires no minting or burning.
+
+## Related Patterns
+
+- **[UTxO Indexer](/docs/design-patterns/utxo-indexer)** - For efficient input-output mapping
+- **[Stake Validator](/docs/design-patterns/withdraw-zero)** - For reducing validation costs
+
+## Resources
+
+- [Anastasia Labs: Aiken Linked List](https://github.com/Anastasia-Labs/aiken-linked-list) - Original Aiken implementation
+- [Plutarch Linked List Guide](https://github.com/Anastasia-Labs/data-structures/blob/main/pages/linked_list.mdx) - Detailed pattern explanation
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests

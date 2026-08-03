@@ -1,0 +1,194 @@
+Source: https://scalus.org/docs/dapp-development/sbt-plugin
+
+# Scalus SBT Plugin
+
+The `ScalusSbtPlugin` adds sbt tasks to your project: `blueprint` for embedding
+[CIP-57](https://cips.cardano.org/cip/CIP-57) blueprint JSON files into JARs,
+`blueprintPin`/`blueprintCheck` for committing pinned blueprints to git, and `deploy`
+for publishing a contract as a reference script UTxO via Blockfrost.
+
+Projects scaffolded from the [`hello.g8` or `validator.g8` templates](/docs/get-started/project-commands)
+come with this plugin already wired in, so the `blueprint` and `deploy` tasks below work out of the
+box. (Those templates also select the test backend and profiling through the `SCALUS_TEST_ENV` and
+`SCALUS_PROFILE` environment variables — see [Project Commands](/docs/get-started/project-commands).)
+The setup below is for adding the plugin to an existing project.
+
+## Setup
+
+`project/plugins.sbt`:
+```scala copy
+addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "<scalus-version>")
+```
+
+`build.sbt`:
+```scala copy
+lazy val myProject = (project in file("."))
+    .enablePlugins(ScalusSbtPlugin)
+    .settings(
+      scalaVersion := "3.3.7",
+      addCompilerPlugin("org.scalus" % "scalus-plugin" % "<scalus-version>" cross CrossVersion.full),
+      libraryDependencies ++= Seq(
+        "org.scalus" %% "scalus" % "<scalus-version>",
+        "org.scalus" %% "scalus-cardano-ledger" % "<scalus-version>",
+      ),
+    )
+```
+
+The plugin was previously named `ScalusBlueprintPlugin`. That name still works as a deprecated
+alias, so existing builds keep compiling; switch to `ScalusSbtPlugin` to clear the warning.
+
+The compiler plugin discovers objects extending `Contract` automatically. Each one needs
+a compiled validator and a blueprint:
+
+```scala copy
+@Compile
+object MyValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef
+    ): Unit = {
+        val owner = datum.getOrFail("No datum").to[PubKeyHash]
+        require(tx.signatories.contains(owner), "Not signed by owner")
+    }
+}
+
+object MyContract extends Contract {
+    private given Options = Options.release
+    lazy val compiled = PlutusV3.compile(MyValidator.validate)
+    lazy val blueprint = Blueprint.plutusV3[PubKeyHash, Unit](
+      title = "My Validator",
+      description = "Owner-signed spending validator",
+      version = "1.0.0",
+      license = None,
+      compiled = compiled
+    )
+}
+```
+
+## Blueprint Generation
+
+When a Cardano smart contract is deployed on-chain, only its script hash is visible. How do
+you verify that a given source code produced that hash?
+
+The verifiable artifact is the **JAR**. The `blueprint` task generates a CIP-57 blueprint JSON
+for every `Contract` in the project, nested under its package at
+`META-INF/scalus/blueprints/<package>/<Contract>.json`, plus a single aggregate document at
+`/plutus.json` (the file name Aiken tooling expects) that merges all validators. Each
+blueprint contains the `compiledCode` (CBOR hex) and `hash` (script hash), so anyone with the
+JAR, or anyone who can build it from source, can independently confirm the on-chain script
+hash.
+
+Version provenance lives inside the JSON, never in file names: the Scalus version in
+`preamble.compiler.version` and the Scala version in the top-level `scalus.scalaVersion`
+extension key (different Scala versions can produce different UPLC, so both matter).
+
+```sh copy
+sbt package
+```
+
+`blueprint` is a resource generator, so `package` (and `publish`) embed the JSON automatically:
+
+```
+[info] Wrote META-INF/scalus/blueprints/com/example/MyContract.json
+[info] Wrote plutus.json
+```
+
+Generation is cached: when the compiled classes have not changed, the task skips all work, so
+repeated `package`/`test` runs cost nothing. Run `sbt blueprint` to generate without packaging.
+To skip generation during `package`, set `blueprint / skip := true` in `build.sbt`, or pass
+`SCALUS_SKIP_BLUEPRINT=1`.
+
+`sbt package` is the standard sbt command for producing a JAR. A JAR is just a ZIP archive, so
+standard tools work to inspect it:
+
+```sh copy
+unzip -p my-project.jar META-INF/scalus/blueprints/com/example/MyContract.json
+unzip -p my-project.jar plutus.json
+```
+
+The `hash` field is the standard Cardano script hash: `blake2b_224(0x03 || compiledCode)`.
+If you have the JAR, you can verify that this hash matches what's deployed on-chain.
+No Scalus installation or JVM required for verification, just the JAR and a blake2b implementation.
+
+## Disabling blueprint generation
+
+Because `blueprint` is a resource generator, it runs whenever the resources are needed —
+`package`, `publish`, `run`, and `test`. There are two ways to turn it off.
+
+Disable it for a project in `build.sbt`:
+
+```scala copy
+blueprint / skip := true
+```
+
+Or skip it for a single command, without editing the build, via an environment variable:
+
+```sh copy
+SCALUS_SKIP_BLUEPRINT=1 sbt package
+```
+
+Both leave the explicit task untouched: `sbt blueprint` still generates on demand,
+regardless of `skip`. Use `skip` when you want fast `test`/`package` cycles and only
+generate blueprints deliberately (for example, in a release step or CI job).
+
+## Pinning Blueprints in Git
+
+The automatic `blueprint` output lives under `target/` and is rebuilt as your code changes.
+When you reach a usable version whose on-chain scripts you want to lock down, pin it:
+
+```sh copy
+sbt blueprintPin
+```
+
+This copies the current set to committed locations – `plutus.json` at the project root (the
+stable path off-chain tooling expects) and `blueprints/<package>/<Contract>.json` per
+contract. Commit them; git history is your pin history, and a diff shows exactly how a code
+or toolchain change affected each `compiledCode` and `hash`.
+
+`sbt blueprintCheck` fails when the pinned files no longer match freshly generated ones – use
+it in release pipelines to catch forgotten pins. If your project cross-builds several Scala
+versions, set `blueprintScalaVersion := Some("3.3.7")` so pins are only written (and checked)
+under your primary Scala baseline; other versions still embed their own blueprints in their
+JARs.
+
+## Deploying Contracts
+
+The `deploy` task creates a reference script UTxO from a `Contract` object. It extracts the
+compiled script, attaches it to a new UTxO, builds and signs the transaction, and submits it
+via Blockfrost.
+
+```sh copy
+sbt "deploy MyContract --network preprod --blockfrost-key <key> --mnemonic '<24 words>' --address <bech32-address>"
+```
+
+The first argument is the simple name of your `Contract` object. Named flags:
+
+| Flag | Env Variable | Default | Description |
+|------|-------------|---------|-------------|
+| `--network` | `CARDANO_NETWORK` | `preview` | `preview`, `preprod`, or `mainnet` |
+| `--blockfrost-key` | `BLOCKFROST_API_KEY` | — | Blockfrost API key |
+| `--mnemonic` | `CARDANO_MNEMONIC` | — | BIP-39 mnemonic phrase |
+| `--address` | — | — | Bech32 address for the reference script UTXO |
+
+CLI flags take precedence over environment variables. Using env vars avoids secrets in shell
+history:
+
+```sh copy
+export BLOCKFROST_API_KEY=preprodXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
+export CARDANO_MNEMONIC="word1 word2 ... word24"
+export CARDANO_NETWORK=preprod
+
+sbt "deploy MyContract --address addr_test1q..."
+```
+
+Example output:
+
+```
+[info] Deploying contract 'MyContract' to preprod...
+[info] Tx e484fdac... submitted successfully
+[info] Deployed successfully! Transaction hash: e484fdac...
+```
+
+## What's Next?
+
+- **[Working with Contract](/docs/dapp-development/working-with-contract)** — Reference the deployed script from off-chain dapp code
+- **[Building Transactions](/docs/transactions/building-first-transaction)** — Spend from your reference script with TxBuilder

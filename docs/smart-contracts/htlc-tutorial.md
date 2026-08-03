@@ -1,0 +1,600 @@
+Source: https://scalus.org/docs/smart-contracts/htlc-tutorial
+
+# Build an HTLC: From Contract to Mainnet
+
+This tutorial takes you through the complete lifecycle of a Cardano smart contract — from design thinking to mainnet deployment. You'll build a Hash Time-Locked Contract (HTLC) while experiencing what makes Scalus different: **one language for everything**, **real debugging**, and **professional testing**.
+
+**Prerequisites:** This tutorial assumes you've completed the [Getting Started](/docs/get-started) guide and have a Scalus project set up. If not, start there first.
+
+## The Problem: Trustless Conditional Payments
+
+Imagine Alice wants to pay Bob, but only if Bob reveals a secret within 24 hours. If Bob doesn't act in time, Alice gets her money back. Neither party should be able to cheat.
+
+This is a **Hash Time-Locked Contract** — the building block for:
+- **Atomic swaps** between blockchains (swap ADA for BTC without trusting an exchange)
+- **Payment channels** for instant off-chain payments
+- **Escrow** with automatic refunds
+
+The challenge: how do you enforce "reveal secret OR timeout" without a trusted third party? That's what smart contracts do.
+
+## Designing the Contract
+
+Before writing code, let's think through what we need.
+
+### What Data Lives On-Chain? (The Datum)
+
+When Alice locks funds, the contract needs to remember:
+
+| Field | Purpose |
+|-------|---------|
+| `committer` | Alice's public key hash — can reclaim after timeout |
+| `receiver` | Bob's public key hash — can claim with secret |
+| `image` | Hash of the secret (Bob must reveal the preimage) |
+| `timeout` | Deadline as POSIX time |
+
+This is our **datum** — configuration stored with the locked UTxO.
+
+### What Actions Are Possible? (The Redeemer)
+
+Two ways to spend the locked funds:
+
+1. **Reveal** — Bob provides the secret (preimage) before timeout
+2. **Timeout** — Alice reclaims after the deadline passes
+
+This is our **redeemer** — the action being validated.
+
+### Time Handling on Cardano
+
+Cardano validators can't read the current time directly. Instead, transactions declare a **validity interval** — the blockchain only accepts the transaction within that window.
+
+- **Reveal**: Transaction must be valid only before timeout (`validTo <= timeout`)
+- **Timeout**: Transaction must be valid only after timeout (`validFrom >= timeout`)
+
+The blockchain enforces these bounds, and our validator checks they're set correctly.
+
+## Writing the Validator
+
+Now let's implement. In Scalus, we define types with automatic serialization:
+
+```scala
+import scalus.*
+import scalus.uplc.builtin.Builtins.sha3_256
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.cardano.onchain.plutus.prelude.*
+
+// Datum — stored when locking funds
+case class Config(
+    committer: PubKeyHash,
+    receiver: PubKeyHash,
+    image: ByteString,      // sha3_256(secret)
+    timeout: PosixTime
+) derives FromData, ToData
+
+@Compile object Config
+
+// Redeemer — action when spending
+enum Action derives FromData, ToData:
+    case Timeout
+    case Reveal(preimage: ByteString)
+
+@Compile object Action
+```
+
+**Why `derives FromData, ToData`?** Cardano stores all on-chain data in a universal `Data` format. Scalus automatically generates serialization code, so you work with typed Scala values while the blockchain sees `Data`. Type errors are caught at compile time, not on-chain.
+
+### The Validator Logic
+
+The complete validator with entry point and error messages:
+
+```scala
+@Compile
+object HtlcValidator {
+
+    // Entry point called by Cardano
+    inline def validate(scData: Data): Unit = {
+        val ctx = scData.to[ScriptContext]
+        ctx.scriptInfo match
+            case ScriptInfo.SpendingScript(txOutRef, datum) =>
+                spend(datum, ctx.redeemer, ctx.txInfo, txOutRef)
+            case _ => fail(MustBeSpending)
+    }
+
+    // Spending validation logic
+    inline def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val config = datum.getOrFail(InvalidDatum).to[Config]
+
+        redeemer.to[Action] match
+            case Action.Timeout =>
+                // COMMITTER RECLAIMS: must be after timeout, signed by committer
+                val validFrom = tx.validRange.from.finite(0)
+                require(config.timeout <= validFrom, InvalidCommitterTimePoint)
+                require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
+
+            case Action.Reveal(preimage) =>
+                // RECEIVER CLAIMS: must be before timeout, correct secret, signed
+                val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+                require(validTo <= config.timeout, InvalidReceiverTimePoint)
+                require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
+                require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
+    }
+
+    // Error messages — inline vals compile to string constants
+    inline val MustBeSpending = "Must be a spending script"
+    inline val InvalidDatum = "Invalid Datum"
+    inline val ValidRangeMustBeBound = "ValidTo must be set"
+    inline val UnsignedCommitterTransaction = "Must be signed by committer"
+    inline val UnsignedReceiverTransaction = "Must be signed by receiver"
+    inline val InvalidCommitterTimePoint = "Must be after timeout"
+    inline val InvalidReceiverTimePoint = "Must be before timeout"
+    inline val InvalidReceiverPreimage = "Invalid preimage"
+}
+```
+
+**Why `inline val` for error messages?** They compile to string constants in UPLC, making errors readable in block explorers. These same constants are used in tests to verify the correct error is thrown.
+
+**What each check does:**
+
+| Check | Prevents |
+|-------|----------|
+| `config.timeout <= validFrom` | Committer reclaiming before timeout |
+| `validTo <= config.timeout` | Receiver claiming after timeout |
+| `sha3_256(preimage) == config.image` | Receiver claiming with wrong secret |
+| `tx.isSignedBy(...)` | Anyone else stealing funds |
+
+The validator is 84 lines total. It compiles to **569 bytes** of Plutus Core.
+
+## The Scalus Advantage: Debugging
+
+Here's something you can't do in other Cardano languages: **set a breakpoint and step through your validator**.
+
+In Scalus, your validator is regular Scala code. Before it's compiled to Plutus Core, you can:
+
+1. Write a test that calls your validator directly
+2. Set a breakpoint on any line
+3. Step through execution, inspect variables, see exactly why validation fails
+
+```scala
+test("debug why receiver fails") {
+    // Call validator directly — it's just Scala
+    HtlcValidator.spend(
+        datum = Some(config.toData),
+        redeemer = Action.Reveal(wrongPreimage).toData,
+        tx = mockTxInfo,
+        ownRef = mockRef
+    )
+    // Set breakpoint above, step through, see sha3_256(wrongPreimage) != image
+}
+```
+
+**This is impossible in Aiken or Plutus.** When your validator fails on-chain, you get an error code. In Scalus, you debug it like any Scala application.
+
+## Testing Like a Professional
+
+Scalus integrates with ScalaTest and ScalaCheck — tools Scala developers already know.
+
+### Unit Tests with ScalusTest
+
+The `ScalusTest` trait provides helpers for creating script contexts and asserting failures:
+
+```scala
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.uplc.builtin.Builtins.sha3_256
+import scalus.cardano.ledger.*
+import scalus.cardano.node.Emulator
+import scalus.testing.kit.Party.{Alice, Bob, Eve}
+import scalus.testing.kit.{ScalusTest, TestUtil}
+import java.time.Instant
+
+class HtlcTest extends AnyFunSuite with ScalusTest {
+
+    private given env: CardanoInfo = TestUtil.testEnvironment
+    private val contract = HtlcContract.compiled.withErrorTraces
+
+    private val txCreator = HtlcTransactions(env = env, contract = contract)
+
+    // Test data
+    val validPreimage: Preimage = genByteStringOfN(32).sample.get
+    val wrongPreimage: Preimage = genByteStringOfN(12).sample.get
+    private val image: Image = sha3_256(validPreimage)
+
+    // Time setup
+    private val slot: SlotNo = 10
+    private val timeout: Instant = env.slotConfig.slotToInstant(slot)
+    private val beforeTimeout: Instant = env.slotConfig.slotToInstant(slot - 1)
+    private val afterTimeout: Instant = env.slotConfig.slotToInstant(slot + 1)
+
+    private def createProvider: Emulator =
+        Emulator.withAddresses(Seq(Alice.address, Bob.address, Eve.address))
+
+    test("receiver reveals preimage before timeout") {
+        val provider = createProvider
+        val lockedUtxo = lock(provider)
+        val utxos = provider.findUtxos(Bob.address).await().toOption.get
+
+        val revealTx = txCreator.reveal(
+            utxos = utxos,
+            lockedUtxo = lockedUtxo,
+            payeeAddress = Bob.address,
+            sponsor = Bob.address,
+            preimage = validPreimage,
+            receiverPkh = Bob.addrKeyHash,
+            validTo = timeout,
+            signer = Bob.signer
+        )
+
+        provider.setSlot(slot - 1)
+        val result = provider.submit(revealTx).await()
+        assert(result.isRight, s"Should succeed: $result")
+    }
+
+    test("receiver fails with wrong preimage") {
+        val provider = createProvider
+        val lockedUtxo = lock(provider)
+        val utxos = provider.findUtxos(Bob.address).await().toOption.get
+
+        // assertScriptFail checks the error message matches
+        assertScriptFail(HtlcValidator.InvalidReceiverPreimage) {
+            txCreator.reveal(
+                utxos = utxos,
+                lockedUtxo = lockedUtxo,
+                payeeAddress = Bob.address,
+                sponsor = Bob.address,
+                preimage = wrongPreimage,  // Wrong!
+                receiverPkh = Bob.addrKeyHash,
+                validTo = timeout,
+                signer = Bob.signer
+            )
+        }
+    }
+
+    test("committer reclaims after timeout") {
+        val provider = createProvider
+        val lockedUtxo = lock(provider)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+
+        val timeoutTx = txCreator.timeout(
+            utxos = utxos,
+            lockedUtxo = lockedUtxo,
+            payeeAddress = Alice.address,
+            sponsor = Alice.address,
+            committerPkh = Alice.addrKeyHash,
+            validFrom = afterTimeout,
+            signer = Alice.signer
+        )
+
+        provider.setSlot(slot + 1)
+        val result = provider.submit(timeoutTx).await()
+        assert(result.isRight, s"Should succeed: $result")
+    }
+}
+```
+
+**`assertScriptFail`** checks that the script fails with the expected error message. It uses the same error constants defined in the validator, ensuring tests and contract stay in sync.
+
+### Property-Based Testing
+
+With ScalaCheck, generate hundreds of test cases automatically:
+
+```scala
+test("any random preimage fails except the correct one") {
+    forAll(genByteStringOfN(32)) { randomPreimage =>
+        whenever(randomPreimage != validPreimage) {
+            assertScriptFail("Wrong secret") {
+                txCreator.reveal(preimage = randomPreimage, ...)
+            }
+        }
+    }
+}
+```
+
+This found a real bug in an early version: preimages of different lengths weren't handled correctly.
+
+### What to Test
+
+| Scenario | Expected |
+|----------|----------|
+| Correct preimage, before timeout | Success |
+| Wrong preimage | Fail: "Wrong secret" |
+| Correct preimage, after timeout | Fail: "Too late" |
+| No signature from receiver | Fail: "Only receiver can claim" |
+| Committer reclaims after timeout | Success |
+| Committer reclaims before timeout | Fail: "Too early" |
+| Random attacker tries either path | Fail: signature check |
+
+## End-to-End: Same Language for Transactions
+
+In most Cardano development, you write contracts in one language (Aiken, Plutus) and transactions in another (JavaScript, Python). Context switching slows you down.
+
+**In Scalus, it's all Scala.** Your transaction builder uses the same types as your validator.
+
+### Why Transactions Matter for Testing
+
+Here's a key insight: **you build transactions to test your validator**. The transaction builder creates the `ScriptContext` that your validator receives. This means:
+
+1. Build a transaction with `TxBuilder`
+2. Extract the `ScriptContext` for a specific input
+3. Run your validator against it
+4. Check if it passes or fails with the expected error
+
+This is how the tests work — they build real transactions, extract the script context, and verify the validator behavior. No mocking required.
+
+Learn more: [Building Transactions](/docs/transactions/building-first-transaction) | [Transaction Builder API](/docs/transactions)
+
+### The Transaction Builder
+
+```scala
+import scalus.uplc.builtin.Data
+import scalus.cardano.address.Address
+import scalus.cardano.ledger.*
+import scalus.cardano.txbuilder.*
+import scalus.cardano.onchain.plutus.v1.PubKeyHash
+import scalus.uplc.PlutusV3
+import java.time.Instant
+
+case class HtlcTransactions(
+    env: CardanoInfo,
+    contract: PlutusV3[Data => Unit]
+) {
+    private val script: Script.PlutusV3 = contract.script
+    private val scriptAddress: Address = contract.address(env.network)
+    private val builder = TxBuilder(env)
+
+    /** Lock funds in the HTLC */
+    def lock(
+        utxos: Utxos,
+        value: Value,
+        sponsor: Address,
+        committer: AddrKeyHash,
+        receiver: AddrKeyHash,
+        image: Image,
+        timeout: Instant,
+        signer: TransactionSigner
+    ): Transaction = {
+        // Same Config type as the validator — shared between on-chain and off-chain
+        val datum = Config(PubKeyHash(committer), PubKeyHash(receiver), image, timeout.toEpochMilli)
+
+        builder
+            .payTo(scriptAddress, value, datum)
+            .complete(availableUtxos = utxos, sponsor = sponsor)
+            .sign(signer)
+            .transaction
+    }
+
+    /** Receiver claims with preimage (before timeout) */
+    def reveal(
+        utxos: Utxos,
+        lockedUtxo: Utxo,
+        payeeAddress: Address,
+        sponsor: Address,
+        preimage: Preimage,
+        receiverPkh: AddrKeyHash,
+        validTo: Instant,
+        signer: TransactionSigner
+    ): Transaction = {
+        // Same Action type — compiler ensures correct redeemer
+        val redeemer = Action.Reveal(preimage)
+
+        builder
+            .spend(lockedUtxo, redeemer, script, Set(receiverPkh))
+            .payTo(payeeAddress, lockedUtxo.output.value)
+            .validTo(validTo)  // Must be before timeout
+            .complete(availableUtxos = utxos, sponsor)
+            .sign(signer)
+            .transaction
+    }
+
+    /** Committer reclaims (after timeout) */
+    def timeout(
+        utxos: Utxos,
+        lockedUtxo: Utxo,
+        payeeAddress: Address,
+        sponsor: Address,
+        committerPkh: AddrKeyHash,
+        validFrom: Instant,
+        signer: TransactionSigner
+    ): Transaction = {
+        val redeemer = Action.Timeout
+
+        builder
+            .spend(lockedUtxo, redeemer, script, Set(committerPkh))
+            .payTo(payeeAddress, lockedUtxo.output.value)
+            .validFrom(validFrom)  // Must be after timeout
+            .complete(availableUtxos = utxos, sponsor)
+            .sign(signer)
+            .transaction
+    }
+}
+```
+
+If you accidentally use `Action.Timeout` when you meant `Action.Reveal`, the compiler tells you — not the blockchain.
+
+### Usage Example
+
+```scala
+// Setup
+val contract = HtlcContract.compiled.withErrorTraces
+val txCreator = HtlcTransactions(cardanoInfo, contract)
+
+val preimage = generateRandomBytes(32)
+val image = sha3_256(preimage)
+val timeout = Instant.now().plusHours(24)
+
+// 1. Alice locks 100 ADA for Bob
+val lockTx = txCreator.lock(
+    utxos = aliceUtxos,
+    value = Value.ada(100),
+    sponsor = alice.address,
+    committer = alice.addrKeyHash,
+    receiver = bob.addrKeyHash,
+    image = image,
+    timeout = timeout,
+    signer = alice.signer
+)
+provider.submit(lockTx)
+
+// 2a. Bob claims with preimage (happy path)
+val revealTx = txCreator.reveal(
+    utxos = bobUtxos,
+    lockedUtxo = lockedUtxo,
+    payeeAddress = bob.address,
+    sponsor = bob.address,
+    preimage = preimage,
+    receiverPkh = bob.addrKeyHash,
+    validTo = timeout,
+    signer = bob.signer
+)
+provider.submit(revealTx)
+
+// 2b. OR Alice reclaims after timeout (if Bob didn't claim)
+val timeoutTx = txCreator.timeout(
+    utxos = aliceUtxos,
+    lockedUtxo = lockedUtxo,
+    payeeAddress = alice.address,
+    sponsor = alice.address,
+    committerPkh = alice.addrKeyHash,
+    validFrom = timeout.plusSeconds(1),
+    signer = alice.signer
+)
+provider.submit(timeoutTx)
+```
+
+## From Emulator to Mainnet
+
+Scalus provides a progression of testing environments — same code, increasing realism:
+
+### Emulator (Instant Feedback)
+
+The **Emulator** is an in-memory Cardano simulation. It:
+- Runs instantly (no waiting for blocks)
+- Validates transactions against ledger rules
+- Evaluates scripts with the real Plutus VM
+- Doesn't require Docker or external services
+
+Use it for rapid iteration — run hundreds of tests in seconds.
+
+### YaciDevKit (Local Devnet)
+
+**YaciDevKit** runs a real Cardano node in Docker. It:
+- Has actual block production and consensus
+- Produces real transaction IDs
+- Simulates network delays and slot timing
+- Catches issues the emulator might miss (timing edge cases, serialization)
+
+Use it before deploying to testnet — it's the closest to production without spending real ADA.
+
+Learn more: [Local Devnet Setup](/docs/testing/local-devnet)
+
+### Testnet and Mainnet
+
+Finally, deploy to **Preprod** (testnet) with real network conditions, then **Mainnet**.
+
+### Same Test Code, Different Backends
+
+```scala
+class HtlcIntegrationTest extends AnyFunSuite with IntegrationTest {
+
+    test(s"[${testEnvName}] receiver reveals preimage") {
+        val lockedUtxo = lock(...)
+        val revealTx = txCreator.reveal(preimage = validPreimage, ...)
+
+        val result = ctx.submit(revealTx).await()
+        assert(result.isRight)
+    }
+}
+```
+
+Run with different environments:
+
+```sh
+# Emulator (instant, in-memory)
+sbtn scalusCardanoLedgerIt/testOnly *HtlcIntegrationTest
+
+# YaciDevKit (local devnet with Docker)
+SCALUS_TEST_ENV=yaci sbtn scalusCardanoLedgerIt/testOnly *HtlcIntegrationTest
+
+# Preprod (real testnet via Blockfrost)
+SCALUS_TEST_ENV=preprod \
+  BLOCKFROST_API_KEY=your_key \
+  WALLET_MNEMONIC_PREPROD="your mnemonic words..." \
+  sbtn scalusCardanoLedgerIt/testOnly *HtlcIntegrationTest
+```
+
+**The workflow:** Start with emulator for fast iteration, validate on YaciDevKit for confidence, deploy to testnet for final verification, then mainnet.
+
+## Compiling and Blueprint Generation
+
+The contract compilation and CIP-57 blueprint in one file:
+
+```scala
+import scalus.cardano.blueprint.Blueprint
+import scalus.compiler.Options
+import scalus.uplc.PlutusV3
+
+object HtlcContract {
+    // Release mode for smaller script size
+    private given Options = Options.release
+
+    // Compile validator to Plutus V3
+    lazy val compiled = PlutusV3.compile(HtlcValidator.validate)
+
+    // Generate CIP-57 blueprint for wallets and explorers
+    lazy val blueprint = Blueprint.plutusV3[Config, Action](
+        title = "Hash Time-Locked Contract",
+        description = "Releases funds when recipient reveals hash preimage before deadline, otherwise refunds to sender.",
+        version = "1.0.0",
+        license = Some("Apache License Version 2.0"),
+        compiled = compiled
+    )
+
+    @main
+    def main(): Unit = {
+        println(s"Script size: ${compiled.script.script.size} bytes")
+        println(blueprint.toJson())
+    }
+}
+```
+
+Run to see the script size and blueprint:
+
+```sh
+scala-cli run HtlcContract.scala
+# Script size: 569 bytes
+# { "preamble": { "title": "Hash Time-Locked Contract", ... }, "validators": [...] }
+```
+
+## Summary: The Scalus Development Experience
+
+| Step | What Scalus Gives You |
+|------|----------------------|
+| **Design** | Scala types with automatic serialization |
+| **Implement** | Familiar language, IDE support, type safety |
+| **Debug** | Breakpoints, step-through, variable inspection |
+| **Test** | ScalaTest + ScalaCheck, property-based testing |
+| **Transactions** | Same types, compiler-checked correctness |
+| **Deploy** | Emulator (fast) → YaciDevKit (realistic) → Testnet → Mainnet |
+
+## Full Source Code
+
+- [HtlcValidator.scala](https://github.com/nau/scalus/blob/master/scalus-examples/shared/src/main/scala/scalus/examples/htlc/HtlcValidator.scala) — Smart contract
+- [HtlcTransactions.scala](https://github.com/nau/scalus/blob/master/scalus-examples/shared/src/main/scala/scalus/examples/htlc/HtlcTransactions.scala) — Transaction building
+- [HtlcTest.scala](https://github.com/nau/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala) — Unit tests
+- [HtlcIntegrationTest.scala](https://github.com/nau/scalus/blob/master/scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/HtlcIntegrationTest.scala) — Integration tests
+
+Based on the [Rosetta Smart Contracts HTLC specification](https://github.com/blockchain-unica/rosetta-smart-contracts/tree/main/contracts/htlc).
+
+## Next Steps
+
+- **[Working with Contract](/docs/dapp-development/working-with-contract)** — Compilation options, blueprints, and script addresses
+- **[First Contract Transaction](/docs/transactions/first-contract-transaction)** — Lock and spend from a script address
+- **[Building Transactions](/docs/transactions/building-first-transaction)** — Transaction builder API in depth
+- **[Debugging Guide](/docs/testing/debugging)** — Deep dive into IDE debugging
+- **[Testing Guide](/docs/testing/unit-testing)** — Property-based testing patterns
+- **[Parameterized Validators](/docs/smart-contracts/parameterized-validators)** — Make HTLC reusable
+- **[Security Guide](/docs/security)** — Common vulnerabilities to avoid

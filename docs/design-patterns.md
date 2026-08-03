@@ -1,0 +1,41 @@
+Source: https://scalus.org/docs/design-patterns
+
+# Cardano Smart Contract Design Patterns
+
+Proven patterns for building efficient and secure Cardano smart contracts, implemented in Scalus.
+
+## Optimization Patterns
+
+Reduce execution costs by delegating computation to single-execution endpoints:
+
+- **[Withdraw Zero](/docs/design-patterns/withdraw-zero)** — Delegate computation to staking scripts using the "withdraw zero trick", reducing costs from O(N²) to O(N)
+- **[Transaction Level Minting](/docs/design-patterns/transaction-level-minting)** — Couple spend and mint endpoints so spending validators stay minimal
+- **[Merkelized Validator](/docs/design-patterns/merkelized-validator)** — Read verified data from stake validator redeemers for efficient batch operations
+
+## Validation Patterns
+
+- **[Parameter Validation](/docs/design-patterns/parameter-validation)** — Verify that script instances across a multi-script protocol are parameterized with expected values
+
+## Indexing Patterns
+
+- **[UTxO Indexer](/docs/design-patterns/utxo-indexer)** — Map inputs to outputs using pre-computed indices for O(1) on-chain verification
+
+## Data Structures
+
+- **[Linked List](/docs/design-patterns/linked-list)** — Ordered and unordered linked lists using NFTs and datums for on-chain state management
+
+## Utilities
+
+- **[Validity Range](/docs/design-patterns/validity-range)** — Normalize time ranges to simplify interval validation in your contracts
+
+## Related
+
+- [Security Guide](/docs/security) — Common vulnerabilities these patterns help prevent
+- [Smart Contract Optimisations](/docs/smart-contract-optimisations) — Compiler-level optimisations
+- [Testing](/docs/testing/unit-testing) — Test your pattern implementations
+
+## Resources
+
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) — Implementation and tests
+- [Anastasia Labs Design Patterns](https://github.com/Anastasia-Labs/design-patterns) — Original pattern documentation
+- [Plutonomicon](https://github.com/Plutonomicon/plutonomicon) — Community-driven Plutus knowledge base

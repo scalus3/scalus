@@ -1,0 +1,74 @@
+Source: https://scalus.org/docs/multiplatform
+
+# Scalus Multiplatform — Cardano on JVM, JavaScript, and Native
+
+Scalus compiles to **JVM**, **JavaScript**/**TypeScript**, and **Native** from the same Scala 3 codebase. Write once, deploy anywhere — from server-side backends to browser wallets to CLI tools.
+
+## Platform Support Matrix
+
+| Feature | JVM | JS/TS | Native |
+|---------|:---:|:-----:|:------:|
+| Smart contracts / UPLC | ✓ (Scala) | — | — |
+| [SIR compiler](/docs/smart-contract-optimisations/lowering-backends) | ✓ (Scala) | — | — |
+| [Standard library](/docs/language-guide) | ✓ | ✓ (Off-chain) | ✓ (Off-chain) |
+| [Transaction builder](/docs/transactions) | ✓ | ✓ | — |
+| Script evaluation / Cost calculation | ✓ | ✓ | — |
+| Plutus VM | ✓ | ✓ | ✓ |
+| [Ledger Rules / Framework](/docs/ledger/ledger-rules) | ✓ | ✓ | — |
+| [Testing utilities ](/docs/testing) | ✓ | ✓ | ✓ |
+| [Emulator](/docs/testing/emulator) | ✓ | [✓](/docs/testing/js-emulator) | — |
+| [Yaci DevKit](/docs/testing/local-devnet) | ✓ | — | — |
+| Ed25519 signatures | ✓ | ✓ | ✓ |
+| ECDSA secp256k1 | ✓ | ✓ | ✓ |
+| Schnorr signatures | ✓ | ✓ | ✓ |
+| BLS12-381 | ✓ | ✓ | ✓ |
+
+## When to Use Which Platform
+
+### JVM — Full DApp Development
+
+The JVM platform provides the complete Scalus stack:
+
+- **Smart contract development** with the compiler plugin (Scala 3)
+- **Transaction building** with TxBuilder
+- **Local testing** with Emulator and Yaci DevKit
+- **Integration** with Bloxbean Cardano Client Library
+- **Production backends** with mature JVM ecosystem
+
+**Best for:** Backend services, full DApp development, integration testing, production deployments.
+
+### JavaScript/TypeScript — Offchain & Browser
+
+JavaScript/TypeScript enables Scalus in Node.js and browser environments:
+
+- **Script evaluation** — Run Plutus V1/V2/V3 scripts
+- **Transaction building** — Construct and sign transactions
+- **Wallet integration** — Works with Lucid Evolution
+- **Cost estimation** — Calculate execution units offchain
+- **Browser DApps** — Full offchain logic in the browser
+
+See the [`scalus` npm package](https://www.npmjs.com/package/scalus) for JavaScript/TypeScript API, installation, and usage examples.
+
+**Best for:** Browser wallets, Node.js tooling, Lucid-based DApps, offchain computation.
+
+### Native — CLI & Embedded
+
+Scala Native compiles to native binaries:
+
+- **Fast startup** — No JVM warmup
+- **Small footprint** — Standalone executables
+- **System integration** — FFI to C libraries
+
+**Best for:** CLI tools, embedded systems, static libraries.
+
+## Get in Touch
+
+  **Building a JavaScript/TypeScript or Native integration?** We're actively looking for feedback and early adopters. [Open an issue](https://github.com/scalus3/scalus/issues) or reach out — we'd love to help with your integration.
+
+## See Also
+
+- [Getting Started](/docs/get-started) — Set up JVM development environment
+- [Emulator](/docs/testing/emulator) — In-memory testing (JVM)
+- [JS/TS Emulator](/docs/testing/js-emulator) — In-memory testing (JavaScript/TypeScript)
+- [Transaction Builder](/docs/transactions) — Build transactions (JVM/JS)
+- [Local Devnet](/docs/testing/local-devnet) — Integration testing (JVM only)

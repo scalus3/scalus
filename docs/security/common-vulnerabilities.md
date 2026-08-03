@@ -1,0 +1,152 @@
+Source: https://scalus.org/docs/security/common-vulnerabilities
+
+# Common Plutus Vulnerabilities
+
+This guide summarizes known Plutus vulnerabilities and mitigation strategies. Understanding these patterns helps you write more secure validators.
+
+---
+
+## 1. UTxO Value Size Spam (Token Dust Attack)
+
+**Problem:** An attacker creates a UTxO containing thousands of different token types, approaching the 16KB maximum size limit. When sent to a script address, this oversized UTxO becomes expensive or impossible to spend, effectively locking the protocol.
+
+**Mitigation:**
+- Don't allow arbitrary values in trusted places
+- Implement minimum ADA requirements that scale with UTxO size
+- Whitelist acceptable tokens
+- Validate value composition before accepting UTxOs
+
+---
+
+## 2. Large Datum Size
+
+**Problem:** Oversized datums on UTxOs that must be consumed for critical operations create performance bottlenecks and can exceed transaction size limits.
+
+**Mitigation:**
+- Avoid infinitely-sized data types
+- Implement size limits on all data structures
+- Use bounded collections (lists with maximum length)
+- Consider using Merkle trees or cryptographic hashes for large datasets
+- Store large data off-chain with on-chain hash references
+
+---
+
+## 3. Double Satisfaction
+
+**Problem:** A spending validator that only checks transaction outputs can allow multiple UTxOs to be spent in one transaction while satisfying conditions only once. Example: Multiple NFTs sold while the seller receives payment for just one.
+
+**Mitigation:**
+- Validate single UTxO consumption by filtering inputs by script address and counting them
+- Tag outputs with corresponding input transaction IDs in datums
+- Explicitly require the redeemer to reference the specific input being spent
+- Verify exactly which UTxO is being consumed
+
+---
+
+## 4. Lack of Staking Control
+
+**Problem:** Protocols must control staking for protocol-held funds. Without proper checks, users could arbitrarily change staking pool addresses, redirecting rewards or manipulating protocol-controlled stake.
+
+**Mitigation:**
+- Use script-controlled staking credentials
+- Verify staking credentials remain unchanged in continuation outputs
+- Implement explicit staking withdrawal validators
+- Ensure all outputs to the script maintain the same staking credential
+
+---
+
+## 5. EUTxO Concurrency Denial of Service
+
+**Problem:** An attacker repeatedly spends and recreates the same UTxO with trivial transactions, blocking legitimate users from interacting with the protocol. In the EUTxO model, only one transaction can spend a specific UTxO per block.
+
+**Mitigation:**
+- Implement cancellation fees or economic disincentives
+- Add freezing periods allowing only keeper functions
+- Use time-range validators to create protocol "cold periods"
+- Require minimum time locks before allowing certain operations
+- Design protocols to minimize shared state
+
+---
+
+## 6. Unauthorized State Transitions
+
+**Problem:** Missing signature checks or insufficient validation of transaction signatories allows unauthorized parties to perform state transitions.
+
+**Mitigation:**
+- Always verify required signatures in `tx.signatories`
+- Implement multi-signature requirements where appropriate
+- Maintain comprehensive test suites where each unauthorized actor fails validation
+- Never assume a transaction is valid without explicit authorization checks
+
+---
+
+## 7. Oracle Attacks
+
+### Price Manipulation
+
+**Problem:** Attackers manipulate oracle price feeds to cause incorrect liquidations or unfavorable trades. Example: Using flash loans to temporarily manipulate DEX spot prices.
+
+**Mitigation:**
+- Use Time-Weighted Average Price (TWAP) instead of spot prices
+- Implement maximum/minimum reportable price changes
+- Aggregate multiple oracle sources (Chainlink, DEXes, Charli3)
+- Verify price consistency across sources
+
+### Oracle Key Compromise
+
+**Problem:** Oracle cryptographic keys are valuable attack targets. If compromised, attackers can submit fraudulent data.
+
+**Mitigation:**
+- Implement on-chain key revoking, expiry, and updating systems
+- Require multi-signature oracles
+- Build robust oracle ecosystems with redundancy
+- Verify oracle signatures on-chain
+
+### Oracle Data Freshness
+
+**Problem:** Stale oracle data can lead to incorrect protocol decisions.
+
+**Mitigation:**
+- Verify timestamp freshness on oracle data
+- Reject oracle data older than acceptable threshold
+- Include timestamp validation in validators
+
+---
+
+## 8. Infinite Mint
+
+**Problem:** Unintended token minting via unexpected authorization pathways. Example: A forwarding minting policy that lacks proper mint-action checks in witness redeemers.
+
+**Mitigation:**
+- Always explicitly validate the mint amount in minting policies
+- Check the exact quantity being minted matches expectations
+- Don't rely solely on spending validators to constrain minting
+- For NFTs, verify exactly one token is minted
+- Implement time windows or other constraints for token creation
+
+---
+
+## 9. Parameterized Validator Verification
+
+**Problem:** Difficulty verifying on-chain that scripts are proper parameterized instantiations. Users risk interacting with malicious contracts that appear legitimate but have attacker-controlled parameters.
+
+**Mitigation:**
+- Store parameters in authenticated, unique UTxOs instead of baking into scripts
+- Use protocol NFTs to authenticate configuration UTxOs
+- Manually construct terms using UPLC Apply constructor for off-chain verification
+- Provide tools for users to verify script parameterization
+- Consider avoiding parameterization for critical protocols
+
+---
+
+## 10. Missing Transaction Validation
+
+**Problem:** Validators fail to check critical transaction properties such as time ranges, required reference inputs, proper continuation outputs, or expected mints/burns.
+
+**Mitigation:**
+- Always validate transaction time ranges when time-dependent
+- Verify required reference inputs are present and authentic
+- Check continuation outputs maintain correct state and value
+- Validate all state transitions are consistent
+- Ensure staking credentials remain unchanged where required
+- Verify expected mints/burns occur as intended

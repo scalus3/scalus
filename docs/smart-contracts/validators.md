@@ -1,0 +1,164 @@
+Source: https://scalus.org/docs/smart-contracts/validators
+
+# Cardano Validator Types
+
+A Cardano validator is a predicate function that approves or rejects transactions. It either succeeds (returns `Unit`) or fails (throws an exception). Scalus compiles Scala validators to Plutus Core bytecode.
+
+## Quick Reference
+
+| Purpose | Method | Validates | Common Use Cases |
+|---------|--------|-----------|------------------|
+| Spending | `spend(...)` | UTxO consumption | Escrow, vesting, DEX orders |
+| Minting | `mint(...)` | Token creation/burning | NFT collections, fungible tokens |
+| Rewarding | `reward(...)` | Stake reward withdrawal | DAO treasuries |
+| Certifying | `certify(...)` | Delegation certificates | Controlled delegation |
+| Voting | `vote(...)` | Governance votes | DAO voting |
+| Proposing | `propose(...)` | Governance proposals | Treasury limits |
+
+## Creating a Validator
+
+To create a validator, extend the `Validator` trait and annotate with `@Compile`:
+
+```scala copy
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    // validation logic here
+  }
+```
+
+The `@Compile` annotation tells Scalus to compile your Scala code into Plutus Core bytecode.
+
+## The Validator Trait
+
+The `Validator` trait is the foundation for all smart contracts. It provides methods for all six Plutus V3 script purposes:
+
+```scala copy
+@Compile
+trait Validator {
+  inline def validate(scData: Data): Unit
+  inline def validateScriptContext(sc: ScriptContext): Unit = {
+    sc.scriptInfo match
+      case ScriptInfo.MintingScript(policyId) =>
+        mint(sc.redeemer, policyId, sc.txInfo)
+      case ScriptInfo.SpendingScript(txOutRef, datum) =>
+        spend(datum, sc.redeemer, sc.txInfo, txOutRef)
+      case ScriptInfo.RewardingScript(credential) =>
+        reward(sc.redeemer, credential, sc.txInfo)
+      case ScriptInfo.CertifyingScript(index, cert) =>
+        certify(sc.redeemer, cert, sc.txInfo)
+      case ScriptInfo.VotingScript(voter) =>
+        vote(sc.redeemer, voter, sc.txInfo)
+      case ScriptInfo.ProposingScript(index, procedure) =>
+        propose(procedure, sc.txInfo)
+  }
+
+  // Override the methods you need
+  inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit = ???
+  inline def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit = ???
+  inline def reward(redeemer: Data, stakingKey: Credential, tx: TxInfo): Unit = ???
+  inline def certify(redeemer: Data, cert: TxCert, tx: TxInfo): Unit = ???
+  inline def vote(redeemer: Data, voter: Voter, tx: TxInfo): Unit = ???
+  inline def propose(proposalProcedure: ProposalProcedure, tx: TxInfo): Unit = ???
+}
+```
+
+The `validate` method is the entry point called by Cardano. It deserializes the script context and routes to the appropriate handler method.
+
+## Script Purposes
+
+### Spending Scripts
+
+**Most common validator type.** Controls whether a UTxO can be spent.
+
+```scala copy
+inline override def spend(
+    datum: Option[Data],      // Data attached to the UTxO
+    redeemer: Data,           // Data provided by the spender
+    tx: TxInfo,               // Transaction script execution context
+    ownRef: TxOutRef          // Reference to the UTxO being spent
+): Unit
+```
+
+**Use cases:** Escrow, vesting, multi-signature wallets, DEX order books, NFT marketplaces
+
+### Minting Policies
+
+Governs creation and destruction of native tokens.
+
+```scala copy
+inline override def mint(
+    redeemer: Data,           // Data provided by the minter
+    policyId: PolicyId,       // The policy ID of tokens being minted/burned
+    tx: TxInfo                // Transaction script execution context
+): Unit
+```
+
+**Use cases:** NFT collections, fungible tokens, access tokens, time-locked minting
+
+### Rewarding Scripts
+
+Validates withdrawal of staking rewards.
+
+```scala copy
+inline override def reward(
+    redeemer: Data,          // Data provided by the withdrawer
+    stakingKey: Credential,  // The stake credential
+    tx: TxInfo               // Transaction script execution context
+): Unit
+```
+
+**Use cases:** DAO treasury withdrawals, controlled reward distribution
+
+### Certifying Scripts
+
+Controls publication of delegation certificates.
+
+```scala copy
+inline override def certify(
+    redeemer: Data,  // Data provided by the certificate publisher
+    cert: TxCert,    // The certificate being published
+    tx: TxInfo       // Transaction script execution context
+): Unit
+```
+
+**Use cases:** Controlled stake delegation, DAO-managed stake pools
+
+### Voting Scripts
+
+Validates governance votes (CIP-1694).
+
+```scala copy
+inline override def vote(
+    redeemer: Data,  // Data provided by the voter
+    voter: Voter,    // The voter identity
+    tx: TxInfo       // Transaction script execution context
+): Unit
+```
+
+**Use cases:** DAO voting, delegated voting rights, quadratic voting
+
+### Proposing Scripts
+
+Constitution guardrails for governance proposals.
+
+```scala copy
+inline override def propose(
+    proposalProcedure: ProposalProcedure,  // The proposal being submitted
+    tx: TxInfo                             // Transaction script execution context
+): Unit
+```
+
+**Use cases:** Treasury spending limits, parameter change constraints, protocol upgrade requirements
+
+## Next Steps
+
+- **[Parameterized Validators](/docs/smart-contracts/parameterized-validators)** — Reusable validators with compile-time configuration
+- **[Testing Validators](/docs/testing/unit-testing)** — Test your validators thoroughly
+- **[Debugging](/docs/testing/debugging)** — Debug validators in your IDE
+- **[Building Transactions](/docs/transactions/building-first-transaction)** — Use validators in transactions

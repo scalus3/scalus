@@ -1,0 +1,141 @@
+Source: https://scalus.org/docs/design-patterns/merkelized-validator
+
+# Merkelized Validator Pattern
+
+Extend the [Stake Validator Pattern](/docs/design-patterns/withdraw-zero) to **delegate computation** to a withdrawal script and let spending validators **read verified results** from its redeemer.
+
+## The Challenge
+
+Cardano validators face two constraints that compound in batch operations:
+
+**Script size limits.** Validators are bounded by the ~16KB reference script limit per script. Optimization techniques like loop unrolling and function inlining reduce ExUnits but increase script size — often pushing past the limit. There's no way to split a single validator's logic across multiple scripts.
+
+**Redundant computation.** When processing multiple UTxOs, each spending validator runs independently. Expensive computations (e.g., calculating a clearing price, verifying a Merkle proof) execute N times — once per input. Even with the Stake Validator pattern, spending validators can only verify that the stake validator ran; they cannot access its computation results.
+
+The Merkelized Validator pattern solves both: move expensive logic into a separate withdrawal script (bypassing size limits) and let spending validators read its verified output (avoiding redundant computation).
+
+## How It Works
+
+1. Off-chain code computes expensive values (e.g., clearing price, settlement amounts)
+2. Values are included in the stake validator's redeemer
+3. Stake validator verifies the values are correct (runs **once**)
+4. Spending validators read the verified values via `MerkelizedValidator` (runs per UTxO)
+
+This reduces complexity from O(N²) to O(N) for batch operations while giving each spending validator access to shared, verified data.
+
+For script size optimization, the same mechanism applies: the heavy computation logic lives in the withdrawal script (which can use its own ~16KB budget for aggressive optimizations), while the spending validator stays small — it just reads the result.
+
+**Reference script limits.** The total size of reference scripts in a transaction is capped at 200KiB, and fees increase exponentially with size. Plan your script splitting accordingly.
+
+## When to Use This Pattern
+
+**Best for:**
+- **Script size optimization** — move heavy logic (loop-unrolled, inlined) into a separate withdrawal script, keeping the spending validator small
+- **Batch operations** — auctions, settlements, or order matching where all inputs need the same computed result (clearing price, exchange rate)
+- **Shared verified state** — any scenario where spending validators need access to a value that's expensive to compute but only needs verification once
+
+**Not ideal for:**
+- Simple validation that doesn't need shared data (use [Stake Validator](/docs/design-patterns/withdraw-zero) instead)
+- Single-input transactions
+- When each input needs completely independent validation
+
+| Pattern | Use Case |
+|---------|----------|
+| **StakeValidator.spendMinimal** | Only need to check stake validator ran |
+| **MerkelizedValidator.verifyAndGetRedeemer** | Need to **read** verified data |
+
+## API Reference
+
+| Function | Description |
+|----------|-------------|
+| `getStakeRedeemer(hash, txInfo)` | Retrieves the stake validator's redeemer |
+| `verifyAndGetRedeemer(hash, txInfo)` | Verifies withdrawal exists AND returns redeemer |
+
+## Implementation Guide
+
+### Stake Validator Redeemer
+
+Define a redeemer type that carries the verified computation results:
+
+```scala
+case class AuctionSettlementRedeemer(
+    clearingPrice: BigInt,
+    totalUnitsAvailable: BigInt
+) derives ToData, FromData
+```
+
+### Spending Validator
+
+Read the verified data using `MerkelizedValidator`:
+
+```scala
+import scalus.patterns.MerkelizedValidator
+
+@Compile
+object BatchAuctionValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Data,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+            .scriptOption.getOrFail("Own address must be Script")
+
+        // Read verified settlement data from stake validator
+        val stakeRedeemer = MerkelizedValidator.verifyAndGetRedeemer(ownScriptHash, tx)
+        val settlement = stakeRedeemer.to[AuctionSettlementRedeemer]
+
+        // Use the verified clearing price
+        val bid = datum.getOrFail("Missing datum").to[BidDatum]
+        if bid.bidPrice >= settlement.clearingPrice then
+            // Fill the bid - verify bidder receives tokens
+        else
+            // Refund the bid - verify bidder receives ADA back
+    }
+}
+```
+
+### Stake Validator (Reward Endpoint)
+
+Verify the computation results are correct:
+
+```scala
+inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInfo): Unit = {
+    val settlement = redeemer.to[AuctionSettlementRedeemer]
+
+    // Verify clearing price calculation
+    require(settlement.clearingPrice > BigInt(0), "Clearing price must be positive")
+
+    // Verify supply/demand balance
+    val totalDemand = calculateTotalDemand(tx, settlement.clearingPrice)
+    require(totalDemand <= settlement.totalUnitsAvailable, "Demand exceeds supply")
+
+    // ... additional verification logic
+}
+```
+
+**Performance Benefit:** When spending N UTxOs with iteration-heavy logic:
+- **Without pattern**: O(N²) - each spending validator iterates all inputs/outputs
+- **With pattern**: O(N) - stake validator iterates once, spending validators just read
+
+Run `BatchAuctionTest` to see actual memory/CPU savings.
+
+**Script Configuration:** The spending script address must have a staking credential that points to your withdrawal validator. Configure this when deploying scripts.
+
+### Example: Batch Auction
+
+See `scalus.examples.BatchAuctionValidator` for a complete implementation where:
+- **Stake validator**: Verifies the clearing price calculation once
+- **Spending validator**: Reads the verified clearing price to determine if each bid is filled or refunded
+
+## Related Patterns
+
+- **[Stake Validator](/docs/design-patterns/withdraw-zero)** - Base pattern when you don't need to read data
+- **[Transaction Level Minter](/docs/design-patterns/transaction-level-minting)** - Alternative using minting instead of staking
+
+## Resources
+
+- [Anastasia Labs: Merkelized Validator](https://github.com/Anastasia-Labs/design-patterns/tree/main/merkelized-validators) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [BatchAuctionTest](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/test/scala/scalus/patterns/BatchAuctionTest.scala) - Test suite with budget comparison

@@ -1,0 +1,150 @@
+Source: https://scalus.org/docs/get-started/project-commands
+
+# Project Templates & Commands
+
+Scalus ships two [Giter8](https://www.foundweekends.org/giter8/) templates for scaffolding a new
+project, and the generated projects come pre-wired with commands for building, testing, profiling,
+generating CIP-57 blueprints, and deploying contracts on-chain.
+
+Every generated project is **dual-build**: it works with both [sbt](https://www.scala-sbt.org/) and
+[Scala CLI](https://scala-cli.virtuslab.org/), sharing one flat source layout (sources at the
+project root, test sources using the `.test.scala` suffix).
+
+## Templates
+
+| Template | Command | What you get |
+|----------|---------|--------------|
+| `hello.g8` | `sbt new scalus3/hello.g8` | Minimal "Hello, Cardano!" spending validator with unit and integration tests. |
+| `validator.g8` | `sbt new scalus3/validator.g8` | Full DApp starter: validator, `Contract` (blueprint + deploy), unit and integration tests. |
+
+Start with **`hello.g8`** to learn the basics; reach for **`validator.g8`** when you want the full
+toolchain (CIP-57 blueprint generation and on-chain deployment) ready to go.
+
+### `hello.g8` layout
+
+```ansi
+hello-cardano/
+├── HelloCardano.scala             # Plutus V3 spending validator
+├── HelloCardano.test.scala        # Unit tests (ScalaTest + scalus-testkit)
+├── HelloCardanoIntegration.test.scala  # Submit-based tests (emulator / Yaci DevKit)
+├── HelloCardanoContract.scala     # Contract: compiled script + CIP-57 blueprint
+├── project.scala                  # Scala CLI build configuration
+├── build.sbt                      # sbt build configuration
+└── Readme.md
+```
+
+### `validator.g8` layout
+
+The `validator.g8` template prompts for a `name` (default `My Validator`) and names the files after
+it:
+
+```ansi
+my-validator/
+├── MyValidator.scala              # On-chain validator — replace its body with your logic
+├── MyValidator.test.scala         # Unit tests using scalus-testkit's ScalusTest
+├── MyValidatorIntegration.test.scala  # Submit-based tests (emulator / Yaci DevKit)
+├── MyValidatorContract.scala      # Contract: compiled script + CIP-57 blueprint
+├── project.scala                  # Scala CLI build configuration
+├── build.sbt                      # sbt build configuration
+└── Readme.md
+```
+
+## Build & test commands
+
+The standard commands behave exactly as they do in any sbt or Scala CLI project. From the project
+directory:
+
+    | Command | Purpose |
+    |---------|---------|
+    | `sbt compile` | Compile the on-chain and off-chain sources. |
+    | `sbt test` | Run all tests (unit + integration; uses the emulator backend). |
+    | `sbt "testOnly *HelloCardanoTest"` | Run a single test suite by name (wildcards allowed). |
+    | `sbt clean` | Remove `target/` build artifacts. Use it to force a full rebuild if you hit stale-class issues. |
+
+    Quotes are required around `testOnly` (and any command with arguments) so sbt receives the whole
+    string as one command.
+    | Command | Purpose |
+    |---------|---------|
+    | `scala-cli compile .` | Compile the project. |
+    | `scala-cli test .` | Run all tests. |
+    | `scala-cli test . --test-only 'HelloCardanoTest'` | Run a single test suite. |
+    | `scala-cli fmt .` | Format sources with Scalafmt. |
+    | `scala-cli clean .` | Clear the Scala CLI build cache. |
+
+    Scala CLI reads its configuration from `project.scala` rather than `build.sbt`.
+
+### Speeding up sbt
+
+Each `sbt <command>` boots a fresh JVM. Two ways to avoid paying that startup cost every time:
+
+- **`sbtn`** — a thin native client that talks to a persistent sbt server, keeping the JVM warm
+  between invocations. Use it as a drop-in replacement: `sbtn compile`, `sbtn test`,
+  `sbtn "testOnly *HelloCardanoTest"`. Run `sbtn shutdown` to stop the background server.
+- **The sbt shell** — run `sbt` with no arguments to drop into its interactive prompt, then type
+  `compile`, `test`, `testOnly …` directly (no `sbt` prefix, no surrounding quotes). The JVM is
+  reused for the whole session.
+
+One caveat: a warm server or shell reads environment variables like `SCALUS_TEST_ENV` and
+`SCALUS_PROFILE` once, at startup, and reuses them for its whole life — so setting one on a later
+command has no effect. To switch backends or toggle profiling, set the variable on a plain
+`sbt <command>` (fresh JVM each time), or restart the server (`sbtn shutdown`) or shell first.
+
+## Test backends
+
+The integration tests (`*Integration.test.scala`) run against a backend selected by the
+`SCALUS_TEST_ENV` environment variable — `emulator` (the default) or `yaci`:
+
+```sh copy
+sbt test                           # in-memory emulator (the default)
+SCALUS_TEST_ENV=emulator sbt test  # in-memory emulator, named explicitly
+SCALUS_TEST_ENV=yaci sbt test      # a local Yaci DevKit node (auto-started; requires Docker)
+```
+
+The same variable works with Scala CLI (`SCALUS_TEST_ENV=yaci scala-cli test .`), since the test
+code reads it directly rather than relying on an sbt-only command.
+
+See [Emulator](/docs/testing/emulator) and [Local Devnet](/docs/testing/local-devnet) for what each
+backend does and when to use it.
+
+## Profiling
+
+Set `SCALUS_PROFILE=1` to run the tests with on-chain execution profiling enabled. It writes an
+interactive HTML report (CPU and memory budget per source line) to `target/profile.html`:
+
+```sh copy
+SCALUS_PROFILE=1 sbt test
+```
+
+The same variable works with Scala CLI (`SCALUS_PROFILE=1 scala-cli test .`). Open
+`target/profile.html` in a browser to see where your validator spends its execution budget.
+See [Profiling](/docs/testing/profiling) for how to read the report and optimise from it.
+
+## Blueprint & deploy
+
+The sbt build enables the `ScalusSbtPlugin`, which adds two tasks backed by the `Contract`
+object in your project:
+
+```sh copy
+# Generate CIP-57 blueprints under
+# target/scala-3.3.7/resource_managed/main/META-INF/scalus/blueprints/<package>/
+# plus an aggregate plutus.json at the resource root
+# (sbt package / publish also embed them in the JAR automatically)
+sbt blueprint
+
+# Deploy the validator as a reference-script UTxO
+# (needs a Blockfrost key and a funded wallet)
+export BLOCKFROST_API_KEY=...        # or pass --blockfrost-key
+export CARDANO_MNEMONIC="word1 ..."  # or pass --mnemonic
+sbt "deploy MyValidatorContract --network preview"
+```
+
+These two tasks are the heart of the Scalus sbt plugin. The
+[**SBT Plugin**](/docs/dapp-development/sbt-plugin) page documents blueprint verification, the full
+set of `deploy` flags, and how to wire the plugin into an existing (non-template) project.
+
+## Next steps
+
+- [Write Smart Contracts](/docs/smart-contracts/developing-smart-contracts) — validators, data conversion, compilation
+- [SBT Plugin](/docs/dapp-development/sbt-plugin) — blueprint verification and contract deployment in depth
+- [Testing](/docs/testing) — unit, property-based, and emulator-based testing
+- [Build Transactions](/docs/transactions/building-first-transaction) — construct and submit transactions

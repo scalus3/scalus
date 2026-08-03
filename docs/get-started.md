@@ -1,0 +1,147 @@
+Source: https://scalus.org/docs/get-started
+
+# Getting Started with Scalus
+
+This guide will help you set up your Scalus development environment and create your first Cardano validator in minutes. You'll install Scala 3, generate a starter project, and run your first smart contract tests.
+
+    ## Install Scala 3 Development Environment
+
+    We recommend using [Coursier](https://get-coursier.io/docs/cli-overview), the official Scala installer that sets up your complete development environment including JVM, Scala compiler, build tools, and code formatters.
+
+      Homebrew based installation:
+      ```sh copy
+      brew install coursier && coursier setup
+      ```
+      On the Apple Silicon (M1, M2, …) architecture:
+      ```sh copy
+      curl -fL https://github.com/VirtusLab/coursier-m1/releases/latest/download/cs-aarch64-apple-darwin.gz | gzip -d > cs && chmod +x cs && (xattr -d com.apple.quarantine cs || true) && ./cs setup
+      ```
+      Otherwise, on the x86-64 architecture:
+      ```sh copy
+      curl -fL https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-apple-darwin.gz | gzip -d > cs && chmod +x cs && (xattr -d com.apple.quarantine cs || true) && ./cs setup
+      ```
+      On the x86-64 architecture:
+      ```sh copy
+      curl -fL https://github.com/coursier/coursier/releases/latest/download/cs-x86_64-pc-linux.gz | gzip -d > cs && chmod +x cs && ./cs setup
+      ```
+      Otherwise, on the ARM64 architecture:
+      ```sh copy
+      curl -fL https://github.com/VirtusLab/coursier-m1/releases/latest/download/cs-aarch64-pc-linux.gz | gzip -d > cs && chmod +x cs && ./cs setup
+      ```
+      <Tabs.Tab>Download and execute [the Scala installer for Windows](https://github.com/coursier/launchers/raw/master/cs-x86_64-pc-win32.zip) based on Coursier, and follow the on-screen
+      instructions.</Tabs.Tab>
+
+    Coursier will install Scala compiler,
+        Command line tool: [Scala CLI](https://scala-cli.virtuslab.org/),
+        Build tool: [sbt](https://www.scala-sbt.org/),
+        REPL: [Ammonite](https://ammonite.io/) and
+        Code formatter: [Scalafmt](https://scalameta.org/scalafmt/).
+
+    ## Get Your First Cardano Validator
+    
+    ```sh copy
+    sbt new scalus3/hello.g8
+    ```
+    This ran the template `scalus3/hello.g8` using [Giter8](https://www.foundweekends.org/giter8/). Let’s take a look at what just got generated:
+    ```ansi
+    hello-cardano/
+    ├── HelloCardano.scala               # Plutus V3 spending validator
+    ├── HelloCardano.test.scala          # Unit tests
+    ├── HelloCardanoIntegration.test.scala  # Submit-based tests
+    ├── HelloCardanoContract.scala       # Contract: compiled script + CIP-57 blueprint
+    ├── project.scala                    # Scala CLI build configuration
+    ├── build.sbt                        # sbt build configuration
+    └── Readme.md
+    ```
+
+    Want the full DApp toolchain (CIP-57 blueprint generation and on-chain deployment) ready to go?
+    Generate the richer starter instead with `sbt new scalus3/validator.g8`. Both templates, and all
+    the commands their projects support, are covered in [Project Commands](/docs/get-started/project-commands).
+
+    ## Run Your First Validator Tests
+    Run unit tests (ScalaTest and ScalaCheck):
+    ```sh copy
+    cd hello-cardano && sbt test
+    ```
+    All is good if you see the following output:
+    ```sh
+    HelloCardanoTest:
+    - Hello Cardano message is signed by the owner
+    HelloCardanoIntegrationTest:
+    - [emulator] owner can spend with the Hello redeemer
+    - [emulator] a non-owner cannot spend
+    ```
+
+    ## Set Up Your IDE for Cardano Development
+    Setting up a productive development environment will significantly improve your Scala/Scalus development experience.
+    Scala offers wide range of IDE support, the most popular are IntelliJ and VSCode.
+
+        1. Install IntelliJ IDEA (Community or Ultimate edition) from the [JetBrains website](https://www.jetbrains.com/idea/download/)
+        2. Install the Scala plugin:
+           - Go to **Settings/Preferences → Plugins → Marketplace**
+           - Search for "Scala" and install the plugin
+           - Restart IntelliJ IDEA when prompted
+        {/*(https://www.jetbrains.com/help/idea/discover-intellij-idea-for-scala.html) */}
+        3. Open your Scalus project:
+           - Select **File → Open** and navigate to your project directory
+           - Choose Import as sbt project when prompted
+        1. Install [Visual Studio Code](https://code.visualstudio.com/Download) from the official website.
+        2. Install the Metals extension from [the Marketplace](https://marketplace.visualstudio.com/items?itemName=scalameta.metals)
+        3. Open your Scalus project folder:
+           - Select **File → Open Folder** and navigate to your project directory.
+        4. Metals should activate and begin importing the project automatically.
+        Metals is most commonly used with VS Code, but it’s also available for Emacs, Vim, Sublime Text, Helix as
+      documented [here](https://scalameta.org/metals/docs/#editor-support).
+
+    ## You are good to go! Start exploring.
+
+    ```scala filename="HelloCardano.scala" copy showLineNumbers
+    package hello
+
+    import scalus.compiler.Compile
+    import scalus.uplc.builtin.Data
+    import scalus.cardano.onchain.plutus.v3.*
+    import scalus.cardano.onchain.plutus.prelude.*
+
+    /** This validator demonstrates two key validation checks:
+      *   1. It verifies that the transaction is signed by the owner's public key
+      *      hash (stored in the datum).
+      *   1. It confirms that the redeemer contains the exact string "Hello,
+      *      Cardano!".
+      *
+      * Both conditions must be met for the validator to approve spending the UTxO.
+      */
+    @Compile
+    object HelloCardano extends Validator {
+        inline override def spend(
+            datum: Option[Data],
+            redeemer: Data,
+            tx: TxInfo,
+            ownRef: TxOutRef
+        ): Unit = {
+            val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
+            require(tx.isSignedBy(owner), "Must be signed")
+            val saysHello = redeemer.to[String] == "Hello, Cardano!"
+            require(saysHello, "Invalid redeemer")
+        }
+    }
+    ```
+
+## Next Steps
+
+Now that your environment is ready, choose your path:
+
+**Learn the fundamentals:**
+- [Project Commands](/docs/get-started/project-commands) — Templates plus every sbt/Scala CLI command: test, profile, blueprint, deploy
+- [Write Smart Contracts](/docs/smart-contracts/developing-smart-contracts) — Validators, data conversion, compilation
+- [Build Transactions](/docs/transactions/building-first-transaction) — Construct and submit transactions
+- [Test Locally](/docs/testing/unit-testing) — Unit testing and debugging
+
+**Go deeper:**
+- [DApp Starter Tutorial](/docs/dapp-development/dapp-starter-tutorial) — Build a complete token minting service
+- [Design Patterns](/docs/design-patterns) — Optimization patterns for efficient contracts
+- [Language Guide](/docs/language-guide) — Scala 3 features supported in Scalus
+
+**New to Cardano or Scala?**
+- [For Scala Developers](/docs/get-started/for-scala-developers) — Cardano concepts
+- [For Cardano Developers](/docs/get-started/for-cardano-developers) — Scala basics

@@ -1,0 +1,124 @@
+Source: https://scalus.org/docs/smart-contracts/compiling
+
+# Compiling Smart Contracts
+
+## Basic Compilation
+
+Use `PlutusV3.compile` to transform your Scala validator into a Plutus script:
+
+```scala
+import scalus.compiler.Options
+import scalus.uplc.PlutusV3
+
+// Compile your validator to Plutus V3
+val compiled = PlutusV3.compile(MyValidator.validate)
+
+// Get the script for use in transactions
+val script = compiled.script
+val scriptHex = compiled.program.doubleCborHex
+```
+
+The compilation flow: `PlutusV3.compile` takes a validator entry point and produces a `PlutusV3[A]` object containing the script, its hash, and address.
+
+## Choosing a Plutus Version
+
+Select the appropriate version for your use case:
+
+```scala
+import scalus.uplc.{PlutusV1, PlutusV2, PlutusV3}
+
+// Plutus V3 (recommended for new validators)
+val compiledV3 = PlutusV3.compile(MyValidator.validate)
+
+// Plutus V2 (for reference inputs, inline datums)
+val compiledV2 = PlutusV2.compile(MyValidator.validate)
+
+// Plutus V1 (legacy)
+val compiledV1 = PlutusV1.compile(MyValidator.validate)
+```
+
+## Compilation Options
+
+Control error traces and optimizations via `Options`:
+
+```scala
+import scalus.compiler.Options
+
+// Development: Include error traces for debugging
+given Options = Options.debug
+
+// Production: Minimal script size
+given Options = Options.release
+```
+
+- `Options.debug`: Adds error location information (easier debugging, larger script)
+- `Options.release`: Minimal script size (for production)
+
+You can also enable error traces on a compiled validator:
+
+```scala
+val compiled = PlutusV3.compile(MyValidator.validate)
+
+// Add error traces for debugging
+val withTraces = compiled.withErrorTraces
+```
+
+## Complete Example
+
+```scala
+import scalus.*
+import scalus.uplc.builtin.Data
+import scalus.compiler.Options
+import scalus.cardano.onchain.plutus.v3.*
+import scalus.uplc.PlutusV3
+
+@Compile
+object MyValidator {
+    inline def validate(scData: Data): Unit = {
+        val ctx = scData.to[ScriptContext]
+        ctx.scriptInfo match
+            case ScriptInfo.SpendingScript(_, datum) =>
+                require(ctx.txInfo.signatories.nonEmpty, "No signatories")
+            case _ => fail("Must be spending")
+    }
+}
+
+object MyContract {
+    private given Options = Options.release
+    lazy val compiled = PlutusV3.compile(MyValidator.validate)
+}
+
+// Get hex for use in transactions
+val scriptHex = MyContract.compiled.program.doubleCborHex
+```
+
+## Encoding Options
+
+UPLC programs can be encoded in several formats:
+
+```scala
+val program = compiled.program
+
+// Flat encoding (binary format)
+val flatEncoded = program.flatEncoded
+
+// CBOR encoding (wraps Flat)
+val cborEncoded = program.cborEncoded
+
+// Double CBOR encoding (standard for Cardano transactions)
+val doubleCborEncoded = program.doubleCborEncoded
+
+// Hex string of double CBOR (most commonly used in APIs)
+val hexString = program.doubleCborHex
+```
+
+## What's Next?
+
+Once your validator compiles, you're ready to publish and use it:
+
+- **[Blueprint Generation](/docs/dapp-development/sbt-plugin#blueprint-generation)** — Produce CIP-57 blueprints with the Scalus sbt plugin and verify script hashes
+- **[Deploying Contracts](/docs/dapp-development/sbt-plugin#deploying-contracts)** — Publish your compiled contract as a reference script UTxO on preview, preprod, or mainnet
+- **[Working with Contract](/docs/dapp-development/working-with-contract)** — Set compilation options, generate CIP-57 blueprints, and get script addresses
+- **[First Contract Transaction](/docs/transactions/first-contract-transaction)** — Lock funds at a script address and spend them with a redeemer
+- **[Building Transactions](/docs/transactions/building-first-transaction)** — Build and submit simple ADA transfers using TxBuilder
+- **[HTLC Tutorial](/docs/smart-contracts/htlc-tutorial)** — End-to-end example: contract, transactions, testing, and deployment

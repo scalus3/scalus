@@ -1,0 +1,147 @@
+Source: https://scalus.org/docs/design-patterns/transaction-level-minting
+
+# Transaction Level Minter Pattern
+
+Couple spending and minting endpoints of the same validator to delegate heavy computation to a single minting execution.
+
+## The Challenge
+
+Like the [Stake Validator Pattern](/docs/design-patterns/withdraw-zero), spending validators that run per-UTxO create quadratic costs for batch operations. However, not all protocols use staking, and some naturally involve minting or burning tokens as part of their logic.
+
+## How It Works
+
+1. **Spending validator** (runs per UTxO): Minimal - just checks minting endpoint executes
+2. **Minting validator** (runs once): Heavy computation when minting/burning tokens
+
+The spending validator only ensures the minting endpoint executes by verifying a non-zero amount of its asset is being minted or burnt.
+
+## When to Use This Pattern
+
+**Best for:**
+- Protocols that already use beacon tokens or minting/burning
+- State machines where minting signals state transitions
+- Cases where token existence proves validation occurred
+
+**Not ideal for:**
+- Protocols without natural minting requirements (use [Stake Validator](/docs/design-patterns/withdraw-zero) instead - lower execution costs)
+- Cases where spend validation must be independent of minting
+- When minting logic should not control spending authorization
+
+**Prefer Stake Validator when possible.** If minting tokens isn't a natural part of your protocol, use the Stake Validator pattern instead—it has lower execution unit costs.
+
+## API Reference
+
+| Function | Description |
+|----------|-------------|
+| `spend` | Check minting policy ran + validate its redeemer and minted tokens |
+| `spendMinimal` | Just check at least one token is minted/burnt with the policy |
+
+## Implementation Guide
+
+### Spending Endpoint
+
+```scala
+import scalus.patterns.TransactionLevelMinterValidator
+
+@Compile
+object MyValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Redeemer,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+            .scriptOption.getOrFail("Own address must be Script")
+
+        // Option 1: Just check minting policy ran
+        TransactionLevelMinterValidator.spendMinimal(ownScriptHash, tx)
+
+        // Option 2: Also validate redeemer and minted tokens
+        TransactionLevelMinterValidator.spend(
+          minterScriptHash = ownScriptHash,
+          minterRedeemerValidator = _.to[MintRedeemer].isValid,
+          minterTokensValidator = tokens => {
+              val (tokenName, qty) = tokens.toList.head
+              tokenName === utf8"BEACON" && (qty === BigInt(1) || qty === BigInt(-1))
+          },
+          txInfo = tx
+        )
+    }
+}
+```
+
+### Minting Endpoint
+
+```scala
+inline override def mint(
+    redeemer: Redeemer,
+    policyId: PolicyId,
+    tx: TxInfo
+): Unit = {
+    val mintRedeemer = redeemer.to[MintRedeemer]
+
+    // Your heavy validation logic here - runs ONCE
+    val scriptInputsCount = tx.inputs.foldRight(BigInt(0)) { (input, acc) =>
+        input.resolved.address.credential match
+            case Credential.ScriptCredential(hash) if hash === policyId => acc + 1
+            case _ => acc
+    }
+
+    require(scriptInputsCount === mintRedeemer.expectedInputCount, "Input count mismatch")
+
+    // Verify all outputs meet requirements
+    // ... additional validation logic
+}
+```
+
+### Example: Beacon Token Protocol
+
+A common use case is minting/burning a "beacon" token to signal state changes:
+
+```scala
+case class SpendRedeemer(ownIndex: BigInt, burn: Boolean) derives FromData
+case class MintRedeemer(maxUtxosToSpend: BigInt) derives FromData
+
+// Spending endpoint - checks beacon is minted/burnt
+inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, ownRef: TxOutRef): Unit = {
+    val spendRedeemer = redeemer.to[SpendRedeemer]
+    val ownHash = tx.inputs.get(spendRedeemer.ownIndex)
+        .getOrFail("Invalid index").resolved.address.credential
+        .scriptOption.getOrFail("Must be script")
+
+    TransactionLevelMinterValidator.spend(
+      minterScriptHash = ownHash,
+      minterRedeemerValidator = _.to[MintRedeemer].maxUtxosToSpend > 0,
+      minterTokensValidator = tokens => {
+          val (tokenName, qty) = tokens.toList.head
+          require(tokenName === utf8"BEACON")
+          if spendRedeemer.burn then qty === BigInt(-1)
+          else qty === BigInt(1)
+      },
+      txInfo = tx
+    )
+}
+
+// Minting endpoint - heavy logic runs once
+inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Unit = {
+    val mintRedeemer = redeemer.to[MintRedeemer]
+    val scriptInputsCount = countScriptInputs(tx, policyId)
+    require(scriptInputsCount === mintRedeemer.maxUtxosToSpend)
+}
+```
+
+**Stake Validator vs Transaction Level Minter:** Both patterns delegate computation to a single execution. Choose based on your protocol:
+- **Stake Validator**: When you don't need minting/burning, or staking is already part of your design
+- **Transaction Level Minter**: When beacon tokens or minting/burning naturally fits your protocol
+
+## Related Patterns
+
+- **[Stake Validator](/docs/design-patterns/withdraw-zero)** - Similar pattern using staking instead of minting
+- **[Merkelized Validator](/docs/design-patterns/merkelized-validator)** - When spending validators need to read verified data
+
+## Resources
+
+- [Anastasia Labs: Transaction Level Validator](https://github.com/Anastasia-Labs/design-patterns/tree/main/transaction-level-validator-minting-policy) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [TransactionLevelMinterValidatorExample](https://github.com/scalus3/scalus/blob/master/scalus-design-patterns/src/main/scala/scalus/examples/TransactionLevelMinterValidatorExample.scala) - Complete example

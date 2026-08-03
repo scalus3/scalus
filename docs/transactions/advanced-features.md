@@ -1,0 +1,240 @@
+Source: https://scalus.org/docs/transactions/advanced-features
+
+# Advanced Features
+
+## Testing Validators with Custom Evaluators
+
+One of the challenges we encounter when testing Cardano smart contracts is testing negative cases-scenarios where your
+ validator *should* reject a transaction. TxBuilder's enables the developer to do it via custom evaluators.
+
+### The Problem with Negative Testing
+
+When building a transaction with scripts, TxBuilder evaluates them during `build()` to:
+1. Verify the script passes validation with the provided redeemer
+2. Calculate execution costs to fill out the `Redeemer`
+
+This creates a dilemma for negative testing:
+
+```scala copy
+// A redeemer that is known to fail with our validator
+val invalidRedeemer = Data(...)
+
+val tx = TxBuilder(env)
+  .spend(scriptUtxo, invalidRedeemer, validator)
+  .payTo(attacker, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)  // Throws `PlutusScriptEvaluationError` by default
+```
+
+The validator correctly rejects the invalid redeemer during local evaluation, but this means `build()` throws an exception and you never get a transaction to test.
+You can't submit it to verify the on-chain behavior.
+
+### The Solution: Constant Budget Evaluator
+
+```scala copy
+// Use constant budget evaluator for negative tests
+val tx = TxBuilder.withConstMaxBudgetEvaluator(env)
+  .spend(scriptUtxo, invalidRedeemer, validator)
+  .payTo(attacker, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)  // The previous exception is gone, as the scripts were never actually evaluated
+  .sign(signer)
+  .transaction
+
+// Now you can submit and verify it fails on-chain
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+provider.submit(tx).await(30.seconds) match {
+  case Left(error) =>
+    assert(error.message.contains("MyValidator logic error"))
+  case Right(_) =>
+    fail("Transaction should have been rejected!")
+}
+```
+
+  This technique bridges unit testing (validator in isolation) and integration testing (full transaction flow including on-chain rejection).
+
+### Testing Pattern: Positive and Negative Cases
+
+Here's a complete testing pattern using both evaluators:
+
+```scala copy
+import scalus.utils.await
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration.*
+
+class ValidatorIntegrationTest extends AnyFunSuite {
+  val defaultEvaluator = PlutusScriptEvaluator(
+    cardanoInfo,
+    EvaluatorMode.EvaluateAndComputeCost
+  )
+
+  test("valid redeemer is accepted on-chain") {
+    val validRedeemer = Action.Reveal(correctPreimage)
+
+    // Use default evaluator - should pass locally
+    val tx = TxBuilder(env, defaultEvaluator)
+      .spend(collateralUtxos)
+      .spend(scriptUtxo, validRedeemer, validator, Set(receiverPkh))
+      .payTo(receiver, scriptUtxo.output.value)
+      .build(changeTo = changeAddress)
+      .sign(signer)
+      .transaction
+
+    // Should succeed on-chain
+    provider.submit(tx).await(30.seconds) match {
+      case Right(txHash) =>
+        println(s"Transaction accepted: ${txHash.toHex}")
+      case Left(error) =>
+        fail(s"Valid transaction was rejected: $error")
+    }
+  }
+
+  test("invalid redeemer is rejected on-chain") {
+    val invalidRedeemer = Action.Reveal(wrongPreimage)
+
+    // Use constant budget evaluator - bypasses local validation
+    val tx = TxBuilder.withConstMaxBudgetEvaluator(env)
+      .spend(collateralUtxos)
+      .spend(scriptUtxo, invalidRedeemer, validator, Set(receiverPkh))
+      .payTo(attacker, scriptUtxo.output.value)
+      .build(changeTo = changeAddress)
+      .sign(signer)
+      .transaction
+
+    // Should fail on-chain
+    provider.submit(tx).await(30.seconds) match {
+      case Left(error) =>
+        assert(error.message.contains("preimage hash mismatch"))
+      case Right(txHash) =>
+        fail(s"Invalid transaction was accepted: ${txHash.toHex}")
+    }
+  }
+}
+```
+
+## Transaction Chaining
+
+Transaction chaining allows building multiple transactions where each uses outputs from previous ones without waiting for on-chain confirmation. This is useful for complex workflows that require multiple sequential transactions.
+
+### Using Transaction.utxos
+
+Every `Transaction` has a `utxos` method that returns the UTXOs it would create:
+
+```scala copy
+// Build the first transaction
+val lockTx = TxBuilder(env)
+    .payTo(scriptAddress, Value.ada(10), lockDatum)
+    .complete(emulator, sponsorAddress)
+    .sign(signer)
+    .transaction
+
+// Get UTXOs from lockTx directly (no provider query needed)
+val scriptUtxo = Utxo(lockTx.utxos.find(_._2.address == scriptAddress).get)
+
+// Build second transaction using the output from first
+val unlockTx = TxBuilder(env)
+    .spend(scriptUtxo, unlockRedeemer, validator)
+    .payTo(recipientAddress, scriptUtxo.output.value)
+    .complete(emulator, sponsorAddress)
+    .sign(signer)
+    .transaction
+
+// Submit both transactions
+emulator.submit(lockTx)
+emulator.submit(unlockTx)
+```
+
+### Emulator for Testing
+
+The `Emulator` supports transaction chaining naturally by tracking UTXOs across submissions:
+
+```scala copy
+val emulator = Emulator(initialUtxos)
+
+// Submit first transaction
+emulator.submit(lockTx)
+
+// Can also query UTXOs from emulator
+val utxo = emulator.findUtxo(
+    address = scriptAddress,
+    transactionId = Some(lockTx.id)
+).toOption.get
+
+// Submit second transaction
+emulator.submit(unlockTx)
+```
+
+  The `Transaction.utxos` method is particularly useful when you need to reference specific outputs immediately after building a transaction, without querying a provider.
+
+## Draft Transactions for ScriptContext Testing
+
+The `draft` method assembles a transaction without balancing or fee calculation. This is useful for testing validators by deriving a `ScriptContext` from the transaction structure.
+
+### Why Use `draft`?
+
+When testing validators, you often need to:
+1. Create a transaction with specific inputs and outputs
+2. Derive the `ScriptContext` that would be passed to your validator
+3. Run the validator against that context
+
+The normal `build()` method requires fee calculation and balancing, which adds complexity when you just want to test validator logic. The `draft` method skips these steps.
+
+### Basic Usage
+
+```scala copy
+import scalus.cardano.txbuilder.{txBuilder, RedeemerPurpose}
+import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
+
+given CardanoInfo = TestUtil.testEnvironment
+
+val tx = txBuilder
+  .spend(lockedUtxo, redeemer, validatorScript, Set(signerPkh))
+  .payTo(recipient, Value.ada(10))
+  .validTo(deadline)
+  .draft  // No balancing, no fee calculation
+
+// Derive ScriptContext for the spend
+val scriptContext = tx.getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
+
+// Test your validator
+validator.code(scriptContext.toData)
+```
+
+### Complete Testing Example
+
+```scala copy
+import scalus.uplc.builtin.Data.toData
+import scalus.cardano.txbuilder.{txBuilder, RedeemerPurpose}
+import scalus.cardano.txbuilder.RedeemerPurpose.ForSpend
+import scalus.testing.kit.{ScalusTest, EvalTestKit}
+
+class MyValidatorTest extends AnyFunSuite, ScalusTest, EvalTestKit {
+  given CardanoInfo = TestUtil.testEnvironment
+
+  test("validator accepts valid action") {
+    // Setup: create UTXOs and locked output
+    val utxos: Utxos = ...
+    val lockedUtxo: Utxo = ...
+    val validRedeemer = MyAction.Unlock(secretValue)
+
+    // Build draft transaction
+    val tx = txBuilder
+      .spend(lockedUtxo, validRedeemer, myValidator.script, Set(ownerPkh))
+      .payTo(owner, lockedUtxo.output.value)
+      .validTo(deadline)
+      .draft
+
+    // Derive ScriptContext
+    val sc = tx.getScriptContextV3(utxos, ForSpend(lockedUtxo.input))
+
+    // Test validator - should succeed without throwing
+    myValidator.code(sc.toData)
+
+    // Or test with the compiled program
+    myValidator.program $ sc.toData
+  }
+}
+```
+
+  The `draft` method is designed for testing. For production transactions, use `build()` or `complete()` which handle fee calculation and balancing.

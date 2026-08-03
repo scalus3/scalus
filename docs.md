@@ -1,0 +1,67 @@
+Source: https://scalus.org/docs
+
+# Scalus Introduction
+
+**Scalus** is a development platform for building smart contracts and decentralized applications (dApps) on the Cardano blockchain. It provides a unified environment where developers can write both on-chain smart contracts and off-chain logic using [Scala 3](/docs/language-guide/scala3) - a modern, expressive, and type-safe functional programming language.
+
+## Get Started with Scalus
+
+    icon="🚀"
+    title="Quick Start Guide"
+    href="/docs/get-started"
+    description="Install Scalus and create your first validator in 5 minutes"
+  />
+    icon="⚙️"
+    title="Build a Smart Contract"
+    href="/docs/smart-contracts/developing-smart-contracts"
+    description="Learn to write, compile, and test Cardano validators"
+  />
+    icon="🏗️"
+    title="Build Transactions"
+    href="/docs/transactions/building-first-transaction"
+    description="Construct and submit Cardano transactions with TxBuilder"
+  />
+    icon="💡"
+    title="DApp Starter Tutorial"
+    href="/docs/dapp-development/dapp-starter-tutorial"
+    description="Build a complete native token minting service from scratch"
+  />
+
+**New to Cardano or Scala?** Check out our [onboarding guides](/docs/get-started) for developers coming from either ecosystem.
+
+## Why Choose Scalus for Cardano Development?
+
+### One Language, Full Stack
+Write smart contracts and application logic in Scala 3. No context switching between Plutus/Aiken for contracts and JavaScript/Python for frontends and backends.
+
+### Type-Safe by Design
+Catch errors at compile time, not on-chain. Leverage Scala's powerful type system to prevent entire classes of bugs before deployment.
+
+### Professional Tooling
+Debug validators with breakpoints in IntelliJ IDEA or VS Code. Step through execution, inspect variables, and use the tools you already know.
+
+### Battle-Tested Ecosystem
+Built on the JVM with access to thousands of proven libraries. Use ScalaTest for testing, Akka for concurrency, and the entire Scala ecosystem.
+
+### Fine-Grained Control
+Advanced optimizations give you control over generated UPLC code. Reduce script size and execution costs with macros, inline optimizations, and direct Script Context access.
+
+## Development Workflow
+
+- **Write** - [Smart contracts](/docs/smart-contracts/developing-smart-contracts) and off-chain logic in Scala 3
+- **Test** - [Unit, integration, and property-based tests](/docs/testing) with ScalaTest and ScalaCheck
+- **Debug** - [Step through validators](/docs/testing/debugging) with breakpoints in your IDE
+- **Optimise** - [Reduce script size and costs](/docs/smart-contract-optimisations) with advanced techniques
+- **Build** - [Construct transactions](/docs/transactions) with automatic fee calculation and balancing
+- **Deploy** - Test on [local devnet](/docs/testing/local-devnet), then ship to mainnet
+
+## Modern Development Experience
+
+Built for professional developers and teams, Scalus provides:
+
+- **Industry-Standard IDEs** - Full support for IntelliJ IDEA and VS Code with intelligent code completion
+- **Comprehensive Testing** - Unit tests, integration tests, and property-based testing with ScalaTest and ScalaCheck
+- **Rich Ecosystem** - Access to thousands of JVM libraries and the entire [Scala ecosystem](https://index.scala-lang.org/)
+- **One Language** - Write everything in Scala 3—no juggling multiple languages, tools, or paradigms
+
+Scalus is a development platform made for professionals and businesses who value productivity, type safety, and code quality.

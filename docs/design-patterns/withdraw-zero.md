@@ -1,0 +1,163 @@
+Source: https://scalus.org/docs/design-patterns/withdraw-zero
+
+# Stake Validator Pattern
+
+Delegate computation to a staking script using the "withdraw zero trick" to reduce execution costs from O(N²) to O(N).
+
+## The Challenge
+
+When a Cardano validator processes multiple UTxOs in a single transaction, the spending script runs once per input. If each execution performs expensive operations (iterating all inputs, checking all outputs), costs grow quadratically:
+
+- **10 inputs** = 10 script executions × 10 iterations = 100 operations
+- **20 inputs** = 20 script executions × 20 iterations = 400 operations
+
+This makes batch operations prohibitively expensive.
+
+## How It Works
+
+1. **Spending validator** (runs per UTxO): Minimal logic - just checks stake validator ran
+2. **Stake validator** (runs once): Heavy computation in the reward endpoint
+
+The spending validator essentially says: "As long as there is a reward withdrawal of the given script in this transaction, this UTxO can be spent."
+
+## When to Use This Pattern
+
+**Best for:**
+- Consolidating complex business logic into a single validation point
+- Batch operations processing multiple UTxOs together
+- Separating payment validation from protocol logic (better composability)
+- Reducing script size and execution costs
+
+**Not ideal for:**
+- Single input transactions (no benefit)
+- Cases where each input needs unique, complex validation
+- Protocols where staking credentials aren't suitable
+
+## API Reference
+
+| Function | Description |
+|----------|-------------|
+| `spend` | Check stake validator ran + validate its redeemer and withdrawal amount |
+| `spendMinimal` | Just check stake validator ran (most common) |
+| `withdraw` | Helper for reward endpoint - extracts script hash from credential |
+
+## Implementation Guide
+
+### Spending Endpoint
+
+```scala
+import scalus.patterns.StakeValidator
+
+@Compile
+object MyValidator extends Validator {
+    inline override def spend(
+        datum: Option[Data],
+        redeemer: Redeemer,
+        tx: TxInfo,
+        ownRef: TxOutRef
+    ): Unit = {
+        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+            .scriptOption.getOrFail("Own address must be Script")
+
+        // Option 1: Just check stake validator ran (withdraw zero trick)
+        StakeValidator.spendMinimal(ownScriptHash, tx)
+
+        // Option 2: Also validate redeemer and withdrawal amount
+        StakeValidator.spend(
+          withdrawalScriptHash = ownScriptHash,
+          withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0),
+          txInfo = tx
+        )
+    }
+}
+```
+
+### Reward Endpoint (Stake Validator)
+
+```scala
+inline override def reward(
+    redeemer: Redeemer,
+    stakingKey: Credential,
+    tx: TxInfo
+): Unit = {
+    StakeValidator.withdraw(
+      withdrawalValidator = (redeemer, validatorHash, txInfo) => {
+          // Your heavy validation logic here
+          // This runs ONCE for all inputs
+          val totalInputValue = txInfo.inputs.foldLeft(BigInt(0)) { (acc, input) =>
+              acc + input.resolved.value.getLovelace
+          }
+          // Verify outputs match expected distribution
+          true
+      },
+      redeemer = redeemer,
+      credential = stakingKey,
+      txInfo = tx
+    )
+}
+```
+
+**Script Configuration:** The spending script address must have a staking credential that points to your withdrawal validator. This is configured when deploying scripts.
+
+**Double Satisfaction:** When using this pattern with multiple inputs, ensure proper input-to-output mapping to prevent double satisfaction vulnerabilities. See [Common Vulnerabilities](/docs/security/common-vulnerabilities#3-double-satisfaction).
+
+### Example: Optimized Payment Splitter
+
+The `scalus-examples` module includes a side-by-side comparison:
+
+| Validator | Description |
+|-----------|-------------|
+| `NaivePaymentSplitterValidator` | Runs full validation per UTxO (O(N²)) |
+| `OptimizedPaymentSplitterValidator` | Uses stake validator pattern (O(N)) |
+
+**Real-world savings:** Tests show **~71% reduction** in memory and CPU costs when spending multiple UTxOs with the optimized version.
+
+The optimized version also uses `SpendRedeemer.ownInputIndex` to avoid iterating through all inputs to find the own input:
+
+```scala
+case class SpendRedeemer(ownInputIndex: BigInt) derives ToData, FromData
+
+// Spending endpoint - O(1) input lookup
+inline override def spend(...): Unit = {
+    val ownInput = tx.inputs.at(spendRedeemer.ownInputIndex)
+    require(ownInput.outRef === ownRef, "Own input index mismatch")
+
+    val ownScriptHash = ownInput.resolved.address.credential
+        .scriptOption.getOrFail("Own address must be Script")
+
+    // Just check stake validator ran (withdraw zero trick)
+    StakeValidator.spendMinimal(ownScriptHash, tx)
+}
+```
+
+The stake validator's reward endpoint receives pre-computed values and verifies them:
+
+```scala
+case class SplitVerificationRedeemer(
+    payeeWithChange: PubKeyHash,
+    sumContractInputs: BigInt,
+    splitPerPayee: BigInt,
+    nPayed: BigInt
+) derives ToData, FromData
+
+// Reward endpoint - runs ONCE, verifies claimed values match transaction
+inline override def reward(...): Unit = {
+    val verification = redeemer.to[SplitVerificationRedeemer]
+    // Verify sumContractInputs matches actual inputs
+    // Verify outputs match claimed split amounts
+    // All heavy iteration happens here, once
+}
+```
+
+## Related Patterns
+
+- **[Merkelized Validator](/docs/design-patterns/merkelized-validator)** - When spending validators need to read verified data from stake validator
+- **[Transaction Level Minter](/docs/design-patterns/transaction-level-minting)** - Similar pattern using minting instead of staking
+
+## Resources
+
+- [Anastasia Labs: Stake Validator Pattern](https://github.com/Anastasia-Labs/design-patterns/tree/main/stake-validator) - Original pattern documentation
+- [Scalus Design Patterns](https://github.com/scalus3/scalus/tree/master/scalus-design-patterns) - Implementation and tests
+- [OptimizedPaymentSplitterValidator](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/OptimizedPaymentSplitterValidator.scala) - Optimized example with 71% savings
+- [NaivePaymentSplitterValidator](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/PaymentSplitterValidator.scala) - Naive version for comparison
+- [PaymentSplitterTxBuilderTest](https://github.com/scalus3/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/paymentsplitter/PaymentSplitterTxBuilderTest.scala) - Cost comparison tests

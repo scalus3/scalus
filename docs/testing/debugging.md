@@ -1,0 +1,249 @@
+Source: https://scalus.org/docs/testing/debugging
+
+# Debugging Cardano Smart Contracts
+
+## Scala-Level Debugging
+
+Before compiling to UPLC, you can debug your validator as regular Scala code:
+- Use your IDE's debugger
+- Set breakpoints in validator methods
+- Step through execution
+- Inspect variables and data structures
+
+**This is the fastest way to debug logic errors.**
+
+## Using `log` for Script Logging
+
+The `log` function accepts **variadic arguments** of any type that has a `Show` or `ToData` instance. All arguments are converted to strings and concatenated into a single trace entry, separated by spaces.
+
+```scala
+inline def log(inline args: Any*): Unit
+```
+
+### Basic Usage
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.log
+
+// Simple message
+log("Starting validation")
+
+// Label with a value — uses Show[BigInt]
+log("count", BigInt(42))
+// trace output: "count 42"
+
+// Multiple values
+log("values", BigInt(1), BigInt(2), BigInt(3))
+// trace output: "values 1 2 3"
+
+// Mixed types — uses Show[Boolean] and Show[BigInt]
+log("mixed", true, BigInt(42))
+// trace output: "mixed True 42"
+```
+
+### How Arguments Are Converted
+
+The `log` macro resolves each argument at compile time:
+
+1. **String literals** — passed through as-is (unquoted), useful as labels
+2. **Types with a `Show` instance** — converted via `Show[T]`. Built-in instances exist for `BigInt`, `Boolean`, `String`, `Data`, and `Unit`
+3. **Types with a `ToData` instance** (fallback) — converted to `Data` first, then displayed via `Show[Data]`. This works for any case class or enum that `derives ToData`
+4. **No instance found** — compilation error
+
+```scala
+// String literal vs string expression
+val s: String = "hello"
+log("label", s)
+// trace output: label "hello"
+// ↑ literal (unquoted)  ↑ expression (quoted via Show[String])
+```
+
+### Logging Custom Types
+
+Any case class or enum with a `ToData` instance can be logged:
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.*
+
+case class Point(x: BigInt, y: BigInt) derives ToData
+
+enum Color derives ToData:
+    case Red, Green, Blue
+
+// In your validator:
+log("point", Point(BigInt(1), BigInt(2)))
+// trace output: "point <0, [1, 2]>"  (Data representation)
+
+log("color", Color.Red)
+// trace output: "color <0, []>"
+```
+
+### Validator Example
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.log
+
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    log("Starting validation")
+    val myDatum = datum.getOrFail("Datum required").to[MyDatum]
+    log("owner", myDatum.owner)
+
+    val isValid = tx.isSignedBy(myDatum.owner)
+    log("signed", isValid)
+
+    require(isValid, "Must be signed by owner")
+  }
+```
+
+### Notes
+
+- `log()` with no arguments is a no-op
+- Each `log(...)` call produces exactly **one** trace entry
+- `log` compiles to `Builtins.trace`, so it consumes execution units on-chain. Remove or minimize logging for production deployments
+
+## Where Do Logs Appear?
+
+**Local evaluation** (via `PlutusScriptEvaluator` or `evaluateDebug`): logs are always collected and included in:
+- The `Result.Success` object (when evaluation succeeds)
+- The `PlutusScriptEvaluationException` (when evaluation fails)
+
+This is the most reliable way to see trace output. Use `evaluateDebug` or the Emulator
+to inspect logs during development.
+
+**Node-side** (when submitting to a Cardano node): trace logs from failed scripts
+appear in the node error response as `"Script debugging logs: ..."`, but **only when
+the node runs in Verbose mode**. Yaci DevKit defaults to Quiet mode where trace output
+is not included in error responses. Blockfrost-connected nodes (Preprod, Mainnet)
+typically run in Verbose mode.
+
+To see trace logs from a Yaci DevKit node, the node must be configured with
+`VerboseMode = Verbose`. Note that successful script evaluations never expose
+trace output on-chain — only failures include logs in the error response.
+
+## Evaluating with Error Traces
+
+```scala
+import scalus.uplc.eval.PlutusVM
+
+given PlutusVM = PlutusVM.makePlutusV3VM()
+
+val compiled = compile {
+  log("Validator starting")
+  // your validator code
+  log("Validator completed")
+}
+
+// Evaluate with error traces enabled
+val result = compiled.toUplc(generateErrorTraces = true).evaluateDebug
+```
+
+**The `generateErrorTraces` flag:**
+- `true`: Adds error location information (useful for debugging, but increases script size)
+- `false`: Minimal script size (for production deployment)
+
+## Diagnostic Replay for Release Scripts
+
+When deploying to production, you typically compile scripts with `Options.release` (which sets `removeTraces = true` and `generateErrorTraces = false`) to minimize script size and execution costs. This means both trace logs and detailed error traces (e.g., `require` messages) are omitted in release scripts, so if a release script fails, you will not see useful error information in the logs — making it hard to diagnose the issue.
+
+**Diagnostic replay** solves this: when you use `CompiledPlutus` (e.g., `PlutusV3.compile(...)`) with `TxBuilder`, the builder automatically registers the compiled script for replay. The `CompiledPlutus` object retains the SIR, so it can recompile a debug version on demand. If the release script fails with empty logs, the evaluator:
+
+1. Recompiles the script from SIR with error traces enabled
+2. Replays the failing evaluation with the same arguments
+3. Collects the diagnostic logs from the replay
+4. Includes them in the `PlutusScriptEvaluationException`
+
+> **Note:** Automatic replay requires `CompiledPlutus` (which keeps the SIR). If you use an external
+> tx builder (e.g., meshJS or Bloxbean CCL), you won't have a `CompiledPlutus` object — instead,
+> use the `DebugScript` API to provide a pre-compiled debug script. See [DebugScript API](#debugscript-api-for-external-builders) below.
+
+### Using Diagnostic Replay with TxBuilder
+
+Pass `CompiledPlutus` (the result of `PlutusV3.compile(...)`) instead of `PlutusScript` to `spend` or `mint`:
+
+```scala
+given Options = Options.release  // no traces for production
+
+val validator = PlutusV3.compile { (sc: Data) =>
+  // your validator code
+  require(someCondition, "Condition failed")
+}
+
+// Using CompiledPlutus enables automatic diagnostic replay
+val tx = TxBuilder(env)
+  .spend(scriptUtxo, redeemer, validator)   // not validator.script!
+  .payTo(recipient, Value.ada(10))
+  .build(changeTo = changeAddress)
+```
+
+For reference scripts, use the `references` overload:
+
+```scala
+val tx = TxBuilder(env)
+  .references(scriptRefUtxo, validator)  // registers for replay
+  .spend(scriptUtxo, redeemer)
+  .build(changeTo = changeAddress)
+```
+
+When the script fails, the exception will contain diagnostic logs even though the on-chain script has no traces:
+
+```scala
+try {
+  builder.build(changeTo = changeAddress)
+} catch {
+  case e: TxBuilderException.BalancingException =>
+    e.scriptLogs.foreach(logs => println(logs.mkString("\n")))
+    // Prints: "Condition failed" (from diagnostic replay)
+}
+```
+
+## Debugging with IDE
+
+One of Scalus's biggest advantages is the ability to debug validators as regular Scala code:
+
+### Setting Up Debug Mode
+
+1. **Run tests in debug mode** - Use your IDE's debug test runner
+2. **Set breakpoints** - Click in the gutter next to line numbers
+3. **Inspect variables** - Hover over variables or use the debug panel
+4. **Step through code** - Use step over, step into, step out
+
+### Example Debug Session
+
+```scala
+@Compile
+object MyValidator extends Validator:
+  inline override def spend(
+      datum: Option[Data],
+      redeemer: Data,
+      tx: TxInfo,
+      ownRef: TxOutRef
+  ): Unit = {
+    val owner = datum.getOrFail("No datum").to[PubKeyHash]
+    // Set breakpoint here ⬅
+    val signed = tx.signatories.contains(owner)
+    // Inspect 'signed' variable
+    require(signed, "Not signed")
+  }
+```
+
+**Debugging workflow:**
+1. Set a breakpoint in your validator
+2. Run test in debug mode
+3. When breakpoint hits, inspect variables
+4. Step through execution to understand behavior
+5. Fix logic errors before compiling to UPLC
+
+## See Also
+
+- **[Profiling](/docs/testing/profiling)** - Find expensive code paths with CEK machine profiling
+- **[Unit Testing](/docs/testing/unit-testing)** - Write comprehensive tests for your validators
+- **[Emulator](/docs/testing/emulator)** - Test with in-memory Cardano node
+- **[Local Devnet](/docs/testing/local-devnet)** - Integration testing with real Cardano node
+- **[Compiling](/docs/smart-contracts/compiling)** - Compile debugged validators to Plutus scripts

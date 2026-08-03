@@ -1,0 +1,46 @@
+Source: https://scalus.org/docs/language-guide/support
+
+# Supported Scala Features
+
+Scalus compiles Scala code to Untyped Plutus Core (UPLC), a minimalist lambda calculus designed for secure blockchain execution. This constraint means only a subset of Scala's feature set is supported—those that can be efficiently and deterministically translated to UPLC.
+
+The compilation process transforms your Scala code into an intermediate representation before generating the final UPLC that runs on Cardano. UPLC's deliberately limited nature (optimized for security and determinism) excludes many high-level language features.
+
+## Supported Features
+
+Below is a comprehensive list of what Scala features are currently supported in Scalus:
+
+* simple `val`s and `def`s of supported built-in types or case classes/enums
+* lambda expressions
+* recursive functions
+* passing/returning functions as arguments (higher-order functions)
+* `if-then-else` expressions
+* `match` expressions on case classes and enums with:
+    * nested patterns: `case List.Cons(Option.Some(v), _) => ...`
+    * wildcard patterns: `case _ => ...`
+    * constant patterns for booleans and strings: `case true => ...`, `case "hello" => ...`
+    * guard clauses: `case Option.Some(v) if v > 0 => ...`
+    * variable bindings with `@`: `case some @ Option.Some(v) => ...`
+    * non-exhaustive matching with `@unchecked`
+* `given` arguments and `using` clauses
+* `throw` expressions but no `try-catch` expressions
+* built-in functions and operators
+* simple data types: case classes and enums
+* `inline` vals, functions and macros in general
+* implicit conversions
+* opaque types (non top-level) and type aliases
+* extension methods
+* tuples
+* value destructuring in vals: `val Some((a, b)) = optionOfTuple` 
+
+## Unsupported Features
+
+* `var`s and `lazy val`s - use immutable `val` declarations instead
+* by-name parameters (`b: => T`) - rejected at compile time, because Scalus would evaluate the argument strictly, unlike Scala; use an `inline` method with an `inline` parameter, or an explicit function parameter `b: () => T`
+* `while` loops - use recursion or higher-order functions like `fold`
+* classes, inheritance and polymorphism aka virtual dispatch
+    * you can't use `isInstanceOf` or runtime type checks
+    * use sealed traits with enums or case classes for polymorphic data
+* `try-catch` expressions - use `Option`, `Either`, or error handling patterns instead
+* overloaded functions - each function must have a unique name
+* mutually recursive functions - functions cannot call each other recursively

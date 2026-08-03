@@ -1,0 +1,103 @@
+Source: https://scalus.org/docs/smart-contracts/plutus-data
+
+# FromData and ToData
+
+On-chain, all data is stored in a universal format called `Data` (Plutus Core Data). Datums, redeemers, and script context are all encoded as `Data`. Scalus provides type-safe conversions to work with your Scala types instead of raw `Data`.
+
+## Quick Usage
+
+```scala
+// Convert Data to a typed value
+val owner = datum.to[PubKeyHash]
+
+// Convert a typed value to Data
+val data = myValue.toData
+```
+
+## Using Data in Validators
+
+In validators, you receive `Data` and convert it to typed values:
+
+```scala
+@Compile
+object MyValidator extends Validator:
+    inline override def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, outRef: TxOutRef): Unit =
+        // Extract typed values from Data
+        val owner = datum.getOrFail("Datum not found").to[PubKeyHash]
+        val action = redeemer.to[MyRedeemer]
+        // ... validation logic
+```
+
+Two equivalent ways to convert:
+
+```scala
+// Using .to[T] extension method (preferred)
+val myDatum = datumData.to[MyDatumType]
+
+// Using fromData function
+import scalus.uplc.builtin.Data.fromData
+val myDatum = fromData[MyDatumType](datumData)
+```
+
+## Deriving Instances
+
+Scalus provides type classes `FromData` and `ToData` to convert between user-defined types and `Data`. Derive instances automatically using Scala 3's `derives` syntax.
+
+One caveat - you must always supply a companion object with @Compile annotation on it even if it is empty.
+This is because Scalus needs to compile the companion object to include the `FromData` instance in the UPLC script.
+
+```scala mdoc:compile-only
+import scalus.uplc.builtin.*, Builtins.*, Data.*
+
+case class Account(hash: ByteString, balance: BigInt) derives FromData, ToData
+
+@Compile
+object Account
+
+enum State derives FromData, ToData:
+    case Empty
+    case Active(account: Account)
+
+@Compile
+object State
+
+```
+
+Here's an example of converting standard and user-defined types to and from `Data`.
+
+```scala mdoc:compile-only
+import scalus.uplc.builtin.*, Builtins.*, Data.*
+
+case class Account(hash: ByteString, balance: BigInt)
+
+enum State:
+    case Empty
+    case Active(account: Account)
+
+val fromDataExample = compile {
+    // The `fromData` function is used to convert a `Data` value to a typed Scala value.
+    val data = iData(123)
+    // fromData is a method that looks up the appropriate `FromData` instance for the type
+    // there are instances for all built-in types
+    val a = fromData[BigInt](data)
+    // also you can use extension method `to` on Data
+    val b = data.to[BigInt]
+
+    // you can define your own `FromData` instances
+    {
+        given FromData[Account] = (d: Data) => {
+            val args = unConstrData(d).snd
+            Account(args.head.to[ByteString], args.tail.head.to[BigInt])
+        }
+        val account = data.to[Account]
+    }
+
+    // or you can use a macro to derive the FromData instance
+    {
+        given FromData[Account] = FromData.derived
+        given FromData[State] = FromData.derived
+    }
+}
+```
+
+You can derive `FromData` instances for your case classes and enums via standard Scala 3 `derives` syntax.

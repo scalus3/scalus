@@ -1,0 +1,302 @@
+Source: https://scalus.org/docs/get-started/for-scala-developers
+
+# Scalus for Scala Developers
+
+Build Cardano smart contracts using the Scala you already know. Get your first validator running in 30 minutes with familiar tools like IntelliJ IDEA, ScalaTest, and SBT.
+
+## Why Scalus Works for Scala Developers
+
+You already understand:
+- ✓ Scala 3 syntax and type system
+- ✓ Functional programming patterns
+- ✓ Case classes, pattern matching, and collections
+- ✓ Testing with ScalaTest/ScalaCheck
+
+You'll learn:
+- **Cardano's eUTxO model** - How blockchain state works
+- **Plutus validators** - On-chain code that controls funds
+- **Scalus constraints** - Which Scala features compile to UPLC
+- **Blockchain-specific patterns** - Datums, redeemers, script context
+
+**Time Investment:** ~2-3 hours to first working validator, ~1 day to proficiency
+
+---
+
+## Your Learning Path
+
+### Step 1: Quick Start (30 minutes)
+
+**Goal:** Get your first validator running and debugged in your IDE
+
+#### Check Hello Cardano Contract
+
+- [ ] **[First Scalus smart contract](/docs/get-started#get-your-first-scalus-validator)** - Explore Hello Cardano validator
+
+#### Write you First Smart Contract
+- [ ] **[Write your first smart contract](/docs/smart-contracts/developing-smart-contracts)** - Build a spending validator
+- [ ] **[Debug in your IDE](/docs/testing/debugging)** - Set breakpoints and inspect execution
+
+**🎯 Quick Win:** You'll have a working Cardano validator and debug it with IntelliJ IDEA's debugger. Yes, **real breakpoints on blockchain code!**
+
+**What You Just Learned:**
+- Validators are just Scala objects with an `@Compile` annotation
+- You can debug them before deploying to blockchain
+- The development experience feels like regular Scala development
+
+---
+
+### Step 2: Understand Cardano Blockchain (1-2 hours)
+
+**Goal:** Understand how Cardano's eUTxO model and validators work
+
+#### Blockchain Concepts (New to You)
+
+**Coming from Web2?** Think of validators as smart locks on digital assets. They define rules for who can unlock/spend funds.
+
+**Essential Reading:**
+- [ ] **[Understanding eUTxO Model](https://docs.cardano.org/about-cardano/learn/eutxo-explainer)** - How Cardano manages state (15 min)
+- [ ] **[The EUTxO-Model - Plutus Pioneer Program](https://www.youtube.com/watch?v=ulYDNaEKf4g)** - Learning details (25 min)
+- [ ] **[Validators in Depth](/docs/smart-contracts/validators)** - Spending, minting, rewarding, certifying validators (20 min)
+- [ ] **[HTLC Tutorial](/docs/smart-contracts/htlc-tutorial)** - Complete Hash Time-Locked Contract example (45 min)
+
+#### Scalus-Specific Concepts
+
+- [ ] **[Supported Scala Features](/docs/language-guide/support)** - **CRITICAL:** Not all Scala works on-chain!
+- [ ] **[Primitive Types](/docs/language-guide/constants-primitives)** - `BigInt`, `ByteString`, `Data` instead of `Int`, `Array[Byte]`, etc.
+- [ ] **[Plutus Data](/docs/smart-contracts/plutus-data)** - Automatic serialization for case classes
+
+**🎯 Quick Win:** Build a multi-signature wallet validator using pattern matching and Scala collections.
+
+**Important Constraint:**
+Not all Scala features compile to Plutus Core (UPLC):
+
+✅ **Supported:** vals, defs, case classes, enums, pattern matching, lambdas, recursion, `inline`
+❌ **Not Supported:** `var`, try-catch (except `throw`), mutable collections, arbitrary type classes
+
+Always check [Supported Features](/docs/language-guide/support)!
+---
+
+### Step 3: Development Lifecycle (2-3 hours)
+
+**Goal:** Build tested, optimized validators ready for testnet/mainnet
+
+#### Testing & Quality
+
+- [ ] **[Testing Smart Contracts](/docs/testing/unit-testing)** - Use ScalaCheck for property-based testing
+- [ ] **[Custom Data Types](/docs/language-guide/data-types)** - Define datums and redeemers with case classes
+- [ ] **[Collections](/docs/language-guide/collections)** - `List`, `AssocMap` for on-chain data
+
+**Testing Example:**
+```scala
+class MyValidatorTest extends AnyFunSuite with ScalusTest:
+
+  test("validator accepts valid signature") {
+    val context = makeSpendingScriptContext(
+      datum = ownerPkh.toData,
+      redeemer = signatureData,
+      signatories = List(ownerPkh)
+    )
+
+    val compiled = PlutusV3.compile(MyValidator.validate)
+    val result = compiled.runScript(context)
+    assert(result.isSuccess)  // Familiar ScalaTest!
+  }
+```
+
+#### Build & Deploy
+
+- [ ] **[Compiling Validators](/docs/smart-contracts/compiling)** - Generate UPLC bytecode and contract blueprints
+- [ ] **Evaluating Scripts (In progress)** - Run validators locally, check execution costs
+- [ ] **[Builtin Functions](/docs/language-guide/builtin-functions)** - Cryptographic operations and blockchain primitives
+
+#### Off-Chain Transaction Building
+
+- [ ] **[Transaction Builder](/docs/transactions)** - Build complete Cardano transactions in Scala
+- [ ] **[Building Your First Transaction](/docs/transactions/building-first-transaction)** - Send ADA and native tokens
+- [ ] **[Spending UTxOs](/docs/transactions/spending-utxos)** - Spend from validator scripts with redeemers
+- [ ] **[Minting & Burning Assets](/docs/transactions/minting-burning-assets)** - Create and manage native tokens
+- [ ] **[Staking & Rewards](/docs/transactions/staking-rewards)** - Stake delegation and reward withdrawal
+- [ ] **[Governance](/docs/transactions/governance)** - DRep registration and voting delegation
+
+**🎯 Quick Win:** Deploy a fully tested validator to Cardano testnet and build a complete off-chain application to interact with it.
+---
+
+### Step 4: Master Advanced Patterns
+
+**Goal:** Master optimizations and advanced validator patterns
+
+#### Optimisations
+- [ ] **[Smart Contract Optimisations](/docs/smart-contract-optimisations)** - Reduce script size and execution costs
+- [ ] **[Modules](/docs/language-guide/modules)** - Build reusable validator libraries
+- [ ] **[Real-World Examples](https://github.com/scalus3/scalus/tree/master/scalus-examples)** - Study production patterns
+- [ ] **[Transaction Builder](/docs/transactions)** - Build complete off-chain applications
+
+#### Design Patterns & Security
+
+- [ ] **[Design Patterns](/docs/design-patterns)** - Proven patterns for efficient multi-input validators
+- [ ] **[Security Guide](/docs/security)** - Common security issues and mitigations
+
+**🎯 Quick Win:** Optimize a validator to reduce execution units by 20-30% using inlining and macros.
+
+---
+
+## Common Questions from Scala Devs
+
+### "What Scala features can I use?"
+
+**The Good News:** Most functional Scala works!
+
+✅ **Fully Supported:**
+- `val`, `def`, case classes, enums
+- Lambdas and higher-order functions
+- Pattern matching on case classes/enums
+- Recursion and tail recursion
+- `given` parameters and `using` clauses
+- `inline` and compile-time macros
+- Extension methods
+
+❌ **Not Supported:**
+- `var` (mutable variables)
+- `try-catch` (but `throw` works)
+- Mutable collections
+- Complex type class derivation
+- Effects (IO, Future, etc.)
+
+See the complete list: [Supported Features](/docs/language-guide/support)
+
+### "Can I use my favorite Scala libraries?"
+
+**For on-chain code:** No. Validators compile to UPLC and can only use `scalus.*` libraries.
+
+**For off-chain code:** Yes! Use any JVM library for:
+- Building transactions
+- Testing validators
+- Backend services
+- Frontend integration
+
+Think of it like Scala.js: different target platform = different available libraries.
+
+### "How does compilation work?"
+
+```
+Your Scala Code (@Compile annotation)
+         ↓
+Scalus Compiler Plugin
+         ↓
+SIR (Scalus Intermediate Representation)
+         ↓
+UPLC (Untyped Plutus Core)
+         ↓
+Plutus Script (runs on Cardano)
+```
+
+**Two modes:**
+1. **JVM execution** - For testing and debugging (fast, debuggable)
+2. **UPLC compilation** - For on-chain deployment (verifiable, immutable)
+
+### "What about performance?"
+
+**On-chain execution is metered:**
+- Memory usage (bytes)
+- CPU steps (execution units)
+- Script size (affects fees)
+
+Scalus provides:
+- **Built-in cost estimation** - See execution units before deploying
+- **Optimization passes** - Reduce script size and costs
+- **Profiling tools** - Identify expensive operations
+
+See: [Smart Contract Optimisations](/docs/smart-contract-optimisations)
+
+### "How does error handling work?"
+
+**On-chain:** No try-catch, but you can use `require` and `fail`:
+
+```scala
+inline def spend(datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef): Unit =
+  val owner = datum.getOrFail("Missing datum").to[PubKeyHash]
+
+  // This throws if condition is false
+  require(tx.signatories.contains(owner), "Not signed by owner")
+
+  // Explicit fail also works
+  if !validCondition then
+    fail("Invalid condition")
+```
+
+**Off-chain (testing):** Full Scala error handling:
+
+```scala
+test("validator rejects invalid signature") {
+  val compiled = PlutusV3.compile(MyValidator.validate)
+  val result = compiled.runScript(context)
+
+  assert(result.isFailure)  // Check it failed
+  assert(result.logs.exists(_.contains("Invalid signature")))  // Check error message
+}
+```
+
+---
+
+## Common Pitfalls & Solutions
+
+**Pitfall #1: Using Scala stdlib types on-chain**
+
+**Problem:**
+```scala
+@Compile
+object Bad extends Validator:
+  def spend(...) =
+    val data = scala.collection.immutable.List(1, 2, 3)  // ❌ Wrong!
+```
+
+**Solution:**
+```scala
+@Compile
+object Good extends Validator:
+  def spend(...) =
+    val data = scalus.cardano.onchain.plutus.prelude.List(1, 2, 3)  // ✅ Correct!
+```
+
+Use `scalus.cardano.onchain.plutus.prelude.List`, not `scala.collection.List`.
+
+**Pitfall #2: Forgetting `@Compile` annotation**
+
+**Problem:** Code runs in tests but doesn't compile to UPLC.
+
+**Solution:** Always annotate validators:
+```scala
+@Compile  // ← Essential!
+object MyValidator extends Validator
+```
+
+**Pitfall #3: Using unsupported Scala features**
+
+**Problem:** Code compiles in Scala but fails in Scalus plugin.
+
+**Solution:** Check [Supported Features](/docs/language-guide/support) before using advanced features. Stick to simple `val`, `def`, case classes, and pattern matching.
+
+---
+
+## Essential Cardano Resources
+
+### Blockchain Fundamentals
+- **[Cardano eUTxO Model](https://docs.cardano.org/learn/eutxo-explainer)** - How state works on Cardano
+- **[Plutus Overview](https://docs.cardano.org/developer-resources/smart-contracts/plutus)** - Cardano's smart contract platform
+- **[Cardano Developer Portal](https://developers.cardano.org/)** - Official developer resources
+
+### Scalus-Specific
+- **[Scalus Examples](https://github.com/scalus3/scalus/tree/master/scalus-examples)** - Real validator code
+- **[API Documentation](https://scalus.org/api/index.html)** - Complete API reference
+- **[Language Guide](/docs/language-guide)** - Scalus language features
+
+---
+
+## Get Help
+
+Need assistance? Connect with the Scalus community:
+- **Join Discord:** [Ask questions](https://discord.gg/B6tXmBzhTn)
+- **Join Scalus Club:** [Check new features & discuss](https://luma.com/scalus)
+- **Examples:** [Real-world validator code](https://github.com/scalus3/scalus/tree/master/scalus-examples)
+
+Happy building! 🚀

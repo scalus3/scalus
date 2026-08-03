@@ -1,0 +1,328 @@
+Source: https://scalus.org/docs/language-guide/collections
+
+# Collections
+
+Scalus provides immutable collection types for organizing and manipulating data in smart contracts. These collections—List and AssocMap—are optimized for blockchain execution and compile efficiently to Plutus Core.
+
+## List
+
+Immutable singly-linked lists are the primary collection type in Plutus. Lists are recursive data structures ideal for sequential processing.
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.List
+
+// Creating lists
+val empty = List.empty[BigInt]
+val numbers = List(1, 2, 3, 4, 5)
+val range = List.range(0, 10)  // [0, 1, 2, ..., 10] (inclusive)
+
+// Prepending (O(1))
+val withZero = 0 :: numbers  // [0, 1, 2, 3, 4, 5]
+
+// Pattern matching
+numbers match
+  case Nil => "empty"
+  case head :: tail => s"head: $head, tail: $tail"
+
+// Common operations
+val doubled = numbers.map(_ * 2)
+val evens = numbers.filter(_ % 2 == 0)
+val sum = numbers.foldLeft(0)(_ + _)
+val sum2 = numbers.foldRight(0)(_ + _)
+val reversed = numbers.reverse
+val length = numbers.length
+val head = numbers.head
+val tail = numbers.tail
+val contains = numbers.contains(3)
+
+// List comprehensions
+val pairs = for
+  x <- List(1, 2, 3)
+  y <- List(10, 20)
+yield (x, y)  // [(1,10), (1,20), (2,10), (2,20), (3,10), (3,20)]
+
+// Flattening
+val nested = List(List(1, 2), List(3, 4))
+val flat = nested.flatten  // [1, 2, 3, 4]
+
+// Zipping
+val letters = List("a", "b", "c")
+val zipped = numbers.zip(letters)  // [(1,"a"), (2,"b"), (3,"c")]
+```
+
+**Performance Notes:**
+- Prepending (`::`) is O(1)
+- Appending is O(n) - avoid in favor of prepending + reversing
+- Random access is O(n) - use lists for sequential processing
+- Pattern matching on lists is efficient and idiomatic
+
+## Tuple
+
+Tuples are fixed-size heterogeneous collections. Scalus supports tuples up to Tuple22.
+
+```scala
+// Creating tuples
+val pair: (BigInt, ByteString) = (42, ByteString.fromHex("deadbeef"))
+val triple = (true, 123, "hello")
+val nested = ((1, 2), (3, 4))
+
+// Accessing elements
+val first = pair._1   // 42
+val second = pair._2  // hex"deadbeef"
+
+// Destructuring
+val (a, b) = pair
+val (x, y, z) = triple
+
+// Pattern matching
+pair match
+  case (num, bytes) => s"Number: $num, Bytes: $bytes"
+
+// Converting
+val list = triple.toList  // requires all elements to have same type
+```
+
+**Use Cases:**
+- Returning multiple values from functions
+- Grouping related data without defining a case class
+- Temporary data structures
+
+## BuiltinPair
+
+`BuiltinPair` is Plutus's builtin pair type, similar to tuples but with named accessors.
+
+```scala
+import scalus.uplc.builtin.BuiltinPair
+
+// Creating pairs
+val pair = BuiltinPair(BigInt(42), ByteString.fromHex("deadbeef"))
+
+// Accessing elements
+val first = pair.fst
+val second = pair.snd
+
+// Using with Builtins
+import scalus.uplc.builtin.Builtins
+val extractFirst = Builtins.fstPair(pair)
+val extractSecond = Builtins.sndPair(pair)
+
+// Pattern matching
+pair match
+  case BuiltinPair(num, bytes) => s"Number: $num, Bytes: $bytes"
+```
+
+## Option
+
+`Option` represents an optional value - either `Some(value)` or `None`.
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.Option
+import scalus.cardano.onchain.plutus.prelude.Option.*
+
+// Creating Options
+val some: Option[BigInt] = Some(42)
+val none: Option[BigInt] = None
+
+// Pattern matching
+some match
+  case Some(value) => value
+  case None => 0
+
+// Operations
+val mapped = some.map(_ * 2)              // Some(84)
+val flatMapped = some.flatMap(x => Some(x + 1))  // Some(43)
+val filtered = some.filter(_ > 40)         // Some(42)
+val getOrElse = some.getOrElse(0)         // 42
+val orElse = none.orElse(Some(100))       // Some(100)
+
+// Combining options
+val opt1 = Some(10)
+val opt2 = Some(20)
+val combined = for
+  x <- opt1
+  y <- opt2
+yield x + y  // Some(30)
+```
+
+**Use Cases:**
+- Representing values that might be absent
+- Avoiding null references
+- Safe operations that might fail
+
+## Error Handling
+
+Scalus does not provide an `Either` type on-chain. Instead, use `require` for validation and `Option` for values that might be absent:
+
+```scala
+// Use require for validation
+require(amount > 0, "Amount must be positive")
+
+// Use Option for values that might be absent
+val value: Option[BigInt] = map.get(key)
+val result = value.getOrFail("Key not found")
+```
+
+## AssocMap
+
+`AssocMap` is an association list - a list of key-value pairs. It's an ordered map with O(n) lookup.
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.AssocMap
+
+// Creating association maps
+val empty = AssocMap.empty[ByteString, BigInt]
+val map = AssocMap.fromList(List(
+  (ByteString.fromHex("01"), BigInt(100)),
+  (ByteString.fromHex("02"), BigInt(200))
+))
+
+// Operations
+val lookup = map.get(ByteString.fromHex("01"))  // Some(100)
+val insert = map.insert(ByteString.fromHex("03"), BigInt(300))
+val delete = map.delete(ByteString.fromHex("01"))
+val member = map.contains(ByteString.fromHex("02"))  // true
+
+// Keys and values
+val keys = map.keys
+val values = map.values
+
+// Mapping over values
+val doubled = map.mapValues(_ * 2)
+
+// Filtering
+val filtered = map.filter { case (k, v) => v > 150 }
+```
+
+**Use Cases:**
+- Small maps where ordering matters
+- Sequential processing of key-value pairs
+- When insertion order needs to be preserved
+
+## Map (PlutusData)
+
+Plutus `Data.Map` is the builtin map type for on-chain data, represented as a list of `(Data, Data)` pairs.
+
+```scala
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Builtins
+
+// Creating maps
+val pairs = List(
+  (Builtins.iData(BigInt(1)), Builtins.bData(ByteString.fromHex("aa"))),
+  (Builtins.iData(BigInt(2)), Builtins.bData(ByteString.fromHex("bb")))
+)
+val mapData = Builtins.mapData(pairs)
+
+// Extracting map
+val extractedPairs = Builtins.unMapData(mapData)
+
+// Working with map entries
+extractedPairs.foreach { case (keyData, valueData) =>
+  val key = Builtins.unIData(keyData)
+  val value = Builtins.unBData(valueData)
+  // process key-value pair
+}
+```
+
+**Use Cases:**
+- Storing data on-chain in datum or redeemer
+- Interoperability with other Plutus scripts
+- Serialization and deserialization
+
+## Choosing the Right Collection
+
+| Collection | Use When | Performance |
+|------------|----------|-------------|
+| **List** | Sequential processing, functional operations | Prepend O(1), access O(n) |
+| **Tuple** | Fixed number of heterogeneous values | Access O(1) |
+| **BuiltinPair** | Two related values, interop with builtins | Access O(1) |
+| **Option** | Optional values, avoiding errors | Pattern match O(1) |
+| **AssocMap** | Small ordered maps, preserved insertion order | Lookup O(n) |
+| **Map (Data)** | On-chain data storage, script interop | Lookup O(n) |
+
+## Collection Conversions
+
+```scala
+// List to Tuple (up to 22 elements)
+val list = List(1, 2, 3)
+// Manual conversion needed
+
+// Tuple to List (requires same types)
+val tuple = (1, 2, 3)
+// Use productIterator for generic approach
+
+// List to AssocMap
+val keyValues = List(("a", 1), ("b", 2))
+val assocMap = AssocMap.fromList(keyValues)
+
+// AssocMap to List
+val backToList = assocMap.toList
+
+// Data conversions
+val listData = Builtins.listData(List(Builtins.iData(1), Builtins.iData(2)))
+val mapData = Builtins.mapData(List(
+  Builtins.mkPairData(Builtins.iData(1), Builtins.iData(100))
+))
+```
+
+## Best Practices
+
+1. **Prefer immutable operations** - All collection operations return new collections
+2. **Use List for sequential processing** - Most efficient for functional operations
+3. **Avoid expensive operations** - Random access, appending, and large maps are costly
+4. **Pattern match for safety** - Handle all cases (empty/non-empty, Some/None)
+5. **Use AssocMap for small maps** - For larger maps, consider alternative data structures
+6. **Minimize on-chain data** - Keep collections small to reduce transaction costs
+7. **Leverage type safety** - Use appropriate collection types to catch errors at compile time
+
+## Common Patterns
+
+### Processing Lists
+
+```scala
+// Sum all elements
+val sum = numbers.foldLeft(0)(_ + _)
+
+// Find maximum
+val max = numbers.foldLeft(numbers.head)((a, b) => if a > b then a else b)
+
+// Group by predicate (using two filters)
+val evens = numbers.filter(_ % 2 == 0)
+val odds = numbers.filter(_ % 2 != 0)
+
+// Take while condition holds
+val lessThanFive = numbers.takeWhile(_ < 5)
+
+// Drop while condition holds
+val fiveAndAbove = numbers.dropWhile(_ < 5)
+```
+
+### Safe Map Access
+
+```scala
+// Using Option for safe access
+def safeLookup(map: AssocMap[String, Int], key: String): Option[Int] =
+  map.get(key)
+
+// With default value
+def lookupOrDefault(map: AssocMap[String, Int], key: String, default: Int): Int =
+  map.get(key).getOrElse(default)
+
+// Chaining lookups
+val result = for
+  value1 <- map1.get(key1)
+  value2 <- map2.get(key2)
+yield value1 + value2
+```
+
+### Validation with require
+
+```scala
+// Validating input on-chain
+def validatePositive(n: BigInt): Unit =
+  require(n > 0, "Number must be positive")
+
+// Chain validations
+require(amount > 0, "Amount must be positive")
+require(deadline > currentTime, "Deadline must be in the future")
+```

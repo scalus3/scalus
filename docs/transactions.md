@@ -1,0 +1,89 @@
+Source: https://scalus.org/docs/transactions
+
+# Building Cardano Transactions
+
+Scalus provides a fluent API for constructing Cardano transactions — payments, token minting, staking, governance, and smart contract interactions.
+
+## What You Can Build
+
+- **[Payments](/docs/transactions/payment-methods)** — Send ADA and native tokens
+- **[Spending UTxOs](/docs/transactions/spending-utxos)** — Spending UTxOs from wallet and script addresses
+- **[Token Minting](/docs/transactions/minting-burning-assets)** — Create and burn native assets
+- **[Staking](/docs/transactions/staking-rewards)** — Delegate stake and withdraw rewards
+- **[Governance](/docs/transactions/governance)** — DRep registration and voting
+- **[Smart Contract Interactions](/docs/transactions/spending-utxos)** — Spend script UTxOs with Plutus validators
+
+## Transaction Builder
+
+TransactionBuilder (`TxBuilder`) handles the complexity of Cardano transactions — UTxO selection, fee calculation, script evaluation, and balancing:
+
+```scala copy
+val tx = TxBuilder(env)
+  .payTo(recipient, Value.ada(10))
+  .complete(provider, myAddress)
+  .await()
+  .sign(signer)
+  .transaction
+```
+
+Since validators are written in Scala, you can share code between on-chain and off-chain:
+
+- **Code Reuse** — Share data types and validation logic
+- **Type Safety** — Scala's type system across your entire stack
+- **Integrated Testing** — Test validators and transactions together
+
+## Quick Example
+
+```scala copy
+val tx = TxBuilder(env)
+  .spend(utxo)                             // Add UTxO as input
+  .payTo(recipientAddress, Value.ada(10))  // Send 10 ADA to recipient
+  .build(changeTo = changeAddress)         // Finalize: calculate fees, handle change
+  .sign(signer)                            // Add signature
+  .transaction                             // Get the final transaction
+```
+
+TxBuilder is purely functional — each method returns a new immutable instance. Only `build()` can throw while evaluating scripts and balancing.
+
+## Automatic Completion
+
+The `complete()` method handles everything that can be determined programmatically:
+
+```scala copy
+TxBuilder(env)
+  .payTo(recipient, Value.ada(10))
+  .complete(provider, sponsorAddress)  // Automatically complete using funds from sponsorAddress
+```
+
+It automatically:
+- Selects UTxOs from the sponsor address to cover outputs and fees
+- Adds collateral inputs for script execution
+- Calculates fees based on transaction size and execution costs
+- Creates change outputs and iteratively rebalances
+
+## Script Evaluation
+
+TxBuilder evaluates Plutus scripts during build to catch errors before submission:
+
+```scala copy
+TxBuilder(env, evaluator)
+  .spend(scriptUtxo, redeemer, script)
+  .payTo(recipient, scriptUtxo.output.value)
+  .build(changeTo = changeAddress)  // Scripts evaluated here
+```
+
+## Next Steps
+
+- **[First Transaction](/docs/transactions/building-first-transaction)** — Step-by-step guide
+- **[First Contract Transaction](/docs/transactions/first-contract-transaction)** — Lock and spend from a script address
+- **[Payment Methods](/docs/transactions/payment-methods)** — Send ADA and tokens
+- **[Spending UTxOs](/docs/transactions/spending-utxos)** — Input selection and script UTxOs
+- **[Minting & Burning](/docs/transactions/minting-burning-assets)** — Create and destroy native tokens
+- **[Staking & Rewards](/docs/transactions/staking-rewards)** — Delegation and reward withdrawal
+- **[Governance](/docs/transactions/governance)** — DRep registration and voting
+
+## Related
+
+- [Smart Contracts](/docs/smart-contracts) — Write validators to use in transactions
+- [Testing with Emulator](/docs/testing/emulator) — Test transactions locally
+- [DApp Starter Tutorial](/docs/dapp-development/dapp-starter-tutorial) — Complete example with transactions
