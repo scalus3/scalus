@@ -7,7 +7,6 @@ import scalus.compiler.sir.lowering.typegens.SirTypeUplcGenerator
 import scalus.cardano.onchain.plutus.prelude.List as PList
 import scalus.pretty
 import scalus.uplc.*
-import scalus.uplc.UplcAnnotation
 
 import scala.util.control.NonFatal
 
@@ -496,7 +495,7 @@ object Lowering {
                         )
                     val loweredMsg = lowerSIR(msg, Some(SIRType.String))
                     val errorTerm =
-                        ErrorLoweredValue(sirError, ~Term.Error(UplcAnnotation(anns.pos)))
+                        ErrorLoweredValue(sirError, ~Term.Error(lctx.ann(anns.pos)))
                     lvForce(
                       lvBuiltinApply2(
                         SIRBuiltins.trace,
@@ -508,10 +507,40 @@ object Lowering {
                       ),
                       anns.pos
                     )
-                else ErrorLoweredValue(sirError, Term.Error(UplcAnnotation(anns.pos)))
+                else ErrorLoweredValue(sirError, Term.Error(lctx.ann(anns.pos)))
         lctx.nestingLevel -= 1
         retval
     }
+
+    /** Trailing `-<symbolId>` that the plugin's `VariableKey` appends to local binding names so
+      * shadowed variables stay distinct.
+      */
+    private[lowering] val LocalBindingIdSuffix = """^(.+)-\d+$""".r
+
+    /** The source-level name of a binding, for display in the UPLC source view. Strips the package
+      * and owner prefix that linked top-level defs carry (`scalus.examples.Foo$.bar` -> `bar`) and
+      * the symbol id that local defs carry (`double-432208` -> `double`).
+      */
+    private[lowering] def simpleBindingName(name: String): String = {
+        val dotIdx = name.lastIndexOf('.')
+        val simple = if dotIdx >= 0 then name.substring(dotIdx + 1) else name
+        simple match
+            case LocalBindingIdSuffix(base) => base
+            case _                          => simple
+    }
+
+    /** Lower `body` as the right-hand side of the binding `name`, so every value created while
+      * lowering it is stamped with `name` (see [[LoweringContext.currentFunction]]).
+      *
+      * Only function-shaped right-hand sides open a new scope. A plain value binding is part of the
+      * code of whatever function encloses it, so it keeps the enclosing name.
+      */
+    private[lowering] def loweringBinding[A](name: String, rhs: SIR)(
+        body: => A
+    )(using lctx: LoweringContext): A =
+        rhs match
+            case _: SIR.LamAbs => lctx.withFunction(simpleBindingName(name))(body)
+            case _             => body
 
     private def lowerLet(sirLet: SIR.Let)(using lctx: LoweringContext): LoweredValue = {
         val retval = sirLet match
@@ -520,7 +549,8 @@ object Lowering {
                 if !flags.isRec then
                     val bindingValues = bindings.map { b =>
                         var prevDebug = lctx.debug
-                        val loweredRhs = lowerSIR(b.value, Some(b.tp))
+                        val loweredRhs =
+                            loweringBinding(b.name, b.value)(lowerSIR(b.value, Some(b.tp)))
                         if lctx.debug then
                             lctx.log(
                               s"[LET binding] ${b.name}: lowered RHS type ${loweredRhs.sirType.show}, repr ${loweredRhs.representation}, target type ${b.tp.show}"
@@ -574,9 +604,11 @@ object Lowering {
                             lctx.scope = lctx.scope.add(newVar)
 
                             val loweredRhs =
-                                lowerSIR(rhs)
-                                    .maybeUpcast(tp, anns.pos)
-                                    .toRepresentation(rhsRepr, anns.pos)
+                                loweringBinding(name, rhs) {
+                                    lowerSIR(rhs)
+                                        .maybeUpcast(tp, anns.pos)
+                                        .toRepresentation(rhsRepr, anns.pos)
+                                }
                             val loweredBody = lowerSIR(body)
 
                             lctx.scope = prevScope
@@ -1186,17 +1218,17 @@ object Lowering {
             v match
                 case dv: DependendVariableLoweredValue =>
                     Term.Apply(
-                      Term.LamAbs(dv.id, term, UplcAnnotation(dv.pos)),
+                      Term.LamAbs(dv.id, term, dv.ann(dv.pos)),
                       dv.rhs.termWithNeededVars(nGctx),
-                      UplcAnnotation(dv.pos)
+                      dv.ann(dv.pos)
                     )
                 case v: VariableLoweredValue =>
                     v.optRhs match
                         case Some(rhs) =>
                             Term.Apply(
-                              Term.LamAbs(v.id, term, UplcAnnotation(v.pos)),
+                              Term.LamAbs(v.id, term, v.ann(v.pos)),
                               rhs.termWithNeededVars(nGctx),
-                              UplcAnnotation(v.pos)
+                              v.ann(v.pos)
                             )
                         case None =>
                             throw LoweringException(
@@ -1234,17 +1266,17 @@ object Lowering {
                 v match
                     case dv: DependendVariableLoweredValue =>
                         Term.Apply(
-                          Term.LamAbs(dv.id, term, UplcAnnotation(dv.pos)),
+                          Term.LamAbs(dv.id, term, dv.ann(dv.pos)),
                           dv.rhs.termWithNeededVars(nGctx),
-                          UplcAnnotation(dv.pos)
+                          dv.ann(dv.pos)
                         )
                     case v: VariableLoweredValue =>
                         v.optRhs match
                             case Some(rhs) =>
                                 Term.Apply(
-                                  Term.LamAbs(v.id, term, UplcAnnotation(v.pos)),
+                                  Term.LamAbs(v.id, term, v.ann(v.pos)),
                                   rhs.termWithNeededVars(nGctx),
-                                  UplcAnnotation(v.pos)
+                                  v.ann(v.pos)
                                 )
                             case None =>
                                 throw LoweringException(

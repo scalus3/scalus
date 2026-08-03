@@ -63,34 +63,42 @@ enum Term:
     /** Returns a copy of this term with the given source position. */
     def withPos(pos: ScalusSourcePos): Term = withAnnotation(UplcAnnotation(pos))
 
-    /** Sets the annotation on this term and recursively on subterms, but only where the annotation
-      * is currently empty. Recursion stops at terms that already have an annotation.
+    /** Sets the annotation on this term and recursively on subterms, but only where the position is
+      * currently empty. Recursion stops at terms that already have a position.
+      *
+      * Keys on the position alone, and keeps a `functionName` the term already carries: lowering
+      * stamps the enclosing function on terms that have no position of their own, and those still
+      * need a position. Keying on whole-annotation emptiness would treat them as already annotated
+      * and stop the recursion into their whole subtree.
       */
     def withAnnotationIfEmpty(ann: UplcAnnotation): Term =
-        if !annotation.isEmpty then this
+        if !annotation.pos.isEmpty then this
         else
+            val self =
+                if annotation.functionName.isEmpty then ann
+                else annotation.copy(pos = ann.pos)
             this match
-                case t: Var => t.copy(annotation = ann)
+                case t: Var => t.copy(annotation = self)
                 case t: LamAbs =>
-                    t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = ann)
+                    t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = self)
                 case t: Apply =>
                     t.copy(
                       f = t.f.withAnnotationIfEmpty(ann),
                       arg = t.arg.withAnnotationIfEmpty(ann),
-                      annotation = ann
+                      annotation = self
                     )
-                case t: Force => t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = ann)
-                case t: Delay => t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = ann)
-                case t: Const => t.copy(annotation = ann)
-                case t: Builtin => t.copy(annotation = ann)
-                case t: Error   => t.copy(annotation = ann)
+                case t: Force => t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = self)
+                case t: Delay => t.copy(term = t.term.withAnnotationIfEmpty(ann), annotation = self)
+                case t: Const => t.copy(annotation = self)
+                case t: Builtin => t.copy(annotation = self)
+                case t: Error   => t.copy(annotation = self)
                 case t: Constr =>
-                    t.copy(args = t.args.map(_.withAnnotationIfEmpty(ann)), annotation = ann)
+                    t.copy(args = t.args.map(_.withAnnotationIfEmpty(ann)), annotation = self)
                 case t: Case =>
                     t.copy(
                       arg = t.arg.withAnnotationIfEmpty(ann),
                       cases = t.cases.map(_.withAnnotationIfEmpty(ann)),
-                      annotation = ann
+                      annotation = self
                     )
 
     /** Sets the source position on this term and recursively on subterms, but only where the
@@ -98,74 +106,80 @@ enum Term:
       */
     def withPosIfEmpty(pos: ScalusSourcePos): Term = withAnnotationIfEmpty(UplcAnnotation(pos))
 
-    /** Bottom-up pass: gives every position-less subterm the source position of its nearest
-      * positioned *descendant*, and returns that representative position for this subtree (its own
-      * if positioned, else the first positioned child, preferring the function/scrutinee side).
+    /** Bottom-up pass: gives every un-annotated subterm the annotation of its nearest annotated
+      * *descendant*, and returns that representative annotation for this subtree (its own if
+      * annotated, else the first annotated child, preferring the function/scrutinee side).
       *
-      * This is the main filler for lowered code: source positions sit on the leaves (the `Var`/
-      * `Const`/`Builtin` a value references), while the `Apply`/`Case`/`Constr` spine that combines
-      * them is built position-less. A spine node here inherits the location of what it operates on
-      * — e.g. an application inherits the position of the function being applied — so its cost is
-      * attributed to that code rather than vanishing. Never overwrites an existing position.
+      * This is the main filler for lowered code: annotations sit on the leaves (the `Var`/`Const`/
+      * `Builtin` a value references), while the `Apply`/`Case`/`Constr` spine that combines them is
+      * built un-annotated. A spine node here inherits the location and enclosing function name of
+      * what it operates on – e.g. an application inherits the annotation of the function being
+      * applied – so its cost is attributed to that code rather than vanishing.
+      *
+      * Fields are filled independently and an existing one is never overwritten: a term that
+      * lowering stamped with its enclosing function name (but no position) still gets a position,
+      * and keeps its own name.
       */
-    def fillEmptyPosBottomUp: (Term, ScalusSourcePos) =
+    private[scalus] def fillEmptyAnnotationsBottomUp: (Term, UplcAnnotation) =
         // Resolve each candidate's effective position first (a synthetic compile-boundary root
-        // becomes the real user call it was inlined from), then take the first real one — so
-        // provenance wins over the structural descendant/ancestor fallback.
-        def firstNonEmpty(ps: ScalusSourcePos*): ScalusSourcePos =
-            ps.iterator
-                .map(_.effectivePos)
-                .find(!_.isEffectivelyEmpty)
-                .getOrElse(ScalusSourcePos.empty)
-        def stamp(t: Term, rep: ScalusSourcePos): UplcAnnotation =
-            if t.annotation.isEffectivelyEmpty && !rep.isEffectivelyEmpty then UplcAnnotation(rep)
-            else t.annotation
+        // becomes the real user call it was inlined from), then take the first candidate that
+        // resolves to a real position – so provenance wins over the structural descendant/ancestor
+        // fallback. The winner's *whole* annotation becomes the representative, so a filled node's
+        // function name always describes the same code as its position.
+        def firstNonEmpty(as: UplcAnnotation*): UplcAnnotation =
+            as.iterator
+                .map { a =>
+                    val p = a.pos.effectivePos
+                    if p eq a.pos then a else a.copy(pos = p)
+                }
+                .find(!_.pos.isEffectivelyEmpty)
+                .getOrElse(UplcAnnotation.empty)
         this match
-            case t: Var     => (t, t.annotation.pos)
-            case t: Const   => (t, t.annotation.pos)
-            case t: Builtin => (t, t.annotation.pos)
-            case t: Error   => (t, t.annotation.pos)
+            case t: Var     => (t, t.annotation)
+            case t: Const   => (t, t.annotation)
+            case t: Builtin => (t, t.annotation)
+            case t: Error   => (t, t.annotation)
             case t: LamAbs =>
-                val (b, bp) = t.term.fillEmptyPosBottomUp
-                val rep = firstNonEmpty(t.annotation.pos, bp)
-                val ann = stamp(t, rep)
+                val (b, ba) = t.term.fillEmptyAnnotationsBottomUp
+                val rep = firstNonEmpty(t.annotation, ba)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 (
                   if (b eq t.term) && (ann eq t.annotation) then t
                   else t.copy(term = b, annotation = ann),
                   rep
                 )
             case t: Force =>
-                val (b, bp) = t.term.fillEmptyPosBottomUp
-                val rep = firstNonEmpty(t.annotation.pos, bp)
-                val ann = stamp(t, rep)
+                val (b, ba) = t.term.fillEmptyAnnotationsBottomUp
+                val rep = firstNonEmpty(t.annotation, ba)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 (
                   if (b eq t.term) && (ann eq t.annotation) then t
                   else t.copy(term = b, annotation = ann),
                   rep
                 )
             case t: Delay =>
-                val (b, bp) = t.term.fillEmptyPosBottomUp
-                val rep = firstNonEmpty(t.annotation.pos, bp)
-                val ann = stamp(t, rep)
+                val (b, ba) = t.term.fillEmptyAnnotationsBottomUp
+                val rep = firstNonEmpty(t.annotation, ba)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 (
                   if (b eq t.term) && (ann eq t.annotation) then t
                   else t.copy(term = b, annotation = ann),
                   rep
                 )
             case t: Apply =>
-                val (f, fp) = t.f.fillEmptyPosBottomUp
-                val (arg, ap) = t.arg.fillEmptyPosBottomUp
-                val rep = firstNonEmpty(t.annotation.pos, fp, ap)
-                val ann = stamp(t, rep)
+                val (f, fa) = t.f.fillEmptyAnnotationsBottomUp
+                val (arg, aa) = t.arg.fillEmptyAnnotationsBottomUp
+                val rep = firstNonEmpty(t.annotation, fa, aa)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 (
                   if (f eq t.f) && (arg eq t.arg) && (ann eq t.annotation) then t
                   else t.copy(f = f, arg = arg, annotation = ann),
                   rep
                 )
             case t: Constr =>
-                val processed = t.args.map(_.fillEmptyPosBottomUp)
-                val rep = firstNonEmpty((t.annotation.pos +: processed.map(_._2))*)
-                val ann = stamp(t, rep)
+                val processed = t.args.map(_.fillEmptyAnnotationsBottomUp)
+                val rep = firstNonEmpty((t.annotation +: processed.map(_._2))*)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 val args = processed.map(_._1)
                 (
                   if args.corresponds(t.args)(_ eq _) && (ann eq t.annotation) then t
@@ -173,10 +187,10 @@ enum Term:
                   rep
                 )
             case t: Case =>
-                val (arg, ap) = t.arg.fillEmptyPosBottomUp
-                val processed = t.cases.map(_.fillEmptyPosBottomUp)
-                val rep = firstNonEmpty((t.annotation.pos +: ap +: processed.map(_._2))*)
-                val ann = stamp(t, rep)
+                val (arg, aa) = t.arg.fillEmptyAnnotationsBottomUp
+                val processed = t.cases.map(_.fillEmptyAnnotationsBottomUp)
+                val rep = firstNonEmpty((t.annotation +: aa +: processed.map(_._2))*)
+                val ann = Term.fillEmptyFields(t.annotation, rep)
                 val cases = processed.map(_._1)
                 (
                   if (arg eq t.arg) && cases.corresponds(t.cases)(_ eq _) && (ann eq t.annotation)
@@ -185,54 +199,66 @@ enum Term:
                   rep
                 )
 
-    /** Top-down pass: stamps every position-less subterm with the source position of its nearest
-      * enclosing positioned ancestor (`inherited` at the root). Positioned subterms keep their own
-      * position and become the inherited position for their descendants.
+    /** Top-down pass: stamps every un-annotated subterm with the annotation of its nearest
+      * enclosing annotated ancestor (`inherited` at the root). Annotated subterms keep what they
+      * have and become the inherited annotation for their descendants; as in the bottom-up pass,
+      * position and function name are filled independently and never overwritten.
       *
-      * This completes [[fillEmptyPosBottomUp]]: per-value stamping during lowering can only place a
-      * position a lowered value actually knows, but many `Apply`/`Let` SIR nodes carry no position
-      * at all (the plugin doesn't stamp them), so the spines they build stay position-less. Here
-      * those nodes inherit the source location of the surrounding code — which is exactly what
-      * profiling and source traces should attribute their cost to.
+      * This completes [[fillEmptyAnnotationsBottomUp]]: per-value stamping during lowering can only
+      * place an annotation a lowered value actually knows, but many `Apply`/`Let` SIR nodes carry
+      * no position at all (the plugin doesn't stamp them), so the spines they build stay
+      * un-annotated. Here those nodes inherit the source location of the surrounding code – which
+      * is exactly what profiling and source traces should attribute their cost to.
       */
-    def fillEmptyPosTopDown(inherited: ScalusSourcePos): Term =
-        val eff = if annotation.isEffectivelyEmpty then inherited else annotation.pos
-        val selfAnn =
-            if annotation.isEffectivelyEmpty && !inherited.isEffectivelyEmpty then
-                UplcAnnotation(inherited)
-            else annotation
+    private[scalus] def fillEmptyAnnotationsTopDown(inherited: UplcAnnotation): Term =
+        // What this term ends up with is also what its descendants inherit: its own fields where it
+        // has them, the ancestor's where it does not.
+        val selfAnn = Term.fillEmptyFields(annotation, inherited)
         this match
             case t: Var     => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
             case t: Const   => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
             case t: Builtin => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
             case t: Error   => if selfAnn eq t.annotation then t else t.copy(annotation = selfAnn)
             case t: LamAbs =>
-                val b = t.term.fillEmptyPosTopDown(eff)
+                val b = t.term.fillEmptyAnnotationsTopDown(selfAnn)
                 if (selfAnn eq t.annotation) && (b eq t.term) then t
                 else t.copy(term = b, annotation = selfAnn)
             case t: Force =>
-                val b = t.term.fillEmptyPosTopDown(eff)
+                val b = t.term.fillEmptyAnnotationsTopDown(selfAnn)
                 if (selfAnn eq t.annotation) && (b eq t.term) then t
                 else t.copy(term = b, annotation = selfAnn)
             case t: Delay =>
-                val b = t.term.fillEmptyPosTopDown(eff)
+                val b = t.term.fillEmptyAnnotationsTopDown(selfAnn)
                 if (selfAnn eq t.annotation) && (b eq t.term) then t
                 else t.copy(term = b, annotation = selfAnn)
             case t: Apply =>
-                val f = t.f.fillEmptyPosTopDown(eff)
-                val arg = t.arg.fillEmptyPosTopDown(eff)
+                val f = t.f.fillEmptyAnnotationsTopDown(selfAnn)
+                val arg = t.arg.fillEmptyAnnotationsTopDown(selfAnn)
                 if (selfAnn eq t.annotation) && (f eq t.f) && (arg eq t.arg) then t
                 else t.copy(f = f, arg = arg, annotation = selfAnn)
             case t: Constr =>
-                val args = t.args.map(_.fillEmptyPosTopDown(eff))
+                val args = t.args.map(_.fillEmptyAnnotationsTopDown(selfAnn))
                 if (selfAnn eq t.annotation) && args.corresponds(t.args)(_ eq _) then t
                 else t.copy(args = args, annotation = selfAnn)
             case t: Case =>
-                val arg = t.arg.fillEmptyPosTopDown(eff)
-                val cases = t.cases.map(_.fillEmptyPosTopDown(eff))
+                val arg = t.arg.fillEmptyAnnotationsTopDown(selfAnn)
+                val cases = t.cases.map(_.fillEmptyAnnotationsTopDown(selfAnn))
                 if (selfAnn eq t.annotation) && (arg eq t.arg) && cases.corresponds(t.cases)(_ eq _)
                 then t
                 else t.copy(arg = arg, cases = cases, annotation = selfAnn)
+
+    /** Bottom-up position fill: see [[fillEmptyAnnotationsBottomUp]], of which this is the
+      * position-only view. Returns the representative position of this subtree.
+      */
+    def fillEmptyPosBottomUp: (Term, ScalusSourcePos) =
+        val (t, rep) = fillEmptyAnnotationsBottomUp
+        (t, rep.pos)
+
+    /** Top-down position fill: see [[fillEmptyAnnotationsTopDown]], of which this is the
+      * position-only view. The root inherits `inherited` and no function name.
+      */
+    def fillEmptyPosTopDown(inherited: ScalusSourcePos): Term =
+        fillEmptyAnnotationsTopDown(UplcAnnotation(inherited))
 
     /** Applies the argument to the term. */
     infix def $(rhs: Term): Term = Term.Apply(this, rhs)
@@ -414,6 +440,24 @@ enum Term:
 
 object Term {
 
+    /** Returns `own` with each of its empty fields filled from `rep`, leaving the fields it already
+      * has untouched. Used by both annotation fill passes, so they never overwrite anything the
+      * lowering knew: a term stamped with only its enclosing function name gains a position, and a
+      * term that has a position of its own keeps it.
+      *
+      * Returns `own` itself (reference-equal) when there is nothing to fill, so callers can detect
+      * that with `eq` and keep the node as is instead of rebuilding it.
+      */
+    private def fillEmptyFields(own: UplcAnnotation, rep: UplcAnnotation): UplcAnnotation =
+        val fillPos = own.pos.isEffectivelyEmpty && !rep.pos.isEffectivelyEmpty
+        val fillName = own.functionName.isEmpty && rep.functionName.nonEmpty
+        if !fillPos && !fillName then own
+        else
+            UplcAnnotation(
+              if fillPos then rep.pos else own.pos,
+              if fillName then rep.functionName else own.functionName
+            )
+
     /** Truncate a string to a maximum length, showing only first line if multiline */
     private[uplc] def truncateForDisplay(s: String, maxLength: Int = 60): String =
         val firstLine = s.linesIterator.nextOption().getOrElse("")
@@ -560,96 +604,132 @@ object Term {
     /** Pretty[Term] instance with rainbow brackets based on nesting depth */
     given Pretty[Term] with
         def pretty(term: Term, style: Style): Doc =
-            prettyTermWithDepth(TermSanitizer.sanitizeNames(term), style, depth = 0)
+            TermPrinter.prettySanitized(TermSanitizer.sanitizeNames(term), style, (_, d) => d)
 
-        private def prettyTermWithDepth(term: Term, style: Style, depth: Int): Doc =
-            import Pretty.{kw, rainbowChar}
+}
 
-            // Local extension that captures 'style' from enclosing scope
-            extension (d: Doc)
-                def styled(s: paiges.Style): Doc =
-                    if style == Style.XTerm then d.style(s) else d
+/** Pretty-printer for [[Term]] with a per-node decorator hook.
+  *
+  * This is the implementation behind `given Pretty[Term]`, exposed so callers that need to attach
+  * extra information to individual nodes (source positions, cost annotations, ...) can reuse the
+  * exact same layout.
+  */
+private[scalus] object TermPrinter {
+    import Term.*
 
-            term match
-                case Var(name, _) => text(name.name)
+    /** Pretty-print an already-sanitized term, passing every printed node's Doc through `decorate`.
+      *
+      * `(term, doc) => doc` reproduces `Term.pretty` exactly. Inner `Apply` nodes of a flattened
+      * application chain are not printed individually and are not decorated.
+      *
+      * @param term
+      *   a term whose names are already sanitized (see [[TermSanitizer.sanitizeNames]]); this
+      *   method does not sanitize
+      * @param style
+      *   plain or XTerm-highlighted output
+      * @param decorate
+      *   applied to the Doc of every printed node, together with that node
+      */
+    def prettySanitized(term: Term, style: Style, decorate: (Term, Doc) => Doc): Doc =
+        prettyTermWithDepth(term, style, depth = 0, decorate)
 
-                case LamAbs(name, body, _) =>
-                    // (lam name body) with rainbow parens at current depth
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    val prefix = openP + kw("lam", style) & text(name)
-                    ((prefix / prettyTermWithDepth(body, style, depth + 1))
+    private def prettyTermWithDepth(
+        term: Term,
+        style: Style,
+        depth: Int,
+        decorate: (Term, Doc) => Doc
+    ): Doc =
+        import Pretty.{kw, rainbowChar}
+
+        // Local extension that captures 'style' from enclosing scope
+        extension (d: Doc)
+            def styled(s: paiges.Style): Doc =
+                if style == Style.XTerm then d.style(s) else d
+
+        val doc = term match
+            case Var(name, _) => text(name.name)
+
+            case LamAbs(name, body, _) =>
+                // (lam name body) with rainbow parens at current depth
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                val prefix = openP + kw("lam", style) & text(name)
+                ((prefix / prettyTermWithDepth(body, style, depth + 1, decorate))
+                    .nested(2)
+                    .grouped + closeP).grouped
+
+            case a @ Apply(_, _, _) =>
+                // [f arg1 arg2 ...] with rainbow brackets
+                val (t, args) = a.applyToList
+                val openB = rainbowChar('[', depth, style)
+                val closeB = rainbowChar(']', depth, style)
+                val allTerms =
+                    (t :: args).map(prettyTermWithDepth(_, style, depth + 1, decorate))
+                val body = intercalate(lineOrSpace, allTerms)
+                ((openB + body).nested(2).grouped + closeB).grouped
+
+            case Force(t, _) =>
+                // (force term)
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                (openP + kw("force", style) & prettyTermWithDepth(
+                  t,
+                  style,
+                  depth + 1,
+                  decorate
+                )).grouped + closeP
+
+            case Delay(t, _) =>
+                // (delay term)
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                (openP + kw("delay", style) & prettyTermWithDepth(
+                  t,
+                  style,
+                  depth + 1,
+                  decorate
+                )).grouped + closeP
+
+            case Const(const, _) =>
+                // (con type value) - no depth increase, leaf node
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                openP + kw("con", style) & const.pretty.styled(Fg.colorCode(64)) + closeP
+
+            case Builtin(bn, _) =>
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                openP + kw("builtin", style) & PrettyPrinter
+                    .pretty(bn)
+                    .styled(Fg.colorCode(176)) + closeP
+
+            case Error(_) =>
+                kw("(error)", style)
+
+            case Constr(tag, args, _) =>
+                // (constr tag arg1 arg2 ...)
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                val argDocs = args.map(prettyTermWithDepth(_, style, depth + 1, decorate))
+                val body = kw("constr", style) & str(tag.value)
+                if argDocs.isEmpty then openP + body + closeP
+                else
+                    ((openP + body & intercalate(lineOrSpace, argDocs))
                         .nested(2)
                         .grouped + closeP).grouped
 
-                case a @ Apply(_, _, _) =>
-                    // [f arg1 arg2 ...] with rainbow brackets
-                    val (t, args) = a.applyToList
-                    val openB = rainbowChar('[', depth, style)
-                    val closeB = rainbowChar(']', depth, style)
-                    val allTerms = (t :: args).map(prettyTermWithDepth(_, style, depth + 1))
-                    val body = intercalate(lineOrSpace, allTerms)
-                    ((openB + body).nested(2).grouped + closeB).grouped
+            case Case(arg, cases, _) =>
+                // (case scrutinee branch1 branch2 ...)
+                val openP = rainbowChar('(', depth, style)
+                val closeP = rainbowChar(')', depth, style)
+                val argDoc = prettyTermWithDepth(arg, style, depth + 1, decorate)
+                val caseDocs = cases.map(prettyTermWithDepth(_, style, depth + 1, decorate))
+                val body = kw("case", style) & argDoc
+                if caseDocs.isEmpty then openP + body + closeP
+                else
+                    ((openP + body & intercalate(lineOrSpace, caseDocs))
+                        .nested(2)
+                        .grouped + closeP).grouped
 
-                case Force(t, _) =>
-                    // (force term)
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    (openP + kw("force", style) & prettyTermWithDepth(
-                      t,
-                      style,
-                      depth + 1
-                    )).grouped + closeP
-
-                case Delay(t, _) =>
-                    // (delay term)
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    (openP + kw("delay", style) & prettyTermWithDepth(
-                      t,
-                      style,
-                      depth + 1
-                    )).grouped + closeP
-
-                case Const(const, _) =>
-                    // (con type value) - no depth increase, leaf node
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    openP + kw("con", style) & const.pretty.styled(Fg.colorCode(64)) + closeP
-
-                case Builtin(bn, _) =>
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    openP + kw("builtin", style) & PrettyPrinter
-                        .pretty(bn)
-                        .styled(Fg.colorCode(176)) + closeP
-
-                case Error(_) =>
-                    kw("(error)", style)
-
-                case Constr(tag, args, _) =>
-                    // (constr tag arg1 arg2 ...)
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    val argDocs = args.map(prettyTermWithDepth(_, style, depth + 1))
-                    val body = kw("constr", style) & str(tag.value)
-                    if argDocs.isEmpty then openP + body + closeP
-                    else
-                        ((openP + body & intercalate(lineOrSpace, argDocs))
-                            .nested(2)
-                            .grouped + closeP).grouped
-
-                case Case(arg, cases, _) =>
-                    // (case scrutinee branch1 branch2 ...)
-                    val openP = rainbowChar('(', depth, style)
-                    val closeP = rainbowChar(')', depth, style)
-                    val argDoc = prettyTermWithDepth(arg, style, depth + 1)
-                    val caseDocs = cases.map(prettyTermWithDepth(_, style, depth + 1))
-                    val body = kw("case", style) & argDoc
-                    if caseDocs.isEmpty then openP + body + closeP
-                    else
-                        ((openP + body & intercalate(lineOrSpace, caseDocs))
-                            .nested(2)
-                            .grouped + closeP).grouped
-
+        decorate(term, doc)
 }

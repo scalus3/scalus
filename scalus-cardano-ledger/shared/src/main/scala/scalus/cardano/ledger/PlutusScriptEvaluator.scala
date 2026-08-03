@@ -355,24 +355,15 @@ object PlutusScriptEvaluator {
 
         private def budgetLogPath: String = reportPath("budget.log")
 
-        /** Render a script's profile to each configured [[ProfileOutput]] (console / files). File
-          * destinations are prefixed with the script key so per-redeemer profiles don't collide,
-          * and are also recorded in `profile-manifest.json` (see [[writeProfileManifest]]). The
-          * actual rendering is delegated to the platform-specific [[ProfileReporting]] so that
-          * [[scalus.uplc.eval.ProfileFormatter]] (HTML/CSS/JS templates, Tarjan pass) stays out of
-          * the JS bundle; HTML output annotates source lines when the source file is readable from
-          * the CWD (JVM only — [[ProfileReporting]] returns `None` on JS).
-          *
-          * @note
-          *   This is fed by a *separate* profiling evaluation of the script (see the call site), so
-          *   enabling profiling roughly doubles evaluation cost. That profiling pass counts budget
-          *   but does not enforce the redeemer's execution-unit limit, so it is only run after the
-          *   real (budget-enforcing) evaluation has already succeeded.
-          */
         /** Render a script's profile to the configured destinations and index the written files in
           * `profile-manifest.json`. Delegated to [[ProfileReportWriter]], which is shared with
           * test-side profiling (`ScalusTest.runWithProfileReport`) so both produce the same layout.
           *
+          * @param uplcTerm
+          *   the script's term, for the `<key>.uplc.json` source map. By name because it can force
+          *   a CBOR decode, which is wasted work when no profile was produced. A decoded term
+          *   carries no annotations, so scripts that did not come from an in-memory `Program` get
+          *   no source map.
           * @note
           *   This is fed by a *separate* profiling evaluation of the script (see the call site), so
           *   enabling profiling roughly doubles evaluation cost. That profiling pass counts budget
@@ -383,7 +374,8 @@ object PlutusScriptEvaluator {
             result: Result,
             scriptHash: ScriptHash,
             redeemer: Redeemer,
-            language: Language
+            language: Language,
+            uplcTerm: => Term
         ): Unit = result.profile.foreach { data =>
             ProfileReportWriter.write(
               data,
@@ -392,7 +384,8 @@ object PlutusScriptEvaluator {
               language.toString,
               redeemer.tag.toString,
               redeemer.index,
-              log.info(_)
+              log.info(_),
+              Some(uplcTerm)
             )
         }
 
@@ -724,7 +717,8 @@ object PlutusScriptEvaluator {
                       vm.evaluateScriptProfile(applied),
                       plutusScript.scriptHash,
                       redeemer,
-                      vm.language
+                      vm.language,
+                      plutusScript.program.term
                     )
                 Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
             catch

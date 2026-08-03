@@ -7,7 +7,7 @@ import scalus.compiler.sir.*
 import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.lowering.SumCaseClassRepresentation.*
-import scalus.uplc.{Term, UplcAnnotation}
+import scalus.uplc.Term
 
 /** Type generator for sum types using UplcConstr representation.
   *
@@ -38,7 +38,7 @@ object SumUplcConstrOps {
 
         override def termInternal(gctx: TermGenerationContext): Term = {
             val innerCtx = gctx.copy(generatedVars = gctx.generatedVars + fieldVar.id)
-            Term.LamAbs(fieldVar.id, inner.termWithNeededVars(innerCtx), UplcAnnotation(casePos))
+            Term.LamAbs(fieldVar.id, inner.termWithNeededVars(innerCtx), ann(casePos))
         }
 
         override def toRepresentation(
@@ -329,9 +329,9 @@ object SumUplcConstrOps {
                   Term.LamAbs(
                     tailVar.id,
                     consResult.termWithNeededVars(ngctx),
-                    UplcAnnotation(constrPos)
+                    ann(constrPos)
                   ),
-                  UplcAnnotation(constrPos)
+                  ann(constrPos)
                 )
             }
             override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
@@ -347,7 +347,7 @@ object SumUplcConstrOps {
                 Term.Case(
                   scrutinee.termWithNeededVars(gctx),
                   scala.List(nilBody.termWithNeededVars(gctx), consBranch.termWithNeededVars(gctx)),
-                  UplcAnnotation(constrPos)
+                  ann(constrPos)
                 )
             override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
                 Doc.text(
@@ -435,7 +435,7 @@ object SumUplcConstrOps {
                     val ngctx = fieldVars.foldLeft(gctx)((g, v) => g.addGeneratedVar(v.id))
                     val innerTerm = branchBody.termWithNeededVars(ngctx)
                     fieldVars.foldRight(innerTerm) { (v, body) =>
-                        Term.LamAbs(v.id, body, UplcAnnotation(constrPos))
+                        Term.LamAbs(v.id, body, ann(constrPos))
                     }
                 }
                 override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -455,7 +455,7 @@ object SumUplcConstrOps {
                 Term.Case(
                   scrutinee.termWithNeededVars(gctx),
                   branches.map(_.termWithNeededVars(gctx)).toList,
-                  UplcAnnotation(constrPos)
+                  ann(constrPos)
                 )
             override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
                 val branchDocs = branches.zipWithIndex.map { case (b, i) =>
@@ -540,7 +540,7 @@ object SumUplcConstrOps {
                     Term.Case(
                       scrutinee.termWithNeededVars(gctx),
                       branchesList.map(_.termWithNeededVars(gctx)),
-                      UplcAnnotation(matchPos)
+                      ann(matchPos)
                     )
 
                 override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -876,7 +876,7 @@ object SumUplcConstrOps {
                         Term.Constr(
                           scalus.cardano.ledger.Word64(idx.toLong),
                           convertedFields.map(_.termWithNeededVars(innerCtx)).toList,
-                          UplcAnnotation(inPos)
+                          ann(inPos)
                         )
                     }
                     override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
@@ -893,7 +893,7 @@ object SumUplcConstrOps {
                             Term.LamAbs(
                               fv.id,
                               inner.termWithNeededVars(ngctx),
-                              UplcAnnotation(inPos)
+                              ann(inPos)
                             )
                         }
                         override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
@@ -913,7 +913,7 @@ object SumUplcConstrOps {
                     Term.Case(
                       inputVal.termWithNeededVars(gctx),
                       branches.map(_.termWithNeededVars(gctx)).toList,
-                      UplcAnnotation(pos)
+                      ann(pos)
                     )
                 override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
                     Doc.text("UplcConstr→UplcConstr(") + inputVal.docRef(ctx) + Doc.text(")")
@@ -1025,7 +1025,7 @@ object SumUplcConstrOps {
                     Term.Constr(
                       scalus.cardano.ledger.Word64(idx.toLong),
                       fields.map(_.termWithNeededVars(gctx)).toList,
-                      UplcAnnotation(inPos)
+                      ann(inPos)
                     )
                 override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
                     Doc.text(s"PairIntDataList→UplcConstr($idx)")
@@ -1116,7 +1116,7 @@ object SumUplcConstrOps {
                     override def pos = inPos
                     override def termInternal(gctx: TermGenerationContext) = {
                         val ctx = gctx.copy(generatedVars = gctx.generatedVars + fv.id)
-                        Term.LamAbs(fv.id, inner.termWithNeededVars(ctx), UplcAnnotation(inPos))
+                        Term.LamAbs(fv.id, inner.termWithNeededVars(ctx), ann(inPos))
                     }
                     override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
                         Doc.text(s"λ${fv.name}.") + inner.docRef(ctx)
@@ -1133,7 +1133,7 @@ object SumUplcConstrOps {
                 Term.Case(
                   input.termWithNeededVars(gctx),
                   branches.map(_.termWithNeededVars(gctx)).toList,
-                  UplcAnnotation(inPos)
+                  ann(inPos)
                 )
             override def docDef(ctx: LoweredValue.PrettyPrintingContext) =
                 Doc.text("UplcConstr→DataConstr(") + input.docRef(ctx) + Doc.text(")")

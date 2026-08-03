@@ -2,7 +2,8 @@ package scalus.uplc.eval
 
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
-import scalus.cardano.ledger.{EvaluatorReportConfig, ProfileDestination, ProfileFormat}
+import scalus.cardano.ledger.{EvaluatorReportConfig, ProfileDestination, ProfileFormat, ProfileLevel}
+import scalus.uplc.Term
 import scalus.uplc.builtin.platform
 
 import scala.util.control.NonFatal
@@ -57,6 +58,14 @@ private[scalus] object ProfileReportWriter {
       * @param onConsole
       *   sink for [[scalus.cardano.ledger.ProfileDestination.Console]] output, so callers keep
       *   their own logger.
+      * @param uplcTerm
+      *   the evaluated program's term, when the caller has it in annotated form. With
+      *   [[scalus.cardano.ledger.ProfileLevel.Full]], and only alongside at least one rendered
+      *   profile file, it adds a `<key>.uplc.json` source map (the UPLC text plus text-range →
+      *   Scala-source spans) to the report, indexed as format `"uplc"`. It is not a
+      *   [[scalus.cardano.ledger.ProfileFormat]] because those are rendered from [[ProfilingData]],
+      *   which carries no term. Terms decoded from CBOR carry no annotations, and nothing is
+      *   written for them.
       */
     def write(
         data: ProfilingData,
@@ -65,7 +74,8 @@ private[scalus] object ProfileReportWriter {
         language: String,
         redeemerTag: String,
         redeemerIndex: Int,
-        onConsole: String => Unit
+        onConsole: String => Unit,
+        uplcTerm: Option[Term] = None
     ): Unit = {
         val key = s"$scriptHash-$redeemerTag-$redeemerIndex"
         val outputs = report.effectiveProfileOutputs
@@ -91,7 +101,25 @@ private[scalus] object ProfileReportWriter {
                             written += formatLabel(out.format) -> path
             }
         }
-        val files = written.result()
+        val profileFiles = written.result()
+        // The source map only ever accompanies rendered profile files. A run that wrote none (a
+        // console-only report) must stay off disk entirely: writing one would create the output
+        // directory unasked and, worse, replace this script's manifest run – keyed by
+        // (scriptHash, tag, index) – with an entry listing the source map alone, hiding the
+        // profile files an earlier run had indexed there.
+        val uplcFiles = uplcTerm match
+            case Some(term)
+                if profileFiles.nonEmpty && report.profile == ProfileLevel.Full &&
+                    UplcSourceMapRenderer.hasSourceInfo(term) =>
+                val file = s"$key.uplc.json"
+                platform.createDirectories(report.outputDir)
+                platform.writeFile(
+                  reportPath(report, file),
+                  UplcSourceMapRenderer.toJson(UplcSourceMapRenderer.render(term))
+                )
+                Seq("uplc" -> file)
+            case _ => Nil
+        val files = profileFiles ++ uplcFiles
         if files.nonEmpty then
             writeManifest(
               report,
