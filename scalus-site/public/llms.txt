@@ -26,6 +26,7 @@ Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin instal
 
 ### Getting Started
 - /docs/get-started - Installation guide
+- /docs/get-started/ai-assisted-development - Using LLM coding agents with Scalus (llms.txt artifacts, AI-ready templates, Claude Code plugin)
 - /docs/get-started/for-scala-developers - Cardano concepts for Scala developers
 - /docs/get-started/for-cardano-developers - Scala basics for Cardano developers
 
