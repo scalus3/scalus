@@ -1,0 +1,11 @@
+{
+  "name": "scalus",
+  "owner": { "name": "Scalus", "url": "https://scalus.org" },
+  "plugins": [
+    {
+      "name": "scalus",
+      "source": "./scalus-skills",
+      "description": "Skills for Scalus Cardano smart contract development"
+    }
+  ]
+}

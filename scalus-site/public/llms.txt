@@ -11,6 +11,8 @@ Fetch these before writing Scalus code; do not rely on trained knowledge - Scalu
 - /llms-full.txt - all documentation pages as one markdown file.
 - Every docs page is also available as markdown: append `.md` to its URL.
 
+Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin install scalus@scalus` installs Scalus task skills (write, test, optimize, security-review validators).
+
 ## Key Features
 
 - **One Language**: Write smart contracts and off-chain code in Scala 3
