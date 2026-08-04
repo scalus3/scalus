@@ -123,6 +123,16 @@ object PrettyPrinter:
         def ctr(s: String): Doc = text(s).styled(Fg.colorCode(27))
         def typ(s: Doc): Doc = s.styled(Fg.colorCode(55))
         def typedName(name: String, tp: SIRType): Doc = text(name) + char(':') & typ(pretty(tp))
+        def prettyFunBinding(name: String, tp: SIRType, rhs: SIR, eqText: Doc): Doc =
+            val (args, body1) = SirDSL.lamAbsToList(rhs)
+            val prettyArgs = inParens(intercalate(text(",") + space, args.map(text)))
+            val signatureLine =
+                (kw("fun") & text(name) + (prettyArgs + char(':') & typ(
+                  pretty(tp)
+                ) & eqText).nested(2)).grouped
+            (signatureLine + (line + pretty(body1, style))
+                .nested(4)
+                .grouped).grouped.aligned
         sir match
             case Decl(DataDecl(name, constructors, typeParams, anns), term) =>
                 val prettyConstrs = constructors.map { constr =>
@@ -193,20 +203,25 @@ object PrettyPrinter:
                   kw("in")
                 ) / pretty(inExpr, style)
             case Let(List(Binding(name, tp, body)), inExpr, flags, anns) if flags.isRec =>
-                val (args, body1) = SirDSL.lamAbsToList(body)
-                val prettyArgs = inParens(intercalate(text(",") + space, args.map(text)))
                 val eqText = if flags.isLazy then text("=[lazy]") else text("=")
-                val signatureLine =
-                    (kw("fun") & text(name) + (prettyArgs + char(':') & typ(
-                      pretty(tp)
-                    ) & eqText).nested(2)).grouped
-                (signatureLine + (line + pretty(body1, style))
-                    .nested(4)
-                    .grouped).grouped.aligned / kw(
+                prettyFunBinding(name, tp, body, eqText) / kw(
                   "in"
                 ) & pretty(inExpr, style)
-            // TODO: support multiple bindings
-            case Let(_, _, inExpr, _) => sys.error(s"Multiple bindings not supported: $sir")
+            case Let(Nil, _, _, _) => sys.error(s"Empty let binding: $sir")
+            case Let(bindings, inExpr, flags, anns) if !flags.isRec =>
+                val eqText = if flags.isLazy then text("=[lazy]") else text("=")
+                val prettyBindings = stack(bindings.map { case Binding(name, tp, rhs) =>
+                    (typedName(name, tp) & eqText + (line + pretty(rhs, style)).nested(2)).grouped
+                })
+                ((kw("let") & prettyBindings.aligned) / kw("in")).aligned / pretty(inExpr, style)
+            case Let(bindings, inExpr, flags, anns) =>
+                val eqText = if flags.isLazy then text("=[lazy]") else text("=")
+                val funDocs = bindings.map { case Binding(name, tp, rhs) =>
+                    prettyFunBinding(name, tp, rhs, eqText)
+                }
+                intercalate(line + kw("and") + space, funDocs) / kw(
+                  "in"
+                ) & pretty(inExpr, style)
             case LamAbs(name, term, typeParams, anns) =>
                 val (args, body1) = SirDSL.lamAbsToList(sir)
                 val prettyArgs = stack(args.map(text))
