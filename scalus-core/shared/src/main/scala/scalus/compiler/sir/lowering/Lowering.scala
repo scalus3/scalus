@@ -585,8 +585,10 @@ object Lowering {
                               s"Empty let binding at ${sirLet.anns.pos.file}:${sirLet.anns.pos.startLine}"
                             )
                         case _ =>
+                            // Multi-binding rec groups are rewritten to single-binding lets by
+                            // MutualRecursionElimination before lowering; this is an unreachable guard.
                             sys.error(
-                              s"Mutually recursive bindings are not supported: $bindings at ${sirLet.anns.pos.file}:${sirLet.anns.pos.startLine}"
+                              s"Unexpected multi-binding recursive let (should have been eliminated): $bindings at ${sirLet.anns.pos.file}:${sirLet.anns.pos.startLine}"
                             )
                 }
         retval

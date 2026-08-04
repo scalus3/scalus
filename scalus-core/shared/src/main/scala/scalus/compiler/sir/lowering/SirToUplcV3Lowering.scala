@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.*
-import scalus.compiler.sir.{Module, SIR, SIRType}
+import scalus.compiler.sir.{Module, MutualRecursionElimination, SIR, SIRType}
 import scalus.uplc.*
 
 import scala.collection.mutable.Map as MutableMap
@@ -25,7 +25,7 @@ class SirToUplcV3Lowering(
 
     def toLoweredValue(lctx: LoweringContext = newLoweringContext): LoweredValue = {
         given LoweringContext = lctx
-        val v0 = Lowering.lowerSIR(sir)
+        val v0 = Lowering.lowerSIR(MutualRecursionElimination(sir))
         val v1 =
             if upcastTo != SIRType.FreeUnificator then v0.upcastOne(upcastTo, v0.pos)
             else {

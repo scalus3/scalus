@@ -49,7 +49,7 @@ abstract class BaseSimpleLowering(
     /** Lower the SIR to UPLC Term */
     def lower(): Term =
         // Apply let floating to optimize lazy let bindings
-        val transformed = LetFloating(sir)
+        val transformed = LetFloating(MutualRecursionElimination(sir))
         lowerInner(transformed)
 
     /** Find all constructors for a given SIR type. Used in Match expressions to determine the
@@ -620,8 +620,11 @@ abstract class BaseSimpleLowering(
                 )
                 Term.Apply(Term.LamAbs(name, lowerInner(body)), fixpoint)
             case SIR.Let(bindings, body, flags, _) =>
-                // TODO: implement mutual recursion
-                sys.error(s"Mutually recursive bindings are not supported: $bindings")
+                // Multi-binding rec groups are rewritten to single-binding lets by
+                // MutualRecursionElimination before lowering; this is an unreachable guard.
+                sys.error(
+                  s"Unexpected multi-binding recursive let (should have been eliminated): $bindings"
+                )
             case SIR.LamAbs(name, term, tps, _) => Term.LamAbs(name.name, lowerInner(term))
             case app @ SIR.Apply(f, arg, _, _) =>
                 if isPairListConversion(app) then lowerInner(arg)
