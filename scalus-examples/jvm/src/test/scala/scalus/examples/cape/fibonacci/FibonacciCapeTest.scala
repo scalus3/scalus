@@ -25,7 +25,7 @@ class FibonacciCapeTest extends AnyFunSuite with ScalusTest {
     private val tests: Seq[ujson.Value] = testsJson("tests").arr.toSeq
 
     test(s"Base script size: ${baseProgram.cborByteString.length} bytes") {
-        assert(baseProgram.cborByteString.length == 52)
+        assert(baseProgram.cborByteString.length == 42)
     }
 
     test(s"Open script size: ${openProgram.cborByteString.length} bytes") {
@@ -90,31 +90,31 @@ class FibonacciCapeTest extends AnyFunSuite with ScalusTest {
     }
 
     private val expectedBaseBudgets: Map[String, ExUnits] = Map(
-      "fibonacci_0" -> ExUnits(memory = 2001, steps = 347937),
-      "fibonacci_1" -> ExUnits(memory = 2001, steps = 347937),
-      "fibonacci_2" -> ExUnits(memory = 6809, steps = 1_507235),
-      "fibonacci_3" -> ExUnits(memory = 11617, steps = 2_666533),
-      "fibonacci_5" -> ExUnits(memory = 35657, steps = 8_463023),
-      "fibonacci_8" -> ExUnits(memory = 160665, steps = 38_604771),
-      "fibonacci_10" -> ExUnits(memory = 425105, steps = 102_366161),
-      "fibonacci_15" -> ExUnits(memory = 4_742689, steps = 1143_415765),
-      "fibonacci_20" -> ExUnits(memory = 52_625561, steps = 12688_864547L),
-      "fibonacci_25" -> ExUnits(memory = 583_654737, steps = 140729_850753L),
-      "fibonacci_negative" -> ExUnits(memory = 2001, steps = 347937)
+      "fibonacci_0" -> ExUnits(memory = 1701, steps = 299937),
+      "fibonacci_1" -> ExUnits(memory = 1701, steps = 299937),
+      "fibonacci_2" -> ExUnits(memory = 5309, steps = 1_267235),
+      "fibonacci_3" -> ExUnits(memory = 8917, steps = 2_234533),
+      "fibonacci_5" -> ExUnits(memory = 26957, steps = 7_071023),
+      "fibonacci_8" -> ExUnits(memory = 120765, steps = 32_220771),
+      "fibonacci_10" -> ExUnits(memory = 319205, steps = 85_422161),
+      "fibonacci_15" -> ExUnits(memory = 3_559189, steps = 954_055765),
+      "fibonacci_20" -> ExUnits(memory = 39_491261, steps = 10587_376547L),
+      "fibonacci_25" -> ExUnits(memory = 437_984037, steps = 117422_538753L),
+      "fibonacci_negative" -> ExUnits(memory = 1701, steps = 299937)
     )
 
     private val expectedBaseFees: Map[String, Coin] = Map(
-      "fibonacci_0" -> Coin(141),
-      "fibonacci_1" -> Coin(141),
-      "fibonacci_2" -> Coin(502),
-      "fibonacci_3" -> Coin(863),
-      "fibonacci_5" -> Coin(2668),
-      "fibonacci_8" -> Coin(12054),
-      "fibonacci_10" -> Coin(31910),
-      "fibonacci_15" -> Coin(356094),
-      "fibonacci_20" -> Coin(3951363),
-      "fibonacci_25" -> Coin(43823501),
-      "fibonacci_negative" -> Coin(141)
+      "fibonacci_0" -> Coin(120),
+      "fibonacci_1" -> Coin(120),
+      "fibonacci_2" -> Coin(398),
+      "fibonacci_3" -> Coin(676),
+      "fibonacci_5" -> Coin(2066),
+      "fibonacci_8" -> Coin(9292),
+      "fibonacci_10" -> Coin(24578),
+      "fibonacci_15" -> Coin(274153),
+      "fibonacci_20" -> Coin(3041996),
+      "fibonacci_25" -> Coin(33737844),
+      "fibonacci_negative" -> Coin(120)
     )
 
     private val expectedOpenBudgets: Map[String, ExUnits] = Map(

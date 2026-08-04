@@ -21,8 +21,6 @@ object ScalusRuntime {
         initArrayToList(using lctx)
         // mapList is initialized on demand when first used
         initSupportBindings(lctx)
-        lctx.zCombinatorNeeded = false
-        // will set to true when some of initialized function will be used
     }
 
     /** Eagerly materialize every support-module binding into `lctx.scope` as a lazy named var.
@@ -60,42 +58,31 @@ object ScalusRuntime {
         }
     }
 
-    def arrayToList(using lctx: LoweringContext): LoweredValue = {
+    def arrayToList(using lctx: LoweringContext): LoweredValue =
         retrieveRuntimeFunction(ARRAY_TO_LIST_NAME)
-    }
 
-    def mapList(using lctx: LoweringContext): LoweredValue = {
-        lctx.scope.getByName(MAP_LIST_NAME) match {
-            case Some(lv) =>
-                lctx.zCombinatorNeeded = true
-                lv
-            case None =>
-                initMapList
-                lctx.scope.getByName(MAP_LIST_NAME) match {
-                    case Some(lv) =>
-                        lctx.zCombinatorNeeded = true
-                        lv
-                    case None =>
-                        throw IllegalStateException(
-                          s"Can't find scalus runtime function ${MAP_LIST_NAME} after init"
-                        )
-                }
+    def mapList(using lctx: LoweringContext): LoweredValue =
+        lctx.scope.getByName(MAP_LIST_NAME).getOrElse {
+            initMapList
+            lctx.scope
+                .getByName(MAP_LIST_NAME)
+                .getOrElse(
+                  throw IllegalStateException(
+                    s"Can't find scalus runtime function $MAP_LIST_NAME after init"
+                  )
+                )
         }
-    }
 
     private def retrieveRuntimeFunction(
         name: String
-    )(using lctx: LoweringContext): LoweredValue = {
-        lctx.scope.getByName(name) match {
-            case Some(lv) =>
-                lctx.zCombinatorNeeded = true
-                lv
-            case None =>
-                throw IllegalStateException(
-                  s"Can't find scalus runtime function ${name} in context, check that context is initialized"
-                )
-        }
-    }
+    )(using lctx: LoweringContext): LoweredValue =
+        lctx.scope
+            .getByName(name)
+            .getOrElse(
+              throw IllegalStateException(
+                s"Can't find scalus runtime function $name in context, check that context is initialized"
+              )
+            )
 
     /** Unified list matching that uses Case on list for PlutusV4 and ChooseList for V1-V3.
       *
@@ -747,7 +734,6 @@ object ScalusRuntime {
               pos
             )
         }
-        lctx.zCombinatorNeeded = true
         lvApplyDirect(goVar, input, listType, outSum, pos)
     }
 
@@ -933,7 +919,6 @@ object ScalusRuntime {
               pos
             )
         }
-        lctx.zCombinatorNeeded = true
         lvApplyDirect(goVar, input, listType, resolvedOutListRepr, pos)
     }
 

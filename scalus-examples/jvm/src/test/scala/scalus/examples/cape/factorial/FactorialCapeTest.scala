@@ -25,7 +25,7 @@ class FactorialCapeTest extends AnyFunSuite with ScalusTest {
     private val tests: Seq[ujson.Value] = testsJson("tests").arr.toSeq
 
     test(s"Base script size: ${baseProgram.cborByteString.length} bytes") {
-        assert(baseProgram.cborByteString.length == 46)
+        assert(baseProgram.cborByteString.length == 34)
     }
 
     test(s"Open script size: ${openProgram.cborByteString.length} bytes") {
@@ -90,29 +90,29 @@ class FactorialCapeTest extends AnyFunSuite with ScalusTest {
     }
 
     private val expectedBaseBudgets: Map[String, ExUnits] = Map(
-      "factorial_0" -> ExUnits(memory = 2001, steps = 347937),
-      "factorial_1" -> ExUnits(memory = 4606, steps = 999935),
-      "factorial_2" -> ExUnits(memory = 7211, steps = 1_651933),
-      "factorial_3" -> ExUnits(memory = 9816, steps = 2_303931),
-      "factorial_4" -> ExUnits(memory = 12421, steps = 2_955929),
-      "factorial_5" -> ExUnits(memory = 15026, steps = 3_607927),
-      "factorial_8" -> ExUnits(memory = 22841, steps = 5_563921),
-      "factorial_10" -> ExUnits(memory = 28051, steps = 6_867917),
-      "factorial_12" -> ExUnits(memory = 33261, steps = 8_171913),
-      "factorial_negative" -> ExUnits(memory = 2001, steps = 347937)
+      "factorial_0" -> ExUnits(memory = 1701, steps = 299937),
+      "factorial_1" -> ExUnits(memory = 3706, steps = 855935),
+      "factorial_2" -> ExUnits(memory = 5711, steps = 1_411933),
+      "factorial_3" -> ExUnits(memory = 7716, steps = 1_967931),
+      "factorial_4" -> ExUnits(memory = 9721, steps = 2_523929),
+      "factorial_5" -> ExUnits(memory = 11726, steps = 3_079927),
+      "factorial_8" -> ExUnits(memory = 17741, steps = 4_747921),
+      "factorial_10" -> ExUnits(memory = 21751, steps = 5_859917),
+      "factorial_12" -> ExUnits(memory = 25761, steps = 6_971913),
+      "factorial_negative" -> ExUnits(memory = 1701, steps = 299937)
     )
 
     private val expectedBaseFees: Map[String, Coin] = Map(
-      "factorial_0" -> Coin(141),
-      "factorial_1" -> Coin(338),
-      "factorial_2" -> Coin(536),
-      "factorial_3" -> Coin(733),
-      "factorial_4" -> Coin(930),
-      "factorial_5" -> Coin(1128),
-      "factorial_8" -> Coin(1720),
-      "factorial_10" -> Coin(2114),
-      "factorial_12" -> Coin(2509),
-      "factorial_negative" -> Coin(141)
+      "factorial_0" -> Coin(120),
+      "factorial_1" -> Coin(276),
+      "factorial_2" -> Coin(432),
+      "factorial_3" -> Coin(588),
+      "factorial_4" -> Coin(743),
+      "factorial_5" -> Coin(899),
+      "factorial_8" -> Coin(1366),
+      "factorial_10" -> Coin(1678),
+      "factorial_12" -> Coin(1990),
+      "factorial_negative" -> Coin(120)
     )
 
     private val expectedOpenBudgets: Map[String, ExUnits] = Map(

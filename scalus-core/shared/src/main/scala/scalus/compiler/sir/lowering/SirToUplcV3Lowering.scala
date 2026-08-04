@@ -110,8 +110,7 @@ class SirToUplcV3Lowering(
                           retV.pos,
                           e
                         )
-            if lctx.zCombinatorNeeded then Term.Apply(Term.LamAbs("__Z", term), ExprBuilder.ZTerm)
-            else term
+            term
         catch
             case e: LoweringException =>
                 throw e
@@ -125,7 +124,6 @@ class SirToUplcV3Lowering(
             if targetLanguage == Language.PlutusV4 then MajorProtocolVersion.vanRossemPV
             else targetProtocolVersion
         val retval = LoweringContext(
-          zCombinatorNeeded = false,
           decls = MutableMap.empty,
           targetLanguage = targetLanguage,
           targetProtocolVersion = effectivePV,

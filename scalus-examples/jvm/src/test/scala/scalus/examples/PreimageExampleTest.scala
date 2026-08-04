@@ -96,7 +96,7 @@ class PreimageExampleTest extends BaseValidatorTest {
         // println(validator.showHighlighted)
         val flatSize = validator.flatEncoded.length
         // V3 backend with lambda barriers, optimizeUplc = true
-        assert(flatSize == ScalaCompilerVersion.baseline(pre38 = 206, since38 = 188))
+        assert(flatSize == ScalaCompilerVersion.baseline(pre38 = 195, since38 = 177))
         // V3 backend, optimizeUplc = false
         // assert(flatSize == 380)
         // SimpleBackend

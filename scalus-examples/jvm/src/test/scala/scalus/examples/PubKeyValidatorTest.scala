@@ -50,7 +50,7 @@ class PubKeyValidatorTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         val flatBytesLen = script.flatEncoded.length
 //    println(Utils.bytesToHex(flatBytes))
         // println(term.show)
-        assert(flatBytesLen == 135)
+        assert(flatBytesLen == 120)
         import Data.*
         import TermDSL.given
 //    println(scriptContext.toData)
@@ -58,6 +58,6 @@ class PubKeyValidatorTest extends AnyFunSuite with ScalaCheckPropertyChecks:
         given PlutusVM = PlutusVM.makePlutusV1VM()
         val evalResult = appliedValidator.deBruijnedProgram.evaluateDebug
         assert(evalResult.isSuccess)
-        assert(evalResult.budget == ExUnits(memory = 10945, steps = 2_951689))
+        assert(evalResult.budget == ExUnits(memory = 10345, steps = 2_855689))
         assert(PubKeyValidator.validator((), (), scriptContext.toData) == ())
     }

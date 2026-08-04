@@ -197,8 +197,11 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokensV3
         val flatSize = Program.plutusV1(appliedValidator).flatEncoded.length
+        // 903 (was 885 with the Z combinator): self-application recursion encoding
+        // adds one Var per recursive call site; unoptimized build, so nothing shrinks it.
+        // Execution budgets improved; optimized variant did not grow.
         val expectedSize1 =
-            885
+            903
         assert(flatSize == expectedSize1)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
 
@@ -216,7 +219,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV2(appliedValidator).flatEncoded.length
-        val expectedSize2 = 885
+        val expectedSize2 = 903
         assert(flatSize == expectedSize2)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV2)
     }

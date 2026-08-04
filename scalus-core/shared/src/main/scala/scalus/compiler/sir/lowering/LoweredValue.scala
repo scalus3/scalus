@@ -6,6 +6,7 @@ import scalus.compiler.sir.lowering.Lowering.tpf
 import scalus.compiler.sir.*
 import scalus.uplc.*
 import scalus.uplc.UplcAnnotation
+import scalus.uplc.transform.Inliner
 import scalus.utils.{Pretty, Style}
 
 import scala.collection.mutable.{Map as MutableMap, Set as MutableSet}
@@ -990,28 +991,40 @@ case class LetRecLoweredValue(
 
     override def pos: SIRPosition = inPos
 
-    /*  let rec f  = x => f (x + 1)
+    /*  let rec f = x => f (x + 1)
         in f 0
-        (\f -> f 0) (Z (\f. \x. f (x + 1)))
+        Self-application encoding (no fixpoint combinator):
+        (\f -> f 0) ((\f -> f f) (\f. \x. (f f) (x + 1)))
+        Each recursive call costs one Apply instead of the Z-combinator's
+        eta-wrapper dispatch (6 machine steps cheaper per call).
+        The fixpoint `(\f -> f f) rhs'` is kept as a closed subterm in argument
+        position (same top-level shape as the old `(\f -> body) (Z rhs)`) so
+        Inliner + PartialEvaluator can still constant-fold closed recursive
+        computations at compile time.
      */
     override def termInternal(gctx: TermGenerationContext): Term = {
         val nGctx = gctx.copy(
           generatedVars = gctx.generatedVars + newVar.id
         )
-        val fixed =
-            Term.Apply(
-              Term.Var(NamedDeBruijn("__Z")),
-              Term.LamAbs(
-                newVar.id,
-                rhs.termWithNeededVars(nGctx),
-                UplcAnnotation(pos)
-              ),
-              UplcAnnotation(pos)
-            )
+        val ann = UplcAnnotation(pos)
+        def selfApply = Term.Apply(
+          Term.Var(NamedDeBruijn(newVar.id)),
+          Term.Var(NamedDeBruijn(newVar.id)),
+          ann
+        )
+        // Capture-safe: lowering variable ids are globally unique and the
+        // replacement `f f` only references `newVar.id` itself.
+        val rhsSelfApp =
+            Inliner.substitute(rhs.termWithNeededVars(nGctx), newVar.id, selfApply)
+        val fixpoint = Term.Apply(
+          Term.LamAbs(newVar.id, selfApply, ann),
+          Term.LamAbs(newVar.id, rhsSelfApp, ann),
+          ann
+        )
         Term.Apply(
-          Term.LamAbs(newVar.id, body.termWithNeededVars(nGctx), UplcAnnotation(pos)),
-          fixed,
-          UplcAnnotation(pos)
+          Term.LamAbs(newVar.id, body.termWithNeededVars(nGctx), ann),
+          fixpoint,
+          ann
         )
     }
 

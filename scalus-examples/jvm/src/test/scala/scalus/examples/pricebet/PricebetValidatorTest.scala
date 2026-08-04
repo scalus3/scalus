@@ -56,7 +56,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         assert(
           // Slightly higher than before: the exchange-rate check now uses RationalEq.equals
           // (cross-multiplication) instead of the previous structural equalsData on Rational.
-          joinResult.budget == (ExUnits(memory = 128662, steps = 41_698556))
+          joinResult.budget == (ExUnits(memory = 123462, steps = 40_866556))
         )
     }
 
@@ -132,7 +132,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(beforeSlot)
         val winResult = assertSuccess(provider, winTx, joinedPricebetUtxo._1)
         assert(
-          winResult.budget == (ExUnits(memory = 108348, steps = 33_270921))
+          winResult.budget == (ExUnits(memory = 105648, steps = 32_838921))
         )
     }
 
@@ -237,7 +237,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(afterDeadlineSlot)
         val timeoutResult = assertSuccess(provider, timeoutTx, pricebetUtxo._1)
         assert(
-          timeoutResult.budget == (ExUnits(memory = 43739, steps = 14_700074))
+          timeoutResult.budget == (ExUnits(memory = 42539, steps = 14_508074))
         )
     }
 
@@ -281,7 +281,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(updateSlot)
         val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
         assert(
-          updateResult.budget == (ExUnits(memory = 65589, steps = 24_706128))
+          updateResult.budget == (ExUnits(memory = 63389, steps = 24_354128))
         )
     }
 

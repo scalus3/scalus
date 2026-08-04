@@ -551,7 +551,6 @@ object Lowering {
                     // in rec case, Lazy doesn't make sense, so we ignore it
                     bindings match
                         case List(Binding(name, tp, rhs)) =>
-                            lctx.zCombinatorNeeded = true
                             // Use `rhs.tp` (from LamAbs) as the base — it preserves the
                             // method's TypeVar kinds (e.g. `@UplcRepr(TypeVar(Unwrapped)) B`
                             // becomes `TypeVar(B, id, Unwrapped)` in LamAbs.param.tp/body.tp).
