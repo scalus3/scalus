@@ -69,41 +69,131 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
               s"Linking SIR at ${pos.show}, options=$options, modules: ${moduleDefs.keys.mkString(", ")}"
             )
         val processed = traverseAndLink(sir, pos)
-        val full: SIR = globalDefs.values.foldRight(processed) { case (state, acc) =>
-            state match
-                case LinkingDefState.Linked(b) =>
-                    SIR.Let(
-                      List(Binding(b.name, b.declaredTp.getOrElse(b.body.tp), b.body)),
-                      acc match {
-                          case annssir: AnnotatedSIR => annssir
-                          case _ =>
-                              val msg =
-                                  s"Unexpected Decl. In binding ${b.name} in SIRLinker.link"
-                              error(
-                                msg,
-                                pos,
-                                SIR.Error(msg, AnnotationsDecl.empty.copy(pos = pos))
-                              )
-                      },
-                      b.flags,
-                      AnnotationsDecl.empty.copy(pos = pos)
-                    )
-                case LinkingDefState.Linking =>
-                    val message = s"Linking in progress for ${state}"
-                    error(
-                      message,
-                      pos,
-                      SIR.Error(
-                        message,
-                        AnnotationsDecl.empty.copy(pos = pos)
-                      )
-                    )
-
+        // Preserve today's behavior for the error path: a def still in Linking
+        // state means a linking failure; report and degrade like before.
+        val states = globalDefs.values.toList
+        val stillLinking = states.exists {
+            case LinkingDefState.Linking => true
+            case _                       => false
         }
+        val full: SIR =
+            if stillLinking then
+                val message = s"Linking in progress at end of linking"
+                error(message, pos, SIR.Error(message, AnnotationsDecl.empty.copy(pos = pos)))
+            else {
+                val linked = states.collect { case LinkingDefState.Linked(b) => b }
+                val keys = linked.map(_.name).toSet
+                val edges: Map[String, Set[String]] =
+                    linked.map(b => b.name -> (collectGlobalRefs(b.body, keys) - b.name)).toMap
+                val sccs = stronglyConnectedComponents(linked.map(_.name), edges)
+                val groupOf: Map[String, List[String]] =
+                    sccs.filter(_.sizeIs >= 2).flatMap(g => g.map(_ -> g)).toMap
+                val byName = linked.map(b => b.name -> b).toMap
+                // Completion (insertion) order, merging each cyclic group into
+                // the slot of its earliest member.
+                val emitted = mutable.Set.empty[String]
+                val slots = mutable.ListBuffer.empty[List[SIRLinkedBinding]]
+                for b <- linked do
+                    if !emitted.contains(b.name) then
+                        groupOf.get(b.name) match
+                            case Some(group) =>
+                                val members = linked.filter(m => group.contains(m.name))
+                                members.foreach(m => emitted += m.name)
+                                slots += members
+                            case None =>
+                                emitted += b.name
+                                slots += List(b)
+                def asAnnotated(acc: SIR, name: String): AnnotatedSIR = acc match
+                    case annssir: AnnotatedSIR => annssir
+                    case _ =>
+                        val msg = s"Unexpected Decl. In binding $name in SIRLinker.link"
+                        error(msg, pos, SIR.Error(msg, AnnotationsDecl.empty.copy(pos = pos)))
+                slots.toList.foldRight(processed) {
+                    case (List(b), acc) =>
+                        SIR.Let(
+                          List(Binding(b.name, b.declaredTp.getOrElse(b.body.tp), b.body)),
+                          asAnnotated(acc, b.name),
+                          b.flags,
+                          AnnotationsDecl.empty.copy(pos = pos)
+                        )
+                    case (group, acc) =>
+                        SIR.Let(
+                          group.map(b =>
+                              Binding(b.name, b.declaredTp.getOrElse(b.body.tp), b.body)
+                          ),
+                          asAnnotated(acc, group.head.name),
+                          SIR.LetFlags.Recursivity,
+                          AnnotationsDecl.empty.copy(pos = pos)
+                        )
+                }
+            }
         val dataDecls = globalDataDecls.foldRight(full: SIR) { case ((_, decl), acc) =>
             SIR.Decl(decl, acc)
         }
         dataDecls
+    }
+
+    /** Names of global defs referenced from `sir` (syntactic, no shadow tracking: global names are
+      * dot-qualified full names that locals never collide with).
+      */
+    private def collectGlobalRefs(sir: SIR, keys: Set[String]): Set[String] = {
+        val acc = mutable.Set.empty[String]
+        def go(s: SIR): Unit = s match
+            case SIR.Decl(_, term)                 => go(term)
+            case SIR.Var(name, _, _)               => if keys.contains(name) then acc += name
+            case SIR.ExternalVar(_, name, _, _)    => if keys.contains(name) then acc += name
+            case SIR.Let(bindings, body, _, _)     => bindings.foreach(b => go(b.value)); go(body)
+            case SIR.LamAbs(_, term, _, _)         => go(term)
+            case SIR.Apply(f, arg, _, _)           => go(f); go(arg)
+            case SIR.Select(s1, _, _, _)           => go(s1)
+            case SIR.IfThenElse(c, t, f, _, _)     => go(c); go(t); go(f)
+            case SIR.And(a, b, _)                  => go(a); go(b)
+            case SIR.Or(a, b, _)                   => go(a); go(b)
+            case SIR.Not(a, _)                     => go(a)
+            case SIR.Match(scrutinee, cases, _, _) => go(scrutinee); cases.foreach(c => go(c.body))
+            case SIR.Constr(_, _, args, _, _)      => args.foreach(go)
+            case SIR.Cast(expr, _, _)              => go(expr)
+            case _: SIR.Builtin | _: SIR.Error | _: SIR.Const => ()
+        go(sir)
+        acc.toSet
+    }
+
+    /** Tarjan strongly connected components; nodes in `nodes` order, edges by name. */
+    private def stronglyConnectedComponents(
+        nodes: List[String],
+        edges: Map[String, Set[String]]
+    ): List[List[String]] = {
+        val indexOf = mutable.Map.empty[String, Int]
+        val lowlink = mutable.Map.empty[String, Int]
+        val onStack = mutable.Set.empty[String]
+        val stack = mutable.Stack.empty[String]
+        val result = mutable.ListBuffer.empty[List[String]]
+        var counter = 0
+
+        def strongConnect(v: String): Unit = {
+            indexOf(v) = counter
+            lowlink(v) = counter
+            counter += 1
+            stack.push(v)
+            onStack += v
+            for w <- edges.getOrElse(v, Set.empty) do
+                if !indexOf.contains(w) then
+                    strongConnect(w)
+                    lowlink(v) = math.min(lowlink(v), lowlink(w))
+                else if onStack(w) then lowlink(v) = math.min(lowlink(v), indexOf(w))
+            if lowlink(v) == indexOf(v) then
+                val component = mutable.ListBuffer.empty[String]
+                var w = ""
+                while {
+                    w = stack.pop()
+                    onStack -= w
+                    component += w
+                    w != v
+                } do ()
+                result += component.toList
+        }
+        nodes.foreach(v => if !indexOf.contains(v) then strongConnect(v))
+        result.toList
     }
 
     private def traverseAndLink(sir: SIR, pos: SIRPosition): SIR = sir match
