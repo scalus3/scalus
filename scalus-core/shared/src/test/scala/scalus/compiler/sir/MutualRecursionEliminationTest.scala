@@ -123,6 +123,89 @@ class MutualRecursionEliminationTest extends AnyFunSuite {
         }
     }
 
+    private def fourGroupCalling(entry: String, arg: Int): AnnotatedSIR =
+        SIR.Let(
+          List(
+            Binding("d1", intToInt, stepInt("d4", base = 1)),
+            Binding("d2", intToInt, stepInt("d3", base = 2)),
+            Binding("d3", intToInt, stepInt("d4", base = 3)),
+            Binding("d4", intToInt, SIR.LamAbs(nVar, intConst(999), List.empty, ann))
+          ),
+          extractAnnotated(SIR.Var(entry, intToInt, ann) $ intConst(arg)),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+
+    test(
+      "4-group: distance-3 forward call (member 1 -> member 4) evaluates correctly on all backends"
+    ) {
+        for backend <- TargetLoweringBackend.values do {
+            val opts = Options(
+              targetLoweringBackend = backend,
+              targetProtocolVersion = MajorProtocolVersion.vanRossemPV
+            )
+            // d1(3) -> d4(2) = 999: the distance-3 forward call (member 1 references
+            // member 4 directly, skipping members 2/3).
+            fourGroupCalling("d1", 3).toUplc(using opts)().evaluateDebug match
+                case s: Result.Success =>
+                    assert(s.term == Term.Const(Constant.Integer(999)), s"backend $backend, d1(3)")
+                case f => fail(s"backend $backend, d1(3) failed: $f")
+            // d2(1) -> d3(0) = 3: the adjacent chain members 2/3 use to terminate.
+            fourGroupCalling("d2", 1).toUplc(using opts)().evaluateDebug match
+                case s: Result.Success =>
+                    assert(s.term == Term.Const(Constant.Integer(3)), s"backend $backend, d2(1)")
+                case f => fail(s"backend $backend, d2(1) failed: $f")
+        }
+    }
+
+    /** 10-member group: member 1 calls member 10 directly (distance 9), members 2..9 chain
+      * adjacently to the next member, member 10 is a terminal constant.
+      */
+    private def tenGroup(arg: Int): AnnotatedSIR =
+        SIR.Let(
+          (1 to 10).map { k =>
+              val rhs =
+                  if k == 1 then stepInt("f10", base = 1)
+                  else if k == 10 then SIR.LamAbs(nVar, intConst(10), List.empty, ann)
+                  else stepInt(s"f${k + 1}", base = k)
+              Binding(s"f$k", intToInt, rhs)
+          }.toList,
+          extractAnnotated(SIR.Var("f1", intToInt, ann) $ intConst(arg)),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+
+    test(
+      "10-group: distance-9 forward call keeps eliminated SIR size polynomial, not exponential"
+    ) {
+        val eliminated = MutualRecursionElimination(tenGroup(0))
+        val nodeCount = SIR.size(eliminated)
+        // Pre-fix, a far reference recursively re-expanded every E(k) for k in 1..j-1,
+        // including the far ones among them - exponential in the reference distance j - i.
+        // Member 1's distance-9 call to member 10 alone would already cost on the order of
+        // 2^8 (~256) applyChain/Apply nodes just for that one call site's argument-chain
+        // re-expansion, on top of the rest of the group and the adjacent 2..9 chain (i.e.
+        // comfortably over 2000 nodes total for the old encoding). With the eta-let fix,
+        // each context's far-reference work is O(distance) and the whole group is O(N^2)
+        // (N = 10 here); the measured count is 499 nodes. 2000 leaves ample slack above
+        // that polynomial bound while staying far below the old exponential one.
+        assert(nodeCount < 2000, s"eliminated SIR has $nodeCount nodes, expected < 2000")
+    }
+
+    test("10-group: distance-9 forward call evaluates correctly on all backends") {
+        for backend <- TargetLoweringBackend.values do {
+            val opts = Options(
+              targetLoweringBackend = backend,
+              targetProtocolVersion = MajorProtocolVersion.vanRossemPV
+            )
+            // f1(1) -> f10(0) = 10 (f10 ignores n and returns the constant 10).
+            tenGroup(1).toUplc(using opts)().evaluateDebug match
+                case s: Result.Success =>
+                    assert(s.term == Term.Const(Constant.Integer(10)), s"backend $backend")
+                case f => fail(s"backend $backend failed: $f")
+        }
+    }
+
     test("group of non-lambda values is rejected") {
         val group = SIR.Let(
           List(Binding("a", intTp, intConst(1)), Binding("b", intTp, intConst(2))),
