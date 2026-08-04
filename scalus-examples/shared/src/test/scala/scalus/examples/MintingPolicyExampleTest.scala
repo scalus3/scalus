@@ -178,82 +178,50 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
         tokensSIR.toUplc().evaluate
 
     test("Minting Policy Validator") {
-        // Import the V3 backend configuration from MintingPolicy
-        import MintingPolicy.given scalus.compiler.Options
-        val options = summon[scalus.compiler.Options]
-
-        // Compile evaledTokens with the same V3 backend
-        val evaledTokensV3 =
-            val tokensSIR =
-                compile(SortedMap.singleton(hex"484f534b59", BigInt("1000000000000000")))
-            tokensSIR.toUplc().evaluate
-
-        val sir = MintingPolicy.compiledMintingPolicyScript
-
-        val validator = sir.toUplc(
+        val validator = MintingPolicy.compiledMintingPolicyScript.toUplc(
           generateErrorTraces = true,
-          optimizeUplc = false
+          optimizeUplc = true
         )
         val appliedValidator =
-            validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokensV3
+            validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV1(appliedValidator).flatEncoded.length
-        // 903 (was 885 with the Z combinator): self-application recursion encoding
-        // adds one Var per recursive call site; unoptimized build, so nothing shrinks it.
-        // Execution budgets improved; optimized variant did not grow.
-        val expectedSize1 =
-            903
-        assert(flatSize == expectedSize1)
+        assert(flatSize == 727)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
-
     }
 
     test("Minting Policy Validator V2") {
-        given scalus.compiler.Options = scalus.compiler.Options(
-          generateErrorTraces = true
-        )
         val validator =
             MintingPolicyV2.compiledMintingPolicyScriptV2.toUplc(
               generateErrorTraces = true,
-              optimizeUplc = false
+              optimizeUplc = true
             )
         val appliedValidator =
             validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokens
         val flatSize = Program.plutusV2(appliedValidator).flatEncoded.length
-        val expectedSize2 = 903
-        assert(flatSize == expectedSize2)
+        assert(flatSize == 727)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV2)
     }
 
     test("Minting Policy Validator Optimized") {
-        // Import SimpleSirToUplcLowering backend from MintingPolicySimpleBackend
+        // Import the ScottEncodingLowering backend from MintingPolicySimpleBackend
         import MintingPolicySimpleBackend.given scalus.compiler.Options
 
-        // Compile evaledTokens with the same SimpleSirToUplcLowering backend
-        val evaledTokensSimple =
+        // Compile the tokens argument with the same ScottEncodingLowering backend so its
+        // runtime representation matches the validator's
+        val evaledTokensScott =
             val tokensSIR =
                 compile(SortedMap.singleton(hex"484f534b59", BigInt("1000000000000000")))
             tokensSIR.toUplc().evaluate
 
-        // println(MintingPolicySimpleBackend.compiledOptimizedMintingPolicyScript.pretty.render(100))
         val validator =
             MintingPolicySimpleBackend.compiledOptimizedMintingPolicyScript.toUplc(
               generateErrorTraces = true,
-              optimizeUplc = false
+              optimizeUplc = true
             )
-        // println(s"Validator UPLC:\n${validator.pretty.render(100)}")
         val appliedValidator =
-            validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokensSimple
-        // println(s"Applied Validator UPLC:\n${appliedValidator.pretty.render(100)}")
+            validator $ hoskyMintTxOutRef.id.hash $ hoskyMintTxOutRef.idx $ evaledTokensScott
         val flatSize = Program.plutusV1(appliedValidator).flatEncoded.length
-        // println(s"Flat size: $flatSize")
-        // assert(flatSize == 846)
-        //    Re-enable when lazy let will be supported on SimpleSirToUplcLowering (issue #125)
-        //    In addition to that, we should optimize redurant beta-reductions in UPLC
-        //    (i.e.  (App (lam x x) y)  => y )
-        //    Not sure, if it exists in current UPLC optimization passes, but in this test
-        //    it produces larger code size than non-optimized version.
-        //    (TODO: alows to disable/enable specific UPLC optimizations from Compiler.Options)
-        assert(flatSize == 814)
+        assert(flatSize == 672)
         performMintingPolicyValidatorChecks(appliedValidator)(withScriptContextV1)
     }
 }
