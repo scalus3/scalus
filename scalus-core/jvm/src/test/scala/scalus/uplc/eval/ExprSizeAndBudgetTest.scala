@@ -96,11 +96,11 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
             params.executionUnitPrices.priceMemory * mem
         // convert to USD assuming 1 ADA = 0.66 USD
         val pricePerRecursionInUSDMilliCents = lovelacePerRecursion.toDouble / 1000000 * 66_000
-        assert(cpu == 128352)
-        assert(mem == 702)
-        assert(lovelacePerRecursion.ceil == 50)
+        assert(cpu == 32256)
+        assert(mem == 102)
+        assert(lovelacePerRecursion.ceil == 9)
         // Precise value with higher precision price_step representation
-        assert(pricePerRecursionInUSDMilliCents == 3.2841322271999998)
+        assert(pricePerRecursionInUSDMilliCents == 0.5419298016)
     }
 
     test("2nd bytestring in a list fee = 126") {

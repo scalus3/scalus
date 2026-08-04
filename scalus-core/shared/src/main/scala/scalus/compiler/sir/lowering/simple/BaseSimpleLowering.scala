@@ -6,6 +6,7 @@ import scalus.compiler.sir.SIR.Pattern
 import scalus.compiler.sir.*
 import scalus.uplc.*
 import scalus.uplc.UplcAnnotation
+import scalus.uplc.transform.Inliner
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -38,6 +39,10 @@ abstract class BaseSimpleLowering(
 
     protected def builtinTerms = Meaning.allBuiltins.forcedBuiltins
 
+    @deprecated(
+      "unused since the self-application recursion encoding; kept for binary compatibility",
+      "1.0.0"
+    )
     protected var zCombinatorNeeded: Boolean = false
     protected val decls = mutable.HashMap.empty[String, DataDecl]
 
@@ -45,9 +50,7 @@ abstract class BaseSimpleLowering(
     def lower(): Term =
         // Apply let floating to optimize lazy let bindings
         val transformed = LetFloating(sir)
-        val term = lowerInner(transformed)
-        if zCombinatorNeeded then Term.Apply(Term.LamAbs("__Z", term), ExprBuilder.ZTerm)
-        else term
+        lowerInner(transformed)
 
     /** Find all constructors for a given SIR type. Used in Match expressions to determine the
       * complete set of constructors.
@@ -600,15 +603,22 @@ abstract class BaseSimpleLowering(
             case SIR.Let(Binding(name, tp, rhs) :: Nil, body, flags, _) if flags.isRec =>
                 /*  let rec f x = f (x + 1)
                     in f 0
-                    (\f -> f 0) (Z (\f. \x. f (x + 1)))
+                    Self-application encoding (no fixpoint combinator):
+                    (\f -> f 0) ((\f -> f f) (\f. \x. (f f) (x + 1)))
+                    The fixpoint stays a closed argument-position subterm so
+                    Inliner + PartialEvaluator can constant-fold closed
+                    recursive computations (see LetRecLoweredValue).
                  */
-                zCombinatorNeeded = true
-                val fixed =
-                    Term.Apply(
-                      Term.Var(NamedDeBruijn("__Z")),
-                      Term.LamAbs(name, lowerInner(rhs))
-                    )
-                Term.Apply(Term.LamAbs(name, lowerInner(body)), fixed)
+                val selfApply =
+                    Term.Apply(Term.Var(NamedDeBruijn(name)), Term.Var(NamedDeBruijn(name)))
+                // Capture-safe: substitution stops at binders that shadow `name`,
+                // and the replacement's only free variable is `name` itself.
+                val rhsSelfApp = Inliner.substitute(lowerInner(rhs), name, selfApply)
+                val fixpoint = Term.Apply(
+                  Term.LamAbs(name, selfApply),
+                  Term.LamAbs(name, rhsSelfApp)
+                )
+                Term.Apply(Term.LamAbs(name, lowerInner(body)), fixpoint)
             case SIR.Let(bindings, body, flags, _) =>
                 // TODO: implement mutual recursion
                 sys.error(s"Mutually recursive bindings are not supported: $bindings")

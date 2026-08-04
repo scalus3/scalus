@@ -99,6 +99,54 @@ class SelfApplicationRecursionTest extends AnyFunSuite {
         )
     }
 
+    test("simple backends lower self-recursion without the Z combinator") {
+        for backend <- List(
+              TargetLoweringBackend.ScottEncodingLowering,
+              TargetLoweringBackend.SumOfProductsLowering
+            )
+        do {
+            val opts = Options(targetLoweringBackend = backend)
+            val uplc = compile {
+                def rec(n: BigInt): BigInt =
+                    if n == BigInt(0) then BigInt(0) else rec(n - 1)
+                rec(1000)
+            }.toUplc(using opts)()
+            assert(!uplc.show.contains("__Z"), s"$backend must not reference the Z combinator")
+            val result = uplc.evaluateDebug
+            assert(result.isSuccess, s"$backend evaluation failed: $result")
+            assert(result.success.term == 0.asTerm)
+            // Z encoding of this loop measured 505_993_433 steps / 2_205_601 mem on both backends.
+            assert(
+              result.budget.steps < 505_993_433L,
+              s"$backend did not improve: ${result.budget}"
+            )
+            assert(result.budget.memory < 2_205_601L, s"$backend did not improve: ${result.budget}")
+            assert(
+              result.budget.steps > 100_000_000L,
+              s"$backend loop did not run: ${result.budget}"
+            )
+        }
+    }
+
+    test("simple backends: recursion with a shadowing binder works") {
+        // The simple backends use raw SIR names (not globally unique ids), so the
+        // self-application substitution must stop at binders that shadow the
+        // recursive name. The lambda parameter `f` below shadows the recursive `f`.
+        val opts = Options(targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering)
+        val uplc = compile {
+            def f(n: BigInt): BigInt =
+                if n == BigInt(0) then
+                    val g = (f: BigInt) => f + 1
+                    g(41)
+                else f(n - 1)
+            f(5)
+        }.toUplc(using opts)()
+        assert(!uplc.show.contains("__Z"))
+        val result = uplc.evaluateDebug
+        assert(result.isSuccess, s"evaluation failed: $result")
+        assert(result.success.term == 42.asTerm)
+    }
+
     test("prelude List recursion (runtime helpers) lowers without the Z combinator") {
         val uplc = compile { (n: BigInt) =>
             List.range(1, n).map(x => x + 1).foldLeft(BigInt(0))(_ + _)
