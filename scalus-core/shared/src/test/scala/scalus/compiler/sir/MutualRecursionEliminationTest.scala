@@ -181,15 +181,14 @@ class MutualRecursionEliminationTest extends AnyFunSuite {
         val eliminated = MutualRecursionElimination(tenGroup(0))
         val nodeCount = SIR.size(eliminated)
         // Pre-fix, a far reference recursively re-expanded every E(k) for k in 1..j-1,
-        // including the far ones among them - exponential in the reference distance j - i.
-        // Member 1's distance-9 call to member 10 alone would already cost on the order of
-        // 2^8 (~256) applyChain/Apply nodes just for that one call site's argument-chain
-        // re-expansion, on top of the rest of the group and the adjacent 2..9 chain (i.e.
-        // comfortably over 2000 nodes total for the old encoding). With the eta-let fix,
-        // each context's far-reference work is O(distance) and the whole group is O(N^2)
-        // (N = 10 here); the measured count is 499 nodes. 2000 leaves ample slack above
-        // that polynomial bound while staying far below the old exponential one.
-        assert(nodeCount < 2000, s"eliminated SIR has $nodeCount nodes, expected < 2000")
+        // including the far ones among them - exponential in the reference distance j - i
+        // (roughly 2^j - 1 nodes for the distance-9 call site alone). Measured on this exact
+        // 10-member fixture: the old, unbounded algorithm produces 1377 nodes; the eta-let
+        // fix (O(distance) per far reference, O(N^2) for the whole group, N = 10) produces
+        // 499. The 700 bound sits strictly between the two, so this assertion actually
+        // discriminates the fix from the regression it fixes, rather than just being a loose
+        // upper bound both would satisfy.
+        assert(nodeCount < 700, s"eliminated SIR has $nodeCount nodes, expected < 700")
     }
 
     test("10-group: distance-9 forward call evaluates correctly on all backends") {
