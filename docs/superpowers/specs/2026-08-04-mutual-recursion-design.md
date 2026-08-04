@@ -111,7 +111,32 @@ in isEven 4
 
 One fixpoint per group; ~1-2 extra applies per cross-call.
 
-## 5. Plugin: clear error for local mutual recursion
+## 5. PrettyPrinter: multi-binding lets
+
+`PrettyPrinter.pretty(sir, style)` currently dies with
+`sys.error("Multiple bindings not supported")` (`PrettyPrinter.scala:208-209`)
+on any multi-binding `Let`. Non-rec multi-binding lets are already legal in
+lowering, and the linker will now emit rec groups, so implement both:
+
+- Non-rec, 2+ bindings: stack the bindings under one `let`, then `in`:
+  ```
+  let a: T1 = e1
+      b: T2 = e2
+  in ...
+  ```
+- Rec, 2+ bindings: render the group with the existing `fun` style, joined
+  by `and`:
+  ```
+  fun isEven(n): (Int -> Boolean) =
+      ...
+  and fun isOdd(n): (Int -> Boolean) =
+      ...
+  in ...
+  ```
+
+The `sys.error` case is removed entirely.
+
+## 6. Plugin: clear error for local mutual recursion
 
 In `SIRCompiler`, where a forward reference to a local def currently becomes
 a phantom `ExternalVar` (symbol owner is not a module class and the name is
@@ -119,10 +144,12 @@ not in `env`): report a real compiler error - "forward reference to local
 def `X`: local mutual recursion is not supported in compile blocks; move the
 functions to a `@Compile` object".
 
-## 6. Tests (TDD)
+## 7. Tests (TDD)
 
 - `MutualRecursionEliminationTest` (unit, hand-built SIR): groups of size 2
   and 3; assert rewritten structure and CEK evaluation result.
+- PrettyPrinter: `sir.show` on a rec group and on a non-rec multi-binding
+  let renders without error; asserted in the end-to-end test.
 - `MutualRecursionTest` (end-to-end, grows out of the probe): top-level
   `isEven`/`isOdd` through V3 and both simple backends, evaluated result plus
   a budget ceiling; a 3-function cycle; a member that is both self- and
@@ -131,7 +158,7 @@ functions to a `@Compile` object".
 - Full `jvm/test` and `sbtn mima` green; acyclic linker output is unchanged
   so no budget re-pinning is expected.
 
-## 7. Docs and compatibility
+## 8. Docs and compatibility
 
 - Correct `CODEGEN_IMPROVEMENT_PLAN.md` T2 text (no Z kept, no polymorphic
   recursion corner case; mark mutual recursion done, drop the dead-code
