@@ -11,8 +11,9 @@ import scalus.uplc.Term.*
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData
+import scalus.cardano.ledger.ExUnits
 import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
-import scalus.uplc.{NamedDeBruijn, Term}
+import scalus.uplc.{ExprBuilder, NamedDeBruijn, Term}
 
 class ExprSizeAndBudgetTest extends AnyFunSuite {
     private val encoder = summon[Flat[Term]]
@@ -215,6 +216,120 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         assert(result.budget.memory == 1737)
         assert(result.budget.steps == 1346626)
         assert(result.budget.fee(prices).value == 198)
+    }
+
+    // ------------------------------------------------------------------
+    // T2 recursion-encoding proof-record: Z combinator vs self-application
+    //
+    // Z encoding (LetRecLoweredValue before T2):
+    //   (λf. body) (Z (λf. rhs))   where Z = λff.(λxx.ff (λvv.xx xx vv)) (λxx.ff (λvv.xx xx vv))
+    // Self-application encoding (T2, as emitted by LetRecLoweredValue):
+    //   (λf. body) ((λf. f f) (λf. rhs[f := f f]))
+    //
+    // Measured (PV11 mainnet params): self-application saves exactly 6 machine
+    // steps per recursive call (96,000 cpu / 600 mem), is cheaper even at
+    // n=0 and when the body uses f several times, and drops the 12-byte Z
+    // term from the script. See docs/internal/CODEGEN_IMPROVEMENT_PLAN.md T2.
+    // ------------------------------------------------------------------
+
+    import scalus.uplc.DefaultFun.{AddInteger, EqualsInteger, IfThenElse, SubtractInteger}
+    import scalus.uplc.TermDSL.given
+
+    /** λn. force(ifThenElse (equalsInteger n 0) (delay 0) (delay (call (subtractInteger n 1)))) */
+    private def countdownRhs(call: Term): Term =
+        λ("n")(
+          !(!IfThenElse $ (EqualsInteger $ vr"n" $ 0.asTerm)
+              $ ~0.asTerm
+              $ ~(call $ (SubtractInteger $ vr"n" $ 1.asTerm)))
+        )
+
+    /** λn. λacc. force(ifThenElse (n == 0) (delay acc) (delay (call (n - 1) (acc + n)))) */
+    private def sumRhs(call: Term): Term =
+        λ("n", "acc")(
+          !(!IfThenElse $ (EqualsInteger $ vr"n" $ 0.asTerm)
+              $ ~vr"acc"
+              $ ~(call $ (SubtractInteger $ vr"n" $ 1.asTerm) $ (AddInteger $ vr"acc" $ vr"n")))
+        )
+
+    /** `(λf. body(f)) (Z (λf. rhs(f)))` - what LetRecLoweredValue emitted before T2 */
+    private def zEncoding(rhs: Term => Term, body: Term => Term): Term =
+        λ("f")(body(vr"f")) $ (ExprBuilder.ZTerm $ λ("f")(rhs(vr"f")))
+
+    /** `(λf. body(f)) ((λf. f f) (λf. rhs(f f)))` - the T2 encoding */
+    private def selfAppEncoding(rhs: Term => Term, body: Term => Term): Term =
+        λ("f")(body(vr"f")) $ (λ("f")(vr"f" $ vr"f") $ λ("f")(rhs(vr"f" $ vr"f")))
+
+    private def runTerm(t: Term): (Term, ExUnits) = t.evaluateDebug match
+        case Result.Success(result, budget, _, _) => (result, budget)
+        case f                                    => fail(s"evaluation failed: $f")
+
+    private def flatSize(t: Term): Int = t.plutusV3.flatEncoded.length
+
+    /** Runs both encodings, asserts identical results and that self-application is cheaper. Returns
+      * (zBudget, selfAppBudget).
+      */
+    private def compareEncodings(
+        name: String,
+        z: Term,
+        selfApp: Term,
+        iterations: Long
+    ): (ExUnits, ExUnits) = {
+        val (zResult, zBudget) = runTerm(z)
+        val (sResult, sBudget) = runTerm(selfApp)
+        assert(zResult == sResult, s"$name: encodings disagree on the result")
+        assert(sBudget.steps < zBudget.steps, s"$name: self-application must cost less CPU")
+        assert(sBudget.memory < zBudget.memory, s"$name: self-application must cost less memory")
+        assert(flatSize(selfApp) < flatSize(z), s"$name: self-application must be smaller")
+        val cpuDelta = zBudget.steps - sBudget.steps
+        val memDelta = zBudget.memory - sBudget.memory
+        info(
+          f"$name%-20s saved cpu=$cpuDelta%11d (${cpuDelta * 100.0 / zBudget.steps}%5.2f%%) mem=$memDelta%8d (${memDelta * 100.0 / zBudget.memory}%5.2f%%) size=${flatSize(z) - flatSize(selfApp)}%3d B"
+        )
+        (zBudget, sBudget)
+    }
+
+    test("T2 proof: self-application beats Z on countdown loop, 6 machine steps per call") {
+        for n <- List(0L, 10L, 1000L) do
+            compareEncodings(
+              s"countdown(n=$n)",
+              zEncoding(countdownRhs, f => f $ n.asTerm),
+              selfAppEncoding(countdownRhs, f => f $ n.asTerm),
+              iterations = n
+            )
+        // pinned per-call saving, measured at n=100_000 to amortize the entry delta:
+        // 6 machine steps/call = 96_000 cpu, 600 mem at PV11 mainnet costs
+        val n = 100_000L
+        val (zb, sb) = compareEncodings(
+          s"countdown(n=$n)",
+          zEncoding(countdownRhs, f => f $ n.asTerm),
+          selfAppEncoding(countdownRhs, f => f $ n.asTerm),
+          iterations = n
+        )
+        assert((zb.steps - sb.steps) / n == 96_000L)
+        assert((zb.memory - sb.memory) / n == 600L)
+    }
+
+    test("T2 proof: self-application beats Z on 2-arg sum loop by the same 6 steps per call") {
+        val n = 100_000L
+        val (zb, sb) = compareEncodings(
+          s"sum(n=$n)",
+          zEncoding(sumRhs, f => f $ n.asTerm $ 0.asTerm),
+          selfAppEncoding(sumRhs, f => f $ n.asTerm $ 0.asTerm),
+          iterations = n
+        )
+        assert((zb.steps - sb.steps) / n == 96_000L)
+        assert((zb.memory - sb.memory) / n == 600L)
+    }
+
+    test("T2 proof: body referencing f multiple times pays the unrolling once, still cheaper") {
+        // body = f 5 + f 3: two uses of the recursive function
+        val body: Term => Term = f => AddInteger $ (f $ 5.asTerm) $ (f $ 3.asTerm)
+        compareEncodings(
+          "two-uses",
+          zEncoding(countdownRhs, body),
+          selfAppEncoding(countdownRhs, body),
+          iterations = 8
+        )
     }
 
 }
