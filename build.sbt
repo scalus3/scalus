@@ -24,7 +24,7 @@ val cardanoClientLibVersion = "0.7.2"
 val yaciVersion = "0.4.5"
 val yaciCardanoTestVersion = "0.1.0"
 val scalatestVersion = "3.2.20"
-val scalatestPlusScalacheckVersion = "3.2.19.0"
+val scalatestPlusScalacheckVersion = "3.2.20.0"
 val borerVersion = "1.16.2"
 val slf4jVersion = "2.0.18"
 val magnoliaVersion = "1.3.21"
@@ -317,7 +317,7 @@ lazy val scalusPlugin = project
       // UPDATE VERSION after changes to the plugin
       // version := "0.13.0+597-4eafe96f+20251217-1256-SNAPSHOT",
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "org.scala-lang" %% "scala3-compiler" % scalaVersion.value // % "provided"
     )
     .settings(
@@ -429,7 +429,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       ),
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies ++= Seq(
         "dev.optics" %%% "monocle-core" % monocleVersion,
         "dev.optics" %%% "monocle-macro" % monocleVersion,
@@ -574,7 +574,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       }.taskValue,
       PluginDependency,
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion,
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion,
       libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.3",
       libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.3",
@@ -636,7 +636,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion,
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       // Exclude integration tests and benchmarks from default test runs
       Test / testOptions += Tests.Argument("-l", "scalus.testing.IntegrationTest"),
@@ -691,7 +691,7 @@ lazy val scalusDesignPatterns = project
       jvmReleaseTarget,
       publishOnlyLts,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       Test / fork := true
       //// enable if need speedup
       // trackInternalDependencies := TrackLevel.TrackIfMissing,
@@ -818,7 +818,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       ),
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion % "test",
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
-      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
+      libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-19" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
       libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.25",
       inConfig(Test)(PluginDependency),
