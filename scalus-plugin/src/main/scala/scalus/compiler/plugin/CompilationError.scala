@@ -147,6 +147,13 @@ case class ExpressionNotSupported(exprType: String, srcPos: SrcPos) extends Comp
            |Try rewriting your program without using it""".stripMargin
 }
 
+case class LocalMutualRecursionNotSupported(name: String, srcPos: SrcPos) extends CompilationError {
+    def message: String =
+        s"""Forward reference to local definition '$name'.
+           |Local mutual recursion is not supported in compile blocks.
+           |Move the mutually recursive functions to a top-level object annotated with @Compile.""".stripMargin
+}
+
 case class UnsupportedBigIntOp(op: String, srcPos: SrcPos) extends CompilationError {
     def message: String =
         s"""BigInt operation '$op' is not supported in Scalus scripts.
