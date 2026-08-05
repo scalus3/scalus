@@ -20,10 +20,21 @@ automates it for all user code.
 
 ## Solution
 
-A new SIR-to-SIR pass `StaticArgumentTransformation`, applied the same way
-as `RemoveRecursivity`: once, in `SIRLinker.link`, immediately after the
-`RemoveRecursivity(linked)` call (`linking/SIRLinker.scala:480`). No
-`Options` flag; the pass is always on.
+A new SIR-to-SIR pass `StaticArgumentTransformation`, applied only when
+optimization is enabled (`Options.optimizeUplc = true`, e.g.
+`Options.release`), not unconditionally. It runs in `Compiled.toUplc`
+(`uplc/Compiled.scala`) on the SIR before backend dispatch, next to the
+existing `RemoveTraces` step:
+
+```scala
+val sir1 = if options.removeTraces then RemoveTraces.transform(sir) else sir
+val sirToLower =
+    if options.optimizeUplc then StaticArgumentTransformation(sir1) else sir1
+```
+
+The test-facing `sir.toUplc(...)` path (`scalus/package.scala`) gets the
+same gating. Debug builds (`optimizeUplc = false`) keep the source-shaped
+recursion.
 
 File: `scalus-core/shared/src/main/scala/scalus/compiler/sir/StaticArgumentTransformation.scala`,
 `def apply(sir: SIR): SIR`, structural recursion over the whole tree
@@ -77,7 +88,7 @@ SAT when the rec rhs is closed (those computations fold away anyway).
 
 ### Known limitation (documented, follow-up)
 
-The linker runs before `MutualRecursionElimination` (backend entries), so
+The pass runs before `MutualRecursionElimination` (backend entries), so
 the peers-as-params static arguments MRE introduces for mutual-recursion
 groups are not lifted by this pass. Multi-binding rec lets are skipped.
 Follow-up option: run a second SAT application after MRE, or emit
@@ -104,7 +115,10 @@ Runtime helpers built directly with `lvLetRec` at the LoweredValue level
 - Budget re-pins across pinned suites via `scripts/update-budgets.py`
   plus the known manual tail; re-measure dual `ScalaCompilerVersion`
   baselines (pre38/since38) where used. Expected: drops on
-  Knights/Clausify and prelude fold-heavy tests.
+  Knights/Clausify and prelude fold-heavy tests. Only suites compiling
+  with `optimizeUplc = true` move; debug-mode pins are unaffected.
+- Gating test: same program compiled with `Options.debug` shows no SAT
+  wrapper in the SIR/UPLC; with `Options.release` it does.
 
 ## Validation
 
