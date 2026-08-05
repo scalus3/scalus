@@ -32,9 +32,16 @@ val sirToLower =
     if options.optimizeUplc then StaticArgumentTransformation(sir1) else sir1
 ```
 
-The test-facing `sir.toUplc(...)` path (`scalus/package.scala`) gets the
-same gating. Debug builds (`optimizeUplc = false`) keep the source-shaped
-recursion.
+The extension methods in `scalus-core/shared/src/main/scala/scalus/package.scala`
+get the same gating, applied to the SIR before the backend match:
+
+- `sir.toUplc(...)`: gate on its `optimizeUplc` parameter (callers can
+  override the `Options` default), e.g.
+  `val sirToLower = if optimizeUplc then StaticArgumentTransformation(sir) else sir`.
+  `toUplcOptimized` delegates to `toUplc`, so it is covered.
+- `sir.lowerToUplc(...)`: gate on `options.optimizeUplc`.
+
+Debug builds (`optimizeUplc = false`) keep the source-shaped recursion.
 
 File: `scalus-core/shared/src/main/scala/scalus/compiler/sir/StaticArgumentTransformation.scala`,
 `def apply(sir: SIR): SIR`, structural recursion over the whole tree
