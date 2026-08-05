@@ -86,8 +86,15 @@ then `f(N-1)p`, ..., `f2p`, innermost `f1`, then the body.
   - `j < i`: the param var `fj`
   - `j = i` (self): `fip f1 ... f(i-1)` - plain self-recursion, lowered by
     the existing T2 self-application encoding
-  - `j > i`: `fjp E(1) ... E(j-1)`, expanding recursively (call sites grow
-    O(N^2) in group size; fine for typical N = 2-3)
+  - `j = i + 1` (adjacent forward): `fjp E(1) ... E(j-1)`, a call-site
+    chain of plain vars - unchanged from the naive scheme
+  - `j >= i + 2` (far forward): **not** expanded recursively at every call
+    site. Each member binds `fk` (for each such target `k`) once, via a
+    non-recursive, eta-expanded let: `let fk = lambda $eta. (fkp E(1) ...
+    E(k-1)) $eta`. The eta-lambda defers the fixpoint application - a
+    strict direct binding (`let fk = fkp E(1) ... E(k-1)`) would apply the
+    fixpoint at member entry and diverge. Call sites inside `rhs_i'` then
+    just reference the plain var `fk`.
 - Types: `fip.tp = Fun(tp_1, ... Fun(tp_(i-1), tp_i))`; intermediate
   `Apply` node types come from peeling `Fun`.
 - Rec flag per emitted let: `LetFlags.Recursivity` iff
@@ -109,7 +116,11 @@ letrec isEven       = λn. if n==0 then true  else isOdd$mutrec isEven (n-1)
 in isEven 4
 ```
 
-One fixpoint per group; ~1-2 extra applies per cross-call.
+One fixpoint per group. Total growth is O(N^2) per member: measured on a
+10-member distance-9 mutual-recursion group, this encoding produces 499 AST
+nodes versus 1377 for naive recursive expansion of far-forward references
+(the old exponential-in-distance shape that the eta-expanded once-only
+binding above replaces).
 
 ## 5. PrettyPrinter: multi-binding lets
 

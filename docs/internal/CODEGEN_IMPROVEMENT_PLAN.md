@@ -280,7 +280,7 @@ tracks T10, T12, T16.
   bytestring parsing); CPU should drop several percent, more with many
   invariant params.
 
-### T2. Cheaper recursion encoding (HIGH)
+### T2. Cheaper recursion encoding (HIGH, DONE)
 
 - **Evidence:** every Scalus recursive call routes through the shared Z
   combinator `λff.(λxx.ff (λvv.xx xx vv)) (...)` (`uplc/Expr.scala:46-49`,
@@ -294,11 +294,11 @@ tracks T10, T12, T16.
   cover or explicitly exclude.
 - **What:** lower single self-recursion as self-application: define
   `f' = λself.λargs. body[f := self self]` and call `f' f'`. No Z, no eta
-  wrapper. Keep Z only where needed (e.g. polymorphic recursion corner
-  cases). Consider Aiken's mutual-recursion packing (one self-applied body +
-  Scott-encoded chooser, `gen_uplc.rs:4497-4540`) to lift Scalus's current
-  "mutual recursion unsupported" restriction (`Lowering.scala:588-591`;
-  same TODO in `BaseSimpleLowering.scala:613`).
+  wrapper. Mutual recursion is supported since this change: `SIRLinker`
+  groups SCCs into multi-binding rec Lets and `MutualRecursionElimination`
+  rewrites them to nested single lets (peers-as-params, one fixpoint per
+  group), lowered by the self-application encoding on all backends. Local
+  (in-block) mutual recursion reports a clear error.
 - **Validate:** microbenchmark a tight counting loop: per-iteration cost
   should drop by the Z-dispatch delta; all existing tests green.
 
