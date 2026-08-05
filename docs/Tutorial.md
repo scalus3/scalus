@@ -82,7 +82,8 @@ Supported:
 * pattern matching using type ascriptions (`case x: BigInt => ...`)
 * `try-catch` expressions
 * overloaded functions
-* mutually recursive functions
+* forward references between local `def`s inside `compile` blocks - put mutually
+  recursive functions in a top-level `@Compile` object instead
 
 ## Constants and primitives
 
