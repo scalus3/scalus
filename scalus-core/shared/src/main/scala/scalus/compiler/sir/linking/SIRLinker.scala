@@ -88,27 +88,97 @@ class SIRLinker(options: SIRLinkerOptions, moduleDefs: Map[String, Module]) {
                 val sccs = stronglyConnectedComponents(linked.map(_.name), edges)
                 val groupOf: Map[String, List[String]] =
                     sccs.filter(_.sizeIs >= 2).flatMap(g => g.map(_ -> g)).toMap
-                val byName = linked.map(b => b.name -> b).toMap
-                // Completion (insertion) order, merging each cyclic group into
-                // the slot of its earliest member.
-                val emitted = mutable.Set.empty[String]
-                val slots = mutable.ListBuffer.empty[List[SIRLinkedBinding]]
-                for b <- linked do
-                    if !emitted.contains(b.name) then
-                        groupOf.get(b.name) match
-                            case Some(group) =>
-                                val members = linked.filter(m => group.contains(m.name))
-                                members.foreach(m => emitted += m.name)
-                                slots += members
-                            case None =>
-                                emitted += b.name
-                                slots += List(b)
+
+                // Completion index: position in `linked`, i.e. the order defs
+                // *finished* linking. findAndLinkDefinition fully links every
+                // callee (depth-first, synchronously) before its caller
+                // completes, so in an ACYCLIC reference graph this is already a
+                // valid topological order: every def's dependencies have a
+                // strictly smaller completion index than the def itself. Only
+                // inside a cycle does that invariant not hold (cycle members can
+                // reference each other regardless of index) - which is exactly
+                // why a naive "emit in completion order, merge cycles at the
+                // earliest member's slot" scheme is unsound: a def outside the
+                // cycle but referenced only from a *later*-completing cycle
+                // member (e.g. `isEven`'s body calls `isOdd` first, then a
+                // plain `positive` helper) completes after that earliest
+                // member and lands inside the group's body instead of
+                // enclosing it - see the "group member calling a later-linked
+                // helper" test.
+                val completionIndex: Map[String, Int] =
+                    linked.iterator.zipWithIndex.map((b, i) => b.name -> i).toMap
+
+                // Condense the reference graph: every node is either a
+                // singleton def or a whole SCC (cyclic group). `nodeRep` names
+                // a node by its earliest-completing member - stable no matter
+                // which member of the node you start from.
+                def nodeMembers(name: String): List[String] = groupOf.getOrElse(name, List(name))
+                def nodeRep(name: String): String = nodeMembers(name).minBy(completionIndex)
+                val nodeRepOf: Map[String, String] =
+                    linked.map(b => b.name -> nodeRep(b.name)).toMap
+                val nodeReps: List[String] = linked.map(b => nodeRepOf(b.name)).distinct
+
+                // Condensation edges (dependency direction), dropping
+                // intra-SCC references - those are already resolved inside the
+                // group's own recursive Let and would otherwise be self-loops.
+                val nodeDeps: Map[String, Set[String]] = nodeReps.map { rep =>
+                    val members = nodeMembers(rep).toSet
+                    val deps = members
+                        .flatMap(m => edges.getOrElse(m, Set.empty))
+                        .filterNot(members.contains)
+                        .map(nodeRepOf)
+                    rep -> deps
+                }.toMap
+                val dependents: Map[String, Set[String]] =
+                    nodeDeps.toList
+                        .flatMap { case (rep, deps) => deps.map(dep => dep -> rep) }
+                        .groupMap(_._1)(_._2)
+                        .view
+                        .mapValues(_.toSet)
+                        .toMap
+                val priority: Map[String, Int] =
+                    nodeReps.map(rep => rep -> nodeMembers(rep).map(completionIndex).min).toMap
+
+                // Kahn's algorithm: repeatedly emit the available node (all its
+                // dependency-nodes already emitted) with the smallest
+                // completion-index priority. The emitted order is
+                // dependencies-first, i.e. outermost-first for the foldRight
+                // below - a node's dependencies must already be in an
+                // enclosing Let before the node's own body can reference them.
+                //
+                // Proof this reproduces today's behavior byte-for-byte on
+                // acyclic input: in a fully acyclic graph every node is a
+                // singleton, and (per completionIndex above) its dependencies
+                // all have a strictly smaller index. By induction on emission
+                // step: once every index < k has been emitted, the def with
+                // index k has all of its dependencies (indices < k) already
+                // emitted, so it is available; every other available def has
+                // index >= k, so k is the smallest-priority available node and
+                // is emitted next. The loop therefore emits exactly
+                // 0, 1, 2, ..., n-1 - plain completion order - whenever the
+                // graph has no cycles. Only an actual cycle (which crashed
+                // unconditionally before this feature existed) can make the
+                // order diverge from completion order.
+                val remaining = mutable.Map.from(nodeReps.map(rep => rep -> nodeDeps(rep).size))
+                val available = mutable.Set.from(nodeReps.filter(rep => remaining(rep) == 0))
+                val order = mutable.ListBuffer.empty[String]
+                while available.nonEmpty do
+                    val next = available.minBy(rep => (priority(rep), rep))
+                    available -= next
+                    order += next
+                    for dependent <- dependents.getOrElse(next, Set.empty) do
+                        remaining(dependent) -= 1
+                        if remaining(dependent) == 0 then available += dependent
+
+                val slots: List[List[SIRLinkedBinding]] =
+                    order.toList.map(rep => linked.filter(b => nodeRepOf(b.name) == rep))
+
                 def asAnnotated(acc: SIR, name: String): AnnotatedSIR = acc match
                     case annssir: AnnotatedSIR => annssir
                     case _ =>
                         val msg = s"Unexpected Decl. In binding $name in SIRLinker.link"
                         error(msg, pos, SIR.Error(msg, AnnotationsDecl.empty.copy(pos = pos)))
-                slots.toList.foldRight(processed) {
+                slots.foldRight(processed) {
                     case (List(b), acc) =>
                         SIR.Let(
                           List(Binding(b.name, b.declaredTp.getOrElse(b.body.tp), b.body)),
