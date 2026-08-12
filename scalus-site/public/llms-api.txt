@@ -1868,6 +1868,8 @@ case class scalus.cardano.ledger.ExUnits
   val steps: Long
   def showJson: String
   def +(other: ExUnits): ExUnits
+  def fitsWithin(budget: ExUnits): Boolean
+  def exceeds(budget: ExUnits): Boolean
   def fee(prices: ExUnitPrices): Coin
   def fee(using info: CardanoInfo): Coin
 
