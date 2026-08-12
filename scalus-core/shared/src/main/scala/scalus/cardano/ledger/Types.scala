@@ -491,6 +491,24 @@ case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
           scalus.uplc.eval.CostingInteger.satPlus(steps, other.steps)
         )
 
+    /** Checks that both components are within `budget`.
+      *
+      * Execution units are only partially ordered: a value can be under budget on memory and over
+      * on steps at the same time. The ledger therefore compares each component independently
+      * (`pointWiseExUnits (<=)` in Alonzo), and so does this method. Do not use a total `Ordering`
+      * for budget checks.
+      *
+      * @param budget
+      *   The maximum execution units allowed
+      * @return
+      *   true if memory and steps are both less than or equal to those of `budget`
+      */
+    def fitsWithin(budget: ExUnits): Boolean =
+        memory <= budget.memory && steps <= budget.steps
+
+    /** Checks that at least one component is over `budget`. Negation of [[fitsWithin]]. */
+    def exceeds(budget: ExUnits): Boolean = !fitsWithin(budget)
+
     /** Calculate fee for the execution units given explicit prices.
       *
       * @param prices
@@ -536,6 +554,18 @@ object ExUnits {
         exUnits
     }
 
+    /** Lexicographic, memory-first ordering.
+      *
+      * @deprecated
+      *   Execution units are only partially ordered, so this total ordering answers budget
+      *   questions incorrectly: `ExUnits(1, 999)` compares as less than `ExUnits(2, 1)` even though
+      *   it is far over on steps. Use [[ExUnits.fitsWithin]] or [[ExUnits.exceeds]] for budget
+      *   checks. Kept only for sorting and for binary compatibility.
+      */
+    @deprecated(
+      "ExUnits is only partially ordered; this ordering is wrong for budget checks. Use fitsWithin/exceeds instead",
+      "1.0.0"
+    )
     given Ordering[ExUnits] = (x: ExUnits, y: ExUnits) => {
         if x.memory != y.memory then x.memory.compareTo(y.memory)
         else x.steps.compareTo(y.steps)
