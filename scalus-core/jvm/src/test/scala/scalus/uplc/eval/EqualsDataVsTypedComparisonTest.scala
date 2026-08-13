@@ -210,8 +210,10 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         val eqFieldsSize = eqFields.program.cborEncoded.length
         info(formatLine("equalsData", eqDataBudget, eqDataSize))
         info(formatLine("===", eqFieldsBudget, eqFieldsSize))
-        // With V3 lowering, equalsData is cheaper for recursive map types
-        assert(eqDataBudget.steps < eqFieldsBudget.steps)
+        // With V3 lowering, equalsData used to be strictly cheaper for recursive map types.
+        // The T1 static-argument transformation closed that gap: `===` on Value now costs
+        // exactly the same, so this only pins that equalsData never becomes the worse choice.
+        assert(eqDataBudget.steps <= eqFieldsBudget.steps)
     }
 
     test("equalsData vs === for v1.TxOut (3 fields)") {

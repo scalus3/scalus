@@ -77,6 +77,23 @@ annotations, so all external uses (partial applications, higher-order
 uses, eta-lets) are untouched. The outer let is non-recursive; only the
 inner let carries the rec flag.
 
+**Prefix shape (added during implementation).** When the static parameters
+form a prefix - the common `go f n acc` case with an invariant `f` - the
+wrapper binds only that prefix and returns the fixpoint itself:
+
+```
+let f = λp1…pj. (let rec f$sat = λq1…qk. body' in f$sat)
+```
+
+This removes one application per changing parameter from every *entry*
+(not just per iteration), and lets a partially applied `f static…` share a
+single fixpoint across all of its calls. It is the shape
+`ScalusRuntime.genMapList` already uses by hand. Requires that no changing
+parameter carries type parameters, since `satTp` is a plain function chain;
+otherwise the general shape above is used. Measurement drove this: the
+first version used the general shape everywhere and regressed a number of
+validators that enter a recursive function often but iterate few times.
+
 Polymorphic bindings: `typeParams` stay on the outer wrapper's `LamAbs`;
 the inner letrec is a plain lambda over the changing params with free type
 vars (same approach as `MutualRecursionElimination.pTp`). This covers

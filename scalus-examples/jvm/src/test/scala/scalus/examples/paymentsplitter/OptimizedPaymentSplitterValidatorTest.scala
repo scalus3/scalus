@@ -27,63 +27,63 @@ class OptimizedPaymentSplitterValidatorTest
     private val expectedRewardBudgets: Map[String, ExUnits] = ScalaCompilerVersion.baseline(
       pre38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 161888,
-          steps = 50_946090
+          memory = 160888,
+          steps = 50_786090
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 215271,
-          steps = 69_098271
+          memory = 211871,
+          steps = 68_554271
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 270755,
-          steps = 88_811948
+          memory = 264455,
+          steps = 87_803948
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 270755,
-          steps = 88_811948
+          memory = 264455,
+          steps = 87_803948
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 270755,
-          steps = 88_811948
+          memory = 264455,
+          steps = 87_803948
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 270755,
-          steps = 88_811948
+          memory = 264455,
+          steps = 87_803948
         ),
-        "success between 5 payees" -> ExUnits(memory = 388026, steps = 132_923790),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 366539, steps = 122_589968)
+        "success between 5 payees" -> ExUnits(memory = 374426, steps = 130_747790),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 357439, steps = 121_133968)
       ),
       since38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 156972,
-          steps = 49_203541
+          memory = 155972,
+          steps = 49_043541
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 210355,
-          steps = 67_355722
+          memory = 206955,
+          steps = 66_811722
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 265839,
-          steps = 87_069399
+          memory = 259539,
+          steps = 86_061399
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 265839,
-          steps = 87_069399
+          memory = 259539,
+          steps = 86_061399
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 265839,
-          steps = 87_069399
+          memory = 259539,
+          steps = 86_061399
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 265839,
-          steps = 87_069399
+          memory = 259539,
+          steps = 86_061399
         ),
-        "success between 5 payees" -> ExUnits(memory = 383110, steps = 131_181241),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 361623, steps = 120_847419)
+        "success between 5 payees" -> ExUnits(memory = 369510, steps = 129_005241),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 352523, steps = 119_391419)
       )
     )
 
-    private val expectedSpendBudget: ExUnits = ExUnits(memory = 44528, steps = 13_875300)
+    private val expectedSpendBudget: ExUnits = ExUnits(memory = 42128, steps = 13_491300)
 
     // Run all shared test cases
     testCases.foreach { tc =>
@@ -97,11 +97,11 @@ class OptimizedPaymentSplitterValidatorTest
         val (rewardBudget, spendBudget) = runTestCaseWithBudget(tc)
         assert(
           rewardBudget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 366539, steps = 122_589968),
-            since38 = ExUnits(memory = 361623, steps = 120_847419)
+            pre38 = ExUnits(memory = 357439, steps = 121_133968),
+            since38 = ExUnits(memory = 352523, steps = 119_391419)
           )
         )
-        assert(spendBudget == ExUnits(memory = 44528, steps = 13_875300))
+        assert(spendBudget == ExUnits(memory = 42128, steps = 13_491300))
     }
 
     private def runTestCase(tc: PaymentSplitterTestCase): Unit = {

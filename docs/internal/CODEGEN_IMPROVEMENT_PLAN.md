@@ -91,7 +91,7 @@ At PV11, Scalus wins essentially every row on both validators.
 | User data representation | PlutusData Constr + exposers, primitives unwrapped | PlutusData-backed, representation-polymorphic lowering, no-op to/fromData | Scott or SOPs (CIP-85) |
 | Datum/redeemer boundary | strict deep `expect` validation | lazy trust + on-demand projection | strict `unsafeFromBuiltinData` decode |
 | Field access caching | per-clause field binds | deterministic cached tail/drop chains | n/a (decoded values) |
-| Recursion | self-application + static-argument transformation | shared Z-combinator | fixpoint combinators / SOP-era letrec |
+| Recursion | self-application + static-argument transformation | self-application + static-argument transformation (T2, T1) | fixpoint combinators / SOP-era letrec |
 | Optimizer driver | fixpoint loop until node count stable | fixed iterations (3x inline, 2x CSE) | fixed pass pipeline, 12 iterations of simplifier |
 | Multi-arg application | `case (constr 0 [...])` via split_body_lambda | `CaseConstrApply` | SOPs / apply chains |
 | Repeated builtin partial apps | `builtin_curry_reducer` hoisting | generic CSE only | CSE |
@@ -238,8 +238,11 @@ measurement + auto-selection, not plumbing.
 
 ### 4.7 Confirmed absent (the actual work)
 
-- Static-argument transformation; self-application recursion encoding (all
-  recursion goes through the shared Z combinator).
+- ~~Static-argument transformation; self-application recursion encoding (all
+  recursion goes through the shared Z combinator).~~ Both landed: T2
+  (self-application, incl. mutual recursion) and T1
+  (`compiler/sir/StaticArgumentTransformation.scala`, gated on
+  `optimizeUplc`).
 - `FloatDelay`, `ForceCaseDelay`, `CaseOfCase`, `CaseReduce`/`KnownCon`
   passes - zero hits in any `.scala` file; only the adjacent
   `Force(Delay(_))` cancellation in `Inliner` and `StrictIf` exist.
@@ -256,10 +259,10 @@ evidence, the Aiken/Plutus prior art, the Scalus code area, and a validation
 method. Tasks T1-T12 come from the Aiken comparison and the measured
 evidence; T13-T16 (end of section 6) come from the Plutus research.
 Suggested implementation order: T11 (close the measurement gaps first),
-then T2, T1, T3, T13, T4, T5, T7, T14, T15, T8, T6, T9, then the research
+then T2 (done), T1 (done), T3, T13, T4, T5, T7, T14, T15, T8, T6, T9, then the research
 tracks T10, T12, T16.
 
-### T1. Static-argument transformation for recursive functions (HIGH)
+### T1. Static-argument transformation for recursive functions (HIGH, DONE)
 
 - **Evidence:** TM byte-parsing loops (varint walks, outpoint/output loops)
   re-pass the invariant `rawTx`/params on every recursive call through the Z
@@ -267,18 +270,47 @@ tracks T10, T12, T16.
   (`recursive_nonstatic_params`, `gen_uplc.rs:3243-3267`, applied at
   4461-4494) and this shows up as ~15% machine-step advantage on parsing
   paths with identical builtin work.
-- **What:** at SIR lowering of a self-recursive `let rec`, compute which
-  parameters are passed unchanged in every self-call; bind those once in a
-  wrapper lambda and re-pass only the changing ones through the fixpoint.
-- **Where:** `lowering/Lowering.scala` - the rec branch of `lowerLet`
-  (`:516`, rec case `:550-592`, `LetRecLoweredValue` built at `:583`);
-  `lowering/LoweredValue.scala` - `LetRecLoweredValue` (`:982-1035`; its
-  `termInternal` emits `(λf. body) (__Z (λf. rhs))` and binds the recursive
-  var twice with the same id) and the `lvLetRec` builder (`:2811-2834`,
-  also used by `ScalusRuntime` helpers - must be handled too).
-- **Validate:** ExUnits regression on recursive-heavy benchmarks (list fold,
-  bytestring parsing); CPU should drop several percent, more with many
-  invariant params.
+- **What landed:** a SIR-to-SIR pass
+  `compiler/sir/StaticArgumentTransformation.scala` (sibling of
+  `MutualRecursionElimination` / `RemoveRecursivity`). For a single-binding
+  `let rec f = λp1..pn. body` it marks position `i` static when *every*
+  self-call passes exactly `Var(pi)` there, then rewrites to
+  `let f = λp1..pn. (let rec f$sat = λq1..qk. body' in f$sat q1..qk)`,
+  where `q` are the changing params. When the static params form a prefix
+  (the common `go f n acc` case) it emits the leaner
+  `let f = λp1..pj. (let rec f$sat = λq1..qk. body' in f$sat)`, which also
+  lets a partially applied `f static...` share one fixpoint across calls.
+  Self-calls are detected through both `Var` and `ExternalVar`, shadow-aware.
+  Skipped when unprovable: multi-binding (mutual) groups, lazy lets,
+  non-lambda rhs, duplicate param names, any bare or under-saturated
+  self-reference, or no static param. If all params are static the last is
+  demoted (a nullary strict letrec diverges).
+- **Gating:** applied only when `options.optimizeUplc` is set, at all three
+  SIR->UPLC entry points: `uplc/Compiled.scala` `toUplc`, and
+  `scalus/package.scala` `toUplc` (parameter-gated, so `toUplcOptimized` is
+  covered) and `lowerToUplc`.
+- **Measured:** the proof-record in
+  `scalus-core/jvm/.../uplc/eval/ExprSizeAndBudgetTest.scala` pins
+  **96,000 cpu / 600 mem saved per recursive call for 2 lifted arguments**
+  (3 machine steps per argument no longer re-passed), obtained by
+  differencing two loop lengths so the fixed entry cost cancels. Corpus
+  effects: Knights 8x8 (Data repr) -10.4% mem / -3.7% cpu, Knights 6x6
+  -8.1% / -3.2%, G2Accumulator -13.7% / -10.3%, prelude `List` operations
+  commonly -16% to -29%, CAPE two-party-escrow -1.5% to -3.5%. A handful of
+  validators regress slightly (functions entered often but iterating few
+  times pay the wrapper) - the inherent SAT trade-off, same as Aiken's.
+- **Known limitation:** the pass runs before `MutualRecursionElimination`
+  (which sits at the backend entry points), so the peers-as-params static
+  arguments that pass introduces for mutual-recursion groups are not lifted.
+  Runtime helpers built directly with `lvLetRec` (e.g.
+  `ScalusRuntime.genArrayToList`, which re-passes an invariant `arr` and `n`)
+  are also out of scope; `genMapList` is already hand-SAT'd and is the model
+  for the shape this pass produces.
+- **Tests:** `compiler/sir/StaticArgumentTransformationTest.scala` (17 cases:
+  both shapes, edge cases, `ExternalVar`, polymorphism, optimizeUplc gating),
+  plus the existing T2 guard
+  `SelfApplicationRecursionTest."optimizer can still constant-fold closed
+  recursive computations"`, which stays green.
 
 ### T2. Cheaper recursion encoding (HIGH, DONE)
 

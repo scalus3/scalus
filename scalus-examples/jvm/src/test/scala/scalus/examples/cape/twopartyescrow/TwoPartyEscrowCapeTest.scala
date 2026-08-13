@@ -52,44 +52,44 @@ class TwoPartyEscrowCapeTest extends AnyFunSuite with ScalusTest {
     test(s"Script size: ${compiled.script.script.size} bytes") {
         assert(
           compiled.script.script.size ==
-              1140
+              1127
         )
     }
 
     // Expected execution budgets for success tests
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "deposit_successful" -> (ExUnits(memory = 42693, steps = 18_502909)),
+      "deposit_successful" -> (ExUnits(memory = 40293, steps = 18_118909)),
       // "accept_successful" -> ExUnits(memory = 73023, steps = 27249620),
-      "accept_successful" -> (ExUnits(memory = 51717, steps = 19_370982)),
+      "accept_successful" -> (ExUnits(memory = 50217, steps = 19_130982)),
       // "accept_with_multiple_inputs" -> ExUnits(memory = 78845, steps = 30325979),
-      "accept_with_multiple_inputs" -> (ExUnits(memory = 55642, steps = 21_785485)),
+      "accept_with_multiple_inputs" -> (ExUnits(memory = 54142, steps = 21_545485)),
       // "accept_with_datum_attached" -> ExUnits(memory = 73023, steps = 27249620),
-      "accept_with_datum_attached" -> (ExUnits(memory = 51717, steps = 19_370982)),
+      "accept_with_datum_attached" -> (ExUnits(memory = 50217, steps = 19_130982)),
       // "accept_with_multiple_outputs_to_seller" -> ExUnits(memory = 97969, steps = 37424519),
-      "accept_with_multiple_outputs_to_seller" -> (ExUnits(memory = 67313, steps = 26_374107)),
+      "accept_with_multiple_outputs_to_seller" -> (ExUnits(memory = 64613, steps = 25_942107)),
       // "refund_successful" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_successful" -> (ExUnits(memory = 60661, steps = 22_430389)),
+      "refund_successful" -> (ExUnits(memory = 59161, steps = 22_190389)),
       // "refund_after_exact_deadline" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_after_exact_deadline" -> (ExUnits(memory = 60661, steps = 22_430389)),
+      "refund_after_exact_deadline" -> (ExUnits(memory = 59161, steps = 22_190389)),
       // "refund_with_multiple_inputs" -> ExUnits(memory = 93612, steps = 35805398),
-      "refund_with_multiple_inputs" -> (ExUnits(memory = 64586, steps = 24_844892)),
+      "refund_with_multiple_inputs" -> (ExUnits(memory = 63086, steps = 24_604892)),
       // "refund_with_datum_attached" -> ExUnits(memory = 87790, steps = 32729039),
-      "refund_with_datum_attached" -> (ExUnits(memory = 60661, steps = 22_430389)),
+      "refund_with_datum_attached" -> (ExUnits(memory = 59161, steps = 22_190389)),
       // "refund_with_multiple_outputs_to_buyer" -> ExUnits(memory = 112736, steps = 42903938)
-      "refund_with_multiple_outputs_to_buyer" -> (ExUnits(memory = 76257, steps = 29_433514))
+      "refund_with_multiple_outputs_to_buyer" -> (ExUnits(memory = 73557, steps = 29_001514))
     )
 
     private val expectedFees: Map[String, Coin] = Map(
-      "deposit_successful" -> Coin(3798),
-      "accept_successful" -> Coin(4381),
-      "accept_with_multiple_inputs" -> Coin(4782),
-      "accept_with_datum_attached" -> Coin(4381),
-      "accept_with_multiple_outputs_to_seller" -> Coin(5786),
-      "refund_successful" -> Coin(5118),
-      "refund_after_exact_deadline" -> Coin(5118),
-      "refund_with_multiple_inputs" -> Coin(5518),
-      "refund_with_datum_attached" -> Coin(5118),
-      "refund_with_multiple_outputs_to_buyer" -> Coin(6523)
+      "deposit_successful" -> Coin(3632),
+      "accept_successful" -> Coin(4277),
+      "accept_with_multiple_inputs" -> Coin(4678),
+      "accept_with_datum_attached" -> Coin(4277),
+      "accept_with_multiple_outputs_to_seller" -> Coin(5599),
+      "refund_successful" -> Coin(5014),
+      "refund_after_exact_deadline" -> Coin(5014),
+      "refund_with_multiple_inputs" -> Coin(5415),
+      "refund_with_datum_attached" -> Coin(5014),
+      "refund_with_multiple_outputs_to_buyer" -> Coin(6336)
     )
 
     // Generate test cases from the JSON
