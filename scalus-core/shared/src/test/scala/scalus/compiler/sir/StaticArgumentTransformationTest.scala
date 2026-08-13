@@ -167,4 +167,347 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
             case s: Result.Success => assert(s.term == Term.Const(Constant.Integer(20)))
             case f                 => fail(s"baseline failed: $f")
     }
+
+    // ------------------------------------------------------------------ edge cases
+
+    private def app(f: SIR, a: SIR, tp: SIRType): AnnotatedSIR =
+        SIR.Apply(extractAnnotated(f), extractAnnotated(a), tp, ann)
+
+    /** let rec count = λn. if n == 0 then 0 else count (n - 1) in count 3 */
+    private def countProgram: AnnotatedSIR =
+        SIR.Let(
+          List(
+            Binding(
+              "count",
+              intToInt,
+              SIR.LamAbs(
+                v("n", intTp),
+                SIR.IfThenElse(
+                  extractAnnotated(SIRBuiltins.equalsInteger $ v("n", intTp) $ intConst(0)),
+                  intConst(0),
+                  app(
+                    v("count", intToInt),
+                    SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+                    intTp
+                  ),
+                  intTp,
+                  ann
+                ),
+                List.empty,
+                ann
+              )
+            )
+          ),
+          app(v("count", intToInt), intConst(3), intTp),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+
+    test("zero static params: the let is returned unchanged") {
+        assert(StaticArgumentTransformation(countProgram) == countProgram)
+    }
+
+    test("all params static: the last one is demoted to changing") {
+        // let rec spin = λa. λb. spin a b   (diverges if run; shape-checked only)
+        val spinTp = SIRType.Fun(intTp, intToInt)
+        val spin = SIR.Let(
+          List(
+            Binding(
+              "spin",
+              spinTp,
+              SIR.LamAbs(
+                v("a", intTp),
+                SIR.LamAbs(
+                  v("b", intTp),
+                  app(app(v("spin", spinTp), v("a", intTp), intToInt), v("b", intTp), intTp),
+                  List.empty,
+                  ann
+                ),
+                List.empty,
+                ann
+              )
+            )
+          ),
+          intConst(0),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+        StaticArgumentTransformation(spin) match
+            case SIR.Let(List(Binding("spin", _, wrapper)), _, flags, _) =>
+                assert(!flags.isRec)
+                wrapper match
+                    case SIR.LamAbs(a, SIR.LamAbs(b, inner, _, _), _, _) =>
+                        assert(List(a.name, b.name) == List("a", "b"))
+                        inner match
+                            case SIR.Let(List(Binding("spin$sat", satTp, satLam)), _, f, _) =>
+                                assert(f.isRec)
+                                // only `b` remains a parameter of the fixpoint
+                                assert(satTp == intToInt)
+                                satLam match
+                                    case SIR.LamAbs(p, body, _, _) =>
+                                        assert(p.name == "b")
+                                        assert(varNames(body) == List("spin$sat", "b"))
+                                    case other => fail(s"expected 1-param sat lambda: $other")
+                            case other => fail(s"expected spin$$sat letrec: $other")
+                    case other => fail(s"expected 2-param wrapper: $other")
+            case other => fail(s"expected spin let: $other")
+    }
+
+    /** Wraps `selfUse` (an Int-typed body fragment) as the else-branch of the standard 2-param
+      * recursion `let rec go2 = λf. λn. if n == 0 then 0 else <selfUse> in go2 double 2`.
+      */
+    private def go2Program(selfUse: AnnotatedSIR): AnnotatedSIR = {
+        val go2Tp = SIRType.Fun(intToInt, intToInt)
+        SIR.Let(
+          List(
+            Binding(
+              "go2",
+              go2Tp,
+              SIR.LamAbs(
+                v("f", intToInt),
+                SIR.LamAbs(
+                  v("n", intTp),
+                  SIR.IfThenElse(
+                    extractAnnotated(SIRBuiltins.equalsInteger $ v("n", intTp) $ intConst(0)),
+                    intConst(0),
+                    selfUse,
+                    intTp,
+                    ann
+                  ),
+                  List.empty,
+                  ann
+                ),
+                List.empty,
+                ann
+              )
+            )
+          ),
+          app(app(v("go2", go2Tp), double, intToInt), intConst(2), intTp),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+    }
+
+    private val go2Tp = SIRType.Fun(intToInt, intToInt)
+
+    test("under-saturated self-call blocks the transform") {
+        // (λh. h (n - 1)) (go2 f)      -- `go2 f` is a 1-arg spine, arity is 2
+        val partial = app(v("go2", go2Tp), v("f", intToInt), intToInt)
+        val consumer = SIR.LamAbs(
+          v("h", intToInt),
+          app(
+            v("h", intToInt),
+            SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+            intTp
+          ),
+          List.empty,
+          ann
+        )
+        val prog = go2Program(app(consumer, partial, intTp))
+        assert(StaticArgumentTransformation(prog) == prog)
+    }
+
+    test("bare self-reference blocks the transform") {
+        // (λh. h f (n - 1)) go2        -- `go2` appears as a plain argument
+        val consumer = SIR.LamAbs(
+          v("h", go2Tp),
+          app(
+            app(v("h", go2Tp), v("f", intToInt), intToInt),
+            SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+            intTp
+          ),
+          List.empty,
+          ann
+        )
+        val prog = go2Program(app(consumer, v("go2", go2Tp), intTp))
+        assert(StaticArgumentTransformation(prog) == prog)
+    }
+
+    test("param shadowed at the call site is not static") {
+        // (λf. go2 f (n - 1)) f        -- the inner λf shadows the outer param
+        val shadowing = SIR.LamAbs(
+          v("f", intToInt),
+          app(
+            app(v("go2", go2Tp), v("f", intToInt), intToInt),
+            SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+            intTp
+          ),
+          List.empty,
+          ann
+        )
+        val prog = go2Program(app(shadowing, v("f", intToInt), intTp))
+        // f is shadowed at the call site, n is changing -> no static param at all
+        assert(StaticArgumentTransformation(prog) == prog)
+    }
+
+    test("over-saturated self-call keeps its trailing arguments") {
+        // let rec mk = λc. λn. if n == 0 then (λx. x + c) else (λy. mk c (n - 1) y)
+        val mkTp = SIRType.Fun(intTp, SIRType.Fun(intTp, intToInt))
+        val selfCall = app(
+          app(
+            app(v("mk", mkTp), v("c", intTp), SIRType.Fun(intTp, intToInt)),
+            SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+            intToInt
+          ),
+          v("y", intTp),
+          intTp
+        )
+        val mk = SIR.Let(
+          List(
+            Binding(
+              "mk",
+              mkTp,
+              SIR.LamAbs(
+                v("c", intTp),
+                SIR.LamAbs(
+                  v("n", intTp),
+                  SIR.IfThenElse(
+                    extractAnnotated(SIRBuiltins.equalsInteger $ v("n", intTp) $ intConst(0)),
+                    SIR.LamAbs(
+                      v("x", intTp),
+                      extractAnnotated(SIRBuiltins.addInteger $ v("x", intTp) $ v("c", intTp)),
+                      List.empty,
+                      ann
+                    ),
+                    SIR.LamAbs(v("y", intTp), selfCall, List.empty, ann),
+                    intToInt,
+                    ann
+                  ),
+                  List.empty,
+                  ann
+                ),
+                List.empty,
+                ann
+              )
+            )
+          ),
+          app(
+            app(
+              app(v("mk", mkTp), intConst(5), SIRType.Fun(intTp, intToInt)),
+              intConst(3),
+              intToInt
+            ),
+            intConst(1),
+            intTp
+          ),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+        StaticArgumentTransformation(mk) match
+            case SIR.Let(List(Binding("mk", _, wrapper)), _, _, _) =>
+                val names = varNames(wrapper)
+                assert(!names.contains("mk"), s"still references mk: $names")
+                assert(names.contains("mk$sat"))
+                // the trailing `y` argument must survive: mk$sat (n - 1) y
+                assert(names.contains("y"), s"trailing arg dropped: $names")
+            case other => fail(s"expected mk let: $other")
+    }
+
+    test("multi-binding recursive let (mutual group) is left untouched") {
+        val mutual = SIR.Let(
+          List(
+            Binding("isEven", intToInt, SIR.LamAbs(v("n", intTp), intConst(1), List.empty, ann)),
+            Binding("isOdd", intToInt, SIR.LamAbs(v("n", intTp), intConst(0), List.empty, ann))
+          ),
+          app(v("isEven", intToInt), intConst(4), intTp),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+        assert(StaticArgumentTransformation(mutual) == mutual)
+    }
+
+    test("non-recursive let is left untouched") {
+        val nonRec = SIR.Let(
+          List(Binding("id", intToInt, SIR.LamAbs(v("x", intTp), v("x", intTp), List.empty, ann))),
+          app(v("id", intToInt), intConst(7), intTp),
+          SIR.LetFlags.None,
+          ann
+        )
+        assert(StaticArgumentTransformation(nonRec) == nonRec)
+    }
+
+    test("a recursive let nested in another recursive rhs is transformed independently") {
+        // let rec outer = λf. λn.
+        //     if n == 0 then 0
+        //     else let rec inner = λg. λm.
+        //              if m == 0 then outer f (n - 1) else inner g (m - 1)
+        //          in inner f n
+        val innerSelf = app(
+          app(v("inner", go2Tp), v("g", intToInt), intToInt),
+          SIRBuiltins.subtractInteger $ v("m", intTp) $ intConst(1),
+          intTp
+        )
+        val outerSelf = app(
+          app(v("outer", go2Tp), v("f", intToInt), intToInt),
+          SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+          intTp
+        )
+        val innerLet = SIR.Let(
+          List(
+            Binding(
+              "inner",
+              go2Tp,
+              SIR.LamAbs(
+                v("g", intToInt),
+                SIR.LamAbs(
+                  v("m", intTp),
+                  SIR.IfThenElse(
+                    extractAnnotated(SIRBuiltins.equalsInteger $ v("m", intTp) $ intConst(0)),
+                    outerSelf,
+                    innerSelf,
+                    intTp,
+                    ann
+                  ),
+                  List.empty,
+                  ann
+                ),
+                List.empty,
+                ann
+              )
+            )
+          ),
+          app(app(v("inner", go2Tp), v("f", intToInt), intToInt), v("n", intTp), intTp),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+        val outer = SIR.Let(
+          List(
+            Binding(
+              "outer",
+              go2Tp,
+              SIR.LamAbs(
+                v("f", intToInt),
+                SIR.LamAbs(
+                  v("n", intTp),
+                  SIR.IfThenElse(
+                    extractAnnotated(SIRBuiltins.equalsInteger $ v("n", intTp) $ intConst(0)),
+                    intConst(0),
+                    innerLet,
+                    intTp,
+                    ann
+                  ),
+                  List.empty,
+                  ann
+                ),
+                List.empty,
+                ann
+              )
+            )
+          ),
+          app(app(v("outer", go2Tp), double, intToInt), intConst(2), intTp),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+        val out = StaticArgumentTransformation(outer)
+        val names = varNames(out)
+        // both fixpoints exist, and each is referenced twice: once by its own
+        // self-call, once by its wrapper's entry call
+        assert(names.count(_ == "outer$sat") == 2, s"outer not transformed: $names")
+        assert(names.count(_ == "inner$sat") == 2, s"inner not transformed: $names")
+        // the only surviving references under the original names are the two
+        // call sites outside the recursive rhs: `inner f n` (inner let body)
+        // and `outer double 2` (top-level program body)
+        assert(names.count(_ == "inner") == 1, s"inner self-call left behind: $names")
+        assert(names.count(_ == "outer") == 1, s"outer self-call left behind: $names")
+    }
 }
