@@ -332,4 +332,78 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
         )
     }
 
+    // ------------------------------------------------------------------
+    // T1 static-argument-transformation proof-record.
+    //
+    // A 3-parameter loop `go lo step n` where `lo` and `step` are invariant:
+    //   without SAT the self-call re-passes all three arguments every iteration;
+    //   with SAT the invariant two are bound once by a wrapper lambda and only
+    //   the counter goes through the fixpoint:
+    //     λlo. λstep. λn. (let rec go$sat = λn. body in go$sat n)
+    //
+    // Both encodings use the T2 self-application fixpoint, so the measured
+    // delta isolates the static-argument lifting alone. See
+    // docs/internal/CODEGEN_IMPROVEMENT_PLAN.md T1.
+    // ------------------------------------------------------------------
+
+    /** λlo. λstep. λn. if n == 0 then lo else call lo step (n - step) - all 3 args re-passed */
+    private def loopRhs(call: Term): Term =
+        λ("lo", "step", "n")(
+          !(!IfThenElse $ (EqualsInteger $ vr"n" $ 0.asTerm)
+              $ ~vr"lo"
+              $ ~(call $ vr"lo" $ vr"step" $ (SubtractInteger $ vr"n" $ vr"step")))
+        )
+
+    /** λn. if n == 0 then lo else call (n - step) - `lo`/`step` captured, not passed */
+    private def satLoopBody(call: Term): Term =
+        λ("n")(
+          !(!IfThenElse $ (EqualsInteger $ vr"n" $ 0.asTerm)
+              $ ~vr"lo"
+              $ ~(call $ (SubtractInteger $ vr"n" $ vr"step")))
+        )
+
+    /** What `StaticArgumentTransformation` emits, lowered by the T2 self-application encoding:
+      * `(λf. f lo step n) (λlo. λstep. λn. (λs. s n) ((λs. s s) (λs. satBody(s s))))`
+      */
+    private def satEncoding(lo: Long, step: Long, n: Long): Term =
+        λ("f")(vr"f" $ lo.asTerm $ step.asTerm $ n.asTerm) $
+            λ("lo", "step", "n")(
+              λ("s")(vr"s" $ vr"n") $ (λ("s")(vr"s" $ vr"s") $ λ("s")(satLoopBody(vr"s" $ vr"s")))
+            )
+
+    /** The same loop without SAT, using the same T2 fixpoint encoding. */
+    private def nonSatEncoding(lo: Long, step: Long, n: Long): Term =
+        selfAppEncoding(loopRhs, f => f $ lo.asTerm $ step.asTerm $ n.asTerm)
+
+    test("T1 proof: lifting 2 invariant args saves a fixed cost per recursive call") {
+        val lo = 7L
+        val step = 1L
+        def measure(n: Long): (ExUnits, ExUnits) = {
+            val (nonSatResult, nonSatBudget) = runTerm(nonSatEncoding(lo, step, n))
+            val (satResult, satBudget) = runTerm(satEncoding(lo, step, n))
+            assert(nonSatResult == lo.asTerm, s"n=$n: wrong result")
+            assert(satResult == nonSatResult, s"n=$n: encodings disagree")
+            assert(satBudget.steps < nonSatBudget.steps, s"n=$n: SAT must cost less CPU")
+            assert(satBudget.memory < nonSatBudget.memory, s"n=$n: SAT must cost less memory")
+            val cpuDelta = nonSatBudget.steps - satBudget.steps
+            val memDelta = nonSatBudget.memory - satBudget.memory
+            info(
+              f"sat-loop(n=$n%6d) saved cpu=$cpuDelta%12d (${cpuDelta * 100.0 / nonSatBudget.steps}%5.2f%%) mem=$memDelta%9d (${memDelta * 100.0 / nonSatBudget.memory}%5.2f%%)"
+            )
+            (nonSatBudget, satBudget)
+        }
+        // Differencing two loop lengths cancels the one-off entry cost exactly, leaving the
+        // pure per-iteration saving: 6 machine steps (96_000 cpu / 600 mem at PV11 mainnet
+        // costs) for 2 lifted arguments, i.e. 3 steps per argument no longer re-passed.
+        val (n1, n2) = (10L, 100_000L)
+        val (nonSat1, sat1) = measure(n1)
+        val (nonSat2, sat2) = measure(n2)
+        val cpuPerCall =
+            ((nonSat2.steps - sat2.steps) - (nonSat1.steps - sat1.steps)) / (n2 - n1)
+        val memPerCall =
+            ((nonSat2.memory - sat2.memory) - (nonSat1.memory - sat1.memory)) / (n2 - n1)
+        assert(cpuPerCall == 96_000L, s"expected 96000 cpu per call, got $cpuPerCall")
+        assert(memPerCall == 600L, s"expected 600 mem per call, got $memPerCall")
+    }
+
 }
