@@ -510,4 +510,126 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
         assert(names.count(_ == "inner") == 1, s"inner self-call left behind: $names")
         assert(names.count(_ == "outer") == 1, s"outer self-call left behind: $names")
     }
+
+    // ---------------------------------------------- ExternalVar and polymorphism
+
+    test("ExternalVar self-calls are detected (linked top-level defs)") {
+        // SIRLinker emits top-level defs under dotted names, with self-references
+        // as ExternalVar("Mod$", "Mod$.go", ...)
+        val fq = "Mod$.go"
+        def selfRef = SIR.ExternalVar("Mod$", fq, go2Tp, ann)
+        val rhs = SIR.LamAbs(
+          v("f", intToInt),
+          SIR.LamAbs(
+            v("n", intTp),
+            SIR.IfThenElse(
+              extractAnnotated(SIRBuiltins.equalsInteger $ v("n", intTp) $ intConst(0)),
+              intConst(0),
+              app(
+                app(selfRef, v("f", intToInt), intToInt),
+                SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+                intTp
+              ),
+              intTp,
+              ann
+            ),
+            List.empty,
+            ann
+          ),
+          List.empty,
+          ann
+        )
+        val prog = SIR.Let(
+          List(Binding(fq, go2Tp, rhs)),
+          app(app(SIR.ExternalVar("Mod$", fq, go2Tp, ann), double, intToInt), intConst(3), intTp),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+        StaticArgumentTransformation(prog) match
+            case SIR.Let(List(Binding(`fq`, _, wrapper)), _, flags, _) =>
+                assert(!flags.isRec)
+                wrapper match
+                    case SIR.LamAbs(_, SIR.LamAbs(_, inner, _, _), _, _) =>
+                        inner match
+                            case SIR.Let(List(Binding(satName, satTp, _)), _, f, _) =>
+                                assert(satName == fq + "$sat")
+                                assert(satTp == intToInt, "only `n` stays in the fixpoint")
+                                assert(f.isRec)
+                            case other => fail(s"expected sat letrec: $other")
+                    case other => fail(s"expected 2-param wrapper: $other")
+            case other => fail(s"expected $fq let: $other")
+    }
+
+    test("typeParams stay on the wrapper lambda") {
+        // let rec go = Λ[A]. λf: A -> A. λn: Int. λx: A.
+        //     if n == 0 then x else go f (n - 1) (f x)
+        val tvA = SIRType.TypeVar("A", Some(1L), SIRType.TypeVarKind.Fixed)
+        val aToA = SIRType.Fun(tvA, tvA)
+        val polyTp = SIRType.TypeLambda(
+          List(tvA),
+          SIRType.Fun(aToA, SIRType.Fun(intTp, SIRType.Fun(tvA, tvA)))
+        )
+        val selfCall = app(
+          app(
+            app(v("go", polyTp), v("f", aToA), SIRType.Fun(intTp, SIRType.Fun(tvA, tvA))),
+            SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+            SIRType.Fun(tvA, tvA)
+          ),
+          app(v("f", aToA), v("x", tvA), tvA),
+          tvA
+        )
+        val rhs = SIR.LamAbs(
+          v("f", aToA),
+          SIR.LamAbs(
+            v("n", intTp),
+            SIR.LamAbs(
+              v("x", tvA),
+              SIR.IfThenElse(
+                extractAnnotated(SIRBuiltins.equalsInteger $ v("n", intTp) $ intConst(0)),
+                v("x", tvA),
+                selfCall,
+                tvA,
+                ann
+              ),
+              List.empty,
+              ann
+            ),
+            List.empty,
+            ann
+          ),
+          List(tvA), // type params sit on the outermost lambda
+          ann
+        )
+        val prog = SIR.Let(
+          List(Binding("go", polyTp, rhs)),
+          intConst(0),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+        StaticArgumentTransformation(prog) match
+            case SIR.Let(List(Binding("go", _, wrapper)), _, _, _) =>
+                wrapper match
+                    case SIR.LamAbs(
+                          fp,
+                          SIR.LamAbs(np, SIR.LamAbs(xp, inner, xt, _), nt, _),
+                          ft,
+                          _
+                        ) =>
+                        assert(ft == List(tvA), "type params must stay on the wrapper")
+                        assert(nt.isEmpty && xt.isEmpty)
+                        assert(List(fp.name, np.name, xp.name) == List("f", "n", "x"))
+                        inner match
+                            case SIR.Let(List(Binding("go$sat", satTp, satLam)), _, f, _) =>
+                                assert(f.isRec)
+                                // f is static; n and x keep recursing
+                                assert(satTp == SIRType.Fun(intTp, SIRType.Fun(tvA, tvA)))
+                                satLam match
+                                    case SIR.LamAbs(p1, SIR.LamAbs(p2, _, tp2, _), tp1, _) =>
+                                        assert(List(p1.name, p2.name) == List("n", "x"))
+                                        assert(tp1.isEmpty && tp2.isEmpty)
+                                    case other => fail(s"expected 2-param sat lambda: $other")
+                            case other => fail(s"expected go$$sat letrec: $other")
+                    case other => fail(s"expected 3-param wrapper: $other")
+            case other => fail(s"expected go let: $other")
+    }
 }
