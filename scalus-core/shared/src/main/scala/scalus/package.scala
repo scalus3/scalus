@@ -42,21 +42,23 @@ package object scalus {
             debug: Boolean = options.debug
         ): Term = {
             val backend = options.targetLoweringBackend
+            val sirToLower =
+                if optimizeUplc then StaticArgumentTransformation(sir) else sir
             val uplc = backend match
                 case TargetLoweringBackend.ScottEncodingLowering =>
                     ScottEncodingLowering(
-                      sir,
+                      sirToLower,
                       generateErrorTraces,
                       targetProtocolVersion = options.targetProtocolVersion
                     ).lower()
                 case TargetLoweringBackend.SumOfProductsLowering =>
                     SumOfProductsLowering(
-                      sir,
+                      sirToLower,
                       generateErrorTraces,
                       targetProtocolVersion = options.targetProtocolVersion
                     ).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
-                    SirToUplcV3Lowering.fromOptions(sir, options, debug).lower()
+                    SirToUplcV3Lowering.fromOptions(sirToLower, options, debug).lower()
             val retval =
                 if optimizeUplc then
                     val optimizer = V3Optimizer()
@@ -92,21 +94,23 @@ package object scalus {
 
         def lowerToUplc(using options: Options = Options()): Term = {
             val backend = options.targetLoweringBackend
+            val sirToLower =
+                if options.optimizeUplc then StaticArgumentTransformation(sir) else sir
             val uplc = backend match
                 case TargetLoweringBackend.ScottEncodingLowering =>
                     ScottEncodingLowering(
-                      sir,
+                      sirToLower,
                       options.generateErrorTraces,
                       targetProtocolVersion = options.targetProtocolVersion
                     ).lower()
                 case TargetLoweringBackend.SumOfProductsLowering =>
                     SumOfProductsLowering(
-                      sir,
+                      sirToLower,
                       options.generateErrorTraces,
                       targetProtocolVersion = options.targetProtocolVersion
                     ).lower()
                 case TargetLoweringBackend.SirToUplcV3Lowering =>
-                    SirToUplcV3Lowering.fromOptions(sir, options).lower()
+                    SirToUplcV3Lowering.fromOptions(sirToLower, options).lower()
             val retval =
                 if options.optimizeUplc then
                     val optimizer = V3Optimizer()

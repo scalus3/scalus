@@ -511,6 +511,31 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
         assert(names.count(_ == "outer") == 1, s"outer self-call left behind: $names")
     }
 
+    // ------------------------------------------------------------------ gating
+
+    test("SAT is applied only when optimizeUplc is on") {
+        // An OPEN term: `λseed. (let rec go = ... in go double 4 seed)`. A closed
+        // program would be constant-folded by the optimizer, taking the marker
+        // with it, so the gate must be observed on something that survives.
+        val open: SIR =
+            SIR.LamAbs(v("seed", intTp), goProgram(v("seed", intTp)), List.empty, ann)
+        val opts = Options(
+          targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
+          targetProtocolVersion = MajorProtocolVersion.vanRossemPV
+        )
+        val optimized = open.toUplc(using opts)(optimizeUplc = true)
+        val plain = open.toUplc(using opts)(optimizeUplc = false)
+        assert(hasSatBinding(optimized), "SAT did not run under optimizeUplc")
+        assert(!hasSatBinding(plain), "SAT ran without optimizeUplc")
+    }
+
+    /** The `$` of the generated `go$sat` name is sanitized to `_` in UPLC names, so accept both. */
+    private def hasSatBinding(term: Term): Boolean = {
+        val rendered = term.show
+        val suffix = StaticArgumentTransformation.SatSuffix // "$sat"
+        rendered.contains("go" + suffix) || rendered.contains("go_sat")
+    }
+
     // ---------------------------------------------- ExternalVar and polymorphism
 
     test("ExternalVar self-calls are detected (linked top-level defs)") {
