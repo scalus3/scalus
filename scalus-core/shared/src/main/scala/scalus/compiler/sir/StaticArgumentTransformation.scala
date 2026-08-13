@@ -18,6 +18,14 @@ import scala.collection.mutable
   *       in f$sat q1...qk                           // q = changing params, in source order
   * }}}
   *
+  * When the static parameters form a prefix (the common case, e.g. `go f n acc` with an invariant
+  * `f`) a leaner shape is used instead - the wrapper binds only the static prefix and returns the
+  * fixpoint itself, so the changing parameters are consumed by `f$sat` directly:
+  *
+  * {{{
+  *   let f = λp1...pj. let rec f$sat = λq1...qk. body' in f$sat
+  * }}}
+  *
   * The wrapper keeps the original name, arity and type, so external uses of `f` (partial
   * applications, higher-order uses, eta-lets) are unaffected. The fixpoint is built once per
   * *entry* into `f` instead of once per iteration, and each iteration saves one `Apply` per lifted
@@ -150,23 +158,46 @@ object StaticArgumentTransformation {
             else combined
         if !staticMask.exists(identity) then return None
 
-        val changing = params.lazyZip(staticMask).collect { case (p, false) => p }.toList
+        val changingLams = lams.lazyZip(staticMask).collect { case (l, false) => l }.toList
+        val changing = changingLams.map(_.param)
         val satName = name + SatSuffix
         val satTp = changing.foldRight(innerBody.tp)((p, acc) => SIRType.Fun(p.tp, acc))
         val anns = lams.head.anns
 
         val rewritten =
             new Rewriter(name, satName, satTp, n, staticMask).rewrite(innerBody, Set.empty)
-
         val satLam = changing.foldRight(rewritten)((p, acc) => LamAbs(p, acc, List.empty, anns))
-        val entry = changing.foldLeft(Var(satName, satTp, anns): AnnotatedSIR) { (acc, p) =>
-            applyOne(acc, Var(p.name, p.tp, anns), anns)
-        }
-        val innerLet =
-            Let(List(Binding(satName, satTp, satLam)), entry, LetFlags.Recursivity, anns)
-        val wrapper = lams.foldRight(innerLet: SIR) { (lam, acc) =>
-            LamAbs(lam.param, acc, lam.typeParams, lam.anns)
-        }
+
+        // When the static parameters form a prefix - the common case, e.g. `go f n acc` with an
+        // invariant `f` - the wrapper only binds that prefix and hands back the fixpoint itself;
+        // the changing parameters are consumed by `f$sat` directly. That removes one application
+        // per changing parameter from every entry, and lets a partially applied `f static...`
+        // share a single fixpoint across all of its calls. Requires that no changing parameter
+        // carries type parameters, since `satTp` is a plain function chain.
+        val staticCount = staticMask.takeWhile(identity).length
+        val usePrefixShape =
+            staticMask.drop(staticCount).forall(!_) && changingLams.forall(_.typeParams.isEmpty)
+
+        val wrapper =
+            if usePrefixShape then
+                val innerLet = Let(
+                  List(Binding(satName, satTp, satLam)),
+                  Var(satName, satTp, anns),
+                  LetFlags.Recursivity,
+                  anns
+                )
+                lams.take(staticCount).foldRight(innerLet: SIR) { (lam, acc) =>
+                    LamAbs(lam.param, acc, lam.typeParams, lam.anns)
+                }
+            else
+                val entry = changing.foldLeft(Var(satName, satTp, anns): AnnotatedSIR) { (acc, p) =>
+                    applyOne(acc, Var(p.name, p.tp, anns), anns)
+                }
+                val innerLet =
+                    Let(List(Binding(satName, satTp, satLam)), entry, LetFlags.Recursivity, anns)
+                lams.foldRight(innerLet: SIR) { (lam, acc) =>
+                    LamAbs(lam.param, acc, lam.typeParams, lam.anns)
+                }
         Some(wrapper)
     }
 

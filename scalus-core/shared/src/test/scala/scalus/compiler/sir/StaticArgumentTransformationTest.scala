@@ -90,18 +90,15 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
 
     private def program: AnnotatedSIR = goProgram(intConst(0))
 
-    test("static param f is lifted, n and acc keep recursing") {
+    test("static param f is lifted, n and acc keep recursing (prefix shape)") {
+        // f is a static *prefix*, so the wrapper binds only f and returns the fixpoint:
+        //   λf. (let rec go$sat = λn. λacc. body in go$sat)
         StaticArgumentTransformation(program) match
             case SIR.Let(List(Binding("go", _, wrapper)), _, outerFlags, _) =>
                 assert(!outerFlags.isRec, "outer let must become non-recursive")
                 wrapper match
-                    case SIR.LamAbs(
-                          f1,
-                          SIR.LamAbs(n1, SIR.LamAbs(a1, inner, _, _), _, _),
-                          _,
-                          _
-                        ) =>
-                        assert(List(f1.name, n1.name, a1.name) == List("f", "n", "acc"))
+                    case SIR.LamAbs(f1, inner, _, _) =>
+                        assert(f1.name == "f", "only the static prefix stays on the wrapper")
                         inner match
                             case SIR.Let(
                                   List(Binding("go$sat", satTp, satLam)),
@@ -116,21 +113,84 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
                                         assert(List(p1.name, p2.name) == List("n", "acc"))
                                     case other => fail(s"expected 2-param sat lambda: $other")
                                 entry match
-                                    case SIR.Apply(
-                                          SIR.Apply(
-                                            SIR.Var("go$sat", _, _),
-                                            SIR.Var("n", _, _),
-                                            _,
-                                            _
-                                          ),
-                                          SIR.Var("acc", _, _),
-                                          _,
-                                          _
-                                        ) =>
-                                    case other => fail(s"expected entry `go$$sat n acc`: $other")
+                                    case SIR.Var("go$sat", _, _) =>
+                                    case other => fail(s"expected entry `go$$sat`: $other")
                             case other => fail(s"expected inner go$$sat letrec: $other")
-                    case other => fail(s"expected 3-param wrapper: $other")
+                    case other => fail(s"expected 1-param wrapper: $other")
             case other => fail(s"expected outer go let: $other")
+    }
+
+    test("interleaved static params use the full wrapper shape") {
+        // mid : Int -> (Int -> Int) -> Int -> Int, self-call `mid (n - 1) f acc`
+        // -> only `f` (position 1) is static, so the mask is not a prefix
+        val midTp = SIRType.Fun(intTp, SIRType.Fun(intToInt, intToInt))
+        val selfCall = app(
+          app(
+            app(
+              v("mid", midTp),
+              SIRBuiltins.subtractInteger $ v("n", intTp) $ intConst(1),
+              SIRType.Fun(intToInt, intToInt)
+            ),
+            v("f", intToInt),
+            intToInt
+          ),
+          SIRBuiltins.addInteger $ v("acc", intTp) $ v("n", intTp),
+          intTp
+        )
+        val mid = SIR.Let(
+          List(
+            Binding(
+              "mid",
+              midTp,
+              SIR.LamAbs(
+                v("n", intTp),
+                SIR.LamAbs(
+                  v("f", intToInt),
+                  SIR.LamAbs(
+                    v("acc", intTp),
+                    SIR.IfThenElse(
+                      extractAnnotated(SIRBuiltins.equalsInteger $ v("n", intTp) $ intConst(0)),
+                      v("acc", intTp),
+                      selfCall,
+                      intTp,
+                      ann
+                    ),
+                    List.empty,
+                    ann
+                  ),
+                  List.empty,
+                  ann
+                ),
+                List.empty,
+                ann
+              )
+            )
+          ),
+          app(
+            app(
+              app(v("mid", midTp), intConst(4), SIRType.Fun(intToInt, intToInt)),
+              double,
+              intToInt
+            ),
+            intConst(0),
+            intTp
+          ),
+          SIR.LetFlags.Recursivity,
+          ann
+        )
+        StaticArgumentTransformation(mid) match
+            case SIR.Let(List(Binding("mid", _, wrapper)), _, _, _) =>
+                wrapper match
+                    case SIR.LamAbs(p1, SIR.LamAbs(p2, SIR.LamAbs(p3, inner, _, _), _, _), _, _) =>
+                        assert(List(p1.name, p2.name, p3.name) == List("n", "f", "acc"))
+                        inner match
+                            case SIR.Let(List(Binding("mid$sat", _, _)), entry, f, _) =>
+                                assert(f.isRec)
+                                // full shape re-applies the changing params at the entry
+                                assert(varNames(entry) == List("mid$sat", "n", "acc"))
+                            case other => fail(s"expected mid$$sat letrec: $other")
+                    case other => fail(s"expected 3-param wrapper: $other")
+            case other => fail(s"expected mid let: $other")
     }
 
     test("no self-call through the original name remains inside the rewritten rhs") {
@@ -236,8 +296,8 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
             case SIR.Let(List(Binding("spin", _, wrapper)), _, flags, _) =>
                 assert(!flags.isRec)
                 wrapper match
-                    case SIR.LamAbs(a, SIR.LamAbs(b, inner, _, _), _, _) =>
-                        assert(List(a.name, b.name) == List("a", "b"))
+                    case SIR.LamAbs(a, inner, _, _) =>
+                        assert(a.name == "a", "only the static prefix stays on the wrapper")
                         inner match
                             case SIR.Let(List(Binding("spin$sat", satTp, satLam)), _, f, _) =>
                                 assert(f.isRec)
@@ -249,7 +309,7 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
                                         assert(varNames(body) == List("spin$sat", "b"))
                                     case other => fail(s"expected 1-param sat lambda: $other")
                             case other => fail(s"expected spin$$sat letrec: $other")
-                    case other => fail(s"expected 2-param wrapper: $other")
+                    case other => fail(s"expected 1-param wrapper: $other")
             case other => fail(s"expected spin let: $other")
     }
 
@@ -574,14 +634,15 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
             case SIR.Let(List(Binding(`fq`, _, wrapper)), _, flags, _) =>
                 assert(!flags.isRec)
                 wrapper match
-                    case SIR.LamAbs(_, SIR.LamAbs(_, inner, _, _), _, _) =>
+                    case SIR.LamAbs(p, inner, _, _) =>
+                        assert(p.name == "f")
                         inner match
                             case SIR.Let(List(Binding(satName, satTp, _)), _, f, _) =>
                                 assert(satName == fq + "$sat")
                                 assert(satTp == intToInt, "only `n` stays in the fixpoint")
                                 assert(f.isRec)
                             case other => fail(s"expected sat letrec: $other")
-                    case other => fail(s"expected 2-param wrapper: $other")
+                    case other => fail(s"expected 1-param wrapper: $other")
             case other => fail(s"expected $fq let: $other")
     }
 
@@ -634,15 +695,9 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
         StaticArgumentTransformation(prog) match
             case SIR.Let(List(Binding("go", _, wrapper)), _, _, _) =>
                 wrapper match
-                    case SIR.LamAbs(
-                          fp,
-                          SIR.LamAbs(np, SIR.LamAbs(xp, inner, xt, _), nt, _),
-                          ft,
-                          _
-                        ) =>
+                    case SIR.LamAbs(fp, inner, ft, _) =>
                         assert(ft == List(tvA), "type params must stay on the wrapper")
-                        assert(nt.isEmpty && xt.isEmpty)
-                        assert(List(fp.name, np.name, xp.name) == List("f", "n", "x"))
+                        assert(fp.name == "f")
                         inner match
                             case SIR.Let(List(Binding("go$sat", satTp, satLam)), _, f, _) =>
                                 assert(f.isRec)
@@ -654,7 +709,7 @@ class StaticArgumentTransformationTest extends AnyFunSuite {
                                         assert(tp1.isEmpty && tp2.isEmpty)
                                     case other => fail(s"expected 2-param sat lambda: $other")
                             case other => fail(s"expected go$$sat letrec: $other")
-                    case other => fail(s"expected 3-param wrapper: $other")
+                    case other => fail(s"expected 1-param wrapper: $other")
             case other => fail(s"expected go let: $other")
     }
 }

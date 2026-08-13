@@ -362,13 +362,14 @@ class ExprSizeAndBudgetTest extends AnyFunSuite {
               $ ~(call $ (SubtractInteger $ vr"n" $ vr"step")))
         )
 
-    /** What `StaticArgumentTransformation` emits, lowered by the T2 self-application encoding:
-      * `(λf. f lo step n) (λlo. λstep. λn. (λs. s n) ((λs. s s) (λs. satBody(s s))))`
+    /** What `StaticArgumentTransformation` emits here - `lo`/`step` are a static prefix, so the
+      * wrapper binds only them and hands back the fixpoint - lowered by the T2 self-application
+      * encoding: `(λf. f lo step n) (λlo. λstep. (λs. s) ((λs. s s) (λs. satBody(s s))))`
       */
     private def satEncoding(lo: Long, step: Long, n: Long): Term =
         λ("f")(vr"f" $ lo.asTerm $ step.asTerm $ n.asTerm) $
-            λ("lo", "step", "n")(
-              λ("s")(vr"s" $ vr"n") $ (λ("s")(vr"s" $ vr"s") $ λ("s")(satLoopBody(vr"s" $ vr"s")))
+            λ("lo", "step")(
+              λ("s")(vr"s") $ (λ("s")(vr"s" $ vr"s") $ λ("s")(satLoopBody(vr"s" $ vr"s")))
             )
 
     /** The same loop without SAT, using the same T2 fixpoint encoding. */
