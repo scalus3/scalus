@@ -1,7 +1,7 @@
 # Unified SIR -> UPLC pipeline
 
 Date: 2026-08-16
-Status: approved design, pending implementation
+Status: implemented
 Scope: unification only. Flipping `optimizeUplc` to true by default is
 explicitly out of scope (measured data recorded below for when it happens).
 

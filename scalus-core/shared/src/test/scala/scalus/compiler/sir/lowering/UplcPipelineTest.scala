@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.cardano.onchain.plutus.prelude.{log, require}
-import scalus.compiler.sir.SirDSL.{*, given}
+import scalus.compiler.sir.SirDSL.*
 import scalus.compiler.sir.{AnnotatedSIR, AnnotationsDecl, Binding, SIR, SIRBuiltins, SIRType, TargetLoweringBackend}
 import scalus.compiler.{compile, Options}
 import scalus.uplc.eval.{PlutusVM, Result}

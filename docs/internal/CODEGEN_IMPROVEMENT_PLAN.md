@@ -285,10 +285,11 @@ tracks T10, T12, T16.
   non-lambda rhs, duplicate param names, any bare or under-saturated
   self-reference, or no static param. If all params are static the last is
   demoted (a nullary strict letrec diverges).
-- **Gating:** applied only when `options.optimizeUplc` is set, at all three
-  SIR->UPLC entry points: `uplc/Compiled.scala` `toUplc`, and
-  `scalus/package.scala` `toUplc` (parameter-gated, so `toUplcOptimized` is
-  covered) and `lowerToUplc`.
+- **Gating:** applied only when `options.optimizeUplc` is set, in the single
+  SIR->UPLC pipeline
+  `compiler/sir/lowering/UplcPipeline.scala` `run`. Every entry point
+  (`uplc/Compiled.scala` `toUplc`, `scalus/package.scala` `toUplc` /
+  `toUplcOptimized` / `lowerToUplc`) delegates to it.
 - **Measured:** the proof-record in
   `scalus-core/jvm/.../uplc/eval/ExprSizeAndBudgetTest.scala` pins
   **96,000 cpu / 600 mem saved per recursive call for 2 lifted arguments**
@@ -299,26 +300,28 @@ tracks T10, T12, T16.
   commonly -16% to -29%, CAPE two-party-escrow -1.5% to -3.5%. A handful of
   validators regress slightly (functions entered often but iterating few
   times pay the wrapper) - the inherent SAT trade-off, same as Aiken's.
-- **Known limitation (measured, low value today):** the pass runs before
-  `MutualRecursionElimination` (which sits at the backend entry points), so
-  the peers-as-params static arguments that pass introduces for
-  mutual-recursion groups are not lifted - and they are textbook static
-  arguments (`selfChain` passes `fip f1 .. f(i-1)`, the function's own
-  params, on every call). Probed 2026-08-16: six prelude-heavy programs
-  (List sort/fold, SortedMap, Value arithmetic, Data, nested flatten,
-  quantityOf) produce **zero** multi-binding recursive Lets, so the win is
-  currently nil; revisit when validators with top-level mutual recursion
-  appear (recursive-descent parsers, mutually recursive tree walks).
-  Cheapest fix when wanted: `if optimizeUplc then
-  StaticArgumentTransformation(MutualRecursionElimination(sir)) else sir` at
-  the two optimize entry points - `MutualRecursionElimination` is idempotent
-  (it only rewrites `isRec && bindings.size >= 2`, and emits single-binding
-  lets), so the backends' second call is a no-op traversal and no backend
-  constructor signature changes (no MiMa filters).
-  Runtime helpers built directly with `lvLetRec` (e.g.
-  `ScalusRuntime.genArrayToList`, which re-passes an invariant `arr` and `n`)
-  are also out of scope; `genMapList` is already hand-SAT'd and is the model
-  for the shape this pass produces.
+- **Mutual recursion - resolved 2026-08-16:** the unified `UplcPipeline` runs
+  SAT after `MutualRecursionElimination`, so peers-as-params arguments are
+  lifted. MRE's `selfChain` passes `fip f1 .. f(i-1)` (the peer's own params)
+  on every self-call of a `$mutrec` peer, which is a textbook static
+  argument; SAT now sees that shape and hoists it. `MutualRecursionElimination`
+  is idempotent (it only rewrites `isRec && bindings.size >= 2`, and emits
+  single-binding lets), so the backends' own second call is a no-op traversal
+  and no backend constructor signature changed (no MiMa filters). Note the
+  lift only fires for peers that are *also* self-recursive - a purely
+  cross-recursive member's self-reference is a bare argument, which SAT
+  refuses. Probed 2026-08-16: six prelude-heavy programs (List sort/fold,
+  SortedMap, Value arithmetic, Data, nested flatten, quantityOf) produce
+  **zero** multi-binding recursive Lets, so the measured win on today's
+  corpus is nil; it matters for validators with top-level mutual recursion
+  (recursive-descent parsers, mutually recursive tree walks). Guarded by
+  `compiler/sir/lowering/UplcPipelineTest."optimized mutual recursion gets
+  its peer parameters lifted"`.
+- **Known limitation (still open):** runtime helpers built directly with
+  `lvLetRec` (e.g. `ScalusRuntime.genArrayToList`, which re-passes an
+  invariant `arr` and `n`) are out of scope - they are constructed at the
+  lowered-value level, after SIR passes have run; `genMapList` is already
+  hand-SAT'd and is the model for the shape this pass produces.
 - **Tests:** `compiler/sir/StaticArgumentTransformationTest.scala` (17 cases:
   both shapes, edge cases, `ExternalVar`, polymorphism, optimizeUplc gating),
   plus the existing T2 guard
