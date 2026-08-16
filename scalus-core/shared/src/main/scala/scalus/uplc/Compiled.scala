@@ -3,9 +3,8 @@ package scalus.uplc
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
 import scalus.compiler
-import scalus.compiler.sir.lowering.SirToUplcV3Lowering
-import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
-import scalus.compiler.sir.{AnnotationsDecl, RemoveTraces, SIR, SIRType, StaticArgumentTransformation, TargetLoweringBackend}
+import scalus.compiler.sir.lowering.UplcPipeline
+import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType}
 import scalus.compiler.{compileInlineWithOptions, Options}
 import scalus.uplc.builtin.Data
 import scalus.uplc.Constant.asConstant
@@ -86,53 +85,7 @@ sealed abstract class CompiledPlutus[A](
     def withErrorTraces: CompiledPlutus[A]
 
     /** Lowers the SIR to UPLC using the configured backend and applies optimization if enabled. */
-    protected def toUplc: Term = {
-        val sir1 = if options.removeTraces then RemoveTraces.transform(sir) else sir
-        val sirToLower =
-            if options.optimizeUplc then StaticArgumentTransformation(sir1) else sir1
-        val backend = options.targetLoweringBackend
-        val uplc = backend match
-            case TargetLoweringBackend.ScottEncodingLowering =>
-                ScottEncodingLowering(
-                  sir = sirToLower,
-                  generateErrorTraces = options.generateErrorTraces,
-                  targetLanguage = language,
-                  targetProtocolVersion = options.targetProtocolVersion
-                ).lower()
-            case TargetLoweringBackend.SumOfProductsLowering =>
-                SumOfProductsLowering(
-                  sir = sirToLower,
-                  generateErrorTraces = options.generateErrorTraces,
-                  targetLanguage = language,
-                  targetProtocolVersion = options.targetProtocolVersion
-                ).lower()
-            case TargetLoweringBackend.SirToUplcV3Lowering =>
-                SirToUplcV3Lowering(
-                  sir = sirToLower,
-                  generateErrorTraces = options.generateErrorTraces,
-                  debug = options.debug,
-                  warnListConversions = options.warnListConversions,
-                  noWarn = options.noWarn,
-                  targetLanguage = language,
-                  targetProtocolVersion = options.targetProtocolVersion,
-                  intrinsicModules =
-                      scalus.compiler.sir.lowering.IntrinsicResolver.defaultIntrinsicModules,
-                  supportModules =
-                      scalus.compiler.sir.lowering.IntrinsicResolver.defaultSupportModules
-                ).lower()
-        val optimized =
-            if options.uplcOptimizers.nonEmpty then
-                options.uplcOptimizers.foldLeft(uplc)((term, opt) => opt(term))
-            else if options.optimizeUplc then optimizer(uplc)
-            else uplc
-        // Give every still-position-less node a source location, so profiling and source-traces can
-        // attribute the cost of generated/optimized spines (the UPLC optimizer rebuilds Apply/Case/
-        // Constr nodes without positions). Run on the FINAL term, after optimization: bottom-up so a
-        // spine node inherits the location of the leaf it operates on (where positions actually sit),
-        // then top-down to fill any node with no positioned descendant from its nearest positioned
-        // ancestor. Positions never affect flat encoding, budget, or evaluation — only diagnostics.
-        optimized.fillEmptyPosBottomUp._1.fillEmptyPosTopDown(scalus.utils.ScalusSourcePos.empty)
-    }
+    protected def toUplc: Term = UplcPipeline.run(sir, options, language, optimizer)
 }
 
 /** A compiled Plutus V1 script.
