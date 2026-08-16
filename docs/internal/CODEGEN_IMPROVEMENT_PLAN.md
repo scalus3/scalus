@@ -299,9 +299,22 @@ tracks T10, T12, T16.
   commonly -16% to -29%, CAPE two-party-escrow -1.5% to -3.5%. A handful of
   validators regress slightly (functions entered often but iterating few
   times pay the wrapper) - the inherent SAT trade-off, same as Aiken's.
-- **Known limitation:** the pass runs before `MutualRecursionElimination`
-  (which sits at the backend entry points), so the peers-as-params static
-  arguments that pass introduces for mutual-recursion groups are not lifted.
+- **Known limitation (measured, low value today):** the pass runs before
+  `MutualRecursionElimination` (which sits at the backend entry points), so
+  the peers-as-params static arguments that pass introduces for
+  mutual-recursion groups are not lifted - and they are textbook static
+  arguments (`selfChain` passes `fip f1 .. f(i-1)`, the function's own
+  params, on every call). Probed 2026-08-16: six prelude-heavy programs
+  (List sort/fold, SortedMap, Value arithmetic, Data, nested flatten,
+  quantityOf) produce **zero** multi-binding recursive Lets, so the win is
+  currently nil; revisit when validators with top-level mutual recursion
+  appear (recursive-descent parsers, mutually recursive tree walks).
+  Cheapest fix when wanted: `if optimizeUplc then
+  StaticArgumentTransformation(MutualRecursionElimination(sir)) else sir` at
+  the two optimize entry points - `MutualRecursionElimination` is idempotent
+  (it only rewrites `isRec && bindings.size >= 2`, and emits single-binding
+  lets), so the backends' second call is a no-op traversal and no backend
+  constructor signature changes (no MiMa filters).
   Runtime helpers built directly with `lvLetRec` (e.g.
   `ScalusRuntime.genArrayToList`, which re-passes an invariant `arr` and `n`)
   are also out of scope; `genMapList` is already hand-SAT'd and is the model
