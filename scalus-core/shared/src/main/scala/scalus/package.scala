@@ -2,10 +2,8 @@ import org.typelevel.paiges.Doc
 import scalus.compiler.Options
 import scalus.compiler.sir.*
 import scalus.utils.Style
-import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
-import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering}
+import scalus.compiler.sir.lowering.{LoweredValue, SirToUplcV3Lowering, UplcPipeline}
 import scalus.uplc.{Constant, DefaultUni, Term}
-import scalus.uplc.transform.V3Optimizer
 
 package object scalus {
 
@@ -41,30 +39,18 @@ package object scalus {
             optimizeUplc: Boolean = options.optimizeUplc,
             debug: Boolean = options.debug
         ): Term = {
-            val backend = options.targetLoweringBackend
-            val sirToLower =
-                if optimizeUplc then StaticArgumentTransformation(sir) else sir
-            val uplc = backend match
-                case TargetLoweringBackend.ScottEncodingLowering =>
-                    ScottEncodingLowering(
-                      sirToLower,
-                      generateErrorTraces,
-                      targetProtocolVersion = options.targetProtocolVersion
-                    ).lower()
-                case TargetLoweringBackend.SumOfProductsLowering =>
-                    SumOfProductsLowering(
-                      sirToLower,
-                      generateErrorTraces,
-                      targetProtocolVersion = options.targetProtocolVersion
-                    ).lower()
-                case TargetLoweringBackend.SirToUplcV3Lowering =>
-                    SirToUplcV3Lowering.fromOptions(sirToLower, options, debug).lower()
-            val retval =
-                if optimizeUplc then
-                    val optimizer = V3Optimizer()
-                    optimizer(uplc)
-                else uplc
-            retval
+            val eff = options.copy(
+              generateErrorTraces = generateErrorTraces,
+              targetLoweringBackend = backend,
+              optimizeUplc = optimizeUplc,
+              debug = debug
+            )
+            UplcPipeline.run(
+              sir,
+              eff,
+              eff.targetLanguage,
+              UplcPipeline.defaultOptimizer(eff.targetLanguage, eff)
+            )
         }
 
         def toUplcOptimized(using
@@ -92,32 +78,8 @@ package object scalus {
             retval
         }
 
-        def lowerToUplc(using options: Options = Options()): Term = {
-            val backend = options.targetLoweringBackend
-            val sirToLower =
-                if options.optimizeUplc then StaticArgumentTransformation(sir) else sir
-            val uplc = backend match
-                case TargetLoweringBackend.ScottEncodingLowering =>
-                    ScottEncodingLowering(
-                      sirToLower,
-                      options.generateErrorTraces,
-                      targetProtocolVersion = options.targetProtocolVersion
-                    ).lower()
-                case TargetLoweringBackend.SumOfProductsLowering =>
-                    SumOfProductsLowering(
-                      sirToLower,
-                      options.generateErrorTraces,
-                      targetProtocolVersion = options.targetProtocolVersion
-                    ).lower()
-                case TargetLoweringBackend.SirToUplcV3Lowering =>
-                    SirToUplcV3Lowering.fromOptions(sirToLower, options).lower()
-            val retval =
-                if options.optimizeUplc then
-                    val optimizer = V3Optimizer()
-                    optimizer(uplc)
-                else uplc
-            retval
-        }
+        @deprecated("use toUplc instead", "1.0.0")
+        def lowerToUplc(using options: Options = Options()): Term = toUplc(using options)()
 
     extension (du: DefaultUni) def pretty: Doc = PrettyPrinter.pretty(du)
     extension (c: Constant) def pretty: Doc = PrettyPrinter.pretty(c)

@@ -41,9 +41,10 @@ import scala.collection.mutable
   * If *every* parameter is static the last one is demoted to changing, because a nullary strict
   * letrec would diverge.
   *
-  * Runs only when optimization is enabled - see `Compiled.toUplc` and `scalus/package.scala`. Note
-  * it runs *before* `MutualRecursionElimination` (which sits at the backend entry points), so the
-  * peers-as-params static arguments that pass introduces are not lifted here.
+  * Runs only when optimization is enabled - see [[scalus.compiler.sir.lowering.UplcPipeline.run]],
+  * which is the single place this pass is invoked from. It runs *after*
+  * `MutualRecursionElimination`, so the peers-as-params static arguments that pass introduces (a
+  * `$mutrec` peer re-passing `f1 .. f(i-1)` unchanged on every self-call) are lifted here too.
   */
 object StaticArgumentTransformation {
 
