@@ -72,7 +72,10 @@ Step order:
 3. `StaticArgumentTransformation` when `options.optimizeUplc`. Running it
    *after* MutualRecursionElimination closes the T1 known limitation: the
    peers-as-params arguments MRE emits (`fip f1 .. f(i-1)` on every
-   self-call) are textbook static arguments and now get lifted.
+   self-call) are textbook static arguments and now get lifted. Caveat: this
+   only applies to peers that are *also* self-recursive; a purely
+   cross-recursive peer's self-reference is a bare argument, which SAT
+   refuses to lift by design (see the delta bullet below).
 4. Backend lowering per `options.targetLoweringBackend`, passing
    `targetLanguage = language` and all V3 options (`generateErrorTraces`,
    `debug`, `warnListConversions`, `noWarn`, default intrinsic/support
@@ -124,7 +127,13 @@ not part of term generation.
   the pipeline.
 - `toUplcOptimized` keeps delegating to `toUplc` (unchanged).
 - `lowerToUplc` gets `@deprecated("use toUplc instead", "1.0.0")` and
-  delegates to `toUplc` (zero users; signature kept for MiMa).
+  delegates to `toUplc` (zero users; signature kept for MiMa). Side effect:
+  the old body hardcoded `debug = false` (it called
+  `SirToUplcV3Lowering.fromOptions(sirToLower, options)` without a `debug`
+  argument, falling through to that method's own `debug: Boolean = false`
+  default, never threading `options.debug` through); delegating to `toUplc`
+  means it now honors `options.debug` like every other path.
+  Diagnostics-only delta.
 
 ## Considered and rejected: moving RemoveRecursivity out of SIRLinker
 
@@ -149,6 +158,14 @@ Bounded and intentional:
 
 - The ~6 test files calling `toUplc` under a `given Options = Options.release`
   start honoring `removeTraces` - their budgets/pins may move (down).
+- `toUplcOptimized`/`toUplc` callers whose `given Options` sets
+  `generateErrorTraces = true` while passing `generateErrorTraces = false` as
+  the explicit parameter (bug 2) now get the parameter honored on the V3
+  backend instead of the `given Options` value winning - traces are no
+  longer generated where the caller asked for them to be suppressed; pins
+  may move (down). This bucket, not peer lifting, is what moved all 8
+  `ClausifyTest`/`KnightsDataTest` pins measured in Task 3: both suites do
+  exactly this, and neither contains any mutual recursion.
 - V1/V2-targeted optimization through `toUplc` switches from `V3Optimizer`
   to `V1V2Optimizer` - a correctness fix; affected pins may move.
 - `toUplc` output gains source positions (diagnostics only; no effect on
@@ -160,10 +177,15 @@ Bounded and intentional:
   `optimizeUplc = false` the pipeline's MRE output is what the backend's
   internal MRE call produced anyway.)
 - Optimized code containing top-level mutual recursion changes: SAT now
-  lifts the peer parameters MRE introduces. Measured 2026-08-16: six
-  prelude-heavy programs contain zero multi-binding recursive lets, so the
-  movement is expected to be limited to mutual-recursion tests
-  (`MutualRecursionTest` budget ceiling and similar).
+  lifts the peer parameters MRE introduces, but only for peers that are
+  *also* self-recursive - a purely cross-recursive peer's self-reference is
+  a bare argument, which SAT refuses to lift by design. Measured
+  2026-08-16: six prelude-heavy programs contain zero multi-binding
+  recursive lets, so the movement is expected to be limited to
+  mutual-recursion tests (`MutualRecursionTest` budget ceiling and
+  similar). Confirmed in Task 3: `ClausifyTest`/`KnightsDataTest` contain no
+  mutual recursion at all, so their 8 pin movements are entirely the
+  `generateErrorTraces` bucket above, not this one.
 - One thing to verify during implementation, not assume: the Scott/SoP
   backends previously used their default `targetLanguage` parameter on this
   path; the unified pipeline passes `options.targetLanguage` explicitly.

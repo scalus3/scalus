@@ -22,6 +22,11 @@ class UplcPipelineTest extends AnyFunSuite {
       optimizeUplc = true
     )
 
+    // CompiledPlutus.toUplc now delegates to UplcPipeline.run, so this no
+    // longer guards the extraction itself (there is nothing left to extract
+    // from). It still pins the wiring between CompiledPlutus and the
+    // pipeline: same optimizer instance semantics, same language/options
+    // threading, ScalusTag off so `program.term` is directly comparable.
     test("CompiledPlutus.program and UplcPipeline.run produce the same term") {
         given Options = releaseNoTag
         val compiled = PlutusV3.compile { (d: Data) =>
