@@ -158,7 +158,7 @@ object SirToUplcV3Lowering {
           noWarn = options.noWarn,
           targetLanguage = options.targetLanguage,
           targetProtocolVersion = options.targetProtocolVersion,
-          intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
+          intrinsicModules = IntrinsicResolver.intrinsicModulesFor(options.valueBuiltins),
           supportModules = IntrinsicResolver.defaultSupportModules
         )
 }

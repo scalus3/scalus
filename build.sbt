@@ -413,6 +413,13 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       },
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // T7: Options gained the valueBuiltins field (new defaulted last parameter).
+        // Source-compatible; binary signatures of the synthetic case-class methods change.
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.apply"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.copy"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.this")
+      ),
 
       // enable when debug compilation of tests
       Test / scalacOptions += "-color:never",

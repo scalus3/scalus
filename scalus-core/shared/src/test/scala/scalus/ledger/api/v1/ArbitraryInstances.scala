@@ -65,6 +65,10 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
       * `unionValue`/`scaleValue` result leaves that range (see
       * `docs/superpowers/specs/2026-08-18-t7-value-builtins-lowering-design.md`). The bound stays
       * well below 2^127 so that summing the up-to-11 generated assets cannot overflow either.
+      *
+      * The `* properties` test in `ValueTest` couples its `+-(2^62)` scaling-factor bound to this
+      * `+-(2^64)` amount bound (`2^64 * 2^62 = 2^126`), so widening this bound means narrowing that
+      * one in step.
       */
     def genAmount: Gen[BigInt] = Gen.oneOf[BigInt](
       Gen.const[BigInt](0),

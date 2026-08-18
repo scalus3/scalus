@@ -94,6 +94,14 @@ object IntrinsicResolver {
         modules
     }
 
+    /** Intrinsic modules honoring `Options.valueBuiltins`: when false, the ValueIntrinsicsV11
+      * provider is absent, so `findProviderBinding` returns None and Value ops fall back to the
+      * linked SIR bodies.
+      */
+    def intrinsicModulesFor(valueBuiltins: Boolean): Map[String, Module] =
+        if valueBuiltins then defaultIntrinsicModules
+        else defaultIntrinsicModules - ValueIntrinsicsV11Module
+
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
       * intrinsic modules, these are NOT used for provider substitution.
       *

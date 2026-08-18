@@ -64,7 +64,7 @@ object UplcPipeline {
                   noWarn = options.noWarn,
                   targetLanguage = language,
                   targetProtocolVersion = options.targetProtocolVersion,
-                  intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
+                  intrinsicModules = IntrinsicResolver.intrinsicModulesFor(options.valueBuiltins),
                   supportModules = IntrinsicResolver.defaultSupportModules
                 ).lower()
         val optimized =

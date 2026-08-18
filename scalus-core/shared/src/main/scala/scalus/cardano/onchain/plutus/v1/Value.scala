@@ -377,6 +377,10 @@ object Value extends ValueOffchainOps {
       *
       * This method traverses the `Value` and negates each token amount by subtracting it from zero.
       *
+      * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
+      * CIP-153 `scaleValue` builtin, which requires the value in canonical form and fails on a
+      * result outside +-(2^127). See `Options.valueBuiltins`.
+      *
       * @param v
       *   The `Value` to negate
       * @return
@@ -415,6 +419,10 @@ object Value extends ValueOffchainOps {
       * This method performs an element-wise addition of the token amounts in both `Value`
       * instances, treating absent tokens as having zero amount.
       *
+      * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
+      * CIP-153 `unionValue` builtin, which requires both values in canonical form and fails on a
+      * sum outside +-(2^127). See `Options.valueBuiltins`.
+      *
       * @param a
       *   First `Value` instance
       * @param b
@@ -436,6 +444,10 @@ object Value extends ValueOffchainOps {
       * This method subtracts the token amounts in the second `Value` from those in the first,
       * treating absent tokens as having zero amount.
       *
+      * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
+      * CIP-153 `scaleValue` + `unionValue` builtins, which require both values in canonical form
+      * and fail on a result outside +-(2^127). See `Options.valueBuiltins`.
+      *
       * @param a
       *   The `Value` to subtract from
       * @param b
@@ -455,6 +467,10 @@ object Value extends ValueOffchainOps {
       *
       * This method scales each token amount in the `Value` by the given factor, effectively
       * multiplying all amounts by the same integer.
+      *
+      * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
+      * CIP-153 `scaleValue` builtin, which requires the value in canonical form and fails on a
+      * scaled amount outside +-(2^127). See `Options.valueBuiltins`.
       *
       * @param v
       *   The `Value` to multiply
@@ -740,6 +756,11 @@ object Value extends ValueOffchainOps {
           *
           * Returns the token amount for the given policy id and token name pair. If either the
           * policy id or token name is not found, returns zero.
+          *
+          * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to
+          * the CIP-153 `lookupCoin` builtin, which requires the value in canonical form (strictly
+          * ascending keys, no zero amounts, no empty inner maps, keys at most 32 bytes, amounts
+          * within +-(2^127)) and makes the script fail otherwise. See `Options.valueBuiltins`.
           *
           * @param cs
           *   The policy id to look up

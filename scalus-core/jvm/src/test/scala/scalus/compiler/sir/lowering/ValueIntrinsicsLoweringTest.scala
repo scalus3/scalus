@@ -131,6 +131,19 @@ class ValueIntrinsicsLoweringTest extends AnyFunSuite {
         both(quantityOfSir, u => u $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm)
     }
 
+    test("valueBuiltins = false disables the intrinsics at PV11") {
+        val off = Options(valueBuiltins = false)
+        val uplc = quantityOfSir.toUplc(using off)()
+        assert(hasNoCip153Builtins(uplc))
+        assert(evalInt(uplc $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm) == BigInt(7))
+    }
+
+    test("valueBuiltins = false disables the intrinsics for every Value op at PV11") {
+        val off = Options(valueBuiltins = false)
+        for sir <- List(plusSir, minusSir, multiplySir, negateSir, containsSir) do
+            assert(hasNoCip153Builtins(sir.toUplc(using off)()))
+    }
+
     test("PV11 strict validation: malformed values fail where PV10 succeeds") {
         // zero amount
         val zeroAmount = Data.Map(
