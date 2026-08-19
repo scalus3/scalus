@@ -31,6 +31,7 @@ object IntrinsicResolver {
     private val SortedMapModule = "scalus.cardano.onchain.plutus.prelude.SortedMap$"
     private val AssocMapModule = "scalus.cardano.onchain.plutus.prelude.AssocMap$"
     private val OptionModule = "scalus.cardano.onchain.plutus.prelude.Option$"
+    private val ValueModule = "scalus.cardano.onchain.plutus.v1.Value$"
 
     /** Methods whose trailing implicit `Eq` argument is discarded during intrinsic resolution: the
       * V3 intrinsic compares structurally via `equalsRepr` instead of calling `eq`. Sound because
@@ -58,6 +59,7 @@ object IntrinsicResolver {
 
     private val SortedMapIntrinsicsModule = "scalus.compiler.intrinsics.SortedMapIntrinsics$"
     private val AssocMapIntrinsicsModule = "scalus.compiler.intrinsics.AssocMapIntrinsics$"
+    private val ValueIntrinsicsV11Module = "scalus.compiler.intrinsics.ValueIntrinsicsV11$"
 
     private val UplcConstrOptionOps = "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption$"
 
@@ -73,6 +75,7 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.BuiltinPairListOperationsV11",
           "scalus.compiler.intrinsics.SortedMapIntrinsics",
           "scalus.compiler.intrinsics.AssocMapIntrinsics",
+          "scalus.compiler.intrinsics.ValueIntrinsicsV11",
           "scalus.compiler.intrinsics.IntrinsicsNativeList",
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrList",
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption"
@@ -131,7 +134,7 @@ object IntrinsicResolver {
         Map[String, scalus.compiler.intrinsics.ArgReprConvertRule]
     )
 
-    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules, UplcConstrListReprRules, UplcConstrOptionReprRules}
+    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules, UplcConstrListReprRules, UplcConstrOptionReprRules, ValueReprRules}
 
     private val NoArgConvert: Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] = Map.empty
 
@@ -186,6 +189,9 @@ object IntrinsicResolver {
           MapReprRules.factoryRules,
           MapReprRules.factoryArgConvertRules
         )
+      ),
+      ValueModule -> List(
+        (WildcardRepr, 11, ValueIntrinsicsV11Module, ValueReprRules.rules, NoArgConvert)
       )
     )
 

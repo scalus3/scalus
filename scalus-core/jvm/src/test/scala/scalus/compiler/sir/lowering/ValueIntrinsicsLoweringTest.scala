@@ -1,0 +1,179 @@
+package scalus.compiler.sir.lowering
+
+import org.scalatest.funsuite.AnyFunSuite
+import scalus.*
+import scalus.cardano.ledger.MajorProtocolVersion
+import scalus.cardano.onchain.plutus
+import scalus.cardano.onchain.plutus.v1.Value
+import scalus.compiler.sir.SIR
+import scalus.compiler.{compile, Options}
+import scalus.uplc.{Constant, Term}
+import scalus.uplc.Term.*
+import scalus.uplc.builtin.Data.fromData
+import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.eval.{PlutusVM, Result}
+
+class ValueIntrinsicsLoweringTest extends AnyFunSuite {
+    private given PlutusVM = PlutusVM.makePlutusV3VM()
+
+    private val pv10 = Options(targetProtocolVersion = MajorProtocolVersion.plominPV)
+
+    /** Canonical 2-policy value as Data. */
+    private def valueData: Data = {
+        def entry(p: String, amount: Int): (Data, Data) =
+            (
+              Data.B(ByteString.fromHex(p * 28)),
+              Data.Map(
+                plutus.prelude.List((Data.B(ByteString.fromString("tok")), Data.I(amount)))
+              )
+            )
+        Data.Map(plutus.prelude.List(entry("aa", 5), entry("bb", 7)))
+    }
+    private val policyBB = ByteString.fromHex("bb" * 28)
+    private val tok = ByteString.fromString("tok")
+
+    /** Second canonical value, single policy `bb`, for the binary operations. */
+    private def valueData2: Data =
+        Data.Map(
+          plutus.prelude.List(
+            (
+              Data.B(ByteString.fromHex("bb" * 28)),
+              Data.Map(plutus.prelude.List((Data.B(tok), Data.I(3))))
+            )
+          )
+        )
+
+    /** All seven CIP-153 MaryEraValue builtins; none may appear in a PV10 lowering. */
+    private val cip153Names =
+        List(
+          "lookupCoin",
+          "unionValue",
+          "scaleValue",
+          "valueContains",
+          "insertCoin",
+          "valueData",
+          "unValueData"
+        )
+
+    private def hasNoCip153Builtins(t: Term): Boolean =
+        cip153Names.forall(n => !hasBuiltin(t, n))
+
+    private val quantityOfSir = compile { (d: Data, cs: ByteString, tn: ByteString) =>
+        fromData[Value](d).quantityOf(cs, tn)
+    }
+
+    private val plusSir = compile { (d1: Data, d2: Data) =>
+        import scalus.uplc.builtin.Data.toData
+        (fromData[Value](d1) + fromData[Value](d2)).toData
+    }
+    private val minusSir = compile { (d1: Data, d2: Data) =>
+        import scalus.uplc.builtin.Data.toData
+        (fromData[Value](d1) - fromData[Value](d2)).toData
+    }
+    private val multiplySir = compile { (d: Data) =>
+        import scalus.uplc.builtin.Data.toData
+        (fromData[Value](d) * BigInt(3)).toData
+    }
+    private val negateSir = compile { (d: Data) =>
+        import scalus.uplc.builtin.Data.toData
+        (-fromData[Value](d)).toData
+    }
+    private val containsSir = compile { (d1: Data, d2: Data) =>
+        fromData[Value](d1).containsAtLeast(fromData[Value](d2))
+    }
+
+    private def hasBuiltin(t: Term, name: String): Boolean =
+        t.show.contains(s"(builtin $name)")
+
+    private def evalInt(t: Term): BigInt = t.evaluateDebug match
+        case Result.Success(Term.Const(Constant.Integer(i), _), _, _, _) => i
+        case other =>
+            fail(s"evaluation failed: $other")
+
+    test("quantityOf lowers to lookupCoin at PV11 and evaluates correctly") {
+        val uplc = quantityOfSir.toUplc()
+        assert(hasBuiltin(uplc, "lookupCoin"))
+        assert(evalInt(uplc $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm) == BigInt(7))
+    }
+
+    test("quantityOf keeps the portable lowering at PV10") {
+        val uplc = quantityOfSir.toUplc(using pv10)()
+        assert(!hasBuiltin(uplc, "lookupCoin"))
+        assert(!hasBuiltin(uplc, "unValueData"))
+        assert(evalInt(uplc $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm) == BigInt(7))
+    }
+
+    test("plus/minus/multiply/negate/containsAtLeast lower to CIP-153 builtins at PV11") {
+        assert(hasBuiltin(plusSir.toUplc(), "unionValue"))
+        assert(hasBuiltin(minusSir.toUplc(), "unionValue"))
+        assert(hasBuiltin(minusSir.toUplc(), "scaleValue"))
+        assert(hasBuiltin(multiplySir.toUplc(), "scaleValue"))
+        assert(hasBuiltin(negateSir.toUplc(), "scaleValue"))
+        assert(hasBuiltin(containsSir.toUplc(), "valueContains"))
+    }
+
+    test("all ops keep the portable lowering at PV10") {
+        for sir <- List(plusSir, minusSir, multiplySir, negateSir, containsSir) do
+            assert(hasNoCip153Builtins(sir.toUplc(using pv10)()))
+    }
+
+    test("PV11 and PV10 lowerings agree on canonical values") {
+        def run(t: Term): Term = t.evaluateDebug match
+            case Result.Success(r, _, _, _) => r
+            case other                      => fail(s"evaluation failed: $other")
+        def both(sir: SIR, args: Term => Term): Unit =
+            assert(run(args(sir.toUplc())) == run(args(sir.toUplc(using pv10)())))
+        both(plusSir, u => u $ valueData.asTerm $ valueData2.asTerm)
+        both(minusSir, u => u $ valueData.asTerm $ valueData2.asTerm)
+        both(multiplySir, u => u $ valueData.asTerm)
+        both(negateSir, u => u $ valueData.asTerm)
+        both(containsSir, u => u $ valueData.asTerm $ valueData2.asTerm)
+        both(quantityOfSir, u => u $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm)
+    }
+
+    test("PV11 strict validation: malformed values fail where PV10 succeeds") {
+        // zero amount
+        val zeroAmount = Data.Map(
+          plutus.prelude.List(
+            (
+              Data.B(ByteString.fromHex("aa" * 28)),
+              Data.Map(plutus.prelude.List((Data.B(tok), Data.I(0))))
+            )
+          )
+        )
+        // duplicate (thus non-strictly-ascending) policy keys
+        val dupKeys = Data.Map(
+          plutus.prelude.List(
+            (
+              Data.B(ByteString.fromHex("aa" * 28)),
+              Data.Map(plutus.prelude.List((Data.B(tok), Data.I(1))))
+            ),
+            (
+              Data.B(ByteString.fromHex("aa" * 28)),
+              Data.Map(plutus.prelude.List((Data.B(tok), Data.I(2))))
+            )
+          )
+        )
+        // canonical shape, but the amount is outside the builtin's 128-bit signed range
+        val outOfRange = Data.Map(
+          plutus.prelude.List(
+            (
+              Data.B(ByteString.fromHex("aa" * 28)),
+              Data.Map(plutus.prelude.List((Data.B(tok), Data.I(BigInt(2).pow(128)))))
+            )
+          )
+        )
+        for bad <- List(zeroAmount, dupKeys, outOfRange) do
+            val pv11 = quantityOfSir.toUplc() $ bad.asTerm $ policyBB.asTerm $ tok.asTerm
+            assert(pv11.evaluateDebug.isFailure, s"expected PV11 failure: $bad")
+            val pv10r =
+                quantityOfSir.toUplc(using pv10)() $ bad.asTerm $ policyBB.asTerm $ tok.asTerm
+            assert(pv10r.evaluateDebug.isSuccess, s"expected PV10 success: $bad")
+            // Same `unValueData` guard on a Task 3 operation, so the strictness is not
+            // specific to quantityOf.
+            val plusPv11 = plusSir.toUplc() $ bad.asTerm $ valueData2.asTerm
+            assert(plusPv11.evaluateDebug.isFailure, s"expected PV11 plus failure: $bad")
+            val plusPv10 = plusSir.toUplc(using pv10)() $ bad.asTerm $ valueData2.asTerm
+            assert(plusPv10.evaluateDebug.isSuccess, s"expected PV10 plus success: $bad")
+    }
+}
