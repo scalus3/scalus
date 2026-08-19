@@ -15,6 +15,8 @@ import scalus.cardano.ledger.ExUnits
 import scalus.uplc.builtin.{BuiltinList, ByteString, Data}
 import scalus.uplc.{ExprBuilder, NamedDeBruijn, Term}
 
+import scala.language.implicitConversions
+
 class ExprSizeAndBudgetTest extends AnyFunSuite {
     private val encoder = summon[Flat[Term]]
     private val boolSize = encoder.bitSize(compile(true).toUplc())

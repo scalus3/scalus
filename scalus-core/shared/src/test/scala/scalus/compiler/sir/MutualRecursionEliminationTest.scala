@@ -4,7 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.Options
-import scalus.compiler.sir.SirDSL.{*, given}
+import scalus.compiler.sir.SirDSL.*
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.eval.{PlutusVM, Result}
 

@@ -246,7 +246,7 @@ object ScalusSbtPlugin extends AutoPlugin {
         }
     }
 
-    override lazy val projectSettings: Seq[Setting[_]] = Seq(
+    override lazy val projectSettings: Seq[Setting[?]] = Seq(
       // Def.uncached opts these out of sbt 2's task cache: they return Seq[File] (not a
       // cacheable output type) and write files, and `deploy` performs network I/O. No-op on
       // sbt 1 (via sbt2-compat). Work-skipping for `blueprint` comes from its own content
@@ -418,7 +418,7 @@ object ScalusSbtPlugin extends AutoPlugin {
                 val stampM = cls.getMethod("stampScalaVersion", classOf[String], classOf[String])
                 val aggM = cls.getMethod(
                   "aggregate",
-                  classOf[java.util.List[_]],
+                  classOf[java.util.List[?]],
                   classOf[String],
                   classOf[String],
                   classOf[String]
@@ -532,5 +532,5 @@ object ScalusSbtPlugin extends AutoPlugin {
   */
 object ScalusBlueprintPlugin extends AutoPlugin {
     val autoImport = ScalusSbtPlugin.autoImport
-    override lazy val projectSettings: Seq[Setting[_]] = ScalusSbtPlugin.projectSettings
+    override lazy val projectSettings: Seq[Setting[?]] = ScalusSbtPlugin.projectSettings
 }

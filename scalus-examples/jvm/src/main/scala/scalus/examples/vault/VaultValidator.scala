@@ -8,7 +8,7 @@ import scalus.cardano.onchain.plutus.v1
 import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime}
 import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
 import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef, Validator}
-import scalus.cardano.onchain.plutus.prelude.{===, fail, require}
+import scalus.cardano.onchain.plutus.prelude.{===, require}
 
 // Datum
 case class State(
