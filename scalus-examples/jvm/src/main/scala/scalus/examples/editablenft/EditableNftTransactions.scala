@@ -174,18 +174,13 @@ case class EditableNftTransactions(
         val userAsset = AssetName(datum.userNftName)
         val userNftUtxo = findUserNftUtxo(utxos, datum.userNftName)
 
-        def buildBurnSpendRedeemer(tx: Transaction): Data = {
-            val userNftInputIndex = findInputIndex(tx, userNftUtxo)
-            SpendRedeemer.Burn(BigInt(userNftInputIndex)).toData
-        }
-
         TxBuilder(env, evaluator)
-            .spend(refNftUtxo, buildBurnSpendRedeemer, parameterizedScript)
+            .spend(refNftUtxo, _ => (SpendRedeemer.Burn: SpendRedeemer).toData, parameterizedScript)
             .spend(userNftUtxo)
             .mint(
               parameterizedScript,
               Map(refAsset -> -1L, userAsset -> -1L),
-              _ => MintRedeemer.Burn.toData
+              _ => (MintRedeemer.Burn(datum.tokenId): MintRedeemer).toData
             )
             .complete(availableUtxos = utxos, changeAddress)
             .sign(signer)
