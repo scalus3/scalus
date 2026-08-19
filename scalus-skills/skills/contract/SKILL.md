@@ -50,6 +50,9 @@ Study existing validators before creating new ones:
 - `require(condition, message)` - assertion with error message
 - `fail(message)` - explicit failure
 - `getOrFail(option, message)` - safe Option extraction
+- `output.datum.inlineOrFail[MyDatum](message)` - extract and decode an inline datum,
+  fail the script otherwise. Use it instead of matching on `OutputDatum.OutputDatum` with
+  a `fail` fallback; the no-message overload fails with "Expected inline datum".
 - `tx.mint.hasOnly(policyId, tokenName, 1)` - exact single-token mint check: exactly
   `{tokenName -> amount}` under the policy, nothing else, other policies unconstrained.
   Use it instead of `quantityOf(...) === BigInt(1)` plus a separate only-token check.
