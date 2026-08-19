@@ -48,6 +48,44 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                     )
                 case Result.Failure(e, _, _, _) => fail(s"Expected success: $e")
         }
+
+        { // Lowering check: `singleton(k, v).toData` must compile to the direct Data construction
+            // (one mapData/mkCons/mkPairData chain), not a list build followed by a conversion walk.
+            // This is what makes e.g. `equalsData(innerMap.toData, SortedMap.singleton(tn, 1).toData)`
+            // a cheap exact-token check on `tx.mint`.
+            import scalus.toUplcOptimized
+            import scalus.uplc.DeBruijn
+            import scalus.uplc.builtin.{Builtins, ByteString}
+
+            val preludeUplc = scalus.compiler
+                .compile { (tn: ByteString) =>
+                    SortedMap.singleton(tn, BigInt(1)).toData
+                }
+                .toUplcOptimized()
+            val rawUplc = scalus.compiler
+                .compile { (tn: ByteString) =>
+                    Builtins.mapData(
+                      Builtins.mkCons(
+                        Builtins.mkPairData(Builtins.bData(tn), Builtins.iData(BigInt(1))),
+                        Builtins.mkNilPairData()
+                      )
+                    )
+                }
+                .toUplcOptimized()
+            assert(
+              DeBruijn.deBruijnTerm(preludeUplc) α_== DeBruijn.deBruijnTerm(rawUplc),
+              s"singleton lowering changed:\n${preludeUplc.show}\nexpected:\n${rawUplc.show}"
+            )
+
+            val applied = preludeUplc $ ByteString.fromString("BEACON").asTerm
+            applied.evaluateDebug match
+                case Result.Success(_, exunits, _, _) =>
+                    assert(
+                      exunits == ExUnits(memory = 1928, steps = 435437),
+                      s"Budget mismatch: got $exunits"
+                    )
+                case Result.Failure(e, _, _, _) => fail(s"Expected success: $e")
+        }
     }
 
     test("unsafeFromList") {
