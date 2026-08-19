@@ -771,6 +771,42 @@ object Value extends ValueOffchainOps {
             case Option.Some(tokens) => tokens.get(tn).getOrElse(0)
             case Option.None         => 0
 
+        /** Tests whether this `Value` contains at least the amounts in `other`.
+          *
+          * For every (policy id, token name, amount) entry in `other`, this `Value` must hold at
+          * least that amount. Fails (throws) when either value contains a negative amount -
+          * mirroring the CIP-153 `valueContains` builtin: for values in canonical form the result
+          * is identical on every protocol version. For non-canonical values (zero amounts, empty
+          * inner maps - only constructible via the unsafe constructors) the PV11 builtin lowering
+          * may fail or differ.
+          *
+          * At PV11 (vanRossem) this method lowers to the `valueContains` builtin, which requires
+          * both values to be in canonical form (strictly ascending keys, no zero amounts, no empty
+          * inner maps, keys at most 32 bytes, amounts within +-(2^127)); a non-canonical value
+          * makes the script fail. See `Options.valueBuiltins`.
+          *
+          * @example
+          *   {{{
+          *   val a = Value.lovelace(BigInt(1000))
+          *   val b = Value.lovelace(BigInt(400))
+          *   a.containsAtLeast(b) === true
+          *   b.containsAtLeast(a) === false
+          *   }}}
+          */
+        def containsAtLeast(other: Value): Boolean = {
+            prelude.require(
+              v.toSortedMap.forall { kv => kv._2.forall { tv => tv._2 >= BigInt(0) } },
+              "containsAtLeast: negative amount in this value"
+            )
+            prelude.require(
+              other.toSortedMap.forall { kv => kv._2.forall { tv => tv._2 >= BigInt(0) } },
+              "containsAtLeast: negative amount in other value"
+            )
+            other.toSortedMap.forall { kv =>
+                kv._2.forall { tv => v.quantityOf(kv._1, tv._1) >= tv._2 }
+            }
+        }
+
         /** Get all tokens associated with a given policy.
           *
           * Returns the token `SortedMap` for the given policy id. If the policy id is not found,

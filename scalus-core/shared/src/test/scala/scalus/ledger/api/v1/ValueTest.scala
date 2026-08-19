@@ -1120,6 +1120,53 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
+    test("containsAtLeast: superset with larger amounts contains subset") {
+        val a = Value.unsafeFromList(
+          List(
+            (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000)))),
+            (hex"aa", List((hex"01", BigInt(5)), (hex"02", BigInt(7))))
+          )
+        )
+        val b = Value.unsafeFromList(
+          List((hex"aa", List((hex"01", BigInt(5)))))
+        )
+        assert(a.containsAtLeast(b))
+        assert(!b.containsAtLeast(a))
+        assert(a.containsAtLeast(a))
+        assert(a.containsAtLeast(Value.zero))
+        assert(Value.zero.containsAtLeast(Value.zero))
+    }
+
+    test("containsAtLeast: missing token or smaller amount is not contained") {
+        val a = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(5))))))
+        val more = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(6))))))
+        val other = Value.unsafeFromList(List((hex"bb", List((hex"01", BigInt(1))))))
+        assert(!a.containsAtLeast(more))
+        assert(!a.containsAtLeast(other))
+    }
+
+    test("containsAtLeast: negative amounts on either side throw") {
+        val neg = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(-1))))))
+        val pos = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(1))))))
+        assertThrows[Exception](pos.containsAtLeast(neg))
+        assertThrows[Exception](neg.containsAtLeast(pos))
+    }
+
+    test("containsAtLeast: evaluates on-chain") {
+        assertEvalEq(
+          Value
+              .unsafeFromList(List((hex"aa", List((hex"01", BigInt(5))))))
+              .containsAtLeast(Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(4))))))),
+          true
+        )
+        assertEvalEq(
+          Value
+              .unsafeFromList(List((hex"aa", List((hex"01", BigInt(3))))))
+              .containsAtLeast(Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(4))))))),
+          false
+        )
+    }
+
     test("withoutLovelace properties") {
         checkEval { (value: Value) =>
             value.withoutLovelace.getLovelace === BigInt(0)
