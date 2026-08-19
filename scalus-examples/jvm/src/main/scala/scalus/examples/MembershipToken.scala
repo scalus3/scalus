@@ -75,17 +75,12 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
                 val proof = unBData(proofData)
                 MerkleTree.verifyMembership(merkleRoot, signer.hash, proof)
 
-                // Verify exactly 1 token minted with tokenName = signer's pkh
+                // Verify exactly 1 token minted with tokenName = signer's pkh and no other
+                // token under this policy
                 require(
-                  txInfo.mint.quantityOf(policyId, signer.hash) === BigInt(1),
-                  "Must mint exactly 1 membership token"
+                  txInfo.mint.hasOnly(policyId, signer.hash, 1),
+                  "Must mint exactly 1 membership token and nothing else"
                 )
-
-                // Verify only one token name under this policy
-                val allMinted = txInfo.mint.flatten.filter { case (pid, _, _) =>
-                    pid === policyId
-                }
-                require(allMinted.length === BigInt(1), "Only one token allowed per mint")
 
                 // Verify deposit UTxO at script address
                 val scriptCred = Credential.ScriptCredential(policyId)

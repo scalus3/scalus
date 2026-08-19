@@ -99,12 +99,7 @@ object Factory {
         val expectedTokenName = computeTokenName(seedUtxo)
 
         // Check exactly 1 token minted under this policy with the correct name
-        val mintedTokens = tx.mint.toSortedMap.get(policyId).getOrFail(NoTokensMinted)
-        val (tokenName, quantity) = mintedTokens.toList match
-            case List.Cons(pair, List.Nil) => pair
-            case _                         => fail(MustMintExactlyOneToken)
-        require(tokenName === expectedTokenName, WrongTokenName)
-        require(quantity === BigInt(1), MustMintExactlyOneToken)
+        require(tx.mint.hasOnly(policyId, expectedTokenName, 1), MustMintExactlyOneToken)
 
         // Find a product output at the spending script address with the NFT and correct datum
         val scriptCred = Credential.ScriptCredential(spendingScriptHash)
@@ -194,7 +189,6 @@ object Factory {
     inline val SeedUtxoMustBeConsumed = "Seed UTxO must be consumed"
     inline val NoTokensMinted = "No tokens minted under this policy"
     inline val MustMintExactlyOneToken = "Must mint exactly one token"
-    inline val WrongTokenName = "Token name does not match expected hash"
     inline val MissingProductOutput = "No product output found at spending script"
     inline val MissingInlineDatum = "Product output must have an inline datum"
     inline val DatumTagMismatch = "Product datum tag does not match"

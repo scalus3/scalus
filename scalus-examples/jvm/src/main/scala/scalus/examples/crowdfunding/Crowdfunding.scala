@@ -197,19 +197,11 @@ object DonationMintingPolicy {
           "Donations must be before deadline"
         )
 
-        // 5. Verify exactly one donation token is minted
+        // 5. Verify exactly one donation token is minted and no other tokens under this
+        // policy (V011 protection)
         require(
-          txInfo.mint.quantityOf(policyId, donationTokenName) === BigInt(1),
-          "Exactly one donation token must be minted"
-        )
-
-        // 6. Verify no other tokens are minted under this policy (V011 protection)
-        val allMintedUnderPolicy = txInfo.mint.flatten.filter { case (pid, _, _) =>
-            pid === policyId
-        }
-        require(
-          allMintedUnderPolicy.length === BigInt(1),
-          "Only one token type may be minted under donation policy"
+          txInfo.mint.hasOnly(policyId, donationTokenName, 1),
+          "Exactly one donation token must be minted and nothing else"
         )
 
     /** Handle burning of donation tokens.
@@ -715,19 +707,11 @@ object CrowdfundingValidator extends Validator {
           scalus.uplc.builtin.Builtins.serialiseData(consumedUtxo.toData)
         )
 
-        // 5. Verify exactly one campaign NFT is minted
+        // 5. Verify exactly one campaign NFT is minted and no other tokens under this
+        // policy (V011 protection)
         require(
-          txInfo.mint.quantityOf(policyId, campaignId) === BigInt(1),
-          "Exactly one campaign NFT must be minted"
-        )
-
-        // 5a. Verify no other tokens are minted under this policy (V011 protection)
-        val allMintedUnderPolicy = txInfo.mint.flatten.filter { case (pid, _, _) =>
-            pid === policyId
-        }
-        require(
-          allMintedUnderPolicy.length === BigInt(1),
-          "Only one token type may be minted under campaign policy"
+          txInfo.mint.hasOnly(policyId, campaignId, 1),
+          "Exactly one campaign NFT must be minted and nothing else"
         )
 
         // 6. Find the output going to the script address

@@ -238,7 +238,7 @@ class FactoryTest
     }
 
     test("validateCreate fails with wrong token name") {
-        assertEvalFailsWithMessage[RequirementError](Factory.WrongTokenName) {
+        assertEvalFailsWithMessage[RequirementError](Factory.MustMintExactlyOneToken) {
             val creator = PubKeyHash(
               ByteString.fromHex("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
             )

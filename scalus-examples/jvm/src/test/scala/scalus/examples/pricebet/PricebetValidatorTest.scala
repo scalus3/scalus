@@ -281,7 +281,7 @@ class PricebetValidatorTest extends AnyFunSuite, ScalusTest {
         provider.setSlot(updateSlot)
         val updateResult = assertSuccess(provider, updateTx, oracleUtxo._1)
         assert(
-          updateResult.budget == (ExUnits(memory = 61989, steps = 24_130128))
+          updateResult.budget == (ExUnits(memory = 61389, steps = 24_034128))
         )
     }
 

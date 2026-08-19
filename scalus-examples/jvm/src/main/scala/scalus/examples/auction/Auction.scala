@@ -402,15 +402,9 @@ object AuctionValidator extends DataParameterizedValidator {
         )
 
         // 3. Validate ALL tokens minted under this policy (prevents Other Token Name Attack)
-        val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.size === BigInt(1),
-          "Only one token name allowed per auction start"
-        )
-        val (mintedTokenName, mintedQuantity) = mintedTokens.toList.head
-        require(
-          mintedTokenName === itemId && mintedQuantity === BigInt(1),
-          "Must mint exactly one auction NFT with the specified itemId"
+          txInfo.mint.hasOnly(policyId, itemId, 1),
+          "Must mint exactly one auction NFT with the specified itemId and nothing else"
         )
 
         // 4. The auction end time must be in the future

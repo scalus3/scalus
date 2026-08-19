@@ -107,12 +107,8 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Exactly one identity token minted, nothing else under this policy
                 require(
-                  tx.mint.quantityOf(policyId, idTn) === BigInt(1),
-                  "Must mint exactly 1 identity token"
-                )
-                require(
-                  tx.mint.tokens(policyId).size === BigInt(1),
-                  "Must mint only the identity token"
+                  tx.mint.hasOnly(policyId, idTn, 1),
+                  "Must mint exactly 1 identity token and nothing else"
                 )
 
             case MintAction.AddDelegate(identityRefInputIndex, delegationOutIndex) =>
@@ -157,17 +153,13 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 // Build expected token name and check minting
                 val delegTn = delegationTokenName(identityTn, delegDatum.delegatePkh)
                 require(
-                  tx.mint.quantityOf(policyId, delegTn) === BigInt(1),
-                  "Must mint exactly 1 delegation token"
+                  tx.mint.hasOnly(policyId, delegTn, 1),
+                  "Must mint exactly 1 delegation token and nothing else"
                 )
 
                 require(
                   delegationOutput.value.quantityOf(policyId, delegTn) === BigInt(1),
                   "Delegation output must hold the delegation token"
-                )
-                require(
-                  tx.mint.tokens(policyId).size === BigInt(1),
-                  "Must mint only the delegation token"
                 )
 
             case MintAction.PublishAttribute(delegationRefInputIndex, attributeOutIndex) =>
@@ -230,17 +222,13 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 // Build expected token name and check minting
                 val attrTn = attributeTokenName(delegDatum.identityTokenName, attrDatum.key)
                 require(
-                  tx.mint.quantityOf(policyId, attrTn) === BigInt(1),
-                  "Must mint exactly 1 attribute token"
+                  tx.mint.hasOnly(policyId, attrTn, 1),
+                  "Must mint exactly 1 attribute token and nothing else"
                 )
 
                 require(
                   attributeOutput.value.quantityOf(policyId, attrTn) === BigInt(1),
                   "Attribute output must hold the attribute token"
-                )
-                require(
-                  tx.mint.tokens(policyId).size === BigInt(1),
-                  "Must mint only the attribute token"
                 )
 
             case MintAction.Burn =>
