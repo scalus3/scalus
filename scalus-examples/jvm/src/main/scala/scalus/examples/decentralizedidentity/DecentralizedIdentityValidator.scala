@@ -234,7 +234,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
             case MintAction.Burn =>
                 // Ensure all quantities under this policy are negative (only burns allowed)
                 require(
-                  tx.mint.tokens(policyId).forall((_, qty) => qty < BigInt(0)),
+                  tx.mint.tokens(policyId).forall((_, qty) => qty < 0),
                   "Burn action must only burn tokens"
                 )
         }
@@ -348,7 +348,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
         // Find first token whose name starts with the prefix
         tokenMap
             .find { case (tn, qty) =>
-                qty > BigInt(0) && tn.take(prefixBs.length) === prefixBs
+                qty > 0 && tn.take(prefixBs.length) === prefixBs
             }
             .map(_._1)
             .getOrFail("Token with prefix not found")

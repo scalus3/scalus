@@ -50,6 +50,22 @@ Study existing validators before creating new ones:
 - `require(condition, message)` - assertion with error message
 - `fail(message)` - explicit failure
 - `getOrFail(option, message)` - safe Option extraction
+- `tx.mint.hasOnly(policyId, tokenName, 1)` - exact single-token mint check: exactly
+  `{tokenName -> amount}` under the policy, nothing else, other policies unconstrained.
+  Use it instead of `quantityOf(...) === BigInt(1)` plus a separate only-token check.
+
+**BigInt literals:**
+- Write a plain integer literal where the expected type is already `BigInt`; the implicit
+  `Int => BigInt` conversion applies and reads better:
+  - arguments to `BigInt`-typed parameters: `tx.mint.hasOnly(policyId, tokenName, 1)`,
+    `Value.lovelace(2_000_000)`, `outputs.at(0)`
+  - annotated vals: `val fee: BigInt = 1_000_000`
+  - relational comparisons against a `BigInt` (member operators): `qty < 5`, `qty >= 0`
+- Write explicit `BigInt(n)` where inference fails without it:
+  - `===` / `!==` comparisons: `qty === BigInt(1)` - a plain literal does NOT compile here
+    (the extension infers `Eq[BigInt | Int]`, which does not exist)
+  - generic positions that would infer `Int` (unsupported on-chain): `Option.Some(BigInt(1))`,
+    `foldLeft(BigInt(0))(...)`, `List(BigInt(1), BigInt(2))`
 
 **Script purposes (Plutus V3):**
 - `spend` - spending UTxOs

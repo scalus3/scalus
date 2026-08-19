@@ -160,7 +160,7 @@ object BettingValidator extends Validator {
             case Action.AnnounceWinner(winner, payoutOutputIdx) =>
                 // V005 fix: Use indexed lookup to prevent double satisfaction
                 require(
-                  payoutOutputIdx >= BigInt(0),
+                  payoutOutputIdx >= 0,
                   "Payout output index must be non-negative"
                 )
                 val payoutOutput = txInfo.outputs.at(payoutOutputIdx)

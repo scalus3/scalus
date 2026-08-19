@@ -70,7 +70,7 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
         val action = redeemer.to[MembershipRedeemer]
         action match
             case MembershipRedeemer.Mint(proofData) =>
-                require(txInfo.signatories.length > BigInt(0), "No signatories")
+                require(txInfo.signatories.length > 0, "No signatories")
                 val signer = txInfo.signatories.head
                 val proof = unBData(proofData)
                 MerkleTree.verifyMembership(merkleRoot, signer.hash, proof)
@@ -89,7 +89,7 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
                 require(depositOutputs.length === BigInt(1), "Expected one deposit output")
                 val depositOut = depositOutputs.head
                 require(
-                  depositOut.value.getLovelace >= BigInt(2_000_000),
+                  depositOut.value.getLovelace >= 2_000_000,
                   "Deposit must be at least 2 ADA"
                 )
                 val depositDatum = depositOut.datum match

@@ -56,7 +56,7 @@ object SimpleTransferValidator extends Validator {
         // eliminate double satisfaction by ensuring exactly one contract own input and at most one own output
         require(contractInputs.size === BigInt(1), "Contract should have exactly one own input")
         require(
-          contractOutputs.size <= BigInt(1),
+          contractOutputs.size <= 1,
           "Contract should have at most one own output"
         )
 

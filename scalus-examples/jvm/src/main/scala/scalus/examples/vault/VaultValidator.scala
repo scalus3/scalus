@@ -154,7 +154,7 @@ object VaultValidator extends Validator {
         val ownerCredential = Credential.PubKeyCredential(v1.PubKeyHash(datum.owner))
         val ownerOutputs =
             tx.findOwnOutputs(out => out.address.credential === ownerCredential)
-        require(ownerOutputs.size > BigInt(0), WrongAddressWithdrawal)
+        require(ownerOutputs.size > 0, WrongAddressWithdrawal)
         val totalToOwner =
             ownerOutputs.foldLeft(BigInt(0))((acc, out) => acc + out.value.getLovelace)
         require(totalToOwner >= datum.amount, VaultAmountChanged)

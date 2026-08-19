@@ -177,7 +177,7 @@ object DonationMintingPolicy {
         campaignInputIdx: BigInt
     ): Unit =
         // 1. Verify amount is positive
-        require(amount > BigInt(0), "Donation amount must be positive")
+        require(amount > 0, "Donation amount must be positive")
 
         // 2. Find campaign input and verify it has the campaign NFT
         val campaignInput = txInfo.inputs.at(campaignInputIdx)
@@ -231,7 +231,7 @@ object DonationMintingPolicy {
         // 3. All tokens of this policy must be burned (negative quantity)
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
+          mintedTokens.forall { case (_, amount) => amount < 0 },
           "Only burning allowed during withdraw/reclaim"
         )
 }
@@ -371,7 +371,7 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 2. Amount must be positive
-        require(amount > BigInt(0), "Donation amount must be positive")
+        require(amount > 0, "Donation amount must be positive")
 
         // 3. Verify continuing campaign output
         val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
@@ -689,7 +689,7 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 2. Goal must be positive
-        require(goal > BigInt(0), "Goal must be positive")
+        require(goal > 0, "Goal must be positive")
 
         // 3. Deadline must be in the future
         require(
@@ -755,7 +755,7 @@ object CrowdfundingValidator extends Validator {
     ): Unit =
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
+          mintedTokens.forall { case (_, amount) => amount < 0 },
           "Only burning is allowed"
         )
 }

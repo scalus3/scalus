@@ -130,7 +130,7 @@ object AmmValidator extends DataParameterizedValidator {
         x0: BigInt,
         x1: BigInt
     ): Unit = {
-        require(x0 > BigInt(0) && x1 > BigInt(0), "Deposit: amounts must be positive")
+        require(x0 > 0 && x1 > 0, "Deposit: amounts must be positive")
 
         val lpMinted =
             if datum.lpSupply === BigInt(0) then Math.sqrt(x0 * x1)
@@ -141,7 +141,7 @@ object AmmValidator extends DataParameterizedValidator {
                 Math.min(lp0, lp1)
             }
 
-        require(lpMinted > BigInt(0), "Deposit: zero LP minted")
+        require(lpMinted > 0, "Deposit: zero LP minted")
 
         val expectedDatum = AmmDatum(
           r0 = datum.r0 + x0,
@@ -161,7 +161,7 @@ object AmmValidator extends DataParameterizedValidator {
         // actual token quantities, so the pool cannot be under-funded. We only validate the datum
         // transition here. Similar reasoning applies in `handleSwap`.
 
-        require(lp > BigInt(0), "Redeem: LP amount must be positive")
+        require(lp > 0, "Redeem: LP amount must be positive")
         require(lp <= datum.lpSupply, "Redeem: LP amount exceeds supply")
 
         val out0 = lp * datum.r0 / datum.lpSupply
@@ -188,7 +188,7 @@ object AmmValidator extends DataParameterizedValidator {
         // token quantities, so the pool cannot be under-funded. We only validate the datum
         // transition here. Similar reasoning applies in `handleRedeem`.
 
-        require(amountIn > BigInt(0), "Swap: amountIn must be positive")
+        require(amountIn > 0, "Swap: amountIn must be positive")
 
         val dxAdjusted = amountIn * params.feeNumerator
 

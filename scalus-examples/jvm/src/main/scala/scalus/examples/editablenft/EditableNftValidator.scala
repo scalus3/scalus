@@ -105,7 +105,7 @@ object EditableNftValidator extends DataParameterizedValidator {
                 // the seed or any script UTxO). The actual "both tokens burned" check lives in the
                 // spend validator, which runs because the reference NFT is spent from the script.
                 val noPositiveMint = tx.mint.toSortedMap.get(policyId) match
-                    case Option.Some(tokens) => tokens.values.forall(_ <= BigInt(0))
+                    case Option.Some(tokens) => tokens.values.forall(_ <= 0)
                     case Option.None         => true
                 require(noPositiveMint, BurnMustNotMint)
         }

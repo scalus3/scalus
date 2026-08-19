@@ -145,7 +145,7 @@ object UnfixedAuctionValidator extends Validator {
         currentHighestBidder match
             case Option.Some(previousBidder) =>
                 require(
-                  refundOutputIdx >= BigInt(0),
+                  refundOutputIdx >= 0,
                   "Refund output index required when previous bidder exists"
                 )
                 val refundOutput = txInfo.outputs.at(refundOutputIdx)
@@ -195,7 +195,7 @@ object UnfixedAuctionValidator extends Validator {
                 )
 
                 require(
-                  winnerOutputIdx >= BigInt(0),
+                  winnerOutputIdx >= 0,
                   "Winner output index required when there is a winner"
                 )
                 val winnerOutput = txInfo.outputs.at(winnerOutputIdx)
@@ -271,7 +271,7 @@ object UnfixedAuctionValidator extends Validator {
         )
 
         require(
-          startingBid > BigInt(0),
+          startingBid > 0,
           "Starting bid must be positive"
         )
 
@@ -307,7 +307,7 @@ object UnfixedAuctionValidator extends Validator {
     ): Unit =
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
+          mintedTokens.forall { case (_, amount) => amount < 0 },
           "Only burning is allowed (all amounts must be negative)"
         )
 }

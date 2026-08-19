@@ -238,7 +238,7 @@ object AuctionValidator extends DataParameterizedValidator {
             case Option.Some(previousBidder) =>
                 // refundOutputIdx >= 0 means there should be a refund output
                 require(
-                  refundOutputIdx >= BigInt(0),
+                  refundOutputIdx >= 0,
                   "Refund output index required when previous bidder exists"
                 )
                 val refundOutput = txInfo.outputs.at(refundOutputIdx)
@@ -293,7 +293,7 @@ object AuctionValidator extends DataParameterizedValidator {
 
                 // 3. Winner must receive the NFT (the auctioned item) - use indexed lookup
                 require(
-                  winnerOutputIdx >= BigInt(0),
+                  winnerOutputIdx >= 0,
                   "Winner output index required when there is a winner"
                 )
                 val winnerOutput = txInfo.outputs.at(winnerOutputIdx)
@@ -415,7 +415,7 @@ object AuctionValidator extends DataParameterizedValidator {
 
         // 5. Starting bid must be positive
         require(
-          startingBid > BigInt(0),
+          startingBid > 0,
           "Starting bid must be positive"
         )
 
@@ -455,7 +455,7 @@ object AuctionValidator extends DataParameterizedValidator {
         // For burning, verify all tokens of this policy are burned (negative quantity)
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
+          mintedTokens.forall { case (_, amount) => amount < 0 },
           "Only burning is allowed (all amounts must be negative)"
         )
 }
