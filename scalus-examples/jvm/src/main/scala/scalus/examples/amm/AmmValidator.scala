@@ -11,14 +11,33 @@ import scalus.cardano.onchain.plutus.prelude.*
 
 type TradedToken = (PolicyId, TokenName)
 
-/** Validator parameter: identifies the token pair and fee rate. */
+/** Validator parameter: identifies the token pair, fee rate, and the one-shot seed UTxO.
+  *
+  * `seed` makes each pool's applied script hash - and therefore its LP `policyId` - globally
+  * unique: two pools can only share a `policyId` by sharing a `seed`, and a UTxO is spendable once.
+  * Without it, two pools with the same token pair and fee would mint the SAME LP asset, so an
+  * attacker could mint LP cheaply from one pool and redeem it against another.
+  */
 case class AmmParams(
     t0: TradedToken,
     t1: TradedToken,
     feeNumerator: BigInt,
-    feeDenominator: BigInt
+    feeDenominator: BigInt,
+    seed: TxOutRef
 ) derives FromData,
       ToData
+
+/** Minting-policy redeemer.
+  *
+  *   - `Init` creates an empty pool: it consumes the one-shot `seed` and mints the single pool NFT
+  *     that authenticates the pool UTxO.
+  *   - `ChangeLiquidity` mints/burns LP on deposit/redeem.
+  *   - `Close` burns the pool NFT when an empty pool is torn down.
+  */
+enum AmmMintAction derives FromData, ToData:
+    case Init
+    case ChangeLiquidity
+    case Close
 
 case class AmmDatum(
     r0: BigInt,
@@ -84,6 +103,7 @@ enum AmmRedeemer derives FromData, ToData:
     case Deposit(x0: BigInt, x1: BigInt)
     case Redeem(lp: BigInt)
     case Swap(t0In: Boolean, amountIn: BigInt, minAmountOut: BigInt)
+    case Close
 
 /** Single-script AMM validator — acts as both pool spending validator and LP minting policy.
   *
@@ -107,6 +127,24 @@ object AmmValidator extends DataParameterizedValidator {
             case _                        => fail("Multiple pool outputs found")
     }
 
+    /** Finds the unique output locked by this script (`policyId == scriptHash`). Used at `Init`,
+      * where there is no pool input to read the address from.
+      */
+    inline def findScriptOutput(outputs: List[TxOut], policyId: PolicyId): TxOut = {
+        val matching = outputs.filter { out =>
+            out.address.credential match
+                case Credential.ScriptCredential(sh) => sh === policyId
+                case _                               => false
+        }
+        matching match
+            case List.Cons(out, List.Nil) => out
+            case List.Nil                 => fail("No pool output found")
+            case _                        => fail("Multiple pool outputs found")
+    }
+
+    /** The single NFT minted at `Init` that authenticates a pool UTxO. */
+    val poolNftName: TokenName = utf8"POOL"
+
     /** Canonical LP token name. Pinning it is what keeps the LP token a single fungible asset:
       * without a name check the mint endpoint would accept LP minted under arbitrary names (the net
       * sum still balances, but wallets/price feeds that treat "the LP token" as one asset would
@@ -114,28 +152,56 @@ object AmmValidator extends DataParameterizedValidator {
       */
     val lpTokenName: TokenName = utf8"LP"
 
-    // mints LP tokens
-    inline def mint(param: Data, redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit = {
-        // Locate the pool input that we're spending
-        val poolInputOpt = tx.inputs.find { inp =>
-            inp.resolved.address.credential match
-                case Credential.ScriptCredential(sh) => sh === policyId
-                case _                               => false
-        }
-        val poolInput = poolInputOpt.getOrFail("Mint: no pool input found")
-        val poolDatum = readPoolDatum(poolInput.resolved)
+    inline def mint(param: Data, redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit =
+        redeemer.to[AmmMintAction] match
+            case AmmMintAction.Init =>
+                // Consume the one-shot seed so this policyId can only ever be initialized once.
+                require(
+                  tx.inputs.exists(_.outRef === param.to[AmmParams].seed),
+                  "Init: must spend the seed UTxO"
+                )
+                // Mint exactly the pool NFT and nothing else, into a fresh empty pool that holds it.
+                require(
+                  tx.mint.hasOnly(policyId, poolNftName, 1),
+                  "Init: must mint exactly one pool NFT"
+                )
+                val poolOut = findScriptOutput(tx.outputs, policyId)
+                require(
+                  readPoolDatum(poolOut) === AmmDatum(BigInt(0), BigInt(0), BigInt(0)),
+                  "Init: pool must start empty"
+                )
+                require(
+                  poolOut.value.quantityOf(policyId, poolNftName) === BigInt(1),
+                  "Init: empty pool must hold the pool NFT"
+                )
 
-        val poolAddress = poolInput.resolved.address
-        val continuationOut = findPoolOutput(tx.outputs, poolAddress)
-        val continuationDatum = readPoolDatum(continuationOut)
+            case AmmMintAction.ChangeLiquidity =>
+                // Locate the pool input we're spending, and its continuation.
+                val poolInput = tx.inputs
+                    .find { inp =>
+                        inp.resolved.address.credential match
+                            case Credential.ScriptCredential(sh) => sh === policyId
+                            case _                               => false
+                    }
+                    .getOrFail("Mint: no pool input found")
+                val poolDatum = readPoolDatum(poolInput.resolved)
+                val continuationDatum =
+                    readPoolDatum(findPoolOutput(tx.outputs, poolInput.resolved.address))
 
-        // The tx must mint/burn exactly `lpDelta` of the LP token and NOTHING else under this
-        // policy: `hasOnly` pins the token name and rejects any other name in one check (works for
-        // negative `lpDelta`, i.e. burns, too). Summing all names would let an attacker fragment
-        // the LP supply across names or mint junk that nets to `lpDelta`.
-        val lpDelta = continuationDatum.lpSupply - poolDatum.lpSupply
-        require(tx.mint.hasOnly(policyId, lpTokenName, lpDelta), "Mint: LP delta mismatch")
-    }
+                // The tx must mint/burn exactly `lpDelta` of the LP token and NOTHING else under
+                // this policy: `hasOnly` pins the token name and rejects any other name in one check
+                // (works for negative `lpDelta`, i.e. burns, too), so the pool NFT can't be minted
+                // or burned on a liquidity change either.
+                val lpDelta = continuationDatum.lpSupply - poolDatum.lpSupply
+                require(tx.mint.hasOnly(policyId, lpTokenName, lpDelta), "Mint: LP delta mismatch")
+
+            case AmmMintAction.Close =>
+                // Burn exactly the pool NFT and nothing else. The spend endpoint (which runs
+                // because the NFT-holding pool UTxO is spent) enforces the pool is empty.
+                require(
+                  tx.mint.hasOnly(policyId, poolNftName, -1),
+                  "Close: must burn exactly the pool NFT"
+                )
     inline def spend(
         param: Data,
         d: Option[Data],
@@ -144,94 +210,94 @@ object AmmValidator extends DataParameterizedValidator {
         ownRef: TxOutRef
     ): Unit = {
         val params = param.to[AmmParams]
-        val action = redeemer.to[AmmRedeemer]
-
         val ownInput = tx.findOwnInputOrFail(ownRef, "Own pool input not found")
         val poolAddress = ownInput.resolved.address
-
+        val poolPolicyId = poolAddress.credential match
+            case Credential.ScriptCredential(sh) => sh
+            case _                               => fail("Own pool input must be script-locked")
         val datum = d.getOrFail("Pool datum missing").to[AmmDatum]
-        val poolOutput = findPoolOutput(tx.outputs, poolAddress)
-        val newDatum = readPoolDatum(poolOutput)
 
-        action match {
-            case AmmRedeemer.Deposit(x0, x1) =>
-                handleDeposit(params, datum, newDatum, x0, x1)
-            case AmmRedeemer.Redeem(lp) =>
-                handleRedeem(datum, newDatum, lp)
-            case AmmRedeemer.Swap(t0In, amountIn, minAmountOut) =>
-                handleSwap(params, datum, newDatum, t0In, amountIn, minAmountOut)
+        redeemer.to[AmmRedeemer] match {
+            case AmmRedeemer.Close =>
+                // Tear down an empty pool: the datum must show no liquidity, and the pool NFT must
+                // be burned (the mint `Close` branch checks nothing else is burned). The leftover
+                // min-ADA is free for the spender to reclaim.
+                require(
+                  datum === AmmDatum(BigInt(0), BigInt(0), BigInt(0)),
+                  "Close: pool must be empty"
+                )
+                require(
+                  tx.mint.quantityOf(poolPolicyId, poolNftName) === BigInt(-1),
+                  "Close: pool NFT must be burned"
+                )
+
+            case action =>
+                val poolOutput = findPoolOutput(tx.outputs, poolAddress)
+                val newDatum = readPoolDatum(poolOutput)
+                action match {
+                    case AmmRedeemer.Deposit(x0, x1) =>
+                        require(x0 > 0 && x1 > 0, "Deposit: amounts must be positive")
+                        if datum.lpSupply !== BigInt(0) then
+                            require(x0 * datum.r1 === x1 * datum.r0, "Deposit: ratio mismatch")
+
+                        val expectedDatum = AmmMath.depositDatum(datum, x0, x1)
+                        require(
+                          expectedDatum.lpSupply - datum.lpSupply > 0,
+                          "Deposit: zero LP minted"
+                        )
+                        require(newDatum === expectedDatum, "Deposit: output datum mismatch")
+                    case AmmRedeemer.Redeem(lp) =>
+                        // We don't check where the redeemed tokens go: the ledger already guarantees
+                        // the tx balances, and the reserve binding below ties the new datum reserves
+                        // to the continuing pool output's actual token quantities, so the pool cannot
+                        // be under-funded. We only validate the datum transition here (same for Swap).
+                        require(lp > 0, "Redeem: LP amount must be positive")
+                        require(lp <= datum.lpSupply, "Redeem: LP amount exceeds supply")
+
+                        val expectedDatum = AmmMath.redeemDatum(datum, lp)
+                        require(newDatum === expectedDatum, "Redeem: output datum mismatch")
+
+                    case AmmRedeemer.Swap(t0In, amountIn, minAmountOut) =>
+                        // As with Redeem, we validate only the datum transition; the reserve binding
+                        // below ties the new reserves to the pool output's actual token quantities.
+                        require(amountIn > 0, "Swap: amountIn must be positive")
+
+                        val (amountOut, expectedDatum) =
+                            AmmMath.swapResult(
+                              datum,
+                              params.feeNumerator,
+                              params.feeDenominator,
+                              t0In,
+                              amountIn
+                            )
+
+                        require(amountOut >= minAmountOut, "Swap: slippage exceeded")
+                        require(
+                          expectedDatum.r0 * expectedDatum.r1 >= datum.r0 * datum.r1,
+                          "Swap: invariant violated"
+                        )
+                        require(newDatum === expectedDatum, "Swap: output datum mismatch")
+                    case AmmRedeemer.Close => fail("unreachable")
+                }
+
+                // Bind the datum reserves to the tokens actually held by the continuing pool output.
+                // The handlers above only check the datum arithmetic; without this an attacker can
+                // write a valid-looking datum while sending the real reserve tokens elsewhere,
+                // draining the pool.
+                require(
+                  poolOutput.value.quantityOf(params.t0._1, params.t0._2) === newDatum.r0,
+                  ReserveT0Mismatch
+                )
+                require(
+                  poolOutput.value.quantityOf(params.t1._1, params.t1._2) === newDatum.r1,
+                  ReserveT1Mismatch
+                )
+                // The pool NFT must stay with the pool - it can only be burned via `Close`.
+                require(
+                  poolOutput.value.quantityOf(poolPolicyId, poolNftName) === BigInt(1),
+                  "Pool output must retain the pool NFT"
+                )
         }
-
-        // Bind the datum reserves to the tokens actually held by the continuing pool output.
-        // The handlers above only check the datum arithmetic; without this an attacker can write a
-        // valid-looking datum while sending the real reserve tokens elsewhere, draining the pool.
-        require(
-          poolOutput.value.quantityOf(params.t0._1, params.t0._2) === newDatum.r0,
-          ReserveT0Mismatch
-        )
-        require(
-          poolOutput.value.quantityOf(params.t1._1, params.t1._2) === newDatum.r1,
-          ReserveT1Mismatch
-        )
-    }
-
-    private inline def handleDeposit(
-        params: AmmParams,
-        datum: AmmDatum,
-        newDatum: AmmDatum,
-        x0: BigInt,
-        x1: BigInt
-    ): Unit = {
-        require(x0 > 0 && x1 > 0, "Deposit: amounts must be positive")
-        if datum.lpSupply !== BigInt(0) then
-            require(x0 * datum.r1 === x1 * datum.r0, "Deposit: ratio mismatch")
-
-        val expectedDatum = AmmMath.depositDatum(datum, x0, x1)
-        require(expectedDatum.lpSupply - datum.lpSupply > 0, "Deposit: zero LP minted")
-        require(newDatum === expectedDatum, "Deposit: output datum mismatch")
-    }
-
-    private inline def handleRedeem(
-        datum: AmmDatum,
-        newDatum: AmmDatum,
-        lp: BigInt
-    ): Unit = {
-        // We don't check where the redeemed tokens go: phase-1 already guarantees the tx balances,
-        // and the caller (`spend`) binds the new datum reserves to the continuing pool output's
-        // actual token quantities, so the pool cannot be under-funded. We only validate the datum
-        // transition here. Similar reasoning applies in `handleSwap`.
-
-        require(lp > 0, "Redeem: LP amount must be positive")
-        require(lp <= datum.lpSupply, "Redeem: LP amount exceeds supply")
-
-        val expectedDatum = AmmMath.redeemDatum(datum, lp)
-        require(newDatum === expectedDatum, "Redeem: output datum mismatch")
-    }
-
-    private inline def handleSwap(
-        params: AmmParams,
-        datum: AmmDatum,
-        newDatum: AmmDatum,
-        t0In: Boolean,
-        amountIn: BigInt,
-        minAmountOut: BigInt
-    ): Unit = {
-        // We don't check where the swapped-out tokens go: phase-1 already guarantees the tx
-        // balances, and `spend` binds the new datum reserves to the continuing pool output's actual
-        // token quantities, so the pool cannot be under-funded. We only validate the datum
-        // transition here. Similar reasoning applies in `handleRedeem`.
-
-        require(amountIn > 0, "Swap: amountIn must be positive")
-
-        val (amountOut, expectedDatum) =
-            AmmMath.swapResult(datum, params.feeNumerator, params.feeDenominator, t0In, amountIn)
-
-        require(amountOut >= minAmountOut, "Swap: slippage exceeded")
-        require(
-          expectedDatum.r0 * expectedDatum.r1 >= datum.r0 * datum.r1,
-          "Swap: invariant violated"
-        )
-        require(newDatum === expectedDatum, "Swap: output datum mismatch")
     }
 
     private inline val ReserveT0Mismatch = "Pool output must hold r0 of token0"

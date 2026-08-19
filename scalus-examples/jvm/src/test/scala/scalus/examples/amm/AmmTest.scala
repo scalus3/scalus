@@ -5,6 +5,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.ScalaCompilerVersion
 import scalus.cardano.ledger.*
+import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
@@ -107,6 +108,55 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         )
     }
 
+    test("close: burns the pool NFT and reclaims min-ADA from an empty pool") {
+        val (provider, txCreator) = createSetup()
+        // Init an empty pool, deposit, then redeem ALL LP so the pool is empty again.
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val createTx = txCreator.createEmptyPool(utxos1, 5_000_000L, Alice.address, Alice.signer)
+        provider.submit(createTx).await()
+        val emptyPool = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
+
+        val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
+        val depositTx =
+            txCreator.deposit(
+              utxos2,
+              emptyPool,
+              x0 = 1000L,
+              x1 = 4000L,
+              Alice.address,
+              Alice.signer
+            )
+        provider.submit(depositTx).await()
+        val funded = Utxo(depositTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
+        val allLp = txCreator.readPoolDatum(funded).lpSupply.toLong
+
+        val utxos3 = provider.findUtxos(Alice.address).await().toOption.get
+        val redeemTx = txCreator.redeem(utxos3, funded, allLp, Alice.address, Alice.signer)
+        provider.submit(redeemTx).await()
+        val drained = Utxo(redeemTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
+        assert(txCreator.readPoolDatum(drained) == AmmDatum(BigInt(0), BigInt(0), BigInt(0)))
+
+        val utxos4 = provider.findUtxos(Alice.address).await().toOption.get
+        val closeTx = txCreator.close(utxos4, drained, Alice.address, Alice.signer)
+        assert(provider.submit(closeTx).await().isRight, "close should succeed")
+        // No pool output remains, and the pool NFT is gone.
+        assert(closeTx.utxos.find(_._2.address == txCreator.scriptAddress).isEmpty)
+    }
+
+    test("security: LP is not fungible across pools with the same params but different seeds") {
+        val (provider, poolA) = createSetup()
+        // A second pool with identical token pair + fee but a DIFFERENT seed UTxO.
+        val poolB = AmmOffchain(
+          env = env,
+          evaluator = poolA.evaluator,
+          contract = compiledContract,
+          params = ammParams.copy(seed = TxOutRef(TxId(genesisHash), 1))
+        )
+        // Different seed -> different applied script -> different LP policyId.
+        assert(poolA.policyId != poolB.policyId, "pools must have distinct policyIds")
+        assert(poolA.lpAssetName == poolB.lpAssetName, "same LP name, but under different policies")
+    }
+
     // Budget assertions - total script ExUnits (mint policy + pool spend) for the whole tx. Dual
     // baselines because the lowering differs across compiler generations; re-measure on both when
     // the validator changes. See scalus-examples-dual-exunits-baselines.
@@ -120,12 +170,12 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         assertScriptBudget(
           depositTx,
           ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 126079, steps = 50_587684),
-            since38 = ExUnits(memory = 126079, steps = 50_587684)
+            pre38 = ExUnits(memory = 147306, steps = 60_533898),
+            since38 = ExUnits(memory = 147306, steps = 60_533898)
           ),
           ScalaCompilerVersion.baseline(
-            pre38 = Coin(306136L),
-            since38 = Coin(305388L)
+            pre38 = Coin(404702L),
+            since38 = Coin(402326L)
           )
         )
     }
@@ -141,12 +191,12 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         assertScriptBudget(
           redeemTx,
           ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 116053, steps = 47_578115),
-            since38 = ExUnits(memory = 116053, steps = 47_578115)
+            pre38 = ExUnits(memory = 135327, steps = 56_614863),
+            since38 = ExUnits(memory = 135327, steps = 56_614863)
           ),
           ScalaCompilerVersion.baseline(
-            pre38 = Coin(305208L),
-            since38 = Coin(304460L)
+            pre38 = Coin(403596L),
+            since38 = Coin(401220L)
           )
         )
     }
@@ -334,11 +384,15 @@ object AmmTest extends ScalusTest {
     val t0Name: AssetName = AssetName(ByteString.fromString("T0"))
     val t1Name: AssetName = AssetName(ByteString.fromString("T1"))
 
+    // Seed UTxO consumed at pool creation to make this pool's policyId unique.
+    val seedRef: TxOutRef = TxOutRef(TxId(genesisHash), 0)
+
     val ammParams: AmmParams = AmmParams(
       t0 = (t0PolicyId, t0Name.bytes),
       t1 = (t1PolicyId, t1Name.bytes),
       feeNumerator = BigInt(997),
-      feeDenominator = BigInt(1000)
+      feeDenominator = BigInt(1000),
+      seed = seedRef
     )
 
     private val compiledContract = AmmContract.compiled.withErrorTraces
