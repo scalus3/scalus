@@ -120,10 +120,13 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         assertScriptBudget(
           depositTx,
           ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 124173, steps = 50_061851),
-            since38 = ExUnits(memory = 124173, steps = 50_061851)
+            pre38 = ExUnits(memory = 126079, steps = 50_587684),
+            since38 = ExUnits(memory = 126079, steps = 50_587684)
           ),
-          Coin(304580L)
+          ScalaCompilerVersion.baseline(
+            pre38 = Coin(306136L),
+            since38 = Coin(305388L)
+          )
         )
     }
 
@@ -138,10 +141,13 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         assertScriptBudget(
           redeemTx,
           ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 116681, steps = 47_865903),
-            since38 = ExUnits(memory = 116681, steps = 47_865903)
+            pre38 = ExUnits(memory = 116053, steps = 47_578115),
+            since38 = ExUnits(memory = 116053, steps = 47_578115)
           ),
-          Coin(303857L)
+          ScalaCompilerVersion.baseline(
+            pre38 = Coin(305208L),
+            since38 = Coin(304460L)
+          )
         )
     }
 

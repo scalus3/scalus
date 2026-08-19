@@ -2,7 +2,6 @@ package scalus.examples.amm
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.onchain.plutus.prelude.Math
 import scalus.cardano.txbuilder.*
 import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.Data.toData
@@ -77,20 +76,11 @@ case class AmmOffchain(
         signer: TransactionSigner
     ): Transaction = {
         val d = readPoolDatum(poolUtxo)
-        val lpMinted: Long =
-            if d.lpSupply == BigInt(0) then Math.sqrt(BigInt(x0) * BigInt(x1)).toLong
-            else {
-                val lp0 = (BigInt(x0) * d.lpSupply / d.r0).toLong
-                val lp1 = (BigInt(x1) * d.lpSupply / d.r1).toLong
-                lp0 min lp1
-            }
-        val newDatum = AmmDatum(
-          r0 = d.r0 + BigInt(x0),
-          r1 = d.r1 + BigInt(x1),
-          lpSupply = d.lpSupply + BigInt(lpMinted)
-        )
+        // Same math the on-chain validator will re-check, so the datum can't drift.
+        val newDatum = AmmMath.depositDatum(d, x0, x1)
+        val lpMinted: Long = (newDatum.lpSupply - d.lpSupply).toLong
         val newValue = poolValue(newDatum.r0, newDatum.r1, poolUtxo.output.value.coin.value)
-        val spendRedeemer = AmmRedeemer.Deposit(BigInt(x0), BigInt(x1)).toData
+        val spendRedeemer = AmmRedeemer.Deposit(x0, x1).toData
         val mintRedeemer = ().toData
 
         TxBuilder(env, evaluator)
@@ -111,15 +101,9 @@ case class AmmOffchain(
         signer: TransactionSigner
     ): Transaction = {
         val d = readPoolDatum(poolUtxo)
-        val out0 = (BigInt(lp) * d.r0 / d.lpSupply).toLong
-        val out1 = (BigInt(lp) * d.r1 / d.lpSupply).toLong
-        val newDatum = AmmDatum(
-          r0 = d.r0 - BigInt(out0),
-          r1 = d.r1 - BigInt(out1),
-          lpSupply = d.lpSupply - BigInt(lp)
-        )
+        val newDatum = AmmMath.redeemDatum(d, lp)
         val newValue = poolValue(newDatum.r0, newDatum.r1, poolUtxo.output.value.coin.value)
-        val spendRedeemer = AmmRedeemer.Redeem(BigInt(lp)).toData
+        val spendRedeemer = AmmRedeemer.Redeem(lp).toData
         val mintRedeemer = ().toData
 
         TxBuilder(env, evaluator)
@@ -143,18 +127,17 @@ case class AmmOffchain(
         signer: TransactionSigner
     ): Transaction = {
         val d = readPoolDatum(poolUtxo)
-        val dxAdj = BigInt(amountIn) * params.feeNumerator
-        val (_, newR0, newR1) =
-            if t0In then
-                val out = d.r1 * dxAdj / (d.r0 * params.feeDenominator + dxAdj)
-                (out, d.r0 + BigInt(amountIn), d.r1 - out)
-            else
-                val out = d.r0 * dxAdj / (d.r1 * params.feeDenominator + dxAdj)
-                (out, d.r0 - out, d.r1 + BigInt(amountIn))
-        val newDatum = AmmDatum(r0 = newR0, r1 = newR1, lpSupply = d.lpSupply)
+        val (_, newDatum) =
+            AmmMath.swapResult(
+              d,
+              params.feeNumerator,
+              params.feeDenominator,
+              t0In,
+              amountIn
+            )
         val newValue = poolValue(newDatum.r0, newDatum.r1, poolUtxo.output.value.coin.value)
         val spendRedeemer =
-            AmmRedeemer.Swap(t0In, BigInt(amountIn), BigInt(minAmountOut)).toData
+            AmmRedeemer.Swap(t0In, amountIn, minAmountOut).toData
 
         TxBuilder(env, evaluator)
             .spend(poolUtxo, _ => spendRedeemer, script)
@@ -170,10 +153,14 @@ case class AmmOffchain(
       */
     def swapQuote(pool: Utxo, t0In: Boolean, amountIn: Long): (Long, BigDecimal) = {
         val d = readPoolDatum(pool)
-        val dxAdj = BigInt(amountIn) * params.feeNumerator
-        val amountOut =
-            if t0In then d.r1 * dxAdj / (d.r0 * params.feeDenominator + dxAdj)
-            else d.r0 * dxAdj / (d.r1 * params.feeDenominator + dxAdj)
+        val (amountOut, _) =
+            AmmMath.swapResult(
+              d,
+              params.feeNumerator,
+              params.feeDenominator,
+              t0In,
+              amountIn
+            )
         val (reserveIn, reserveOut) = if t0In then (d.r0, d.r1) else (d.r1, d.r0)
         val midPrice = BigDecimal(reserveOut) / BigDecimal(reserveIn)
         val executionPrice = BigDecimal(amountOut) / BigDecimal(amountIn)
