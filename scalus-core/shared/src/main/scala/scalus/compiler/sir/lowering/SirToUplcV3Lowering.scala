@@ -142,7 +142,11 @@ class SirToUplcV3Lowering(
 
 object SirToUplcV3Lowering {
 
-    /** Create a SirToUplcV3Lowering from compiler Options, using default intrinsic/support modules.
+    /** Create a SirToUplcV3Lowering from compiler Options.
+      *
+      * The support modules are always the defaults; the intrinsic modules are selected by
+      * [[IntrinsicResolver.intrinsicModulesFor]] from `options.valueBuiltins`, which drops the
+      * CIP-153 `Value` intrinsics when the flag is off.
       */
     def fromOptions(
         sir: SIR,

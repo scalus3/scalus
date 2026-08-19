@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- `plutus.v1.Value.containsAtLeast` – "does this value cover every asset of the other one", with
+  the exact semantics of the CIP-153 `valueContains` builtin on canonical values, on every
+  protocol version
+
+### Changed
+
+- **PV11 Value builtins (CIP-153).** At `targetProtocolVersion >= vanRossemPV`,
+  `plutus.v1.Value` operations (`quantityOf`/`getLovelace`, `+`, `-`, `*`, `negate`, and the new
+  `Value.containsAtLeast`) lower to the CIP-153 builtins – 13-75x cheaper per operation.
+  Behavior change: the builtins validate canonical form (strictly ascending keys, no zero
+  amounts, no empty inner maps, keys <= 32 bytes, amounts within +-(2^127)) and fail on
+  malformed values that the portable lowering tolerated; `unionValue`/`scaleValue` fail on
+  128-bit overflow. Opt out with `Options.valueBuiltins = false`.
+- the `scalus-testkit`-published `Value` generator (`plutus.v1.ArbitraryInstances.genAmount`) now
+  draws token quantities from `+-(2^64)` instead of `+-(2^128)`, so generated values stay inside
+  the CIP-153 quantity range; property tests that scale a generated `Value` must bound their
+  factor to match
+
 ## 1.0.0 (2026-07-30)
 
 First stable release. `scalus-core`, `scalus-cardano-ledger` and
