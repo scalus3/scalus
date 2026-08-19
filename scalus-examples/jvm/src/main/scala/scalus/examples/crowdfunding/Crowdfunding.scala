@@ -181,9 +181,8 @@ object DonationMintingPolicy {
 
         // 2. Find campaign input and verify it has the campaign NFT
         val campaignInput = txInfo.inputs.at(campaignInputIdx)
-        val campaignDatum = campaignInput.resolved.datum match
-            case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-            case _                          => fail("Campaign must have inline datum")
+        val campaignDatum =
+            campaignInput.resolved.datum.inlineOf[CampaignDatum]("Campaign must have inline datum")
 
         // 3. Verify this donation policy matches the campaign's expected policy
         require(
@@ -218,9 +217,8 @@ object DonationMintingPolicy {
     ): Unit =
         // 1. Verify campaign UTxO is being spent (this triggers CrowdfundingValidator)
         val campaignInput = txInfo.inputs.at(campaignInputIdx)
-        val campaignDatum = campaignInput.resolved.datum match
-            case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-            case _                          => fail("Campaign must have inline datum")
+        val campaignDatum =
+            campaignInput.resolved.datum.inlineOf[CampaignDatum]("Campaign must have inline datum")
 
         // 2. Verify this is the correct campaign by checking donation policy matches
         require(
@@ -375,9 +373,8 @@ object CrowdfundingValidator extends Validator {
 
         // 3. Verify continuing campaign output
         val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-        val newDatum = campaignOutput.datum match
-            case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-            case _                          => fail("Campaign output must have inline datum")
+        val newDatum =
+            campaignOutput.datum.inlineOf[CampaignDatum]("Campaign output must have inline datum")
 
         // 4. Verify datum update - only totalSum should change
         val expectedDatum = CampaignDatum(
@@ -413,14 +410,14 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 7. Verify donation UTxO has DonationDatum with correct amount
-        donationOutput.datum match
-            case OutputDatum.OutputDatum(d) =>
-                val donationDatum = d.to[DonationDatum]
-                require(
-                  donationDatum.amount === amount,
-                  "DonationDatum must contain correct amount"
-                )
-            case _ => fail("Donation output must have inline DonationDatum")
+        val donationDatum =
+            donationOutput.datum.inlineOf[DonationDatum](
+              "Donation output must have inline DonationDatum"
+            )
+        require(
+          donationDatum.amount === amount,
+          "DonationDatum must contain correct amount"
+        )
 
     /** Handle withdraw spend - validates fund transfer to recipient */
     private inline def handleWithdrawSpend(
@@ -480,9 +477,9 @@ object CrowdfundingValidator extends Validator {
         else
             // Partial withdrawal - verify updated campaign datum
             val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-            val newDatum = campaignOutput.datum match
-                case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-                case _                          => fail("Campaign output must have inline datum")
+            val newDatum = campaignOutput.datum.inlineOf[CampaignDatum](
+              "Campaign output must have inline datum"
+            )
             // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
             val expectedDatum = CampaignDatum(
               totalSum = currentDatum.totalSum,
@@ -546,9 +543,8 @@ object CrowdfundingValidator extends Validator {
                     val donationInput = txInfo.inputs.at(donationIdx)
 
                     // Get donor from DonationDatum and full UTxO value
-                    val donationDatum = donationInput.resolved.datum match
-                        case OutputDatum.OutputDatum(d) => d.to[DonationDatum]
-                        case _ => fail("Donation input must have inline DonationDatum")
+                    val donationDatum = donationInput.resolved.datum
+                        .inlineOf[DonationDatum]("Donation input must have inline DonationDatum")
                     val donorPkh = donationDatum.donor
                     val donationAmount = donationDatum.amount
                     // Use actual UTxO lovelace to include min UTxO overhead
@@ -580,9 +576,9 @@ object CrowdfundingValidator extends Validator {
         else
             // Partial reclaim - verify updated campaign datum
             val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-            val newDatum = campaignOutput.datum match
-                case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-                case _                          => fail("Campaign output must have inline datum")
+            val newDatum = campaignOutput.datum.inlineOf[CampaignDatum](
+              "Campaign output must have inline datum"
+            )
             // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
             val expectedDatum = CampaignDatum(
               totalSum = currentDatum.totalSum,
@@ -728,9 +724,9 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 8. Get the donation policy ID from datum (computed off-chain)
-        val donationPolicyId = campaignOutput.datum match
-            case OutputDatum.OutputDatum(d) => d.to[CampaignDatum].donationPolicyId
-            case _                          => fail("Campaign output must have inline datum")
+        val donationPolicyId = campaignOutput.datum
+            .inlineOf[CampaignDatum]("Campaign output must have inline datum")
+            .donationPolicyId
 
         // 9. Verify the datum is correct
         val expectedDatum = CampaignDatum(
@@ -741,13 +737,11 @@ object CrowdfundingValidator extends Validator {
           withdrawn = BigInt(0),
           donationPolicyId = donationPolicyId
         )
-        campaignOutput.datum match
-            case OutputDatum.OutputDatum(datumData) =>
-                require(
-                  datumData.to[CampaignDatum] === expectedDatum,
-                  "Initial campaign datum must be correct"
-                )
-            case _ => fail("Campaign output must have inline datum")
+        require(
+          campaignOutput.datum
+              .inlineOf[CampaignDatum]("Campaign output must have inline datum") === expectedDatum,
+          "Initial campaign datum must be correct"
+        )
 
     private inline def handleBurn(
         policyId: PolicyId,

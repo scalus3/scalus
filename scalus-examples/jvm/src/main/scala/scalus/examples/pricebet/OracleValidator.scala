@@ -105,10 +105,9 @@ object OracleValidator extends DataParameterizedValidator {
                 )
 
                 // Extract new state and verify timestamp is within validity window
-                val newState = continuationOutput.datum match {
-                    case v2.OutputDatum.OutputDatum(d) => d.to[OracleState]
-                    case _ => fail("Continuation must have inline datum")
-                }
+                val newState = continuationOutput.datum.inlineOf[OracleState](
+                  "Continuation must have inline datum"
+                )
 
                 // Verify timestamp is within tx validity window
                 val validRange = tx.validRange

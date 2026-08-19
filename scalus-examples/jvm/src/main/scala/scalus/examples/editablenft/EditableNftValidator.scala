@@ -70,9 +70,8 @@ object EditableNftValidator extends DataParameterizedValidator {
                 val refNftOutput = tx.outputs.at(refNftOutIndex)
 
                 // Validate datum structure and content
-                val datum = refNftOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[ReferenceNftDatum]
-                    case _                          => fail(ReferenceNftMustHaveInlineDatum)
+                val datum =
+                    refNftOutput.datum.inlineOf[ReferenceNftDatum](ReferenceNftMustHaveInlineDatum)
 
                 val refTokenName = EditableNftValidator.refNftName(datum.tokenId)
                 val userTokenName = EditableNftValidator.userNftName(datum.tokenId)
@@ -147,9 +146,8 @@ object EditableNftValidator extends DataParameterizedValidator {
                 val validContinuation = correctAddress && correctQuantity
                 require(validContinuation, MustReturnRefNft)
 
-                val newDatum = newOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[ReferenceNftDatum]
-                    case _                          => fail(ContinuationMustHaveInlineDatum)
+                val newDatum =
+                    newOutput.datum.inlineOf[ReferenceNftDatum](ContinuationMustHaveInlineDatum)
 
                 // Sealed policy enforcement
                 if datum.isSealed then

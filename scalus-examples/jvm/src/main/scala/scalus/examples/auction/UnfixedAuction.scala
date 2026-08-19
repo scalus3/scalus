@@ -116,9 +116,9 @@ object UnfixedAuctionValidator extends Validator {
           "Continuing output must go to auction script address"
         )
 
-        val newDatum = continuingOutput.datum match
-            case OutputDatum.OutputDatum(newDatumData) => newDatumData.to[Datum]
-            case _ => fail("Continuing auction output must have inline datum")
+        val newDatum = continuingOutput.datum.inlineOf[Datum](
+          "Continuing auction output must have inline datum"
+        )
 
         val expectedNewDatum = Datum(
           seller = seller,
@@ -293,13 +293,11 @@ object UnfixedAuctionValidator extends Validator {
           auctionEndTime = auctionEndTime,
           itemId = itemId
         )
-        auctionOutput.datum match
-            case OutputDatum.OutputDatum(datumData) =>
-                require(
-                  datumData.to[Datum] === expectedDatum,
-                  "Initial auction datum must be correct"
-                )
-            case _ => fail("Auction output must have inline datum")
+        require(
+          auctionOutput.datum
+              .inlineOf[Datum]("Auction output must have inline datum") === expectedDatum,
+          "Initial auction datum must be correct"
+        )
 
     private inline def handleBurn(
         policyId: PolicyId,

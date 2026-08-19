@@ -92,9 +92,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Identity output must be at script address with inline datum
                 val identityOutput = tx.outputs.at(identityOutIndex)
-                identityOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[IdentityDatum]
-                    case _                          => fail("Identity must have inline datum")
+                identityOutput.datum.inlineOf[IdentityDatum]("Identity must have inline datum")
 
                 // Output must be at own script address
                 identityOutput.address.credential match
@@ -114,9 +112,8 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
             case MintAction.AddDelegate(identityRefInputIndex, delegationOutIndex) =>
                 // Identity must be present as reference input
                 val identityRefInput = tx.referenceInputs.at(identityRefInputIndex)
-                val identityDatum = identityRefInput.resolved.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[IdentityDatum]
-                    case _ => fail("Identity ref input must have inline datum")
+                val identityDatum = identityRefInput.resolved.datum
+                    .inlineOf[IdentityDatum]("Identity ref input must have inline datum")
 
                 // Must be signed by identity owner
                 require(
@@ -136,9 +133,9 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                     case _ => fail("Delegation must go to script address")
 
                 // Check delegation datum
-                val delegDatum = delegationOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[DelegationDatum]
-                    case _                          => fail("Delegation must have inline datum")
+                val delegDatum = delegationOutput.datum.inlineOf[DelegationDatum](
+                  "Delegation must have inline datum"
+                )
 
                 require(
                   delegDatum.identityTokenName === identityTn,
@@ -165,9 +162,8 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
             case MintAction.PublishAttribute(delegationRefInputIndex, attributeOutIndex) =>
                 // Delegation must be present as reference input
                 val delegationRefInput = tx.referenceInputs.at(delegationRefInputIndex)
-                val delegDatum = delegationRefInput.resolved.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[DelegationDatum]
-                    case _ => fail("Delegation ref input must have inline datum")
+                val delegDatum = delegationRefInput.resolved.datum
+                    .inlineOf[DelegationDatum]("Delegation ref input must have inline datum")
 
                 // Delegation must be at script address (proving it's valid/non-forged)
                 delegationRefInput.resolved.address.credential match
@@ -210,9 +206,9 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                     case _ => fail("Attribute must go to script address")
 
                 // Check attribute datum
-                val attrDatum = attributeOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[AttributeDatum]
-                    case _                          => fail("Attribute must have inline datum")
+                val attrDatum = attributeOutput.datum.inlineOf[AttributeDatum](
+                  "Attribute must have inline datum"
+                )
 
                 require(
                   attrDatum.identityTokenName === delegDatum.identityTokenName,
@@ -288,9 +284,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                   "Must return identity token"
                 )
 
-                val newDatum = newOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[IdentityDatum]
-                    case _                          => fail("Must have inline datum")
+                val newDatum = newOutput.datum.inlineOf[IdentityDatum]("Must have inline datum")
 
                 require(newDatum.ownerPkh === newOwnerPkh, "Datum must reflect new owner")
 
@@ -366,8 +360,8 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
             }
             .getOrFail("Identity reference input not found")
 
-        identityRefInput.resolved.datum match
-            case OutputDatum.OutputDatum(d) => d.to[IdentityDatum].ownerPkh
-            case _                          => fail("Identity must have inline datum")
+        identityRefInput.resolved.datum
+            .inlineOf[IdentityDatum]("Identity must have inline datum")
+            .ownerPkh
     }
 }

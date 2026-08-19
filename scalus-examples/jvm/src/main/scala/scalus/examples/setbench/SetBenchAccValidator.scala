@@ -46,9 +46,7 @@ object SetBenchAccValidator extends Validator {
         val outputs = txInfo.findOwnOutputsByCredential(ownInput.address.credential)
         require(outputs.length === BigInt(1), "Expected one continuing output")
         val out = outputs.head
-        val outDatum = out.datum match
-            case OutputDatum.OutputDatum(d) => d.to[SetBenchDatum]
-            case _                          => fail("Expected inline datum")
+        val outDatum = out.datum.inlineOf[SetBenchDatum]("Expected inline datum")
         require(outDatum.remaining === newRemaining, "Wrong remaining")
         require(outDatum.root === newRoot, "Wrong root")
         require(out.value.getLovelace >= newRemaining, "Insufficient lovelace")

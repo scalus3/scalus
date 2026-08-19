@@ -201,19 +201,14 @@ object VaultValidator extends Validator {
         scriptOutputs.head
     }
 
-    private def getVaultDatum(vaultOutput: TxOut) = vaultOutput.datum match {
-        case OutputDatum.OutputDatum(d) => d.to[State]
-        case _                          => fail(NoDatumProvided)
-    }
+    private def getVaultDatum(vaultOutput: TxOut) =
+        vaultOutput.datum.inlineOf[State](NoDatumProvided)
 
-    private def requireSameOwner(out: TxOut, datum: State): Unit =
-        out.datum match {
-            case OutputDatum.OutputDatum(newDatum) =>
-                val s = newDatum.to[State]
-                require(s.owner == datum.owner, VaultOwnerChanged)
-                require(s.recoveryKey == datum.recoveryKey, RecoveryKeyChanged)
-            case _ => fail(NoInlineDatum)
-        }
+    private def requireSameOwner(out: TxOut, datum: State): Unit = {
+        val s = out.datum.inlineOf[State](NoInlineDatum)
+        require(s.owner == datum.owner, VaultOwnerChanged)
+        require(s.recoveryKey == datum.recoveryKey, RecoveryKeyChanged)
+    }
 
     // Errors
     inline val NoDatumExists = "Contract has no datum"

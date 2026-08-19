@@ -113,12 +113,9 @@ object Factory {
         // Verify inline datum and authorize against the product's own creator. The creator is taken
         // from the product datum (not the first signatory) so it is order-independent and the
         // signature check is meaningful: a product can't be created attributed to a non-signer.
-        productOutput.datum match
-            case OutputDatum.OutputDatum(datum) =>
-                val productDatum = datum.to[ProductDatum]
-                require(productDatum.tag === tag, DatumTagMismatch)
-                require(tx.isSignedBy(productDatum.creator), CreatorMustSign)
-            case _ => fail(MissingInlineDatum)
+        val productDatum = productOutput.datum.inlineOf[ProductDatum](MissingInlineDatum)
+        require(productDatum.tag === tag, DatumTagMismatch)
+        require(tx.isSignedBy(productDatum.creator), CreatorMustSign)
     }
 
     /** Validate product destruction (minting policy logic for `Destroy`).

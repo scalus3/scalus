@@ -204,9 +204,9 @@ object AuctionValidator extends DataParameterizedValidator {
           "Continuing output must go to auction script address"
         )
 
-        val newDatum = continuingOutput.datum match
-            case OutputDatum.OutputDatum(newDatumData) => newDatumData.to[Datum]
-            case _ => fail("Continuing auction output must have inline datum")
+        val newDatum = continuingOutput.datum.inlineOf[Datum](
+          "Continuing auction output must have inline datum"
+        )
 
         // 7. Verify the new datum is correct
         val expectedNewDatum = Datum(
@@ -331,9 +331,8 @@ object AuctionValidator extends DataParameterizedValidator {
                 // check is only `>=` its own bid), letting an attacker pay the seller once and pocket
                 // the rest. Requiring the seller output to carry this auction's scriptHash forces a
                 // distinct seller output per auction, closing the cross-instance double satisfaction.
-                val sellerOutputDatum = sellerOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d
-                    case _ => fail("Seller output must carry this auction's id datum")
+                val sellerOutputDatum = sellerOutput.datum
+                    .inlineOf[Data]("Seller output must carry this auction's id datum")
                 require(
                   sellerOutputDatum == scriptHash.toData,
                   "Seller output must be tagged with this auction's id"
@@ -440,13 +439,11 @@ object AuctionValidator extends DataParameterizedValidator {
           auctionEndTime = auctionEndTime,
           itemId = itemId
         )
-        auctionOutput.datum match
-            case OutputDatum.OutputDatum(datumData) =>
-                require(
-                  datumData.to[Datum] === expectedDatum,
-                  "Initial auction datum must be correct"
-                )
-            case _ => fail("Auction output must have inline datum")
+        require(
+          auctionOutput.datum
+              .inlineOf[Datum]("Auction output must have inline datum") === expectedDatum,
+          "Initial auction datum must be correct"
+        )
 
     private inline def handleBurn(
         policyId: PolicyId,

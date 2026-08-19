@@ -79,10 +79,9 @@ object PricebetValidator extends DataParameterizedValidator {
                 )
 
                 // Verify new datum
-                val newState = continuationOutput.datum match {
-                    case v2.OutputDatum.OutputDatum(d) => d.to[PricebetState]
-                    case _ => fail("Continuation must have inline datum")
-                }
+                val newState = continuationOutput.datum.inlineOf[PricebetState](
+                  "Continuation must have inline datum"
+                )
 
                 // Find who signed and verify they're the player
                 require(newState.player.isDefined, "Player must be set in new datum")
@@ -125,10 +124,9 @@ object PricebetValidator extends DataParameterizedValidator {
                   OracleInputMustHaveBeacon
                 )
 
-                val oracleState = oracleInput.resolved.datum match {
-                    case v2.OutputDatum.OutputDatum(d) => d.to[scalus.examples.pricebet.OracleState]
-                    case _                             => fail("Oracle must have inline datum")
-                }
+                val oracleState =
+                    oracleInput.resolved.datum
+                        .inlineOf[OracleState]("Oracle must have inline datum")
 
                 // Verify oracle timestamp is within tx validity window
                 val validRange = tx.validRange
