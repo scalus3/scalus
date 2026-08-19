@@ -1218,6 +1218,92 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
+    test("hasOnly properties") {
+        checkEval { (value: Value, cs: PolicyId, tn: TokenName) =>
+            val amount = value.quantityOf(cs, tn)
+            (value.hasOnly(cs, tn, amount) ===
+                (value.tokens(cs) === SortedMap.singleton(tn, amount))) &&
+            (value.hasOnly(cs, tn, BigInt(1)) ===
+                (value.tokens(cs) === SortedMap.singleton(tn, BigInt(1))))
+        }
+
+        checkEval { (cs: PolicyId, tn: TokenName, amount: BigInt) =>
+            Value(cs, tn, amount).hasOnly(cs, tn, amount) === (amount !== BigInt(0))
+        }
+    }
+
+    test("hasOnly: exactly one token under the policy") {
+        val solo = Value(hex"aa", utf8"BEACON", 1)
+        val multi = Value.unsafeFromList(
+          List(
+            (hex"11", List((utf8"tokenX", BigInt(5)))),
+            (hex"aa", List((utf8"BEACON", BigInt(1)))),
+            (hex"ff", List((utf8"tokenY", BigInt(2))))
+          )
+        )
+        assert(solo.hasOnly(hex"aa", utf8"BEACON", 1))
+        assert(multi.hasOnly(hex"aa", utf8"BEACON", 1))
+
+        assertEvalEq(Value(hex"aa", utf8"BEACON", 1).hasOnly(hex"aa", utf8"BEACON", 1), true)
+        assertEvalEq(
+          Value
+              .unsafeFromList(
+                List(
+                  (hex"11", List((utf8"tokenX", BigInt(5)))),
+                  (hex"aa", List((utf8"BEACON", BigInt(1)))),
+                  (hex"ff", List((utf8"tokenY", BigInt(2))))
+                )
+              )
+              .hasOnly(hex"aa", utf8"BEACON", 1),
+          true
+        )
+    }
+
+    test("hasOnly: extra token, wrong amount, absent policy, zero amount") {
+        val extraToken = Value.unsafeFromList(
+          List((hex"aa", List((utf8"BEACON", BigInt(1)), (utf8"BEACON1", BigInt(1)))))
+        )
+        val wrongAmount = Value(hex"aa", utf8"BEACON", 2)
+        assert(!extraToken.hasOnly(hex"aa", utf8"BEACON", 1))
+        assert(!wrongAmount.hasOnly(hex"aa", utf8"BEACON", 1))
+        assert(!wrongAmount.hasOnly(hex"bb", utf8"BEACON", 2))
+        assert(!Value.zero.hasOnly(hex"aa", utf8"BEACON", 0))
+
+        assertEvalEq(
+          Value
+              .unsafeFromList(
+                List((hex"aa", List((utf8"BEACON", BigInt(1)), (utf8"BEACON1", BigInt(1)))))
+              )
+              .hasOnly(hex"aa", utf8"BEACON", 1),
+          false
+        )
+        assertEvalEq(Value(hex"aa", utf8"BEACON", 2).hasOnly(hex"aa", utf8"BEACON", 1), false)
+    }
+
+    test("hasOnly: exact burn") {
+        val burn = Value(hex"aa", utf8"BEACON", -1)
+        assert(burn.hasOnly(hex"aa", utf8"BEACON", -1))
+        assert(!burn.hasOnly(hex"aa", utf8"BEACON", 1))
+
+        assertEvalEq(Value(hex"aa", utf8"BEACON", -1).hasOnly(hex"aa", utf8"BEACON", -1), true)
+    }
+
+    test("hasOnly: budget") {
+        val multi = Value.unsafeFromList(
+          List(
+            (hex"11", List((utf8"tokenX", BigInt(5)))),
+            (hex"aa", List((utf8"BEACON", BigInt(1)))),
+            (hex"ff", List((utf8"tokenY", BigInt(2))))
+          )
+        )
+        assertEvalWithBudget(
+          (v: Value) => v.hasOnly(hex"aa", utf8"BEACON", 1),
+          multi,
+          true,
+          ExUnits(memory = 8687, steps = 3_620482)
+        )
+    }
+
     test("withoutLovelace properties") {
         checkEval { (value: Value) =>
             value.withoutLovelace.getLovelace === BigInt(0)

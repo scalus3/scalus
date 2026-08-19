@@ -8,7 +8,7 @@ import scalus.cardano.onchain.plutus.prelude.{!==, <=>, ===, Eq, List, Option, O
 import scalus.compiler.{Compile, Ignore}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.{fromData, toData}
-import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.{BuiltinList, BuiltinPair, ByteString, Data, FromData, ToData}
 
 import scala.annotation.tailrec
 
@@ -863,6 +863,54 @@ object Value extends ValueOffchainOps {
           */
         def tokens(cs: PolicyId): SortedMap[TokenName, BigInt] =
             v.toSortedMap.get(cs).getOrElse(SortedMap.empty)
+
+        /** Tests whether the tokens under `cs` are exactly `{tn -> amount}`.
+          *
+          * True iff this `Value` holds `amount` of `tn` under `cs` and NO other token of that
+          * policy id. Other policy ids are not constrained, so the check composes with other
+          * scripts acting in the same transaction. Negative amounts work too, e.g.
+          * `hasOnly(cs, tn, -1)` checks an exact single-token burn.
+          *
+          * This is the recommended way to verify an exact mint, e.g. that a minting policy forges
+          * exactly one beacon NFT and nothing else under its own policy id:
+          * `tx.mint.hasOnly(ownPolicyId, tn, 1)`. It costs a single `equalsData` on the policy's
+          * token map instead of an element-wise `SortedMap` comparison.
+          *
+          * The equality is on the underlying `Data` encoding, so it assumes this `Value` is in
+          * canonical form (strictly ascending keys, no zero amounts, no empty inner maps) - true
+          * for every ledger-provided value such as `tx.mint` or an output's value. A non-canonical
+          * value (constructible only via the unsafe constructors) may compare unequal to a
+          * semantically equal one. In particular `amount == 0` returns `false` on canonical values:
+          * they never store zero amounts.
+          *
+          * @param cs
+          *   The policy id whose tokens must be exactly `{tn -> amount}`
+          * @param tn
+          *   The single token name allowed under `cs`
+          * @param amount
+          *   The exact amount required for `tn`
+          * @example
+          *   {{{
+          *   val beacon = Value(utf8"pid", utf8"BEACON", 1)
+          *   beacon.hasOnly(utf8"pid", utf8"BEACON", 1) === true
+          *   beacon.hasOnly(utf8"pid", utf8"BEACON", 2) === false
+          *   beacon.hasOnly(utf8"other", utf8"BEACON", 1) === false
+          *
+          *   val two = Value.unsafeFromList(
+          *     List((utf8"pid", List((utf8"BEACON", BigInt(1)), (utf8"BEACON1", BigInt(1)))))
+          *   )
+          *   two.hasOnly(utf8"pid", utf8"BEACON", 1) === false
+          *   }}}
+          */
+        def hasOnly(cs: PolicyId, tn: TokenName, amount: BigInt): Boolean = {
+            val expectedTokens = SortedMap.singleton(tn, amount).toData
+            def go(pairs: BuiltinList[BuiltinPair[Data, Data]]): Boolean =
+                if pairs.isEmpty then false
+                else if equalsByteString(unBData(pairs.head.fst), cs) then
+                    equalsData(pairs.head.snd, expectedTokens)
+                else go(pairs.tail)
+            go(unMapData(v.toData))
+        }
 
         /** Returns a new `Value` with all ADA/Lovelace tokens removed.
           *
