@@ -68,6 +68,10 @@ object OutputDatum {
           * }}}
           * with `output.datum.inlineOf[MyDatum]`.
           *
+          * Being `inline`, the match is checked against the receiver's static type: calling this on
+          * a receiver the compiler already knows is `NoOutputDatum` or `OutputDatumHash` is
+          * rejected at compile time instead of failing at run time.
+          *
           * @tparam A
           *   the datum type to decode with its `FromData` instance
           * @example
@@ -75,7 +79,7 @@ object OutputDatum {
           *   val datum = output.datum.inlineOf[CampaignDatum]
           *   }}}
           */
-        inline def inlineOf[A: FromData]: A = (d: v2.OutputDatum) match
+        inline def inlineOf[A: FromData]: A = d match
             case OutputDatum(datum) => datum.to[A]
             case _                  => fail("Expected inline datum")
 
@@ -89,7 +93,7 @@ object OutputDatum {
           *   val datum = output.datum.inlineOf[CampaignDatum]("Campaign must have inline datum")
           *   }}}
           */
-        inline def inlineOf[A: FromData](inline message: String): A = (d: v2.OutputDatum) match
+        inline def inlineOf[A: FromData](inline message: String): A = d match
             case OutputDatum(datum) => datum.to[A]
             case _                  => fail(message)
     }

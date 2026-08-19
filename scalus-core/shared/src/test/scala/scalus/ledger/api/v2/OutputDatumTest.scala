@@ -16,12 +16,15 @@ class OutputDatumTest extends AnyFunSuite with EvalTestKit {
     }
 
     test("inlineOf fails on NoOutputDatum and OutputDatumHash") {
+        // Receivers are widened to the enum type: on a receiver statically known to be a
+        // non-inline case, inlineOf is a compile error, not a runtime failure.
+        val hashDatum: OutputDatum = OutputDatum.OutputDatumHash(hex"deadbeef")
         assertThrows[OnchainError](OutputDatum.NoOutputDatum.inlineOf[BigInt])
-        assertThrows[OnchainError](OutputDatum.OutputDatumHash(hex"deadbeef").inlineOf[BigInt])
+        assertThrows[OnchainError](hashDatum.inlineOf[BigInt])
 
         assertEvalFails[OnchainError](OutputDatum.NoOutputDatum.inlineOf[BigInt])
         assertEvalFails[OnchainError](
-          OutputDatum.OutputDatumHash(hex"deadbeef").inlineOf[BigInt]
+          (OutputDatum.OutputDatumHash(hex"deadbeef"): OutputDatum).inlineOf[BigInt]
         )
     }
 
