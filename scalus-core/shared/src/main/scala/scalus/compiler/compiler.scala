@@ -37,9 +37,10 @@ case class Options(
       * operations (`quantityOf`, `+`, `-`, `*`, `negate`, `containsAtLeast`) lower to the CIP-153
       * builtins (`lookupCoin`, `unionValue`, `scaleValue`, `valueContains`). The builtins require
       * values in canonical form (strictly ascending keys, no zero amounts, no empty inner maps,
-      * keys <= 32 bytes, amounts within +-(2^127)) and make the script fail otherwise, and
-      * `unionValue`/`scaleValue` fail on 128-bit overflow - stricter than the portable lowering,
-      * which tolerates malformed values. Set to false to keep the portable lowering at any PV.
+      * keys <= 32 bytes, amounts within the signed 128-bit range) and make the script fail
+      * otherwise, and `unionValue`/`scaleValue` fail on 128-bit overflow - stricter than the
+      * portable lowering, which tolerates malformed values. Set to false to keep the portable
+      * lowering at any PV.
       */
     valueBuiltins: Boolean = true
 ) {

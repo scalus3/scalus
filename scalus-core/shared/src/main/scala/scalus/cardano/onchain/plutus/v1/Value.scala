@@ -379,7 +379,7 @@ object Value extends ValueOffchainOps {
       *
       * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
       * CIP-153 `scaleValue` builtin, which requires the value in canonical form and fails on a
-      * result outside +-(2^127). See `Options.valueBuiltins`.
+      * result outside the signed 128-bit range. See `Options.valueBuiltins`.
       *
       * @param v
       *   The `Value` to negate
@@ -421,7 +421,7 @@ object Value extends ValueOffchainOps {
       *
       * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
       * CIP-153 `unionValue` builtin, which requires both values in canonical form and fails on a
-      * sum outside +-(2^127). See `Options.valueBuiltins`.
+      * sum outside the signed 128-bit range. See `Options.valueBuiltins`.
       *
       * @param a
       *   First `Value` instance
@@ -446,7 +446,7 @@ object Value extends ValueOffchainOps {
       *
       * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
       * CIP-153 `scaleValue` + `unionValue` builtins, which require both values in canonical form
-      * and fail on a result outside +-(2^127). See `Options.valueBuiltins`.
+      * and fail on a result outside the signed 128-bit range. See `Options.valueBuiltins`.
       *
       * @param a
       *   The `Value` to subtract from
@@ -470,7 +470,7 @@ object Value extends ValueOffchainOps {
       *
       * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
       * CIP-153 `scaleValue` builtin, which requires the value in canonical form and fails on a
-      * scaled amount outside +-(2^127). See `Options.valueBuiltins`.
+      * scaled amount outside the signed 128-bit range. See `Options.valueBuiltins`.
       *
       * @param v
       *   The `Value` to multiply
@@ -681,6 +681,12 @@ object Value extends ValueOffchainOps {
           *
           * If the `Value` contains no Lovelace, it returns zero.
           *
+          * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this delegates to
+          * `quantityOf` and thus lowers to the CIP-153 `lookupCoin` builtin, which requires the
+          * value in canonical form (strictly ascending keys, no zero amounts, no empty inner maps,
+          * keys at most 32 bytes, amounts within the signed 128-bit range) and makes the script
+          * fail otherwise. See `Options.valueBuiltins`.
+          *
           * @return
           *   The amount of Lovelace in this `Value`
           * @example
@@ -760,7 +766,8 @@ object Value extends ValueOffchainOps {
           * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to
           * the CIP-153 `lookupCoin` builtin, which requires the value in canonical form (strictly
           * ascending keys, no zero amounts, no empty inner maps, keys at most 32 bytes, amounts
-          * within +-(2^127)) and makes the script fail otherwise. See `Options.valueBuiltins`.
+          * within the signed 128-bit range) and makes the script fail otherwise. See
+          * `Options.valueBuiltins`.
           *
           * @param cs
           *   The policy id to look up
@@ -803,8 +810,8 @@ object Value extends ValueOffchainOps {
           *
           * At PV11 (vanRossem) this method lowers to the `valueContains` builtin, which requires
           * both values to be in canonical form (strictly ascending keys, no zero amounts, no empty
-          * inner maps, keys at most 32 bytes, amounts within +-(2^127)); a non-canonical value
-          * makes the script fail. See `Options.valueBuiltins`.
+          * inner maps, keys at most 32 bytes, amounts within the signed 128-bit range); a
+          * non-canonical value makes the script fail. See `Options.valueBuiltins`.
           *
           * @example
           *   {{{

@@ -411,7 +411,23 @@ tracks T10, T12, T16.
 - **Validate:** failure-path ExUnits drop on validators computing state
   before cheap guards; success paths unchanged.
 
-### T7. Lower prelude Value/SortedMap through PV11 batch-6 builtins (HIGH for PV11)
+### T7. Lower prelude Value/SortedMap through PV11 batch-6 builtins (HIGH for PV11, PHASE 1 DONE)
+
+- **Phase 1 landed 2026-08-18** (commits 95c6cf660..c92fd0181): `ValueIntrinsicsV11`
+  lowers `Value.quantityOf`/`plus`/`minus`/`multiply`/`negate` and the new
+  `Value.containsAtLeast` to `lookupCoin`/`unionValue`/`scaleValue`/`valueContains`
+  at PV11, gated on `Options.valueBuiltins` (default true; registry `minPV = 11`,
+  silent fallback to the linked SIR body at PV10 or flag-off). Measured ~13-75x
+  cheaper per operation; conversions amortize at 1 call (cpu) / 0 (mem). Strict
+  CIP-153 validation (canonical form, signed 128-bit range) is a documented
+  behavior change. Design:
+  `docs/superpowers/specs/2026-08-18-t7-value-builtins-lowering-design.md`;
+  measurements pinned in `scalus-core/jvm/.../uplc/eval/ValueBuiltinsBudgetTest.scala`.
+- **Phase 2 (open):** a `BuiltinValueBacked` representation so chained ops stay
+  native between calls (today each op pays a `valueData`/`unValueData` roundtrip),
+  per the design doc's sketch. Also open: `interpretReprSIR` has no
+  `ProductCaseOneElement` case (latent trap for future intrinsics; documented at
+  the cast site in `compiler/intrinsics/ValueIntrinsics.scala`).
 
 - **Evidence:** TM GC profile: Scalus executed 2x `equalsData` (2.5M CPU) and
   29-vs-19 `ifThenElse`, 18-vs-10 `equalsInteger` against Aiken's direct

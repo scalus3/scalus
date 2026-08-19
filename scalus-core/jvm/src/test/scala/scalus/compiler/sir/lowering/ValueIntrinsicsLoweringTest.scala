@@ -19,7 +19,7 @@ class ValueIntrinsicsLoweringTest extends AnyFunSuite {
     private val pv10 = Options(targetProtocolVersion = MajorProtocolVersion.plominPV)
 
     /** Canonical 2-policy value as Data. */
-    private def valueData: Data = {
+    private val valueData: Data = {
         def entry(p: String, amount: Int): (Data, Data) =
             (
               Data.B(ByteString.fromHex(p * 28)),
@@ -33,11 +33,11 @@ class ValueIntrinsicsLoweringTest extends AnyFunSuite {
     private val tok = ByteString.fromString("tok")
 
     /** Second canonical value, single policy `bb`, for the binary operations. */
-    private def valueData2: Data =
+    private val valueData2: Data =
         Data.Map(
           plutus.prelude.List(
             (
-              Data.B(ByteString.fromHex("bb" * 28)),
+              Data.B(policyBB),
               Data.Map(plutus.prelude.List((Data.B(tok), Data.I(3))))
             )
           )
@@ -176,17 +176,37 @@ class ValueIntrinsicsLoweringTest extends AnyFunSuite {
             )
           )
         )
+        val quantityOfPv11 = quantityOfSir.toUplc()
+        val quantityOfPv10 = quantityOfSir.toUplc(using pv10)()
+        val plusPv11Term = plusSir.toUplc()
+        val plusPv10Term = plusSir.toUplc(using pv10)()
         for bad <- List(zeroAmount, dupKeys, outOfRange) do
-            val pv11 = quantityOfSir.toUplc() $ bad.asTerm $ policyBB.asTerm $ tok.asTerm
+            val pv11 = quantityOfPv11 $ bad.asTerm $ policyBB.asTerm $ tok.asTerm
             assert(pv11.evaluateDebug.isFailure, s"expected PV11 failure: $bad")
-            val pv10r =
-                quantityOfSir.toUplc(using pv10)() $ bad.asTerm $ policyBB.asTerm $ tok.asTerm
+            val pv10r = quantityOfPv10 $ bad.asTerm $ policyBB.asTerm $ tok.asTerm
             assert(pv10r.evaluateDebug.isSuccess, s"expected PV10 success: $bad")
             // Same `unValueData` guard on a Task 3 operation, so the strictness is not
             // specific to quantityOf.
-            val plusPv11 = plusSir.toUplc() $ bad.asTerm $ valueData2.asTerm
+            val plusPv11 = plusPv11Term $ bad.asTerm $ valueData2.asTerm
             assert(plusPv11.evaluateDebug.isFailure, s"expected PV11 plus failure: $bad")
-            val plusPv10 = plusSir.toUplc(using pv10)() $ bad.asTerm $ valueData2.asTerm
+            val plusPv10 = plusPv10Term $ bad.asTerm $ valueData2.asTerm
             assert(plusPv10.evaluateDebug.isSuccess, s"expected PV10 plus success: $bad")
+
+        // containsAtLeast: a canonical value holding a negative amount is rejected by the
+        // `valueContains` builtin. Both PVs fail by design here (the portable body also
+        // requires non-negative amounts), so only the PV11 failure is asserted.
+        val negativeAmount = Data.Map(
+          plutus.prelude.List(
+            (
+              Data.B(ByteString.fromHex("aa" * 28)),
+              Data.Map(plutus.prelude.List((Data.B(tok), Data.I(-1))))
+            )
+          )
+        )
+        val containsNeg = containsSir.toUplc() $ negativeAmount.asTerm $ valueData2.asTerm
+        assert(
+          containsNeg.evaluateDebug.isFailure,
+          "expected PV11 containsAtLeast failure on a negative amount"
+        )
     }
 }

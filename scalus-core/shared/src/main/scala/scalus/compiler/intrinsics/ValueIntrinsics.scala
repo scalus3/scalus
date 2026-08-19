@@ -13,8 +13,8 @@ import scalus.uplc.builtin.{ByteString, Data}
   * linked SIR bodies are used unchanged.
   *
   * Semantics note: `unValueData` requires canonical form (strictly ascending keys, no zero amounts,
-  * no empty inner maps, keys <= 32 bytes, amounts within +-(2^127)) and fails otherwise;
-  * `unionValue`/`scaleValue` fail on 128-bit overflow. See the design doc
+  * no empty inner maps, keys <= 32 bytes, amounts within the signed 128-bit range) and fails
+  * otherwise; `unionValue`/`scaleValue` fail on 128-bit overflow. See the design doc
   * `docs/superpowers/specs/2026-08-18-t7-value-builtins-lowering-design.md`.
   */
 @Compile

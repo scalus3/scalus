@@ -303,12 +303,14 @@ class ValueBuiltinsBudgetTest extends AnyFunSuite {
       * structurally identical and the budgets match exactly.
       */
     test("T7: prelude Value ops lower to builtin-level budgets at PV11 by default") {
-        val preludeLookup = compile { (d: Data, cs: ByteString, tn: ByteString) =>
+        val preludeSir = compile { (d: Data, cs: ByteString, tn: ByteString) =>
             fromData[Value](d).quantityOf(cs, tn)
-        }.toUplc()
-        val rawBuiltin = compile { (d: Data, cs: ByteString, tn: ByteString) =>
+        }
+        val rawBuiltinSir = compile { (d: Data, cs: ByteString, tn: ByteString) =>
             lookupCoin(cs, tn, unValueData(d))
-        }.toUplc()
+        }
+        val preludeLookup = preludeSir.toUplc()
+        val rawBuiltin = rawBuiltinSir.toUplc()
         def applied(uplc: Term): Term =
             uplc $ fiveByTwo.asTerm $ lastPolicy.asTerm $ lastToken.asTerm
         val (pr, pb) = runTerm(applied(preludeLookup))
@@ -322,21 +324,15 @@ class ValueBuiltinsBudgetTest extends AnyFunSuite {
         assert(pb.memory < rb.memory * 2, s"prelude=${pb.memory} raw=${rb.memory}")
 
         // Optimized: no wrapper left at all, so the budgets must be identical.
-        val preludeOpt = compile { (d: Data, cs: ByteString, tn: ByteString) =>
-            fromData[Value](d).quantityOf(cs, tn)
-        }.toUplcOptimized()
-        val rawOpt = compile { (d: Data, cs: ByteString, tn: ByteString) =>
-            lookupCoin(cs, tn, unValueData(d))
-        }.toUplcOptimized()
+        val preludeOpt = preludeSir.toUplcOptimized()
+        val rawOpt = rawBuiltinSir.toUplcOptimized()
         val (_, pOptB) = runTerm(applied(preludeOpt))
         val (_, rOptB) = runTerm(applied(rawOpt))
         assert(pOptB == rOptB, s"optimized prelude=$pOptB raw=$rOptB")
 
         // And the portable lowering it replaced is genuinely more expensive, so the bounds above do
         // not pass merely because the operation is cheap on every path.
-        val portableLookup = compile { (d: Data, cs: ByteString, tn: ByteString) =>
-            fromData[Value](d).quantityOf(cs, tn)
-        }.toUplc(using portable)()
+        val portableLookup = preludeSir.toUplc(using portable)()
         val (or, ob) = runTerm(applied(portableLookup))
         assert(or == pr)
         assert(pb.steps * 2 < ob.steps, s"prelude=${pb.steps} portable=${ob.steps}")

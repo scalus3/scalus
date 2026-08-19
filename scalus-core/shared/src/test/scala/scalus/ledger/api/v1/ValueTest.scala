@@ -8,6 +8,7 @@ import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.ByteString.{hex, utf8}
 import scalus.cardano.ledger.LedgerToPlutusTranslation
+import scalus.cardano.onchain.RequirementError
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 
@@ -1198,8 +1199,8 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
     test("containsAtLeast: negative amounts on either side throw") {
         val neg = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(-1))))))
         val pos = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(1))))))
-        assertThrows[Exception](pos.containsAtLeast(neg))
-        assertThrows[Exception](neg.containsAtLeast(pos))
+        assertThrows[RequirementError](pos.containsAtLeast(neg))
+        assertThrows[RequirementError](neg.containsAtLeast(pos))
     }
 
     test("containsAtLeast: evaluates on-chain") {
