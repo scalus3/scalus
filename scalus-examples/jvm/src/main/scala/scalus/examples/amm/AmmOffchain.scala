@@ -21,7 +21,8 @@ case class AmmOffchain(
     val policyId: PolicyId = appliedScript.script.scriptHash
     val scriptAddress: Address = appliedScript.address(env.network)
 
-    val lpAssetName: AssetName = AssetName.fromString("lp")
+    // Single source of truth: the LP name the on-chain minting policy pins.
+    val lpAssetName: AssetName = AssetName(AmmValidator.lpTokenName)
 
     def readPoolDatum(utxo: Utxo): AmmDatum =
         utxo.output.inlineDatum

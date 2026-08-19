@@ -1,7 +1,7 @@
 package scalus.examples.amm
 
 import scalus.compiler.Compile
-import scalus.uplc.builtin.{Data, FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{PolicyId, TokenName, Value}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v2
@@ -60,6 +60,13 @@ object AmmValidator extends DataParameterizedValidator {
             case _                        => fail("Multiple pool outputs found")
     }
 
+    /** Canonical LP token name. Pinning it is what keeps the LP token a single fungible asset:
+      * without a name check the mint endpoint would accept LP minted under arbitrary names (the net
+      * sum still balances, but wallets/price feeds that treat "the LP token" as one asset would
+      * break, and redemption fragments across names).
+      */
+    val lpTokenName: TokenName = ByteString.fromString("lp")
+
     // mints LP tokens
     inline def mint(param: Data, redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit = {
         // Locate the pool input that we're spending
@@ -75,12 +82,12 @@ object AmmValidator extends DataParameterizedValidator {
         val continuationOut = findPoolOutput(tx.outputs, poolAddress)
         val continuationDatum = readPoolDatum(continuationOut)
 
-        // LP delta must match actual minted/burned amount for this policyId.
+        // The tx must mint/burn exactly `lpDelta` of the LP token and NOTHING else under this
+        // policy: `hasOnly` pins the token name and rejects any other name in one check (works for
+        // negative `lpDelta`, i.e. burns, too). Summing all names would let an attacker fragment
+        // the LP supply across names or mint junk that nets to `lpDelta`.
         val lpDelta = continuationDatum.lpSupply - poolDatum.lpSupply
-        val actualDelta = tx.mint.tokens(policyId).toList.foldLeft(BigInt(0)) { (acc, pair) =>
-            acc + pair._2
-        }
-        require(actualDelta === lpDelta, "Mint: LP delta mismatch")
+        require(tx.mint.hasOnly(policyId, lpTokenName, lpDelta), "Mint: LP delta mismatch")
     }
     inline def spend(
         param: Data,

@@ -3,6 +3,7 @@ package scalus.examples.amm
 import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scalus.ScalaCompilerVersion
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.node.Emulator
@@ -16,6 +17,18 @@ import scalus.utils.await
 
 class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
     import AmmTest.{*, given}
+
+    /** Asserts the total evaluated script ExUnits (all redeemers) and the tx fee of a built
+      * transaction. The fee is derived from tx size + script ExUnits, so it moves whenever the
+      * budget does.
+      */
+    private def assertScriptBudget(tx: Transaction, expected: ExUnits, expectedFee: Coin): Unit = {
+        val actual = tx.witnessSet.redeemers
+            .map(_.value.totalExUnits)
+            .getOrElse(fail("transaction has no redeemers"))
+        assert(actual == expected, s"Budget mismatch: got $actual")
+        assert(tx.body.value.fee == expectedFee, s"Fee mismatch: got ${tx.body.value.fee}")
+    }
 
     test(s"AmmValidator size: ${AmmContract.compiled.script.script.size} bytes") {
         info(s"Validator size: ${AmmContract.compiled.script.script.size} bytes")
@@ -91,6 +104,44 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           newDatum.r1 == initialDatum.r1 - (BigInt(
             halfLp
           ) * initialDatum.r1 / initialDatum.lpSupply)
+        )
+    }
+
+    // Budget assertions - total script ExUnits (mint policy + pool spend) for the whole tx. Dual
+    // baselines because the lowering differs across compiler generations; re-measure on both when
+    // the validator changes. See scalus-examples-dual-exunits-baselines.
+    test("budget: deposit") {
+        val (provider, txCreator) = createSetup()
+        val poolUtxo1 = initPoolWith(provider, txCreator, x0 = 1000L, x1 = 4000L)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val depositTx =
+            txCreator.deposit(utxos, poolUtxo1, x0 = 1000L, x1 = 4000L, Alice.address, Alice.signer)
+        assert(provider.submit(depositTx).await().isRight, "deposit should succeed")
+        assertScriptBudget(
+          depositTx,
+          ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 124173, steps = 50_061851),
+            since38 = ExUnits(memory = 124173, steps = 50_061851)
+          ),
+          Coin(304580L)
+        )
+    }
+
+    test("budget: redeem") {
+        val (provider, txCreator) = createSetup()
+        val poolUtxo1 = initPoolWith(provider, txCreator, x0 = 1000L, x1 = 4000L)
+        val initialDatum = txCreator.readPoolDatum(poolUtxo1)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val halfLp = (initialDatum.lpSupply / 2).toLong
+        val redeemTx = txCreator.redeem(utxos, poolUtxo1, halfLp, Alice.address, Alice.signer)
+        assert(provider.submit(redeemTx).await().isRight, "redeem should succeed")
+        assertScriptBudget(
+          redeemTx,
+          ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 116681, steps = 47_865903),
+            since38 = ExUnits(memory = 116681, steps = 47_865903)
+          ),
+          Coin(303857L)
         )
     }
 
