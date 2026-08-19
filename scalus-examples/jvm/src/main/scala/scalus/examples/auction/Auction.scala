@@ -204,7 +204,7 @@ object AuctionValidator extends DataParameterizedValidator {
           "Continuing output must go to auction script address"
         )
 
-        val newDatum = continuingOutput.datum.inlineOf[Datum](
+        val newDatum = continuingOutput.datum.inlineOrFail[Datum](
           "Continuing auction output must have inline datum"
         )
 
@@ -332,7 +332,7 @@ object AuctionValidator extends DataParameterizedValidator {
                 // the rest. Requiring the seller output to carry this auction's scriptHash forces a
                 // distinct seller output per auction, closing the cross-instance double satisfaction.
                 val sellerOutputDatum = sellerOutput.datum
-                    .inlineOf[Data]("Seller output must carry this auction's id datum")
+                    .inlineOrFail[Data]("Seller output must carry this auction's id datum")
                 require(
                   sellerOutputDatum == scriptHash.toData,
                   "Seller output must be tagged with this auction's id"
@@ -441,7 +441,7 @@ object AuctionValidator extends DataParameterizedValidator {
         )
         require(
           auctionOutput.datum
-              .inlineOf[Datum]("Auction output must have inline datum") === expectedDatum,
+              .inlineOrFail[Datum]("Auction output must have inline datum") === expectedDatum,
           "Initial auction datum must be correct"
         )
 

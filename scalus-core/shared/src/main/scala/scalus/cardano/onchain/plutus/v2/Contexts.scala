@@ -66,7 +66,7 @@ object OutputDatum {
           *     case OutputDatum.OutputDatum(d) => d.to[MyDatum]
           *     case _                          => fail("Expected inline datum")
           * }}}
-          * with `output.datum.inlineOf[MyDatum]`.
+          * with `output.datum.inlineOrFail[MyDatum]`.
           *
           * Being `inline`, the match is checked against the receiver's static type: calling this on
           * a receiver the compiler already knows is `NoOutputDatum` or `OutputDatumHash` is
@@ -76,12 +76,10 @@ object OutputDatum {
           *   the datum type to decode with its `FromData` instance
           * @example
           *   {{{
-          *   val datum = output.datum.inlineOf[CampaignDatum]
+          *   val datum = output.datum.inlineOrFail[CampaignDatum]
           *   }}}
           */
-        inline def inlineOf[A: FromData]: A = d match
-            case OutputDatum(datum) => datum.to[A]
-            case _                  => fail("Expected inline datum")
+        inline def inlineOrFail[A: FromData]: A = inlineOrFail[A]("Expected inline datum")
 
         /** Extracts the inline datum and decodes it as `A`, failing with `message` when the datum
           * is not inline.
@@ -90,10 +88,10 @@ object OutputDatum {
           *   the datum type to decode with its `FromData` instance
           * @example
           *   {{{
-          *   val datum = output.datum.inlineOf[CampaignDatum]("Campaign must have inline datum")
+          *   val datum = output.datum.inlineOrFail[CampaignDatum]("Campaign must have inline datum")
           *   }}}
           */
-        inline def inlineOf[A: FromData](inline message: String): A = d match
+        inline def inlineOrFail[A: FromData](inline message: String): A = d match
             case OutputDatum(datum) => datum.to[A]
             case _                  => fail(message)
     }

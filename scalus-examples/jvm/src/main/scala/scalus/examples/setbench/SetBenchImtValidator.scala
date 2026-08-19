@@ -61,7 +61,7 @@ object SetBenchImtValidator extends Validator {
         val outputs = txInfo.findOwnOutputsByCredential(contractAddr.credential)
         require(outputs.length === BigInt(1), "Expected one continuing output")
         val out = outputs.head
-        val outDatum = out.datum.inlineOf[ImtDatum]("Expected inline datum")
+        val outDatum = out.datum.inlineOrFail[ImtDatum]("Expected inline datum")
         require(outDatum.remaining === newRemaining, "Wrong remaining")
         require(outDatum.root === newRoot, "Wrong root")
         require(outDatum.size === newSize, "Wrong size")

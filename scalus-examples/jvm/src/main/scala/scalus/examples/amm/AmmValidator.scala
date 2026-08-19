@@ -49,7 +49,7 @@ object AmmValidator extends DataParameterizedValidator {
 
     /** Reads the [[AmmDatum]] from an output's inline datum; fails otherwise. */
     inline def readPoolDatum(out: TxOut): AmmDatum =
-        out.datum.inlineOf[AmmDatum]("Pool output must have inline datum")
+        out.datum.inlineOrFail[AmmDatum]("Pool output must have inline datum")
 
     /** Finds the unique pool output at `addr`; fails if absent or ambiguous. */
     inline def findPoolOutput(outputs: List[TxOut], addr: Address): TxOut = {

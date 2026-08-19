@@ -202,10 +202,10 @@ object VaultValidator extends Validator {
     }
 
     private def getVaultDatum(vaultOutput: TxOut) =
-        vaultOutput.datum.inlineOf[State](NoDatumProvided)
+        vaultOutput.datum.inlineOrFail[State](NoDatumProvided)
 
     private def requireSameOwner(out: TxOut, datum: State): Unit = {
-        val s = out.datum.inlineOf[State](NoInlineDatum)
+        val s = out.datum.inlineOrFail[State](NoInlineDatum)
         require(s.owner == datum.owner, VaultOwnerChanged)
         require(s.recoveryKey == datum.recoveryKey, RecoveryKeyChanged)
     }

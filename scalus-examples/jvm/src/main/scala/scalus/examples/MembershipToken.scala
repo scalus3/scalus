@@ -93,7 +93,9 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
                   "Deposit must be at least 2 ADA"
                 )
                 val depositDatum =
-                    depositOut.datum.inlineOf[MembershipDatum]("Expected inline datum on deposit")
+                    depositOut.datum.inlineOrFail[MembershipDatum](
+                      "Expected inline datum on deposit"
+                    )
                 require(
                   depositDatum.depositor === signer.hash,
                   "Deposit datum must reference the signer"

@@ -9,41 +9,43 @@ import scalus.uplc.builtin.Data.toData
 
 class OutputDatumTest extends AnyFunSuite with EvalTestKit {
 
-    test("inlineOf decodes an inline datum") {
-        assert(OutputDatum.OutputDatum(BigInt(42).toData).inlineOf[BigInt] == BigInt(42))
+    test("inlineOrFail decodes an inline datum") {
+        assert(OutputDatum.OutputDatum(BigInt(42).toData).inlineOrFail[BigInt] == BigInt(42))
 
-        assertEvalEq(OutputDatum.OutputDatum(BigInt(42).toData).inlineOf[BigInt], BigInt(42))
+        assertEvalEq(OutputDatum.OutputDatum(BigInt(42).toData).inlineOrFail[BigInt], BigInt(42))
     }
 
-    test("inlineOf fails on NoOutputDatum and OutputDatumHash") {
+    test("inlineOrFail fails on NoOutputDatum and OutputDatumHash") {
         // Receivers are widened to the enum type: on a receiver statically known to be a
-        // non-inline case, inlineOf is a compile error, not a runtime failure.
+        // non-inline case, inlineOrFail is a compile error, not a runtime failure.
         val hashDatum: OutputDatum = OutputDatum.OutputDatumHash(hex"deadbeef")
-        assertThrows[OnchainError](OutputDatum.NoOutputDatum.inlineOf[BigInt])
-        assertThrows[OnchainError](hashDatum.inlineOf[BigInt])
+        assertThrows[OnchainError](OutputDatum.NoOutputDatum.inlineOrFail[BigInt])
+        assertThrows[OnchainError](hashDatum.inlineOrFail[BigInt])
 
-        assertEvalFails[OnchainError](OutputDatum.NoOutputDatum.inlineOf[BigInt])
+        assertEvalFails[OnchainError](OutputDatum.NoOutputDatum.inlineOrFail[BigInt])
         assertEvalFails[OnchainError](
-          (OutputDatum.OutputDatumHash(hex"deadbeef"): OutputDatum).inlineOf[BigInt]
+          (OutputDatum.OutputDatumHash(hex"deadbeef"): OutputDatum).inlineOrFail[BigInt]
         )
     }
 
-    test("inlineOf with a custom message") {
+    test("inlineOrFail with a custom message") {
         assert(
-          OutputDatum.OutputDatum(BigInt(7).toData).inlineOf[BigInt]("Campaign datum") == BigInt(7)
+          OutputDatum
+              .OutputDatum(BigInt(7).toData)
+              .inlineOrFail[BigInt]("Campaign datum") == BigInt(7)
         )
 
         val thrown = intercept[OnchainError](
-          OutputDatum.NoOutputDatum.inlineOf[BigInt]("Campaign datum")
+          OutputDatum.NoOutputDatum.inlineOrFail[BigInt]("Campaign datum")
         )
         assert(thrown.getMessage == "Campaign datum")
 
         assertEvalEq(
-          OutputDatum.OutputDatum(BigInt(7).toData).inlineOf[BigInt]("Campaign datum"),
+          OutputDatum.OutputDatum(BigInt(7).toData).inlineOrFail[BigInt]("Campaign datum"),
           BigInt(7)
         )
         assertEvalFails[OnchainError](
-          OutputDatum.NoOutputDatum.inlineOf[BigInt]("Campaign datum")
+          OutputDatum.NoOutputDatum.inlineOrFail[BigInt]("Campaign datum")
         )
     }
 }

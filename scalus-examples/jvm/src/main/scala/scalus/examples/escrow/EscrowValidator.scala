@@ -100,7 +100,7 @@ object EscrowValidator extends Validator {
         )
 
         require(
-          contractOutput.datum.inlineOf[Data]("Expected inline datum") === receivedData,
+          contractOutput.datum.inlineOrFail[Data]("Expected inline datum") === receivedData,
           "EscrowDatum must be preserved"
         )
     }

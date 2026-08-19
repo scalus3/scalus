@@ -71,7 +71,9 @@ object EditableNftValidator extends DataParameterizedValidator {
 
                 // Validate datum structure and content
                 val datum =
-                    refNftOutput.datum.inlineOf[ReferenceNftDatum](ReferenceNftMustHaveInlineDatum)
+                    refNftOutput.datum.inlineOrFail[ReferenceNftDatum](
+                      ReferenceNftMustHaveInlineDatum
+                    )
 
                 val refTokenName = EditableNftValidator.refNftName(datum.tokenId)
                 val userTokenName = EditableNftValidator.userNftName(datum.tokenId)
@@ -147,7 +149,7 @@ object EditableNftValidator extends DataParameterizedValidator {
                 require(validContinuation, MustReturnRefNft)
 
                 val newDatum =
-                    newOutput.datum.inlineOf[ReferenceNftDatum](ContinuationMustHaveInlineDatum)
+                    newOutput.datum.inlineOrFail[ReferenceNftDatum](ContinuationMustHaveInlineDatum)
 
                 // Sealed policy enforcement
                 if datum.isSealed then

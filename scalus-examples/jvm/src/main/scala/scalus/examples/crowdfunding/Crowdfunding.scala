@@ -182,7 +182,8 @@ object DonationMintingPolicy {
         // 2. Find campaign input and verify it has the campaign NFT
         val campaignInput = txInfo.inputs.at(campaignInputIdx)
         val campaignDatum =
-            campaignInput.resolved.datum.inlineOf[CampaignDatum]("Campaign must have inline datum")
+            campaignInput.resolved.datum
+                .inlineOrFail[CampaignDatum]("Campaign must have inline datum")
 
         // 3. Verify this donation policy matches the campaign's expected policy
         require(
@@ -218,7 +219,8 @@ object DonationMintingPolicy {
         // 1. Verify campaign UTxO is being spent (this triggers CrowdfundingValidator)
         val campaignInput = txInfo.inputs.at(campaignInputIdx)
         val campaignDatum =
-            campaignInput.resolved.datum.inlineOf[CampaignDatum]("Campaign must have inline datum")
+            campaignInput.resolved.datum
+                .inlineOrFail[CampaignDatum]("Campaign must have inline datum")
 
         // 2. Verify this is the correct campaign by checking donation policy matches
         require(
@@ -374,7 +376,9 @@ object CrowdfundingValidator extends Validator {
         // 3. Verify continuing campaign output
         val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
         val newDatum =
-            campaignOutput.datum.inlineOf[CampaignDatum]("Campaign output must have inline datum")
+            campaignOutput.datum.inlineOrFail[CampaignDatum](
+              "Campaign output must have inline datum"
+            )
 
         // 4. Verify datum update - only totalSum should change
         val expectedDatum = CampaignDatum(
@@ -411,7 +415,7 @@ object CrowdfundingValidator extends Validator {
 
         // 7. Verify donation UTxO has DonationDatum with correct amount
         val donationDatum =
-            donationOutput.datum.inlineOf[DonationDatum](
+            donationOutput.datum.inlineOrFail[DonationDatum](
               "Donation output must have inline DonationDatum"
             )
         require(
@@ -477,7 +481,7 @@ object CrowdfundingValidator extends Validator {
         else
             // Partial withdrawal - verify updated campaign datum
             val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-            val newDatum = campaignOutput.datum.inlineOf[CampaignDatum](
+            val newDatum = campaignOutput.datum.inlineOrFail[CampaignDatum](
               "Campaign output must have inline datum"
             )
             // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
@@ -544,7 +548,9 @@ object CrowdfundingValidator extends Validator {
 
                     // Get donor from DonationDatum and full UTxO value
                     val donationDatum = donationInput.resolved.datum
-                        .inlineOf[DonationDatum]("Donation input must have inline DonationDatum")
+                        .inlineOrFail[DonationDatum](
+                          "Donation input must have inline DonationDatum"
+                        )
                     val donorPkh = donationDatum.donor
                     val donationAmount = donationDatum.amount
                     // Use actual UTxO lovelace to include min UTxO overhead
@@ -576,7 +582,7 @@ object CrowdfundingValidator extends Validator {
         else
             // Partial reclaim - verify updated campaign datum
             val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-            val newDatum = campaignOutput.datum.inlineOf[CampaignDatum](
+            val newDatum = campaignOutput.datum.inlineOrFail[CampaignDatum](
               "Campaign output must have inline datum"
             )
             // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
@@ -725,7 +731,7 @@ object CrowdfundingValidator extends Validator {
 
         // 8. Get the donation policy ID from datum (computed off-chain)
         val donationPolicyId = campaignOutput.datum
-            .inlineOf[CampaignDatum]("Campaign output must have inline datum")
+            .inlineOrFail[CampaignDatum]("Campaign output must have inline datum")
             .donationPolicyId
 
         // 9. Verify the datum is correct
@@ -739,7 +745,9 @@ object CrowdfundingValidator extends Validator {
         )
         require(
           campaignOutput.datum
-              .inlineOf[CampaignDatum]("Campaign output must have inline datum") === expectedDatum,
+              .inlineOrFail[CampaignDatum](
+                "Campaign output must have inline datum"
+              ) === expectedDatum,
           "Initial campaign datum must be correct"
         )
 

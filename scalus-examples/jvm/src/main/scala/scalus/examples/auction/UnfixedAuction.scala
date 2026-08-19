@@ -116,7 +116,7 @@ object UnfixedAuctionValidator extends Validator {
           "Continuing output must go to auction script address"
         )
 
-        val newDatum = continuingOutput.datum.inlineOf[Datum](
+        val newDatum = continuingOutput.datum.inlineOrFail[Datum](
           "Continuing auction output must have inline datum"
         )
 
@@ -295,7 +295,7 @@ object UnfixedAuctionValidator extends Validator {
         )
         require(
           auctionOutput.datum
-              .inlineOf[Datum]("Auction output must have inline datum") === expectedDatum,
+              .inlineOrFail[Datum]("Auction output must have inline datum") === expectedDatum,
           "Initial auction datum must be correct"
         )
 

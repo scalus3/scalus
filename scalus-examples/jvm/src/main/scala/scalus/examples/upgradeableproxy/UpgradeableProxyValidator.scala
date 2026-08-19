@@ -65,7 +65,7 @@ object ProxyValidator extends Validator {
                 .getOrFail(MissingContinuation)
 
         val continuationDatum =
-            continuationOutput.datum.inlineOf[ProxyDatum](ContinuationMustHaveInlineDatum)
+            continuationOutput.datum.inlineOrFail[ProxyDatum](ContinuationMustHaveInlineDatum)
 
         require(
           continuationOutput.value === ownInput.resolved.value,

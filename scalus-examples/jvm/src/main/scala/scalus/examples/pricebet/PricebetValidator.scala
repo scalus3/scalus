@@ -79,7 +79,7 @@ object PricebetValidator extends DataParameterizedValidator {
                 )
 
                 // Verify new datum
-                val newState = continuationOutput.datum.inlineOf[PricebetState](
+                val newState = continuationOutput.datum.inlineOrFail[PricebetState](
                   "Continuation must have inline datum"
                 )
 
@@ -126,7 +126,7 @@ object PricebetValidator extends DataParameterizedValidator {
 
                 val oracleState =
                     oracleInput.resolved.datum
-                        .inlineOf[OracleState]("Oracle must have inline datum")
+                        .inlineOrFail[OracleState]("Oracle must have inline datum")
 
                 // Verify oracle timestamp is within tx validity window
                 val validRange = tx.validRange
