@@ -17,6 +17,8 @@ object LlmApiGen {
       "scalus.compiler",
       "scalus.uplc",
       "scalus.uplc.builtin",
+      "scalus.cardano.onchain.plutus.v1",
+      "scalus.cardano.onchain.plutus.v2",
       "scalus.cardano.onchain.plutus.v3",
       "scalus.cardano.ledger",
       "scalus.cardano.node",

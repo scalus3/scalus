@@ -3402,6 +3402,419 @@ enum scalus.cardano.onchain.plutus.prelude.These.These
 case class scalus.cardano.onchain.plutus.prelude.Varargs
   val list: List[T]
 
+case class scalus.cardano.onchain.plutus.v1.Address
+  val credential: Credential
+  val stakingCredential: Option[StakingCredential]
+
+object scalus.cardano.onchain.plutus.v1.Address
+  given given_Eq_Address: Eq[Address]
+  given given_Ord_Address: Ord[Address]
+  given given_ToData_Address: ToData[Address]
+  given given_FromData_Address: FromData[Address]
+  def fromCredential(credential: Credential): Address
+  def fromScriptHash(script: ScriptHash): Address
+  def fromPubKeyHash(pubKey: PubKeyHash): Address
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+enum scalus.cardano.onchain.plutus.v1.Credential
+
+object scalus.cardano.onchain.plutus.v1.Credential
+
+enum scalus.cardano.onchain.plutus.v1.Credential.PubKeyCredential
+  val hash: PubKeyHash
+
+enum scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
+  val hash: ValidatorHash
+  given given_Eq_Credential: Eq[Credential]
+  given given_Ord_Credential: Ord[Credential]
+  given given_FromData_Credential: FromData[Credential]
+  given given_ToData_Credential: ToData[Credential]
+  def pubKeyOption(self: Credential): Option[PubKeyHash]
+  def scriptOption(self: Credential): Option[ValidatorHash]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+enum scalus.cardano.onchain.plutus.v1.DCert
+
+object scalus.cardano.onchain.plutus.v1.DCert
+
+enum scalus.cardano.onchain.plutus.v1.DCert.DelegRegKey
+  val cred: StakingCredential
+
+enum scalus.cardano.onchain.plutus.v1.DCert.DelegDeRegKey
+  val cred: StakingCredential
+
+enum scalus.cardano.onchain.plutus.v1.DCert.DelegDelegate
+  val cred: StakingCredential
+  val delegatee: PubKeyHash
+
+enum scalus.cardano.onchain.plutus.v1.DCert.PoolRegister
+  val poolId: PubKeyHash
+  val vrf: PubKeyHash
+
+enum scalus.cardano.onchain.plutus.v1.DCert.PoolRetire
+  val poolId: PubKeyHash
+  val epoch: BigInt
+  val Genesis: DCert
+  val Mir: DCert
+  given given_Eq_DCert: Eq[DCert]
+  given given_Ord_DCert: Ord[DCert]
+  given given_ToData_DCert: ToData[DCert]
+  given given_FromData_DCert: FromData[DCert]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.Interval
+  val from: IntervalBound
+  val to: IntervalBound
+
+object scalus.cardano.onchain.plutus.v1.Interval
+  given given_Eq_Interval: Eq[Interval]
+  given given_Ord_Interval: Ord[Interval]
+  given given_ToData_Interval: ToData[Interval]
+  given given_FromData_Interval: FromData[Interval]
+  val always: Interval
+  val never: Interval
+  def after(time: PosixTime): Interval
+  def before(time: PosixTime): Interval
+  def entirelyBefore(time: PosixTime): Interval
+  def between(from: PosixTime, to: PosixTime): Interval
+  def entirelyBetween(from: PosixTime, to: PosixTime): Interval
+  def hull(lhs: Interval, rhs: Interval): Interval
+  def intersection(lhs: Interval, rhs: Interval): Interval
+  def contains(self: Interval)(time: PosixTime): Boolean
+  def isEntirelyAfter(self: Interval)(time: PosixTime): Boolean
+  def isEntirelyBefore(self: Interval)(time: PosixTime): Boolean
+  def isEntirelyBetween(self: Interval)(after: PosixTime, before: PosixTime): Boolean
+  def isNever(self: Interval): Boolean
+  def nonNever(self: Interval): Boolean
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.IntervalBound
+  val boundType: IntervalBoundType
+  val isInclusive: Closure
+
+object scalus.cardano.onchain.plutus.v1.IntervalBound
+  given given_Eq_IntervalBound: Eq[IntervalBound]
+  given given_Ord_IntervalBound: Ord[IntervalBound]
+  given given_ToData_IntervalBound: ToData[IntervalBound]
+  given given_FromData_IntervalBound: FromData[IntervalBound]
+  val negInf: IntervalBound
+  val posInf: IntervalBound
+  def finiteInclusive(time: PosixTime): IntervalBound
+  def finiteExclusive(time: PosixTime): IntervalBound
+  def min(lhs: IntervalBound, rhs: IntervalBound): IntervalBound
+  def max(lhs: IntervalBound, rhs: IntervalBound): IntervalBound
+  def finite(self: IntervalBound)(default: PosixTime): PosixTime
+  def finiteOrFail(self: IntervalBound)(message: String): PosixTime
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+enum scalus.cardano.onchain.plutus.v1.IntervalBoundType
+
+object scalus.cardano.onchain.plutus.v1.IntervalBoundType
+  val NegInf: IntervalBoundType
+
+enum scalus.cardano.onchain.plutus.v1.IntervalBoundType.Finite
+  val time: PosixTime
+  val PosInf: IntervalBoundType
+  given given_Eq_IntervalBoundType: Eq[IntervalBoundType]
+  given given_Ord_IntervalBoundType: Ord[IntervalBoundType]
+  given given_ToData_IntervalBoundType: ToData[IntervalBoundType]
+  given given_FromData_IntervalBoundType: FromData[IntervalBoundType]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.PubKeyHash
+  val hash: Hash
+  def toString: String
+
+object scalus.cardano.onchain.plutus.v1.PubKeyHash
+  given given_Eq_PubKeyHash: Eq[PubKeyHash]
+  given given_Ord_PubKeyHash: Ord[PubKeyHash]
+  given given_ToData_PubKeyHash: ToData[PubKeyHash]
+  given given_FromData_PubKeyHash: FromData[PubKeyHash]
+  def pkh(sc: StringContext)(args: Any*): PubKeyHash
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.ScriptContext
+  val txInfo: TxInfo
+  val purpose: ScriptPurpose
+
+object scalus.cardano.onchain.plutus.v1.ScriptContext
+  given given_Eq_ScriptContext: Eq[ScriptContext]
+  given given_Ord_ScriptContext: Ord[ScriptContext]
+  given given_FromData_ScriptContext: FromData[ScriptContext]
+  given given_ToData_ScriptContext: ToData[ScriptContext]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+enum scalus.cardano.onchain.plutus.v1.ScriptPurpose
+
+object scalus.cardano.onchain.plutus.v1.ScriptPurpose
+
+enum scalus.cardano.onchain.plutus.v1.ScriptPurpose.Minting
+  val curSymbol: ByteString
+
+enum scalus.cardano.onchain.plutus.v1.ScriptPurpose.Spending
+  val txOutRef: TxOutRef
+
+enum scalus.cardano.onchain.plutus.v1.ScriptPurpose.Rewarding
+  val stakingCred: StakingCredential
+
+enum scalus.cardano.onchain.plutus.v1.ScriptPurpose.Certifying
+  val cert: DCert
+  given given_Eq_ScriptPurpose: Eq[ScriptPurpose]
+  given given_Ord_ScriptPurpose: Ord[ScriptPurpose]
+  given given_ToData_ScriptPurpose: ToData[ScriptPurpose]
+  given given_FromData_ScriptPurpose: FromData[ScriptPurpose]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+enum scalus.cardano.onchain.plutus.v1.StakingCredential
+
+object scalus.cardano.onchain.plutus.v1.StakingCredential
+
+enum scalus.cardano.onchain.plutus.v1.StakingCredential.StakingHash
+  val cred: Credential
+
+enum scalus.cardano.onchain.plutus.v1.StakingCredential.StakingPtr
+  val a: BigInt
+  val b: BigInt
+  val c: BigInt
+  given given_Eq_StakingCredential: Eq[StakingCredential]
+  given given_Ord_StakingCredential: Ord[StakingCredential]
+  given given_FromData_StakingCredential: FromData[StakingCredential]
+  given given_ToData_StakingCredential: ToData[StakingCredential]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.TxId
+  val hash: Hash
+  def toString: String
+
+object scalus.cardano.onchain.plutus.v1.TxId
+  given given_Eq_TxId: Eq[TxId]
+  given given_Ord_TxId: Ord[TxId]
+  given given_ToData_TxId: ToData[TxId]
+  given given_FromData_TxId: FromData[TxId]
+  def txid(sc: StringContext)(args: Any*): TxId
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.TxInInfo
+  val outRef: TxOutRef
+  val resolved: TxOut
+
+object scalus.cardano.onchain.plutus.v1.TxInInfo
+  given given_Eq_TxInInfo: Eq[TxInInfo]
+  given given_Ord_TxInInfo: Ord[TxInInfo]
+  given given_ToData_TxInInfo: ToData[TxInInfo]
+  given given_FromData_TxInInfo: FromData[TxInInfo]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.TxInfo
+  val inputs: List[TxInInfo]
+  val outputs: List[TxOut]
+  val fee: Value
+  val mint: Value
+  val dcert: List[DCert]
+  val withdrawals: List[Tuple2[StakingCredential, BigInt]]
+  val validRange: PosixTimeRange
+  val signatories: List[PubKeyHash]
+  val data: List[Tuple2[DatumHash, Datum]]
+  val id: TxId
+  def toString: String
+
+object scalus.cardano.onchain.plutus.v1.TxInfo
+  val placeholder: TxInfo
+  given given_Eq_TxInfo: Eq[TxInfo]
+  given given_Ord_TxInfo: Ord[TxInfo]
+  given given_ToData_TxInfo: ToData[TxInfo]
+  given given_FromData_TxInfo: FromData[TxInfo]
+  def findOwnInput(self: TxInfo)(outRef: TxOutRef): Option[TxInInfo]
+  def findOwnScriptOutputs(self: TxInfo)(scriptHash: ValidatorHash): List[TxOut]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.TxOut
+  val address: Address
+  val value: Value
+  val datumHash: Option[DatumHash]
+  def toString: String
+
+object scalus.cardano.onchain.plutus.v1.TxOut
+  given given_Eq_TxOut: Eq[TxOut]
+  given given_Ord_TxOut: Ord[TxOut]
+  given given_ToData_TxOut: ToData[TxOut]
+  given given_FromData_TxOut: FromData[TxOut]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.TxOutRef
+  val id: TxId
+  val idx: BigInt
+
+object scalus.cardano.onchain.plutus.v1.TxOutRef
+  given given_Eq_TxOutRef: Eq[TxOutRef]
+  given given_Ord_TxOutRef: Ord[TxOutRef]
+  given given_ToData_TxOutRef: ToData[TxOutRef]
+  given given_FromData_TxOutRef: FromData[TxOutRef]
+  def toOffchain(outRef: TxOutRef): TransactionInput
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+object scalus.cardano.onchain.plutus.v1.Utils
+  def findInput(inputs: List[TxInInfo], outRef: TxOutRef): Option[TxInInfo]
+  def findScriptOutputs(outputs: List[TxOut], scriptHash: ValidatorHash): List[TxOut]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v1.Value
+  val toSortedMap: SortedMap[PolicyId, SortedMap[TokenName, BigInt]]
+  def toString: String
+
+object scalus.cardano.onchain.plutus.v1.Value
+  val zero: Value
+  def apply(cs: PolicyId, tn: TokenName, v: BigInt): Value
+  def lovelace(v: BigInt): Value
+  def unsafeFromList(list: List[Tuple2[PolicyId, List[Tuple2[TokenName, BigInt]]]]): Value
+  def unsafeFromSortedMap(sm: SortedMap[PolicyId, SortedMap[TokenName, BigInt]]): Value
+  def fromList(list: List[Tuple2[PolicyId, List[Tuple2[TokenName, BigInt]]]]): Value
+  def fromStrictlyAscendingListWithNonZeroAmounts(list: List[Tuple2[PolicyId, List[Tuple2[TokenName, BigInt]]]]): Value
+  val adaPolicyId: PolicyId
+  val adaTokenName: TokenName
+  def equalsAssets(a: SortedMap[TokenName, BigInt], b: SortedMap[TokenName, BigInt]): Boolean
+  def eq(a: Value, b: Value): Boolean
+  def nonEq(a: Value, b: Value): Boolean
+  def negate(v: Value): Value
+  def plus(a: Value, b: Value): Value
+  def minus(a: Value, b: Value): Value
+  def multiply(v: Value, factor: BigInt): Value
+  def debugToString(v: Value): String
+  given valueEq: Eq[Value]
+  val valueOrd: Ord[Value]
+  given valueToData: ToData[Value]
+  given valueFromData: FromData[Value]
+  def valueFromDataWithValidation: FromData[Value]
+  def unary_-(v: Value): Value
+  def +(v: Value)(other: Value): Value
+  def -(v: Value)(other: Value): Value
+  def *(v: Value)(factor: BigInt): Value
+  def showDebug(v: Value): String
+  def getLovelace(v: Value): BigInt
+  def lovelaceAmount(v: Value): BigInt
+  def isZero(v: Value): Boolean
+  def nonZero(v: Value): Boolean
+  def isPositive(v: Value): Boolean
+  def quantityOf(v: Value)(cs: PolicyId, tn: TokenName): BigInt
+  def containsAtLeast(v: Value)(other: Value): Boolean
+  def insertCoin(v: Value)(cs: PolicyId, tn: TokenName, amount: BigInt): Value
+  def tokens(v: Value)(cs: PolicyId): SortedMap[TokenName, BigInt]
+  def hasOnly(v: Value)(cs: PolicyId, tn: TokenName, amount: BigInt): Boolean
+  def withoutLovelace(v: Value): Value
+  def flatten(v: Value): List[Tuple3[PolicyId, TokenName, BigInt]]
+  def policyIds(v: Value): List[PolicyId]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+trait scalus.cardano.onchain.plutus.v1.ValueOffchainOps
+  def toLedgerValue(v: Value): ledger.Value
+
+enum scalus.cardano.onchain.plutus.v2.OutputDatum
+
+object scalus.cardano.onchain.plutus.v2.OutputDatum
+  val NoOutputDatum: OutputDatum
+
+enum scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatumHash
+  val datumHash: DatumHash
+
+enum scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum
+  val datum: Datum
+  given given_Eq_OutputDatum: Eq[v2.OutputDatum]
+  given given_Ord_OutputDatum: Ord[v2.OutputDatum]
+  given given_ToData_OutputDatum: ToData[v2.OutputDatum]
+  given given_FromData_OutputDatum: FromData[v2.OutputDatum]
+  def inlineOrFail(d: v2.OutputDatum)[A](evidence$1: FromData[A]): A
+  def inlineOrFail(d: v2.OutputDatum)[A](message: String)(evidence$1: FromData[A]): A
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v2.ScriptContext
+  val txInfo: TxInfo
+  val purpose: ScriptPurpose
+
+object scalus.cardano.onchain.plutus.v2.ScriptContext
+  given given_Eq_ScriptContext: Eq[ScriptContext]
+  given given_Ord_ScriptContext: Ord[ScriptContext]
+  given given_ToData_ScriptContext: ToData[ScriptContext]
+  given given_FromData_ScriptContext: FromData[ScriptContext]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v2.TxInInfo
+  val outRef: TxOutRef
+  val resolved: TxOut
+
+object scalus.cardano.onchain.plutus.v2.TxInInfo
+  given given_Eq_TxInInfo: Eq[TxInInfo]
+  given given_Ord_TxInInfo: Ord[TxInInfo]
+  given given_ToData_TxInInfo: ToData[TxInInfo]
+  given given_FromData_TxInInfo: FromData[TxInInfo]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v2.TxInfo
+  val inputs: List[TxInInfo]
+  val referenceInputs: List[TxInInfo]
+  val outputs: List[TxOut]
+  val fee: Value
+  val mint: Value
+  val dcert: List[DCert]
+  val withdrawals: SortedMap[StakingCredential, BigInt]
+  val validRange: PosixTimeRange
+  val signatories: List[PubKeyHash]
+  val redeemers: SortedMap[ScriptPurpose, Redeemer]
+  val data: SortedMap[DatumHash, Datum]
+  val id: TxId
+
+object scalus.cardano.onchain.plutus.v2.TxInfo
+  val placeholder: TxInfo
+  given given_Eq_TxInfo: Eq[TxInfo]
+  given given_Ord_TxInfo: Ord[TxInfo]
+  given given_ToData_TxInfo: ToData[TxInfo]
+  given given_FromData_TxInfo: FromData[TxInfo]
+  def findOwnInput(self: TxInfo)(outRef: TxOutRef): Option[TxInInfo]
+  def findOwnDatum(self: TxInfo)(datumHash: DatumHash): Option[Datum]
+  def findOwnScriptOutputs(self: TxInfo)(scriptHash: ValidatorHash): List[TxOut]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+case class scalus.cardano.onchain.plutus.v2.TxOut
+  val address: Address
+  val value: Value
+  val datum: OutputDatum
+  val referenceScript: Option[ScriptHash]
+
+object scalus.cardano.onchain.plutus.v2.TxOut
+  given given_Eq_TxOut: Eq[TxOut]
+  given given_Ord_TxOut: Ord[TxOut]
+  given given_ToData_TxOut: ToData[TxOut]
+  given given_FromData_TxOut: FromData[TxOut]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
+object scalus.cardano.onchain.plutus.v2.Utils
+  def findInput(inputs: List[TxInInfo], outRef: TxOutRef): Option[TxInInfo]
+  def findDatum(outputs: List[TxOut], datum: SortedMap[DatumHash, Datum], datumHash: DatumHash): Option[Datum]
+  def findScriptOutputs(outputs: List[TxOut], scriptHash: ValidatorHash): List[TxOut]
+  val sirModule: Module
+  val sirDeps: List[SIRModuleWithDeps]
+
 case class scalus.cardano.onchain.plutus.v3.Committee
   val members: SortedMap[ColdCommitteeCredential, BigInt]
   val quorum: BigInt
@@ -4454,6 +4867,31 @@ object scalus.cardano.ledger.ArbitraryInstances.TimelockGen
   given given_Arbitrary_Block: Arbitrary[Block]
   given given_Arbitrary_BlockFile: Arbitrary[BlockFile]
   given given_Arbitrary_Transaction: Arbitrary[Transaction]
+
+object scalus.cardano.onchain.plutus.v1.ArbitraryInstances
+
+trait scalus.cardano.onchain.plutus.v1.ArbitraryInstances
+  given given_Arbitrary_IntervalBoundType: Arbitrary[IntervalBoundType]
+  given given_Arbitrary_IntervalBound: Arbitrary[IntervalBound]
+  given given_Arbitrary_Interval: Arbitrary[Interval]
+  given TxIdV1: Arbitrary[TxId]
+  given given_Arbitrary_PubKeyHash: Arbitrary[PubKeyHash]
+  given given_Arbitrary_Credential: Arbitrary[Credential]
+  given given_Arbitrary_StakingCredential: Arbitrary[StakingCredential]
+  given given_Arbitrary_Address: Arbitrary[Address]
+  def genAssetName: Gen[ByteString]
+  def genPolicyId: Gen[ByteString]
+  def genAmount: Gen[BigInt]
+  def genToken: Gen[Tuple2[ByteString, BigInt]]
+  def genAsset: Gen[Value]
+  def genLovelace: Gen[Value]
+  given given_Arbitrary_Value: Arbitrary[Value]
+
+object scalus.cardano.onchain.plutus.v2.ArbitraryInstances
+
+trait scalus.cardano.onchain.plutus.v2.ArbitraryInstances
+  given given_Arbitrary_OutputDatum: Arbitrary[OutputDatum]
+  given given_Arbitrary_TxOut: Arbitrary[TxOut]
 
 object scalus.cardano.onchain.plutus.v3.ArbitraryInstances
 
