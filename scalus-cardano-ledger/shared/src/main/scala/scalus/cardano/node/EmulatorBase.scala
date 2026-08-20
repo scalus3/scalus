@@ -92,7 +92,16 @@ trait EmulatorBase extends BlockchainProvider {
         CardanoInfo(ctx.env.params, ctx.env.network, ctx.slotConfig)
     }
 
-    def currentSlot: Future[SlotNo] = Future.successful(currentContext.env.slot)
+    def currentSlot: Future[SlotNo] = Future.successful(currentSlotSync)
+
+    /** The current slot, without the `Future` wrapper.
+      *
+      * An emulator's slot is in-memory state, so the effectful accessor above is a formality
+      * imposed by the `BlockchainReader` interface. Streaming needs the value synchronously while
+      * building a chain point, where handing back an already-completed `Future` and unwrapping it
+      * would be pure ceremony.
+      */
+    def currentSlotSync: SlotNo = currentContext.env.slot
 
     def fetchLatestParams: Future[ProtocolParams] = {
         val params = currentContext.env.params
