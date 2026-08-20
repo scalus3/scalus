@@ -39,9 +39,9 @@ import scala.concurrent.Future
   * @tparam F
   *   effect type for one-shot operations
   * @tparam C
-  *   stream type for subscriptions, supplied by an adapter's [[ScalusAsyncStream]] instance
+  *   stream type for subscriptions, supplied by an adapter's [[ScalusAsyncStreamAdapter]] instance
   */
-trait BlockchainStreamReaderTF[F[_], C[_]: ScalusAsyncStream] extends BlockchainReaderTF[F] {
+trait BlockchainStreamReaderTF[F[_], C[_]: ScalusAsyncStreamAdapter] extends BlockchainReaderTF[F] {
 
     /** What this provider can do. The only thing an implementation declares; per-request support is
       * derived from it by [[SubscriptionSupport.of]].
@@ -86,7 +86,7 @@ trait BlockchainStreamReaderTF[F[_], C[_]: ScalusAsyncStream] extends Blockchain
 }
 
 /** A streaming provider: [[BlockchainStreamReaderTF]] plus submission. */
-trait BlockchainStreamProviderTF[F[_], C[_]: ScalusAsyncStream]
+trait BlockchainStreamProviderTF[F[_], C[_]: ScalusAsyncStreamAdapter]
     extends BlockchainProviderTF[F]
     with BlockchainStreamReaderTF[F, C]
 
@@ -95,7 +95,7 @@ trait BlockchainStreamProviderTF[F[_], C[_]: ScalusAsyncStream]
   * Wanted for read-only surfaces — a scenario runner's post-run reader, an emulator projection —
   * where handing out a provider would imply a submit path that does not exist.
   */
-trait BlockchainStreamReader[C[_]: ScalusAsyncStream]
+trait BlockchainStreamReader[C[_]: ScalusAsyncStreamAdapter]
     extends BlockchainStreamReaderTF[Future, C]
     with BlockchainReader
 
@@ -106,7 +106,7 @@ trait BlockchainStreamReader[C[_]: ScalusAsyncStream]
   * fs2, ox or pekko streams from them by having the right given in scope, and gets a working stream
   * with no adapter at all by using `ScalusAsyncSource`.
   */
-trait BlockchainStreamProvider[C[_]: ScalusAsyncStream]
+trait BlockchainStreamProvider[C[_]: ScalusAsyncStreamAdapter]
     extends BlockchainStreamProviderTF[Future, C]
     with BlockchainStreamReader[C]
     with BlockchainProvider

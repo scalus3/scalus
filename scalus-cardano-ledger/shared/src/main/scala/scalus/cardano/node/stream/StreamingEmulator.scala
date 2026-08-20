@@ -31,7 +31,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class StreamingEmulator[C[_]](
     val emulator: EmulatorBase,
     val securityParam: Int = 0
-)(using stream: ScalusAsyncStream[C])
+)(using adapter: ScalusAsyncStreamAdapter[C])
     extends BlockchainStreamProvider[C] {
 
     private val hub = new SubscriptionHub(
@@ -83,7 +83,7 @@ class StreamingEmulator[C[_]](
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.delta[UtxoEvent](bufferSize(opts), () => hub.unregisterUtxo(id))
         hub.registerUtxo(id, query, opts, mailbox, emulator.utxos)
-        stream.fromSource(mailbox)
+        adapter.fromSource(mailbox)
     }
 
     def subscribeTransactionQuery(
@@ -95,7 +95,7 @@ class StreamingEmulator[C[_]](
         val mailbox =
             Mailbox.delta[TransactionEvent](bufferSize(opts), () => hub.unregisterTransaction(id))
         hub.registerTransaction(id, query, opts, mailbox)
-        stream.fromSource(mailbox)
+        adapter.fromSource(mailbox)
     }
 
     def subscribeBlockQuery(query: BlockQuery, opts: SubscriptionOptions): C[BlockEvent] = {
@@ -103,21 +103,21 @@ class StreamingEmulator[C[_]](
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.delta[BlockEvent](bufferSize(opts), () => hub.unregisterBlock(id))
         hub.registerBlock(id, query, opts, mailbox)
-        stream.fromSource(mailbox)
+        adapter.fromSource(mailbox)
     }
 
     def subscribeTip(): C[ChainTip] = {
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ChainTip](() => hub.unregisterTip(id))
         hub.registerTip(id, mailbox)
-        stream.fromSource(mailbox)
+        adapter.fromSource(mailbox)
     }
 
     def subscribeProtocolParams(): C[ProtocolParams] = {
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ProtocolParams](() => hub.unregisterParams(id))
         hub.registerParams(id, mailbox)
-        stream.fromSource(mailbox)
+        adapter.fromSource(mailbox)
     }
 
     def subscribeTransactionStatus(txHash: TransactionHash): C[TransactionStatus] = {
@@ -125,7 +125,7 @@ class StreamingEmulator[C[_]](
         val mailbox =
             Mailbox.latestValue[TransactionStatus](() => hub.unregisterTxStatus(txHash, id))
         hub.registerTxStatus(id, txHash, mailbox)
-        stream.fromSource(mailbox)
+        adapter.fromSource(mailbox)
     }
 
     def close(): Future[Unit] = {

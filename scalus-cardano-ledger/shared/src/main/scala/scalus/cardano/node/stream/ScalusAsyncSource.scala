@@ -35,13 +35,11 @@ trait ScalusAsyncSource[A] {
   * One instance per stream library, each a handful of lines. The identity instance below means a
   * caller who does not want to choose a library does not have to.
   */
-trait ScalusAsyncStream[S[_]] {
+trait ScalusAsyncStreamAdapter[S[_]] {
     def fromSource[A](src: ScalusAsyncSource[A]): S[A]
 }
 
-object ScalusAsyncStream {
-
-    def apply[S[_]](using s: ScalusAsyncStream[S]): ScalusAsyncStream[S] = s
+object ScalusAsyncStreamAdapter {
 
     /** A [[ScalusAsyncSource]] is already a stream, so
       * `BlockchainStreamProvider[ScalusAsyncSource]` is a complete streaming API with nothing
@@ -49,7 +47,7 @@ object ScalusAsyncStream {
       * is the form to reach for in examples, so the first thing a reader meets does not force a
       * choice of stream library.
       */
-    given identity: ScalusAsyncStream[ScalusAsyncSource] with {
+    given identity: ScalusAsyncStreamAdapter[ScalusAsyncSource] with {
         def fromSource[A](src: ScalusAsyncSource[A]): ScalusAsyncSource[A] = src
     }
 }
