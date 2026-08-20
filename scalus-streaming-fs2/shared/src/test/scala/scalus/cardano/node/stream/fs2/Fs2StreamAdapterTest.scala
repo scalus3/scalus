@@ -4,8 +4,8 @@ import cats.effect.IO
 import cats.effect.unsafe.implicits.global
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.infra.ScalusBufferOverflowException
-import scalus.cardano.node.stream.ScalusAsyncStream
-import scalus.cardano.node.stream.fs2.Fs2ScalusAsyncStream.fs2Stream
+import scalus.cardano.node.stream.ScalusAsyncStreamAdapter
+import scalus.cardano.node.stream.fs2.Fs2StreamAdapter.fs2Adapter
 import scalus.cardano.node.stream.internal.Mailbox
 
 import scala.concurrent.duration.DurationInt
@@ -13,9 +13,9 @@ import scala.concurrent.duration.DurationInt
 /** The adapter's own responsibilities: bridging pull to `Stream`, terminating, and releasing the
   * subscription. Provider behaviour is the conformance suite's job, not this file's.
   */
-class Fs2ScalusAsyncStreamTest extends AnyFunSuite {
+class Fs2StreamAdapterTest extends AnyFunSuite {
 
-    private val adapter = ScalusAsyncStream[Fs2ScalusAsyncStream.IOStream]
+    private val adapter = summon[ScalusAsyncStreamAdapter[Fs2StreamAdapter.IOStream]]
 
     test("values reach the stream in order and a close terminates it") {
         val mailbox = Mailbox.delta[Int]()
@@ -52,7 +52,7 @@ class Fs2ScalusAsyncStreamTest extends AnyFunSuite {
     test("the resource form releases even when the stream is never run") {
         var cancelled = false
         val mailbox = Mailbox.delta[Int](onCancel = () => cancelled = true)
-        Fs2ScalusAsyncStream
+        Fs2StreamAdapter
             .subscribe(IO.pure(mailbox))
             .use(_ => IO.unit)
             .unsafeRunTimed(5.seconds)
