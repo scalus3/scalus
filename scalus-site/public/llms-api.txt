@@ -3807,6 +3807,7 @@ case class scalus.compiler.Options
   val addScalusTag: Boolean
   val warnListConversions: Boolean
   val noWarn: Boolean
+  val valueBuiltins: Boolean
   def withScalusTag(enable: Boolean): Options
 
 object scalus.compiler.Options
