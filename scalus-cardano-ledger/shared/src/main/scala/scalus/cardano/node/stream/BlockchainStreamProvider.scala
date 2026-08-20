@@ -36,68 +36,91 @@ import scala.concurrent.Future
   * and the request did not set `allowUnindexedScan`. Callers that want to decide *before* asking
   * consult the same function.
   *
+  * ## Choosing a stream type
+  *
+  * The stream type is chosen per call, not per provider, so one provider instance can hand fs2
+  * streams to application code while a test pulls raw [[ScalusAsyncSource]]s from it. `C` is
+  * inferred from the expected type:
+  *
+  * {{{
+  * val tips: Stream[IO, ChainTip]        = provider.subscribeTip()  // needs the fs2 adapter given
+  * val raw:  ScalusAsyncSource[ChainTip] = provider.subscribeTip()  // no adapter module needed
+  * }}}
+  *
+  * Where there is no expected type, `C` is decided by which adapter is in implicit scope — an
+  * imported adapter outranks the [[ScalusAsyncStreamAdapter.identity]] instance in this companion.
+  * Importing an adapter is therefore what makes `subscribe` return that library's type. Two
+  * adapters imported into one file with no expected type is an ambiguity, and the compiler says so;
+  * annotate or pass the type argument explicitly.
+  *
   * @tparam F
   *   effect type for one-shot operations
-  * @tparam C
-  *   stream type for subscriptions, supplied by an adapter's [[ScalusAsyncStreamAdapter]] instance
   */
-trait BlockchainStreamReaderTF[F[_], C[_]: ScalusAsyncStreamAdapter] extends BlockchainReaderTF[F] {
+trait BlockchainStreamReaderTF[F[_]] extends BlockchainReaderTF[F] {
 
     /** What this provider can do. The only thing an implementation declares; per-request support is
       * derived from it by [[SubscriptionSupport.of]].
       */
     def streamCapabilities: StreamCapabilities
 
-    def subscribeUtxoQuery(query: UtxoEventQuery, opts: SubscriptionOptions): C[UtxoEvent]
+    def subscribeUtxoQuery[C[_]: ScalusAsyncStreamAdapter](
+        query: UtxoEventQuery,
+        opts: SubscriptionOptions
+    ): C[UtxoEvent]
 
-    def subscribeTransactionQuery(
+    def subscribeTransactionQuery[C[_]: ScalusAsyncStreamAdapter](
         query: TransactionQuery,
         opts: SubscriptionOptions
     ): C[TransactionEvent]
 
-    def subscribeBlockQuery(query: BlockQuery, opts: SubscriptionOptions): C[BlockEvent]
+    def subscribeBlockQuery[C[_]: ScalusAsyncStreamAdapter](
+        query: BlockQuery,
+        opts: SubscriptionOptions
+    ): C[BlockEvent]
 
     /** Subscribe with default options. */
-    def subscribeUtxoQuery(query: UtxoEventQuery): C[UtxoEvent] =
-        subscribeUtxoQuery(query, SubscriptionOptions())
+    def subscribeUtxoQuery[C[_]: ScalusAsyncStreamAdapter](query: UtxoEventQuery): C[UtxoEvent] =
+        subscribeUtxoQuery[C](query, SubscriptionOptions())
 
     /** Subscribe with default options. */
-    def subscribeTransactionQuery(query: TransactionQuery): C[TransactionEvent] =
-        subscribeTransactionQuery(query, SubscriptionOptions())
+    def subscribeTransactionQuery[C[_]: ScalusAsyncStreamAdapter](
+        query: TransactionQuery
+    ): C[TransactionEvent] =
+        subscribeTransactionQuery[C](query, SubscriptionOptions())
 
     /** Subscribe with default options. */
-    def subscribeBlockQuery(query: BlockQuery): C[BlockEvent] =
-        subscribeBlockQuery(query, SubscriptionOptions())
+    def subscribeBlockQuery[C[_]: ScalusAsyncStreamAdapter](query: BlockQuery): C[BlockEvent] =
+        subscribeBlockQuery[C](query, SubscriptionOptions())
 
     /** Latest-value stream of chain-tip updates — newer wins, so a subscriber always sees the most
       * recent tip when it pulls rather than a backlog of stale ones.
       */
-    def subscribeTip(): C[ChainTip]
+    def subscribeTip[C[_]: ScalusAsyncStreamAdapter](): C[ChainTip]
 
     /** Latest-value stream of protocol parameters: the current value on subscribe, then changes. */
-    def subscribeProtocolParams(): C[ProtocolParams]
+    def subscribeProtocolParams[C[_]: ScalusAsyncStreamAdapter](): C[ProtocolParams]
 
     /** Latest-value stream of one transaction's status, following it through the mempool into a
       * block — and back out again if a rollback orphans it.
       */
-    def subscribeTransactionStatus(txHash: TransactionHash): C[TransactionStatus]
+    def subscribeTransactionStatus[C[_]: ScalusAsyncStreamAdapter](
+        txHash: TransactionHash
+    ): C[TransactionStatus]
 
     def close(): F[Unit]
 }
 
 /** A streaming provider: [[BlockchainStreamReaderTF]] plus submission. */
-trait BlockchainStreamProviderTF[F[_], C[_]: ScalusAsyncStreamAdapter]
+trait BlockchainStreamProviderTF[F[_]]
     extends BlockchainProviderTF[F]
-    with BlockchainStreamReaderTF[F, C]
+    with BlockchainStreamReaderTF[F]
 
 /** `Future`-based streaming reader, mirroring [[BlockchainReader]].
   *
   * Wanted for read-only surfaces — a scenario runner's post-run reader, an emulator projection —
   * where handing out a provider would imply a submit path that does not exist.
   */
-trait BlockchainStreamReader[C[_]: ScalusAsyncStreamAdapter]
-    extends BlockchainStreamReaderTF[Future, C]
-    with BlockchainReader
+trait BlockchainStreamReader extends BlockchainStreamReaderTF[Future] with BlockchainReader
 
 /** `Future`-based streaming provider, mirroring [[BlockchainProvider]].
   *
@@ -106,7 +129,7 @@ trait BlockchainStreamReader[C[_]: ScalusAsyncStreamAdapter]
   * fs2, ox or pekko streams from them by having the right given in scope, and gets a working stream
   * with no adapter at all by using `ScalusAsyncSource`.
   */
-trait BlockchainStreamProvider[C[_]: ScalusAsyncStreamAdapter]
-    extends BlockchainStreamProviderTF[Future, C]
-    with BlockchainStreamReader[C]
+trait BlockchainStreamProvider
+    extends BlockchainStreamProviderTF[Future]
+    with BlockchainStreamReader
     with BlockchainProvider
