@@ -81,6 +81,14 @@ class ValueIntrinsicsLoweringTest extends AnyFunSuite {
     private val containsSir = compile { (d1: Data, d2: Data) =>
         fromData[Value](d1).containsAtLeast(fromData[Value](d2))
     }
+    private val insertCoinSir = compile { (d: Data, cs: ByteString, tn: ByteString, n: BigInt) =>
+        import scalus.uplc.builtin.Data.toData
+        fromData[Value](d).insertCoin(cs, tn, n).toData
+    }
+    private val withoutLovelaceSir = compile { (d: Data) =>
+        import scalus.uplc.builtin.Data.toData
+        fromData[Value](d).withoutLovelace.toData
+    }
 
     private def hasBuiltin(t: Term, name: String): Boolean =
         t.show.contains(s"(builtin $name)")
@@ -112,9 +120,22 @@ class ValueIntrinsicsLoweringTest extends AnyFunSuite {
         assert(hasBuiltin(containsSir.toUplc(), "valueContains"))
     }
 
+    test("insertCoin and withoutLovelace lower to the insertCoin builtin at PV11") {
+        assert(hasBuiltin(insertCoinSir.toUplc(), "insertCoin"))
+        assert(hasBuiltin(withoutLovelaceSir.toUplc(), "insertCoin"))
+    }
+
     test("all ops keep the portable lowering at PV10") {
-        for sir <- List(plusSir, minusSir, multiplySir, negateSir, containsSir) do
-            assert(hasNoCip153Builtins(sir.toUplc(using pv10)()))
+        for sir <- List(
+              plusSir,
+              minusSir,
+              multiplySir,
+              negateSir,
+              containsSir,
+              insertCoinSir,
+              withoutLovelaceSir
+            )
+        do assert(hasNoCip153Builtins(sir.toUplc(using pv10)()))
     }
 
     test("PV11 and PV10 lowerings agree on canonical values") {
@@ -129,6 +150,25 @@ class ValueIntrinsicsLoweringTest extends AnyFunSuite {
         both(negateSir, u => u $ valueData.asTerm)
         both(containsSir, u => u $ valueData.asTerm $ valueData2.asTerm)
         both(quantityOfSir, u => u $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm)
+        // replace, insert-new, and zero-deletes cases
+        both(insertCoinSir, u => u $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm $ 42L.asTerm)
+        both(
+          insertCoinSir,
+          u => u $ valueData.asTerm $ ByteString.fromHex("cc" * 28).asTerm $ tok.asTerm $ 9L.asTerm
+        )
+        both(insertCoinSir, u => u $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm $ 0L.asTerm)
+        // an ada-bearing value, so `withoutLovelace` actually deletes something
+        val adaValue = Data.Map(
+          plutus.prelude.List(
+            (
+              Data.B(ByteString.empty),
+              Data.Map(plutus.prelude.List((Data.B(ByteString.empty), Data.I(1000))))
+            ),
+            (Data.B(policyBB), Data.Map(plutus.prelude.List((Data.B(tok), Data.I(3)))))
+          )
+        )
+        both(withoutLovelaceSir, u => u $ adaValue.asTerm)
+        both(withoutLovelaceSir, u => u $ valueData.asTerm)
     }
 
     test("valueBuiltins = false disables the intrinsics at PV11") {
@@ -140,8 +180,32 @@ class ValueIntrinsicsLoweringTest extends AnyFunSuite {
 
     test("valueBuiltins = false disables the intrinsics for every Value op at PV11") {
         val off = Options(valueBuiltins = false)
-        for sir <- List(plusSir, minusSir, multiplySir, negateSir, containsSir) do
-            assert(hasNoCip153Builtins(sir.toUplc(using off)()))
+        for sir <- List(
+              plusSir,
+              minusSir,
+              multiplySir,
+              negateSir,
+              containsSir,
+              insertCoinSir,
+              withoutLovelaceSir
+            )
+        do assert(hasNoCip153Builtins(sir.toUplc(using off)()))
+    }
+
+    test("PV11 strict validation: insertCoin rejects long keys and out-of-range amounts") {
+        val longKey = ByteString.fromHex("ab" * 33)
+        val pv11 = insertCoinSir.toUplc()
+        val pv10i = insertCoinSir.toUplc(using pv10)()
+        // 33-byte policy id, non-zero amount: PV11 fails, PV10 inserts it
+        val longKeyArgs =
+            (u: Term) => u $ valueData.asTerm $ longKey.asTerm $ tok.asTerm $ 1L.asTerm
+        assert(longKeyArgs(pv11).evaluateDebug.isFailure)
+        assert(longKeyArgs(pv10i).evaluateDebug.isSuccess)
+        // amount outside the signed 128-bit range: PV11 fails, PV10 inserts it
+        val bigAmount = Term.Const(Constant.Integer(BigInt(2).pow(128)))
+        val bigArgs = (u: Term) => u $ valueData.asTerm $ policyBB.asTerm $ tok.asTerm $ bigAmount
+        assert(bigArgs(pv11).evaluateDebug.isFailure)
+        assert(bigArgs(pv10i).evaluateDebug.isSuccess)
     }
 
     test("PV11 strict validation: malformed values fail where PV10 succeeds") {

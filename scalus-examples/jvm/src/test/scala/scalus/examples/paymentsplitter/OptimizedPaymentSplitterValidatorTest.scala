@@ -27,59 +27,59 @@ class OptimizedPaymentSplitterValidatorTest
     private val expectedRewardBudgets: Map[String, ExUnits] = ScalaCompilerVersion.baseline(
       pre38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 125622,
-          steps = 43_657936
+          memory = 121905,
+          steps = 43_603979
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 159122,
-          steps = 57_886040
+          memory = 155405,
+          steps = 57_832083
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 194223,
-          steps = 73_595640
+          memory = 190506,
+          steps = 73_541683
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 194223,
-          steps = 73_595640
+          memory = 190506,
+          steps = 73_541683
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 194223,
-          steps = 73_595640
+          memory = 190506,
+          steps = 73_541683
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 194223,
-          steps = 73_595640
+          memory = 190506,
+          steps = 73_541683
         ),
-        "success between 5 payees" -> ExUnits(memory = 269228, steps = 109_459328),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 252241, steps = 99_845506)
+        "success between 5 payees" -> ExUnits(memory = 265511, steps = 109_405371),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 241090, steps = 99_683635)
       ),
       since38 = Map(
         "success when payments are correctly split for a single payee" -> ExUnits(
-          memory = 120706,
-          steps = 41_915387
+          memory = 116989,
+          steps = 41_861430
         ),
         "success when payments are correctly split between 2 payees" -> ExUnits(
-          memory = 154206,
-          steps = 56_143491
+          memory = 150489,
+          steps = 56_089534
         ),
         "success when payments are correctly split between 3 payees" -> ExUnits(
-          memory = 189307,
-          steps = 71_853091
+          memory = 185590,
+          steps = 71_799134
         ),
         "success when split equally and remainder compensates fee - o1" -> ExUnits(
-          memory = 189307,
-          steps = 71_853091
+          memory = 185590,
+          steps = 71_799134
         ),
         "success when split equally and remainder compensates fee - o2" -> ExUnits(
-          memory = 189307,
-          steps = 71_853091
+          memory = 185590,
+          steps = 71_799134
         ),
         "success when split equally and remainder compensates fee - o3" -> ExUnits(
-          memory = 189307,
-          steps = 71_853091
+          memory = 185590,
+          steps = 71_799134
         ),
-        "success between 5 payees" -> ExUnits(memory = 264312, steps = 107_716779),
-        "success with multiple contract UTxOs" -> ExUnits(memory = 247325, steps = 98_102957)
+        "success between 5 payees" -> ExUnits(memory = 260595, steps = 107_662822),
+        "success with multiple contract UTxOs" -> ExUnits(memory = 236174, steps = 97_941086)
       )
     )
 
@@ -97,8 +97,8 @@ class OptimizedPaymentSplitterValidatorTest
         val (rewardBudget, spendBudget) = runTestCaseWithBudget(tc)
         assert(
           rewardBudget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 252241, steps = 99_845506),
-            since38 = ExUnits(memory = 247325, steps = 98_102957)
+            pre38 = ExUnits(memory = 241090, steps = 99_683635),
+            since38 = ExUnits(memory = 236174, steps = 97_941086)
           )
         )
         assert(spendBudget == ExUnits(memory = 41828, steps = 13_443300))

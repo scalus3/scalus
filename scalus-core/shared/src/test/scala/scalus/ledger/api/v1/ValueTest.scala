@@ -1218,6 +1218,70 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         )
     }
 
+    test("insertCoin properties") {
+        // The inserted keys must respect the CIP-153 32-byte key bound: the value produced
+        // here flows into the PV11 `unValueData` guard inside `quantityOf`. Shadows the
+        // ambient unbounded ByteString arbitrary for this test only.
+        given Arbitrary[ByteString] = Arbitrary(genAssetName)
+        checkEval { (value: Value, cs: PolicyId, tn: TokenName) =>
+            value.insertCoin(cs, tn, BigInt(7)).quantityOf(cs, tn) === BigInt(7) &&
+            value.insertCoin(cs, tn, BigInt(-3)).quantityOf(cs, tn) === BigInt(-3) &&
+            value.insertCoin(cs, tn, BigInt(0)).quantityOf(cs, tn) === BigInt(0)
+        }
+    }
+
+    test("insertCoin inserts a new token") {
+        assertEvalEq(
+          Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"bb", utf8"tokenY", BigInt(7)),
+          Value.unsafeFromList(
+            List(
+              (hex"aa", List((utf8"tokenX", BigInt(5)))),
+              (hex"bb", List((utf8"tokenY", BigInt(7))))
+            )
+          )
+        )
+    }
+
+    test("insertCoin replaces an existing amount instead of adding") {
+        assertEvalEq(
+          Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"aa", utf8"tokenX", BigInt(7)),
+          Value(hex"aa", utf8"tokenX", 7)
+        )
+    }
+
+    test("insertCoin zero amount deletes the token and drops an emptied policy") {
+        assertEvalEq(
+          Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"aa", utf8"tokenX", BigInt(0)),
+          Value.zero
+        )
+        assertEvalEq(
+          Value
+              .unsafeFromList(
+                List((hex"aa", List((utf8"tokenX", BigInt(5)), (utf8"tokenY", BigInt(7)))))
+              )
+              .insertCoin(hex"aa", utf8"tokenX", BigInt(0)),
+          Value(hex"aa", utf8"tokenY", 7)
+        )
+    }
+
+    test("insertCoin budget") {
+        assertEvalWithBudget(
+          (v: Value) => v.insertCoin(utf8"PolicyId", utf8"Other", BigInt(7)),
+          Value(utf8"PolicyId", utf8"TokenName", 1000),
+          Value.unsafeFromList(
+            List((utf8"PolicyId", List((utf8"Other", BigInt(7)), (utf8"TokenName", BigInt(1000)))))
+          ),
+          ExUnits(memory = 1689, steps = 1_175858)
+        )
+    }
+
+    test("insertCoin zero amount on an absent token is a no-op") {
+        assertEvalEq(
+          Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"bb", utf8"tokenY", BigInt(0)),
+          Value(hex"aa", utf8"tokenX", 5)
+        )
+    }
+
     test("hasOnly properties") {
         checkEval { (value: Value, cs: PolicyId, tn: TokenName) =>
             val amount = value.quantityOf(cs, tn)
@@ -1310,12 +1374,31 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         }
     }
 
+    test("withoutLovelace keeps other tokens under the empty policy") {
+        // Pins the delete-the-ada-token semantics shared with the CIP-153 `insertCoin`
+        // builtin: only the (adaPolicyId, adaTokenName) coin goes; a non-ada token that
+        // sits under the empty policy survives. Ledger-shaped values never hit this case.
+        assertEvalEq(
+          Value
+              .unsafeFromList(
+                List(
+                  (
+                    Value.adaPolicyId,
+                    List((Value.adaTokenName, BigInt(1000)), (utf8"weird", BigInt(2)))
+                  )
+                )
+              )
+              .withoutLovelace,
+          Value(Value.adaPolicyId, utf8"weird", 2)
+        )
+    }
+
     test("withoutLovelace zero") {
         assertEvalWithBudget(
           (v: Value) => v.withoutLovelace,
           Value.zero,
           Value.zero,
-          ExUnits(memory = 2064, steps = 396969)
+          ExUnits(memory = 1559, steps = 678958)
         )
     }
 
@@ -1324,7 +1407,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.withoutLovelace,
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 5262, steps = 1_137497)
+          ExUnits(memory = 1645, steps = 1_099540)
         )
     }
 
@@ -1333,7 +1416,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.withoutLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 4661, steps = 1_012667)
+          ExUnits(memory = 1667, steps = 1_137699)
         )
     }
 
@@ -1350,7 +1433,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 5262, steps = 1_137497)
+          ExUnits(memory = 1732, steps = 1_539900)
         )
     }
 

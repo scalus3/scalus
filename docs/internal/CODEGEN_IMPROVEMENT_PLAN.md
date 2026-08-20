@@ -423,6 +423,12 @@ tracks T10, T12, T16.
   behavior change. Design:
   `docs/superpowers/specs/2026-08-18-t7-value-builtins-lowering-design.md`;
   measurements pinned in `scalus-core/jvm/.../uplc/eval/ValueBuiltinsBudgetTest.scala`.
+- **Phase 1.1 landed 2026-08-20:** the last uncovered CIP-153 builtin, `insertCoin`,
+  now has a prelude counterpart `Value.insertCoin(cs, tn, amount)` (replace
+  semantics; zero deletes the coin) lowering to the builtin at PV11, and
+  `Value.withoutLovelace` delegates to `insertCoin(ada, ada, 0)` so it picks the
+  intrinsic up transitively (semantics aligned: deletes the ada coin, not the
+  whole empty-policy entry).
 - **Phase 2 (open):** a `BuiltinValueBacked` representation so chained ops stay
   native between calls (today each op pays a `valueData`/`unValueData` roundtrip),
   per the design doc's sketch. Also open: `interpretReprSIR` has no

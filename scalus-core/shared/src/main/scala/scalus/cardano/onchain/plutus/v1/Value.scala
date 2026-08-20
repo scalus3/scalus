@@ -835,6 +835,43 @@ object Value extends ValueOffchainOps {
             }
         }
 
+        /** Returns a new `Value` with the amount of `(cs, tn)` set to `amount`.
+          *
+          * The amount is REPLACED, not added - unlike `+`. An `amount` of zero deletes the token,
+          * and the policy entry too when it held no other token, keeping the result canonical.
+          * Mirrors the CIP-153 `insertCoin` builtin.
+          *
+          * At PV11 (vanRossem) this method lowers to the `insertCoin` builtin, which requires the
+          * value to be in canonical form (strictly ascending keys, no zero amounts, no empty inner
+          * maps, keys at most 32 bytes, amounts within the signed 128-bit range) and rejects a
+          * `cs`/`tn` longer than 32 bytes (for non-zero `amount`) or an `amount` outside the signed
+          * 128-bit range; a violation makes the script fail. See `Options.valueBuiltins`.
+          *
+          * @param cs
+          *   The policy id of the coin to set
+          * @param tn
+          *   The token name of the coin to set
+          * @param amount
+          *   The new amount; zero deletes the coin
+          * @example
+          *   {{{
+          *   val value = Value(utf8"pid", utf8"TOKEN", BigInt(5))
+          *   value.insertCoin(utf8"pid", utf8"TOKEN", BigInt(7)) === Value(utf8"pid", utf8"TOKEN", BigInt(7))
+          *   value.insertCoin(utf8"pid", utf8"TOKEN", BigInt(0)) === Value.zero
+          *   }}}
+          */
+        def insertCoin(cs: PolicyId, tn: TokenName, amount: BigInt): Value =
+            if amount !== BigInt(0) then
+                val tokens = v.toSortedMap.get(cs).getOrElse(SortedMap.empty)
+                Value(v.toSortedMap.insert(cs, tokens.insert(tn, amount)))
+            else
+                v.toSortedMap.get(cs) match
+                    case Option.Some(tokens) =>
+                        val newTokens = tokens.delete(tn)
+                        if newTokens.isEmpty then Value(v.toSortedMap.delete(cs))
+                        else Value(v.toSortedMap.insert(cs, newTokens))
+                    case Option.None => v
+
         /** Get all tokens associated with a given policy.
           *
           * Returns the token `SortedMap` for the given policy id. If the policy id is not found,
@@ -912,10 +949,13 @@ object Value extends ValueOffchainOps {
             go(unMapData(v.toData))
         }
 
-        /** Returns a new `Value` with all ADA/Lovelace tokens removed.
+        /** Returns a new `Value` with the ADA/Lovelace coin removed.
           *
-          * This method creates a copy of the value with the ADA policy id removed, effectively
-          * removing all Lovelace tokens while preserving other tokens.
+          * Deletes the `(adaPolicyId, adaTokenName)` coin - and the empty-policy entry with it when
+          * it held no other token - while preserving all other tokens. Equivalent to
+          * `insertCoin(adaPolicyId, adaTokenName, 0)` and shares its PV11 lowering to the CIP-153
+          * `insertCoin` builtin, including its canonical-form requirement. See
+          * `Options.valueBuiltins`.
           *
           * @return
           *   A new `Value` without any Lovelace tokens
@@ -941,7 +981,7 @@ object Value extends ValueOffchainOps {
           *   value.withoutLovelace === withoutAda
           *   }}}
           */
-        def withoutLovelace: Value = Value(v.toSortedMap.delete(adaPolicyId))
+        def withoutLovelace: Value = v.insertCoin(adaPolicyId, adaTokenName, BigInt(0))
 
         /** Flattens the `Value` into a list of policy id, token name, and amount triples.
           *

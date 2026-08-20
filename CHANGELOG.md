@@ -7,6 +7,9 @@
 - `plutus.v1.Value.containsAtLeast` – "does this value cover every asset of the other one", with
   the exact semantics of the CIP-153 `valueContains` builtin on canonical values, on every
   protocol version
+- `plutus.v1.Value.insertCoin(cs, tn, amount)` – set one coin's amount (REPLACES, unlike `+`;
+  zero deletes the coin), with the exact semantics of the CIP-153 `insertCoin` builtin, on every
+  protocol version; lowers to that builtin at PV11
 
 ### Changed
 
@@ -18,6 +21,10 @@
   fail on
   malformed values that the portable lowering tolerated; `unionValue`/`scaleValue` fail on
   128-bit overflow. Opt out with `Options.valueBuiltins = false`.
+- `plutus.v1.Value.withoutLovelace` now deletes the `(adaPolicyId, adaTokenName)` coin (via
+  `insertCoin(ada, ada, 0)`, lowering to the CIP-153 `insertCoin` builtin at PV11) instead of the
+  whole empty-policy entry. Identical for ledger-shaped values; a non-ada token sitting under the
+  empty policy now survives.
 - The `scalus-testkit`-published `Value` generator (`plutus.v1.ArbitraryInstances.genAmount`) now
   draws token quantities from `+-(2^64)` instead of `+-(2^128)`, so generated values stay inside
   the CIP-153 quantity range; property tests that scale a generated `Value` must bound their

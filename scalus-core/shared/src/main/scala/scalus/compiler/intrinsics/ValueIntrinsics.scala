@@ -4,7 +4,10 @@ import scalus.cardano.onchain.plutus.v1.Value
 import scalus.compiler.Compile
 import scalus.compiler.intrinsics.IntrinsicHelpers.*
 import scalus.compiler.sir.lowering.*
-import scalus.uplc.builtin.Builtins.*
+// The builtin is aliased because the provider def below must be named `insertCoin` (intrinsic
+// dispatch matches the target method's name) and shares its arity - a bare reference would be
+// ambiguous.
+import scalus.uplc.builtin.Builtins.{insertCoin as insertCoinBuiltin, *}
 import scalus.uplc.builtin.internal.UniversalDataConversion
 import scalus.uplc.builtin.{ByteString, Data}
 
@@ -70,6 +73,13 @@ object ValueIntrinsicsV11 {
 
     def containsAtLeast(v: Value, other: Value): Boolean =
         valueContains(unValueData(typeProxy[Data](v)), unValueData(typeProxy[Data](other)))
+
+    // Also reached transitively by `Value.withoutLovelace`, whose prelude body delegates to
+    // `insertCoin(adaPolicyId, adaTokenName, 0)`.
+    def insertCoin(v: Value, cs: ByteString, tn: ByteString, amount: BigInt): Value =
+        UniversalDataConversion.fromData[Value](
+          valueData(insertCoinBuiltin(cs, tn, amount, unValueData(typeProxy[Data](v))))
+        )
 }
 
 object ValueReprRules {
@@ -92,6 +102,7 @@ object ValueReprRules {
       "minus" -> valueOut,
       "multiply" -> valueOut,
       "negate" -> valueOut,
-      "containsAtLeast" -> defaultOut
+      "containsAtLeast" -> defaultOut,
+      "insertCoin" -> valueOut
     )
 }

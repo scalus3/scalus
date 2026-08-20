@@ -247,7 +247,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, depositTx, vaultUtxo.input)
         assert(result.isSuccess, s"Deposit should succeed: $result")
         assert(
-          result.budget == (ExUnits(memory = 101393, steps = 38_650773))
+          result.budget == (ExUnits(memory = 97976, steps = 38_644816))
         )
 
         assert(provider.submit(depositTx).await().isRight)
