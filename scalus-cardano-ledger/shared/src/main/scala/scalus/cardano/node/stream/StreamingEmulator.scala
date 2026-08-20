@@ -28,11 +28,8 @@ import scala.concurrent.{ExecutionContext, Future}
   *   emulator never forks, so nothing ever needs to settle. Raise it to exercise a subscriber's
   *   confirmation gating.
   */
-class StreamingEmulator[C[_]](
-    val emulator: EmulatorBase,
-    val securityParam: Int = 0
-)(using adapter: ScalusAsyncStreamAdapter[C])
-    extends BlockchainStreamProvider[C] {
+class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
+    extends BlockchainStreamProvider {
 
     private val hub = new SubscriptionHub(
       emulator.cardanoInfo,
@@ -78,15 +75,18 @@ class StreamingEmulator[C[_]](
 
     // ── subscriptions ───────────────────────────────────────────────────────
 
-    def subscribeUtxoQuery(query: UtxoEventQuery, opts: SubscriptionOptions): C[UtxoEvent] = {
+    def subscribeUtxoQuery[C[_]: ScalusAsyncStreamAdapter](
+        query: UtxoEventQuery,
+        opts: SubscriptionOptions
+    ): C[UtxoEvent] = {
         hub.require(SubscriptionRequest.Utxo(query, opts))
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.delta[UtxoEvent](bufferSize(opts), () => hub.unregisterUtxo(id))
         hub.registerUtxo(id, query, opts, mailbox, emulator.utxos)
-        adapter.fromSource(mailbox)
+        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
 
-    def subscribeTransactionQuery(
+    def subscribeTransactionQuery[C[_]: ScalusAsyncStreamAdapter](
         query: TransactionQuery,
         opts: SubscriptionOptions
     ): C[TransactionEvent] = {
@@ -95,37 +95,42 @@ class StreamingEmulator[C[_]](
         val mailbox =
             Mailbox.delta[TransactionEvent](bufferSize(opts), () => hub.unregisterTransaction(id))
         hub.registerTransaction(id, query, opts, mailbox)
-        adapter.fromSource(mailbox)
+        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
 
-    def subscribeBlockQuery(query: BlockQuery, opts: SubscriptionOptions): C[BlockEvent] = {
+    def subscribeBlockQuery[C[_]: ScalusAsyncStreamAdapter](
+        query: BlockQuery,
+        opts: SubscriptionOptions
+    ): C[BlockEvent] = {
         hub.require(SubscriptionRequest.Block(query, opts))
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.delta[BlockEvent](bufferSize(opts), () => hub.unregisterBlock(id))
         hub.registerBlock(id, query, opts, mailbox)
-        adapter.fromSource(mailbox)
+        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
 
-    def subscribeTip(): C[ChainTip] = {
+    def subscribeTip[C[_]: ScalusAsyncStreamAdapter](): C[ChainTip] = {
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ChainTip](() => hub.unregisterTip(id))
         hub.registerTip(id, mailbox)
-        adapter.fromSource(mailbox)
+        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
 
-    def subscribeProtocolParams(): C[ProtocolParams] = {
+    def subscribeProtocolParams[C[_]: ScalusAsyncStreamAdapter](): C[ProtocolParams] = {
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ProtocolParams](() => hub.unregisterParams(id))
         hub.registerParams(id, mailbox)
-        adapter.fromSource(mailbox)
+        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
 
-    def subscribeTransactionStatus(txHash: TransactionHash): C[TransactionStatus] = {
+    def subscribeTransactionStatus[C[_]: ScalusAsyncStreamAdapter](
+        txHash: TransactionHash
+    ): C[TransactionStatus] = {
         val id = hub.nextSubscriptionId()
         val mailbox =
             Mailbox.latestValue[TransactionStatus](() => hub.unregisterTxStatus(txHash, id))
         hub.registerTxStatus(id, txHash, mailbox)
-        adapter.fromSource(mailbox)
+        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
 
     def close(): Future[Unit] = {

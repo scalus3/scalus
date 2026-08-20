@@ -180,7 +180,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
 
     test("tip is delivered on subscribe and advances with the chain") {
         withFixture { f =>
-            val tips = f.provider.subscribeTip()
+            val tips: ScalusAsyncSource[ChainTip] = f.provider.subscribeTip()
             val first = next(tips)
             f.payTo(f.freshAddress(), Value.ada(10))
             val second = next(tips)
@@ -195,7 +195,8 @@ abstract class StreamProviderConformance extends AnyFunSuite {
         withFixture { f =>
             val target = f.freshAddress()
             val hash = f.payTo(target, Value.ada(10))
-            val statuses = f.provider.subscribeTransactionStatus(hash)
+            val statuses: ScalusAsyncSource[scalus.cardano.node.TransactionStatus] =
+                f.provider.subscribeTransactionStatus(hash)
             assert(
               next(statuses) == scalus.cardano.node.TransactionStatus.Confirmed,
               "a transaction already in a block should read as Confirmed"
@@ -247,6 +248,8 @@ abstract class StreamProviderConformance extends AnyFunSuite {
         address: Address,
         opts: SubscriptionOptions
     ): ScalusAsyncSource[UtxoEvent] =
+        // The declared return type is what picks `C`; the suite deliberately works at the
+        // ScalusAsyncSource level so it needs no stream library to test one.
         f.provider.subscribeUtxoQuery(addressQuery(address), opts)
 
     private def requestOfKind(
@@ -303,7 +306,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
   */
 trait StreamConformanceFixture {
 
-    def provider: BlockchainStreamProvider[ScalusAsyncSource]
+    def provider: BlockchainStreamProvider
 
     /** An address the fixture can spend from. */
     def payer: Address
