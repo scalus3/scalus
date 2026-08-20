@@ -30,7 +30,7 @@ trait ScalusAsyncSource[A] {
     def cancel(): Unit
 }
 
-/** Witness that a stream type `S[_]` can be built from a [[ScalusAsyncSource]].
+/** Typeclass for building a stream type `S[_]` from a [[ScalusAsyncSource]].
   *
   * One instance per stream library, each a handful of lines. The identity instance below means a
   * caller who does not want to choose a library does not have to.
