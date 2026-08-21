@@ -1,0 +1,125 @@
+---
+title: Value Operations and CIP-153 Builtins
+sidebarTitle: Value Builtins
+description: How Scalus compiles prelude Value operations to CIP-153 builtins at protocol version 11, with measured cost improvements and the canonical-form rules.
+---
+
+import { Callout } from 'nextra/components'
+
+# Value Operations and CIP-153 Builtins
+
+Protocol version 11 (van Rossem) added native `Value` builtins to Plutus
+([CIP-153](https://cips.cardano.org/cip/CIP-0153)): `lookupCoin`, `unionValue`, `scaleValue`,
+`valueContains`, `insertCoin`, plus the `valueData`/`unValueData` conversions. They replace
+whole `SortedMap` traversals with single builtin calls costed by the node.
+
+Scalus uses them automatically: when compiling for PV11 (the default target), the compiler
+rewrites prelude `Value` operations to these builtins. You keep writing high-level code, and the
+compiled UPLC gets builtin-level budgets.
+
+```scala
+// You write this:
+val paid = output.value.quantityOf(policyId, tokenName)
+
+// At PV11 the compiler emits (roughly):
+//   lookupCoin(policyId, tokenName, unValueData(value))
+```
+
+## What Gets Rewritten
+
+| `Value` operation | PV11 lowering |
+| --- | --- |
+| `v.quantityOf(cs, tn)`, `v.getLovelace` | `lookupCoin` |
+| `a + b` | `unionValue` |
+| `a - b` | `unionValue` + `scaleValue(-1)` (there is no subtract builtin) |
+| `v * factor`, `-v` | `scaleValue` |
+| `a.containsAtLeast(b)` | `valueContains` |
+| `v.insertCoin(cs, tn, amount)`, `v.withoutLovelace` | `insertCoin` |
+
+Not rewritten (they are already cheap or have no builtin counterpart): `===` (a single
+`equalsData` on the underlying `Data`), `flatten`, `policyIds`, `tokens`, `isPositive`,
+`hasOnly`, and the constructors (`Value.zero`, `Value.lovelace`, `Value.apply`,
+`Value.fromList`).
+
+## Measured Improvements
+
+CPU cost of the prelude operation before and after, on a value with 5 policies of 2 tokens each
+(PV11 mainnet cost model):
+
+| Operation | Portable lowering | Builtin lowering | Improvement |
+| --- | ---: | ---: | ---: |
+| `quantityOf` | 12.7M | 0.99M | 13x |
+| `+` (union) | 125.9M | 4.1M | 31x |
+| `*` (scale) | 58.0M | 3.3M | 18x |
+| `containsAtLeast` | 110.3M | 1.5M | 75x |
+
+The `unValueData` conversion at the boundary is a fixed few million CPU, and `toData`/`fromData`
+on `Value` are identities under the V3 lowering backend, so the rewrite pays for itself from the
+very first operation: break-even is one call on CPU and zero on memory.
+
+## When It Applies
+
+Both conditions must hold:
+
+- `Options.valueBuiltins = true` – the default, and
+- `Options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV` (PV11) – also the default.
+
+Below PV11 (e.g. `Options.plomin`) the portable lowering is used and the output is byte-identical
+to Scalus 1.0.0. To opt out at PV11:
+
+```scala
+import scalus.compiler.Options
+
+given Options = Options(valueBuiltins = false)
+```
+
+<Callout type="warning">
+**Behavior change: canonical form is enforced.** The builtins require values in canonical form
+and fail evaluation otherwise: strictly ascending policy-id and token-name keys (no duplicates),
+no zero quantities, no empty inner maps, keys of at most 32 bytes, and quantities within
+±(2^127 - 1). `unionValue` and `scaleValue` additionally fail on 128-bit overflow, and
+`valueContains` fails when either side holds a negative amount.
+
+Values the ledger puts in your `ScriptContext` are always canonical. The values that gain
+validation are the user-controlled ones you decode from datums and redeemers – with the portable
+lowering, a malformed map was silently traversed; with the builtins, the transaction fails. If a
+contract must accept non-canonical values, compile it with `valueBuiltins = false`.
+</Callout>
+
+## Choosing the Right Check
+
+**"The output pays at least X"** – use `containsAtLeast`. It is one `valueContains` call instead
+of a walk over every policy and token:
+
+```scala
+require(output.value.containsAtLeast(datum.escrowed + fee), "underpaid")
+```
+
+**"Exactly this one token was minted/burned"** – use `hasOnly`. It is not builtin-lowered, but
+it checks the policy's token map with a single `equalsData` and is portable to every protocol
+version. It only constrains the given policy, so other scripts can mint in the same transaction:
+
+```scala
+// from the PriceBet oracle example
+require(tx.mint.hasOnly(policyId, config.beaconName, 1), "must mint exactly one beacon")
+// burning: amount -1
+```
+
+This is roughly 35% cheaper in fee than the equivalent
+`tx.mint.tokens(policyId) === SortedMap.singleton(beaconName, BigInt(1))`.
+
+**Adjusting a value** – `insertCoin(cs, tn, amount)` replaces the quantity (it does not add);
+amount `0` deletes the coin and drops the policy entry when it becomes empty, keeping the value
+canonical. `withoutLovelace` is defined as `insertCoin(adaPolicyId, adaTokenName, 0)`.
+
+<Callout type="info">
+`withoutLovelace` changed semantics with this work: it used to drop the whole entry under the
+ADA policy id. For ledger-shaped values the result is identical; a non-ADA token stored under
+the empty policy id (which the ledger never produces) now survives.
+</Callout>
+
+## See Also
+
+- **[Protocol Version & Builtins](/docs/testing/protocol-version-builtins)** – Which builtins each protocol version provides
+- **[Low-Level Builtins](/docs/smart-contract-optimisations/low-level-builtins)** – Manual `Data` access and budget comparisons
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** – Verify the improvements on your own contracts
