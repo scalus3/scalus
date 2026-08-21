@@ -17,6 +17,7 @@ import scala.concurrent.duration.DurationInt
   * very same instance. With the stream type baked into the provider, these would have to be two
   * differently-typed providers over the same emulator, and the two views could drift.
   */
+// JVM-only: see Fs2StreamAdapterTest.
 class OneProviderTwoStreamTypesTest extends AnyFunSuite {
 
     test("the same provider yields both a raw source and an fs2 stream") {

@@ -13,6 +13,8 @@ import scala.concurrent.duration.DurationInt
 /** The adapter's own responsibilities: bridging pull to `Stream`, terminating, and releasing the
   * subscription. Provider behaviour is the conformance suite's job, not this file's.
   */
+// JVM-only: unsafeRunTimed is defined in cats-effect's JVM IOPlatform, and running an fs2 stream
+// synchronously is the whole point of these assertions.
 class Fs2StreamAdapterTest extends AnyFunSuite {
 
     private val adapter = summon[ScalusAsyncStreamAdapter[Fs2StreamAdapter.IOStream]]
