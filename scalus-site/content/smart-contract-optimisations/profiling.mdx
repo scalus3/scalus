@@ -84,7 +84,12 @@ default: `target/scalus`):
 - `<scriptHash>-<tag>-<index>.profile.html` – the interactive report
 - `<scriptHash>-<tag>-<index>.profile.json` – machine-readable data (`"schemaVersion": 1`)
 - `<scriptHash>-<tag>-<index>.profile.csv` – flat table for spreadsheets
+- `<scriptHash>-<tag>-<index>.uplc.json` – the [UPLC source map](#uplc-source-map-uplcjson)
 - `profile-manifest.json` – the discovery entry point listing every run
+
+Every rendering also carries derived on-chain fee columns (lovelace and ADA per row), computed
+from the network's execution-unit prices, so you see what a code path costs in money, not only
+in abstract units.
 
 File names are stable per `(scriptHash, redeemer tag, index)`, so repeated evaluations (e.g.
 during fee balancing) overwrite rather than accumulate. Manifest entries are merged on that same
@@ -106,15 +111,37 @@ directory is preserved. The manifest maps each run to its files:
 ```
 
 Tools should start from `profile-manifest.json` and check `schemaVersion` (currently `1` for
-both the manifest and `profile.json`). The Scalus VS Code extension consumes `profile.json` to
-annotate source lines with per-line cost.
+both the manifest and `profile.json`). The
+[Scalus VS Code extension](/docs/smart-contract-optimisations/vscode-extension) consumes these
+files to annotate source lines with per-line cost and to show the compiled UPLC of your code.
 
 <Callout type="info">
-  The report directory lives under `target/`, which is git-ignored. Editor tooling that discovers
-  files through the workspace search index will not see it — VS Code's `findFiles` honours ignore
-  files. The Scalus Profiler extension handles this from 0.2.2 onwards; older versions find
-  nothing unless you point `SCALUS_DUMP_DIR` at a directory that is not ignored.
+  The report directory lives under `target/`, which is git-ignored, so generic editor tooling
+  that discovers files through the workspace search index will not see it. The Scalus VS Code
+  extension locates the reports there regardless; other tools may need `SCALUS_DUMP_DIR` pointed
+  at a directory that is not ignored.
 </Callout>
+
+## UPLC Source Map (`.uplc.json`)
+
+Alongside the profile files, Scalus writes a source map of the compiled program:
+`<scriptHash>-<tag>-<index>.uplc.json`, indexed in the manifest as `"format": "uplc"`. It holds
+the full pretty-printed UPLC text of the unapplied script plus a span table mapping ranges of
+that text back to Scala source positions and enclosing function names. This is what powers the
+extension's [Compiled UPLC view](/docs/smart-contract-optimisations/vscode-extension#compiled-uplc-view):
+put the cursor on a line of your validator and see exactly the UPLC it compiled to, and back.
+
+The source map is written when all of the following hold:
+
+- the profile level is `full` (`SCALUS_PROFILE=full`), and
+- at least one profile file was rendered (a console-only report writes no files at all), and
+- the program was compiled in this process. Scripts decoded from CBOR carry no source
+  annotations (positions are erased at serialization), so no source map can exist for them.
+
+Format notes for tool authors: spans carry character offsets into the UPLC text (start inclusive,
+end exclusive), a post-order node index that stays stable when the program is later wrapped in
+parameter applications, and indices into file and function string tables. Lines and columns are
+0-based in `.uplc.json` but 1-based in `profile.json`; do not mix the two.
 
 ## Profiling Direct UPLC Runs
 
@@ -135,11 +162,13 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
 The redeemer tag in the file name follows the script purpose in the `ScriptContext`, so a spending
 validator lands in `<scriptHash>-Spend-0.profile.*` just as it would from the ledger.
 
-Calling the method is itself the request for a report, so it writes the full set by default.
-`SCALUS_PROFILE`, `SCALUS_PROFILE_OUT` and `SCALUS_DUMP_DIR` override that exactly as they do for
-the ledger — `SCALUS_PROFILE=off` silences the output without touching the test. Because manifest
-entries merge, ledger- and test-produced runs accumulate side by side and the extension lists them
-together.
+Calling the method is itself the request for a report, so it writes the full set by default,
+including the [UPLC source map](#uplc-source-map-uplcjson). `SCALUS_PROFILE`,
+`SCALUS_PROFILE_OUT` and `SCALUS_DUMP_DIR` override that exactly as they do for the ledger —
+`SCALUS_PROFILE=off` silences the output without touching the test. Because manifest entries
+merge, ledger- and test-produced runs accumulate side by side and the extension lists them
+together. Report writing is auxiliary: a failure to render or write a file only prints a warning
+and never fails a test whose evaluation succeeded.
 
 ## Toggle Profiling in Tests
 
@@ -184,6 +213,7 @@ Profiling adds ~40% overhead to CEK evaluation (measured on the Knights benchmar
 
 ## See Also
 
+- **[VS Code Extension](/docs/smart-contract-optimisations/vscode-extension)** – Per-line cost annotations and the compiled UPLC view in your editor
 - **[JS/TS Profiling](/docs/testing/js-emulator#profiling-a-script)** — Collect profiling data (JSON) from JavaScript/TypeScript with `Scalus.evaluateScriptProfile`
 - **[Debugging](/docs/testing/debugging)** — IDE debugging, logging, error traces
 - **[Unit Testing](/docs/testing/unit-testing)** — Test validators with budget assertions
