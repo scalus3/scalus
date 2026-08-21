@@ -93,6 +93,15 @@ class EvalPlutusScriptsTest extends AnyFunSuite {
             val html = new String(Files.readAllBytes(dir.resolve(htmlName)), "UTF-8")
             assert(html.contains("Scalus CEK Machine Profile"))
             assert(html.contains("By Source Location"))
+            // Execution-unit prices are always attached, so the derived fee columns render.
+            assert(html.contains("Fee (lov)"), "expected a fee column in the HTML report")
+            assert(html.contains("fee=") && html.contains("ADA"), "expected a total fee line")
+            val csvName = files.find(_.endsWith(".profile.csv")).get
+            val csv = new String(Files.readAllBytes(dir.resolve(csvName)), "UTF-8")
+            assert(
+              csv.startsWith("section,key,detail,count,mem,cpu,fee\n"),
+              "expected a fee column in the CSV report"
+            )
         } finally
             Option(dir.toFile.listFiles())
                 .getOrElse(Array.empty[java.io.File])

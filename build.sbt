@@ -418,7 +418,40 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         // Source-compatible; binary signatures of the synthetic case-class methods change.
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.apply"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.copy"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.this")
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.this"),
+        // EvaluatorReportConfig dropped the never-implemented profileThreshold field.
+        // Source impact is limited to callers naming the parameter; synthetic case-class
+        // methods shift accordingly (maxRows moves from slot 7 to slot 6).
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig.this"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig.profileThreshold"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig.apply"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig.copy"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig.copy$default$7"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig._7"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig.<init>$default$7"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig.copy$default$6"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig._6"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.EvaluatorReportConfig.<init>$default$6"
+        )
       ),
 
       // enable when debug compilation of tests
@@ -809,6 +842,13 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     .settings(
       name := "scalus-cardano-ledger",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // DefaultImpl is a private nested class (MiMa still sees its constructor); it gained
+        // the ExUnitPrices used to derive the fee columns of profile reports.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.this"
+        )
+      ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel

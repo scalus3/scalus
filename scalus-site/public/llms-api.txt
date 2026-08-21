@@ -1845,7 +1845,6 @@ case class scalus.cardano.ledger.EvaluatorReportConfig
   val artifacts: Set[DumpArtifact]
   val profile: ProfileLevel
   val profileOutputs: Seq[ProfileOutput]
-  val profileThreshold: Double
   val maxRows: Int
   def dumps(artifact: DumpArtifact): Boolean
   def effectiveProfileOutputs: Seq[ProfileOutput]

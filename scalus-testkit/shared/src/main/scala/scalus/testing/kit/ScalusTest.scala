@@ -6,7 +6,7 @@ import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.ledger.{EvaluatorReportConfig, ExUnits, Language, ProfileLevel, RedeemerTag}
+import scalus.cardano.ledger.{CardanoInfo, EvaluatorReportConfig, ExUnits, Language, ProfileLevel, RedeemerTag}
 import scalus.cardano.ledger.Script
 import scalus.cardano.ledger.Transaction
 import scalus.cardano.txbuilder.TxBuilderException
@@ -95,7 +95,9 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
             val result = runWithProfile(scriptContext)
             result.profile.foreach { data =>
                 ProfileReportWriter.write(
-                  data,
+                  // Mainnet execution-unit prices so every report carries the derived fee
+                  // columns; all public Cardano networks currently share the same prices.
+                  data.withPrices(CardanoInfo.mainnet.protocolParams.executionUnitPrices),
                   EvaluatorReportConfig.fromEnv(profileReportDefaults),
                   Script.PlutusV3(self.cborByteString).scriptHash.toHex,
                   Language.PlutusV3.toString,

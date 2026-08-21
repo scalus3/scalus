@@ -316,7 +316,7 @@ object PlutusScriptEvaluator {
         cardanoInfo: CardanoInfo,
         mode: EvaluatorMode
     ): PlutusScriptEvaluator =
-        apply(
+        new DefaultImpl(
           cardanoInfo.slotConfig,
           ExUnits(
             cardanoInfo.protocolParams.maxTxExecutionUnits.memory,
@@ -324,7 +324,9 @@ object PlutusScriptEvaluator {
           ),
           cardanoInfo.majorProtocolVersion,
           cardanoInfo.protocolParams.costModels,
-          mode
+          mode,
+          EvaluatorReportConfig.fromEnv(EvaluatorReportConfig.disabled),
+          prices = cardanoInfo.protocolParams.executionUnitPrices
         )
 
     private class DefaultImpl(
@@ -334,7 +336,11 @@ object PlutusScriptEvaluator {
         val costModels: CostModels,
         val mode: EvaluatorMode,
         val report: EvaluatorReportConfig,
-        val logBudgetDifferences: Boolean = false
+        val logBudgetDifferences: Boolean = false,
+        // Execution-unit prices used to derive the fee columns of profile reports. Factories
+        // without protocol params fall back to mainnet prices — all public Cardano networks
+        // currently share the same ExUnitPrices, so the derived lovelace figures stay meaningful.
+        val prices: ExUnitPrices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
     ) extends PlutusScriptEvaluator {
 
         /** Path under [[report]]'s output directory, or the bare name when the dir is the CWD. */
@@ -386,7 +392,7 @@ object PlutusScriptEvaluator {
             language: Language
         ): Unit = result.profile.foreach { data =>
             ProfileReportWriter.write(
-              data,
+              data.withPrices(prices),
               report,
               scriptHash.toHex,
               language.toString,

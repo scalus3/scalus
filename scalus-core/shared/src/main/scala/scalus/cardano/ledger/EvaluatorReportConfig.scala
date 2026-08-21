@@ -59,10 +59,8 @@ final case class ProfileOutput(format: ProfileFormat, destination: ProfileDestin
   *   profile verbosity (rendering is wired in a later step)
   * @param profileOutputs
   *   explicit profile renderings; empty ⇒ derived from `profile`
-  * @param profileThreshold
-  *   rows below this fraction of total budget collapse into "... and N more"
   * @param maxRows
-  *   row cap per profile section
+  *   row cap per profile section (text rendering)
   */
 final case class EvaluatorReportConfig(
     enabled: Boolean = false,
@@ -70,7 +68,6 @@ final case class EvaluatorReportConfig(
     artifacts: Set[DumpArtifact] = Set(DumpArtifact.Flat),
     profile: ProfileLevel = ProfileLevel.Off,
     profileOutputs: Seq[ProfileOutput] = Nil,
-    profileThreshold: Double = 0.01,
     maxRows: Int = 50
 ) {
 
@@ -130,7 +127,6 @@ object EvaluatorReportConfig {
       *   - `SCALUS_PROFILE` — `off` | `summary` | `full`
       *   - `SCALUS_PROFILE_OUT` — comma list of destinations: `-`/`console` to display, or a file
       *     name (format inferred from `.html`/`.csv`/`.json`/`.txt`); enables profiling
-      *   - `SCALUS_PROFILE_THRESHOLD` — budget fraction (Double)
       *   - `SCALUS_PROFILE_MAX_ROWS` — Int
       *
       * `env` is injectable so the precedence rules can be unit-tested without touching the process
@@ -184,10 +180,6 @@ object EvaluatorReportConfig {
               profileOutputs = outs,
               profile = if cfg.profile == ProfileLevel.Off then ProfileLevel.Full else cfg.profile
             )
-        }
-
-        env.get("SCALUS_PROFILE_THRESHOLD").flatMap(_.trim.toDoubleOption).foreach { t =>
-            cfg = cfg.copy(profileThreshold = t)
         }
 
         env.get("SCALUS_PROFILE_MAX_ROWS").flatMap(_.trim.toIntOption).foreach { n =>
