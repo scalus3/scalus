@@ -28,6 +28,24 @@ object SubscriptionKind {
     val all: Set[SubscriptionKind] = Set(Utxo, Transaction, Block)
 }
 
+/** What it costs a provider to examine a block it was not asked about.
+  *
+  * The distinction is not how clever the matching is — it is whether the provider already holds the
+  * block's contents. An in-memory ledger, a chain-sync follower and a gRPC stream all see every
+  * transaction anyway, so a subscription that matches everything costs them nothing beyond the
+  * fan-out they already do. A REST provider whose cheap path is per-address endpoints has to fetch
+  * the block and then a UTxO set per transaction in it, which is the difference between a handful
+  * of requests a day and a spent quota.
+  */
+enum ScanCost {
+
+    /** The provider already has every block's contents; scanning adds nothing. */
+    case Free
+
+    /** Examining a block the provider would not otherwise fetch costs it real requests. */
+    case Metered
+}
+
 /** How far back a provider can start a subscription.
   *
   * Replay is not a yes/no property, for the same reason pushdown is not: on a REST backend an
@@ -62,6 +80,9 @@ enum ReplaySupport {
   *   which subscription kinds are served at all
   * @param pushdown
   *   query sources that can be served from an index rather than a scan
+  * @param scanning
+  *   what a query outside [[pushdown]] costs — `Free` for a provider that already holds every
+  *   block, `Metered` for one that would have to go and fetch it
   * @param replay
   *   how far back a subscription can start
   * @param rollbackHorizon
@@ -75,6 +96,7 @@ enum ReplaySupport {
 case class StreamCapabilities(
     kinds: Set[SubscriptionKind],
     pushdown: Set[PushdownKind],
+    scanning: ScanCost,
     replay: ReplaySupport,
     rollbackHorizon: Option[Int],
     maxConfirmations: Option[Int],
@@ -94,6 +116,7 @@ object StreamCapabilities {
     ): StreamCapabilities = StreamCapabilities(
       kinds = kinds,
       pushdown = PushdownKind.all,
+      scanning = ScanCost.Free,
       replay = replay,
       rollbackHorizon = rollbackHorizon,
       maxConfirmations = None,

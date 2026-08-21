@@ -210,9 +210,9 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
 
 object StreamingEmulator {
 
-    /** What an emulator honestly offers: everything is indexed because the whole ledger is in
-      * memory; there is no history to replay; and there are no real blocks to hand to a block
-      * subscription.
+    /** What an emulator honestly offers: the whole ledger is in memory, so every source is indexed
+      * and a scan costs nothing either; there is no history to replay; and there are no real blocks
+      * to hand to a block subscription.
       *
       * `rollbackHorizon` follows `securityParam`, and `0` means `None` — a linear emulator never
       * forks, so a subscriber is entitled to assume `RolledBack` never arrives. A non-zero
@@ -222,6 +222,7 @@ object StreamingEmulator {
     def capabilities(securityParam: Int): StreamCapabilities = StreamCapabilities(
       kinds = Set(SubscriptionKind.Utxo, SubscriptionKind.Transaction),
       pushdown = PushdownKind.all,
+      scanning = ScanCost.Free,
       replay = ReplaySupport.NoReplay,
       rollbackHorizon = if securityParam > 0 then Some(securityParam) else None,
       maxConfirmations = None,
