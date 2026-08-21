@@ -1,4 +1,4 @@
-# Scalus 1.0.0 public API cheatsheet
+# Scalus 1.1.0 public API cheatsheet
 # Generated - do not edit. Signatures are Scala 3.
 
 object scalus.cardano.ledger.BloxbeanToLedgerTranslation
