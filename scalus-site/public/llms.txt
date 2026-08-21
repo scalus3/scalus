@@ -26,6 +26,7 @@ Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin instal
 
 ### Getting Started
 - /docs/get-started - Installation guide
+- /docs/get-started/project-commands - sbt and Scala CLI commands, test backends, profiling switches
 - /docs/get-started/ai-assisted-development - Using LLM coding agents with Scalus (llms.txt artifacts, AI-ready templates, Claude Code plugin)
 - /docs/get-started/for-scala-developers - Cardano concepts for Scala developers
 - /docs/get-started/for-cardano-developers - Scala basics for Cardano developers
@@ -44,9 +45,12 @@ Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin instal
 ### Smart Contract Optimisations
 - /docs/smart-contract-optimisations - Reduce script size and execution units in Cardano validators
 - /docs/smart-contract-optimisations/measuring-performance - Measure CPU steps, memory, flat size, and transaction fees
+- /docs/smart-contract-optimisations/profiling - CEK machine profiling: per-line costs, profile.json/manifest, UPLC source map
+- /docs/smart-contract-optimisations/vscode-extension - VS Code extension: inline cost annotations and the compiled UPLC view
 - /docs/smart-contract-optimisations/algorithmic-optimisations - Withdraw-zero, UTxO indexer, transaction-level minting, merkelised validators
 - /docs/smart-contract-optimisations/scala-metaprogramming - Scala 3 inline, loop unrolling, compile-time evaluation, conditional codegen
 - /docs/smart-contract-optimisations/low-level-builtins - Drop to UPLC builtins and raw Plutus Data for compiled-assembler control over on-chain code
+- /docs/smart-contract-optimisations/value-builtins - Prelude Value operations lowered to CIP-153 builtins at PV11
 - /docs/smart-contract-optimisations/lowering-backends - V3 Lowering, Scott Encoding, Sum of Products, @UplcRepr
 - /docs/smart-contract-optimisations/uplc-term-dsl - Hand-craft UPLC validators with Plutarch-style Term DSL
 - /docs/smart-contract-optimisations/uplc-optimiser-pipeline - EtaReduce, Inliner, StrictIf, ForcedBuiltinsExtractor, CaseConstrApply
@@ -62,10 +66,15 @@ Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin instal
 
 ### Testing
 - /docs/testing - Testing overview
-- /docs/testing/unit-testing - Property-based testing with ScalaCheck
+- /docs/testing/tdd-atdd-workflow - Test-first development methodology
+- /docs/testing/unit-testing - ScalusTest, assertScriptFail, budget testing
+- /docs/testing/property-based-testing - Property-based testing with ScalaCheck
+- /docs/testing/boundary-testing - Transaction variations and attack simulation
 - /docs/testing/debugging - IDE debugging and logging
 - /docs/testing/emulator - In-memory Cardano emulator
+- /docs/testing/js-emulator - Emulator and profiling from JavaScript/TypeScript
 - /docs/testing/local-devnet - Docker-based local node (Yaci DevKit)
+- /docs/testing/protocol-version-builtins - Protocol versions and available builtins
 
 ### Design Patterns
 - /docs/design-patterns - Optimization patterns for Cardano
@@ -80,6 +89,7 @@ Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin instal
 ### Security
 - /docs/security - Security principles
 - /docs/security/common-vulnerabilities - Plutus vulnerabilities and mitigations
+- /docs/security/datum-validation - Datum shape validation: lazy decoding by default, when and how to validate
 
 ### DApp Development
 - /docs/dapp-development - Building complete DApps
@@ -100,7 +110,7 @@ Claude Code users: `/plugin marketplace add scalus3/scalus` then `/plugin instal
 - /docs/language-guide/data-types - Case classes, enums, ADTs
 - /docs/language-guide/functions - Functions and recursion
 - /docs/language-guide/control-flow - If/else, pattern matching
-- /docs/language-guide/collections - List, AssocMap operations
+- /docs/language-guide/collections - List, SortedMap, AssocMap operations
 - /docs/language-guide/builtin-functions - Plutus builtin functions
 - /docs/language-guide/modules - Module system and imports
 - /docs/language-guide/support - Supported Scala features

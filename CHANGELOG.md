@@ -4,12 +4,54 @@
 
 ### Added
 
+- **Mutual recursion for top-level `def`s** in `@Compile` objects. Local mutual recursion inside
+  a `compile {}` block now reports a clear error (`LocalMutualRecursionNotSupported`) instead of
+  failing obscurely
+- **UPLC source map**: full profile reports (`SCALUS_PROFILE=full`) now include
+  `<scriptHash>-<tag>-<index>.uplc.json` – the pretty-printed UPLC of the script plus spans
+  mapping the text back to Scala source positions and function names, indexed in
+  `profile-manifest.json` as format `"uplc"`. Consumed by the Scalus Profile VS Code extension
+  0.3.0 (compiled UPLC view with bidirectional cursor sync)
+- Profile reports carry derived on-chain fee columns (lovelace/ADA per row)
 - `plutus.v1.Value.containsAtLeast` – "does this value cover every asset of the other one", with
   the exact semantics of the CIP-153 `valueContains` builtin on canonical values, on every
   protocol version
 - `plutus.v1.Value.insertCoin(cs, tn, amount)` – set one coin's amount (REPLACES, unlike `+`;
   zero deletes the coin), with the exact semantics of the CIP-153 `insertCoin` builtin, on every
   protocol version; lowers to that builtin at PV11
+- `plutus.v1.Value.hasOnly(cs, tn, amount)` – "the tokens under this policy are exactly
+  `{tn -> amount}`"; one `equalsData` on the policy's token map, ~35% cheaper in fee than the
+  equivalent `tokens(cs) === SortedMap.singleton(...)`, portable to every protocol version
+- `plutus.v2.OutputDatum.inlineOrFail[A]` (with an optional message overload) – decode an inline
+  datum or fail, replacing the usual match boilerplate; `inline`, so calling it on a receiver
+  statically known not to be inline is a compile error
+- `ExUnits.fitsWithin` / `ExUnits.exceeds` – component-wise budget comparison matching the
+  ledger's `pointWiseExUnits`
+
+### Performance
+
+- **Self-application recursion** replaced the Z combinator in the recursion encoding: Knights
+  benchmark -19.8% mem / -16.1% cpu, CAPE fibonacci_25 fee -23%, typical validators -4..12% cpu,
+  smaller scripts
+- **Static-argument transformation** (under `optimizeUplc = true`): loop arguments that never
+  change are no longer re-passed; example corpus average -7.5% mem / -5.2% cpu, with recursive
+  folds over constant context improving far more
+- The SIR-to-UPLC lowering now runs through one unified pipeline (`sir.toUplc`, `lowerToUplc`
+  and `CompiledPlutus` all route through it)
+- Generated UPLC differs from 1.0.0: script hashes and pinned budgets change on upgrade.
+  `Options.plomin` (PV10) still reproduces pre-van-Rossem output
+
+### Deprecated
+
+- `given Ordering[ExUnits]` – execution units are only partially ordered and the lexicographic
+  ordering is wrong for budget checks; use `fitsWithin`/`exceeds`. Also fixed:
+  `ExUnitsTooBigValidator` compared totals with that ordering and could accept a transaction
+  over the CPU cap
+- `SIR.toLoweredValue` and `SIR.lowerToUplc` – use `sir.toUplc` (the unified pipeline)
+
+### Removed
+
+- `EvaluatorReportConfig.profileThreshold` and `SCALUS_PROFILE_THRESHOLD` (never implemented)
 
 ### Changed
 
