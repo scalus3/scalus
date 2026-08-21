@@ -76,7 +76,7 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
       */
     final def submitAsync(transaction: Transaction): CompletableFuture[SubmitResult] =
         submit(transaction)
-            .map(SubmitResult.fromEither)(executionContext)
+            .map(SubmitResult.fromEither)(using executionContext)
             .asJava
             .toCompletableFuture
 
@@ -95,7 +95,7 @@ private[node] trait EmulatorJavaApi extends InteropApi { self: Emulator =>
         address: Address
     ): CompletableFuture[java.util.List[Utxo]] =
         findUtxos(address)
-            .map(result => toJavaUtxoList(queryResultOrThrow(result)))(executionContext)
+            .map(result => toJavaUtxoList(queryResultOrThrow(result)))(using executionContext)
             .asJava
             .toCompletableFuture
 

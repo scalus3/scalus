@@ -2,7 +2,6 @@ package scalus.uplc
 
 import scalus.cardano.address.{Address, Network}
 import scalus.cardano.ledger.{Credential, Language, PlutusScript, Script}
-import scalus.compiler
 import scalus.compiler.sir.lowering.UplcPipeline
 import scalus.compiler.sir.{AnnotationsDecl, SIR, SIRType}
 import scalus.compiler.{compileInlineWithOptions, Options}

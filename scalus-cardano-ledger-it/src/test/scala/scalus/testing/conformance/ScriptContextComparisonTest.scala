@@ -8,7 +8,6 @@ import scalus.uplc.builtin.Data.toData
 import java.io.File
 import scalus.uplc.builtin.platform
 import scalus.cardano.ledger.*
-import scalus.cardano.ledger.rules.*
 import scalus.cardano.onchain.plutus
 import scalus.testing.conformance.CardanoLedgerVectors.*
 import scalus.utils.Hex
