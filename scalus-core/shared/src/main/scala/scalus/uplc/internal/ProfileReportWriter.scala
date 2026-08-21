@@ -1,10 +1,11 @@
-package scalus.uplc.eval
+package scalus.uplc.internal
 
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import scalus.cardano.ledger.{EvaluatorReportConfig, ProfileDestination, ProfileFormat, ProfileLevel}
 import scalus.uplc.Term
 import scalus.uplc.builtin.platform
+import scalus.uplc.eval.ProfilingData
 
 import java.lang.ref.WeakReference
 import scala.collection.concurrent.TrieMap
@@ -18,9 +19,10 @@ import scala.util.control.NonFatal
   * land on disk in exactly the same shape, and tools such as the Scalus VS Code extension consume
   * both identically.
   *
-  * Internal (`private[scalus]`): the on-disk format is the contract, not this API.
+  * Public for tooling, but in `scalus.uplc.internal` and thus with no binary-compatibility
+  * guarantees: the on-disk format is the contract, not this API.
   */
-private[scalus] object ProfileReportWriter {
+object ProfileReportWriter {
 
     /** Schema version of `profile-manifest.json`. Bump on any incompatible change to its shape so
       * consumers (e.g. the Scalus VS Code extension) can detect and reject manifests they don't

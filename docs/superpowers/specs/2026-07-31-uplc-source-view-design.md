@@ -65,7 +65,10 @@ Design:
 
 - Refactor the `Pretty[Term]` printer to accept a decorator hook
   `(Term, Doc) => Doc`, default identity. Default output stays byte-identical.
-- New `UplcSourceMapRenderer`:
+- New `UplcSourceMapRenderer` (in `scalus.uplc.internal`, together with
+  `ProfileReportWriter`/`ProfileReporting`: public utilitarian tooling with no
+  binary-compatibility guarantees — the `.uplc.json`/manifest formats are the
+  contract, and the package is wildcard-exempt from MiMa):
   - The hook wraps each node that has a non-empty effective position in
     `Doc.zeroWidth` markers: `<id>` before, `/<id>` after.
     `id` indexes an array of collected annotations.

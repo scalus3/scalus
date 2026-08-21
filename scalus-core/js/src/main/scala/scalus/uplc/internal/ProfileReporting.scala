@@ -1,6 +1,7 @@
-package scalus.uplc.eval
+package scalus.uplc.internal
 
 import scalus.cardano.ledger.{ProfileFormat, ProfileLevel}
+import scalus.uplc.eval.ProfilingData
 
 /** JS stub for [[scalus.cardano.ledger.PlutusScriptEvaluator]]'s built-in profile report.
   *
@@ -10,7 +11,7 @@ import scalus.cardano.ledger.{ProfileFormat, ProfileLevel}
   * builders depend on and which must stay small. For JS-side profiling, use
   * `Scalus.evaluateScriptProfile`, which returns the raw profile as JSON.
   */
-private[scalus] object ProfileReporting {
+object ProfileReporting {
 
     /** Always `None`: the built-in evaluator report is unavailable in the JS build. */
     def render(

@@ -21,6 +21,7 @@ import scalus.compiler.Options
 import scalus.compiler.sir.SIR
 import scalus.uplc.*
 import scalus.uplc.eval.*
+import scalus.uplc.internal.ProfileReportWriter
 
 // `prelude.Option.*` above shadows the standard Some; alias it for the off-chain APIs that take one.
 import scala.Some as ScalaSome

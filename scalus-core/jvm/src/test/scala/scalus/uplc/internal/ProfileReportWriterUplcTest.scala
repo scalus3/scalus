@@ -1,9 +1,10 @@
-package scalus.uplc.eval
+package scalus.uplc.internal
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{EvaluatorReportConfig, ExUnits, ProfileDestination, ProfileFormat, ProfileLevel, ProfileOutput}
 import scalus.uplc.*
 import scalus.uplc.DefaultFun.AddInteger
+import scalus.uplc.eval.ProfilingData
 import scalus.utils.ScalusSourcePos
 
 import java.nio.file.{Files, Path}

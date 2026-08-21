@@ -9,6 +9,7 @@ import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{platform, Data}
 import scalus.uplc.eval.*
+import scalus.uplc.internal.ProfileReportWriter
 import scalus.uplc.{DeBruijnedProgram, DebugScript, Term}
 import scalus.utils.ScalusSourcePos
 import scribe.Logger

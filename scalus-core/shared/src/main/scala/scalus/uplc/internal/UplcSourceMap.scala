@@ -1,4 +1,4 @@
-package scalus.uplc.eval
+package scalus.uplc.internal
 
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
@@ -78,6 +78,10 @@ final case class UplcSourceMap(
   * mechanism the printer already uses for ANSI styling): markers take part in no layout decision,
   * are emitted verbatim into the rendered string, and are stripped afterwards while recording where
   * each node's text starts and ends.
+  *
+  * Public for tooling, but in `scalus.uplc.internal` and thus with no binary-compatibility
+  * guarantees: the `<key>.uplc.json` format (versioned by [[SchemaVersion]]) is the contract, not
+  * this API.
   */
 object UplcSourceMapRenderer {
 

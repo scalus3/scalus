@@ -1,4 +1,4 @@
-package scalus.uplc.eval
+package scalus.uplc.internal
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*

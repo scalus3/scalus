@@ -463,7 +463,48 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[Problem]("scalus.compiler.sir.lowering.*"),
         ProblemFilters.exclude[Problem]("scalus.compiler.sir.linking.*"),
         ProblemFilters.exclude[Problem]("scalus.compiler.intrinsics.*"),
-        ProblemFilters.exclude[Problem]("scalus.uplc.builtin.internal.*")
+        ProblemFilters.exclude[Problem]("scalus.uplc.builtin.internal.*"),
+        // scalus.uplc.internal: public utilitarian tooling (UPLC source-map renderer, profile
+        // report writer) whose contract is the on-disk artifact formats, not the Scala API.
+        ProblemFilters.exclude[Problem]("scalus.uplc.internal.*"),
+        // ProfileReportWriter and ProfileReporting moved from scalus.uplc.eval to
+        // scalus.uplc.internal. Both were `private[scalus]`, so no external code could link
+        // against the old location; MiMa still flags qualified-private class removal.
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.ProfileReportWriter"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.ProfileReportWriter$"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.ProfileReporting"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.uplc.eval.ProfileReporting$"),
+        // ... including ProfileReportWriter's private nested manifest model classes.
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifest"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifest$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifestBudget"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifestBudget$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifestFile"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifestFile$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifestRedeemer"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifestRedeemer$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifestRun"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.uplc.eval.ProfileReportWriter$ProfileManifestRun$"
+        )
       ),
 
       // enable when debug compilation of tests
