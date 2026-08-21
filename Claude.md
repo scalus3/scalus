@@ -197,9 +197,16 @@ Every platform trait extends the shared marker `InteropApi` and must exist on
 every platform the class compiles to (empty is fine).
 
 **Stability:** interop packages are the MiMa-stable surface; route churn-prone
-additions into `*.internal` subpackages. `InteropSurfaceTest` mechanically
-enforces the rules. Internal/compiler/prelude code is out of scope — stays fully
-idiomatic Scala.
+additions into `*.internal` subpackages. (`InteropSurfaceTest` is planned for M2
+to mechanically enforce the rules; today the gate is MiMa.) Compiler-internal
+and tooling-internal packages are exempt from the MiMa check via wildcard
+filters in build.sbt: `scalus.compiler.sir.lowering`,
+`scalus.compiler.sir.linking`, `scalus.compiler.intrinsics`,
+`scalus.uplc.builtin.internal`, `scalus.uplc.internal`. MIXED packages
+(`scalus.uplc`, `scalus.uplc.eval`, `scalus.compiler.sir`,
+`scalus.serialization.flat`, `scalus.utils`, `scalus.cardano.ledger.rules`)
+take per-symbol filters only, never wildcards. Internal/compiler/prelude code
+is out of scope for interop style rules and stays fully idiomatic Scala.
 
 ## Commit Guidelines
 

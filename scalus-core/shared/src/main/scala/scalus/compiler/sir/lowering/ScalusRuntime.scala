@@ -4,7 +4,7 @@ import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
-import scalus.uplc.{Term, UplcAnnotation}
+import scalus.uplc.Term
 import scalus.compiler.sir.lowering.typegens.SumUplcConstrOps
 
 object ScalusRuntime {
@@ -45,7 +45,10 @@ object ScalusRuntime {
                 val prevFlag = lctx.inUplcConstrListScope
                 if isNativeConstr then lctx.inUplcConstrListScope = true
                 try
-                    val lowered = Lowering.lowerSIR(d.value)
+                    // Same attribution as a user binding: everything lowered here belongs to the
+                    // support def, so the UPLC source view can name prelude/support code too.
+                    val lowered =
+                        Lowering.loweringBinding(d.name, d.value)(Lowering.lowerSIR(d.value))
                     LoweredValue.Builder.lvNewLazyNamedVar(
                       d.name,
                       d.tp,
@@ -640,7 +643,7 @@ object ScalusRuntime {
                 Term.Constr(
                   scalus.cardano.ledger.Word64(0L),
                   scala.List.empty,
-                  UplcAnnotation(constrPos)
+                  ann(constrPos)
                 )
             override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
                 Doc.text("Constr(0)")
@@ -708,7 +711,7 @@ object ScalusRuntime {
                                     convertedHead.termWithNeededVars(gctx),
                                     recCall.termWithNeededVars(gctx)
                                   ),
-                                  UplcAnnotation(AnnotationsDecl.empty.pos)
+                                  ann(AnnotationsDecl.empty.pos)
                                 )
                             override def docDef(
                                 ctx: LoweredValue.PrettyPrintingContext

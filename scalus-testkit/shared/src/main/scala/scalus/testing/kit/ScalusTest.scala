@@ -21,6 +21,12 @@ import scalus.compiler.Options
 import scalus.compiler.sir.SIR
 import scalus.uplc.*
 import scalus.uplc.eval.*
+import scalus.uplc.internal.ProfileReportWriter
+
+import scala.util.control.NonFatal
+
+// `prelude.Option.*` above shadows the standard Some; alias it for the off-chain APIs that take one.
+import scala.Some as ScalaSome
 
 trait ScalusTest extends ArbitraryInstances, Assertions {
     protected def plutusVM: PlutusVM = PlutusVM.makePlutusV3VM()
@@ -90,21 +96,31 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
           * calling this asks for the full set, and `SCALUS_PROFILE` / `SCALUS_PROFILE_OUT` /
           * `SCALUS_DUMP_DIR` override it as they do for the ledger. Manifest entries are merged by
           * (scriptHash, tag, index), so several profiled tests accumulate rather than overwrite.
+          *
+          * A `<key>.uplc.json` source map is written alongside them when this program still carries
+          * the compiler's source annotations, i.e. it was compiled in this process rather than
+          * decoded from CBOR.
           */
         def runWithProfileReport(scriptContext: ScriptContext)(using vm: PlutusVM): Result = {
             val result = runWithProfile(scriptContext)
             result.profile.foreach { data =>
-                ProfileReportWriter.write(
-                  // Mainnet execution-unit prices so every report carries the derived fee
-                  // columns; all public Cardano networks currently share the same prices.
-                  data.withPrices(CardanoInfo.mainnet.protocolParams.executionUnitPrices),
-                  EvaluatorReportConfig.fromEnv(profileReportDefaults),
-                  Script.PlutusV3(self.cborByteString).scriptHash.toHex,
-                  Language.PlutusV3.toString,
-                  redeemerTag(scriptContext.scriptInfo),
-                  0,
-                  println
-                )
+                // Profiling is auxiliary output: a failure to render or write the report must not
+                // fail a test whose evaluation succeeded. Warn and keep the result, exactly like
+                // the guarded renderProfile call in PlutusScriptEvaluator.
+                try
+                    ProfileReportWriter.write(
+                      // Mainnet execution-unit prices so every report carries the derived fee
+                      // columns; all public Cardano networks currently share the same prices.
+                      data.withPrices(CardanoInfo.mainnet.protocolParams.executionUnitPrices),
+                      EvaluatorReportConfig.fromEnv(profileReportDefaults),
+                      Script.PlutusV3(self.cborByteString).scriptHash.toHex,
+                      Language.PlutusV3.toString,
+                      redeemerTag(scriptContext.scriptInfo),
+                      0,
+                      println,
+                      ScalaSome(self.term)
+                    )
+                catch case NonFatal(e) => println(s"Failed to write profile report: $e")
             }
             result
         }

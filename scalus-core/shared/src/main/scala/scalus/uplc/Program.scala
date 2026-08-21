@@ -111,10 +111,10 @@ case class Program(version: (Int, Int, Int), term: Term):
     def prettyXTerm: Doc = Pretty[Program].pretty(this, Style.XTerm)
 
     /** Show the program as a string. */
-    def show: String = pretty.render(80)
+    def show: String = pretty.render(TermPrinter.DefaultRenderWidth)
 
     /** Show the program as a string with XTerm syntax highlighting. */
-    def showHighlighted: String = prettyXTerm.render(80)
+    def showHighlighted: String = prettyXTerm.render(TermPrinter.DefaultRenderWidth)
 
     /** Write the program to a Plutus file.
       *
@@ -314,10 +314,10 @@ case class DeBruijnedProgram private[uplc] (version: (Int, Int, Int), term: Term
     def prettyXTerm: Doc = Pretty[Program].pretty(toProgram, Style.XTerm)
 
     /** Show the program as a string. */
-    def show: String = pretty.render(80)
+    def show: String = pretty.render(TermPrinter.DefaultRenderWidth)
 
     /** Show the program as a string with XTerm syntax highlighting. */
-    def showHighlighted: String = prettyXTerm.render(80)
+    def showHighlighted: String = prettyXTerm.render(TermPrinter.DefaultRenderWidth)
 
     /** Write the program to a Plutus file.
       *

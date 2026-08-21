@@ -9,6 +9,7 @@ import scalus.cardano.onchain.plutus.{v1, v2, v3, ScriptContext}
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{platform, Data}
 import scalus.uplc.eval.*
+import scalus.uplc.internal.ProfileReportWriter
 import scalus.uplc.{DeBruijnedProgram, DebugScript, Term}
 import scalus.utils.ScalusSourcePos
 import scribe.Logger
@@ -361,24 +362,15 @@ object PlutusScriptEvaluator {
 
         private def budgetLogPath: String = reportPath("budget.log")
 
-        /** Render a script's profile to each configured [[ProfileOutput]] (console / files). File
-          * destinations are prefixed with the script key so per-redeemer profiles don't collide,
-          * and are also recorded in `profile-manifest.json` (see [[writeProfileManifest]]). The
-          * actual rendering is delegated to the platform-specific [[ProfileReporting]] so that
-          * [[scalus.uplc.eval.ProfileFormatter]] (HTML/CSS/JS templates, Tarjan pass) stays out of
-          * the JS bundle; HTML output annotates source lines when the source file is readable from
-          * the CWD (JVM only — [[ProfileReporting]] returns `None` on JS).
-          *
-          * @note
-          *   This is fed by a *separate* profiling evaluation of the script (see the call site), so
-          *   enabling profiling roughly doubles evaluation cost. That profiling pass counts budget
-          *   but does not enforce the redeemer's execution-unit limit, so it is only run after the
-          *   real (budget-enforcing) evaluation has already succeeded.
-          */
         /** Render a script's profile to the configured destinations and index the written files in
           * `profile-manifest.json`. Delegated to [[ProfileReportWriter]], which is shared with
           * test-side profiling (`ScalusTest.runWithProfileReport`) so both produce the same layout.
           *
+          * @param uplcTerm
+          *   the script's term, for the `<key>.uplc.json` source map. By name because it can force
+          *   a CBOR decode, which is wasted work when no profile was produced. A decoded term
+          *   carries no annotations, so scripts that did not come from an in-memory `Program` get
+          *   no source map.
           * @note
           *   This is fed by a *separate* profiling evaluation of the script (see the call site), so
           *   enabling profiling roughly doubles evaluation cost. That profiling pass counts budget
@@ -389,7 +381,8 @@ object PlutusScriptEvaluator {
             result: Result,
             scriptHash: ScriptHash,
             redeemer: Redeemer,
-            language: Language
+            language: Language,
+            uplcTerm: => Term
         ): Unit = result.profile.foreach { data =>
             ProfileReportWriter.write(
               data.withPrices(prices),
@@ -398,7 +391,8 @@ object PlutusScriptEvaluator {
               language.toString,
               redeemer.tag.toString,
               redeemer.index,
-              log.info(_)
+              log.info(_),
+              Some(uplcTerm)
             )
         }
 
@@ -723,42 +717,51 @@ object PlutusScriptEvaluator {
             val logger = Log()
             val hash = plutusScript.scriptHash
             // Execute the script
-            try
-                val resultTerm = vm.evaluateScript(applied, spender, logger)
-                if report.enabled && report.profile != ProfileLevel.Off then
+            val resultTerm =
+                try vm.evaluateScript(applied, spender, logger)
+                catch
+                    case e: StackTraceMachineError =>
+                        val logs = logger.getLogs
+                        val finalLogs =
+                            if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
+                            else logs
+                        throw new PlutusScriptEvaluationException(
+                          e.getMessage,
+                          e,
+                          finalLogs,
+                          hash,
+                          spentBudget = spender.getSpentBudget,
+                          failedSourcePosition = Some(e.sourcePos)
+                        )
+                    case NonFatal(e) =>
+                        val logs = logger.getLogs
+                        val finalLogs =
+                            if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
+                            else logs
+                        throw new PlutusScriptEvaluationException(
+                          e.getMessage,
+                          e,
+                          finalLogs,
+                          hash,
+                          spentBudget = spender.getSpentBudget
+                        )
+            // Profiling is auxiliary output: it runs after the evaluation try so that a failure to
+            // render the profile or write its files (read-only or deleted output dir, full disk)
+            // cannot rebrand a successful evaluation as a PlutusScriptEvaluationException. It only
+            // warns — the evaluation result stands.
+            if report.enabled && report.profile != ProfileLevel.Off then
+                try
                     renderProfile(
                       vm.evaluateScriptProfile(applied),
                       plutusScript.scriptHash,
                       redeemer,
-                      vm.language
+                      vm.language,
+                      plutusScript.program.term
                     )
-                Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
-            catch
-                case e: StackTraceMachineError =>
-                    val logs = logger.getLogs
-                    val finalLogs =
-                        if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
-                        else logs
-                    throw new PlutusScriptEvaluationException(
-                      e.getMessage,
-                      e,
-                      finalLogs,
-                      hash,
-                      spentBudget = spender.getSpentBudget,
-                      failedSourcePosition = Some(e.sourcePos)
-                    )
-                case NonFatal(e) =>
-                    val logs = logger.getLogs
-                    val finalLogs =
-                        if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
-                        else logs
-                    throw new PlutusScriptEvaluationException(
-                      e.getMessage,
-                      e,
-                      finalLogs,
-                      hash,
-                      spentBudget = spender.getSpentBudget
-                    )
+                catch
+                    case NonFatal(e) =>
+                        log.warn(s"Failed to write profile report for script ${hash.toHex}: $e")
+            Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
         }
 
         /** Replay a failed script with error traces enabled to collect diagnostic logs.

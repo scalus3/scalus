@@ -2,6 +2,7 @@ package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.*
+import scalus.uplc.UplcAnnotation
 
 import scala.collection.mutable.Map as MutableMap
 
@@ -42,6 +43,33 @@ class LoweringContext(
     val intrinsicModules: Map[String, Module] = Map.empty,
     val supportModules: Map[String, Module] = Map.empty,
 ) {
+
+    /** Simple name of the innermost enclosing user function being lowered, or `""` outside any
+      * named binding. Stamped into [[scalus.uplc.UplcAnnotation.functionName]] so tooling (the VS
+      * Code UPLC source view) can group compiled UPLC by the source function it came from. It is
+      * pure metadata: it never influences the generated code.
+      *
+      * Backed by a thread-local in the companion rather than by a plain field, because every
+      * [[LoweredValue]] captures it at construction time (see [[LoweredValue.functionName]]) and
+      * lowered values are built deep inside helpers that do not all carry a `LoweringContext`.
+      * Several lowerings can run at once in one JVM (parallel sbt subprojects, parallel test
+      * suites), so the state has to be per-thread. Always change it through [[withFunction]].
+      */
+    def currentFunction: String = LoweringContext.currentFunctionName
+
+    private def currentFunction_=(name: String): Unit =
+        LoweringContext.currentFunctionName = name
+
+    /** Annotation for a term built at lowering time: position plus the enclosing function name. */
+    def ann(pos: SIRPosition): UplcAnnotation = UplcAnnotation(pos, currentFunction)
+
+    /** Run `body` with [[currentFunction]] set to `name`, restoring the previous value after. */
+    def withFunction[A](name: String)(body: => A): A = {
+        val saved = currentFunction
+        currentFunction = name
+        try body
+        finally currentFunction = saved
+    }
 
     private val bindingCache = MutableMap.empty[(String, String), Option[Binding]]
 
@@ -112,7 +140,8 @@ class LoweringContext(
       *      let-rec wrapping the lowered SIR root.
       *
       * `label` is the short site name passed to [[LoweringContext.traceLetRec]] — used when
-      * filtering `SCALUS_TRACE_LETREC` output.
+      * filtering `SCALUS_TRACE_LETREC` output — and the [[currentFunction]] the helper body is
+      * built under, so the UPLC source view attributes the shared helper to a stable name.
       */
     def defineCachedTopLevelHelper(
         cacheKey: String,
@@ -127,18 +156,26 @@ class LoweringContext(
                 LoweringContext.traceLetRec("HIT", label, cacheKey)
                 v
             case None =>
-                val id = uniqueVarName(namePrefix)
-                val v = new VariableLoweredValue(
-                  id = id,
-                  name = id,
-                  sir = SIR.Var(id, funType, AnnotationsDecl(pos)),
-                  representation = funRepr
-                )
-                cachedTopLevelHelpers(cacheKey) = v
-                val rhs = buildRhs(v)
-                pendingTopLevelLetRecs += ((v, rhs))
-                LoweringContext.traceLetRec("ADD", label, cacheKey)
-                v
+                // The helper is cached and shared by every later call site, so neither its body
+                // nor the helper variable itself (whose functionName every reference re-emits, see
+                // VariableLoweredValue.termInternal) may inherit the functionName of whichever
+                // user function happened to trigger generation first: that would attribute the
+                // helper's code to an unrelated function, encounter-order-dependently so. Build
+                // everything under the stable site label instead.
+                withFunction(label) {
+                    val id = uniqueVarName(namePrefix)
+                    val v = new VariableLoweredValue(
+                      id = id,
+                      name = id,
+                      sir = SIR.Var(id, funType, AnnotationsDecl(pos)),
+                      representation = funRepr
+                    )
+                    cachedTopLevelHelpers(cacheKey) = v
+                    val rhs = buildRhs(v)
+                    pendingTopLevelLetRecs += ((v, rhs))
+                    LoweringContext.traceLetRec("ADD", label, cacheKey)
+                    v
+                }
 
     /** Find a binding in a provider module by module name and method name. */
     def findProviderBinding(providerModuleName: String, methodName: String): Option[Binding] = {
@@ -247,6 +284,17 @@ class LoweringContext(
 }
 
 object LoweringContext {
+
+    /** Enclosing function name for the lowering running on the current thread. See
+      * [[LoweringContext.currentFunction]] for why this is thread-local state instead of a field.
+      */
+    private val currentFunctionTL: ThreadLocal[String] = new ThreadLocal[String] {
+        override def initialValue(): String = ""
+    }
+
+    def currentFunctionName: String = currentFunctionTL.get()
+
+    private def currentFunctionName_=(name: String): Unit = currentFunctionTL.set(name)
 
     /** Process-wide trace facility for `pendingTopLevelLetRecs` add/hit events. Gated by
       * `SCALUS_TRACE_LETREC` env var (or `-Dscalus.trace.letrec=true` JVM prop). Emits a monotonic
