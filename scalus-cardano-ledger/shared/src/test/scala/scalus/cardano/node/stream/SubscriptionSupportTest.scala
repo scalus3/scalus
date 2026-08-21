@@ -20,10 +20,19 @@ class SubscriptionSupportTest extends AnyFunSuite {
     private val blockfrostLike = StreamCapabilities(
       kinds = SubscriptionKind.all,
       pushdown = Set(PushdownKind.Address, PushdownKind.Asset),
+      scanning = ScanCost.Metered,
       replay = ReplaySupport.Scoped(Set(PushdownKind.Address, PushdownKind.Asset)),
       rollbackHorizon = Some(50),
       maxConfirmations = Some(100),
       idleSignals = true
+    )
+
+    /** An in-process provider: the whole ledger is in memory, so nothing costs extra. */
+    private val inMemory = blockfrostLike.copy(
+      pushdown = PushdownKind.all,
+      scanning = ScanCost.Free,
+      replay = ReplaySupport.NoReplay,
+      maxConfirmations = None
     )
 
     private def utxoRequest(
@@ -133,6 +142,20 @@ class SubscriptionSupportTest extends AnyFunSuite {
                 .Transaction(TransactionQuery.InvolvesAddress(alice), SubscriptionOptions()),
             blockfrostLike
           ) == SubscriptionSupport.Indexed
+        )
+    }
+
+    test("a provider that already holds every block is not charged for a scan") {
+        val watchEverything =
+            SubscriptionRequest.Transaction(TransactionQuery.All, SubscriptionOptions())
+        assert(
+          SubscriptionSupport.of(watchEverything, blockfrostLike) == SubscriptionSupport.Unindexed,
+          "on a metered backend, watching every transaction means fetching every block"
+        )
+        assert(
+          SubscriptionSupport.of(watchEverything, inMemory) == SubscriptionSupport.Indexed,
+          "on an in-memory ledger it is the cheapest thing you can ask for, so requiring " +
+              "allowUnindexedScan would refuse the obvious test subscription"
         )
     }
 

@@ -123,7 +123,15 @@ object SubscriptionSupport {
         request: SubscriptionRequest,
         caps: StreamCapabilities
     ): SubscriptionSupport =
-        if isIndexed(request, caps.pushdown) then Indexed else Unindexed
+        if isIndexed(request, caps.pushdown) then Indexed
+        else
+            caps.scanning match
+                // A provider that already holds every block has nothing to charge for a scan, so
+                // there is nothing for the caller to consent to. Making it demand
+                // `allowUnindexedScan` would refuse "watch every transaction" on an in-memory
+                // ledger, where that is the cheapest thing you can ask for.
+                case ScanCost.Free    => Indexed
+                case ScanCost.Metered => Unindexed
 
     private def isIndexed(request: SubscriptionRequest, pushdown: Set[PushdownKind]): Boolean =
         request match
