@@ -7,8 +7,7 @@ import scalus.uplc.Term
 import scalus.uplc.builtin.platform
 import scalus.uplc.eval.ProfilingData
 
-import java.lang.ref.WeakReference
-import scala.collection.concurrent.TrieMap
+import scala.collection.mutable
 import scala.util.control.NonFatal
 
 /** Renders a CEK profile to the destinations an [[scalus.cardano.ledger.EvaluatorReportConfig]]
@@ -138,18 +137,30 @@ object ProfileReportWriter {
       * program term, but [[write]] runs once per (redeemer, evaluation): a transaction spending one
       * script via N redeemers, or an emulator fee-balancing loop re-evaluating it K times, would
       * otherwise pay the renderer's full pretty-print for byte-identical output every time. The
-      * weak reference detects a recompiled script arriving under the same hash with a fresh term
-      * instance (and thus possibly different annotations) and re-renders instead of serving stale
-      * spans; it also keeps the cache from pinning term trees the caller has dropped.
+      * `eq` check on the cached term detects a recompiled script arriving under the same hash with
+      * a fresh term instance (and thus possibly different annotations) and re-renders instead of
+      * serving stale spans.
+      *
+      * A plain synchronized map with a small size bound — neither TrieMap nor
+      * java.lang.ref.WeakReference link on Scala.js, and the bound keeps the strongly-held term
+      * trees from accumulating in a long-lived process. The expensive render runs outside the lock:
+      * two threads racing on a fresh hash render twice and the identical result wins, which beats
+      * serializing every renderer behind one lock.
       */
-    private val uplcJsonCache = TrieMap.empty[String, (WeakReference[Term], Array[Byte])]
+    private val uplcJsonCache = mutable.LinkedHashMap.empty[String, (Term, Array[Byte])]
+    private val MaxCachedScripts = 8
 
     private def renderUplcJson(scriptHash: String, term: Term): Array[Byte] =
-        uplcJsonCache.get(scriptHash) match
-            case Some((ref, bytes)) if ref.get eq term => bytes
+        uplcJsonCache.synchronized(uplcJsonCache.get(scriptHash)) match
+            case Some((cachedTerm, bytes)) if cachedTerm eq term => bytes
             case _ =>
                 val bytes = UplcSourceMapRenderer.toJson(UplcSourceMapRenderer.render(term))
-                uplcJsonCache(scriptHash) = (new WeakReference(term), bytes)
+                uplcJsonCache.synchronized {
+                    uplcJsonCache.remove(scriptHash)
+                    if uplcJsonCache.size >= MaxCachedScripts then
+                        uplcJsonCache.remove(uplcJsonCache.head._1)
+                    uplcJsonCache(scriptHash) = (term, bytes)
+                }
                 bytes
 
     /** Path under `report`'s output directory, or the bare name when the dir is the CWD. */
