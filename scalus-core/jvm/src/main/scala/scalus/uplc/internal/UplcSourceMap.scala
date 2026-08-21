@@ -94,9 +94,12 @@ object UplcSourceMapRenderer {
     /** The width `Term.show` renders at. Used here too, so the artifact holds the familiar text. */
     private val RenderWidth = TermPrinter.DefaultRenderWidth
 
-    // Always emit `files`/`functions`/`spans`, even when empty, so consumers can index them without
-    // a presence check. `fn` is still omitted when absent (jsoniter's transientNone default).
-    private given JsonValueCodec[UplcSourceMap] =
+    /** Codec for the `<key>.uplc.json` document; public so tooling and tests can parse it back.
+      * Always emits `files`/`functions`/`spans`, even when empty, so consumers can index them
+      * without a presence check. `fn` is still omitted when absent (jsoniter's transientNone
+      * default).
+      */
+    given uplcSourceMapCodec: JsonValueCodec[UplcSourceMap] =
         JsonCodecMaker.make(CodecMakerConfig.withTransientEmpty(false))
 
     // Control characters that printed UPLC does not contain: names are sanitized identifiers, byte

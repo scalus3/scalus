@@ -156,22 +156,26 @@ class LoweringContext(
                 LoweringContext.traceLetRec("HIT", label, cacheKey)
                 v
             case None =>
-                val id = uniqueVarName(namePrefix)
-                val v = new VariableLoweredValue(
-                  id = id,
-                  name = id,
-                  sir = SIR.Var(id, funType, AnnotationsDecl(pos)),
-                  representation = funRepr
-                )
-                cachedTopLevelHelpers(cacheKey) = v
-                // The helper body is cached and shared by every later call site, so it must not
-                // inherit the functionName of whichever user function happened to trigger it
-                // first (that would attribute the helper's cost to an unrelated function, and
-                // encounter-order-dependently so). Stamp it with the stable site label instead.
-                val rhs = withFunction(label)(buildRhs(v))
-                pendingTopLevelLetRecs += ((v, rhs))
-                LoweringContext.traceLetRec("ADD", label, cacheKey)
-                v
+                // The helper is cached and shared by every later call site, so neither its body
+                // nor the helper variable itself (whose functionName every reference re-emits, see
+                // VariableLoweredValue.termInternal) may inherit the functionName of whichever
+                // user function happened to trigger generation first: that would attribute the
+                // helper's code to an unrelated function, encounter-order-dependently so. Build
+                // everything under the stable site label instead.
+                withFunction(label) {
+                    val id = uniqueVarName(namePrefix)
+                    val v = new VariableLoweredValue(
+                      id = id,
+                      name = id,
+                      sir = SIR.Var(id, funType, AnnotationsDecl(pos)),
+                      representation = funRepr
+                    )
+                    cachedTopLevelHelpers(cacheKey) = v
+                    val rhs = buildRhs(v)
+                    pendingTopLevelLetRecs += ((v, rhs))
+                    LoweringContext.traceLetRec("ADD", label, cacheKey)
+                    v
+                }
 
     /** Find a binding in a provider module by module name and method name. */
     def findProviderBinding(providerModuleName: String, methodName: String): Option[Binding] = {

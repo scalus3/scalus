@@ -157,12 +157,11 @@ class UplcSourceMapRendererTest extends AnyFunSuite {
     }
 
     test("json round-trip") {
+        import com.github.plokhotnyuk.jsoniter_scala.core.readFromArray
+        import UplcSourceMapRenderer.given
         val map = UplcSourceMapRenderer.render(term)
-        val json = new String(UplcSourceMapRenderer.toJson(map), "UTF-8")
-        assert(json.contains("\"schemaVersion\": 1") || json.contains("\"schemaVersion\":1"))
-        assert(json.contains("\"uplc\""))
-        assert(json.contains("\"spans\""))
-        assert(json.contains("\"fn\""))
+        val decoded = readFromArray[UplcSourceMap](UplcSourceMapRenderer.toJson(map))
+        assert(decoded == map)
     }
 
     test("json always carries the string tables, even when empty") {

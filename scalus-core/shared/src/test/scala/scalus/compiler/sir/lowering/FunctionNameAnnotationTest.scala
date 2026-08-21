@@ -68,8 +68,31 @@ class FunctionNameAnnotationTest extends AnyFunSuite {
         val sir = compile { (a: NestedLists, b: NestedLists) =>
             NestedListsModule.eqLists(a, b)
         }
-        val names = collectFunctionNames(sir.toUplc())
+        val term = sir.toUplc()
+        val names = collectFunctionNames(term)
         assert(names.contains("sumEq"), s"expected 'sumEq' in $names")
+        // References to the helper variable re-emit the variable's own functionName (see
+        // VariableLoweredValue.termInternal), so they must carry the label too, not the name of
+        // whichever function triggered helper generation first.
+        def collectVars(t: Term): List[Term.Var] = t match
+            case v: Term.Var           => List(v)
+            case Term.LamAbs(_, b, _)  => collectVars(b)
+            case Term.Apply(f, a, _)   => collectVars(f) ++ collectVars(a)
+            case Term.Force(b, _)      => collectVars(b)
+            case Term.Delay(b, _)      => collectVars(b)
+            case Term.Constr(_, as, _) => as.flatMap(collectVars)
+            case Term.Case(a, cs, _)   => collectVars(a) ++ cs.flatMap(collectVars)
+            case _                     => Nil
+        val helperRefs = collectVars(term).filter(_.name.name.contains("sumEq"))
+        assert(helperRefs.nonEmpty, "expected at least one reference to the sumEq helper")
+        // "" is fine (the let-rec wrapper is emitted outside any function scope); any other
+        // user-function name means the construction-order capture bug is back.
+        assert(
+          helperRefs.forall(v =>
+              v.annotation.functionName == "sumEq" || v.annotation.functionName.isEmpty
+          ),
+          s"helper refs carry ${helperRefs.map(_.annotation.functionName).distinct}"
+        )
     }
 
     test("simpleBindingName strips only what the producer appended") {

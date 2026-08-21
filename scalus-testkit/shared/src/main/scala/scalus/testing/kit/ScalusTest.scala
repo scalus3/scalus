@@ -23,6 +23,8 @@ import scalus.uplc.*
 import scalus.uplc.eval.*
 import scalus.uplc.internal.ProfileReportWriter
 
+import scala.util.control.NonFatal
+
 // `prelude.Option.*` above shadows the standard Some; alias it for the off-chain APIs that take one.
 import scala.Some as ScalaSome
 
@@ -102,18 +104,23 @@ trait ScalusTest extends ArbitraryInstances, Assertions {
         def runWithProfileReport(scriptContext: ScriptContext)(using vm: PlutusVM): Result = {
             val result = runWithProfile(scriptContext)
             result.profile.foreach { data =>
-                ProfileReportWriter.write(
-                  // Mainnet execution-unit prices so every report carries the derived fee
-                  // columns; all public Cardano networks currently share the same prices.
-                  data.withPrices(CardanoInfo.mainnet.protocolParams.executionUnitPrices),
-                  EvaluatorReportConfig.fromEnv(profileReportDefaults),
-                  Script.PlutusV3(self.cborByteString).scriptHash.toHex,
-                  Language.PlutusV3.toString,
-                  redeemerTag(scriptContext.scriptInfo),
-                  0,
-                  println,
-                  ScalaSome(self.term)
-                )
+                // Profiling is auxiliary output: a failure to render or write the report must not
+                // fail a test whose evaluation succeeded. Warn and keep the result, exactly like
+                // the guarded renderProfile call in PlutusScriptEvaluator.
+                try
+                    ProfileReportWriter.write(
+                      // Mainnet execution-unit prices so every report carries the derived fee
+                      // columns; all public Cardano networks currently share the same prices.
+                      data.withPrices(CardanoInfo.mainnet.protocolParams.executionUnitPrices),
+                      EvaluatorReportConfig.fromEnv(profileReportDefaults),
+                      Script.PlutusV3(self.cborByteString).scriptHash.toHex,
+                      Language.PlutusV3.toString,
+                      redeemerTag(scriptContext.scriptInfo),
+                      0,
+                      println,
+                      ScalaSome(self.term)
+                    )
+                catch case NonFatal(e) => println(s"Failed to write profile report: $e")
             }
             result
         }

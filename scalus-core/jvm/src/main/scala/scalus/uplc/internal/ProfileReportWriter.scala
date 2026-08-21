@@ -111,13 +111,11 @@ object ProfileReportWriter {
         // (scriptHash, tag, index) – with an entry listing the source map alone, hiding the
         // profile files an earlier run had indexed there.
         val uplcFiles = uplcTerm match
-            case Some(term)
-                if profileFiles.nonEmpty && report.profile == ProfileLevel.Full &&
-                    UplcSourceMapRenderer.hasSourceInfo(term) =>
+            case Some(term) if profileFiles.nonEmpty && report.profile == ProfileLevel.Full =>
                 val file = s"$key.uplc.json"
-                platform.createDirectories(report.outputDir)
-                platform.writeFile(reportPath(report, file), renderUplcJson(scriptHash, term))
-                Seq("uplc" -> file)
+                if writeUplcJson(scriptHash, term, reportPath(report, file), report) then
+                    Seq("uplc" -> file)
+                else Nil
             case _ => Nil
         val files = profileFiles ++ uplcFiles
         if files.nonEmpty then
@@ -133,35 +131,76 @@ object ProfileReportWriter {
             )
     }
 
-    /** Rendered `<key>.uplc.json` bytes per script hash. The document depends only on the unapplied
-      * program term, but [[write]] runs once per (redeemer, evaluation): a transaction spending one
-      * script via N redeemers, or an emulator fee-balancing loop re-evaluating it K times, would
-      * otherwise pay the renderer's full pretty-print for byte-identical output every time. The
-      * `eq` check on the cached term detects a recompiled script arriving under the same hash with
-      * a fresh term instance (and thus possibly different annotations) and re-renders instead of
-      * serving stale spans.
+    /** Source-map cache entry, per script hash. The `.uplc.json` document depends only on the
+      * unapplied program term, but [[write]] runs once per (redeemer, evaluation): a transaction
+      * spending one script via N redeemers, or an emulator fee-balancing loop re-evaluating it K
+      * times, would otherwise pay the renderer's full pretty-print (or, for annotation-free CBOR
+      * scripts, a full `hasSourceInfo` tree walk) and a rewrite of identical bytes every time.
+      * `bytes` is `None` when the term carries no source info, so the negative answer is remembered
+      * too; `writtenPaths` records where the bytes already landed, so a repeat write to the same
+      * path is skipped. The `eq` check on the cached term detects a recompiled script arriving
+      * under the same hash with a fresh term instance (and thus possibly different annotations) and
+      * recomputes instead of serving stale spans.
       *
-      * A plain synchronized map with a small size bound — neither TrieMap nor
-      * java.lang.ref.WeakReference link on Scala.js, and the bound keeps the strongly-held term
-      * trees from accumulating in a long-lived process. The expensive render runs outside the lock:
-      * two threads racing on a fresh hash render twice and the identical result wins, which beats
-      * serializing every renderer behind one lock.
+      * A plain map under a lock, bounded to [[MaxCachedScripts]] entries with LRU refresh on hit,
+      * keeps the strongly-held term trees from accumulating in a long-lived process. The expensive
+      * render runs outside the lock: two threads racing on a fresh hash render twice and the
+      * identical result wins, which beats serializing every renderer behind one lock.
       */
-    private val uplcJsonCache = mutable.LinkedHashMap.empty[String, (Term, Array[Byte])]
+    private final class UplcJsonEntry(
+        val term: Term,
+        val bytes: Option[Array[Byte]],
+        val writtenPaths: mutable.Set[String]
+    )
+    private val uplcJsonCache = mutable.LinkedHashMap.empty[String, UplcJsonEntry]
     private val MaxCachedScripts = 8
 
-    private def renderUplcJson(scriptHash: String, term: Term): Array[Byte] =
-        uplcJsonCache.synchronized(uplcJsonCache.get(scriptHash)) match
-            case Some((cachedTerm, bytes)) if cachedTerm eq term => bytes
-            case _ =>
-                val bytes = UplcSourceMapRenderer.toJson(UplcSourceMapRenderer.render(term))
-                uplcJsonCache.synchronized {
+    /** Renders (or reuses) the source map for `term` and writes it to `path` unless the identical
+      * content was already written there. Returns false, writing nothing, when the term carries no
+      * source info (a CBOR-decoded script). Trade-off of the skip: a `path` deleted externally
+      * mid-process is not restored until the script recompiles or its cache entry is evicted.
+      */
+    private def writeUplcJson(
+        scriptHash: String,
+        term: Term,
+        path: String,
+        report: EvaluatorReportConfig
+    ): Boolean = {
+        val cached = uplcJsonCache.synchronized {
+            uplcJsonCache.get(scriptHash) match
+                case Some(e) if e.term eq term =>
+                    // LRU refresh: reinsert so hot scripts are not the first evicted.
                     uplcJsonCache.remove(scriptHash)
-                    if uplcJsonCache.size >= MaxCachedScripts then
-                        uplcJsonCache.remove(uplcJsonCache.head._1)
-                    uplcJsonCache(scriptHash) = (term, bytes)
+                    uplcJsonCache(scriptHash) = e
+                    Some(e)
+                case _ => None
+        }
+        val entry = cached.getOrElse {
+            val bytes =
+                if UplcSourceMapRenderer.hasSourceInfo(term) then
+                    Some(UplcSourceMapRenderer.toJson(UplcSourceMapRenderer.render(term)))
+                else None
+            val e = new UplcJsonEntry(term, bytes, mutable.Set.empty)
+            uplcJsonCache.synchronized {
+                uplcJsonCache.remove(scriptHash)
+                if uplcJsonCache.size >= MaxCachedScripts then
+                    uplcJsonCache.remove(uplcJsonCache.head._1)
+                uplcJsonCache(scriptHash) = e
+            }
+            e
+        }
+        entry.bytes match
+            case Some(bytes) =>
+                // The path is recorded only after a successful write, so a failed write (the
+                // caller warns and continues) is retried on the next evaluation.
+                if !uplcJsonCache.synchronized(entry.writtenPaths.contains(path)) then {
+                    platform.createDirectories(report.outputDir)
+                    platform.writeFile(path, bytes)
+                    uplcJsonCache.synchronized(entry.writtenPaths += path)
                 }
-                bytes
+                true
+            case None => false
+    }
 
     /** Render `data` in `format`. For HTML, profiled source files readable from the working
       * directory are annotated with per-line cost.

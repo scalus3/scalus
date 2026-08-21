@@ -1,5 +1,6 @@
 package scalus.uplc.internal
 
+import com.github.plokhotnyuk.jsoniter_scala.core.readFromArray
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{EvaluatorReportConfig, ExUnits, ProfileDestination, ProfileFormat, ProfileLevel, ProfileOutput}
 import scalus.uplc.*
@@ -8,6 +9,8 @@ import scalus.uplc.eval.ProfilingData
 import scalus.utils.ScalusSourcePos
 
 import java.nio.file.{Files, Path}
+
+import UplcSourceMapRenderer.given
 
 /** The `<key>.uplc.json` artifact [[ProfileReportWriter]] writes next to a full profile, and its
   * `"uplc"` entry in `profile-manifest.json`.
@@ -45,9 +48,9 @@ class ProfileReportWriterUplcTest extends AnyFunSuite {
         )
         val uplcFile = dir.resolve("cafe01-Spend-0.uplc.json")
         assert(Files.exists(uplcFile))
-        val json = new String(Files.readAllBytes(uplcFile), "UTF-8")
-        assert(json.contains("\"schemaVersion\":1") || json.contains("\"schemaVersion\": 1"))
-        assert(json.contains("addInteger"))
+        val map = readFromArray[UplcSourceMap](Files.readAllBytes(uplcFile))
+        assert(map.schemaVersion == 1)
+        assert(map.uplc.contains("addInteger"))
         val manifest =
             new String(Files.readAllBytes(dir.resolve("profile-manifest.json")), "UTF-8")
         assert(manifest.contains("\"uplc\""))
@@ -71,6 +74,28 @@ class ProfileReportWriterUplcTest extends AnyFunSuite {
         val first = Files.readAllBytes(dir.resolve("cafe06-Spend-0.uplc.json"))
         val second = Files.readAllBytes(dir.resolve("cafe06-Spend-1.uplc.json"))
         assert(first.sameElements(second))
+    }
+
+    test("a cache hit skips rewriting an existing artifact") {
+        val dir = Files.createTempDirectory("scalus-uplc-test7")
+        def writeOnce(): Unit = ProfileReportWriter.write(
+          emptyProfile,
+          fullReport(dir),
+          "cafe07",
+          "PlutusV3",
+          "Spend",
+          0,
+          _ => (),
+          Some(annotated)
+        )
+        writeOnce()
+        val uplcFile = dir.resolve("cafe07-Spend-0.uplc.json")
+        assert(Files.exists(uplcFile))
+        // Documented trade-off: the same (path, term) is written once; an externally deleted
+        // file is not restored until the script recompiles or the cache entry is evicted.
+        Files.delete(uplcFile)
+        writeOnce()
+        assert(!Files.exists(uplcFile))
     }
 
     test("no artifact for a term without source info") {
