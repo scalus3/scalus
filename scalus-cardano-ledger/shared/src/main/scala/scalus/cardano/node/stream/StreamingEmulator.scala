@@ -51,8 +51,19 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     def getDatum(datumHash: DataHash): Future[Option[Data]] = emulator.getDatum(datumHash)
     def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
         emulator.findUtxos(query)
+
+    /** The same cell `subscribeTransactionStatus` reads, falling back to the emulator for
+      * transactions this provider never observed.
+      *
+      * The duality between a one-shot read and its subscription is only worth anything if the two
+      * cannot disagree, and they can only be guaranteed not to by reading the same state. A
+      * transaction submitted here is `Pending` then `Confirmed` in the hub; one that predates this
+      * wrapper is answered by the ledger.
+      */
     override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
-        emulator.checkTransaction(txHash)
+        hub.statusOf(txHash) match
+            case Some(status) => Future.successful(status)
+            case None         => emulator.checkTransaction(txHash)
 
     /** The tip as the stream sees it — synthetic block height, and the emulator's own slot. */
     def currentTip: ChainTip = hub.currentTip

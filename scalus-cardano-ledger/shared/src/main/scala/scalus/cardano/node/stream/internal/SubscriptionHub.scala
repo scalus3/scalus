@@ -92,6 +92,15 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
 
     def latestParams: ProtocolParams = synchronized(params)
 
+    /** The status this hub is currently reporting for a transaction, if it is tracking one.
+      *
+      * `None` means the hub has no opinion — the transaction was never submitted through this
+      * provider and never appeared in a block it applied — and the caller should fall back to
+      * whatever it considers authoritative.
+      */
+    def statusOf(txHash: TransactionHash): Option[TransactionStatus] =
+        synchronized(statuses.get(txHash))
+
     def nextSubscriptionId(): Long = synchronized { nextId += 1; nextId }
 
     /** Throw unless this provider can serve the request — synchronously, before anything is

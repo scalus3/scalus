@@ -136,6 +136,18 @@ trait EmulatorBase extends BlockchainProvider {
     def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
         Future.successful(Right(EmulatorBase.evalQuery(utxos, query)))
 
+    /** Whether this emulator has applied the transaction.
+      *
+      * Authoritative, unlike the inherited default, which infers status from the UTxOs a
+      * transaction produced: `findUtxos` here answers `Right(empty)` for a transaction it has never
+      * seen, and an emulator that has applied a transaction whose outputs are all since spent
+      * produces none either. The applied-transaction index knows the answer outright.
+      */
+    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
+        Future.successful(
+          if hasTx(txHash) then TransactionStatus.Confirmed else TransactionStatus.NotFound
+        )
+
     protected def processTransaction(
         context: Context,
         state: State,

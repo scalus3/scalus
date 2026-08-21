@@ -236,6 +236,33 @@ abstract class StreamProviderConformance extends AnyFunSuite {
         }
     }
 
+    test("a transaction that was never submitted is not reported as confirmed") {
+        withFixture { f =>
+            val unknown = TransactionHash.fromByteString(
+              scalus.uplc.builtin.ByteString.fromArray(Array.fill[Byte](32)(0x7f))
+            )
+            val status = Await.result(f.provider.checkTransaction(unknown), patience)
+            assert(
+              status != scalus.cardano.node.TransactionStatus.Confirmed,
+              "reporting an unsubmitted transaction as Confirmed makes submitAndPoll report " +
+                  s"success for something that never reached the chain, got $status"
+            )
+        }
+    }
+
+    test("the one-shot status and its subscription agree") {
+        withFixture { f =>
+            val hash = f.payTo(f.freshAddress(), Value.ada(10))
+            val subscribed =
+                Reader(f.provider.subscribeTransactionStatus[ScalusAsyncSource](hash)).next()
+            val oneShot = Await.result(f.provider.checkTransaction(hash), patience)
+            assert(
+              oneShot == subscribed,
+              s"a one-shot read is the head of its own subscription; got $oneShot vs $subscribed"
+            )
+        }
+    }
+
     // ── honesty of the declaration ──────────────────────────────────────────
 
     test("a provider declaring no rollback horizon never emits RolledBack") {

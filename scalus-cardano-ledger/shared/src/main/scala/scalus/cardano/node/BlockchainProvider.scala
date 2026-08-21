@@ -244,13 +244,23 @@ trait BlockchainReader extends BlockchainReaderTF[Future] {
 
     /** Check the status of a transaction on the blockchain.
       *
-      * Default implementation checks for UTxOs from the transaction. For emulators without a
-      * mempool concept, this returns either Confirmed or NotFound.
+      * Fallback implementation: look for UTxOs produced by the transaction. A provider that can
+      * answer authoritatively should override this — `BlockfrostProvider` asks the API, and
+      * `EmulatorBase` consults its applied-transaction index — because this inference has a blind
+      * spot in each direction. It cannot see a mempool, so a pending transaction reads as
+      * `NotFound`; and a transaction all of whose outputs have since been spent also reads as
+      * `NotFound`, since it produces no current UTxOs.
+      *
+      * What it must not do is report a transaction that was never submitted as `Confirmed`. An
+      * empty result is therefore not a confirmation — the inherited
+      * [[BlockchainProviderTF.submitAndPoll]] builds on this answer, and "confirmed" for a
+      * transaction that never reached the chain is the one wrong answer that silently corrupts a
+      * caller's state.
       */
     def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
         findUtxos(UtxoQuery(UtxoSource.FromTransaction(txHash))).map {
-            case Right(_) => TransactionStatus.Confirmed
-            case Left(_)  => TransactionStatus.NotFound
+            case Right(utxos) if utxos.nonEmpty => TransactionStatus.Confirmed
+            case _                              => TransactionStatus.NotFound
         }(using executionContext)
 
 }
