@@ -29,6 +29,12 @@
   draws token quantities from `+-(2^64)` instead of `+-(2^128)`, so generated values stay inside
   the CIP-153 quantity range; property tests that scale a generated `Value` must bound their
   factor to match
+- **BREAKING (`scalus-sbt-plugin`)**: the sbt 1.x baseline is now **sbt 1.9.0**, up from 1.5.8.
+  Consumers on sbt 1.5-1.8 must upgrade to sbt 1.9.0 or later. The plugin's shared-source shim
+  moved to `sbt2-compat` 0.2.0, which itself requires sbt >= 1.9. The sbt 2.x axis is unchanged.
+- Dependency refresh: BouncyCastle 1.84 -> 1.85.2 (20+ CVE fixes, incl. CVE-2026-14682),
+  borer 1.16.2 -> 1.17.0, jsoniter-scala 2.38.16 -> 2.40.1, magnolia 1.3.21 -> 1.3.23,
+  sttp client4 4.0.25 -> 4.0.26, dotty-cps-async 1.3.3 -> 1.3.4
 
 ## 1.0.0 (2026-07-30)
 

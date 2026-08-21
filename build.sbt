@@ -25,12 +25,12 @@ val yaciVersion = "0.4.5"
 val yaciCardanoTestVersion = "0.1.0"
 val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.19.0"
-val borerVersion = "1.16.2"
+val borerVersion = "1.17.0"
 val slf4jVersion = "2.0.18"
-val magnoliaVersion = "1.3.21"
+val magnoliaVersion = "1.3.23"
 val pprintVersion = "0.9.6"
 val monocleVersion = "3.3.0"
-val jsoniterScalaVersion = "2.38.16"
+val jsoniterScalaVersion = "2.40.1"
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
@@ -552,7 +552,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         s"-Dscalus.plugin.jar=${(scalusPlugin / Compile / packageBin).value.getAbsolutePath}",
         s"-Dscalus.test.classpath=${(Test / fullClasspath).value.files.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
       ),
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
@@ -669,8 +669,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion,
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.3",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.3",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.4",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.4",
       // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
       Compile / sourceGenerators += Def.task {
           val baseDir =
@@ -700,7 +700,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
-      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.25",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.26",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test
     )
     .jsSettings(jsModuleSettings *)
@@ -765,7 +765,7 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.3",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.4",
       publish / skip := true
     )
     .jvmSettings(Test / fork := true)
@@ -858,7 +858,7 @@ lazy val bench = project
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.0",
+      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.1",
       libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )
@@ -920,7 +920,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.25",
+      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.26",
       inConfig(Test)(PluginDependency),
       publishOnlyLts
     )
@@ -988,16 +988,17 @@ lazy val scalusSbtPlugin = project
       sbtPlugin := true,
       scalaVersion := "2.12.21",
       // Cross-build for sbt 1 (Scala 2.12) and sbt 2 (Scala 3). A single sbt 1.x launcher
-      // builds and publishes both axes via pluginCrossBuild.
+      // builds and publishes both axes via pluginCrossBuild. The sbt 1.x baseline is the
+      // minimum version consumers may use; sbt2-compat 0.2.0 requires sbt >= 1.9.
       crossScalaVersions := Seq("2.12.21", scala3NextVersion),
       pluginCrossBuild / sbtVersion := {
           scalaBinaryVersion.value match {
-              case "2.12" => "1.5.8" // minimum sbt 1.x baseline for max consumer compatibility
+              case "2.12" => "1.9.0" // minimum sbt 1.x baseline
               case _      => "2.0.0" // sbt 2.x
           }
       },
       // shared-source shim so one source set compiles against both sbt 1 and sbt 2 APIs
-      addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.1.0"),
+      addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.2.0"),
       scalacOptions ++= Seq("-deprecation", "-feature"),
       libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % Test,
     )
@@ -1038,7 +1039,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84" % "test",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
