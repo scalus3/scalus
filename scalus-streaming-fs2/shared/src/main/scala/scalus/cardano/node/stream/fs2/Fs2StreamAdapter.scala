@@ -1,6 +1,7 @@
 package scalus.cardano.node.stream.fs2
 
 import cats.effect.{IO, Resource}
+import scalus.cardano.infra.CancelSource
 import fs2.Stream
 import scalus.cardano.node.stream.{ScalusAsyncSource, ScalusAsyncStreamAdapter}
 
@@ -16,11 +17,22 @@ object Fs2StreamAdapter {
 
     given fs2Adapter: ScalusAsyncStreamAdapter[IOStream] with {
         def fromSource[A](src: ScalusAsyncSource[A]): Stream[IO, A] =
-            Stream
-                .repeatEval(IO.fromFuture(IO(src.pull())))
-                .unNoneTerminate
-                .onFinalize(IO(src.cancel()))
+            Stream.repeatEval(pull(src)).unNoneTerminate.onFinalize(IO(src.cancel()))
     }
+
+    /** One cancellable pull.
+      *
+      * `IO.fromFuture` alone would be a trap here: it parks on an uncancelable async node, so a
+      * stream waiting on a quiet chain could not be interrupted at all — `.timeout` would never
+      * fire, a cancelled `Resource.use` would hang, and the finalizer that would have woken the
+      * pull cannot run until the cancellation it is waiting on completes. Passing a
+      * [[CancelSource]] through to the source gives cats-effect something real to pull the plug on.
+      */
+    private def pull[A](src: ScalusAsyncSource[A]): IO[Option[A]] =
+        IO.fromFutureCancelable(IO {
+            val cancellation = CancelSource()
+            (src.pull(cancellation.token), IO(cancellation.cancel()))
+        })
 
     extension [A](src: ScalusAsyncSource[A]) {
 
@@ -44,7 +56,5 @@ object Fs2StreamAdapter {
       * }}}
       */
     def subscribe[A](acquire: IO[ScalusAsyncSource[A]]): Resource[IO, Stream[IO, A]] =
-        Resource
-            .make(acquire)(src => IO(src.cancel()))
-            .map(src => Stream.repeatEval(IO.fromFuture(IO(src.pull()))).unNoneTerminate)
+        Resource.make(acquire)(src => IO(src.cancel())).map(fs2Adapter.fromSource)
 }

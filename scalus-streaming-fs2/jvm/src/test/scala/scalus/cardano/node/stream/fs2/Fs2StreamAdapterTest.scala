@@ -51,6 +51,24 @@ class Fs2StreamAdapterTest extends AnyFunSuite {
         assert(cancelled, "an unconsumed subscription must not outlive the stream that held it")
     }
 
+    test("a stream parked on a quiet chain can still be interrupted") {
+        // Nothing is ever offered, so the stream parks inside pull(). With an uncancelable pull the
+        // timeout below never fires: cats-effect cannot interrupt the async node, and the finalizer
+        // that would wake it cannot run until the cancellation completes.
+        val mailbox = Mailbox.delta[Int]()
+        val outcome = adapter
+            .fromSource(mailbox)
+            .compile
+            .drain
+            .timeout(500.millis)
+            .attempt
+            .unsafeRunTimed(10.seconds)
+
+        assert(outcome.isDefined, "the pull must be cancellable, or this hangs")
+        assert(outcome.exists(_.isLeft), "the timeout should surface as an error")
+        assert(mailbox.isClosed, "cancelling the stream must unregister the subscription")
+    }
+
     test("the resource form releases even when the stream is never run") {
         var cancelled = false
         val mailbox = Mailbox.delta[Int](onCancel = () => cancelled = true)

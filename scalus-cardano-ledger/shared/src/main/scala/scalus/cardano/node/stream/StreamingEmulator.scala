@@ -31,17 +31,17 @@ import scala.concurrent.{ExecutionContext, Future}
 class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     extends BlockchainStreamProvider {
 
-    private val hub = new SubscriptionHub(
-      emulator.cardanoInfo,
-      securityParam,
-      StreamingEmulator.capabilities
-    )
+    private val capabilities: StreamCapabilities =
+        StreamingEmulator.capabilities(securityParam)
+
+    private val hub = new SubscriptionHub(emulator.cardanoInfo, capabilities)
 
     private var blockNo: BlockNo = 0L
+    @volatile private var closed: Boolean = false
 
     def executionContext: ExecutionContext = emulator.executionContext
 
-    def streamCapabilities: StreamCapabilities = StreamingEmulator.capabilities
+    def streamCapabilities: StreamCapabilities = capabilities
 
     // ── one-shot reads: straight through to the emulator ────────────────────
 
@@ -60,17 +60,34 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     // ── submission ──────────────────────────────────────────────────────────
 
     def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]] =
-        emulator.submitSync(transaction) match
-            case Left(error) => Future.successful(Left(error))
-            case Right(hash) =>
-                hub.notifySubmit(hash)
-                hub.applyBlock(buildBlock(Seq(transaction -> hash)))
-                Future.successful(Right(hash))
+        if closed then
+            Future.successful(
+              Left(NetworkSubmitError.ConnectionError("provider is closed", None))
+            )
+        else
+            // Ledger commit and block production are one step. The wrapped emulator serialises its
+            // own state, but block numbering lives here: two concurrent submits that interleaved
+            // between the two would mint two blocks with the same height and hash, and the hub
+            // would silently drop the second one's events as already-delivered.
+            val applied = synchronized {
+                emulator.submitSync(transaction) match
+                    case Left(error) => Left(error)
+                    case Right(hash) => Right(hash -> buildBlock(Seq(transaction -> hash)))
+            }
+            applied match
+                case Left(error) => Future.successful(Left(error))
+                case Right((hash, block)) =>
+                    hub.notifySubmit(hash)
+                    hub.applyBlock(block)
+                    Future.successful(Right(hash))
 
     /** Advance the tip without a transaction. */
     def newEmptyBlock(): Unit = {
-        emulator.tick(1)
-        hub.applyBlock(buildBlock(Seq.empty))
+        val block = synchronized {
+            emulator.tick(1)
+            buildBlock(Seq.empty)
+        }
+        hub.applyBlock(block)
     }
 
     // ── subscriptions ───────────────────────────────────────────────────────
@@ -133,7 +150,12 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
         summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
 
+    /** Terminal: subscriptions end, and the provider serves no new ones and submits nothing
+      * further. A `close` that left the provider working would leak the very subscriptions it was
+      * called to release.
+      */
     def close(): Future[Unit] = {
+        closed = true
         hub.closeAll()
         Future.unit
     }
@@ -151,8 +173,20 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
                 TransactionInput(hash, index) -> out.value
             }.toMap
             // The emulator resolved the consumed outputs while validating; reuse that rather than
-            // re-resolving against a UTxO set the transaction has already mutated.
-            val spent: Utxos = emulator.getAppliedTx(hash).map(_.spent).getOrElse(Map.empty)
+            // re-resolving against a UTxO set the transaction has already mutated. Absence is not
+            // "nothing was spent" — it means the applied-tx index has been cleared or is not
+            // maintained, and defaulting to empty would silently stop emitting Spent events while
+            // subscribers went on believing their UTxO set was complete.
+            val spent: Utxos = emulator
+                .getAppliedTx(hash)
+                .map(_.spent)
+                .getOrElse(
+                  throw new IllegalStateException(
+                    s"emulator has no applied-transaction record for ${hash.toHex}; streaming " +
+                        "cannot report what it spent. Do not call clearAppliedTxs() on an emulator " +
+                        "wrapped by StreamingEmulator."
+                  )
+                )
             AppliedTransaction(tx, created, spent)
         }
         AppliedBlock(
@@ -166,14 +200,19 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
 object StreamingEmulator {
 
     /** What an emulator honestly offers: everything is indexed because the whole ledger is in
-      * memory; there is no history to replay and no fork to roll back; and there are no real blocks
-      * to hand to a block subscription.
+      * memory; there is no history to replay; and there are no real blocks to hand to a block
+      * subscription.
+      *
+      * `rollbackHorizon` follows `securityParam`, and `0` means `None` — a linear emulator never
+      * forks, so a subscriber is entitled to assume `RolledBack` never arrives. A non-zero
+      * `securityParam` is what a test uses to say "pretend blocks settle this deep", and it becomes
+      * the declared horizon so the hub and the classifier agree on the depth.
       */
-    val capabilities: StreamCapabilities = StreamCapabilities(
+    def capabilities(securityParam: Int): StreamCapabilities = StreamCapabilities(
       kinds = Set(SubscriptionKind.Utxo, SubscriptionKind.Transaction),
       pushdown = PushdownKind.all,
       replay = ReplaySupport.NoReplay,
-      rollbackHorizon = None,
+      rollbackHorizon = if securityParam > 0 then Some(securityParam) else None,
       maxConfirmations = None,
       idleSignals = true
     )

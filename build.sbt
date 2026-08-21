@@ -660,6 +660,8 @@ lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "co.fs2" %%% "fs2-core" % fs2Version,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
     )
+    .jvmSettings(jvmReleaseTarget)
+    .jsSettings(jsModuleSettings *)
 
 lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
