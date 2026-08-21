@@ -81,6 +81,46 @@ class MailboxTest extends AnyFunSuite {
         assert(completed(m).contains(None))
     }
 
+    test("close unregisters the subscription") {
+        var cancels = 0
+        val m = Mailbox.delta[Int](onCancel = () => cancels += 1)
+        m.close()
+        assert(
+          cancels == 1,
+          "a subscription that ends cleanly must still stop costing the provider"
+        )
+    }
+
+    test("a producer failure unregisters the subscription") {
+        var cancels = 0
+        val m = Mailbox.delta[Int](onCancel = () => cancels += 1)
+        m.fail(new RuntimeException("boom"))
+        assert(cancels == 1)
+    }
+
+    test("a buffer overflow unregisters the subscription") {
+        var cancels = 0
+        val m = Mailbox.delta[Int](maxSize = 1, onCancel = () => cancels += 1)
+        m.offer(1)
+        m.offer(2)
+        assert(
+          cancels == 1,
+          "an overflowed subscription is dead; leaving it registered means matching every " +
+              "subsequent block against a consumer that can never be told the result"
+        )
+    }
+
+    test("offerBuffered never completes an outstanding waiter; flush does") {
+        val m = Mailbox.delta[Int]()
+        val pending = m.pull()
+        m.offerBuffered(1)
+        // This is the property the hub depends on: a producer can enqueue while holding its own
+        // lock without the consumer's continuation running inside that lock.
+        assert(pending.value.isEmpty, "offerBuffered must not complete a waiting pull")
+        m.flush()
+        assert(pending.value.map(_.get).contains(Some(1)))
+    }
+
     test("cancel fires its hook once, drops buffered events and ends the stream") {
         var cancels = 0
         val m = Mailbox.delta[Int](onCancel = () => cancels += 1)

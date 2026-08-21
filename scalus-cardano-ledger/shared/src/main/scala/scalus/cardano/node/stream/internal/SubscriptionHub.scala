@@ -1,6 +1,6 @@
 package scalus.cardano.node.stream.internal
 
-import scalus.cardano.infra.UnsupportedSubscriptionException
+import scalus.cardano.infra.{ResyncRequiredException, UnsupportedSubscriptionException}
 import scalus.cardano.ledger.{CardanoInfo, ProtocolParams, TransactionHash}
 import scalus.cardano.node.TransactionStatus
 import scalus.cardano.node.stream.*
@@ -27,15 +27,21 @@ import scala.collection.mutable
   * on `offer`, and that continuation is allowed to cancel its subscription, which re-enters this
   * hub — holding the lock across `offer` would deadlock on exactly that path.
   *
-  * @param securityParam
-  *   depth at which a block is considered settled; `noRollback` subscriptions wait this long, and
-  *   it bounds how far back [[rollbackTo]] can go
+  * ## Delivery happens outside the monitor
+  *
+  * Events are *buffered* into mailboxes under the lock and *delivered* after releasing it. Both
+  * halves matter. Buffering under the lock is what makes a registration plus its seed one
+  * indivisible step, so a subscriber can never see a live `Spent` before the `Created` it belongs
+  * after. Delivering outside it is what keeps a consumer's continuation — which may cancel, and so
+  * re-enter this hub — from running while the monitor is held.
   */
-final class SubscriptionHub(
-    val cardanoInfo: CardanoInfo,
-    val securityParam: Int,
-    val capabilities: StreamCapabilities
-) {
+final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: StreamCapabilities) {
+
+    /** Depth at which a block counts as settled. Taken from the provider's own declaration rather
+      * than a separate constructor parameter, so the classifier deciding whether a subscription is
+      * serviceable and the hub deciding when to release it cannot disagree.
+      */
+    val securityParam: Int = capabilities.rollbackHorizon.getOrElse(0)
 
     private final class UtxoSubscription(
         val query: UtxoEventQuery,
@@ -62,6 +68,7 @@ final class SubscriptionHub(
     }
 
     private var nextId: Long = 0L
+    private var closed: Boolean = false
     private var tip: ChainTip = ChainTip.origin
     private var params: ProtocolParams = cardanoInfo.protocolParams
 
@@ -90,7 +97,18 @@ final class SubscriptionHub(
     /** Throw unless this provider can serve the request — synchronously, before anything is
       * registered, so the exception arrives at the call that caused it.
       */
-    def require(request: SubscriptionRequest): Unit =
+    def require(request: SubscriptionRequest): Unit = {
+        if synchronized(closed) then
+            throw new IllegalStateException("provider is closed; it serves no new subscriptions")
+        // The hub delivers live events only. A provider whose capabilities advertise replay must
+        // seed the subscription itself before registering it; silently downgrading a replay request
+        // to a live-only stream would let a subscriber resume from a checkpoint and never learn it
+        // had skipped everything in between.
+        if request.options.startFrom != StartFrom.Tip then
+            throw UnsupportedSubscriptionException(
+              s"this provider serves live subscriptions only; ${request.options.startFrom} needs " +
+                  "replay, which it does not implement"
+            )
         SubscriptionSupport.of(request, capabilities) match
             case SubscriptionSupport.Indexed => ()
             case SubscriptionSupport.Unindexed =>
@@ -102,6 +120,7 @@ final class SubscriptionHub(
                     )
             case SubscriptionSupport.Unsupported(reason) =>
                 throw UnsupportedSubscriptionException(reason)
+    }
 
     // ------------------------------------------------------------------
     // Registration
@@ -109,8 +128,13 @@ final class SubscriptionHub(
 
     /** Register a UTxO subscription, optionally seeding it from a snapshot.
       *
-      * The seed is emitted here, under the same lock that live events take, so a subscriber cannot
-      * observe a live event before the seed it belongs after.
+      * The seed is buffered under the same lock live events take, so a subscriber cannot observe a
+      * live event before the seed it belongs after; it is delivered once the lock is released.
+      *
+      * Seeded events carry [[ChainPoint.origin]] rather than the current tip. They describe UTxOs
+      * produced in blocks the subscription never saw, so stamping them with the tip would make a
+      * later rollback past that tip instruct the subscriber to discard state that is still on
+      * chain. `origin` says what is true: this came from a snapshot, not from a block you observed.
       */
     def registerUtxo(
         id: Long,
@@ -119,17 +143,21 @@ final class SubscriptionHub(
         mailbox: Mailbox[UtxoEvent],
         seed: scalus.cardano.ledger.Utxos
     ): Unit = {
-        val seeded = synchronized {
+        synchronized {
             val sub = new UtxoSubscription(query, opts, mailbox)
-            sub.lastEmitted = tip.blockNo
+            sub.lastEmitted = watermark(opts)
             utxoSubs.put(id, sub)
-            if !opts.includeExistingUtxos || seed.isEmpty then Seq.empty
-            else
+            val wantsCreated = query.types.contains(UtxoEventType.Created)
+            if opts.includeExistingUtxos && wantsCreated then
                 QueryMatching
                     .matching(query.query, seed)
-                    .map(u => UtxoEvent.Created(u, u.input.transactionId, tip.point))
+                    .foreach(u =>
+                        mailbox.offerBuffered(
+                          UtxoEvent.Created(u, u.input.transactionId, ChainPoint.origin)
+                        )
+                    )
         }
-        seeded.foreach(mailbox.offer)
+        mailbox.flush()
     }
 
     def unregisterUtxo(id: Long): Unit = synchronized { utxoSubs.remove(id); () }
@@ -141,7 +169,7 @@ final class SubscriptionHub(
         mailbox: Mailbox[TransactionEvent]
     ): Unit = synchronized {
         val sub = new TxSubscription(query, opts, mailbox)
-        sub.lastEmitted = tip.blockNo
+        sub.lastEmitted = watermark(opts)
         txSubs.put(id, sub)
         ()
     }
@@ -155,7 +183,7 @@ final class SubscriptionHub(
         mailbox: Mailbox[BlockEvent]
     ): Unit = synchronized {
         val sub = new BlockSubscription(query, opts, mailbox)
-        sub.lastEmitted = tip.blockNo
+        sub.lastEmitted = watermark(opts)
         blockSubs.put(id, sub)
         ()
     }
@@ -167,15 +195,21 @@ final class SubscriptionHub(
       * one-shot's dual.
       */
     def registerTip(id: Long, mailbox: Mailbox[ChainTip]): Unit = {
-        val current = synchronized { tipSubs.put(id, mailbox); tip }
-        mailbox.offer(current)
+        synchronized {
+            tipSubs.put(id, mailbox)
+            mailbox.offerBuffered(tip)
+        }
+        mailbox.flush()
     }
 
     def unregisterTip(id: Long): Unit = synchronized { tipSubs.remove(id); () }
 
     def registerParams(id: Long, mailbox: Mailbox[ProtocolParams]): Unit = {
-        val current = synchronized { paramSubs.put(id, mailbox); params }
-        mailbox.offer(current)
+        synchronized {
+            paramSubs.put(id, mailbox)
+            mailbox.offerBuffered(params)
+        }
+        mailbox.flush()
     }
 
     def unregisterParams(id: Long): Unit = synchronized { paramSubs.remove(id); () }
@@ -185,11 +219,11 @@ final class SubscriptionHub(
         txHash: TransactionHash,
         mailbox: Mailbox[TransactionStatus]
     ): Unit = {
-        val current = synchronized {
+        synchronized {
             statusSubs.getOrElseUpdate(txHash, mutable.LinkedHashMap.empty).put(id, mailbox)
-            statuses.getOrElse(txHash, TransactionStatus.NotFound)
+            mailbox.offerBuffered(statuses.getOrElse(txHash, TransactionStatus.NotFound))
         }
-        mailbox.offer(current)
+        mailbox.flush()
     }
 
     def unregisterTxStatus(txHash: TransactionHash, id: Long): Unit = synchronized {
@@ -204,24 +238,28 @@ final class SubscriptionHub(
     // ------------------------------------------------------------------
 
     /** A transaction entered the mempool. */
-    def notifySubmit(txHash: TransactionHash): Unit =
-        setStatus(txHash, TransactionStatus.Pending).foreach { case (m, s) => m.offer(s) }
+    def notifySubmit(txHash: TransactionHash): Unit = {
+        val touched = synchronized(setStatusLocked(txHash, TransactionStatus.Pending))
+        touched.foreach(_.flush())
+    }
 
     def updateParams(next: ProtocolParams): Unit = {
-        val targets = synchronized {
+        val touched = synchronized {
             if next == params then Seq.empty
             else
                 params = next
-                paramSubs.values.toSeq
+                paramSubs.values.toSeq.map { m =>
+                    m.offerBuffered(next); m
+                }
         }
-        targets.foreach(_.offer(next))
+        touched.foreach(_.flush())
     }
 
     /** Apply a block: advance the tip, then release whichever block each subscription's
       * confirmation depth now makes visible.
       */
     def applyBlock(block: AppliedBlock): Unit = {
-        val actions = synchronized {
+        val touched = synchronized {
             recent.append(block)
             // Keep enough history to satisfy the deepest confirmation gate any subscription is
             // waiting on — a window sized only by securityParam would starve a subscriber that
@@ -229,19 +267,21 @@ final class SubscriptionHub(
             val deepestGate = (utxoSubs.values.map(s => effectiveDepth(s.opts)) ++
                 txSubs.values.map(s => effectiveDepth(s.opts)) ++
                 blockSubs.values.map(s => effectiveDepth(s.opts))).maxOption.getOrElse(0)
-            val retain = math.max(securityParam, deepestGate) + 1
+            // `+ 1` on a saturating max, so an absurd confirmation depth cannot wrap the window
+            // negative and empty the deque on the next prune.
+            val retain = math.max(securityParam, deepestGate).min(Int.MaxValue - 1) + 1
             while recent.size > retain do recent.removeHead()
-            tip = ChainTip(block.point, block.blockNo)
+            val newTip = ChainTip(block.point, block.blockNo)
+            tip = newTip
 
-            val tipDeliveries: Seq[() => Unit] = tipSubs.values.toSeq.map(m => () => m.offer(tip))
-            val statusDeliveries: Seq[() => Unit] = block.txs.flatMap { applied =>
-                setStatusLocked(applied.txHash, TransactionStatus.Confirmed).map { case (m, s) =>
-                    () => m.offer(s)
-                }
+            val tipTouched = tipSubs.values.toSeq.map { m =>
+                m.offerBuffered(newTip); m
             }
-            tipDeliveries ++ statusDeliveries ++ releaseLocked()
+            val statusTouched =
+                block.txs.flatMap(a => setStatusLocked(a.txHash, TransactionStatus.Confirmed))
+            tipTouched ++ statusTouched ++ releaseLocked()
         }
-        actions.foreach(_())
+        touched.foreach(_.flush())
     }
 
     /** Roll back to `target`, which must still be within [[securityParam]] of the tip.
@@ -251,47 +291,61 @@ final class SubscriptionHub(
       * all, and telling it to undo events it never received would be worse than silence.
       */
     def rollbackTo(target: ChainTip): Unit = {
-        val actions = synchronized {
+        val touched = synchronized {
+            if capabilities.rollbackHorizon.isEmpty then
+                throw new IllegalStateException(
+                  "this provider declares rollbackHorizon = None, so subscribers are entitled to " +
+                      "assume RolledBack never arrives; it must not roll back"
+                )
+            if target.blockNo < tip.blockNo - securityParam then
+                throw ResyncRequiredException(
+                  s"rollback to block ${target.blockNo} is deeper than the $securityParam-block " +
+                      s"horizon at tip ${tip.blockNo}; the events needed to reconcile subscribers " +
+                      "are no longer available"
+                )
             val orphaned = recent.filter(_.blockNo > target.blockNo).toSeq
             recent.dropRightInPlace(orphaned.size)
             tip = target
 
-            val statusDeliveries: Seq[() => Unit] = orphaned.flatMap(_.txs).flatMap { applied =>
+            val statusTouched = orphaned.flatMap(_.txs).flatMap { applied =>
                 // Conservative: the transaction is no longer on chain. Whether it re-enters a
                 // mempool and reappears is the provider's business, not the hub's.
-                setStatusLocked(applied.txHash, TransactionStatus.NotFound).map { case (m, s) =>
-                    () => m.offer(s)
-                }
+                setStatusLocked(applied.txHash, TransactionStatus.NotFound)
             }
 
-            val utxoDeliveries: Seq[() => Unit] = utxoSubs.values.toSeq.flatMap { sub =>
+            val utxoTouched = utxoSubs.values.toSeq.flatMap { sub =>
                 if sub.lastEmitted <= target.blockNo then Seq.empty
                 else
                     sub.lastEmitted = target.blockNo
-                    Seq(() => sub.mailbox.offer(UtxoEvent.RolledBack(target.point)))
+                    sub.mailbox.offerBuffered(UtxoEvent.RolledBack(target.point))
+                    Seq(sub.mailbox)
             }
-            val txDeliveries: Seq[() => Unit] = txSubs.values.toSeq.flatMap { sub =>
+            val txTouched = txSubs.values.toSeq.flatMap { sub =>
                 if sub.lastEmitted <= target.blockNo then Seq.empty
                 else
                     sub.lastEmitted = target.blockNo
-                    Seq(() => sub.mailbox.offer(TransactionEvent.RolledBack(target.point)))
+                    sub.mailbox.offerBuffered(TransactionEvent.RolledBack(target.point))
+                    Seq(sub.mailbox)
             }
-            val blockDeliveries: Seq[() => Unit] = blockSubs.values.toSeq.flatMap { sub =>
+            val blockTouched = blockSubs.values.toSeq.flatMap { sub =>
                 if sub.lastEmitted <= target.blockNo then Seq.empty
                 else
                     sub.lastEmitted = target.blockNo
-                    Seq(() => sub.mailbox.offer(BlockEvent.RolledBack(target.point)))
+                    sub.mailbox.offerBuffered(BlockEvent.RolledBack(target.point))
+                    Seq(sub.mailbox)
+            }
+            val tipTouched = tipSubs.values.toSeq.map { m =>
+                m.offerBuffered(target); m
             }
 
-            val tipDeliveries: Seq[() => Unit] = tipSubs.values.toSeq.map(m => () => m.offer(tip))
-
-            tipDeliveries ++ statusDeliveries ++ utxoDeliveries ++ txDeliveries ++ blockDeliveries
+            tipTouched ++ statusTouched ++ utxoTouched ++ txTouched ++ blockTouched
         }
-        actions.foreach(_())
+        touched.foreach(_.flush())
     }
 
     def closeAll(): Unit = {
         val mailboxes = synchronized {
+            closed = true
             val all: Seq[Mailbox[?]] =
                 utxoSubs.values.toSeq.map(_.mailbox) ++
                     txSubs.values.toSeq.map(_.mailbox) ++
@@ -315,14 +369,14 @@ final class SubscriptionHub(
     // ------------------------------------------------------------------
 
     /** Release, per subscription, every block that has now reached its confirmation depth. */
-    private def releaseLocked(): Seq[() => Unit] = {
+    private def releaseLocked(): Seq[Mailbox[?]] = {
         def deliveries[S](
             subs: Iterable[S],
             depthOf: S => Int,
             lastOf: S => BlockNo,
             advance: (S, BlockNo) => Unit,
-            emit: (S, AppliedBlock) => Seq[() => Unit]
-        ): Seq[() => Unit] = subs.toSeq.flatMap { sub =>
+            emit: (S, AppliedBlock) => Seq[Mailbox[?]]
+        ): Seq[Mailbox[?]] = subs.toSeq.flatMap { sub =>
             val depth = depthOf(sub)
             // Everything at or below the visible height that this subscription has not seen yet.
             val visibleUpTo = tip.blockNo - depth
@@ -338,27 +392,48 @@ final class SubscriptionHub(
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => utxoEvents(s, b).map(e => () => s.mailbox.offer(e))
+          (s, b) => { utxoEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
         )
         val txs = deliveries[TxSubscription](
           txSubs.values,
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => txEvents(s, b).map(e => () => s.mailbox.offer(e))
+          (s, b) => { txEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
         )
         val blocks = deliveries[BlockSubscription](
           blockSubs.values,
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => blockEvents(s, b).map(e => () => s.mailbox.offer(e))
+          (s, b) => { blockEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
         )
         utxo ++ txs ++ blocks
     }
 
+    /** Shared with [[SubscriptionSupport.of]] by construction: the depth that decides whether a
+      * subscription is *serviceable* and the depth it is actually *gated* at are the same
+      * expression, evaluated in one place.
+      */
     private def effectiveDepth(opts: SubscriptionOptions): Int =
-        if opts.noRollback then math.max(opts.confirmations, securityParam) else opts.confirmations
+        SubscriptionSupport.effectiveDepth(opts, capabilities)
+
+    /** Where a new subscription's delivery watermark starts.
+      *
+      * Not `tip.blockNo`: a subscription gated on confirmations has been delivered nothing for the
+      * last `depth` blocks, and marking those as already-emitted would make a later rollback into
+      * that range offer it a `RolledBack` retracting events it never received — which is exactly
+      * the guarantee `noRollback` sells.
+      */
+    private def watermark(opts: SubscriptionOptions): BlockNo =
+        math.max(0L, tip.blockNo - effectiveDepth(opts))
+
+    /** Idle signals need both sides to agree: the provider must be able to produce them and the
+      * subscriber must want them. Checking only the option would let the hub emit a signal its own
+      * provider declared it does not produce.
+      */
+    private def wantsIdle(opts: SubscriptionOptions): Boolean =
+        capabilities.idleSignals && opts.idleSignals
 
     private def utxoEvents(sub: UtxoSubscription, block: AppliedBlock): Seq[UtxoEvent] = {
         val wantCreated = sub.query.types.contains(UtxoEventType.Created)
@@ -380,7 +455,7 @@ final class SubscriptionHub(
             // produced, and a subscriber folding these into a set needs the removal to land first.
             spent ++ created
         }
-        if events.isEmpty && sub.opts.idleSignals then Seq(UtxoEvent.Idle(block.point))
+        if events.isEmpty && wantsIdle(sub.opts) then Seq(UtxoEvent.Idle(block.point))
         else events
     }
 
@@ -388,34 +463,38 @@ final class SubscriptionHub(
         val events = block.txs
             .filter(QueryMatching.matchesTransaction(sub.query, _))
             .map(applied => TransactionEvent.Included(applied.tx, block.point))
-        if events.isEmpty && sub.opts.idleSignals then Seq(TransactionEvent.Idle(block.point))
+        if events.isEmpty && wantsIdle(sub.opts) then Seq(TransactionEvent.Idle(block.point))
         else events
     }
 
     private def blockEvents(sub: BlockSubscription, applied: AppliedBlock): Seq[BlockEvent] = {
-        val inRange = sub.query match
-            case BlockQuery.All => true
+        val (inRange, past) = sub.query match
+            case BlockQuery.All => (true, false)
             case BlockQuery.InSlotRange(from, to) =>
-                applied.point.slot >= from && to.forall(applied.point.slot <= _)
+                (
+                  applied.point.slot >= from && to.forall(applied.point.slot <= _),
+                  to.exists(applied.point.slot > _)
+                )
+        // A bounded range ends the stream once the chain passes it, as BlockQuery.InSlotRange
+        // promises. Leaving it open would park the subscriber forever on a range that can never
+        // produce another event, while the registration kept inflating the retention window.
+        if past then sub.mailbox.close()
         // A provider that declared it serves block subscriptions supplies the block; one that did
         // not never gets here, because `require` refused the subscription.
         if inRange then applied.block.toSeq.map(BlockEvent.Applied(_, applied.point))
         else Seq.empty
     }
 
-    private def setStatus(
-        txHash: TransactionHash,
-        status: TransactionStatus
-    ): Seq[(Mailbox[TransactionStatus], TransactionStatus)] =
-        synchronized(setStatusLocked(txHash, status))
-
     private def setStatusLocked(
         txHash: TransactionHash,
         status: TransactionStatus
-    ): Seq[(Mailbox[TransactionStatus], TransactionStatus)] = {
+    ): Seq[Mailbox[TransactionStatus]] = {
         if statuses.get(txHash).contains(status) then Seq.empty
         else
             statuses.put(txHash, status)
-            statusSubs.get(txHash).toSeq.flatMap(_.values.toSeq).map(_ -> status)
+            statusSubs.get(txHash).toSeq.flatMap(_.values.toSeq).map { m =>
+                m.offerBuffered(status)
+                m
+            }
     }
 }

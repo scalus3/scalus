@@ -61,13 +61,27 @@ object SubscriptionSupport {
                 .getOrElse(indexing(request, caps))
     }
 
+    /** The depth a subscription actually waits, which is not always what it asked for: `noRollback`
+      * means "wait until a reorg cannot reach me", i.e. the provider's declared rollback horizon.
+      * The hub computes delivery depth the same way, and both must, or a subscription can be
+      * accepted against `maxConfirmations` and then gated far deeper than the provider can manage.
+      */
+    def effectiveDepth(opts: SubscriptionOptions, caps: StreamCapabilities): Int =
+        if opts.noRollback then math.max(opts.confirmations, caps.rollbackHorizon.getOrElse(0))
+        else opts.confirmations
+
     private def checkConfirmations(
         opts: SubscriptionOptions,
         caps: StreamCapabilities
-    ): Option[SubscriptionSupport] =
-        caps.maxConfirmations.filter(opts.confirmations > _).map { max =>
-            Unsupported(s"confirmations=${opts.confirmations} exceeds the provider's maximum $max")
+    ): Option[SubscriptionSupport] = {
+        val depth = effectiveDepth(opts, caps)
+        caps.maxConfirmations.filter(depth > _).map { max =>
+            val asked =
+                if depth == opts.confirmations then s"confirmations=$depth"
+                else s"noRollback implies a depth of $depth"
+            Unsupported(s"$asked exceeds the provider's maximum of $max")
         }
+    }
 
     private def checkReplay(
         request: SubscriptionRequest,
@@ -84,14 +98,25 @@ object SubscriptionSupport {
                 case ReplaySupport.NoReplay =>
                     Some(Unsupported("provider is live-only; StartFrom.At is not serviceable"))
                 case ReplaySupport.Scoped(kinds) =>
-                    // Replay is available only where the query itself pushes down.
-                    if isIndexed(request, kinds) then None
-                    else
-                        Some(
-                          Unsupported(
-                            s"provider can only replay subscriptions indexed by $kinds"
-                          )
-                        )
+                    // Replay is available only where the query itself pushes down — and a block
+                    // subscription has no query to push down, so a provider that replays by
+                    // looking up a source cannot serve one at all. `isIndexed` answers `true` for
+                    // blocks because there is nothing to *scan*, which is the opposite question.
+                    request match
+                        case _: SubscriptionRequest.Block =>
+                            Some(
+                              Unsupported(
+                                "provider replays only subscriptions it can look up by query " +
+                                    s"source ($kinds); a block subscription has none"
+                              )
+                            )
+                        case _ if isIndexed(request, kinds) => None
+                        case _ =>
+                            Some(
+                              Unsupported(
+                                s"provider can only replay subscriptions indexed by $kinds"
+                              )
+                            )
                 case ReplaySupport.Buffered(_) | ReplaySupport.FullHistory => None
 
     private def indexing(

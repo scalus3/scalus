@@ -7,8 +7,9 @@ import scalus.cardano.ledger.{TransactionHash, Value}
 import scalus.cardano.node.stream.*
 import scalus.cardano.node.{UtxoQuery, UtxoSource}
 
-import scala.concurrent.Await
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.{Await, Future}
+import scala.util.{Failure, Success}
 
 /** What a [[BlockchainStreamProvider]] must do, whatever it is backed by.
   *
@@ -32,21 +33,52 @@ abstract class StreamProviderConformance extends AnyFunSuite {
     /** How long to wait for an event that should already be on its way. */
     protected def patience: FiniteDuration = 5.seconds
 
-    protected def next[A](src: ScalusAsyncSource[A]): A =
-        Await.result(src.pull(), patience).getOrElse(fail("stream ended while awaiting an event"))
+    /** A reader that never drops an event.
+      *
+      * `pull` is a commitment, not a poll: on an empty source it installs a waiter that the next
+      * offered event completes. Calling `pull` and discarding the future would therefore route the
+      * next event into a promise nobody holds — invisible against a provider that delivers
+      * synchronously, and silent data loss against every remote one this suite exists to certify.
+      * So the outstanding future is kept and re-inspected instead.
+      */
+    protected final class Reader[A](val source: ScalusAsyncSource[A]) {
+        private var outstanding: Option[Future[Option[A]]] = None
 
-    /** The next event if one is already available, without waiting for one that is not. */
-    protected def peek[A](src: ScalusAsyncSource[A]): Option[A] =
-        src.pull().value.flatMap(_.toOption).flatten
+        private def current(): Future[Option[A]] = {
+            val f = outstanding.getOrElse(source.pull())
+            outstanding = Some(f)
+            f
+        }
 
-    protected def drain[A](src: ScalusAsyncSource[A]): List[A] = {
-        val buf = List.newBuilder[A]
-        var more = true
-        while more do
-            peek(src) match
-                case Some(a) => buf += a
-                case None    => more = false
-        buf.result()
+        /** Wait for the next event. */
+        def next(): A = {
+            val value = Await.result(current(), patience)
+            outstanding = None
+            value.getOrElse(fail("stream ended while awaiting an event"))
+        }
+
+        /** The next event if one has already arrived; does not wait for one that has not. */
+        def peek(): Option[A] = current().value match
+            case Some(Success(value)) =>
+                outstanding = None
+                value
+            case Some(Failure(e)) => throw e
+            case None             => None
+
+        /** Everything already delivered. */
+        def drain(): List[A] = {
+            val buf = List.newBuilder[A]
+            var more = true
+            while more do
+                peek() match
+                    case Some(a) => buf += a
+                    case None    => more = false
+            buf.result()
+        }
+
+        def isEnded: Boolean = Await.result(current(), patience).isEmpty
+
+        def cancel(): Unit = source.cancel()
     }
 
     private def withFixture(body: StreamConformanceFixture => Unit): Unit = {
@@ -109,7 +141,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
             val target = f.freshAddress()
             val events = subscribeUtxo(f, target, SubscriptionOptions(includeExistingUtxos = false))
             val hash = f.payTo(target, Value.ada(10))
-            next(events) match
+            events.next() match
                 case UtxoEvent.Created(utxo, producedBy, _) =>
                     assert(producedBy == hash)
                     assert(utxo.output.address == target)
@@ -123,14 +155,14 @@ abstract class StreamProviderConformance extends AnyFunSuite {
             f.payTo(target, Value.ada(10))
 
             val events = subscribeUtxo(f, target, SubscriptionOptions(includeExistingUtxos = true))
-            val seeded = next(events)
+            val seeded = events.next()
             assert(
               seeded.isInstanceOf[UtxoEvent.Created],
               s"seed should arrive as Created, got $seeded"
             )
 
             val second = f.payTo(target, Value.ada(5))
-            val live = next(events)
+            val live = events.next()
             live match
                 case UtxoEvent.Created(_, producedBy, _) => assert(producedBy == second)
                 case other => fail(s"expected the live Created event, got $other")
@@ -142,7 +174,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
             val target = f.freshAddress()
             f.payTo(target, Value.ada(10))
             val events = subscribeUtxo(f, target, SubscriptionOptions(includeExistingUtxos = false))
-            assert(peek(events).isEmpty, "a live-only subscription must not replay existing UTxOs")
+            assert(events.peek().isEmpty, "a live-only subscription must not replay existing UTxOs")
         }
     }
 
@@ -151,12 +183,12 @@ abstract class StreamProviderConformance extends AnyFunSuite {
             val target = f.freshAddress()
             val events = subscribeUtxo(f, target, SubscriptionOptions(includeExistingUtxos = false))
             f.payTo(target, Value.ada(20))
-            val created = next(events) match
+            val created = events.next() match
                 case c: UtxoEvent.Created => c
                 case other                => fail(s"expected Created, got $other")
 
             f.spendFrom(target, Value.ada(5))
-            val spent = next(events) match
+            val spent = events.next() match
                 case s: UtxoEvent.Spent => s
                 case other              => fail(s"expected Spent, got $other")
             assert(spent.utxo.input == created.utxo.input, "Spent must retract the created UTxO")
@@ -170,7 +202,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
             events.cancel()
             f.payTo(target, Value.ada(10))
             assert(
-              Await.result(events.pull(), patience).isEmpty,
+              events.isEnded,
               "a cancelled subscription must end rather than keep delivering"
             )
         }
@@ -180,10 +212,10 @@ abstract class StreamProviderConformance extends AnyFunSuite {
 
     test("tip is delivered on subscribe and advances with the chain") {
         withFixture { f =>
-            val tips: ScalusAsyncSource[ChainTip] = f.provider.subscribeTip()
-            val first = next(tips)
+            val tips = Reader(f.provider.subscribeTip[ScalusAsyncSource]())
+            val first = tips.next()
             f.payTo(f.freshAddress(), Value.ada(10))
-            val second = next(tips)
+            val second = tips.next()
             assert(
               second.blockNo > first.blockNo,
               s"tip should advance: $first then $second"
@@ -195,10 +227,10 @@ abstract class StreamProviderConformance extends AnyFunSuite {
         withFixture { f =>
             val target = f.freshAddress()
             val hash = f.payTo(target, Value.ada(10))
-            val statuses: ScalusAsyncSource[scalus.cardano.node.TransactionStatus] =
-                f.provider.subscribeTransactionStatus(hash)
+            val statuses =
+                Reader(f.provider.subscribeTransactionStatus[ScalusAsyncSource](hash))
             assert(
-              next(statuses) == scalus.cardano.node.TransactionStatus.Confirmed,
+              statuses.next() == scalus.cardano.node.TransactionStatus.Confirmed,
               "a transaction already in a block should read as Confirmed"
             )
         }
@@ -213,7 +245,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
                 val events =
                     subscribeUtxo(f, target, SubscriptionOptions(includeExistingUtxos = false))
                 (1 to 3).foreach(_ => f.payTo(target, Value.ada(2)))
-                val observed = drain(events)
+                val observed = events.drain()
                 assert(
                   !observed.exists(_.isInstanceOf[UtxoEvent.RolledBack]),
                   s"provider declared rollbackHorizon = None but emitted a rollback: $observed"
@@ -221,20 +253,47 @@ abstract class StreamProviderConformance extends AnyFunSuite {
         }
     }
 
-    test("idle signals appear only when both provider and subscription allow them") {
+    test("a provider that does not declare idle signals never emits one") {
         withFixture { f =>
             val watched = f.freshAddress()
             val unrelated = f.freshAddress()
             val opts = SubscriptionOptions(includeExistingUtxos = false, idleSignals = true)
             val events = subscribeUtxo(f, watched, opts)
-            f.payTo(unrelated, Value.ada(3))
-            val observed = drain(events)
-            if f.provider.streamCapabilities.idleSignals then
+            (1 to 3).foreach(_ => f.payTo(unrelated, Value.ada(3)))
+            val observed = events.drain()
+            // Only the negative direction is a contract. `UtxoEvent.Idle` is explicitly emitted at
+            // provider discretion, so a provider that reports progress every tenth block, or on a
+            // timer, is behaving correctly — demanding one for the very next non-matching block
+            // would fail it for no reason.
+            if !f.provider.streamCapabilities.idleSignals then
                 assert(
-                  observed.exists(_.isInstanceOf[UtxoEvent.Idle]),
-                  "provider declares idle signals but produced none for a non-matching block"
+                  !observed.exists(_.isInstanceOf[UtxoEvent.Idle]),
+                  s"provider does not declare idle signals but emitted one: $observed"
                 )
-            else assert(observed.isEmpty, "provider does not declare idle signals but emitted some")
+            assert(
+              !observed.exists {
+                  case _: UtxoEvent.Created => true
+                  case _: UtxoEvent.Spent   => true
+                  case _                    => false
+              },
+              s"a subscription must not receive another address's events: $observed"
+            )
+        }
+    }
+
+    test("an idle signal, when emitted, marks a real position on the chain") {
+        withFixture { f =>
+            if f.provider.streamCapabilities.idleSignals then
+                val watched = f.freshAddress()
+                val unrelated = f.freshAddress()
+                val opts = SubscriptionOptions(includeExistingUtxos = false, idleSignals = true)
+                val events = subscribeUtxo(f, watched, opts)
+                (1 to 3).foreach(_ => f.payTo(unrelated, Value.ada(3)))
+                val idles = events.drain().collect { case i: UtxoEvent.Idle => i.at }
+                assert(
+                  idles == idles.distinct,
+                  s"an idle signal is a checkpointable position, so it must advance: $idles"
+                )
         }
     }
 
@@ -247,10 +306,10 @@ abstract class StreamProviderConformance extends AnyFunSuite {
         f: StreamConformanceFixture,
         address: Address,
         opts: SubscriptionOptions
-    ): ScalusAsyncSource[UtxoEvent] =
-        // The declared return type is what picks `C`; the suite deliberately works at the
+    ): Reader[UtxoEvent] =
+        // The expected type is what picks `C`; the suite deliberately works at the
         // ScalusAsyncSource level so it needs no stream library to test one.
-        f.provider.subscribeUtxoQuery(addressQuery(address), opts)
+        Reader(f.provider.subscribeUtxoQuery[ScalusAsyncSource](addressQuery(address), opts))
 
     private def requestOfKind(
         kind: SubscriptionKind,
