@@ -5,7 +5,7 @@ import com.github.plokhotnyuk.jsoniter_scala.macros.JsonCodecMaker
 import scalus.cardano.ledger.{EvaluatorReportConfig, ProfileDestination, ProfileFormat, ProfileLevel}
 import scalus.uplc.Term
 import scalus.uplc.builtin.platform
-import scalus.uplc.eval.ProfilingData
+import scalus.uplc.eval.{ProfileFormatter, ProfilingData}
 
 import scala.collection.mutable
 import scala.util.control.NonFatal
@@ -20,6 +20,11 @@ import scala.util.control.NonFatal
   *
   * Public for tooling, but in `scalus.uplc.internal` and thus with no binary-compatibility
   * guarantees: the on-disk format is the contract, not this API.
+  *
+  * JVM implementation; the JS build substitutes a no-op stub of the same FQN, keeping
+  * [[ProfileFormatter]] (HTML/CSS/JS templates, Tarjan pass), the jsoniter manifest codec and the
+  * UPLC source-map renderer dead-code-eliminated from the published `scalus.js` bundle, which
+  * transaction builders depend on and which must stay small.
   */
 object ProfileReportWriter {
 
@@ -52,11 +57,8 @@ object ProfileReportWriter {
 
     /** Render `data` to each configured [[scalus.cardano.ledger.ProfileOutput]] (console / files).
       * File destinations are prefixed with the script key so per-redeemer profiles don't collide,
-      * and are also recorded in `profile-manifest.json` (see [[writeManifest]]). The actual
-      * rendering is delegated to the platform-specific [[ProfileReporting]] so that
-      * [[ProfileFormatter]] (HTML/CSS/JS templates, Tarjan pass) stays out of the JS bundle; HTML
-      * output annotates source lines when the source file is readable from the CWD (JVM only —
-      * [[ProfileReporting]] returns `None` on JS).
+      * and are also recorded in `profile-manifest.json` (see [[writeManifest]]). HTML output
+      * annotates source lines when the source file is readable from the CWD.
       *
       * @param onConsole
       *   sink for [[scalus.cardano.ledger.ProfileDestination.Console]] output, so callers keep
@@ -88,21 +90,19 @@ object ProfileReportWriter {
             platform.createDirectories(report.outputDir)
         val written = Seq.newBuilder[(String, String)]
         outputs.foreach { out =>
-            ProfileReporting.render(data, out.format, report.profile, report.maxRows).foreach {
-                content =>
-                    out.destination match
-                        case ProfileDestination.Console =>
-                            onConsole(s"Profile $key:\n$content")
-                        case ProfileDestination.File(name) =>
-                            val file = s"$key.$name"
-                            platform.writeFile(reportPath(report, file), content.getBytes("UTF-8"))
-                            written += formatLabel(out.format) -> file
-                        case ProfileDestination.AbsoluteFile(path) =>
-                            val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
-                            if sep > 0 then platform.createDirectories(path.substring(0, sep))
-                            platform.writeFile(path, content.getBytes("UTF-8"))
-                            written += formatLabel(out.format) -> path
-            }
+            val content = render(data, out.format, report.profile, report.maxRows)
+            out.destination match
+                case ProfileDestination.Console =>
+                    onConsole(s"Profile $key:\n$content")
+                case ProfileDestination.File(name) =>
+                    val file = s"$key.$name"
+                    platform.writeFile(reportPath(report, file), content.getBytes("UTF-8"))
+                    written += formatLabel(out.format) -> file
+                case ProfileDestination.AbsoluteFile(path) =>
+                    val sep = math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'))
+                    if sep > 0 then platform.createDirectories(path.substring(0, sep))
+                    platform.writeFile(path, content.getBytes("UTF-8"))
+                    written += formatLabel(out.format) -> path
         }
         val profileFiles = written.result()
         // The source map only ever accompanies rendered profile files. A run that wrote none (a
@@ -162,6 +162,27 @@ object ProfileReportWriter {
                     uplcJsonCache(scriptHash) = (term, bytes)
                 }
                 bytes
+
+    /** Render `data` in `format`. For HTML, profiled source files readable from the working
+      * directory are annotated with per-line cost.
+      *
+      * @note
+      *   Called once per configured output, so a (rare) config with several HTML outputs re-reads
+      *   the annotated source files per output — negligible next to the extra profiling evaluation
+      *   pass that precedes it.
+      */
+    private def render(
+        data: ProfilingData,
+        format: ProfileFormat,
+        level: ProfileLevel,
+        maxRows: Int
+    ): String = format match
+        case ProfileFormat.Text =>
+            if level == ProfileLevel.Full then ProfileFormatter.toText(data, maxRows)
+            else ProfileFormatter.summary(data)
+        case ProfileFormat.Csv  => ProfileFormatter.toCsv(data)
+        case ProfileFormat.Html => ProfileFormatter.toHtml(data, ProfileFormatter.loadSources(data))
+        case ProfileFormat.Json => ProfileFormatter.toJson(data)
 
     /** Path under `report`'s output directory, or the bare name when the dir is the CWD. */
     private def reportPath(report: EvaluatorReportConfig, name: String): String =
