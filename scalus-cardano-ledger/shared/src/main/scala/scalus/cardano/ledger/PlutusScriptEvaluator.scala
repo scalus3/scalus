@@ -716,9 +716,40 @@ object PlutusScriptEvaluator {
             val logger = Log()
             val hash = plutusScript.scriptHash
             // Execute the script
-            try
-                val resultTerm = vm.evaluateScript(applied, spender, logger)
-                if report.enabled && report.profile != ProfileLevel.Off then
+            val resultTerm =
+                try vm.evaluateScript(applied, spender, logger)
+                catch
+                    case e: StackTraceMachineError =>
+                        val logs = logger.getLogs
+                        val finalLogs =
+                            if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
+                            else logs
+                        throw new PlutusScriptEvaluationException(
+                          e.getMessage,
+                          e,
+                          finalLogs,
+                          hash,
+                          spentBudget = spender.getSpentBudget,
+                          failedSourcePosition = Some(e.sourcePos)
+                        )
+                    case NonFatal(e) =>
+                        val logs = logger.getLogs
+                        val finalLogs =
+                            if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
+                            else logs
+                        throw new PlutusScriptEvaluationException(
+                          e.getMessage,
+                          e,
+                          finalLogs,
+                          hash,
+                          spentBudget = spender.getSpentBudget
+                        )
+            // Profiling is auxiliary output: it runs after the evaluation try so that a failure to
+            // render the profile or write its files (read-only or deleted output dir, full disk)
+            // cannot rebrand a successful evaluation as a PlutusScriptEvaluationException. It only
+            // warns — the evaluation result stands.
+            if report.enabled && report.profile != ProfileLevel.Off then
+                try
                     renderProfile(
                       vm.evaluateScriptProfile(applied),
                       plutusScript.scriptHash,
@@ -726,33 +757,10 @@ object PlutusScriptEvaluator {
                       vm.language,
                       plutusScript.program.term
                     )
-                Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
-            catch
-                case e: StackTraceMachineError =>
-                    val logs = logger.getLogs
-                    val finalLogs =
-                        if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
-                        else logs
-                    throw new PlutusScriptEvaluationException(
-                      e.getMessage,
-                      e,
-                      finalLogs,
-                      hash,
-                      spentBudget = spender.getSpentBudget,
-                      failedSourcePosition = Some(e.sourcePos)
-                    )
-                case NonFatal(e) =>
-                    val logs = logger.getLogs
-                    val finalLogs =
-                        if logs.isEmpty then replayWithDiagnostics(debugScripts, hash, args)
-                        else logs
-                    throw new PlutusScriptEvaluationException(
-                      e.getMessage,
-                      e,
-                      finalLogs,
-                      hash,
-                      spentBudget = spender.getSpentBudget
-                    )
+                catch
+                    case NonFatal(e) =>
+                        log.warn(s"Failed to write profile report for script ${hash.toHex}: $e")
+            Result.Success(resultTerm, spender.getSpentBudget, Map.empty, logger.getLogs.toSeq)
         }
 
         /** Replay a failed script with error traces enabled to collect diagnostic logs.

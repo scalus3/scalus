@@ -6,7 +6,7 @@ import scalus.uplc.*
 import scalus.uplc.DefaultFun.AddInteger
 import scalus.utils.ScalusSourcePos
 
-import java.nio.file.Files
+import java.nio.file.{Files, Path}
 
 /** The `<key>.uplc.json` artifact [[ProfileReportWriter]] writes next to a full profile, and its
   * `"uplc"` entry in `profile-manifest.json`.
@@ -24,7 +24,7 @@ class ProfileReportWriterUplcTest extends AnyFunSuite {
       totalBudget = ExUnits(memory = 0, steps = 0)
     )
 
-    private def fullReport(dir: java.nio.file.Path) = EvaluatorReportConfig(
+    private def fullReport(dir: Path) = EvaluatorReportConfig(
       enabled = true,
       outputDir = dir.toString,
       profile = ProfileLevel.Full
@@ -51,6 +51,25 @@ class ProfileReportWriterUplcTest extends AnyFunSuite {
             new String(Files.readAllBytes(dir.resolve("profile-manifest.json")), "UTF-8")
         assert(manifest.contains("\"uplc\""))
         assert(manifest.contains("cafe01-Spend-0.uplc.json"))
+    }
+
+    test("each redeemer of one script gets the artifact, with identical content") {
+        val dir = Files.createTempDirectory("scalus-uplc-test6")
+        def writeFor(index: Int): Unit = ProfileReportWriter.write(
+          emptyProfile,
+          fullReport(dir),
+          "cafe06",
+          "PlutusV3",
+          "Spend",
+          index,
+          _ => (),
+          Some(annotated)
+        )
+        writeFor(0)
+        writeFor(1) // second redeemer: served from the per-script render cache
+        val first = Files.readAllBytes(dir.resolve("cafe06-Spend-0.uplc.json"))
+        val second = Files.readAllBytes(dir.resolve("cafe06-Spend-1.uplc.json"))
+        assert(first.sameElements(second))
     }
 
     test("no artifact for a term without source info") {

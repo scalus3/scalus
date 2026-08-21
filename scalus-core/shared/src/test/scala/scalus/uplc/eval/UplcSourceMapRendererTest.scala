@@ -143,6 +143,19 @@ class UplcSourceMapRendererTest extends AnyFunSuite {
         assert(map.spans.isEmpty)
     }
 
+    test("spans are emitted sorted: s ascending, then e descending") {
+        val sir = compile {
+            def double(x: BigInt): BigInt = x + x
+            double(21)
+        }
+        val map = UplcSourceMapRenderer.render(sir.toUplc())
+        assert(map.spans.size > 1)
+        map.spans.sliding(2).foreach { pair =>
+            val (a, b) = (pair.head, pair.last)
+            assert(a.s < b.s || (a.s == b.s && a.e >= b.e), s"unsorted: $a before $b")
+        }
+    }
+
     test("json round-trip") {
         val map = UplcSourceMapRenderer.render(term)
         val json = new String(UplcSourceMapRenderer.toJson(map), "UTF-8")

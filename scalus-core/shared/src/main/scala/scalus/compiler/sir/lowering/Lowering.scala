@@ -523,10 +523,14 @@ object Lowering {
       */
     private[lowering] def simpleBindingName(name: String): String = {
         val dotIdx = name.lastIndexOf('.')
-        val simple = if dotIdx >= 0 then name.substring(dotIdx + 1) else name
-        simple match
-            case LocalBindingIdSuffix(base) => base
-            case _                          => simple
+        // Only local binding names carry the plugin's `-<symbolId>` suffix; linked top-level defs
+        // (`pkg.Obj$.bar`, built via `VariableKey.fromName`) never do, so a dotted name keeps its
+        // tail even when it happens to end in `-<digits>` (a backticked identifier).
+        if dotIdx >= 0 then name.substring(dotIdx + 1)
+        else
+            name match
+                case LocalBindingIdSuffix(base) => base
+                case _                          => name
     }
 
     /** Lower `body` as the right-hand side of the binding `name`, so every value created while
@@ -538,9 +542,18 @@ object Lowering {
     private[lowering] def loweringBinding[A](name: String, rhs: SIR)(
         body: => A
     )(using lctx: LoweringContext): A =
-        rhs match
-            case _: SIR.LamAbs => lctx.withFunction(simpleBindingName(name))(body)
-            case _             => body
+        if isFunctionShaped(rhs) then lctx.withFunction(simpleBindingName(name))(body)
+        else body
+
+    /** A lambda, possibly under `Cast` wrappers: a type-ascribed local `val f = x => ...` reaches
+      * [[loweringBinding]] as `Cast(LamAbs(...), tp)` (see `SIRCompiler.compileValDef`), and it is
+      * still a function definition for attribution purposes.
+      */
+    @scala.annotation.tailrec
+    private def isFunctionShaped(rhs: SIR): Boolean = rhs match
+        case _: SIR.LamAbs         => true
+        case SIR.Cast(inner, _, _) => isFunctionShaped(inner)
+        case _                     => false
 
     private def lowerLet(sirLet: SIR.Let)(using lctx: LoweringContext): LoweredValue = {
         val retval = sirLet match

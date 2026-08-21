@@ -1080,7 +1080,7 @@ case class IfThenElseLoweredValue(
         (!(DefaultFun.IfThenElse.tpf $
             cond.termWithNeededVars(gctx) $
             ~thenBranch.termWithNeededVars(gctx) $
-            ~elseBranch.termWithNeededVars(gctx))).withPos(pos)
+            ~elseBranch.termWithNeededVars(gctx))).withAnnotationIfEmpty(ann(pos))
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {

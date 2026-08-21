@@ -6,6 +6,8 @@ import scalus.cardano.ledger.{EvaluatorReportConfig, ProfileDestination, Profile
 import scalus.uplc.Term
 import scalus.uplc.builtin.platform
 
+import java.lang.ref.WeakReference
+import scala.collection.concurrent.TrieMap
 import scala.util.control.NonFatal
 
 /** Renders a CEK profile to the destinations an [[scalus.cardano.ledger.EvaluatorReportConfig]]
@@ -113,10 +115,7 @@ private[scalus] object ProfileReportWriter {
                     UplcSourceMapRenderer.hasSourceInfo(term) =>
                 val file = s"$key.uplc.json"
                 platform.createDirectories(report.outputDir)
-                platform.writeFile(
-                  reportPath(report, file),
-                  UplcSourceMapRenderer.toJson(UplcSourceMapRenderer.render(term))
-                )
+                platform.writeFile(reportPath(report, file), renderUplcJson(scriptHash, term))
                 Seq("uplc" -> file)
             case _ => Nil
         val files = profileFiles ++ uplcFiles
@@ -132,6 +131,24 @@ private[scalus] object ProfileReportWriter {
               )
             )
     }
+
+    /** Rendered `<key>.uplc.json` bytes per script hash. The document depends only on the unapplied
+      * program term, but [[write]] runs once per (redeemer, evaluation): a transaction spending one
+      * script via N redeemers, or an emulator fee-balancing loop re-evaluating it K times, would
+      * otherwise pay the renderer's full pretty-print for byte-identical output every time. The
+      * weak reference detects a recompiled script arriving under the same hash with a fresh term
+      * instance (and thus possibly different annotations) and re-renders instead of serving stale
+      * spans; it also keeps the cache from pinning term trees the caller has dropped.
+      */
+    private val uplcJsonCache = TrieMap.empty[String, (WeakReference[Term], Array[Byte])]
+
+    private def renderUplcJson(scriptHash: String, term: Term): Array[Byte] =
+        uplcJsonCache.get(scriptHash) match
+            case Some((ref, bytes)) if ref.get eq term => bytes
+            case _ =>
+                val bytes = UplcSourceMapRenderer.toJson(UplcSourceMapRenderer.render(term))
+                uplcJsonCache(scriptHash) = (new WeakReference(term), bytes)
+                bytes
 
     /** Path under `report`'s output directory, or the bare name when the dir is the CWD. */
     private def reportPath(report: EvaluatorReportConfig, name: String): String =

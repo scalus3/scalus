@@ -363,10 +363,10 @@ enum Term:
     def prettyXTerm: Doc = Pretty[Term].pretty(this, Style.XTerm)
 
     /** Show the term as a string. */
-    def show: String = pretty.render(80)
+    def show: String = pretty.render(TermPrinter.DefaultRenderWidth)
 
     /** Show the term as a string with XTerm syntax highlighting. */
-    def showHighlighted: String = prettyXTerm.render(80)
+    def showHighlighted: String = prettyXTerm.render(TermPrinter.DefaultRenderWidth)
 
     /** Show the term as a short string (truncated to 60 chars, first line only). */
     def showShort: String = Term.truncateForDisplay(pretty.render(100), 60)
@@ -616,6 +616,12 @@ object Term {
   */
 private[scalus] object TermPrinter {
     import Term.*
+
+    /** The width `Term.show` and `Program.show` render at. `UplcSourceMapRenderer` must use the
+      * same width — its documented invariant is that the `.uplc.json` text equals `term.show` — so
+      * it references this constant instead of repeating the literal.
+      */
+    val DefaultRenderWidth = 80
 
     /** Pretty-print an already-sanitized term, passing every printed node's Doc through `decorate`.
       *

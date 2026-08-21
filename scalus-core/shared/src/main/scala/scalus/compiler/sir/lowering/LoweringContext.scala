@@ -57,7 +57,8 @@ class LoweringContext(
       */
     def currentFunction: String = LoweringContext.currentFunctionName
 
-    def currentFunction_=(name: String): Unit = LoweringContext.currentFunctionName = name
+    private def currentFunction_=(name: String): Unit =
+        LoweringContext.currentFunctionName = name
 
     /** Annotation for a term built at lowering time: position plus the enclosing function name. */
     def ann(pos: SIRPosition): UplcAnnotation = UplcAnnotation(pos, currentFunction)
@@ -139,7 +140,8 @@ class LoweringContext(
       *      let-rec wrapping the lowered SIR root.
       *
       * `label` is the short site name passed to [[LoweringContext.traceLetRec]] — used when
-      * filtering `SCALUS_TRACE_LETREC` output.
+      * filtering `SCALUS_TRACE_LETREC` output — and the [[currentFunction]] the helper body is
+      * built under, so the UPLC source view attributes the shared helper to a stable name.
       */
     def defineCachedTopLevelHelper(
         cacheKey: String,
@@ -162,7 +164,11 @@ class LoweringContext(
                   representation = funRepr
                 )
                 cachedTopLevelHelpers(cacheKey) = v
-                val rhs = buildRhs(v)
+                // The helper body is cached and shared by every later call site, so it must not
+                // inherit the functionName of whichever user function happened to trigger it
+                // first (that would attribute the helper's cost to an unrelated function, and
+                // encounter-order-dependently so). Stamp it with the stable site label instead.
+                val rhs = withFunction(label)(buildRhs(v))
                 pendingTopLevelLetRecs += ((v, rhs))
                 LoweringContext.traceLetRec("ADD", label, cacheKey)
                 v
@@ -284,7 +290,7 @@ object LoweringContext {
 
     def currentFunctionName: String = currentFunctionTL.get()
 
-    def currentFunctionName_=(name: String): Unit = currentFunctionTL.set(name)
+    private def currentFunctionName_=(name: String): Unit = currentFunctionTL.set(name)
 
     /** Process-wide trace facility for `pendingTopLevelLetRecs` add/hit events. Gated by
       * `SCALUS_TRACE_LETREC` env var (or `-Dscalus.trace.letrec=true` JVM prop). Emits a monotonic

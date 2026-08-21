@@ -3,9 +3,10 @@ package scalus.uplc.eval
 import com.github.plokhotnyuk.jsoniter_scala.core.*
 import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
 import org.typelevel.paiges.Doc
-import scalus.uplc.{Term, TermPrinter, TermSanitizer}
+import scalus.uplc.{Constant, Term, TermPrinter, TermSanitizer}
 import scalus.utils.Style
 
+import java.util.IdentityHashMap
 import scala.collection.mutable
 
 /** One mapped region of rendered UPLC text.
@@ -53,12 +54,12 @@ final case class UplcSpan(
   * `files` and `functions` are string tables referenced by [[UplcSpan.file]] and [[UplcSpan.fn]].
   *
   * @param spans
-  *   the mapped regions, in the order the printer finished the nodes: a node's children precede it,
-  *   and [[UplcSpan.s]] is **not** monotonic. Do not assume document order – a consumer that wants
-  *   to binary-search by offset, or to resolve a cursor to the innermost containing span, must sort
-  *   first (by `s` ascending, then `e` descending, which orders enclosing spans before the spans
-  *   they contain). The spans are properly nested, so that resolution is well defined. The table is
-  *   empty when nothing could be mapped; [[uplc]] is always the full program text.
+  *   the mapped regions, sorted by [[UplcSpan.s]] ascending, then [[UplcSpan.e]] descending, which
+  *   orders enclosing spans before the spans they contain: binary-searching by offset and resolving
+  *   a cursor to the innermost containing span work directly on the table. The spans are properly
+  *   nested, so that resolution is well defined. (Documents written by earlier schema-1 producers
+  *   carried the spans unsorted, so a defensive consumer may still sort.) The table is empty when
+  *   nothing could be mapped; [[uplc]] is always the full program text.
   */
 final case class UplcSourceMap(
     schemaVersion: Int,
@@ -87,7 +88,7 @@ object UplcSourceMapRenderer {
     val SchemaVersion = 1
 
     /** The width `Term.show` renders at. Used here too, so the artifact holds the familiar text. */
-    private val RenderWidth = 80
+    private val RenderWidth = TermPrinter.DefaultRenderWidth
 
     // Always emit `files`/`functions`/`spans`, even when empty, so consumers can index them without
     // a presence check. `fn` is still omitted when absent (jsoniter's transientNone default).
@@ -100,6 +101,29 @@ object UplcSourceMapRenderer {
     // a program loses its spans rather than getting corrupted text.
     private val MarkerStart = '\u0001'
     private val MarkerEnd = '\u0002'
+
+    /** True when a `string` constant somewhere in `term` contains a marker character — the only way
+      * rendered UPLC can collide with the marker encoding. String constants are the single
+      * verbatim-printed value (also inside list/pair/array constants); everything else prints as
+      * identifiers, hex, or digits. When this is false, every marker character in the marked render
+      * is a genuine marker and stripping is exact, so [[render]] skips its verification pass.
+      */
+    private def mayCollideWithMarkers(t: Term): Boolean = t match
+        case Term.Const(c, _)      => constantHasMarkerChar(c)
+        case Term.LamAbs(_, b, _)  => mayCollideWithMarkers(b)
+        case Term.Apply(f, a, _)   => mayCollideWithMarkers(f) || mayCollideWithMarkers(a)
+        case Term.Force(b, _)      => mayCollideWithMarkers(b)
+        case Term.Delay(b, _)      => mayCollideWithMarkers(b)
+        case Term.Constr(_, as, _) => as.exists(mayCollideWithMarkers)
+        case Term.Case(a, cs, _)   => mayCollideWithMarkers(a) || cs.exists(mayCollideWithMarkers)
+        case _                     => false
+
+    private def constantHasMarkerChar(c: Constant): Boolean = c match
+        case Constant.String(s)    => s.exists(ch => ch == MarkerStart || ch == MarkerEnd)
+        case Constant.Pair(a, b)   => constantHasMarkerChar(a) || constantHasMarkerChar(b)
+        case Constant.List(_, vs)  => vs.exists(constantHasMarkerChar)
+        case Constant.Array(_, vs) => vs.exists(constantHasMarkerChar)
+        case _                     => false
 
     /** True when at least one node of `term` carries a usable source position, i.e. rendering it
       * would produce a non-empty span table. Terms decoded from CBOR carry no annotations at all,
@@ -117,15 +141,18 @@ object UplcSourceMapRenderer {
 
     /** Renders `term` and maps every positioned node to the text it printed.
       *
-      * The rendered text is always identical to `term.show`; this is checked, not merely intended
-      * (see below). Nodes without an effective source position get no span, and neither do the
-      * inner `Apply` nodes of an application chain: the printer flattens `[[[f a] b] c]` to
-      * `[f a b c]` and prints only the outermost `Apply`, whose span covers the whole chain.
+      * The rendered text is always identical to `term.show`; when the program could spoof a marker
+      * this is checked, not merely intended (see below). Nodes without an effective source position
+      * get no span, and neither do the inner `Apply` nodes of an application chain: the printer
+      * flattens `[[[f a] b] c]` to `[f a b c]` and prints only the outermost `Apply`, whose span
+      * covers the whole chain.
       *
       * A `string` constant is printed verbatim, so a program can contain text indistinguishable
-      * from a marker. Rather than reason about which spoofs are recoverable, the marked render is
-      * verified against an unmarked one and the whole span table is dropped when they disagree: a
-      * source view with no spans is a degraded view, one with wrong text is a wrong one.
+      * from a marker. Rather than reason about which spoofs are recoverable, whenever a string
+      * constant holds a marker character the marked render is verified against an unmarked one, and
+      * the whole span table is dropped when they disagree: a source view with no spans is a
+      * degraded view, one with wrong text is a wrong one. Programs without such constants — all
+      * real ones — need no verification render: every marker in their marked render is genuine.
       */
     def render(term: Term): UplcSourceMap = {
         // Name sanitization is what the printer does anyway, and it preserves both the tree
@@ -137,7 +164,7 @@ object UplcSourceMapRenderer {
         // equal subterms. A node instance shared by several parents (as common-subexpression
         // elimination produces) is printed once per occurrence, and every occurrence then reports
         // the index this numbering gave its last visit.
-        val postOrder = new java.util.IdentityHashMap[Term, Integer]()
+        val postOrder = new IdentityHashMap[Term, Integer]()
         var next = 0
         def index(t: Term): Unit = {
             t match
@@ -169,14 +196,18 @@ object UplcSourceMapRenderer {
         )
         val (uplc, starts, ends) = stripMarkers(doc.render(RenderWidth), nodes.length)
 
-        // Ground truth for the text, produced by the same printer with no markers at all. Markers
-        // are zero-width, so they cannot change a layout decision, and stripping them must restore
-        // this string exactly. If it does not, the program's own text collided with the marker
-        // encoding; report the clean text and no spans.
-        val plain = TermPrinter
-            .prettySanitized(sanitized, Style.Normal, (_, d) => d)
-            .render(RenderWidth)
-        if uplc != plain then return UplcSourceMap(SchemaVersion, plain, Nil, Nil, Nil)
+        // Only a `string` constant can spoof the marker encoding (see mayCollideWithMarkers), so
+        // the ground-truth check — the same printer with no markers at all — runs only when one
+        // holds a marker character. Markers are zero-width, so they cannot change a layout
+        // decision, and stripping them must restore the unmarked string exactly. If it does not,
+        // the program's own text collided with the marker encoding; report the clean text and no
+        // spans.
+        if mayCollideWithMarkers(sanitized) then {
+            val plain = TermPrinter
+                .prettySanitized(sanitized, Style.Normal, (_, d) => d)
+                .render(RenderWidth)
+            if uplc != plain then return UplcSourceMap(SchemaVersion, plain, Nil, Nil, Nil)
+        }
 
         val files = mutable.LinkedHashMap.empty[String, Int]
         val functions = mutable.LinkedHashMap.empty[String, Int]
@@ -207,7 +238,15 @@ object UplcSourceMapRenderer {
             }
         }
 
-        UplcSourceMap(SchemaVersion, uplc, files.keys.toSeq, functions.keys.toSeq, spans)
+        // Sorted so enclosing spans precede the spans they contain: consumers can binary-search
+        // by offset or resolve the innermost span without sorting first.
+        UplcSourceMap(
+          SchemaVersion,
+          uplc,
+          files.keys.toSeq,
+          functions.keys.toSeq,
+          spans.sortBy(sp => (sp.s, -sp.e))
+        )
     }
 
     /** Serializes a source map to the `<key>.uplc.json` bytes, indented for readability. */

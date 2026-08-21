@@ -59,4 +59,26 @@ class FunctionNameAnnotationTest extends AnyFunSuite {
         val names = collectFunctionNames(sir.toUplc())
         assert(names.contains("triple"), s"expected 'triple' in $names")
     }
+
+    test("shared sumEq helper is attributed to its site label, not the triggering function") {
+        // NestedListsModule.eqLists compares UplcConstr lists, which makes the lowering emit a
+        // cached top-level sumEq helper. The helper is shared by every later call site, so its
+        // body must carry the stable label "sumEq" — not "eqLists", the function that happened
+        // to trigger its generation first.
+        val sir = compile { (a: NestedLists, b: NestedLists) =>
+            NestedListsModule.eqLists(a, b)
+        }
+        val names = collectFunctionNames(sir.toUplc())
+        assert(names.contains("sumEq"), s"expected 'sumEq' in $names")
+    }
+
+    test("simpleBindingName strips only what the producer appended") {
+        // local binding: the plugin appends `-<symbolId>`
+        assert(Lowering.simpleBindingName("double-432208") == "double")
+        // a backticked local `retry-2` gets a suffix on top; only the suffix goes
+        assert(Lowering.simpleBindingName("retry-2-432208") == "retry-2")
+        // linked top-level defs are never suffixed: keep a digit tail
+        assert(Lowering.simpleBindingName("pkg.Obj$.bar") == "bar")
+        assert(Lowering.simpleBindingName("pkg.Obj$.retry-2") == "retry-2")
+    }
 }
