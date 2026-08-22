@@ -2,7 +2,7 @@ Source: https://scalus.org/docs/language-guide/collections
 
 # Collections
 
-Scalus provides immutable collection types for organizing and manipulating data in smart contracts. These collections—List and AssocMap—are optimized for blockchain execution and compile efficiently to Plutus Core.
+Scalus provides immutable collection types for organizing and manipulating data in smart contracts. These collections (List, SortedMap, AssocMap) are optimized for blockchain execution and compile efficiently to Plutus Core.
 
 ## List
 
@@ -164,7 +164,10 @@ val result = value.getOrFail("Key not found")
 
 ## AssocMap
 
-`AssocMap` is an association list - a list of key-value pairs. It's an ordered map with O(n) lookup.
+`AssocMap` is an association list - a list of key-value pairs in no particular order, keyed by
+`Eq` equality, with O(n) lookup. Use it when keys only support equality; when keys have an
+ordering, prefer [SortedMap](#sortedmap), whose canonical key order gives it structural equality
+and `Data` interoperability.
 
 ```scala
 import scalus.cardano.onchain.plutus.prelude.AssocMap
@@ -194,9 +197,70 @@ val filtered = map.filter { case (k, v) => v > 150 }
 ```
 
 **Use Cases:**
-- Small maps where ordering matters
+- Small maps whose keys have `Eq` but no `Ord`
 - Sequential processing of key-value pairs
-- When insertion order needs to be preserved
+
+## SortedMap
+
+`SortedMap` is a key-value map whose entries are kept in strictly ascending key order (`Ord`
+keys, no duplicates). It is the canonical on-chain map: `Value` is a
+`SortedMap[PolicyId, SortedMap[TokenName, BigInt]]`, and the sorted representation means two
+equal maps are structurally identical. It is stored as a Plutus `Data` map, so `toData` and
+`fromData` are cheap.
+
+```scala
+import scalus.cardano.onchain.plutus.prelude.{List, Option, SortedMap, These}
+
+// Creating sorted maps
+val empty = SortedMap.empty[BigInt, ByteString]
+val one = SortedMap.singleton(BigInt(1), ByteString.fromHex("aa"))
+val sorted = SortedMap.fromList(List(          // sorts and de-duplicates (first wins), O(n^2)
+  (BigInt(2), ByteString.fromHex("bb")),
+  (BigInt(1), ByteString.fromHex("aa"))
+))
+// When the input is already strictly ascending:
+val validated = SortedMap.fromStrictlyAscendingList(pairs) // fails if it is not
+val trusted = SortedMap.unsafeFromList(pairs)              // no validation at all
+
+// Key-based operations (require Ord[K])
+val value = sorted.get(BigInt(1))          // Some(hex"aa")
+val must = sorted.getOrFail(BigInt(1), "missing entry")
+val direct = sorted.at(BigInt(1))          // fails when absent
+val has = sorted.contains(BigInt(2))       // true
+val updated = sorted.insert(BigInt(3), ByteString.fromHex("cc")) // upsert, keeps order
+val without = sorted.delete(BigInt(2))     // no-op when absent
+
+// Traversal (no constraints needed)
+val keys = sorted.keys                     // ascending List of keys
+val values = sorted.values
+val doubled = sorted.mapValues(v => v)     // ~3x cheaper than mapping the list of tuples
+val big = sorted.filter { case (k, v) => k > 1 }
+val total = sorted.foldLeft(BigInt(0)) { case (acc, (k, _)) => acc + k }
+val found = sorted.findMap { case (k, v) => if k > 1 then Option.Some(v) else Option.None }
+
+// Merging two maps in one ordered pass
+val merged: SortedMap[BigInt, These[ByteString, ByteString]] = SortedMap.union(sorted, one)
+val summed = SortedMap.unionMap(a, b, {
+  case These.These(x, y) => x + y  // key in both
+  case These.This(x)     => x      // key only in the left map
+  case These.That(y)     => y      // key only in the right map
+})
+```
+
+`List.groupBy`, `List.groupMap` and `List.groupMapReduce` produce `SortedMap`s, which is the
+idiomatic way to aggregate a list by key.
+
+**Decoding from Data:** the default `FromData` instance does **not** validate key order. A map
+decoded from a datum or redeemer is attacker-controlled, and a deliberately mis-ordered map can
+make lookups miss entries. When the shape matters for your logic, decode with the validating
+decoder, `sortedMapFromDataWithValidation`, which fails on non-ascending keys.
+
+**Performance Notes:**
+- Lookups are linear scans; the sort order does not speed up a hit, it only enables early exit
+  on a miss
+- `mapValues` is about 3x cheaper than mapping over `toList` tuples
+- For hot per-policy checks on `Value`, prefer `hasOnly`/`containsAtLeast` over `get`-based
+  code (see [Value Builtins](/docs/smart-contract-optimisations/value-builtins))
 
 ## Map (PlutusData)
 
@@ -237,7 +301,8 @@ extractedPairs.foreach { case (keyData, valueData) =>
 | **Tuple** | Fixed number of heterogeneous values | Access O(1) |
 | **BuiltinPair** | Two related values, interop with builtins | Access O(1) |
 | **Option** | Optional values, avoiding errors | Pattern match O(1) |
-| **AssocMap** | Small ordered maps, preserved insertion order | Lookup O(n) |
+| **SortedMap** | Canonical key-value maps, `Ord` keys, `Value`/datum interop | Lookup O(n) |
+| **AssocMap** | Small maps whose keys have `Eq` but no `Ord` | Lookup O(n) |
 | **Map (Data)** | On-chain data storage, script interop | Lookup O(n) |
 
 ## Collection Conversions
@@ -271,7 +336,7 @@ val mapData = Builtins.mapData(List(
 2. **Use List for sequential processing** - Most efficient for functional operations
 3. **Avoid expensive operations** - Random access, appending, and large maps are costly
 4. **Pattern match for safety** - Handle all cases (empty/non-empty, Some/None)
-5. **Use AssocMap for small maps** - For larger maps, consider alternative data structures
+5. **Keep on-chain maps small** - Every lookup is a linear scan; for larger keyed data, consider [alternative data structures](/docs/advanced-data-structures)
 6. **Minimize on-chain data** - Keep collections small to reduce transaction costs
 7. **Leverage type safety** - Use appropriate collection types to catch errors at compile time
 

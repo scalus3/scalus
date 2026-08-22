@@ -1,0 +1,5 @@
+:HL["/_next/static/chunks/2szemeg7aniaa.css","style"]
+:HL["/_next/static/chunks/2xdxvesoqq_er.css","style"]
+:HL["/_next/static/chunks/1bxba95ypntlg.css","style"]
+:HL["/scalus-logo-dark.png","image"]
+0:{"tree":{"name":"","param":null,"prefetchHints":4112,"slots":{"children":{"name":"docs","param":null,"prefetchHints":4160,"slots":{"children":{"name":"mdxPath","param":{"type":"oc","key":"smart-contract-optimisations/value-builtins","siblings":[]},"prefetchHints":4192,"slots":{"children":{"name":"__PAGE__","param":null,"prefetchHints":4256,"slots":null}}}}}}},"staleTime":300,"buildId":"EeEo3HCpqyynURaEbExFz"}

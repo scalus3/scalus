@@ -15,6 +15,8 @@ The setup below is for adding the plugin to an existing project.
 
 ## Setup
 
+The plugin requires **sbt 1.9.0 or later** on the sbt 1.x line, and supports sbt 2.x.
+
 `project/plugins.sbt`:
 ```scala copy
 addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "<scalus-version>")

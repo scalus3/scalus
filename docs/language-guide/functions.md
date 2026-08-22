@@ -247,49 +247,42 @@ compile {
 
 ## Mutually Recursive Functions
 
-**NOT SUPPORTED** - Functions cannot call each other recursively:
+**Supported** for top-level `def`s in `@Compile` objects - functions can call
+each other recursively:
 
 ```scala
-// NOT SUPPORTED
-def isEven(n: BigInt): Boolean =
-  if n == BigInt(0) then true
-  else isOdd(n - 1)
+@Compile
+object Parity {
+  def isEven(n: BigInt): Boolean =
+    if n == BigInt(0) then true
+    else isOdd(n - 1)
 
-def isOdd(n: BigInt): Boolean =
-  if n == BigInt(0) then false
-  else isEven(n - 1)
+  def isOdd(n: BigInt): Boolean =
+    if n == BigInt(0) then false
+    else isEven(n - 1)
+}
+
+compile {
+  Parity.isEven(BigInt(10))  // true
+}
 ```
 
-**Workaround:** Combine into a single function or use a helper enum:
+**Limitation:** local `def`s inside a `compile` block cannot forward-reference
+each other. The compiler reports a clear error:
 
 ```scala
 compile {
-  // Combine into one function
+  // NOT SUPPORTED: forward reference to local definition 'isOdd'
   def isEven(n: BigInt): Boolean =
-    (n % BigInt(2)) == BigInt(0)
-
+    if n == BigInt(0) then true else isOdd(n - 1)
   def isOdd(n: BigInt): Boolean =
-    !isEven(n)
-
-  // Or use helper data structure
-  enum Parity:
-    case Even
-    case Odd
-
-  def checkParity(n: BigInt, current: Parity): Boolean =
-    if n == BigInt(0) then
-      current match
-        case Parity.Even => true
-        case Parity.Odd => false
-    else
-      val nextParity = current match
-        case Parity.Even => Parity.Odd
-        case Parity.Odd => Parity.Even
-      checkParity(n - 1, nextParity)
-
-  checkParity(BigInt(10), Parity.Even)  // true (10 is even)
+    if n == BigInt(0) then false else isEven(n - 1)
+  isEven(BigInt(10))
 }
 ```
+
+Move the mutually recursive functions to a top-level object annotated with
+`@Compile` instead.
 
 ## Closures
 
@@ -503,5 +496,6 @@ compile {
 - Higher-order functions enable functional patterns
 - Recursion replaces loops
 - No default parameters, named arguments, varargs, or overloading
-- No mutually recursive functions
+- Mutually recursive functions work as top-level defs in `@Compile` objects
+  (not as local defs inside `compile` blocks)
 - Use `inline` for performance-critical small functions

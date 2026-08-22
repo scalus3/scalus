@@ -70,7 +70,7 @@ You'll learn:
 **Important Constraint:**
 Not all Scala features compile to Plutus Core (UPLC):
 
-✅ **Supported:** vals, defs, case classes, enums, pattern matching, lambdas, recursion, `inline`
+✅ **Supported:** vals, defs, case classes, enums, pattern matching, lambdas, recursion (including mutual), `inline`
 ❌ **Not Supported:** `var`, try-catch (except `throw`), mutable collections, arbitrary type classes
 
 Always check [Supported Features](/docs/language-guide/support)!
@@ -150,7 +150,7 @@ class MyValidatorTest extends AnyFunSuite with ScalusTest:
 - `val`, `def`, case classes, enums
 - Lambdas and higher-order functions
 - Pattern matching on case classes/enums
-- Recursion and tail recursion
+- Recursion and tail recursion, including mutually recursive top-level `def`s in `@Compile` objects
 - `given` parameters and `using` clauses
 - `inline` and compile-time macros
 - Extension methods
