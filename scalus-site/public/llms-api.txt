@@ -4503,7 +4503,7 @@ class scalus.uplc.builtin.ByteString
   def toString: String
   def hashCode: Int
   def equals(obj: Any): Boolean
-  val toHex: String
+  def toHex: String
   def toBinaryString: String
   def concat(that: ByteString): ByteString
   def size: Int
@@ -4963,10 +4963,10 @@ object scalus.testing.kit.KeyPairGenerator
 
 enum scalus.testing.kit.Party
   val account: HdAccount
-  val addrKeyHash: AddrKeyHash
+  def addrKeyHash: AddrKeyHash
   def address(network: Network): ShelleyAddress
   def address(using env: CardanoInfo): ShelleyAddress
-  val signer: TransactionSigner
+  def signer: TransactionSigner
 
 object scalus.testing.kit.Party
   val Alice: Party
