@@ -188,7 +188,7 @@ enum ShelleyPaymentPart {
     def toBytes: ByteString = asHash
 
     /** Convert to hex string */
-    def toHex: String = asHash.toString // Assuming Hash28 has proper toString
+    def toHex: String = asHash.toHex
 }
 
 /** The delegation part of a Shelley address - various ways to specify stake credentials */
@@ -217,7 +217,7 @@ enum ShelleyDelegationPart {
         case Null                             => ByteString.empty
 
     /** Convert to hex string */
-    def toHex: String = toBytes.toString
+    def toHex: String = toBytes.toHex
 }
 
 object ShelleyDelegationPart {
