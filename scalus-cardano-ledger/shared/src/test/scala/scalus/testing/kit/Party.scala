@@ -9,8 +9,6 @@ import scalus.cardano.txbuilder.TransactionSigner
 import scalus.cardano.wallet.hd.HdAccount
 import scalus.crypto.ed25519.given
 
-import scala.annotation.threadUnsafe
-
 /** Test parties for smart contract testing.
   *
   * Each party has a deterministic wallet derived from a test mnemonic, providing:
@@ -49,11 +47,9 @@ enum Party derives CanEqual {
     case Wendy // Whistleblower
 
     /** HD wallet account for this party (CIP-1852 compatible). */
-    @threadUnsafe
     lazy val account: HdAccount = HdAccount.fromMnemonic(Party.mnemonic, "", this.ordinal)
 
-    @threadUnsafe
-    lazy val addrKeyHash: AddrKeyHash = account.paymentKeyHash
+    def addrKeyHash: AddrKeyHash = account.paymentKeyHash
 
     def address(network: Network): ShelleyAddress =
         ShelleyAddress(network, Key(addrKeyHash), Null)
@@ -61,8 +57,7 @@ enum Party derives CanEqual {
     /** Get address using CardanoInfo's network (backward compatible). */
     def address(using env: CardanoInfo): ShelleyAddress = address(env.network)
 
-    @threadUnsafe
-    lazy val signer: TransactionSigner = new TransactionSigner(Set(account.paymentKeyPair))
+    def signer: TransactionSigner = new TransactionSigner(Set(account.paymentKeyPair))
 }
 
 object Party {

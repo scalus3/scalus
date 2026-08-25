@@ -7,7 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.uplc.Term.*
 import scalus.utils.ScalusSourcePos
 
-import scala.annotation.{switch, tailrec, threadUnsafe}
+import scala.annotation.{switch, tailrec}
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.{immutable, mutable}
@@ -166,15 +166,15 @@ case class MachineParams(
 
 object MachineParams {
 
-    @threadUnsafe lazy val defaultPlutusV1PostConwayParams: MachineParams = {
+    lazy val defaultPlutusV1PostConwayParams: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV1)
     }
 
-    @threadUnsafe lazy val defaultPlutusV2PostConwayParams: MachineParams = {
+    lazy val defaultPlutusV2PostConwayParams: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV2)
     }
 
-    @threadUnsafe lazy val defaultPlutusV3Params: MachineParams = {
+    lazy val defaultPlutusV3Params: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV3)
     }
 

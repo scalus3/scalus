@@ -5,8 +5,6 @@ import scalus.uplc.{BuiltinSemanticsVariant, PlutusParams}
 import scalus.utils.Macros
 import upickle.default.*
 
-import scala.annotation.threadUnsafe
-
 case class BuiltinCostModel(
     // Integers
     addInteger: DefaultCostingFun[TwoArguments],
@@ -239,14 +237,12 @@ object BuiltinCostModel {
       * (which lacks the PV11 builtin parameters) is used for a PV11 evaluation, so that the new
       * builtins are not costed with the `300_000_000` placeholder.
       */
-    @threadUnsafe
     lazy val vanRossemReferenceD: BuiltinCostModel =
         fromJsonString(inlineResource("builtinCostModelD.json"))
 
     /** Plutus reference cost model for builtin semantics variant E (PlutusV3/V4 in the van Rossem /
       * PV11 era), vendored from `builtinCostModelE.json`. See [[vanRossemReferenceD]].
       */
-    @threadUnsafe
     lazy val vanRossemReferenceE: BuiltinCostModel =
         fromJsonString(inlineResource("builtinCostModelE.json"))
 

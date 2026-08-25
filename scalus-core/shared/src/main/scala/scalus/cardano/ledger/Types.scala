@@ -15,7 +15,7 @@ import scalus.utils.{Pretty, Style}
 import upickle.default.{readwriter, ReadWriter as UpickleReadWriter}
 
 import java.util
-import scala.annotation.{targetName, threadUnsafe}
+import scala.annotation.targetName
 import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.compiletime.asMatchable
 
@@ -797,7 +797,7 @@ object OriginalCborByteArray {
 }
 
 class KeepRaw[A] private (val value: A, rawBytes: () => Array[Byte]) {
-    @threadUnsafe lazy val raw: Array[Byte] = rawBytes()
+    lazy val raw: Array[Byte] = rawBytes()
     override def hashCode: Int =
         util.Arrays.hashCode(Array(value.hashCode(), util.Arrays.hashCode(raw)))
 

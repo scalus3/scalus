@@ -9,8 +9,6 @@ import scalus.uplc.builtin.Data
 import scalus.uplc.Constant.asConstant
 import scalus.uplc.transform.*
 
-import scala.annotation.threadUnsafe
-
 /** Base implementation for compiled Plutus scripts of all versions.
   *
   * This sealed abstract class provides the common implementation for compiling Scala code to Plutus
@@ -46,14 +44,14 @@ sealed abstract class CompiledPlutus[A](
       * If `options.addScalusTag` is set, the term is wrapped in the [[ScalusTag]] marker after
       * optimization (so the UPLC optimizer cannot eliminate the tag as dead code).
       */
-    @threadUnsafe lazy val program: Program = {
+    lazy val program: Program = {
         val term = toUplc
         val tagged = if options.addScalusTag then ScalusTag.wrap(term) else term
         makeProgram(tagged)
     }
 
     /** The Plutus script in its serialized form. Lazily computed on first access. */
-    @threadUnsafe lazy val script: PlutusScript = makeScript(program)
+    lazy val script: PlutusScript = makeScript(program)
 
     /** Derives a Cardano address for this script on the specified network.
       *

@@ -3,8 +3,6 @@ package scalus.cardano.ledger
 import scalus.cardano.address.Network
 import scalus.utils.Macros
 
-import scala.annotation.threadUnsafe
-
 /** Contains information about the Cardano network, including protocol parameters and slot
   * configuration
   */
@@ -21,7 +19,7 @@ object CardanoInfo {
       * enacted 2026-07-18 at the epoch 643/644 boundary) with the van Rossem cost models enacted on
       * 2026-06-18 (PlutusV1/V2 extended to 332 entries, PlutusV3 to 350)
       */
-    @threadUnsafe lazy val mainnet: CardanoInfo =
+    lazy val mainnet: CardanoInfo =
         CardanoInfo(
           inlineProtocolParams("blockfrost-params-epoch-645.json"),
           Network.Mainnet,
@@ -31,7 +29,7 @@ object CardanoInfo {
     /** Cardano info for Preprod testnet, epoch 303, major protocol version 11 (van Rossem hard
       * fork)
       */
-    @threadUnsafe lazy val preprod: CardanoInfo =
+    lazy val preprod: CardanoInfo =
         CardanoInfo(
           inlineProtocolParams("blockfrost-params-preprod-303.json"),
           Network.Testnet,
@@ -41,7 +39,7 @@ object CardanoInfo {
     /** Cardano info for Preview testnet, epoch 1370, major protocol version 11 (van Rossem hard
       * fork)
       */
-    @threadUnsafe lazy val preview: CardanoInfo =
+    lazy val preview: CardanoInfo =
         CardanoInfo(
           inlineProtocolParams("blockfrost-params-preview-1370.json"),
           Network.Testnet,

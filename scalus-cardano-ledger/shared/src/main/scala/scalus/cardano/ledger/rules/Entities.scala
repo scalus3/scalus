@@ -4,8 +4,6 @@ package rules
 import scalus.cardano.address.Network
 import scalus.uplc.DebugScript
 
-import scala.annotation.threadUnsafe
-
 // It's mutable state for transient calculation
 case class Context(
     var fee: Coin = Coin.zero,
@@ -39,7 +37,7 @@ case class UtxoEnv(slot: SlotNo, params: ProtocolParams, certState: CertState, n
 object UtxoEnv {
     // Uses CardanoInfo.mainnet.protocolParams (inlined at compile time via macro)
     // TODO: remove
-    @threadUnsafe lazy val default: UtxoEnv = UtxoEnvDefaults.default
+    lazy val default: UtxoEnv = UtxoEnvDefaults.default
 
     // TODO: remove
     def testMainnet(): UtxoEnv = testMainnet(0)

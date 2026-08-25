@@ -11,7 +11,6 @@ import scalus.uplc.eval.CekValue.*
 import scalus.uplc.eval.*
 import scalus.utils.Macros
 
-import scala.annotation.threadUnsafe
 import scala.collection.immutable.ArraySeq
 import scala.language.implicitConversions
 
@@ -1404,7 +1403,7 @@ class CardanoBuiltins(
       *
       * This map provides the forced versions of all builtins.
       */
-    @threadUnsafe lazy val forcedBuiltins: collection.Map[DefaultFun, Term] = {
+    lazy val forcedBuiltins: collection.Map[DefaultFun, Term] = {
         def forceBuiltin(scheme: TypeScheme, term: Term): Term = scheme match
             case TypeScheme.All(_, t) => Term.Force(forceBuiltin(t, term))
             case _                    => term

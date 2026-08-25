@@ -4,7 +4,6 @@ import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{Eq, Ord, Order, Show}
 import scalus.utils.Hex.toHex
 
-import scala.annotation.threadUnsafe
 import scala.compiletime.asMatchable
 
 /** An immutable sequence of bytes.
@@ -42,7 +41,7 @@ class ByteString private[builtin] (val bytes: Array[Byte]) extends Serializable 
       *
       * Offchain operation, not available onchain.
       */
-    @threadUnsafe lazy val toHex: String = bytes.toHex
+    def toHex: String = bytes.toHex
 
     /** Converts the ByteString to a binary string representation
       *
