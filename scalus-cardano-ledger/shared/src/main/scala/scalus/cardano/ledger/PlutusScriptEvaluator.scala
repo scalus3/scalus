@@ -228,7 +228,7 @@ object PlutusScriptEvaluator {
     ) {
         override protected def evalScript(
             redeemer: Redeemer,
-            txhash: String,
+            txhash: TransactionHash,
             vm: PlutusVM,
             plutusScript: PlutusScript,
             debugScripts: Map[ScriptHash, DebugScript],
@@ -238,7 +238,7 @@ object PlutusScriptEvaluator {
               Term.Error(),
               evalBudget(
                 redeemer,
-                txhash,
+                txhash.toHex,
                 vm,
                 plutusScript,
                 Seq.from(args)
@@ -571,7 +571,6 @@ object PlutusScriptEvaluator {
             val purpose = getScriptPurposeV1(tx, redeemer)
             val scriptContext = v1.ScriptContext(txInfoV1, purpose)
             val ctxData = scriptContext.toData
-            val txhash = tx.id.toHex
 
             log.debug(s"Evaluating PlutusV1 script, purpose: $purpose")
             log.debug(s"Datum: ${datum.map(_.toJson)}")
@@ -581,7 +580,7 @@ object PlutusScriptEvaluator {
             // Apply script arguments based on whether datum is present
             evalScript(
               redeemer,
-              txhash,
+              tx.id,
               plutusV1VM,
               plutusScript,
               debugScripts,
@@ -614,7 +613,6 @@ object PlutusScriptEvaluator {
             val purpose = getScriptPurposeV2(tx, redeemer)
             val scriptContext = v2.ScriptContext(txInfoV2, purpose)
             val ctxData = scriptContext.toData
-            val txhash = tx.id.toHex
 
             log.debug(s"Evaluating PlutusV2 script, purpose: $purpose")
             log.debug(s"Datum: ${datum.map(_.toJson)}")
@@ -624,7 +622,7 @@ object PlutusScriptEvaluator {
             // Apply script arguments
             evalScript(
               redeemer,
-              txhash,
+              tx.id,
               plutusV2VM,
               plutusScript,
               debugScripts,
@@ -657,7 +655,6 @@ object PlutusScriptEvaluator {
             val scriptInfo = getScriptInfoV3(tx, redeemer, datum)
             val scriptContext = v3.ScriptContext(txInfoV3, redeemer.data, scriptInfo)
             val ctxData = scriptContext.toData
-            val txhash = tx.id.toHex
 
             log.debug(s"Evaluating PlutusV3 script, scriptInfo: $scriptInfo")
             log.debug(s"Datum: ${datum.map(_.toJson)}")
@@ -667,7 +664,7 @@ object PlutusScriptEvaluator {
             // V3 scripts only take the script context as argument
             evalScript(
               redeemer,
-              txhash,
+              tx.id,
               plutusV3VM,
               plutusScript,
               debugScripts,
@@ -686,7 +683,7 @@ object PlutusScriptEvaluator {
           */
         protected def evalScript(
             redeemer: Redeemer,
-            txhash: String,
+            txhash: TransactionHash,
             vm: PlutusVM,
             plutusScript: PlutusScript,
             debugScripts: Map[ScriptHash, DebugScript],

@@ -819,6 +819,14 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     .settings(
       name := "scalus-cardano-ledger",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // DefaultImpl is a private nested class (MiMa still sees its members); the protected
+        // evalScript hook now takes the TransactionHash instead of a pre-encoded hex String,
+        // so the default evaluation path skips hex encoding entirely.
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
+        )
+      ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
