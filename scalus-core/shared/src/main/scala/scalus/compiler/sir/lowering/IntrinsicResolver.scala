@@ -51,7 +51,7 @@ object IntrinsicResolver {
 
     /** Methods that may dispatch a still-packed (`PackedSumDataList`) receiver through the
       * `BuiltinList` (Data-element) providers, by unpacking it on demand (`unListData`, O(1)). See
-      * `dispatchReprNames`.
+      * `dispatchPriority`.
       *
       * Safe only for methods that never hand an element back under the receiver's own labelling:
       * these return a scalar (`contains`/`indexOf`) or a Data-element list that the provider
@@ -154,7 +154,7 @@ object IntrinsicResolver {
     private val BuiltinListRepr = "BuiltinList"
 
     /** Name of a still-packed `Data` list. No registry entry carries it — a packed receiver only
-      * ever dispatches through the [[BuiltinListRepr]] view, see [[dispatchReprNames]].
+      * ever dispatches through the [[BuiltinListRepr]] view, see [[dispatchPriority]].
       */
     private val PackedSumDataListRepr = "PackedSumDataList"
     private val NativeBuiltinListRepr = "NativeBuiltinList"
@@ -277,37 +277,82 @@ object IntrinsicResolver {
         reprPriority: Int
     )
 
-    /** Pick the provider for `methodName` among `entries`, given the receiver's dispatch names
-      * (most specific first, see [[dispatchReprNames]]).
+    /** Priority of the packed -> `BuiltinList` view. Above every exact name match (a representation
+      * is described by at most a handful of names) and below [[WildcardPriority]].
+      */
+    private val PackedViewPriority = 100
+
+    /** Priority of a [[WildcardRepr]] entry. It matches any receiver, so it must lose to every
+      * representation-specific entry and to every view.
+      */
+    private val WildcardPriority = 200
+
+    /** Can the entry serve `moduleName.methodName` for a receiver described by `names`, and at what
+      * priority (lower wins)?
       *
-      * The entry matching the most specific name wins; ties go to the highest `minPV` the target
-      * protocol version satisfies. A [[WildcardRepr]] entry matches any receiver but at the lowest
-      * priority, and only for methods it carries a repr rule for. An entry whose provider module
-      * has no binding for `methodName` is skipped, leaving any lower-priority match in place.
+      * This is the single place that answers "what may dispatch where". Three ways to match, in
+      * order of preference:
+      *   1. The entry's representation is one of the receiver's own names ([[representationNames]])
+      *      — priority is the position, so a native-element list prefers the native provider over
+      *      the Data one.
+      *   2. The receiver is a still-packed `Data` list and the entry is the `BuiltinList`
+      *      (Data-element) provider: a packed list is viewable as one by unpacking on demand
+      *      (`unListData`, O(1)). Restricted to [[PackedListViewMethods]] — see there for why only
+      *      those methods are safe under a view.
+      *   3. The entry is a wildcard (factory methods whose arguments don't match the module type),
+      *      which matches anything but only for methods it carries a repr rule for.
+      *
+      * The packed receiver is recognised by NAME rather than by `repr ==
+      * SumCaseClassRepresentation.PackedSumDataList`, so it is also seen through a
+      * [[SumCaseClassRepresentation.SumReprProxy]], which [[representationNames]] dereferences.
+      */
+    private def dispatchPriority(
+        names: List[String],
+        entry: RegistryEntry,
+        moduleName: String,
+        methodName: String
+    ): Option[Int] = {
+        val (entryRepr, _, _, reprRules, _) = entry
+        names.indexOf(entryRepr) match
+            case i if i >= 0 => Some(i)
+            case _
+                if entryRepr == BuiltinListRepr && names.contains(PackedSumDataListRepr)
+                    && PackedListViewMethods.contains(s"$moduleName.$methodName") =>
+                Some(PackedViewPriority)
+            case _ if entryRepr == WildcardRepr && reprRules.contains(methodName) =>
+                Some(WildcardPriority)
+            case _ => None
+    }
+
+    /** Pick the provider for `moduleName.methodName` among `entries`, for a receiver in `repr`.
+      *
+      * The lowest [[dispatchPriority]] wins; ties go to the highest `minPV` the target protocol
+      * version satisfies. An entry whose provider module has no binding for `methodName` is
+      * skipped, leaving any lower-priority match in place.
       */
     private def selectProvider(
         entries: List[RegistryEntry],
-        reprNames: List[String],
+        repr: LoweredValueRepresentation,
+        moduleName: String,
         methodName: String
     )(using lctx: LoweringContext): Option[SelectedProvider] = {
+        val names = representationNames(repr)
         val pvVersion = lctx.targetProtocolVersion.version
         var best: Option[SelectedProvider] = None
         var bestPV = -1
-        var bestReprPriority = Int.MaxValue
-        for (repr, minPV, providerModuleName, reprRules, argConvertRules) <- entries do {
-            val reprPriority = reprNames.indexOf(repr) match
-                case -1 if repr == WildcardRepr && reprRules.contains(methodName) =>
-                    reprNames.size // wildcard has lowest priority
-                case -1 => -1 // no match
-                case i  => i
-            if reprPriority >= 0 && pvVersion >= minPV &&
-                (reprPriority < bestReprPriority || (reprPriority == bestReprPriority && minPV > bestPV))
-            then
-                lctx.findProviderBinding(providerModuleName, methodName).foreach { b =>
-                    best = Some(SelectedProvider(b, reprRules, argConvertRules, reprPriority))
-                    bestPV = minPV
-                    bestReprPriority = reprPriority
-                }
+        var bestPriority = Int.MaxValue
+        for entry <- entries do {
+            val (_, minPV, providerModuleName, reprRules, argConvertRules) = entry
+            dispatchPriority(names, entry, moduleName, methodName) match
+                case Some(priority)
+                    if pvVersion >= minPV &&
+                        (priority < bestPriority || (priority == bestPriority && minPV > bestPV)) =>
+                    lctx.findProviderBinding(providerModuleName, methodName).foreach { b =>
+                        best = Some(SelectedProvider(b, reprRules, argConvertRules, priority))
+                        bestPV = minPV
+                        bestPriority = priority
+                    }
+                case _ => // not applicable, or already beaten
         }
         best
     }
@@ -336,11 +381,12 @@ object IntrinsicResolver {
                         argSirs0.dropRight(1)
                     else argSirs0
                 val firstArgRepr = firstLoweredOnly.representation
-                val reprNames = dispatchReprNames(firstArgRepr, moduleName, methodName)
+                val reprNames = representationNames(firstArgRepr)
                 registry.get(moduleName) match
                     case None => None
                     case Some(entries) =>
-                        val selected = selectProvider(entries, reprNames, methodName)
+                        val selected =
+                            selectProvider(entries, firstArgRepr, moduleName, methodName)
                         val bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
                             selected.map(_.reprRules).getOrElse(Map.empty)
                         val bestArgConvertRules
@@ -458,15 +504,20 @@ object IntrinsicResolver {
                 registry.get(moduleName) match
                     case None => None
                     case Some(entries) =>
-                        val reprNames =
-                            dispatchReprNames(loweredArg.representation, moduleName, methodName)
+                        val reprNames = representationNames(loweredArg.representation)
                         if lctx.debug then
                             lctx.log(
                               s"IntrinsicResolver: reprNames=$reprNames entries=${entries.map(e => s"(${e._1},${e._2},${e._3})").mkString(",")}"
                             )
                         // Find best matching provider: most specific repr name first,
                         // then highest minPV that satisfies constraints
-                        val selected = selectProvider(entries, reprNames, methodName)
+                        val selected =
+                            selectProvider(
+                              entries,
+                              loweredArg.representation,
+                              moduleName,
+                              methodName
+                            )
                         val bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
                             selected.map(_.reprRules).getOrElse(Map.empty)
                         val bestArgConvertRules
@@ -567,34 +618,6 @@ object IntrinsicResolver {
                                     .wrapIfAnnotated(ruleApplied, pos)
                             OuterTypeLambdaWrappedLoweredValue.wrapIfNeeded(annotated, pos)
                         }
-    }
-
-    /** Representation names to use for provider dispatch of `moduleName.methodName` on a receiver
-      * in `repr`, most specific first.
-      *
-      * Besides the plain [[representationNames]] mapping, a packed receiver (a still-packed `Data`
-      * list — the representation of every lazily-decoded ledger list, such as `TxInfo.signatories`)
-      * may additionally dispatch to the `BuiltinList` (Data-element) providers, at lowest priority,
-      * for the methods in [[PackedListViewMethods]] (which see for why only those). For those, the
-      * generic prelude bodies are known-bad on packed lists (an `Option` allocated per step plus a
-      * dead `Eq` closure; measured +2,528 mem / +644,996 steps for a single `signatories.contains`
-      * on CAPE linear_vesting).
-      *
-      * The packed receiver is recognised by NAME rather than by `repr ==
-      * SumCaseClassRepresentation.PackedSumDataList`, so that it is also seen through a
-      * [[SumCaseClassRepresentation.SumReprProxy]] — which [[representationNames]] dereferences —
-      * instead of silently losing the view the way the missing registry entry did.
-      */
-    private def dispatchReprNames(
-        repr: LoweredValueRepresentation,
-        moduleName: String,
-        methodName: String
-    ): List[String] = {
-        val names = representationNames(repr)
-        if names.contains(PackedSumDataListRepr)
-            && PackedListViewMethods.contains(s"$moduleName.$methodName")
-        then names :+ BuiltinListRepr
-        else names
     }
 
     /** Extract module name and method name from a function SIR node. */
