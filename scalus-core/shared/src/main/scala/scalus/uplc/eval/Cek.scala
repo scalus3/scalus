@@ -1717,7 +1717,15 @@ class CekMachine(
                     case Apply(fun, arg, ann)    => Apply(go(lamCnt, fun), go(lamCnt, arg), ann)
                     case Force(term, ann)        => Force(go(lamCnt, term), ann)
                     case Delay(term, ann)        => Delay(go(lamCnt, term), ann)
-                    case _                       => term
+                    // Constr/Case must be traversed like every other node with subterms, matching
+                    // the reference implementation (UntypedPlutusCore.Evaluation.Machine.Cek
+                    // .Internal.dischargeCekValue's goValEnv). Skipping them left env-bound
+                    // variables undischarged inside a returned closure's Case/Constr body, and
+                    // the open deBruijn indices then crashed DeBruijn.fromDeBruijnTerm.
+                    case Constr(tag, args, ann) => Constr(tag, args.map(go(lamCnt, _)), ann)
+                    case Case(scrut, cases, ann) =>
+                        Case(go(lamCnt, scrut), cases.map(go(lamCnt, _)), ann)
+                    case _ => term
             }
 
             go(0, term)
