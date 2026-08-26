@@ -135,13 +135,18 @@ section 5 build on this baseline.
 
 - Harnesses: `scalus-examples/jvm/src/test/scala/scalus/examples/cape/`
   `{factorial/FactorialCapeTest, fibonacci/FibonacciCapeTest,
-  twopartyescrow/TwoPartyEscrowCapeTest}.scala`. They parse the upstream
-  `cape-tests.json` fixtures (66 cases total) and pin script sizes, exact
-  ExUnits, and mainnet fees.
+  twopartyescrow/TwoPartyEscrowCapeTest, ecd/EcdCapeTest, htlc/HtlcCapeTest,
+  linearvesting/LinearVestingCapeTest}.scala` (one file per scenario pair,
+  since `factorial`/`factorial_naive_recursion` and `fibonacci`/
+  `fibonacci_naive_recursion` share a harness each - 6 files cover all 8
+  scenarios). They parse the upstream `cape-tests.json` fixtures per
+  scenario and pin script sizes, exact ExUnits, and mainnet fees.
 - Submission generators + 9-step runbook:
   `scalus-examples/jvm/src/main/scala/scalus/examples/cape/CAPE-SUBMISSION.md`.
-  Scenarios done: factorial, factorial_naive_recursion, fibonacci,
-  fibonacci_naive_recursion, two_party_escrow. Not implemented: `ecd`.
+  All 8 upstream scenarios are done and submitted: `factorial`,
+  `factorial_naive_recursion`, `fibonacci`, `fibonacci_naive_recursion`,
+  `two_party_escrow`, `ecd`, `htlc`, `linear_vesting`. Standings/loss
+  analysis: `docs/internal/CAPE_COMPETITIVE_ANALYSIS.md`.
 
 **JMH** (`bench/` module; compiled but **never run in CI**):
 
@@ -197,7 +202,7 @@ of exact pins. Making the tie-break stable would let all pins be exact.
 | Pass | Role |
 |---|---|
 | `Inliner.scala` | beta-reduction, small-value/identity inlining, dead-arg elimination, adjacent `Force(Delay(t)) -> t` (`:285-291`), calls `PartialEvaluator` |
-| `EtaReduce.scala` | `λx. f x -> f` when pure and x not free in f |
+| `EtaReduce.scala` | `λx. f x -> f` when pure and x not free in f; since 2026-08-25 tracks let-bound value arities so multi-arg wrappers over known-arity lambdas (incl. the self-application fixpoint) reduce too |
 | `CommonSubexpressionElimination.scala` | 3-pass path-based CSE (ported from Plutus) |
 | `CommonContextExtraction.scala` | CCE - hoists common contexts (one-hole subtrees); **off by default** (`Options.cceEnabled = false`) |
 | `CaseConstrApply.scala` | 3+-arg apply chains -> `case (constr 0 [args]) [f]`; final pass |
@@ -395,8 +400,18 @@ tracks T10, T12, T16.
   dependency order and effect ordering between the bound terms.
 - **Validate:** machine-step (Apply/Lam) count reduction on any validator;
   compare against Aiken's header structure in decompiled output.
-
-### T6. Opt-in relaxed evaluation order (single-use let sinking) (MEDIUM)
+- **Evidence (CAPE `ecd`, 2026-08-25): dropping `CaseConstrApply` measured,
+  and it loses - the pass's docstring math holds.** Built `ecd` with
+  `Options.releaseUntagged.copy(uplcOptimizers = Seq(<the V3 phases minus
+  the final CaseConstrApply>))` (note: `uplcOptimizers`, when non-empty,
+  REPLACES the default optimizer in `UplcPipeline.run` - this is pure
+  configuration, no code change). Over the 14 fixture cases (33 recursive
+  iterations total): plain 3-arg applies cost +100 mem / +16,000 cpu per
+  iteration vs the `case (constr 0 ...)` encoding (+3,300 mem / +528,000
+  cpu = +228 lovelace exec fee) while saving only 1 byte of script (15
+  lovelace of Conway reference fee). Total fee 8,099 vs 7,886 on the
+  eta-reduced program. Keep the pass; the per-iteration cost of the T2
+  encoding is the re-passed `self` argument, not the constr/case nodes.
 
 - **Evidence:** Aiken's `inline_reducer` (`shrinker.rs:1877`) sinks
   single-use bindings to the use site even past other computations; measured
@@ -467,6 +482,21 @@ tracks T10, T12, T16.
   freshly-constructed value vs a decoded one can compare fields directly
   instead of serializing to Data.
 - **Validate:** GC-path profile: `equalsData` count/cost drop.
+- **Evidence (CAPE `htlc`/`two_party_escrow`, task 12b, 2026-08-24):** in
+  `HtlcValidator`/`TwoPartyEscrowValidator`, `EqualsData` was the single
+  biggest builtin cost on our own CEK (14.8M/71.5M steps htlc, 53.3M/224.5M
+  steps escrow before tuning) and stayed **byte-for-byte, step-for-step
+  identical** after replacing every `a.toData == b.toData` call site with
+  the hand-written narrow `Eq[PubKeyHash]`/`Eq[Credential]`/`Eq[TxOutRef]`
+  instances' `===` (which themselves compare raw `ByteString`s via
+  `equalsByteString`, per `Contexts.scala`). Inspecting the emitted UPLC
+  showed why: when one operand is already lazily-kept `Data` (from a list
+  walk) and the other is a decoded native value, the lowering re-wraps the
+  native side back to `Data` via `constrData` and still calls `equalsData`,
+  rather than decoding the `Data` side's field and comparing narrow. This
+  confirms T8's premise with a second, independent scenario and shows the
+  representation choice - not the source-level comparator - is what needs
+  to change.
 
 ### T9. Derived deep-validation combinator (datum safety parity) (LOW effort, LIB)
 
@@ -515,7 +545,8 @@ remaining gaps, in priority order:
 - **(c) Document `refBudget` provenance** for
   `compareBudgetWithReferenceValue` call sites (which Plutus/Plinth version
   produced them, how to regenerate) - currently stated nowhere.
-- **(d) CAPE:** implement the `ecd` scenario; keep submissions current with
+- **(d) CAPE:** all 8 upstream scenarios are implemented and submitted
+  (`ecd` included, see section 4.1 above); keep submissions current with
   each release (runbook: `CAPE-SUBMISSION.md`).
 - **(e) Fix the CSE tie-break instability** (4.4) so `KnightsTest` can drop
   its 5% tolerance and all pins become exact.
@@ -631,6 +662,84 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
   in the stdlib.
 - **Validate:** corpus term sizes + ExUnits; no size regressions above the
   budget.
+- **Evidence (CAPE `ecd`, task 12c, 2026-08-24):** profiled our compiled
+  `EcdContract.program` against the leader `Plinth_1.65.0.0_Unisay_preview`'s
+  real `ecd.uplc` on Scalus's own CEK (`Term.evaluateDebug`'s per-category
+  cost map, summed over the scenario's 14 measurement cases): ours
+  24,747,572 vs the leader's 18,747,572 (+32.0%, matching the standings
+  table). Every builtin cost is bit-for-bit identical between the two
+  (`EqualsInteger` 2,459,651, `LessThanInteger` 634,060, `SubtractInteger`
+  101,208 on both sides; `RemainderInteger`/`ModInteger` both cost
+  4,367,253 despite the different builtin choice) - the entire 6,000,000
+  CPU gap is machine steps: `Var` +2,704,000, `LamAbs` +1,648,000, `Apply`
+  +592,000, `Case` +528,000, `Constr` +528,000 (leader has zero `Constr`
+  steps at all). Structural cause, confirmed by parsing both programs and
+  reprinting with Scalus's own pretty-printer: our compiled `ecd` is T2's
+  self-application fixpoint (`case (constr 0 self b (remainderInteger a b))
+  [self]` per recursive call - the `CaseConstrApply`-encoded self-call,
+  paying one `Constr`+`Case`+2x`Var`+2x`Apply`+1x`LamAbs` per iteration for
+  the self-reference plumbing), while the leader's `ecd.uplc` has **no
+  fixpoint combinator or self-application at all** for any of the 14 test
+  cases - it is a plain chain of 15 nested `case (equalsInteger 0 b_i) [(lam
+  b_{i+1} <continue>)] <base case>` lets, i.e. the recursion is statically
+  unrolled to depth 15 (falling back to a genuine self-application fixpoint,
+  visible once at the bottom of the file, only beyond that depth - never
+  reached by any of the 14 CAPE inputs, whose GCD depth is at most ~4).
+  Fetched the submission's actual source
+  (`Unisay/plinth-cape-submissions@3efc19a`, `lib/Ecd.hs`): the function is
+  a plain 2-line `{-# INLINEABLE ecd #-}` recursive definition (no manual
+  `unroll`/`peel` helper, no hand-written UPLC) compiled with one extra GHC
+  plugin flag, `{-# OPTIONS_GHC -fplugin-opt
+  Plinth.Plugin:inline-unconditional-growth=45 #-}` - raising Plinth's
+  unconditional-inlining AST-growth budget (default cap is far smaller, per
+  section 6's Inliner design notes) lets its inliner self-recursively inline
+  `ecd` into its own call site repeatedly until the cumulative growth
+  exceeds 45 nodes (~3 nodes/level x 15 levels matches the observed unroll
+  depth exactly), then stops and falls back to real recursion. This is
+  precisely the "size-budgeted callsite inlining" + "`peel`/`unroll`-style
+  bounded recursion unrolling" this task already names as open work -
+  **confirmed absent in Scalus** (section 4.7) and **not reachable via any
+  existing `Options` knob**: `cceEnabled=true`, `cseIterations=4`, and
+  `cseIterations=0` were all tried against `EcdContract.program` and
+  produced byte-identical script and cpu (24,747,572 in every case) - a
+  single, non-repeated top-level recursive function gives CSE/CCE nothing
+  to exploit, confirming this is new-pass work, not a mistuned existing
+  pass. Classification: **(d) recursion/encoding overhead**, matched to T15.
+  Expected gain if a bounded self-recursive unrolling pass landed with a
+  similar growth budget: up to the full 32.0% (the leader shows ~0 residual
+  recursion overhead for every in-scope `ecd` input once unrolled).
+- **Evidence (CAPE `ecd` unrolling prototype, 2026-08-25): unrolling is a
+  NET LOSS under total-fee scoring at this scale.** Re-scored with CAPE's
+  own fee model (`lib/Cape/Protocol/Parameters.hs`): `total_fee =
+  ceil(memSum*0.0577 + cpuSum*0.0000721) + refScriptFee(size)` with Conway
+  reference-script pricing at 15 lovelace/byte (first 25 KiB tier). A
+  UPLC-level bounded-unroll prototype (`level(0) = fix; level(k) =
+  funBody[[f f] := level(k-1)]`, then EtaReduce+Inliner x3 so the pure
+  `Var` first argument beta-reduces each level to the leader's single
+  `(lam b_k ...)` shape, then CaseConstrApply) was measured at depths
+  1/2/4/8/15 over the 14 fixture cases (max GCD iteration depth is 4, sum
+  33): exec fee falls 6,884 / 6,393 / 5,638 / 5,472 / 5,472 lovelace while
+  size grows 78 / 106 / 162 / 275 / 471 bytes - exec saturates at the
+  1.64/1.65-preview leaders' exact 5,472 (their own 15-level unroll costs
+  502 B, so their residual fixpoint is dead code for every fixture input),
+  but every depth loses on total fee (best d=2 at 7,983) against the plain
+  eta-reduced fixpoint's 7,886 (46 B, exec 7,196): each unroll level costs
+  ~28 B (~420 lovelace ref) and saves at most ~400 lovelace exec across
+  the whole suite. The unrolled Plinth previews sit at 13,002 total vs
+  7,886 for their own un-unrolled 1.61 preview - Conway pricing penalizes
+  the trade on both compilers. Conclusion: T15's unrolling half only pays
+  where execution dominates size (hot loops with many iterations per
+  invocation, or scripts carried inline rather than as reference scripts);
+  a production pass belongs at UPLC level over the self-application
+  encoding (the `[(lam f [f f]) (lam f λ...)]` pattern is stable; SIR
+  level would fight MutualRecursionElimination and the backends' encoding
+  choice), needs an AST-node growth budget (Plinth caps growth at 45) and
+  a re-run of the simplify phase afterwards, and must be measured on total
+  fee, not ExUnits. Note the separate 2026-08-25 fix that made the
+  comparison fair: `EtaReduce` now removes the multi-arg entry-point
+  wrapper via let-bound value-arity tracking (see `EtaReduce.scala`),
+  which alone took `ecd` from 8,863 to 7,886 total - a tie with the
+  total-fee leader - without any unrolling.
 
 ### T16. Usage-driven representation inference (RESEARCH, potentially large)
 
@@ -648,6 +757,31 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
   accesses per binding at SIR level), expose an override annotation.
 - **Validate:** oracle-style (sparse access) AND fold-heavy (dense access)
   benchmarks must both stay at their current best or improve.
+- **Evidence (CAPE `htlc`/`two_party_escrow`, task 12b, 2026-08-24):**
+  `derives FromData` for `ScriptContext`/`TxInfo` (`FromDataMacros.scala`'s
+  case-class path) unconditionally materializes every declared field via a
+  fixed `.tail`-chain, regardless of PV11 or field index - it never emits
+  `dropList`, even though `ProdDataListOps.genSelect` already implements a
+  dropList-vs-tailList choice (index >= 2 under PV11) for hand-written
+  `.field` selects on lazy `ProdDataList`-represented values. Hand-rolling
+  `unConstrData`/`dropList` navigation in source to reach only the 3-4 of
+  `TxInfo`'s 16 fields each validator reads (skipping `referenceInputs`/
+  `fee`/`mint`/`certificates`/`withdrawals`/`redeemers`/`data`/`id`/`votes`/
+  `proposalProcedures`/`currentTreasuryAmount`/`treasuryDonation` entirely)
+  cut total measured CPU 0.5% (htlc) and 12.3% (two_party_escrow, clone
+  CAPE-evaluator-measured: 225,473,091 -> 197,737,600). This is exactly the
+  "sparse per-field access on a large record" case T16 describes -
+  `derives FromData` should route through the same dropList-capable path
+  `ProdDataListOps` already has for hand-written field access instead of a
+  separate eager macro. **Negative data point, same task:** going the
+  *other* direction - hand-decoding one further level (`TxInInfo`/`TxOut`/
+  `Address` down to just `outRef`+`credential`, materialized into a small
+  local case class, `InputView`) made htlc **worse** (571 -> 658 bytes,
+  18.49M -> 23.82M steps), reverted. The existing lazy-Data-per-access
+  default for a short (1-2 element) input list already beats manually
+  forcing eager materialization into a new product type - representation
+  choice needs to be usage-driven per T16's thesis, not "always decode
+  narrower" as a blanket rule.
 
 ### T17. Packed-list intrinsic dispatch: Eq family DONE, spine ops open
 
@@ -705,6 +839,41 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
   body with a data-`Some` allocation per match.
 - **Validate:** full corpus; MembershipToken is the regression sentinel for
   element-repr labeling.
+
+### T18. Let-sinking of multi-use top-level bindings into using branches (MEDIUM)
+
+- **Evidence (CAPE `linear_vesting`, 2026-08-25):** the linker hoists every
+  referenced global def to a top-level `Let` around the whole program;
+  `RemoveRecursivity` already strips the `Rec` flag from non-recursive
+  singles (plain `(\v -> body) rhs`), and the optimizer already *localizes
+  single-use bindings* — recursive or not — into the branch that uses them
+  (verified in the emitted UPLC: the validator's own single-use recursive
+  helpers appear as self-application fixpoints at their use site, not at top
+  level). What remains at top level are **multi-use** defs (`List.find`,
+  `divCeil` in this validator), whose closure/fixpoint construction is paid
+  at program start on *every* code path, used or not. Measured: adopting
+  `findOwnInputOrFail` (whose old body linked `findOwnInput` →
+  `Utils.findInput` → `find`) cost the `FullUnlock` path — which never calls
+  it — +400 mem / +64,000 steps; removing the last `find` user cut another
+  −300 mem / −48,000 steps from that same path. An earlier claim (validator
+  scaladoc, since removed) that the linker wraps *any* external def in a
+  `Let` + fixpoint layer was half-right: only genuinely recursive defs get
+  the fixpoint, and single-use ones are already sunk — the residual problem
+  is multi-use bindings only.
+- **What:** sink each top-level binding to the lowest common dominator of
+  its use sites (into a single `case` branch when all uses live there), or
+  `delay`/`force` its construction (ties into T13 FloatDelay). Prelude-side
+  workaround used meanwhile: `inline` helpers with local recursion
+  (`findOwnInputOrFail`, `findOwnOutputByCredentialOrFail`) keep the loop
+  letrec inside the calling branch, so unused paths pay zero.
+- **Validate:** multi-branch validators (spend/mint dispatch) where each
+  branch uses a disjoint helper set; assert the unused branch's ExUnits do
+  not change when a helper is added to another branch.
+- **Related, now fixed:** the same investigation root-caused a second,
+  independent cost - `List.contains` never resolved to its data-repr
+  intrinsic for lazily-decoded ledger lists. That is T17 above, landed on
+  master in `2e0fdf779`; the linear_vesting and htlc numbers quoted in
+  `docs/internal/CAPE_COMPETITIVE_ANALYSIS.md` are measured with it.
 
 ## 7. Further research recommendations
 
