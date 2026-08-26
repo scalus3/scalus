@@ -49,6 +49,33 @@ object IntrinsicResolver {
       OptionModule + ".contains"
     )
 
+    /** Methods that may dispatch a still-packed (`PackedSumDataList`) receiver through the
+      * `BuiltinList` (Data-element) providers, by unpacking it on demand (`unListData`, O(1)). See
+      * `dispatchReprNames`.
+      *
+      * Safe only for methods that never hand an element back under the receiver's own labelling:
+      * these return a scalar (`contains`/`indexOf`) or a Data-element list that the provider
+      * relabels from the element TYPE via `typeProxyRepr` (`deleteFirst`/`distinct`/`diff`), so a
+      * packed receiver cannot mislabel anything. The spine ops
+      * (`head`/`tail`/`isEmpty`/`at`/`drop`) are deliberately absent: their repr rules read the
+      * element repr out of the RECEIVER's repr, and `PackedSumDataList` carries none, so
+      * `ListReprRules.elemRepr` falls through to the native default and labels a still-`Data`
+      * element as native (`Blake2b_256` applied to `VCon(Data)` in MembershipToken). Tracked as T17
+      * in docs/internal/CODEGEN_IMPROVEMENT_PLAN.md.
+      *
+      * Deliberately distinct from [[EqStripMethods]], which today holds the same List methods: that
+      * set answers "drop the trailing implicit `Eq`" (an arity property), this one answers "safe
+      * under the packed → BuiltinList view" (a representation property). An `Eq`-taking method that
+      * returned an element natively would belong in the first set and not in this one.
+      */
+    private val PackedListViewMethods: Set[String] = Set(
+      ListModule + ".contains",
+      ListModule + ".indexOf",
+      ListModule + ".deleteFirst",
+      ListModule + ".distinct",
+      ListModule + ".diff"
+    )
+
     private val ListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
     private val ListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
     private val NativeListOps = "scalus.compiler.intrinsics.IntrinsicsNativeList$"
@@ -125,6 +152,11 @@ object IntrinsicResolver {
 
     // Representation name constants for registry lookup
     private val BuiltinListRepr = "BuiltinList"
+
+    /** Name of a still-packed `Data` list. No registry entry carries it — a packed receiver only
+      * ever dispatches through the [[BuiltinListRepr]] view, see [[dispatchReprNames]].
+      */
+    private val PackedSumDataListRepr = "PackedSumDataList"
     private val NativeBuiltinListRepr = "NativeBuiltinList"
     private val UplcConstrListRepr = "UplcConstrList"
     private val UplcConstrOptionRepr = "UplcConstrOption"
@@ -235,6 +267,51 @@ object IntrinsicResolver {
         case SIR.LamAbs(_, body, _, _) => 1 + countTopLambdas(body)
         case _                         => 0
 
+    /** The registry entry chosen for a call: its provider binding, the rule tables to apply to the
+      * result and to the first argument, and the dispatch priority it won at (debug logging only).
+      */
+    private case class SelectedProvider(
+        binding: Binding,
+        reprRules: Map[String, scalus.compiler.intrinsics.ReprRule],
+        argConvertRules: Map[String, scalus.compiler.intrinsics.ArgReprConvertRule],
+        reprPriority: Int
+    )
+
+    /** Pick the provider for `methodName` among `entries`, given the receiver's dispatch names
+      * (most specific first, see [[dispatchReprNames]]).
+      *
+      * The entry matching the most specific name wins; ties go to the highest `minPV` the target
+      * protocol version satisfies. A [[WildcardRepr]] entry matches any receiver but at the lowest
+      * priority, and only for methods it carries a repr rule for. An entry whose provider module
+      * has no binding for `methodName` is skipped, leaving any lower-priority match in place.
+      */
+    private def selectProvider(
+        entries: List[RegistryEntry],
+        reprNames: List[String],
+        methodName: String
+    )(using lctx: LoweringContext): Option[SelectedProvider] = {
+        val pvVersion = lctx.targetProtocolVersion.version
+        var best: Option[SelectedProvider] = None
+        var bestPV = -1
+        var bestReprPriority = Int.MaxValue
+        for (repr, minPV, providerModuleName, reprRules, argConvertRules) <- entries do {
+            val reprPriority = reprNames.indexOf(repr) match
+                case -1 if repr == WildcardRepr && reprRules.contains(methodName) =>
+                    reprNames.size // wildcard has lowest priority
+                case -1 => -1 // no match
+                case i  => i
+            if reprPriority >= 0 && pvVersion >= minPV &&
+                (reprPriority < bestReprPriority || (reprPriority == bestReprPriority && minPV > bestPV))
+            then
+                lctx.findProviderBinding(providerModuleName, methodName).foreach { b =>
+                    best = Some(SelectedProvider(b, reprRules, argConvertRules, reprPriority))
+                    bestPV = minPV
+                    bestReprPriority = reprPriority
+                }
+        }
+        best
+    }
+
     def tryResolveFull(
         head: SIR,
         argSirs0: scala.List[SIR],
@@ -263,37 +340,13 @@ object IntrinsicResolver {
                 registry.get(moduleName) match
                     case None => None
                     case Some(entries) =>
-                        val pvVersion = lctx.targetProtocolVersion.version
-                        var bestBinding: Option[Binding] = None
-                        var bestPV = -1
-                        var bestReprPriority = Int.MaxValue
-                        var bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
-                            Map.empty
-                        var bestArgConvertRules
+                        val selected = selectProvider(entries, reprNames, methodName)
+                        val bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
+                            selected.map(_.reprRules).getOrElse(Map.empty)
+                        val bestArgConvertRules
                             : Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] =
-                            Map.empty
-                        for (repr, minPV, providerModuleName, reprRules, argConvertRules) <-
-                                entries
-                        do {
-                            val reprPriority = reprNames.indexOf(repr) match {
-                                case -1 if repr == WildcardRepr && reprRules.contains(methodName) =>
-                                    reprNames.size
-                                case -1 => -1
-                                case i  => i
-                            }
-                            if reprPriority >= 0 && pvVersion >= minPV &&
-                                (reprPriority < bestReprPriority || (reprPriority == bestReprPriority && minPV > bestPV))
-                            then
-                                lctx.findProviderBinding(providerModuleName, methodName).foreach {
-                                    b =>
-                                        bestBinding = Some(b)
-                                        bestPV = minPV
-                                        bestReprPriority = reprPriority
-                                        bestReprRules = reprRules
-                                        bestArgConvertRules = argConvertRules
-                                }
-                        }
-                        bestBinding.flatMap { binding =>
+                            selected.map(_.argConvertRules).getOrElse(Map.empty)
+                        selected.map(_.binding).flatMap { binding =>
                             val depth = countTopLambdas(binding.value)
                             if depth != argSirs.length then None
                             else {
@@ -411,47 +464,26 @@ object IntrinsicResolver {
                             lctx.log(
                               s"IntrinsicResolver: reprNames=$reprNames entries=${entries.map(e => s"(${e._1},${e._2},${e._3})").mkString(",")}"
                             )
-                        val pvVersion = lctx.targetProtocolVersion.version
-
                         // Find best matching provider: most specific repr name first,
                         // then highest minPV that satisfies constraints
-                        var bestBinding: Option[Binding] = None
-                        var bestPV = -1
-                        var bestReprPriority = Int.MaxValue
-                        var bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
-                            Map.empty
-                        var bestArgConvertRules
+                        val selected = selectProvider(entries, reprNames, methodName)
+                        val bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
+                            selected.map(_.reprRules).getOrElse(Map.empty)
+                        val bestArgConvertRules
                             : Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] =
-                            Map.empty
-                        for (repr, minPV, providerModuleName, reprRules, argConvertRules) <-
-                                entries
-                        do {
-                            val reprPriority = reprNames.indexOf(repr) match {
-                                case -1 if repr == WildcardRepr && reprRules.contains(methodName) =>
-                                    reprNames.size // wildcard has lowest priority
-                                case -1 => -1 // no match
-                                case i  => i
-                            }
-                            if reprPriority >= 0 && pvVersion >= minPV &&
-                                (reprPriority < bestReprPriority || (reprPriority == bestReprPriority && minPV > bestPV))
-                            then
-                                lctx.findProviderBinding(providerModuleName, methodName).foreach {
-                                    b =>
-                                        bestBinding = Some(b)
-                                        bestPV = minPV
-                                        bestReprPriority = reprPriority
-                                        bestReprRules = reprRules
-                                        bestArgConvertRules = argConvertRules
-                                }
-                        }
+                            selected.map(_.argConvertRules).getOrElse(Map.empty)
 
-                        if lctx.debug && bestBinding.isEmpty then
-                            lctx.log(s"IntrinsicResolver: no binding found for $methodName")
-                        if lctx.debug && bestBinding.isDefined then
-                            lctx.log(
-                              s"IntrinsicResolver: FOUND binding for $methodName, reprPriority=$bestReprPriority"
-                            )
-                        bestBinding.map { binding =>
+                        if lctx.debug then
+                            selected match
+                                case None =>
+                                    lctx.log(
+                                      s"IntrinsicResolver: no binding found for $methodName"
+                                    )
+                                case Some(sel) =>
+                                    lctx.log(
+                                      s"IntrinsicResolver: FOUND binding for $methodName, reprPriority=${sel.reprPriority}"
+                                    )
+                        selected.map(_.binding).map { binding =>
                             // Before substituting the argSir into the provider body, rewrite any
                             // inner ExternalVar references to intrinsic-dispatched modules so
                             // their TypeLambda TypeVars are Transparent. The Scala plugin stamps
@@ -537,22 +569,21 @@ object IntrinsicResolver {
                         }
     }
 
-    /** Extract module name and method name from a function SIR node. */
     /** Representation names to use for provider dispatch of `moduleName.methodName` on a receiver
-      * in `repr`.
+      * in `repr`, most specific first.
       *
-      * Besides the plain [[representationNames]] mapping, a receiver in `PackedSumDataList` (a
-      * still-packed `Data` list, the representation of every lazily-decoded ledger list such as
-      * `TxInfo.signatories`) may additionally dispatch to the `BuiltinList` (Data-element)
-      * providers — but only for the structural-equality methods ([[EqStripMethods]]). For those,
-      * the generic prelude bodies are known-bad on packed lists (an `Option` allocated per step
-      * plus a dead `Eq` closure; measured +2,528 mem / +644,996 steps for a single
-      * `signatories.contains` on CAPE linear_vesting), while the providers return scalars or
-      * relabeled Data lists, so no element-representation mislabeling can occur. The spine ops
-      * (`head`/`tail`/`isEmpty`/`at`/`drop`) are deliberately NOT routed this way: dispatching them
-      * on packed receivers mislabels element representations (e.g. `Blake2b_256` applied to a
-      * still-`Data` "ByteString" in MembershipToken) and regresses degenerate micro cases — fixing
-      * that is tracked in docs/internal/CODEGEN_IMPROVEMENT_PLAN.md (T17).
+      * Besides the plain [[representationNames]] mapping, a packed receiver (a still-packed `Data`
+      * list — the representation of every lazily-decoded ledger list, such as `TxInfo.signatories`)
+      * may additionally dispatch to the `BuiltinList` (Data-element) providers, at lowest priority,
+      * for the methods in [[PackedListViewMethods]] (which see for why only those). For those, the
+      * generic prelude bodies are known-bad on packed lists (an `Option` allocated per step plus a
+      * dead `Eq` closure; measured +2,528 mem / +644,996 steps for a single `signatories.contains`
+      * on CAPE linear_vesting).
+      *
+      * The packed receiver is recognised by NAME rather than by `repr ==
+      * SumCaseClassRepresentation.PackedSumDataList`, so that it is also seen through a
+      * [[SumCaseClassRepresentation.SumReprProxy]] — which [[representationNames]] dereferences —
+      * instead of silently losing the view the way the missing registry entry did.
       */
     private def dispatchReprNames(
         repr: LoweredValueRepresentation,
@@ -560,12 +591,13 @@ object IntrinsicResolver {
         methodName: String
     ): List[String] = {
         val names = representationNames(repr)
-        if repr == SumCaseClassRepresentation.PackedSumDataList
-            && EqStripMethods.contains(s"$moduleName.$methodName")
+        if names.contains(PackedSumDataListRepr)
+            && PackedListViewMethods.contains(s"$moduleName.$methodName")
         then names :+ BuiltinListRepr
         else names
     }
 
+    /** Extract module name and method name from a function SIR node. */
     private def extractModuleAndMethod(f: SIR): Option[(String, String)] = f match
         case SIR.Var(name, _, _) =>
             val lastDot = name.lastIndexOf('.')
@@ -679,7 +711,7 @@ object IntrinsicResolver {
         case SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
             List(PairListRepr)
         case SumCaseClassRepresentation.PackedSumDataList =>
-            List("PackedSumDataList")
+            List(PackedSumDataListRepr)
         case SumCaseClassRepresentation.DataConstr =>
             List("DataConstr")
         case _ =>
