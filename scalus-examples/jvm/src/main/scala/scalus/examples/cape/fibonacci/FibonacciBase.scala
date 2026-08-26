@@ -12,5 +12,5 @@ import scalus.*
 @Compile
 object FibonacciBase {
     def fibonacci(n: BigInt): BigInt =
-        if n <= 1 then n else fibonacci(n - BigInt(1)) + fibonacci(n - BigInt(2))
+        if n <= 1 then n else fibonacci(n - 1) + fibonacci(n - 2)
 }
