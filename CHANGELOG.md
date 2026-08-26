@@ -1,5 +1,48 @@
 # Changelog
 
+## 1.1.1 (2026-08-25)
+
+### Fixed
+
+- `ByteString.toHex` is a plain `def` again. As a `@threadUnsafe lazy val` it cached a hex
+  `String` twice the size of the bytes on every instance that was ever printed or encoded (about
+  3x memory amplification), and that initialization is not safe under concurrent access.
+  `@threadUnsafe` is gone from every remaining `lazy val` (#349, #350)
+- `ShelleyPaymentPart.toHex` and `ShelleyDelegationPart.toHex` returned the hex wrapped in
+  literal double quotes, because both went through `ByteString.toString`
+
+### Performance
+
+- `PlutusScriptEvaluator` passes the `TransactionHash` to `evalScript` instead of a pre-encoded
+  hex string. The base path never reads it, so every redeemer of every fee-balancing pass paid
+  for a hex `String` that only the custom `evalBudget` hook uses. The public callback type is
+  unchanged
+- `TypeScheme.arity` and `TypeScheme.numTypeVars` are plain eager `val`s. As `lazy val`s they
+  compiled to a volatile field with a type test and an unbox on every read, on the per-node hot
+  path of the UPLC optimizer (~277ns vs ~874ns per 1024 steady-state reads)
+
+### JavaScript (npm `scalus` 1.1.1)
+
+The npm package is published again after 0.18.1, and now carries the same version number as the
+JVM libraries. What changed for JavaScript users since 0.18.1:
+
+- **Protocol version 11 (van Rossem) is the default** for `Scalus.evaluateScript` and
+  `Scalus.evalPlutusScripts`. Version 0.18.1 defaulted to PV10 (Plomin), so execution budgets
+  differ. Pass `protocolMajorVersion` to `evalPlutusScripts` to select another version
+- **`scalus.js` is a self-contained ES module** with the `@noble/*` crypto dependencies inlined.
+  A browser loads it directly from `<script type="module">`; the old CommonJS shim no longer
+  works. `require("scalus")` now fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`, so CommonJS callers
+  need `await import("scalus")`
+- **`Emulator.withAddresses` funds each address with 10 000 ADA** when `lovelacePerAddress` is
+  omitted. It funded 10 000 lovelace before, which is below min-ada, and both the README and the
+  type declarations promised 10 000 ADA. The JVM `Emulator.withAddresses` already used 10 000
+  ADA. This fix landed after the `v1.1.1` tag, so it reached the npm bundle only, not the Maven
+  `scalus_sjs1` 1.1.1 artifact
+- **`scalus.d.ts` matches the runtime again**: `ExUnits`, `Result` and `Redeemer` are declared as
+  top-level exports (they were never members of `Scalus` at runtime), and the declarations gained
+  the `Emulator` constructor's `initialStakeRewards` argument, the
+  `submitTx(tx, debugScripts)` overload, and the `SlotConfig` fields
+
 ## 1.1.0 (2026-08-21)
 
 ### Added

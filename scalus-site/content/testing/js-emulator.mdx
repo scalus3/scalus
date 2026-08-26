@@ -40,12 +40,13 @@ import { Emulator, SlotConfig } from "scalus";
 
 /*
 `withAddresses` creates an emulator where every specified address has
-a UTxO with the specified lovelace amount.
+a UTxO with the specified lovelace amount. The amount is a `bigint`.
+Omit it to fund each address with 10 000 ADA.
 */
 const emulator = Emulator.withAddresses(
   ["addr_test1qr...", "addr_test1qp..."],
   SlotConfig.preview,
-  10_000_000
+  10_000_000n
 );
 
 // Encode your transaction to CBOR with your favorite encoder and submit the result to the Scalus emulator.
@@ -71,7 +72,15 @@ const emulator = Emulator.withAddresses(
   SlotConfig.mainnet,
   BigInt(50_000_000_000) // 50 000 ADA
 );
+
+// Without the third argument each address gets 10 000 ADA
+const defaultFunded = Emulator.withAddresses([aliceAddress], SlotConfig.mainnet);
 ```
+
+<Callout type="info">
+  Before `scalus` 1.1.1 the default was 10 000 lovelace, which is below min-ada. Pass the amount
+  explicitly if you support both versions.
+</Callout>
 
 ### With Custom UTxOs
 
@@ -129,11 +138,31 @@ Get the entire UTxO set as a single CBOR-encoded map.
 
 ### `setSlot(slot: number): void`
 
-Advance the current slot for time-based validation:
+Set the current slot for time-based validation:
 
 ```typescript
-emulator.setSlot(1000);
+emulator.setSlot(1000);   // jump to an absolute slot
+emulator.tick(10);        // advance by 10 slots
+const slot = emulator.getSlot();
 ```
+
+### `submitTx(txCborBytes: Uint8Array, debugScripts: Record<string, string>): SubmitResult`
+
+Submit a transaction and replay a failing script with a debug-compiled version, to get better
+trace logs. The keys are script hash hex, the values are the double-CBOR hex of the debug
+script. The Plutus language version comes from the release script in the transaction.
+
+### Other methods
+
+| Method | Purpose |
+|--------|---------|
+| `tick(n: number)` | Advance the current slot by `n` |
+| `getSlot(): number` | Read the current slot |
+| `hasTx(txHashBytes: Uint8Array): boolean` | True once the transaction was accepted |
+| `getDelegation(stakeCredentialCbor: Uint8Array)` | `{ poolId, rewards }` for a stake credential |
+| `getStakeReward(scriptHashHex: string): bigint \| null` | Reward balance of a script stake credential |
+| `getDatum(datumHashBytes: Uint8Array): Uint8Array \| null` | Look up a datum by hash |
+| `Emulator.withState(state, slotConfig)` | Seed UTxOs, stake, pool and DRep registrations, and datums |
 
 ### `snapshot(): Emulator`
 

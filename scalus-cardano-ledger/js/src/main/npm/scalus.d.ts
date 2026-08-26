@@ -1,39 +1,54 @@
 // scalus.d.ts
 
+// `ExUnits`, `Result` and `Redeemer` are exported at the TOP LEVEL of the module
+// (`import { Result } from "scalus"`). They are not members of the `Scalus` object,
+// which carries the functions only.
+
+/** Execution units representation. */
+export class ExUnits {
+  constructor(memory: bigint, steps: bigint);
+  memory: bigint;
+  steps: bigint;
+}
+
+/** Script evaluation result. */
+export class Result {
+  constructor(
+    isSuccess: boolean,
+    budget: ExUnits,
+    logs: string[],
+    profileJson?: string,
+  );
+  isSuccess: boolean;
+  budget: ExUnits;
+  logs: string[];
+  /**
+   * CEK machine profiling data as JSON. Present only when the result was produced by
+   * {@link Scalus.evaluateScriptProfile}; `undefined` otherwise.
+   */
+  profileJson?: string;
+}
+
+/** Redeemer with execution budget. */
+export class Redeemer {
+  constructor(tag: string, index: number, budget: ExUnits);
+  tag: string;
+  index: number;
+  budget: ExUnits;
+}
+
+type ExUnitsType = ExUnits;
+type ResultType = Result;
+type RedeemerType = Redeemer;
+
 /** Main API exported by Scalus */
 export namespace Scalus {
-  /** Execution units representation. */
-  export class ExUnits {
-    constructor(memory: bigint, steps: bigint);
-    memory: bigint;
-    steps: bigint;
-  }
-
-  /** Script evaluation result. */
-  export class Result {
-    constructor(
-      isSuccess: boolean,
-      budget: ExUnits,
-      logs: string[],
-      profileJson?: string,
-    );
-    isSuccess: boolean;
-    budget: ExUnits;
-    logs: string[];
-    /**
-     * CEK machine profiling data as JSON. Present only when the result was produced by
-     * {@link evaluateScriptProfile}; `undefined` otherwise.
-     */
-    profileJson?: string;
-  }
-
-  /** Redeemer with execution budget. */
-  export class Redeemer {
-    constructor(tag: string, index: number, budget: ExUnits);
-    tag: string;
-    index: number;
-    budget: ExUnits;
-  }
+  /** @deprecated Import `ExUnits` from the package root instead. */
+  export type ExUnits = ExUnitsType;
+  /** @deprecated Import `Result` from the package root instead. */
+  export type Result = ResultType;
+  /** @deprecated Import `Redeemer` from the package root instead. */
+  export type Redeemer = RedeemerType;
 
   /**
    * Applies a data argument to a Plutus script given its double-CBOR-encoded hex.
@@ -98,6 +113,17 @@ export class PlutusScriptEvaluationError {
 
 /** Slot and epoch configuration for a Cardano network. */
 export class SlotConfig {
+  /** POSIX time in milliseconds of slot `zeroSlot`. */
+  readonly zeroTime: number;
+  /** First slot of the linear (post-Byron) era. */
+  readonly zeroSlot: number;
+  /** Slot length in milliseconds. */
+  readonly slotLength: number;
+  /** Epoch length in slots. */
+  readonly epochLength: number;
+  /** Epoch number at `zeroSlot`. */
+  readonly zeroEpoch: number;
+
   /**
    * @param zeroTime POSIX time in milliseconds of slot `zeroSlot`.
    * @param zeroSlot First slot of the linear (post-Byron) era.
@@ -225,8 +251,15 @@ export class Emulator {
    * Create an emulator with initial UTxOs.
    * @param initialUtxosCbor CBOR-encoded UTxO map (Map[TransactionInput, TransactionOutput]).
    * @param slotConfig Slot configuration for time conversions.
+   * @param initialStakeRewards Optional map from script hash hex to a lovelace amount, written
+   *   as a decimal string. Each entry pre-registers that script stake credential with the given
+   *   reward balance. Use `"0"` for the zero-withdrawal trick.
    */
-  constructor(initialUtxosCbor: Uint8Array, slotConfig: SlotConfig);
+  constructor(
+    initialUtxosCbor: Uint8Array,
+    slotConfig: SlotConfig,
+    initialStakeRewards?: Record<string, string>,
+  );
 
   /**
    * Submit a transaction to the emulator.
@@ -234,6 +267,18 @@ export class Emulator {
    * @returns Result with isSuccess, txHash (on success), or error and logs (on failure).
    */
   submitTx(txCborBytes: Uint8Array): SubmitResult;
+
+  /**
+   * Submit a transaction, replaying failing scripts with debug-compiled versions.
+   * @param txCborBytes CBOR-encoded transaction bytes.
+   * @param debugScripts Map from script hash hex to the double-CBOR hex of the debug-compiled
+   *   script. The Plutus language version comes from the release script in the transaction.
+   * @returns Result with isSuccess, txHash (on success), or error and logs (on failure).
+   */
+  submitTx(
+    txCborBytes: Uint8Array,
+    debugScripts: Record<string, string>,
+  ): SubmitResult;
 
   /**
    * Get all UTxOs as a single CBOR-encoded map.
