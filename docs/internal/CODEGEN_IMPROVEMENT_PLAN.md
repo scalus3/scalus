@@ -649,6 +649,39 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
 - **Validate:** oracle-style (sparse access) AND fold-heavy (dense access)
   benchmarks must both stay at their current best or improve.
 
+### T17. Packed-list intrinsic dispatch: Eq family DONE, spine ops open
+
+- **Done (2026-08-25):** `IntrinsicResolver` never dispatched intrinsics on a
+  `PackedSumDataList` receiver (a still-packed `Data` list — the
+  representation of every lazily-decoded ledger list, e.g.
+  `TxInfo.signatories`): `representationNames` mapped that repr only to the
+  name `"PackedSumDataList"`, which has no registry entry, so
+  `List.contains`/`indexOf`/`deleteFirst`/`distinct`/`diff` silently lowered
+  their generic prelude bodies (a data-encoded `Some` allocated per element
+  plus a dead `Eq` closure that `EqStrip` never removed, because stripping
+  only happens when dispatch fires) instead of the `equalsData`-scan
+  intrinsics. Measured cost of the miss: +2,528 mem / +644,996 steps for a
+  single `signatories.contains` in the CAPE linear_vesting validator. Fix:
+  `dispatchReprNames` lets a `PackedSumDataList` receiver fall back to the
+  `BuiltinList` provider name, scoped to the `EqStripMethods` family — those
+  providers return scalars or relabeled Data lists, so no
+  element-representation mislabeling is possible.
+- **Open:** route the spine ops (`head`/`tail`/`isEmpty`/`at`/`drop`) the
+  same way. A broader first attempt did this and was backed out: it
+  mislabeled element representations (`head`/`at` on a packed
+  `List[ByteString]` returned a still-`Data` value labeled native —
+  MembershipToken failed at runtime with `Blake2b_256` applied to
+  `VCon(Data(...))`) and regressed degenerate micro cases (`tail` +396 mem /
+  +189,448 steps; `drop 0`/`-1`/empty +150–183k steps), even while cutting
+  every realistic validator 2–13% (auction, betting, AMM, payment splitter,
+  Knights, HTLC). Fixing the element-repr labeling of spine-op dispatch on
+  packed receivers recovers those forfeited wins.
+- **Also open:** `find` has no BuiltinList-repr provider at all (only a
+  native-list one), so packed-list `find` still lowers the generic fixpoint
+  body with a data-`Some` allocation per match.
+- **Validate:** full corpus; MembershipToken is the regression sentinel for
+  element-repr labeling.
+
 ## 7. Further research recommendations
 
 1. **Machine-step attribution.** The profiling CEK attributes builtin costs

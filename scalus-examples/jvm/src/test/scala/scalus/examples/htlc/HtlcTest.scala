@@ -61,7 +61,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     }
 
     test(s"HTLC validator size is ${HtlcContract.compiled.script.script.size} bytes") {
-        assert(HtlcContract.compiled.script.script.size == 366)
+        assert(HtlcContract.compiled.script.script.size == 322)
     }
 
     test("VALIDATOR: receiver reveals preimage before timeout") {
@@ -84,8 +84,8 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
         assert(Try(contract(scriptCtx.toData).code).isSuccess)
         val result = contract(scriptCtx.toData).program.evaluateDebug
         assert(result.isSuccess)
-        assert(result.budget == ExUnits(memory = 29355, steps = 12_138878))
-        assert(result.budget.fee == Coin(2569))
+        assert(result.budget == ExUnits(memory = 27127, steps = 11_541882))
+        assert(result.budget.fee == Coin(2398))
     }
 
     test("receiver reveals preimage before timeout") {
@@ -104,7 +104,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           signer = Bob.signer
         )
 
-        assertResult(ExUnits(memory = 29355, steps = 12_138878)):
+        assertResult(ExUnits(memory = 27127, steps = 11_541882)):
             revealTx.witnessSet.redeemers.get.value.totalExUnits
 
         provider.setSlot(beforeSlot)
@@ -185,7 +185,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        assertResult(ExUnits(memory = 25922L, steps = 9249707L)):
+        assertResult(ExUnits(memory = 23694L, steps = 8652711L)):
             timeoutTx.witnessSet.redeemers.get.value.totalExUnits
 
         provider.setSlot(afterSlot)
