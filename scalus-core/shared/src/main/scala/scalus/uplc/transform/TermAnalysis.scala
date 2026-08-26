@@ -153,6 +153,14 @@ object TermAnalysis:
           * by the partial evaluator to determine if a term is closed (has no free variables) and
           * can therefore be evaluated at compile time.
           *
+          * '''Named terms only.''' Variables are identified by NAME; `NamedDeBruijn.index` is
+          * ignored, so a binder shadows every same-named variable under it regardless of index.
+          * That matches what the compiler pipeline produces (optimizers run before de Bruijn
+          * indices are assigned, see `UplcPipeline` and `Program.deBruijnedProgram`). On an
+          * already-de-Bruijned term, where distinct binders can share a name and only the index
+          * tells them apart, this under-reports free variables — callers using it as a capture
+          * check would then be unsound.
+          *
           * @return
           *   the set of free variable names
           */

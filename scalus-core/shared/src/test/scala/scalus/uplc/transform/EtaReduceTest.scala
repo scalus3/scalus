@@ -229,3 +229,166 @@ class EtaReduceTest extends AnyFunSuite:
     test("(lam x [(case (constr 0) [y, z]) x]) reduces to the case term"):
         val caseTerm = Case(Constr(Word64.Zero, Nil), List(vr"y", vr"z"))
         assert(etaReduce(λ("x")(caseTerm $ vr"x")) == caseTerm)
+
+    // Value-arity tracking: multi-argument eta-wrappers over let-bound lambdas
+
+    test("[(lam f (lam a (lam b [f a b]))) (lam x (lam y x))] reduces the wrapper to f"):
+        // f is let-bound to a 2-argument lambda, so [f a] is a pure partial application
+        val rhs = λ("x", "y")(vr"x")
+        val term = λ("f")(λ("a", "b")(vr"f" $ vr"a" $ vr"b")) $ rhs
+        assert(etaReduce(term) == (λ("f")(vr"f") $ rhs))
+
+    test("wrapper over the self-application fixpoint encoding reduces to f"):
+        // rhs = [(lam s [s s]) (lam s (lam a (lam b 42)))] evaluates to a 2-argument lambda
+        val fix = λ("s")(vr"s" $ vr"s") $ λ("s")(λ("a", "b")(Const(Constant.Integer(42))))
+        val term = λ("f")(λ("a", "b")(vr"f" $ vr"a" $ vr"b")) $ fix
+        assert(etaReduce(term) == (λ("f")(vr"f") $ fix))
+
+    test("wrapper does not reduce when the bound lambda has arity 1"):
+        // f is bound to (lam x x): applying [f a] already evaluates the body, and applying
+        // one more argument to its result is an unknown computation
+        val rhs = λ("x")(vr"x")
+        val term = λ("f")(λ("a", "b")(vr"f" $ vr"a" $ vr"b")) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("wrapper does not reduce when the variable is rebound by an inner lambda"):
+        // the inner (lam f ...) shadows the let-bound f, so its arity is unknown
+        val rhs = λ("x", "y")(vr"x")
+        val term = λ("f")(λ("f")(λ("a", "b")(vr"f" $ vr"a" $ vr"b"))) $ rhs
+        assert(etaReduce(term) == term)
+
+    // Case-constr encoding of multi-argument eta-wrappers:
+    //   (lam a (lam b (case (constr 0 a b) f)))  =>  f
+
+    /** The case-constr wrapper `(lam n1 .. (lam nk (case (constr tag fields) branches)))`. */
+    private def ccWrapper(
+        binders: List[String],
+        fields: List[Term],
+        branches: List[Term],
+        tag: Word64 = Word64.Zero
+    ): Term =
+        binders.foldRight(Case(Constr(tag, fields), branches): Term)((n, acc) => λ(n)(acc))
+
+    test("(lam a (lam b (case (constr 0 a b) f))) reduces to f when f is a 2-arg lambda"):
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a", vr"b"), List(vr"f"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == (λ("f")(vr"f") $ rhs))
+
+    test("3-arg case-constr wrapper over the self-application fixpoint reduces to f"):
+        val fix = λ("s")(vr"s" $ vr"s") $ λ("s")(λ("a", "b", "c")(Const(Constant.Integer(42))))
+        val wrapper = ccWrapper(List("a", "b", "c"), List(vr"a", vr"b", vr"c"), List(vr"f"))
+        val term = λ("f")(wrapper) $ fix
+        assert(etaReduce(term) == (λ("f")(vr"f") $ fix))
+
+    test("1-arg case-constr wrapper over a pure term reduces (same as the plain rule)"):
+        // (lam a (case (constr 0 a) unBData)) = (lam a [unBData a])
+        val term = ccWrapper(List("a"), List(vr"a"), List(Builtin(UnBData)))
+        assert(etaReduce(term) == Builtin(UnBData))
+
+    test("2-arg case-constr wrapper over a pure NON-lambda does NOT reduce"):
+        // (lam a (lam b (case (constr 0 a b) 5))) partially applied is a lambda value;
+        // (con integer 5) partially applied is an error. Purity alone must not fire for n >= 2.
+        val term = ccWrapper(List("a", "b"), List(vr"a", vr"b"), List(Const(Constant.Integer(5))))
+        assert(etaReduce(term) == term)
+
+    test("2-arg case-constr wrapper does not reduce when the bound lambda has arity 1"):
+        val rhs = λ("x")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a", vr"b"), List(vr"f"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper with wrong tag does not reduce"):
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a", vr"b"), List(vr"f"), tag = Word64(1))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper with two branches does not reduce"):
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a", vr"b"), List(vr"f", vr"g"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper with permuted fields does not reduce"):
+        // (lam a (lam b (case (constr 0 b a) f))) flips the arguments; it is NOT f
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"b", vr"a"), List(vr"f"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper with a duplicated field does not reduce"):
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a", vr"a"), List(vr"f"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper with an extra field does not reduce"):
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a", vr"b", vr"b"), List(vr"f"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper with missing fields does not reduce"):
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a"), List(vr"f"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper with a non-variable field does not reduce"):
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper =
+            ccWrapper(List("a", "b"), List(vr"a", Const(Constant.Integer(1))), List(vr"f"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper whose branch captures a bound variable does not reduce"):
+        // branch [f a] uses the wrapper's own binder
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a", vr"b"), List(vr"f" $ vr"a"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("case-constr wrapper with duplicated binder names does not reduce"):
+        // (lam a (lam a (case (constr 0 a a) f))): both fields refer to the INNER a
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "a"), List(vr"a", vr"a"), List(vr"f"))
+        val term = λ("f")(wrapper) $ rhs
+        assert(etaReduce(term) == term)
+
+    test("shadowed let binding does not feed its arity into a case-constr wrapper"):
+        // inner (lam f ...) shadows the outer let-bound 2-arg f
+        val rhs = λ("x", "y")(vr"x")
+        val wrapper = ccWrapper(List("a", "b"), List(vr"a", vr"b"), List(vr"f"))
+        val term = λ("f")(λ("f")(wrapper)) $ rhs
+        assert(etaReduce(term) == term)
+
+    // Redexes nested inside Constr fields and Case scrutinees/branches. UPLC lowered at PV11 is
+    // full of Case nodes, so a wrapper that sits under one is the common case, not a corner case.
+
+    test("eta-redex inside a constr field reduces"):
+        val term = Constr(Word64.Zero, List(λ("x")(vr"f" $ vr"x")))
+        assert(etaReduce(term) == Constr(Word64.Zero, List(vr"f")))
+
+    test("eta-redex inside a case scrutinee reduces"):
+        val term = Case(λ("x")(vr"f" $ vr"x"), List(vr"g"))
+        assert(etaReduce(term) == Case(vr"f", List(vr"g")))
+
+    test("eta-redex inside a case branch reduces"):
+        val term = Case(vr"scrut", List(λ("x")(vr"f" $ vr"x"), vr"g"))
+        assert(etaReduce(term) == Case(vr"scrut", List(vr"f", vr"g")))
+
+    test("eta-redex nested under several constr/case layers reduces"):
+        val inner = λ("x")(vr"f" $ vr"x")
+        val term = Case(vr"scrut", List(Constr(Word64.Zero, List(Delay(inner)))))
+        assert(etaReduce(term) == Case(vr"scrut", List(Constr(Word64.Zero, List(Delay(vr"f"))))))
+
+    test("a let-bound arity is visible to a redex inside a case branch"):
+        // The 2-arg rhs makes [f a] pure, so the whole wrapper collapses under the Case -- without
+        // the arity environment reaching in there, (lam a (lam b [f a b])) would survive untouched
+        // (see "(lam x (lam y [f x y])) does not reduce ..." for the no-arity-known case).
+        val rhs = λ("x", "y")(vr"x")
+        val body = Case(vr"scrut", List(λ("a")(λ("b")(vr"f" $ vr"a" $ vr"b"))))
+        val term = λ("f")(body) $ rhs
+        val expected = λ("f")(Case(vr"scrut", List(vr"f"))) $ rhs
+        assert(etaReduce(term) == expected)
