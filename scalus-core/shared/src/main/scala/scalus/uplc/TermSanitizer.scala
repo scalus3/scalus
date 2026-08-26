@@ -2,12 +2,21 @@ package scalus.uplc
 
 import scala.collection.mutable
 
-/** Sanitizes UPLC Terms to ensure all variable names conform to the UPLC text format requirements.
+/** Sanitizes UPLC Terms to ensure all variable names conform to the identifier grammar accepted by
+  * the reference `plutus-core` textual parser (`PlutusCore.Parser.ParserCommon.name`, backed by
+  * `PlutusCore.Name.Unique.isIdentifierStartingChar` / `isIdentifierChar`; verified against
+  * plutus-core-1.45.0.0):
   *
-  * UPLC text format only allows:
-  *   - First character: letters (a-z, A-Z) or underscore (_)
-  *   - Subsequent characters: letters, digits, underscore (_), or apostrophe (')
-  *   - Optional suffix: hyphen followed by digits (-\d+)
+  *   - First character: an ASCII letter (a-z, A-Z) or underscore (_).
+  *   - Subsequent characters: an ASCII letter, digit, underscore (_), or apostrophe (').
+  *   - The reference parser additionally accepts a `-<digits>` "Unique" suffix (e.g. `foo-123`),
+  *     but only as a *terminal* token component parsed by a separate combinator: once `-<digits>`
+  *     starts, nothing else (not even more digits, letters, or apostrophes) may follow it in the
+  *     same token. A name like `a-91533'653` therefore parses as `a-91533` followed by a stray,
+  *     unparseable `'653`. Since Scalus never needs to emit that literal Unique-suffix syntax, this
+  *     sanitizer does not attempt to reproduce it: every `-` in an original name is replaced with
+  *     `_` instead, which is always valid in any position and sidesteps the terminal-suffix
+  *     ambiguity entirely.
   *
   * This sanitizer transforms variable names to comply with these rules while avoiding conflicts.
   */
@@ -87,13 +96,13 @@ object TermSanitizer:
             result.append(firstChar)
         else result.append('_')
 
-        // Handle subsequent characters - can be letter, digit, underscore, or apostrophe
+        // Handle subsequent characters - can be letter, digit, underscore, or apostrophe.
+        // Note: '-' is deliberately NOT special-cased here (see the class doc comment) - it is
+        // always replaced with '_', even when followed by digits, because the reference parser
+        // only accepts '-\d+' as a terminal suffix, not embeddable anywhere in the name.
         for i <- 1 until chars.length do
             val c = chars(i)
             if isValidSubsequentChar(c) then result.append(c)
-            else if c == '-' && i + 1 < chars.length && chars(i + 1).isDigit then
-                // Allow hyphen-digit pattern
-                result.append(c)
             else result.append('_')
 
         result.toString
