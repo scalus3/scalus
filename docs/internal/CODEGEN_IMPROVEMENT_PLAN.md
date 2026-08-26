@@ -834,9 +834,34 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
   `tail` also serve `SumBuiltinList(native-element)` receivers (the second
   name `representationNames` returns for those), where the element genuinely
   is native, so the labelling has to stay receiver-derived.
-- **Also open:** `find` has no BuiltinList-repr provider at all (only a
-  native-list one), so packed-list `find` still lowers the generic fixpoint
-  body with a data-`Some` allocation per match.
+- **Closed, do not retry (measured 2026-08-26):** `find` has no
+  BuiltinList-repr provider (only a native-list one), so packed-list `find`
+  lowers the generic fixpoint body. Adding one **makes it worse** and was not
+  landed. A `BuiltinListSupport.find` walking a `BuiltinList` with
+  `nullList`/`headList`/`tailList` (the `NativeListOperations.find` shape),
+  forwarded from `BuiltinListOperations`/`...V11` and enabled for packed
+  receivers via `PackedListViewMethods`, measured on
+  `(d: Data) => d.to[List[BigInt]].find(_ > 1000000)` (full scan, no match):
+
+  | len | generic body (mem / steps) | with provider | delta |
+  |-----|---------------------------|---------------|-------|
+  | 0   | 2,432 / 394,033           | 2,764 / 516,466 | +14% / +31% |
+  | 2   | 6,698 / 1,198,101         | 9,222 / 2,119,026 | +38% / +77% |
+  | 10  | 23,762 / 4,414,373        | 35,054 / 8,529,266 | +48% / +93% |
+  | 20  | 45,092 / 8,434,713        | 67,344 / 16,542,066 | +49% / +96% |
+
+  Marginal per element: 2,133 mem / 402,034 steps generic vs 3,229 / 801,280
+  dispatched — 1.5x memory, 2.0x steps — and script size 59 -> 68 B. The
+  regression is per-element, not fixed overhead, so no list length recovers it.
+  Reason it cannot win: `find`'s only work is walking the spine and calling the
+  caller's predicate. The generic body calls that predicate directly, while a
+  once-lowered support takes `A` abstract and so pays a representation adapter
+  per element — the doubling in steps. There is no `equalsData`-style
+  algorithmic substitution available the way there is for
+  `contains`/`indexOf`, where dispatch replaces a per-element `Option`
+  allocation plus an `Eq` closure. `find`'s remaining upside is therefore the
+  spine-op fix above (its per-element cost is the packed-spine cost), not a
+  provider of its own.
 - **Validate:** full corpus; MembershipToken is the regression sentinel for
   element-repr labeling.
 
