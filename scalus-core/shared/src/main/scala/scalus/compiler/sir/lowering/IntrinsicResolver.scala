@@ -259,7 +259,7 @@ object IntrinsicResolver {
                         argSirs0.dropRight(1)
                     else argSirs0
                 val firstArgRepr = firstLoweredOnly.representation
-                val reprNames = representationNames(firstArgRepr)
+                val reprNames = dispatchReprNames(firstArgRepr, moduleName, methodName)
                 registry.get(moduleName) match
                     case None => None
                     case Some(entries) =>
@@ -405,7 +405,8 @@ object IntrinsicResolver {
                 registry.get(moduleName) match
                     case None => None
                     case Some(entries) =>
-                        val reprNames = representationNames(loweredArg.representation)
+                        val reprNames =
+                            dispatchReprNames(loweredArg.representation, moduleName, methodName)
                         if lctx.debug then
                             lctx.log(
                               s"IntrinsicResolver: reprNames=$reprNames entries=${entries.map(e => s"(${e._1},${e._2},${e._3})").mkString(",")}"
@@ -537,6 +538,34 @@ object IntrinsicResolver {
     }
 
     /** Extract module name and method name from a function SIR node. */
+    /** Representation names to use for provider dispatch of `moduleName.methodName` on a receiver
+      * in `repr`.
+      *
+      * Besides the plain [[representationNames]] mapping, a receiver in `PackedSumDataList` (a
+      * still-packed `Data` list, the representation of every lazily-decoded ledger list such as
+      * `TxInfo.signatories`) may additionally dispatch to the `BuiltinList` (Data-element)
+      * providers — but only for the structural-equality methods ([[EqStripMethods]]). For those,
+      * the generic prelude bodies are known-bad on packed lists (an `Option` allocated per step
+      * plus a dead `Eq` closure; measured +2,528 mem / +644,996 steps for a single
+      * `signatories.contains` on CAPE linear_vesting), while the providers return scalars or
+      * relabeled Data lists, so no element-representation mislabeling can occur. The spine ops
+      * (`head`/`tail`/`isEmpty`/`at`/`drop`) are deliberately NOT routed this way: dispatching them
+      * on packed receivers mislabels element representations (e.g. `Blake2b_256` applied to a
+      * still-`Data` "ByteString" in MembershipToken) and regresses degenerate micro cases — fixing
+      * that is tracked in docs/internal/CODEGEN_IMPROVEMENT_PLAN.md (T17).
+      */
+    private def dispatchReprNames(
+        repr: LoweredValueRepresentation,
+        moduleName: String,
+        methodName: String
+    ): List[String] = {
+        val names = representationNames(repr)
+        if repr == SumCaseClassRepresentation.PackedSumDataList
+            && EqStripMethods.contains(s"$moduleName.$methodName")
+        then names :+ BuiltinListRepr
+        else names
+    }
+
     private def extractModuleAndMethod(f: SIR): Option[(String, String)] = f match
         case SIR.Var(name, _, _) =>
             val lastDot = name.lastIndexOf('.')

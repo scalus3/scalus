@@ -67,8 +67,8 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
         ).runWithBudget()
         assert(
           budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 90771, steps = 36_577723),
-            since38 = ExUnits(memory = 87715, steps = 35_499861)
+            pre38 = ExUnits(memory = 87043, steps = 35_740727),
+            since38 = ExUnits(memory = 83987, steps = 34_662865)
           )
         )
     }
@@ -80,8 +80,8 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
         ).runWithBudget()
         assert(
           budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 108451, steps = 43_455561),
-            since38 = ExUnits(memory = 105395, steps = 42_377699)
+            pre38 = ExUnits(memory = 104723, steps = 42_618565),
+            since38 = ExUnits(memory = 101667, steps = 41_540703)
           )
         )
     }
@@ -93,8 +93,8 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
         ).runWithBudget()
         assert(
           budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 171521, steps = 57_863333),
-            since38 = ExUnits(memory = 168465, steps = 56_785471)
+            pre38 = ExUnits(memory = 170921, steps = 57_767333),
+            since38 = ExUnits(memory = 167865, steps = 56_689471)
           )
         )
     }
@@ -106,8 +106,8 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
         ).runWithBudget()
         assert(
           budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 151847, steps = 47_592180),
-            since38 = ExUnits(memory = 148791, steps = 46_514318)
+            pre38 = ExUnits(memory = 148119, steps = 46_755184),
+            since38 = ExUnits(memory = 145063, steps = 45_677322)
           )
         )
     }
