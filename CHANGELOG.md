@@ -1,5 +1,33 @@
 # Changelog
 
+## Unreleased
+
+### Performance
+
+- `EtaReduce` removes multi-argument wrappers (`\a.\b. f a b` → `f`), not only single-argument
+  ones, and now traverses into `Constr` arguments and `Case` scrutinee/branches so wrappers
+  nested there reduce like any other subterm. A value-arity analysis guards the rewrite:
+  eta-reduction is unsound in call-by-value when the wrapper delays work, so a redex collapses
+  only when the head provably accepts that many arguments without performing any
+
+### Fixed
+
+- `dischargeCekValEnv` returned `Constr` and `Case` nodes untouched, so a variable inside a
+  constructor argument or a case branch kept its unresolved name whenever a CEK value was
+  discharged back to a term
+- `TermSanitizer` could emit names the reference plutus-core parser rejects as malformed. It
+  allowed hyphen-digit anywhere in a name, but the upstream textual grammar treats a `-<digits>`
+  suffix as a terminal Unique-id token, so a name carrying both a `-<id>` suffix and a
+  `'<counter>` disambiguation suffix (e.g. `a-91533'653`) produced unparseable UPLC. Every `-`
+  now maps to `_`
+
+### Added
+
+- Scalus implementations of all 8 [UPLC-CAPE](https://github.com/IntersectMBO/UPLC-CAPE)
+  benchmark scenarios in `scalus-examples`, each with a test pinning its script size and
+  per-case execution budget, plus `scripts/cape-submit.sh` to generate, verify, measure and
+  rank submissions against the published leaderboard in one command
+
 ## 1.1.1 (2026-08-25)
 
 ### Fixed
