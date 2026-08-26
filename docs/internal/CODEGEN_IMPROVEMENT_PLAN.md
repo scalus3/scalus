@@ -663,9 +663,14 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
   intrinsics. Measured cost of the miss: +2,528 mem / +644,996 steps for a
   single `signatories.contains` in the CAPE linear_vesting validator. Fix:
   `dispatchReprNames` lets a `PackedSumDataList` receiver fall back to the
-  `BuiltinList` provider name, scoped to the `EqStripMethods` family — those
-  providers return scalars or relabeled Data lists, so no
-  element-representation mislabeling is possible.
+  `BuiltinList` provider name, scoped to the `PackedListViewMethods` family —
+  those providers return scalars or Data lists that they relabel from the
+  element TYPE (`typeProxyRepr` in `deleteFirst`/`distinct`/`diff`), so no
+  element-representation mislabeling is possible. That set was split out of
+  `EqStripMethods` in the follow-up refactor: the two answer different
+  questions (drop the trailing implicit `Eq` — an arity property — vs safe
+  under the packed → `BuiltinList` view — a representation property) and only
+  happen to hold the same List methods today.
 - **Open:** route the spine ops (`head`/`tail`/`isEmpty`/`at`/`drop`) the
   same way. A broader first attempt did this and was backed out: it
   mislabeled element representations (`head`/`at` on a packed
@@ -676,6 +681,25 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
   every realistic validator 2–13% (auction, betting, AMM, payment splitter,
   Knights, HTLC). Fixing the element-repr labeling of spine-op dispatch on
   packed receivers recovers those forfeited wins.
+- **Where that mislabel comes from** (fix site, established during review of
+  the Eq-family commit): `ListReprRules.elemRepr`
+  (`intrinsics/ListIntrinsics.scala:30`) derives the result's element repr
+  from the RECEIVER's repr, and `PackedSumDataList` carries no element repr,
+  so it falls through to `case _ => defaultRepresentation(outTp)` — the
+  *native* default — while the value the provider body actually unpacked is
+  `SumBuiltinList(defaultDataRepresentation(elemType))` (the `unListData`
+  conversion at `typegens/SumListEmitterCommon.scala:721-727`). `listRepr`
+  (`ListIntrinsics.scala:27`) has the mirror problem: it returns `inRepr`
+  unchanged, so `tail`/`drop` on a packed receiver claim a packed result the
+  body no longer produces. Candidate fix: give both a `PackedSumDataList`
+  case mirroring that conversion — `elemRepr` →
+  `defaultDataRepresentation(outTp)`, `listRepr` →
+  `SumBuiltinList(defaultDataRepresentation(elemType(outTp)))` — and then add
+  the spine ops to `PackedListViewMethods`. This cannot instead be fixed
+  inside the providers with `typeProxyRepr`: `BuiltinListOperations.head`/
+  `tail` also serve `SumBuiltinList(native-element)` receivers (the second
+  name `representationNames` returns for those), where the element genuinely
+  is native, so the labelling has to stay receiver-derived.
 - **Also open:** `find` has no BuiltinList-repr provider at all (only a
   native-list one), so packed-list `find` still lowers the generic fixpoint
   body with a data-`Some` allocation per match.
