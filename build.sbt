@@ -848,7 +848,15 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // so the default evaluation path skips hex encoding entirely.
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
-        )
+        ),
+        // TEMPORARY, and meant to be removed. The streaming facade is declared out of the
+        // cross-language interop surface — it has two higher-kinded parameters, context bounds and
+        // macro subscribe methods, none of it reachable from Java, Kotlin or JS — and is
+        // deliberately unfrozen for one or two releases while the Blockfrost and Ogmios providers
+        // shake its shapes out. Freeze it after that and delete this filter.
+        // Without it, the first release that ships this package freezes it: it is absent from the
+        // previous published artifact today, which is the only reason MiMa is currently silent.
+        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.*")
       ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
