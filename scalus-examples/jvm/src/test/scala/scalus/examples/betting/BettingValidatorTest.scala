@@ -84,7 +84,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for initial minting")
         assert(
-          result.budget == (ExUnits(memory = 68003, steps = 22_874981))
+          result.budget == (ExUnits(memory = 67539, steps = 22_644498))
         )
 
     test("Verify that player2 can join an existing bet"):
@@ -222,7 +222,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
             println(result)
         assert(result.isSuccess, "Script execution should succeed for announce winner spending")
         assert(
-          result.budget == (ExUnits(memory = 104521, steps = 38_988054))
+          result.budget == (ExUnits(memory = 103593, steps = 38_527088))
         )
 
     test("Verify that announcing the winner fails if the bet token is not burned"):
@@ -325,7 +325,7 @@ class BettingValidatorTest extends AnyFunSuite, ScalusTest:
         if result.isFailure then result.logs.foreach(println)
         assert(result.isSuccess, "Reclaim after expiration should succeed")
         assert(
-          result.budget == (ExUnits(memory = 137794, steps = 51_135908))
+          result.budget == (ExUnits(memory = 136866, steps = 50_674942))
         )
 
     test("Verify that reclaim before expiration fails"):

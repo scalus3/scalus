@@ -444,6 +444,13 @@ object ProductCaseEmitter extends SirTypeUplcGenerator {
                         Doc.text("UplcConstr→DataList(") + input.docRef(ctx) + Doc.text(")")
                     override def docRef(ctx: LoweredValue.PrettyPrintingContext) = docDef(ctx)
                 }
+            case (_: ProdUplcConstr, _: SumCaseClassRepresentation.SumUplcConstr) =>
+                // A variant value in `Constr(tag, fields)` form is already a valid value of
+                // its parent sum's native `SumUplcConstr` form. `SumUplcConstrOps` owns that
+                // conversion (field-repr alignment included); delegate instead of failing.
+                // Reached when a bare enum constructor (`Order.Less`) meets a value typed at
+                // the parent sum, e.g. `(a <=> b) === Order.Less`.
+                SumUplcConstrOps.emitConvert(input, representation, pos)
             case (_: ProdUplcConstr, PackedDataList) | (_: ProdUplcConstr, ProdDataConstr) |
                 (_: ProdUplcConstr, PairIntDataList) =>
                 via(ProdDataList)(input, representation, pos)

@@ -1,7 +1,8 @@
 package scalus.cardano.onchain.plutus.prelude
 
-import scalus.compiler.Compile
+import scalus.compiler.{Compile, UplcRepr, UplcRepresentation}
 
+@UplcRepr(UplcRepresentation.UplcConstr)
 enum Order:
     case Less, Equal, Greater
 

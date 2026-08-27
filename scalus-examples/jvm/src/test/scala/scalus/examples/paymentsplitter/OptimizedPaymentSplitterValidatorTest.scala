@@ -83,7 +83,7 @@ class OptimizedPaymentSplitterValidatorTest
       )
     )
 
-    private val expectedSpendBudget: ExUnits = ExUnits(memory = 41828, steps = 13_443300)
+    private val expectedSpendBudget: ExUnits = ExUnits(memory = 41364, steps = 13_212817)
 
     // Run all shared test cases
     testCases.foreach { tc =>
@@ -101,7 +101,7 @@ class OptimizedPaymentSplitterValidatorTest
             since38 = ExUnits(memory = 236174, steps = 97_941086)
           )
         )
-        assert(spendBudget == ExUnits(memory = 41828, steps = 13_443300))
+        assert(spendBudget == ExUnits(memory = 41364, steps = 13_212817))
     }
 
     private def runTestCase(tc: PaymentSplitterTestCase): Unit = {
