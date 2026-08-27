@@ -147,7 +147,7 @@ val jvmReleaseTarget = Compile / scalacOptions ++= {
 // The compiler plugin is exempt: it uses CrossVersion.full, so its 3.8.x variants are distinct artifacts.
 val publishOnlyLts = publish / skip := (scalaVersion.value != scala3LtsVersion)
 
-val fs2Version = "3.12.0"
+val fs2Version = "3.12.2"
 
 // Compilation profiling options for analyzing compilation time
 lazy val profilingScalacOptions = Seq(
