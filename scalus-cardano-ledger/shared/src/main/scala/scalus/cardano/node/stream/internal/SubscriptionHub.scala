@@ -366,6 +366,34 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
         touched.foreach(_.flush())
     }
 
+    /** Fail every subscription with `cause`, and stop accepting new ones.
+      *
+      * Distinct from [[closeAll]], and the distinction is the subscriber's whole world: a closed
+      * stream ended, so whatever it delivered was the truth; a failed stream means the view is
+      * untrustworthy and must be rebuilt. A follower that loses track of the chain owes subscribers
+      * the second, never the first.
+      */
+    def failAll(cause: Throwable): Unit = {
+        val mailboxes = synchronized {
+            closed = true
+            val all: Seq[Mailbox[?]] =
+                utxoSubs.values.toSeq.map(_.mailbox) ++
+                    txSubs.values.toSeq.map(_.mailbox) ++
+                    blockSubs.values.toSeq.map(_.mailbox) ++
+                    tipSubs.values.toSeq ++
+                    paramSubs.values.toSeq ++
+                    statusSubs.values.flatMap(_.values).toSeq
+            utxoSubs.clear()
+            txSubs.clear()
+            blockSubs.clear()
+            tipSubs.clear()
+            paramSubs.clear()
+            statusSubs.clear()
+            all
+        }
+        mailboxes.foreach(_.fail(cause))
+    }
+
     def closeAll(): Unit = {
         val mailboxes = synchronized {
             closed = true
