@@ -48,14 +48,22 @@ case class SubscriptionOptions(
 
 /** Overflow behaviour for a delta buffer.
   *
+  * There is no backpressure to be had here, and that is a property of the source rather than of
+  * this implementation: a chain produces blocks whether or not anyone is keeping up, so the only
+  * decisions available are how much to hold and what to do when that is not enough.
+  *
   * Chain-sourced events must never be dropped silently — a missed `Spent` corrupts the subscriber's
   * view of state permanently, and it has no way to notice. So the two options are "never drop" and
   * "fail loudly":
   *
-  *   - `Unbounded` — memory is the only bound. Default.
   *   - `Bounded(n)` — on overflow the subscription terminates with
   *     [[scalus.cardano.infra.ScalusBufferOverflowException]], so the subscriber knows its view is
-  *     untrustworthy and must resync.
+  *     untrustworthy and must resync. Default, see [[DeltaBufferPolicy.default]].
+  *   - `Unbounded` — memory is the only bound. For a subscriber that would rather be killed by the
+  *     OOM killer than resync.
+  *
+  * Deliberately not offered: a bounded buffer that drops. It would turn the corruption this policy
+  * exists to prevent into the default behaviour, and the subscriber could not detect it.
   */
 enum DeltaBufferPolicy {
     case Bounded(size: Int)
@@ -63,5 +71,20 @@ enum DeltaBufferPolicy {
 }
 
 object DeltaBufferPolicy {
-    val default: DeltaBufferPolicy = Unbounded
+
+    /** Live events a delta subscription may fall behind by before it is failed.
+      *
+      * Sized so that only a broken consumer reaches it. Mainnet produces a block roughly every 20
+      * seconds, so even a subscription matching every transaction accumulates on the order of tens
+      * of events per block; 10,000 is hours of falling behind, while a subscriber that is merely
+      * bursty is nowhere near it. The snapshot seed does not count against it — see
+      * `StreamingEmulator.bufferSize`.
+      */
+    val defaultBound: Int = 10_000
+
+    /** Bounded rather than unbounded, on the same principle as the rest of this policy: a
+      * subscriber that falls hopelessly behind gets a `ScalusBufferOverflowException` naming its
+      * subscription, instead of an out-of-memory error naming nothing.
+      */
+    val default: DeltaBufferPolicy = Bounded(defaultBound)
 }
