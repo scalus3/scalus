@@ -7,7 +7,7 @@ import scalus.cardano.ledger.*
 import scalus.uplc.Term.*
 import scalus.utils.ScalusSourcePos
 
-import scala.annotation.{switch, tailrec, threadUnsafe}
+import scala.annotation.{switch, tailrec}
 import scala.collection.immutable.ArraySeq
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.collection.{immutable, mutable}
@@ -127,14 +127,26 @@ object CekMachineCosts {
             memory = params.`cekBuiltinCost-exBudgetMemory`,
             steps = params.`cekBuiltinCost-exBudgetCPU`
           ),
-          constrCost = ExUnits(
-            memory = params.`cekConstrCost-exBudgetMemory`,
-            steps = params.`cekConstrCost-exBudgetCPU`
-          ),
-          caseCost = ExUnits(
-            memory = params.`cekCaseCost-exBudgetMemory`,
-            steps = params.`cekCaseCost-exBudgetCPU`
-          )
+          // PlutusV1Params/PlutusV2Params never carry the constr/case machine costs (they are
+          // PV11-appended parameters, read as the 300_000_000 placeholder), so fall back to the
+          // Plutus reference values — same approach as fromMap and the new-builtin cost fallback
+          // in MachineParams.fromCostModels. The on-chain PV11 V1/V2 values equal the reference.
+          constrCost =
+              if params.`cekConstrCost-exBudgetCPU` == 300_000_000L then
+                  defaultMachineCosts.constrCost
+              else
+                  ExUnits(
+                    memory = params.`cekConstrCost-exBudgetMemory`,
+                    steps = params.`cekConstrCost-exBudgetCPU`
+                  )
+          ,
+          caseCost =
+              if params.`cekCaseCost-exBudgetCPU` == 300_000_000L then defaultMachineCosts.caseCost
+              else
+                  ExUnits(
+                    memory = params.`cekCaseCost-exBudgetMemory`,
+                    steps = params.`cekCaseCost-exBudgetCPU`
+                  )
         )
     }
 
@@ -154,15 +166,15 @@ case class MachineParams(
 
 object MachineParams {
 
-    @threadUnsafe lazy val defaultPlutusV1PostConwayParams: MachineParams = {
+    lazy val defaultPlutusV1PostConwayParams: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV1)
     }
 
-    @threadUnsafe lazy val defaultPlutusV2PostConwayParams: MachineParams = {
+    lazy val defaultPlutusV2PostConwayParams: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV2)
     }
 
-    @threadUnsafe lazy val defaultPlutusV3Params: MachineParams = {
+    lazy val defaultPlutusV3Params: MachineParams = {
         fromProtocolParams(CardanoInfo.mainnet.protocolParams, Language.PlutusV3)
     }
 
@@ -258,7 +270,6 @@ object MachineParams {
                   lengthOfArray = ref.lengthOfArray,
                   listToArray = ref.listToArray,
                   indexArray = ref.indexArray,
-                  multiIndexArray = ref.multiIndexArray,
                   bls12_381_G1_multiScalarMul = ref.bls12_381_G1_multiScalarMul,
                   bls12_381_G2_multiScalarMul = ref.bls12_381_G2_multiScalarMul,
                   insertCoin = ref.insertCoin,
@@ -1706,7 +1717,15 @@ class CekMachine(
                     case Apply(fun, arg, ann)    => Apply(go(lamCnt, fun), go(lamCnt, arg), ann)
                     case Force(term, ann)        => Force(go(lamCnt, term), ann)
                     case Delay(term, ann)        => Delay(go(lamCnt, term), ann)
-                    case _                       => term
+                    // Constr/Case must be traversed like every other node with subterms, matching
+                    // the reference implementation (UntypedPlutusCore.Evaluation.Machine.Cek
+                    // .Internal.dischargeCekValue's goValEnv). Skipping them left env-bound
+                    // variables undischarged inside a returned closure's Case/Constr body, and
+                    // the open deBruijn indices then crashed DeBruijn.fromDeBruijnTerm.
+                    case Constr(tag, args, ann) => Constr(tag, args.map(go(lamCnt, _)), ann)
+                    case Case(scrut, cases, ann) =>
+                        Case(go(lamCnt, scrut), cases.map(go(lamCnt, _)), ann)
+                    case _ => term
             }
 
             go(0, term)

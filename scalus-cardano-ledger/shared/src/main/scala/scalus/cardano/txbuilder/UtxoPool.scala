@@ -40,6 +40,10 @@ private[txbuilder] class UtxoPool(
     def withCollateral(additional: Utxos): UtxoPool =
         new UtxoPool(available, selectedForInputs, selectedForCollateral ++ additional)
 
+    /** Returns a new pool with the collateral selection replaced entirely. */
+    def replaceCollateral(newCollateral: Utxos): UtxoPool =
+        new UtxoPool(available, selectedForInputs, newCollateral)
+
     /** Total ADA available across all UTXOs (for error messages). */
     def totalAvailableAda: Coin =
         Coin(available.values.foldLeft(0L)((acc, o) => acc + o.value.coin.value))
@@ -139,6 +143,10 @@ private[txbuilder] class UtxoPool(
       * Can reuse UTXOs already selected for inputs - same UTXO can be in both inputs and
       * collateralInputs (collateral only consumed if scripts fail).
       *
+      * Never selects more than `protocolParams.maxCollateralInputs` UTXOs - the ledger rejects
+      * transactions above that limit. If the requirement cannot be covered within the limit, the
+      * best-effort (insufficient) selection is returned and the caller decides how to fail.
+      *
       * Selection strategy:
       *   1. First tries to find an "optimal" ADA-only UTxO where the excess is below minAda
       *      threshold, so no collateralReturn output is needed
@@ -147,16 +155,19 @@ private[txbuilder] class UtxoPool(
       *   4. Falls back to UTxOs with tokens if ADA-only UTxOs are insufficient
       *   5. UTXOs carrying a reference script are the absolute last resort: if the scripts fail
       *      on-chain, collateral is consumed and the deployed script is destroyed
+      *   6. If the tier-preserving strategies cannot cover the requirement within
+      *      maxCollateralInputs, selects largest-first across all UTXOs regardless of tier
       *
       * @param requiredAmount
       *   the amount of ADA required for collateral
       * @param protocolParams
-      *   protocol parameters for computing minAda
+      *   protocol parameters for computing minAda and the collateral input limit
       * @return
       *   selected UTXOs for collateral
       */
     def selectForCollateral(requiredAmount: Coin, protocolParams: ProtocolParams): Utxos = {
         val required = requiredAmount.value
+        val maxInputs = protocolParams.maxCollateralInputs.toInt
 
         // All UTxOs are candidates (can reuse inputs for collateral),
         // but ref-script UTXOs are deferred to the last-resort strategy 5
@@ -177,7 +188,7 @@ private[txbuilder] class UtxoPool(
         val optimalUtxo = adaOnlySorted.find { case (_, output) =>
             val ada = output.value.coin.value
             // Compute minAda for a potential return output to this address
-            val minimalReturnOutput = TransactionOutput(output.address, Value.zero)
+            val minimalReturnOutput = Output(output.address, Value.zero)
             val minAdaForReturn =
                 MinCoinSizedTransactionOutput.ensureMinAda(
                   Sized(minimalReturnOutput),
@@ -204,7 +215,7 @@ private[txbuilder] class UtxoPool(
         var accumulated = 0L
 
         adaOnlySorted.reverse.foreach { case (input, output) =>
-            if accumulated < required then {
+            if accumulated < required && selected.size < maxInputs then {
                 selected = selected + (input -> output)
                 accumulated += output.value.coin.value
             }
@@ -230,13 +241,13 @@ private[txbuilder] class UtxoPool(
             output.value.coin.value >= remainingRequired
         }
 
-        if smallestSufficientToken.isDefined then {
+        if smallestSufficientToken.isDefined && selected.size < maxInputs then {
             return selected + smallestSufficientToken.get
         }
 
         // Otherwise, select multiple starting with largest
         tokenUtxosSorted.reverse.foreach { case (input, output) =>
-            if accumulated < required then {
+            if accumulated < required && selected.size < maxInputs then {
                 selected = selected + (input -> output)
                 accumulated += output.value.coin.value
             }
@@ -255,18 +266,37 @@ private[txbuilder] class UtxoPool(
             output.value.coin.value >= remainingAfterPlain
         }
 
-        if smallestSufficientRefScript.isDefined then {
+        if smallestSufficientRefScript.isDefined && selected.size < maxInputs then {
             return selected + smallestSufficientRefScript.get
         }
 
         refScriptSorted.reverse.foreach { case (input, output) =>
-            if accumulated < required then {
+            if accumulated < required && selected.size < maxInputs then {
                 selected = selected + (input -> output)
                 accumulated += output.value.coin.value
             }
         }
 
-        selected
+        if accumulated >= required then {
+            return selected
+        }
+
+        // Strategy 6: The tier-preserving strategies cannot cover the requirement within
+        // maxCollateralInputs (e.g. the preferred ADA-only UTxOs are all small). Select
+        // largest-first across all UTxOs regardless of tier, which maximizes the covered
+        // amount within the limit.
+        var fallback = Map.empty[TransactionInput, TransactionOutput]
+        var fallbackTotal = 0L
+        available.toSeq
+            .sortBy { case (_, output) => -output.value.coin.value }
+            .foreach { case (input, output) =>
+                if fallbackTotal < required && fallback.size < maxInputs then {
+                    fallback = fallback + (input -> output)
+                    fallbackTotal += output.value.coin.value
+                }
+            }
+
+        if fallbackTotal >= required then fallback else selected
     }
 }
 

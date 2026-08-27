@@ -44,7 +44,7 @@ object TestUtil {
 
     def mockTxInput(variation: BigInt, idx: BigInt): TransactionInput =
         val TxOutRef(id, index) = mockTxOutRef(variation, idx)
-        TransactionInput(TransactionHash.fromByteString(id.hash), index.toInt)
+        Input(TransactionHash.fromByteString(id.hash), index.toInt)
 
     val testEnvironment: CardanoInfo = CardanoInfo.mainnet
 

@@ -15,7 +15,7 @@ import scalus.utils.{Pretty, Style}
 import upickle.default.{readwriter, ReadWriter as UpickleReadWriter}
 
 import java.util
-import scala.annotation.{targetName, threadUnsafe}
+import scala.annotation.targetName
 import scala.collection.immutable.{SortedMap, TreeMap}
 import scala.compiletime.asMatchable
 
@@ -24,10 +24,13 @@ enum Era(val value: Int) extends Enumeration {
     case Conway extends Era(7)
 }
 
-// FIXME: make sure we validate the Coin is non-negative in ledger rules
 /** Represents an amount of Cardano's native currency (ADA)
+  *
+  * On the wire a coin is unsigned (Conway CDDL `coin = uint`), and the CBOR decoder rejects
+  * negative values. The constructor deliberately allows negative amounts: balancing and `Value`
+  * arithmetic produce transient negative differences.
   */
-final case class Coin(value: Long) derives Codec {
+final case class Coin(value: Long) {
 
     /** Add another coin amount */
     @targetName("plus")
@@ -56,6 +59,15 @@ object Coin {
 
     /** Create lovelace amount from ADA amount, e.g.  ada(2) = 2_000_000 lovelace */
     def ada(amount: Long): Coin = Coin(amount * 1_000_000L)
+
+    given Codec[Coin] = Codec(
+      Encoder((w, coin) => w.writeLong(coin.value)),
+      Decoder { r =>
+          val value = r.readLong()
+          if value < 0 then r.validationFailure(s"Coin must be non-negative, got $value")
+          Coin(value)
+      }
+    )
 
     given CommutativeGroup[Coin] with
         def combine(x: Coin, y: Coin): Coin = x + y
@@ -479,6 +491,24 @@ case class ExUnits(memory: Long, steps: Long) derives UpickleReadWriter {
           scalus.uplc.eval.CostingInteger.satPlus(steps, other.steps)
         )
 
+    /** Checks that both components are within `budget`.
+      *
+      * Execution units are only partially ordered: a value can be under budget on memory and over
+      * on steps at the same time. The ledger therefore compares each component independently
+      * (`pointWiseExUnits (<=)` in Alonzo), and so does this method. Do not use a total `Ordering`
+      * for budget checks.
+      *
+      * @param budget
+      *   The maximum execution units allowed
+      * @return
+      *   true if memory and steps are both less than or equal to those of `budget`
+      */
+    def fitsWithin(budget: ExUnits): Boolean =
+        memory <= budget.memory && steps <= budget.steps
+
+    /** Checks that at least one component is over `budget`. Negation of [[fitsWithin]]. */
+    def exceeds(budget: ExUnits): Boolean = !fitsWithin(budget)
+
     /** Calculate fee for the execution units given explicit prices.
       *
       * @param prices
@@ -524,6 +554,18 @@ object ExUnits {
         exUnits
     }
 
+    /** Lexicographic, memory-first ordering.
+      *
+      * @deprecated
+      *   Execution units are only partially ordered, so this total ordering answers budget
+      *   questions incorrectly: `ExUnits(1, 999)` compares as less than `ExUnits(2, 1)` even though
+      *   it is far over on steps. Use [[ExUnits.fitsWithin]] or [[ExUnits.exceeds]] for budget
+      *   checks. Kept only for sorting and for binary compatibility.
+      */
+    @deprecated(
+      "ExUnits is only partially ordered; this ordering is wrong for budget checks. Use fitsWithin/exceeds instead",
+      "1.0.0"
+    )
     given Ordering[ExUnits] = (x: ExUnits, y: ExUnits) => {
         if x.memory != y.memory then x.memory.compareTo(y.memory)
         else x.steps.compareTo(y.steps)
@@ -755,7 +797,7 @@ object OriginalCborByteArray {
 }
 
 class KeepRaw[A] private (val value: A, rawBytes: () => Array[Byte]) {
-    @threadUnsafe lazy val raw: Array[Byte] = rawBytes()
+    lazy val raw: Array[Byte] = rawBytes()
     override def hashCode: Int =
         util.Arrays.hashCode(Array(value.hashCode(), util.Arrays.hashCode(raw)))
 

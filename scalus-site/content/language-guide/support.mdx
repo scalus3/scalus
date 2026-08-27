@@ -16,7 +16,7 @@ Below is a comprehensive list of what Scala features are currently supported in 
 
 * simple `val`s and `def`s of supported built-in types or case classes/enums
 * lambda expressions
-* recursive functions
+* recursive functions, including mutually recursive top-level `def`s in `@Compile` objects
 * passing/returning functions as arguments (higher-order functions)
 * `if-then-else` expressions
 * `match` expressions on case classes and enums with:
@@ -47,4 +47,5 @@ Below is a comprehensive list of what Scala features are currently supported in 
     * use sealed traits with enums or case classes for polymorphic data
 * `try-catch` expressions - use `Option`, `Either`, or error handling patterns instead
 * overloaded functions - each function must have a unique name
-* mutually recursive functions - functions cannot call each other recursively
+* forward references between local `def`s inside `compile` blocks - move mutually
+  recursive functions to a top-level object annotated with `@Compile`

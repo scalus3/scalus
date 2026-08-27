@@ -85,9 +85,9 @@ class FibonacciTest extends AnyFunSuite with ScalusTest {
         }
 
         val result = (optFibTerm $ 25.asTerm).evaluateDebug
-        assert(optFibTerm.plutusV3.cborByteString.length == 118)
+        assert(optFibTerm.plutusV3.cborByteString.length == 113)
         assert(result.asInstanceOf[Result.Success].term == 75025.asTerm)
-        assert(result.budget == ExUnits(memory = 3009, steps = 1745331))
+        assert(result.budget == ExUnits(memory = 2408, steps = 1_573282))
     }
 
     test("fibonacci unfold") {

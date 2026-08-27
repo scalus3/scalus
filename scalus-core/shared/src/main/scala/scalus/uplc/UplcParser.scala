@@ -366,7 +366,7 @@ object UplcParser:
         case DefaultUni.ByteString =>
             lexeme(bytestring.map(asConstant))
         case DefaultUni.String =>
-            lexeme(stringLiteral).map(s => asConstant(s)) // TODO validate escape sequences
+            lexeme(stringLiteral).map(s => asConstant(s))
         case DefaultUni.Data =>
             (if expectDataParens then inParens(dataTerm) else dataTerm).map(asConstant)
         case DefaultUni.Apply(ProtoList, t)                      => conListOf(t)

@@ -2,12 +2,269 @@
 
 ## Unreleased
 
+### Performance
+
+- `EtaReduce` removes multi-argument wrappers (`\a.\b. f a b` → `f`), not only single-argument
+  ones, and now traverses into `Constr` arguments and `Case` scrutinee/branches so wrappers
+  nested there reduce like any other subterm. A value-arity analysis guards the rewrite:
+  eta-reduction is unsound in call-by-value when the wrapper delays work, so a redex collapses
+  only when the head provably accepts that many arguments without performing any
+
+### Fixed
+
+- `dischargeCekValEnv` returned `Constr` and `Case` nodes untouched, so a variable inside a
+  constructor argument or a case branch kept its unresolved name whenever a CEK value was
+  discharged back to a term
+- `TermSanitizer` could emit names the reference plutus-core parser rejects as malformed. It
+  allowed hyphen-digit anywhere in a name, but the upstream textual grammar treats a `-<digits>`
+  suffix as a terminal Unique-id token, so a name carrying both a `-<id>` suffix and a
+  `'<counter>` disambiguation suffix (e.g. `a-91533'653`) produced unparseable UPLC. Every `-`
+  now maps to `_`
+
+### Added
+
+- Streaming subscriptions in `scalus.cardano.node.stream`: `BlockchainStreamProvider` /
+  `BlockchainStreamReader` (and their `TF` variants over a generic effect) add rollback-aware
+  event subscriptions to the existing reader/provider pair. Everything that changes over time
+  now has both a one-shot read and a subscription, so `pollForConfirmation` becomes
+  `subscribeTransactionStatus` with no sleep loop and no missed-update window.
+
+  A provider declares only `StreamCapabilities`; whether a given request is served, and whether
+  it is cheap, is derived from that by `SubscriptionSupport.of` — so a provider can neither
+  refuse what it advertised nor accept what it did not. Subscriptions are registered
+  synchronously, which makes `subscribe` followed by `submit` race-free.
+
+  The stream type is chosen per call rather than per provider. `ScalusAsyncSource` needs nothing
+  beyond the stdlib and works on JVM and JS alike; the new `scalus-streaming-fs2` module adds
+  fs2 `Stream`s, and further adapters plug in through `ScalusAsyncStreamAdapter`.
+  `StreamingEmulator` implements the facade over the in-memory emulator, and
+  `StreamProviderConformance` in `scalus-testkit` holds any implementation to the capabilities
+  it declares
+
+- Scalus implementations of all 8 [UPLC-CAPE](https://github.com/IntersectMBO/UPLC-CAPE)
+  benchmark scenarios in `scalus-examples`, each with a test pinning its script size and
+  per-case execution budget, plus `scripts/cape-submit.sh` to generate, verify, measure and
+  rank submissions against the published leaderboard in one command
+
+## 1.1.1 (2026-08-25)
+
+### Fixed
+
+- `ByteString.toHex` is a plain `def` again. As a `@threadUnsafe lazy val` it cached a hex
+  `String` twice the size of the bytes on every instance that was ever printed or encoded (about
+  3x memory amplification), and that initialization is not safe under concurrent access.
+  `@threadUnsafe` is gone from every remaining `lazy val` (#349, #350)
+- `ShelleyPaymentPart.toHex` and `ShelleyDelegationPart.toHex` returned the hex wrapped in
+  literal double quotes, because both went through `ByteString.toString`
+
+### Performance
+
+- `PlutusScriptEvaluator` passes the `TransactionHash` to `evalScript` instead of a pre-encoded
+  hex string. The base path never reads it, so every redeemer of every fee-balancing pass paid
+  for a hex `String` that only the custom `evalBudget` hook uses. The public callback type is
+  unchanged
+- `TypeScheme.arity` and `TypeScheme.numTypeVars` are plain eager `val`s. As `lazy val`s they
+  compiled to a volatile field with a type test and an unbox on every read, on the per-node hot
+  path of the UPLC optimizer (~277ns vs ~874ns per 1024 steady-state reads)
+
+### JavaScript (npm `scalus` 1.1.1)
+
+The npm package is published again after 0.18.1, and now carries the same version number as the
+JVM libraries. What changed for JavaScript users since 0.18.1:
+
+- **Protocol version 11 (van Rossem) is the default** for `Scalus.evaluateScript` and
+  `Scalus.evalPlutusScripts`. Version 0.18.1 defaulted to PV10 (Plomin), so execution budgets
+  differ. Pass `protocolMajorVersion` to `evalPlutusScripts` to select another version
+- **`scalus.js` is a self-contained ES module** with the `@noble/*` crypto dependencies inlined.
+  A browser loads it directly from `<script type="module">`; the old CommonJS shim no longer
+  works. `require("scalus")` now fails with `ERR_PACKAGE_PATH_NOT_EXPORTED`, so CommonJS callers
+  need `await import("scalus")`
+- **`Emulator.withAddresses` funds each address with 10 000 ADA** when `lovelacePerAddress` is
+  omitted. It funded 10 000 lovelace before, which is below min-ada, and both the README and the
+  type declarations promised 10 000 ADA. The JVM `Emulator.withAddresses` already used 10 000
+  ADA. This fix landed after the `v1.1.1` tag, so it reached the npm bundle only, not the Maven
+  `scalus_sjs1` 1.1.1 artifact
+- **`scalus.d.ts` matches the runtime again**: `ExUnits`, `Result` and `Redeemer` are declared as
+  top-level exports (they were never members of `Scalus` at runtime), and the declarations gained
+  the `Emulator` constructor's `initialStakeRewards` argument, the
+  `submitTx(tx, debugScripts)` overload, and the `SlotConfig` fields
+
+## 1.1.0 (2026-08-21)
+
+### Added
+
+- **Mutual recursion for top-level `def`s** in `@Compile` objects. Local mutual recursion inside
+  a `compile {}` block now reports a clear error (`LocalMutualRecursionNotSupported`) instead of
+  failing obscurely
+- **UPLC source map**: full profile reports (`SCALUS_PROFILE=full`) now include
+  `<scriptHash>-<tag>-<index>.uplc.json` – the pretty-printed UPLC of the script plus spans
+  mapping the text back to Scala source positions and function names, indexed in
+  `profile-manifest.json` as format `"uplc"`. Consumed by the Scalus Profile VS Code extension
+  0.3.0 (compiled UPLC view with bidirectional cursor sync)
+- Profile reports carry derived on-chain fee columns (lovelace/ADA per row)
+- `plutus.v1.Value.containsAtLeast` – "does this value cover every asset of the other one", with
+  the exact semantics of the CIP-153 `valueContains` builtin on canonical values, on every
+  protocol version
+- `plutus.v1.Value.insertCoin(cs, tn, amount)` – set one coin's amount (REPLACES, unlike `+`;
+  zero deletes the coin), with the exact semantics of the CIP-153 `insertCoin` builtin, on every
+  protocol version; lowers to that builtin at PV11
+- `plutus.v1.Value.hasOnly(cs, tn, amount)` – "the tokens under this policy are exactly
+  `{tn -> amount}`"; one `equalsData` on the policy's token map, ~35% cheaper in fee than the
+  equivalent `tokens(cs) === SortedMap.singleton(...)`, portable to every protocol version
+- `plutus.v2.OutputDatum.inlineOrFail[A]` (with an optional message overload) – decode an inline
+  datum or fail, replacing the usual match boilerplate; `inline`, so calling it on a receiver
+  statically known not to be inline is a compile error
+- `ExUnits.fitsWithin` / `ExUnits.exceeds` – component-wise budget comparison matching the
+  ledger's `pointWiseExUnits`
+- **AI-assisted development**: scalus.org now serves llms.txt artifacts for coding agents –
+  `llms.txt`, `llms-full.txt` (all docs as one file), `llms-examples.txt` (21 example
+  contracts), and a version-pinned `llms-api.txt` API cheatsheet generated by the new
+  `llmApiGen` sbt task. The Scalus skills (contract, contract-test, local-development,
+  optimize-contract, smart-contract-security-review) ship as a Claude Code plugin:
+  `/plugin install scalus@scalus`
+
+### Performance
+
+- **Self-application recursion** replaced the Z combinator in the recursion encoding: Knights
+  benchmark -19.8% mem / -16.1% cpu, CAPE fibonacci_25 fee -23%, typical validators -4..12% cpu,
+  smaller scripts
+- **Static-argument transformation** (under `optimizeUplc = true`): loop arguments that never
+  change are no longer re-passed; example corpus average -7.5% mem / -5.2% cpu, with recursive
+  folds over constant context improving far more
+- The SIR-to-UPLC lowering now runs through one unified pipeline (`sir.toUplc`, `lowerToUplc`
+  and `CompiledPlutus` all route through it)
+- Generated UPLC differs from 1.0.0: script hashes and pinned budgets change on upgrade.
+  `Options.plomin` (PV10) still reproduces pre-van-Rossem output
+
+### Deprecated
+
+- `given Ordering[ExUnits]` – execution units are only partially ordered and the lexicographic
+  ordering is wrong for budget checks; use `fitsWithin`/`exceeds`. Also fixed:
+  `ExUnitsTooBigValidator` compared totals with that ordering and could accept a transaction
+  over the CPU cap
+- `SIR.toLoweredValue` and `SIR.lowerToUplc` – use `sir.toUplc` (the unified pipeline)
+
+### Removed
+
+- `EvaluatorReportConfig.profileThreshold` and `SCALUS_PROFILE_THRESHOLD` (never implemented)
+
 ### Changed
 
-- Cardano protocol parameters updated to the latest on-chain values: mainnet epoch 642 (still PV10;
-  includes the van Rossem cost models enacted 2026-06-18 — PlutusV1/V2 extended to 332 entries,
-  PlutusV3 to 350, `equalsByteString` and integer-division CPU coefficients repriced), preprod
-  epoch 300 and preview epoch 1354 (both PV11, van Rossem hard fork)
+- **PV11 Value builtins (CIP-153).** At `targetProtocolVersion >= vanRossemPV`,
+  `plutus.v1.Value` operations (`quantityOf`/`getLovelace`, `+`, `-`, `*`, `negate`, and the new
+  `Value.containsAtLeast`) lower to the CIP-153 builtins – ~13-75x cheaper per operation.
+  Behavior change: the builtins validate canonical form (strictly ascending keys, no zero
+  amounts, no empty inner maps, keys <= 32 bytes, amounts within the signed 128-bit range) and
+  fail on
+  malformed values that the portable lowering tolerated; `unionValue`/`scaleValue` fail on
+  128-bit overflow. Opt out with `Options.valueBuiltins = false`.
+- `plutus.v1.Value.withoutLovelace` now deletes the `(adaPolicyId, adaTokenName)` coin (via
+  `insertCoin(ada, ada, 0)`, lowering to the CIP-153 `insertCoin` builtin at PV11) instead of the
+  whole empty-policy entry. Identical for ledger-shaped values; a non-ada token sitting under the
+  empty policy now survives.
+- The `scalus-testkit`-published `Value` generator (`plutus.v1.ArbitraryInstances.genAmount`) now
+  draws token quantities from `+-(2^64)` instead of `+-(2^128)`, so generated values stay inside
+  the CIP-153 quantity range; property tests that scale a generated `Value` must bound their
+  factor to match
+- **BREAKING (`scalus-sbt-plugin`)**: the sbt 1.x baseline is now **sbt 1.9.0**, up from 1.5.8.
+  Consumers on sbt 1.5-1.8 must upgrade to sbt 1.9.0 or later. The plugin's shared-source shim
+  moved to `sbt2-compat` 0.2.0, which itself requires sbt >= 1.9. The sbt 2.x axis is unchanged.
+- Dependency refresh: BouncyCastle 1.84 -> 1.85.2 (20+ CVE fixes, incl. CVE-2026-14682),
+  borer 1.16.2 -> 1.17.0, jsoniter-scala 2.38.16 -> 2.40.1, magnolia 1.3.21 -> 1.3.23,
+  sttp client4 4.0.25 -> 4.0.26, dotty-cps-async 1.3.3 -> 1.3.4
+
+### Fixed
+
+- **AMM example**: two pools with identical parameters shared a script hash and LP policy,
+  making LP tokens fungible across pools (mint cheap in one, redeem against a better reserve
+  ratio in another). Each pool is now identified by a one-shot seed UTxO and a POOL NFT, with
+  an explicit Init/Close lifecycle, and the LP token name is pinned in the mint check
+- **EditableNft example**: the mint policy now pins the minted value to exactly the ref/user
+  pair (extra tokens could ride along), requires the reference output to hold only the ref
+  NFT, and burn is an exact-pair burn (burning just the user NFT orphaned the ref NFT forever)
+
+## 1.0.0 (2026-07-30)
+
+First stable release. `scalus-core`, `scalus-cardano-ledger` and
+`scalus-bloxbean-cardano-client-lib` form the MiMa-checked stable API surface.
+Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
+
+### Fixed
+
+- generated-name collisions in SIR lowering (prefix+counter conflation) and in the
+  pattern-matching compiler (two matches on one source line) that could silently capture variables
+- Transparent TypeVar conversions are checked against the registered byte shape instead of
+  blindly relabeled; unknown shapes raise a positioned compile error
+
+## 1.0.0-M2 (2026-07-30)
+
+### Added
+
+- `ScalusTest.runWithProfileReport` — profiling reports for direct UPLC evaluation, not just
+  ledger-driven runs
+- `YaciConfig.imageTag` and `YaciConfig.startupTimeoutSeconds`
+
+### Changed
+
+- **BREAKING**: profile rendering moved from `PlutusScriptEvaluator` internals into
+  `scalus.uplc.eval.ProfileReportWriter` (removed classes were implementation-private)
+- Yaci DevKit devnet defaults to `bloxbean/yaci-cli:0.12.0-beta5` in companion node mode — a
+  protocol version 11 (van Rossem) node that runs PV11-compiled scripts
+  (bloxbean/yaci-devkit#184, #185)
+- dependency updates: yaci 0.4.5
+
+### Fixed
+
+- `BlockfrostProvider.localYaci` anchors slot-zero time on the chain's latest block instead of
+  the Yaci admin `startTime`
+- the testkit waits for the yaci-store index to reach the node tip before tests start
+  (fixes "All inputs are spent" right after devnet startup)
+
+## 1.0.0-M1 (2026-07-28)
+
+First milestone of the 1.0 line. Protocol version 11 (van Rossem) is the default compile and
+evaluation target, all previously deprecated API is removed, and `scalus-core`,
+`scalus-cardano-ledger` and `scalus-bloxbean-cardano-client-lib` become the MiMa-checked stable
+surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
+
+### Added
+
+- Java-friendly Emulator API: Java collection accessors, `*OrNull` lookups, `SubmitResult`,
+  `CompletableFuture`-based async methods, `EmulatorInitialState.builder()`
+- `FlatCodec`/`Flats` Java facade for the flat codec with static encode/decode helpers and named
+  `Flat` instances
+
+### Changed
+
+- **BREAKING**: `scalus.serialization.flat` package object converted to top-level definitions –
+  source-compatible, but binary names changed
+- **BREAKING**: `SIRVersion` bumped to 6.0 (`TypeVar` `optId` codec fix) – recompile precompiled
+  SIR modules
+- **BREAKING**: protocol version 11 (van Rossem) is now the default compile and evaluation
+  target – every script hash changes; budgets drop ~30% and scripts shrink ~20%; use
+  `Options.plomin` to reproduce pre-PV11 output
+- Cardano protocol parameters updated: mainnet epoch 645, preprod 303, preview 1370
+- ledger rules accept the van Rossem batch6 builtins on PlutusV1/V2/V3 at PV11
+
+### Removed
+
+- all previously deprecated API: `ReprTag`, top-level `scalus.ScalusDebug` and
+  `scalus.CompileDerivations` aliases, `w7l`
+- legacy experimental `scalus.bloxbean.TxEvaluator` – use `ScalusTransactionEvaluator` or
+  `PlutusScriptEvaluator`
+- the `multiIndexArray` builtin – a Scalus invention that no Plutus release implements; scripts
+  using it could not decode under real Plutus tooling. Use `indexArray` per element
+
+### Fixed
+
+- `BlockfrostProvider.findUtxos` resolves reference scripts (previously `scriptRef` was always
+  `None`, breaking reference-script fee calculation and UTxO selection); resolved scripts are
+  hash-verified and cached per provider
+- `PlutusVM` factories and `PlutusScriptEvaluator` now respect the target protocol version when
+  selecting builtin semantics
+- PlutusV1/V2 `Case`/`Constr` CEK step costs fell back to a ~300M placeholder instead of the
+  Plutus reference values
+- `List.at`/`!!` rejects negative and past-the-end indices on-chain, matching JVM semantics
 
 ## 0.18.2 (2026-06-19)
 

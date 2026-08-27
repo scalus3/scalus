@@ -166,13 +166,23 @@ object Builtins {
               DefaultFun.Ripemd_160
             )
 
+        // Matches Plutus 1.63 (cardano-node 11.0.1, van Rossem / PV11).
         val batch6: Set[DefaultFun] =
             Set(
-              DefaultFun.ExpModInteger
-//              DefaultFun.DropList,
-//              DefaultFun.LengthOfArray,
-//              DefaultFun.ListToArray,
-//              DefaultFun.IndexArray
+              DefaultFun.ExpModInteger,
+              DefaultFun.DropList,
+              DefaultFun.LengthOfArray,
+              DefaultFun.ListToArray,
+              DefaultFun.IndexArray,
+              DefaultFun.Bls12_381_G1_multiScalarMul,
+              DefaultFun.Bls12_381_G2_multiScalarMul,
+              DefaultFun.InsertCoin,
+              DefaultFun.LookupCoin,
+              DefaultFun.UnionValue,
+              DefaultFun.ValueContains,
+              DefaultFun.ValueData,
+              DefaultFun.UnValueData,
+              DefaultFun.ScaleValue
             )
     }
 

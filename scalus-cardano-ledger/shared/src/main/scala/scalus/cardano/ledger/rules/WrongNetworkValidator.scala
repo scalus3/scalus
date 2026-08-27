@@ -37,9 +37,10 @@ object WrongNetworkValidator extends STS.Validator {
           for
               SizedValue(output) <- outputs.view
               address = output.address
-              if !address.getNetwork.contains(
-                expectedNetwork
-              ) // TODO: getNetwork returns Option[Network] instead of Network due to Byron addresses issue, so we need to handle None case as invalid address
+              // getNetwork is defined for every address type, Byron included (derived from the
+              // network-magic attribute, matching cardano-ledger's getNetwork); `contains`
+              // rejects a hypothetical None as wrong-network.
+              if !address.getNetwork.contains(expectedNetwork)
           yield address
         ).toIndexedSeq
     }

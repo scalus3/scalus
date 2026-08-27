@@ -2,7 +2,8 @@ package scalus.testing.regression.hzmin20251002
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
-import scalus.compiler.compile
+import scalus.compiler.{compile, Options}
+import scalus.compiler.sir.lowering.SirToUplcV3Lowering
 
 class HzMinCompilationTest extends AnyFunSuite {
 
@@ -27,7 +28,7 @@ class HzMinCompilationTest extends AnyFunSuite {
 
         // println(sir1.pretty.render(100))
 
-        val lc = sir1.toLoweredValue()
+        val lc = SirToUplcV3Lowering.fromOptions(sir1, Options()).toLoweredValue()
         // println(lc.pretty.render(100))
 
         val uplc = sir1.toUplc(generateErrorTraces = true)

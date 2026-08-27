@@ -1,30 +1,30 @@
 {
-  "version": "1.0.0",
+  "version": "3.0.0",
   "description": "Test cases for two-party escrow smart contract validator",
   "data_structures": {
     "buyer_pubkey": {
       "type": "builtin_data",
-      "value": "#aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      "value": "B #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
     },
     "seller_pubkey": {
       "type": "builtin_data",
-      "value": "#bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      "value": "B #bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
     },
     "impostor_pubkey": {
       "type": "builtin_data",
-      "value": "#cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      "value": "B #cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
     },
     "deposited_escrow_datum": {
       "type": "builtin_data",
-      "value": "0(0() 1000)"
+      "value": "Constr 0 [Constr 0 [], I 1000]"
     },
     "accepted_escrow_datum": {
       "type": "builtin_data",
-      "value": "0(1() 1000)"
+      "value": "Constr 0 [Constr 1 [], I 1000]"
     },
     "refunded_escrow_datum": {
       "type": "builtin_data",
-      "value": "0(2() 1000)"
+      "value": "Constr 0 [Constr 2 [], I 1000]"
     },
     "successful_deposit": {
       "type": "script_context",
@@ -33,7 +33,7 @@
         "patches": [
           {
             "op": "set_redeemer",
-            "redeemer": "0"
+            "redeemer": "I 0"
           },
           {
             "op": "add_signature",
@@ -41,12 +41,15 @@
           },
           {
             "op": "set_valid_range",
-            "from_time": 1000
+            "from_time": 1000,
+            "to_time": 1000
           },
           {
             "op": "add_input_utxo",
             "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
-            "lovelace": 75000000,
+            "value": {
+              "lovelace": 75000000
+            },
             "is_own_input": false
           },
           {
@@ -55,7 +58,9 @@
               "type": "script",
               "script_hash": "1111111111111111111111111111111111111111111111111111111111"
             },
-            "lovelace": 75000000,
+            "value": {
+              "lovelace": 75000000
+            },
             "datum": "@deposited_escrow_datum"
           }
         ]
@@ -68,7 +73,7 @@
         "patches": [
           {
             "op": "set_redeemer",
-            "redeemer": "1"
+            "redeemer": "I 1"
           },
           {
             "op": "set_script_datum",
@@ -81,7 +86,9 @@
           {
             "op": "add_input_utxo",
             "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-            "lovelace": 75000000,
+            "value": {
+              "lovelace": 75000000
+            },
             "is_own_input": true,
             "datum": "@deposited_escrow_datum"
           },
@@ -91,7 +98,9 @@
               "type": "pubkey",
               "pubkey_hash": "@seller_pubkey"
             },
-            "lovelace": 75000000
+            "value": {
+              "lovelace": 75000000
+            }
           }
         ]
       }
@@ -103,7 +112,7 @@
         "patches": [
           {
             "op": "set_redeemer",
-            "redeemer": "2"
+            "redeemer": "I 2"
           },
           {
             "op": "set_script_datum",
@@ -120,7 +129,9 @@
           {
             "op": "add_input_utxo",
             "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:1",
-            "lovelace": 75000000,
+            "value": {
+              "lovelace": 75000000
+            },
             "is_own_input": true,
             "datum": "@deposited_escrow_datum"
           },
@@ -130,130 +141,15 @@
               "type": "pubkey",
               "pubkey_hash": "@buyer_pubkey"
             },
-            "lovelace": 75000000
+            "value": {
+              "lovelace": 75000000
+            }
           }
         ]
       }
     }
   },
-  "tests": [
-    {
-      "name": "redeemer_integer_3",
-      "description": "Validator fails when redeemer is integer 3 (not 0, 1, or 2)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "3"
-        }
-      ]
-    },
-    {
-      "name": "redeemer_integer_4",
-      "description": "Validator fails when redeemer is integer 4 (not 0, 1, or 2)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "4"
-        }
-      ]
-    },
-    {
-      "name": "redeemer_integer_99",
-      "description": "Validator fails when redeemer is integer 99 (not 0, 1, or 2)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "99"
-        }
-      ]
-    },
-    {
-      "name": "redeemer_integer_negative_1",
-      "description": "Validator fails when redeemer is integer -1 (not 0, 1, or 2)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "-1"
-        }
-      ]
-    },
-    {
-      "name": "redeemer_constructor_0",
-      "description": "Validator fails when redeemer is constructor instead of integer",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "0()"
-        }
-      ]
-    },
-    {
-      "name": "redeemer_bytestring",
-      "description": "Validator fails when redeemer is bytestring instead of integer",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "#deadbeef"
-        }
-      ]
-    },
-    {
-      "name": "redeemer_list_with_integers",
-      "description": "Validator fails when redeemer is list [1,2,3] instead of integer",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "[1 2 3]"
-        }
-      ]
-    },
-    {
-      "name": "redeemer_map_with_data",
-      "description": "Validator fails when redeemer is map instead of integer",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "{1:42}"
-        }
-      ]
-    },
-    {
-      "name": "simple_builtin_data_redeemer_0",
-      "description": "Test redeemer 0 with simple builtin_data (not script_context)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "builtin_data",
-          "value": "0"
-        }
-      ]
-    },
+  "measurements": [
     {
       "name": "deposit_successful",
       "description": "Deposit with buyer signature and exactly 75 ADA should succeed",
@@ -267,91 +163,6 @@
           "script_context": {
             "baseline": "@successful_deposit",
             "patches": []
-          }
-        }
-      ]
-    },
-    {
-      "name": "deposit_without_buyer_signature",
-      "description": "Deposit without buyer signature should fail",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "@successful_deposit",
-            "patches": [
-              {
-                "op": "remove_signature",
-                "pubkey_hash": "@buyer_pubkey"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "deposit_with_incorrect_amount",
-      "description": "Deposit with buyer signature but wrong amount (50 ADA) should fail",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "@successful_deposit",
-            "patches": [
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "script",
-                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
-                },
-                "lovelace": 50000000
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "deposit_to_wrong_address",
-      "description": "Deposit fails when ADA goes to pubkey address instead of script",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "spending",
-            "patches": [
-              {
-                "op": "set_redeemer",
-                "redeemer": "0"
-              },
-              {
-                "op": "add_signature",
-                "pubkey_hash": "@buyer_pubkey"
-              },
-              {
-                "op": "add_input_utxo",
-                "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
-                "lovelace": 75000000,
-                "is_own_input": true
-              },
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "pubkey",
-                  "pubkey_hash": "@impostor_pubkey"
-                },
-                "lovelace": 75000000
-              }
-            ]
           }
         }
       ]
@@ -374,124 +185,6 @@
       ]
     },
     {
-      "name": "accept_without_seller_signature",
-      "description": "Accept operation fails when seller signature is missing",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "@successful_accept",
-            "patches": [
-              {
-                "op": "remove_signature",
-                "pubkey_hash": "@seller_pubkey"
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "accept_with_incorrect_payment_amount",
-      "description": "Accept operation fails with wrong payment amount (50 ADA instead of 75 ADA)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "@successful_accept",
-            "patches": [
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "pubkey",
-                  "pubkey_hash": "@seller_pubkey"
-                },
-                "lovelace": 50000000
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "accept_with_payment_to_wrong_address",
-      "description": "Accept operation fails when payment goes to impostor address instead of seller",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "spending",
-            "patches": [
-              {
-                "op": "set_redeemer",
-                "redeemer": "1"
-              },
-              {
-                "op": "add_signature",
-                "pubkey_hash": "@seller_pubkey"
-              },
-              {
-                "op": "add_input_utxo",
-                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
-                "is_own_input": true
-              },
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "pubkey",
-                  "pubkey_hash": "@impostor_pubkey"
-                },
-                "lovelace": 75000000
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "accept_without_prior_deposit",
-      "description": "Accept operation without valid deposit UTXO (should fail - invalid escrow state)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "spending",
-            "patches": [
-              {
-                "op": "set_redeemer",
-                "redeemer": "1"
-              },
-              {
-                "op": "add_signature",
-                "pubkey_hash": "@seller_pubkey"
-              },
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "pubkey",
-                  "pubkey_hash": "@seller_pubkey"
-                },
-                "lovelace": 75000000
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
       "name": "accept_with_multiple_inputs",
       "description": "Accept with multiple script inputs (ambiguous state - expects pass)",
       "expected": {
@@ -506,7 +199,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "1"
+                "redeemer": "I 1"
               },
               {
                 "op": "add_signature",
@@ -519,13 +212,17 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:1",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -534,85 +231,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@seller_pubkey"
                 },
-                "lovelace": 75000000
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "accept_with_partial_payment_to_seller",
-      "description": "Accept with only 50 ADA payment to seller (insufficient - expects fail)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "spending",
-            "patches": [
-              {
-                "op": "set_redeemer",
-                "redeemer": "1"
-              },
-              {
-                "op": "add_signature",
-                "pubkey_hash": "@seller_pubkey"
-              },
-              {
-                "op": "add_input_utxo",
-                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
-                "is_own_input": true
-              },
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "pubkey",
-                  "pubkey_hash": "@seller_pubkey"
-                },
-                "lovelace": 50000000
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "accept_with_excess_payment_to_seller",
-      "description": "Accept with 100 ADA payment to seller (excess amount - expects fail due to exact validation)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "spending",
-            "patches": [
-              {
-                "op": "set_redeemer",
-                "redeemer": "1"
-              },
-              {
-                "op": "add_signature",
-                "pubkey_hash": "@seller_pubkey"
-              },
-              {
-                "op": "add_input_utxo",
-                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
-                "is_own_input": true
-              },
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "pubkey",
-                  "pubkey_hash": "@seller_pubkey"
-                },
-                "lovelace": 100000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -651,7 +272,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "1"
+                "redeemer": "I 1"
               },
               {
                 "op": "add_signature",
@@ -664,7 +285,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:1",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -673,7 +296,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@seller_pubkey"
                 },
-                "lovelace": 50000000
+                "value": {
+                  "lovelace": 50000000
+                }
               },
               {
                 "op": "add_output_utxo",
@@ -681,54 +306,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@seller_pubkey"
                 },
-                "lovelace": 25000000
-              }
-            ]
-          }
-        }
-      ]
-    },
-    {
-      "name": "accept_with_remaining_script_output",
-      "description": "Accept while leaving funds in script (should fail - incomplete withdrawal)",
-      "expected": {
-        "type": "error"
-      },
-      "inputs": [
-        {
-          "type": "script_context",
-          "script_context": {
-            "baseline": "spending",
-            "patches": [
-              {
-                "op": "set_redeemer",
-                "redeemer": "1"
-              },
-              {
-                "op": "add_signature",
-                "pubkey_hash": "@seller_pubkey"
-              },
-              {
-                "op": "add_input_utxo",
-                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
-                "is_own_input": true
-              },
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "pubkey",
-                  "pubkey_hash": "@seller_pubkey"
-                },
-                "lovelace": 75000000
-              },
-              {
-                "op": "add_output_utxo",
-                "address": {
-                  "type": "script",
-                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
-                },
-                "lovelace": 10000000
+                "value": {
+                  "lovelace": 25000000
+                }
               }
             ]
           }
@@ -784,7 +364,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -801,13 +381,17 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:1",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -816,7 +400,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -838,7 +424,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -855,7 +441,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:1",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -864,7 +452,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -886,7 +476,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -903,7 +493,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:1",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -912,7 +504,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 50000000
+                "value": {
+                  "lovelace": 50000000
+                }
               },
               {
                 "op": "add_output_utxo",
@@ -920,7 +514,484 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 25000000
+                "value": {
+                  "lovelace": 25000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "redeemer_integer_3",
+      "description": "Validator fails when redeemer is integer 3 (not 0, 1, or 2)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "I 3"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_integer_4",
+      "description": "Validator fails when redeemer is integer 4 (not 0, 1, or 2)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "I 4"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_integer_99",
+      "description": "Validator fails when redeemer is integer 99 (not 0, 1, or 2)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "I 99"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_integer_negative_1",
+      "description": "Validator fails when redeemer is integer -1 (not 0, 1, or 2)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "I -1"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_constructor_0",
+      "description": "Validator fails when redeemer is constructor instead of integer",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "Constr 0 []"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_bytestring",
+      "description": "Validator fails when redeemer is bytestring instead of integer",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "B #deadbeef"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_list_with_integers",
+      "description": "Validator fails when redeemer is list [1,2,3] instead of integer",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "List [I 1, I 2, I 3]"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_map_with_data",
+      "description": "Validator fails when redeemer is map instead of integer",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "Map [(I 1, I 42)]"
+        }
+      ]
+    },
+    {
+      "name": "simple_builtin_data_redeemer_0",
+      "description": "Test redeemer 0 with simple builtin_data (not script_context)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "I 0"
+        }
+      ]
+    },
+    {
+      "name": "deposit_without_buyer_signature",
+      "description": "Deposit without buyer signature should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_deposit",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@buyer_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "deposit_with_incorrect_amount",
+      "description": "Deposit with buyer signature but wrong amount (50 ADA) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_deposit",
+            "patches": [
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 50000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "deposit_to_wrong_address",
+      "description": "Deposit fails when ADA goes to pubkey address instead of script",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "spending",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": "I 0"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@buyer_pubkey"
+              },
+              {
+                "op": "add_input_utxo",
+                "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
+                "value": {
+                  "lovelace": 75000000
+                },
+                "is_own_input": true
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "pubkey",
+                  "pubkey_hash": "@impostor_pubkey"
+                },
+                "value": {
+                  "lovelace": 75000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "accept_without_seller_signature",
+      "description": "Accept operation fails when seller signature is missing",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_accept",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@seller_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "accept_with_incorrect_payment_amount",
+      "description": "Accept operation fails with wrong payment amount (50 ADA instead of 75 ADA)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_accept",
+            "patches": [
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "pubkey",
+                  "pubkey_hash": "@seller_pubkey"
+                },
+                "value": {
+                  "lovelace": 50000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "accept_with_payment_to_wrong_address",
+      "description": "Accept operation fails when payment goes to impostor address instead of seller",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "spending",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": "I 1"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@seller_pubkey"
+              },
+              {
+                "op": "add_input_utxo",
+                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
+                "value": {
+                  "lovelace": 75000000
+                },
+                "is_own_input": true
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "pubkey",
+                  "pubkey_hash": "@impostor_pubkey"
+                },
+                "value": {
+                  "lovelace": 75000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "accept_without_prior_deposit",
+      "description": "Accept operation without valid deposit UTXO (should fail - invalid escrow state)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "spending",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": "I 1"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@seller_pubkey"
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "pubkey",
+                  "pubkey_hash": "@seller_pubkey"
+                },
+                "value": {
+                  "lovelace": 75000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "accept_with_partial_payment_to_seller",
+      "description": "Accept with only 50 ADA payment to seller (insufficient - expects fail)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "spending",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": "I 1"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@seller_pubkey"
+              },
+              {
+                "op": "add_input_utxo",
+                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
+                "value": {
+                  "lovelace": 75000000
+                },
+                "is_own_input": true
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "pubkey",
+                  "pubkey_hash": "@seller_pubkey"
+                },
+                "value": {
+                  "lovelace": 50000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "accept_with_excess_payment_to_seller",
+      "description": "Accept with 100 ADA payment to seller (excess amount - expects fail due to exact validation)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "spending",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": "I 1"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@seller_pubkey"
+              },
+              {
+                "op": "add_input_utxo",
+                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
+                "value": {
+                  "lovelace": 75000000
+                },
+                "is_own_input": true
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "pubkey",
+                  "pubkey_hash": "@seller_pubkey"
+                },
+                "value": {
+                  "lovelace": 100000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "accept_with_remaining_script_output",
+      "description": "Accept while leaving funds in script (should fail - incomplete withdrawal)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "spending",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": "I 1"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@seller_pubkey"
+              },
+              {
+                "op": "add_input_utxo",
+                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
+                "value": {
+                  "lovelace": 75000000
+                },
+                "is_own_input": true
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "pubkey",
+                  "pubkey_hash": "@seller_pubkey"
+                },
+                "value": {
+                  "lovelace": 75000000
+                }
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 10000000
+                }
               }
             ]
           }
@@ -962,7 +1033,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -975,7 +1046,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -984,7 +1057,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1005,7 +1080,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1018,7 +1093,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1027,7 +1104,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1048,7 +1127,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1061,7 +1140,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1070,7 +1151,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1091,7 +1174,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1104,7 +1187,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1113,7 +1198,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1134,7 +1221,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1143,7 +1230,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1152,7 +1241,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1173,7 +1264,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1186,7 +1277,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1195,7 +1288,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 80000000
+                "value": {
+                  "lovelace": 80000000
+                }
               }
             ]
           }
@@ -1216,7 +1311,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1229,7 +1324,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1238,7 +1335,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 50000000
+                "value": {
+                  "lovelace": 50000000
+                }
               }
             ]
           }
@@ -1259,7 +1358,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1272,7 +1371,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1281,7 +1382,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 100000000
+                "value": {
+                  "lovelace": 100000000
+                }
               }
             ]
           }
@@ -1302,7 +1405,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1315,7 +1418,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1324,7 +1429,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@seller_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1345,7 +1452,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1358,7 +1465,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1367,7 +1476,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 65000000
+                "value": {
+                  "lovelace": 65000000
+                }
               },
               {
                 "op": "add_output_utxo",
@@ -1375,7 +1486,9 @@
                   "type": "script",
                   "script_hash": "1111111111111111111111111111111111111111111111111111111111"
                 },
-                "lovelace": 10000000
+                "value": {
+                  "lovelace": 10000000
+                }
               }
             ]
           }
@@ -1396,7 +1509,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1412,7 +1525,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1433,7 +1548,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1450,7 +1565,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1459,7 +1576,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1480,7 +1599,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "1"
+                "redeemer": "I 1"
               },
               {
                 "op": "add_signature",
@@ -1493,7 +1612,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1502,7 +1623,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@seller_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1523,7 +1646,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "2"
+                "redeemer": "I 2"
               },
               {
                 "op": "add_signature",
@@ -1540,7 +1663,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1549,7 +1674,9 @@
                   "type": "pubkey",
                   "pubkey_hash": "@buyer_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
               }
             ]
           }
@@ -1570,7 +1697,7 @@
             "patches": [
               {
                 "op": "set_redeemer",
-                "redeemer": "1"
+                "redeemer": "I 1"
               },
               {
                 "op": "add_signature",
@@ -1583,7 +1710,9 @@
               {
                 "op": "add_input_utxo",
                 "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
-                "lovelace": 75000000,
+                "value": {
+                  "lovelace": 75000000
+                },
                 "is_own_input": true
               },
               {
@@ -1592,7 +1721,51 @@
                   "type": "pubkey",
                   "pubkey_hash": "@seller_pubkey"
                 },
-                "lovelace": 75000000
+                "value": {
+                  "lovelace": 75000000
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "deposit_infinite_upper_bound",
+      "description": "Deposit with no upper bound (+inf) should fail; the upper bound must be finite to record the deposit time safely",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_deposit",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 1000
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_infinite_lower_bound",
+      "description": "Refund with no lower bound (-inf) should fail; the lower bound must be finite to check the refund deadline",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "to_time": 3000
               }
             ]
           }

@@ -1,8 +1,6 @@
 package scalus.cardano.ledger
 package rules
 
-import scala.math.Ordered.orderingToOrdered
-
 // Checks that the total execution units for a transaction don't exceed the protocol-defined maximum.
 // It's Alonzo.validateExUnitsTooBigUTxO in cardano-ledger
 object ExUnitsTooBigValidator extends STS.Validator {
@@ -15,7 +13,8 @@ object ExUnitsTooBigValidator extends STS.Validator {
             .map(_.value.totalExUnits)
             .getOrElse(ExUnits.zero)
 
-        if actualTxExecutionUnits > maxTxExecutionUnits then
+        // Memory and steps are checked independently, like pointWiseExUnits (<=) in cardano-ledger
+        if actualTxExecutionUnits.exceeds(maxTxExecutionUnits) then
             failure(
               TransactionException.ExUnitsExceedMaxException(
                 event.id,

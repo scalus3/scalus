@@ -54,30 +54,19 @@ object OracleValidator extends DataParameterizedValidator {
                 val seedUtxoIsSpent = tx.inputs.exists(_.outRef === config.seedUtxo)
                 require(seedUtxoIsSpent, "Must spend seed utxo to mint the beacon")
 
-                // Get the minted value and sum all quantities
-                // We expect exactly 1 token to be minted (the beacon NFT)
-                val mintedValue = tx.mint
-                val allMintedTokens = mintedValue.toSortedMap.toList.flatMap {
-                    case (policyId, tokens) =>
-                        tokens.toList
-                }
-
-                // Verify exactly one token is minted with quantity 1
-                require(allMintedTokens.length === BigInt(1), "Must mint exactly one token")
-                val (tokenName, quantity) = allMintedTokens.head
-                require(quantity === BigInt(1), "Must mint exactly 1 beacon token")
+                // Verify exactly one beacon token is minted with quantity 1 and nothing else
+                // under this policy
+                require(
+                  tx.mint.hasOnly(policyId, config.beaconName, 1),
+                  "Must mint exactly 1 beacon token and nothing else"
+                )
             case Burn =>
-                // Verify exactly one beacon token is burned (quantity = -1)
-                val mintedValue = tx.mint
-                val burnedTokens = mintedValue.toSortedMap.toList.flatMap {
-                    case (policyId, tokens) =>
-                        tokens.toList
-                }
-
-                // Verify exactly one token entry with quantity -1
-                require(burnedTokens.length === BigInt(1), "Must burn exactly one token type")
-                val (tokenName, quantity) = burnedTokens.head
-                require(quantity === BigInt(-1), "Must burn exactly 1 beacon token")
+                // Verify exactly one beacon token is burned (quantity = -1) and nothing else
+                // under this policy
+                require(
+                  tx.mint.hasOnly(policyId, config.beaconName, -1),
+                  "Must burn exactly 1 beacon token and nothing else"
+                )
         }
     }
 
@@ -116,10 +105,9 @@ object OracleValidator extends DataParameterizedValidator {
                 )
 
                 // Extract new state and verify timestamp is within validity window
-                val newState = continuationOutput.datum match {
-                    case v2.OutputDatum.OutputDatum(d) => d.to[OracleState]
-                    case _ => fail("Continuation must have inline datum")
-                }
+                val newState = continuationOutput.datum.inlineOrFail[OracleState](
+                  "Continuation must have inline datum"
+                )
 
                 // Verify timestamp is within tx validity window
                 val validRange = tx.validRange

@@ -150,7 +150,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
             .mint(
               parameterizedScript,
               Map(AssetName(refAsset) -> 1L, AssetName(userAsset) -> 1L),
-              _ => MintRedeemer.Burn.toData
+              _ => (MintRedeemer.Burn(tokenId2): MintRedeemer).toData
             )
             .payTo(Alice.address, Value.asset(txCreator.policyId, AssetName(refAsset), 1))
             .payTo(Alice.address, Value.asset(txCreator.policyId, AssetName(userAsset), 1))
@@ -160,6 +160,155 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
 
         val result = provider.submit(attackTx).await()
         assert(result.isLeft, s"minting via the Burn redeemer must fail, got: $result")
+    }
+
+    test("Mint: cannot mint extra token names alongside the pair") {
+        val provider = createProvider()
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
+
+        val parameterizedScript = EditableNftContract.compiled.withErrorTraces.apply(
+          TxOutRef(TxId(seedUtxo.input.transactionId), BigInt(seedUtxo.input.index)).toData
+        )
+        val refAsset = EditableNftValidator.refNftName(tokenId)
+        val userAsset = EditableNftValidator.userNftName(tokenId)
+        // An extra name under the same policy: 1000 "user" tokens of a different tokenId.
+        val extraAsset = EditableNftValidator.userNftName(utf8"extra")
+        val refDatum = ReferenceNftDatum(tokenId, initialData, isSealed = false)
+
+        def buildRedeemer(tx: Transaction): Data = {
+            val seedIdx = tx.body.value.inputs.toSeq.indexWhere(i =>
+                i.transactionId == seedUtxo.input.transactionId && i.index == seedUtxo.input.index
+            )
+            val refIdx =
+                tx.body.value.outputs.toSeq.indexWhere(_.value.address == txCreator.scriptAddr)
+            MintRedeemer.Mint(BigInt(seedIdx), BigInt(refIdx)).toData
+        }
+
+        // The legitimate pair passes every per-name check; only pinning the whole mint map for
+        // this policy rejects the extra tokens riding along in the one-shot mint transaction.
+        val attackTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .spend(seedUtxo)
+            .mint(
+              parameterizedScript,
+              Map(
+                AssetName(refAsset) -> 1L,
+                AssetName(userAsset) -> 1L,
+                AssetName(extraAsset) -> 1000L
+              ),
+              buildRedeemer
+            )
+            .payTo(
+              txCreator.scriptAddr,
+              Value.asset(txCreator.policyId, AssetName(refAsset), 1),
+              refDatum
+            )
+            .payTo(Alice.address, Value.asset(txCreator.policyId, AssetName(userAsset), 1))
+            .payTo(Alice.address, Value.asset(txCreator.policyId, AssetName(extraAsset), 1000))
+            .complete(availableUtxos = utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+
+        val result = provider.submit(attackTx).await()
+        assert(result.isLeft, s"minting extra tokens alongside the pair must fail, got: $result")
+    }
+
+    test("Mint: user NFT must not be minted into the reference NFT output") {
+        val provider = createProvider()
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
+
+        val parameterizedScript = EditableNftContract.compiled.withErrorTraces.apply(
+          TxOutRef(TxId(seedUtxo.input.transactionId), BigInt(seedUtxo.input.index)).toData
+        )
+        val refAsset = EditableNftValidator.refNftName(tokenId)
+        val userAsset = EditableNftValidator.userNftName(tokenId)
+        val refDatum = ReferenceNftDatum(tokenId, initialData, isSealed = false)
+
+        def buildRedeemer(tx: Transaction): Data = {
+            val seedIdx = tx.body.value.inputs.toSeq.indexWhere(i =>
+                i.transactionId == seedUtxo.input.transactionId && i.index == seedUtxo.input.index
+            )
+            val refIdx =
+                tx.body.value.outputs.toSeq.indexWhere(_.value.address == txCreator.scriptAddr)
+            MintRedeemer.Mint(BigInt(seedIdx), BigInt(refIdx)).toData
+        }
+
+        // Both tokens land in the script output. The spend validator accepts any input holding
+        // the user NFT as ownership proof — including the script's own input — so this UTxO
+        // would be spendable by anyone. The mint must reject it.
+        val attackTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .spend(seedUtxo)
+            .mint(
+              parameterizedScript,
+              Map(AssetName(refAsset) -> 1L, AssetName(userAsset) -> 1L),
+              buildRedeemer
+            )
+            .payTo(
+              txCreator.scriptAddr,
+              Value.asset(txCreator.policyId, AssetName(refAsset), 1) +
+                  Value.asset(txCreator.policyId, AssetName(userAsset), 1),
+              refDatum
+            )
+            .complete(availableUtxos = utxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+
+        val result = provider.submit(attackTx).await()
+        assert(
+          result.isLeft,
+          s"minting the user NFT into the reference output must fail, got: $result"
+        )
+    }
+
+    test("Burn: cannot burn the user NFT alone (would orphan the reference NFT)") {
+        val provider = createProvider()
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val seedUtxo = Utxo(utxos.head)
+        val txCreator = createTxCreator(seedUtxo)
+
+        // Legitimate mint first.
+        val mintTx = txCreator.mint(
+          utxos = utxos,
+          tokenId = tokenId,
+          initialData = initialData,
+          holderAddress = Alice.address,
+          changeAddress = Alice.address,
+          signer = Alice.signer
+        )
+        assert(provider.submit(mintTx).await().isRight, "mint should succeed")
+
+        val parameterizedScript = EditableNftContract.compiled.withErrorTraces.apply(
+          TxOutRef(TxId(seedUtxo.input.transactionId), BigInt(seedUtxo.input.index)).toData
+        )
+        val userAsset = EditableNftValidator.userNftName(tokenId)
+        val aliceUtxos = provider.findUtxos(Alice.address).await().toOption.get
+        val userNftUtxo = aliceUtxos
+            .find { case (_, out) =>
+                out.value.assets.assets.exists { case (cs, tokens) =>
+                    cs == txCreator.policyId && tokens.get(AssetName(userAsset)).exists(_ > 0)
+                }
+            }
+            .map(Utxo.apply)
+            .get
+
+        // Burn only the user NFT. The reference NFT stays at the script, but without the user
+        // NFT it can never be edited or burned again — the pair must be burned together.
+        val attackTx = TxBuilder(env, PlutusScriptEvaluator.constMaxBudget(env))
+            .spend(userNftUtxo)
+            .mint(
+              parameterizedScript,
+              Map(AssetName(userAsset) -> -1L),
+              _ => (MintRedeemer.Burn(tokenId): MintRedeemer).toData
+            )
+            .complete(availableUtxos = aliceUtxos, Alice.address)
+            .sign(Alice.signer)
+            .transaction
+
+        val result = provider.submit(attackTx).await()
+        assert(result.isLeft, s"burning the user NFT alone must fail, got: $result")
     }
 
     test("Lifecycle: mint -> edit -> edit -> seal success") {
@@ -409,7 +558,7 @@ class EditableNftValidatorTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
         assertResult(
-          ExUnits(memory = 177417L, steps = 51824198L)
+          ExUnits(memory = 79778, steps = 26_766461)
         ):
             burnTx.witnessSet.redeemers.get.value.totalExUnits
         val burnResult = provider.submit(burnTx).await()
@@ -456,19 +605,19 @@ object EditableNftValidatorTest extends ScalusTest {
 
     def createProvider(): Emulator = {
         val initialUtxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput.Babbage(
+          Input(genesisHash, 0) -> TransactionOutput.Babbage(
             Alice.address,
             Value.ada(5000)
           ),
-          TransactionInput(genesisHash, 1) -> TransactionOutput.Babbage(
+          Input(genesisHash, 1) -> TransactionOutput.Babbage(
             Alice.address,
             Value.ada(5000)
           ),
-          TransactionInput(genesisHash, 2) -> TransactionOutput.Babbage(
+          Input(genesisHash, 2) -> TransactionOutput.Babbage(
             Bob.address,
             Value.ada(5000)
           ),
-          TransactionInput(genesisHash, 3) -> TransactionOutput.Babbage(
+          Input(genesisHash, 3) -> TransactionOutput.Babbage(
             Bob.address,
             Value.ada(5000)
           )

@@ -11,21 +11,26 @@ import scala.scalanative.build.*
 Global / onChangedBuildSource := ReloadOnSourceChanges
 autoCompilerPlugins := true
 
-val scalusStableVersion = "0.18.0"
+val scalusStableVersion = "1.1.0"
+// The MiMa-checked stable surface is scalus-core, scalus-cardano-ledger and
+// scalus-bloxbean-cardano-client-lib (see docs/superpowers/specs/2026-07-28-1.0.0-m1-release-plan-design.md).
+// Re-baseline at each milestone: bump scalusStableVersion after the release artifacts are on
+// Maven Central and delete the then-obsolete mimaBinaryIssueFilters. Between releases,
+// intentional breaks require a reviewed mimaBinaryIssueFilters entry with a comment.
 val scalusCompatibleVersion = scalusStableVersion
 
 // Bloxbean Cardano Client Library versions
 val cardanoClientLibVersion = "0.7.2"
-val yaciVersion = "0.4.4"
+val yaciVersion = "0.4.5"
 val yaciCardanoTestVersion = "0.1.0"
 val scalatestVersion = "3.2.20"
 val scalatestPlusScalacheckVersion = "3.2.19.0"
-val borerVersion = "1.16.2"
+val borerVersion = "1.17.0"
 val slf4jVersion = "2.0.18"
-val magnoliaVersion = "1.3.21"
+val magnoliaVersion = "1.3.23"
 val pprintVersion = "0.9.6"
 val monocleVersion = "3.3.0"
-val jsoniterScalaVersion = "2.38.16"
+val jsoniterScalaVersion = "2.40.1"
 
 //ThisBuild / scalaVersion := "3.8.0-RC1-bin-SNAPSHOT"
 //ThisBuild / scalaVersion := "3.3.7-RC1-bin-SNAPSHOT"
@@ -142,6 +147,8 @@ val jvmReleaseTarget = Compile / scalacOptions ++= {
 // The compiler plugin is exempt: it uses CrossVersion.full, so its 3.8.x variants are distinct artifacts.
 val publishOnlyLts = publish / skip := (scalaVersion.value != scala3LtsVersion)
 
+val fs2Version = "3.12.2"
+
 // Compilation profiling options for analyzing compilation time
 lazy val profilingScalacOptions = Seq(
   "-Vprofile", // Basic compilation profiling with file complexity
@@ -225,6 +232,8 @@ lazy val root: Project = project
       scalusCardanoLedger.js,
       scalusTestkit.js,
       scalusTestkit.jvm,
+      scalusStreamingFs2.js,
+      scalusStreamingFs2.jvm,
       scalusExamples.js,
       scalusExamples.jvm,
       scalusUtxoCell.js,
@@ -250,10 +259,12 @@ lazy val jvm: Project = project
       scalusUplcJitCompiler,
       scalusCardanoLedger.jvm,
       scalusTestkit.jvm,
+      scalusStreamingFs2.jvm,
       scalusExamples.jvm,
       scalusUtxoCell.jvm,
       scalusDesignPatterns,
       bench,
+      llmApiGen,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
     )
@@ -268,6 +279,7 @@ lazy val js: Project = project
       scalus.js,
       scalusCardanoLedger.js,
       scalusTestkit.js,
+      scalusStreamingFs2.js,
       scalusExamples.js,
       scalusUtxoCell.js,
     )
@@ -341,7 +353,8 @@ lazy val scalusPlugin = project
             "scalus/compiler/sir/SIRHashCodeInRec.scala",
             "scalus/compiler/sir/RemoveRecursivity.scala",
             "scalus/compiler/sir/RenamingTypeVars.scala",
-            "scalus/serialization/flat/package.scala",
+            "scalus/serialization/flat/Flat.scala",
+            "scalus/serialization/flat/FlatCodec.scala",
             "scalus/serialization/flat/FlatInstances.scala",
             "scalus/serialization/flat/HashConsed.scala",
             "scalus/serialization/flat/HashConsedFlat.scala",
@@ -407,19 +420,21 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // scalacOptions += "-Yretain-trees",
       mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
       mimaBinaryIssueFilters ++= Seq(
-        // ScalusDebug and CompileDerivations moved to scalus.compiler.*; deprecated type aliases
-        // kept in package scalus for source compat. The marker trait CompileDerivations has no
-        // members, so dropping it from these interfaces' hierarchy is binary-safe.
-        ProblemFilters.exclude[MissingClassProblem]("scalus.ScalusDebug"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.CompileDerivations"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.builtin.FromData"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.uplc.builtin.ToData"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Eq"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Ord"),
-        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.onchain.plutus.prelude.Show"),
-        ProblemFilters.exclude[MissingTypesProblem](
-          "scalus.cardano.onchain.plutus.prelude.ShowByteString"
-        )
+        // Compiler-internal packages: no supported external implementors or instantiators;
+        // excluded from the binary-compat promise (README: "compiler internals carry no
+        // compatibility promise"; interop style guide: SIR compiler out of scope). Everything
+        // user-facing stays checked - the `scalus.compiler` entry points, the `scalus.compiler.sir`
+        // types appearing in `compile`'s signature and in plugin-generated bytecode, and all
+        // MIXED packages (scalus.uplc, scalus.uplc.eval, scalus.serialization.flat, scalus.utils)
+        // get per-symbol filters only, never wildcards. Known caveat: the wildcard also hides
+        // deletion of the `lowering.simple` backend objects referenced by `sir.toUplc`.
+        ProblemFilters.exclude[Problem]("scalus.compiler.sir.lowering.*"),
+        ProblemFilters.exclude[Problem]("scalus.compiler.sir.linking.*"),
+        ProblemFilters.exclude[Problem]("scalus.compiler.intrinsics.*"),
+        ProblemFilters.exclude[Problem]("scalus.uplc.builtin.internal.*"),
+        // scalus.uplc.internal: public utilitarian tooling (UPLC source-map renderer, profile
+        // report writer) whose contract is the on-disk artifact formats, not the Scala API.
+        ProblemFilters.exclude[Problem]("scalus.uplc.internal.*")
       ),
 
       // enable when debug compilation of tests
@@ -467,7 +482,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         s"-Dscalus.plugin.jar=${(scalusPlugin / Compile / packageBin).value.getAbsolutePath}",
         s"-Dscalus.test.classpath=${(Test / fullClasspath).value.files.map(_.getAbsolutePath).mkString(java.io.File.pathSeparator)}"
       ),
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       // Ethereum KZG ceremony JSON is in scalus-ethereum-kzg-ceremony resources, needed for benchmark tests
@@ -584,8 +599,8 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "com.softwaremill.magnolia1_3" %%% "magnolia" % magnoliaVersion,
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion,
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.3",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.3",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.4",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async-logic" % "1.3.4",
       // Copy Party.scala and TestUtil.scala from cardano-ledger test sources
       Compile / sourceGenerators += Def.task {
           val baseDir =
@@ -615,7 +630,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       // Add Yaci DevKit dependencies for integration testing
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "com.bloxbean.cardano" % "yaci-cardano-test" % yaciCardanoTestVersion,
-      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.25",
+      libraryDependencies += "com.softwaremill.sttp.client4" %% "core" % "4.0.26",
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % Test
     )
     .jsSettings(jsModuleSettings *)
@@ -630,6 +645,23 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           files.map(targetDir / _)
       }.taskValue
     )
+
+// fs2 adapter for the streaming facade: a ScalusAsyncStream instance and nothing else.
+// Deliberately tiny — the buffering and fan-out semantics live in scalus-cardano-ledger so that
+// every adapter shares one implementation of them rather than one interpretation each.
+lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
+    .in(file("scalus-streaming-fs2"))
+    .dependsOn(scalusCardanoLedger)
+    .settings(
+      name := "scalus-streaming-fs2",
+      publishOnlyLts,
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "co.fs2" %%% "fs2-core" % fs2Version,
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+    )
+    .jvmSettings(jvmReleaseTarget)
+    .jsSettings(jsModuleSettings *)
 
 lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))
@@ -680,7 +712,7 @@ lazy val scalusUtxoCell = crossProject(JSPlatform, JVMPlatform)
       PluginDependency,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.3",
+      libraryDependencies += "io.github.dotty-cps-async" %%% "dotty-cps-async" % "1.3.4",
       publish / skip := true
     )
     .jvmSettings(Test / fork := true)
@@ -773,18 +805,51 @@ lazy val bench = project
       run / fork := true,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion,
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
-      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.0",
+      libraryDependencies += "com.fasterxml.jackson.core" % "jackson-databind" % "2.22.1",
       libraryDependencies += "io.bullet" %%% "borer-core" % borerVersion,
       libraryDependencies += "io.bullet" %%% "borer-derivation" % borerVersion
     )
+
+// Generates scalus-site/public/llms-api.txt - the LLM-facing public API cheatsheet
+lazy val llmApiGen = project
+    .in(file("llm-api-gen"))
+    .dependsOn(scalus.jvm, scalusCardanoLedger.jvm, scalusTestkit.jvm)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "llm-api-gen",
+      publish / skip := true,
+      run / fork := true,
+      libraryDependencies += "org.scala-lang" %% "scala3-tasty-inspector" % scalaVersion.value
+    )
+
+lazy val generateLlmsApi = taskKey[Unit]("Generate scalus-site/public/llms-api.txt")
+generateLlmsApi := Def.taskDyn {
+    val dirs = Seq(
+      (scalus.jvm / Compile / classDirectory).value,
+      (scalusCardanoLedger.jvm / Compile / classDirectory).value,
+      (scalusTestkit.jvm / Compile / classDirectory).value
+    ).map(_.getAbsolutePath)
+    val outFile =
+        ((ThisBuild / baseDirectory).value / "scalus-site" / "public" / "llms-api.txt").getAbsolutePath
+    val argLine = (Seq(outFile, version.value) ++ dirs).mkString(" ")
+    (llmApiGen / Compile / runMain).toTask(s" scalus.llmapi.LlmApiGen $argLine")
+}.value
 
 // Cardano Ledger domain model and CBOR serialization
 lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-cardano-ledger"))
     .dependsOn(scalus % "compile->compile;test->test")
-    .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       name := "scalus-cardano-ledger",
+      mimaPreviousArtifacts := Set(organization.value %%% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // DefaultImpl is a private nested class (MiMa still sees its members); the protected
+        // evalScript hook now takes the TransactionHash instead of a pre-encoded hex String,
+        // so the default evaluation path skips hex encoding entirely.
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
+        )
+      ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
@@ -803,7 +868,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
       libraryDependencies += "org.scalatestplus" %%% "scalacheck-1-18" % scalatestPlusScalacheckVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
-      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.25",
+      libraryDependencies += "com.softwaremill.sttp.client4" %%% "core" % "4.0.26",
       inConfig(Test)(PluginDependency),
       publishOnlyLts
     )
@@ -871,17 +936,19 @@ lazy val scalusSbtPlugin = project
       sbtPlugin := true,
       scalaVersion := "2.12.21",
       // Cross-build for sbt 1 (Scala 2.12) and sbt 2 (Scala 3). A single sbt 1.x launcher
-      // builds and publishes both axes via pluginCrossBuild.
+      // builds and publishes both axes via pluginCrossBuild. The sbt 1.x baseline is the
+      // minimum version consumers may use; sbt2-compat 0.2.0 requires sbt >= 1.9.
       crossScalaVersions := Seq("2.12.21", scala3NextVersion),
       pluginCrossBuild / sbtVersion := {
           scalaBinaryVersion.value match {
-              case "2.12" => "1.5.8" // minimum sbt 1.x baseline for max consumer compatibility
+              case "2.12" => "1.9.0" // minimum sbt 1.x baseline
               case _      => "2.0.0" // sbt 2.x
           }
       },
       // shared-source shim so one source set compiles against both sbt 1 and sbt 2 APIs
-      addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.1.0"),
+      addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.2.0"),
       scalacOptions ++= Seq("-deprecation", "-feature"),
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % Test,
     )
 
 // Ethereum KZG ceremony trusted setup for bilinear accumulators
@@ -920,7 +987,7 @@ lazy val scalusCardanoLedgerIt = project
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
       libraryDependencies += "com.lihaoyi" %%% "upickle" % "4.4.3" % "test",
       libraryDependencies += "com.lihaoyi" %% "requests" % "0.9.3" % "test",
-      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.84" % "test",
+      libraryDependencies += "org.bouncycastle" % "bcprov-jdk18on" % "1.85.2" % "test",
       libraryDependencies += "foundation.icon" % "blst-java" % "0.3.2",
       libraryDependencies += "org.scalus" % "scalus-secp256k1-jni" % "0.6.0",
       libraryDependencies += "com.lihaoyi" %%% "pprint" % pprintVersion % "test",
@@ -954,11 +1021,13 @@ def copyFiles(files: Seq[String], baseDir: File, targetDir: File, log: ManagedLo
 // COMMAND ALIASES
 // =============================================================================
 
-// We only check ABI compatibility for scalus-bloxbean-cardano-client-lib project for now
-// because it's used by CCL and we want to avoid breaking changes
+// ABI compatibility gate for the stable surface: scalus-core, scalus-cardano-ledger and
+// scalus-bloxbean-cardano-client-lib, checked against scalusCompatibleVersion.
 addCommandAlias(
   "mima",
-  "scalus-bloxbean-cardano-client-lib/mimaReportBinaryIssues"
+  "scalusJVM/mimaReportBinaryIssues;" +
+      "scalusCardanoLedgerJVM/mimaReportBinaryIssues;" +
+      "scalus-bloxbean-cardano-client-lib/mimaReportBinaryIssues"
 )
 addCommandAlias(
   "quick",

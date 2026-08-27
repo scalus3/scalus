@@ -5,8 +5,6 @@ import scalus.uplc.{BuiltinSemanticsVariant, PlutusParams}
 import scalus.utils.Macros
 import upickle.default.*
 
-import scala.annotation.threadUnsafe
-
 case class BuiltinCostModel(
     // Integers
     addInteger: DefaultCostingFun[TwoArguments],
@@ -129,7 +127,6 @@ case class BuiltinCostModel(
     lengthOfArray: DefaultCostingFun[OneArgument],
     listToArray: DefaultCostingFun[OneArgument],
     indexArray: DefaultCostingFun[TwoArguments],
-    multiIndexArray: DefaultCostingFun[TwoArguments],
     // MaryEraValue builtins (CIP-0153) - from Plutus builtinCostModelC.json
     insertCoin: DefaultCostingFun[FourArguments] = DefaultCostingFun(
       FourArguments.LinearInU(
@@ -240,14 +237,12 @@ object BuiltinCostModel {
       * (which lacks the PV11 builtin parameters) is used for a PV11 evaluation, so that the new
       * builtins are not costed with the `300_000_000` placeholder.
       */
-    @threadUnsafe
     lazy val vanRossemReferenceD: BuiltinCostModel =
         fromJsonString(inlineResource("builtinCostModelD.json"))
 
     /** Plutus reference cost model for builtin semantics variant E (PlutusV3/V4 in the van Rossem /
       * PV11 era), vendored from `builtinCostModelE.json`. See [[vanRossemReferenceD]].
       */
-    @threadUnsafe
     lazy val vanRossemReferenceE: BuiltinCostModel =
         fromJsonString(inlineResource("builtinCostModelE.json"))
 
@@ -371,7 +366,6 @@ object BuiltinCostModel {
             "lengthOfArray" -> writeJs(model.lengthOfArray),
             "listToArray" -> writeJs(model.listToArray),
             "indexArray" -> writeJs(model.indexArray),
-            "multiIndexArray" -> writeJs(model.multiIndexArray),
             // MaryEraValue builtins (CIP-0153)
             "insertCoin" -> writeJs(model.insertCoin),
             "lookupCoin" -> writeJs(model.lookupCoin),
@@ -603,10 +597,6 @@ object BuiltinCostModel {
             indexArray =
                 if json.obj.keySet.contains("indexArray") then
                     read[DefaultCostingFun[TwoArguments]](json("indexArray"))
-                else null,
-            multiIndexArray =
-                if json.obj.keySet.contains("multiIndexArray") then
-                    read[DefaultCostingFun[TwoArguments]](json("multiIndexArray"))
                 else null,
             // MaryEraValue builtins (CIP-0153)
             insertCoin =
@@ -1724,10 +1714,6 @@ object BuiltinCostModel {
           indexArray = DefaultCostingFun(
             cpu = TwoArguments.ConstantCost(params.`indexArray-cpu-arguments`),
             memory = TwoArguments.ConstantCost(params.`indexArray-memory-arguments`)
-          ),
-          multiIndexArray = DefaultCostingFun(
-            cpu = TwoArguments.ConstantCost(CostingInteger(100000L)),
-            memory = TwoArguments.ConstantCost(CostingInteger(4L))
           ),
           insertCoin = DefaultCostingFun(
             cpu = FourArguments.LinearInU(

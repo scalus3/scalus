@@ -551,23 +551,23 @@ object DecentralizedIdentityTest extends ScalusTest {
 
     def createProvider(): Emulator = {
         val initialUtxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput.Babbage(
+          Input(genesisHash, 0) -> TransactionOutput.Babbage(
             Alice.address,
             Value.ada(5000)
           ),
-          TransactionInput(genesisHash, 1) -> TransactionOutput.Babbage(
+          Input(genesisHash, 1) -> TransactionOutput.Babbage(
             Alice.address,
             Value.ada(5000)
           ),
-          TransactionInput(genesisHash, 2) -> TransactionOutput.Babbage(
+          Input(genesisHash, 2) -> TransactionOutput.Babbage(
             Bob.address,
             Value.ada(5000)
           ),
-          TransactionInput(genesisHash, 3) -> TransactionOutput.Babbage(
+          Input(genesisHash, 3) -> TransactionOutput.Babbage(
             Bob.address,
             Value.ada(5000)
           ),
-          TransactionInput(genesisHash, 4) -> TransactionOutput.Babbage(
+          Input(genesisHash, 4) -> TransactionOutput.Babbage(
             Charles.address,
             Value.ada(5000)
           )

@@ -185,54 +185,7 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       *   The term with all free occurrences of `name` replaced by `replacement`
       */
     def substitute(term: Term, name: String, replacement: Term): Term =
-        // Generate a fresh name that doesn't clash with any names in the set
-        def freshName(base: String, avoid: Set[String]): String =
-            if !avoid.contains(base) then base
-            else
-                var i = 0
-                var fresh = s"${base}_$i"
-                while avoid.contains(fresh) do
-                    i += 1
-                    fresh = s"${base}_$i"
-                fresh
-
-        // Compute free variables of replacement term once
-        lazy val replacementFreeVars = replacement.freeVars
-
-        def go(t: Term, boundVars: Set[String]): Term = t match
-            case Var(NamedDeBruijn(n, _), _) =>
-                if n == name && !boundVars.contains(n) then replacement
-                else t
-
-            case LamAbs(n, body, ann) =>
-                if n == name then t
-                else if replacementFreeVars.contains(n) then
-                    val freshN = freshName(n, boundVars ++ replacementFreeVars ++ body.freeVars)
-                    LamAbs(
-                      freshN,
-                      go(substitute(body, n, Var(NamedDeBruijn(freshN))), boundVars + freshN),
-                      ann
-                    )
-                else LamAbs(n, go(body, boundVars + n), ann)
-
-            case Apply(f, arg, ann) => Apply(go(f, boundVars), go(arg, boundVars), ann)
-
-            case Force(t, ann) => Force(go(t, boundVars), ann)
-            case Delay(t, ann) => Delay(go(t, boundVars), ann)
-
-            case Constr(tag, args, ann) =>
-                Constr(tag, args.map(arg => go(arg, boundVars)), ann)
-
-            case Case(scrutinee, cases, ann) =>
-                Case(
-                  go(scrutinee, boundVars),
-                  cases.map(c => go(c, boundVars)),
-                  ann
-                )
-
-            case _: Const | _: Builtin | _: Error => t
-
-        go(term, Set.empty)
+        Inliner.substitute(term, name, replacement)
 
     /** Attempts to partially evaluate a term using the CEK machine.
       *
@@ -318,3 +271,60 @@ object Inliner:
       *   The optimized term with inlining applied
       */
     def apply(term: Term): Term = new Inliner().apply(term)
+
+    /** Performs capture-avoiding substitution `[x → s]t`.
+      *
+      * Substitutes all free occurrences of variable `name` with `replacement` in `term`, while
+      * avoiding variable capture: substitution stops at lambdas that rebind `name`, and lambdas
+      * whose binder is free in `replacement` are alpha-renamed first. Also used by
+      * `LetRecLoweredValue` to rewrite recursive references into self-application.
+      */
+    def substitute(term: Term, name: String, replacement: Term): Term =
+        // Generate a fresh name that doesn't clash with any names in the set
+        def freshName(base: String, avoid: Set[String]): String =
+            if !avoid.contains(base) then base
+            else
+                var i = 0
+                var fresh = s"${base}_$i"
+                while avoid.contains(fresh) do
+                    i += 1
+                    fresh = s"${base}_$i"
+                fresh
+
+        // Compute free variables of replacement term once
+        lazy val replacementFreeVars = replacement.freeVars
+
+        def go(t: Term, boundVars: Set[String]): Term = t match
+            case Var(NamedDeBruijn(n, _), _) =>
+                if n == name && !boundVars.contains(n) then replacement
+                else t
+
+            case LamAbs(n, body, ann) =>
+                if n == name then t
+                else if replacementFreeVars.contains(n) then
+                    val freshN = freshName(n, boundVars ++ replacementFreeVars ++ body.freeVars)
+                    LamAbs(
+                      freshN,
+                      go(substitute(body, n, Var(NamedDeBruijn(freshN))), boundVars + freshN),
+                      ann
+                    )
+                else LamAbs(n, go(body, boundVars + n), ann)
+
+            case Apply(f, arg, ann) => Apply(go(f, boundVars), go(arg, boundVars), ann)
+
+            case Force(t, ann) => Force(go(t, boundVars), ann)
+            case Delay(t, ann) => Delay(go(t, boundVars), ann)
+
+            case Constr(tag, args, ann) =>
+                Constr(tag, args.map(arg => go(arg, boundVars)), ann)
+
+            case Case(scrutinee, cases, ann) =>
+                Case(
+                  go(scrutinee, boundVars),
+                  cases.map(c => go(c, boundVars)),
+                  ann
+                )
+
+            case _: Const | _: Builtin | _: Error => t
+
+        go(term, Set.empty)

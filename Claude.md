@@ -42,28 +42,9 @@ Use `sbtn clean` to force full recompilation if you encounter stale class issues
 ### Working in a git worktree with sbt
 
 When the repo is checked out in a **git worktree** (`git worktree add ...`, e.g. `.claude/worktrees/<name>`),
-sbt fails to load out of the box. Two one-time fixes are needed inside the worktree:
+one one-time fix is needed inside the worktree:
 
-1. **`sbt-git` / JGit cannot read the worktree's `.git` file.** Loading the build throws
-   `org.eclipse.jgit.errors.NoWorkTreeException: Bare Repository has neither a working tree, nor an index`
-   (the bundled JGit 5.13 does not understand a worktree's `gitdir:`-pointer `.git`). Work around it by
-   adding a local, **untracked** `.sbt` file at the worktree root that short-circuits the eager git
-   settings with constants (do NOT commit it):
-
-   ```scala
-   // zz-worktree-git-override.sbt  — local worktree workaround, do not commit
-   import com.github.sbt.git.SbtGit.git
-   ThisBuild / git.gitUncommittedChanges := false
-   ThisBuild / git.gitHeadCommit := Some("0000000000000000000000000000000000000000")
-   ThisBuild / git.gitCurrentTags := Nil
-   ThisBuild / git.gitCurrentBranch := "<your-branch>"
-   ThisBuild / git.gitHeadMessage := None
-   ```
-
-   Add `zz-worktree-git-override.sbt` to your worktree's `.git/info/exclude` (or just leave it unstaged)
-   so it never lands in a commit.
-
-2. **The `plutus-conformance` corpus is not present in the worktree.** `scalusJVM/Test/compile` fails with
+1. **The `plutus-conformance` corpus is not present in the worktree.** `scalusJVM/Test/compile` fails with
    `Plutus conformance corpus not found at .../plutus-conformance/test-cases/uplc/evaluation` (it is a
    symlink into the nix store that only exists in the primary checkout). Recreate the symlink in the
    worktree, pointing at the same target as the primary checkout:
@@ -197,9 +178,16 @@ Every platform trait extends the shared marker `InteropApi` and must exist on
 every platform the class compiles to (empty is fine).
 
 **Stability:** interop packages are the MiMa-stable surface; route churn-prone
-additions into `*.internal` subpackages. `InteropSurfaceTest` mechanically
-enforces the rules. Internal/compiler/prelude code is out of scope — stays fully
-idiomatic Scala.
+additions into `*.internal` subpackages. (`InteropSurfaceTest` is planned for M2
+to mechanically enforce the rules; today the gate is MiMa.) Compiler-internal
+and tooling-internal packages are exempt from the MiMa check via wildcard
+filters in build.sbt: `scalus.compiler.sir.lowering`,
+`scalus.compiler.sir.linking`, `scalus.compiler.intrinsics`,
+`scalus.uplc.builtin.internal`, `scalus.uplc.internal`. MIXED packages
+(`scalus.uplc`, `scalus.uplc.eval`, `scalus.compiler.sir`,
+`scalus.serialization.flat`, `scalus.utils`, `scalus.cardano.ledger.rules`)
+take per-symbol filters only, never wildcards. Internal/compiler/prelude code
+is out of scope for interop style rules and stays fully idiomatic Scala.
 
 ## Commit Guidelines
 

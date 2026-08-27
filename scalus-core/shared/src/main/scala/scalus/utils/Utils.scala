@@ -48,11 +48,33 @@ object Utils:
             case PlutusV4 => "PlutusScriptV3"
         write(PlutusTextEnvelope(`type`, "", program.doubleCborHex))
 
+    private val supportedEnvelopeTypes: Map[String, Language] =
+        Map(
+          "PlutusScriptV1" -> PlutusV1,
+          "PlutusScriptV2" -> PlutusV2,
+          "PlutusScriptV3" -> PlutusV3
+        )
+
     def readPlutusFileContent(content: String): Program =
         val envelope = read[PlutusTextEnvelope](content)
-        // TODO: check that the version is supported, validate builtins etc
-        val doubleCborHex = envelope.cborHex
-        Program.fromDoubleCborHex(doubleCborHex)
+        val language = supportedEnvelopeTypes.getOrElse(
+          envelope.`type`,
+          throw new IllegalArgumentException(
+            s"Unsupported Plutus text envelope type '${envelope.`type`}', " +
+                s"expected one of ${supportedEnvelopeTypes.keys.mkString(", ")}"
+          )
+        )
+        val program = Program.fromDoubleCborHex(envelope.cborHex)
+        // Plutus Core 1.1.0 (constr/case) is only available in Plutus V3
+        val supportedVersions: Set[(Int, Int, Int)] = language match
+            case PlutusV1 | PlutusV2 => Set((1, 0, 0))
+            case _                   => Set((1, 0, 0), (1, 1, 0))
+        if !supportedVersions.contains(program.version) then
+            throw new IllegalArgumentException(
+              s"Unsupported Plutus Core version ${program.version} for ${envelope.`type`}, " +
+                  s"expected one of ${supportedVersions.mkString(", ")}"
+            )
+        program
 
     def readPlutusFile(path: String): Program =
         val content = new String(Files.readAllBytes(Paths.get(path)), "UTF-8")

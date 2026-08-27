@@ -57,5 +57,6 @@
   { "from": "/docs/dapp-development/blueprint-plugin", "to": "/docs/dapp-development/sbt-plugin#blueprint-generation" },
   { "from": "/docs/dapp-development/deploy", "to": "/docs/dapp-development/sbt-plugin#deploying-contracts" },
   { "from": "/docs/smart-contracts/blueprint", "to": "/docs/dapp-development/sbt-plugin#blueprint-generation" },
-  { "from": "/docs/smart-contracts/deploy", "to": "/docs/dapp-development/sbt-plugin#deploying-contracts" }
+  { "from": "/docs/smart-contracts/deploy", "to": "/docs/dapp-development/sbt-plugin#deploying-contracts" },
+  { "from": "/docs/testing/profiling", "to": "/docs/smart-contract-optimisations/profiling" }
 ]

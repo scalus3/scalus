@@ -12,6 +12,26 @@ most of the ledger rules to validate incoming transactions, as well ledger state
 npm install scalus
 ```
 
+## Upgrading from 0.18.x
+
+The npm package now carries the same version number as the Scalus JVM libraries, so 0.18.1 is
+followed by 1.1.1. Four changes affect existing code:
+
+- **Protocol version 11 (van Rossem) is the default.** `Scalus.evaluateScript` and
+  `Scalus.evalPlutusScripts` use the mainnet PV11 cost models. Version 0.18.1 used PV10
+  (Plomin). Execution budgets therefore differ. Pass `protocolMajorVersion` to
+  `evalPlutusScripts` to select another version.
+- **`scalus.js` is an ES module.** Import it with `import` or with
+  `<script type="module">`. `require("scalus")` now fails with
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`; from CommonJS use `const scalus = await import("scalus")`.
+  The old CommonJS shim for browsers no longer works. See [Browser Usage](#browser-usage).
+- **`ExUnits`, `Result` and `Redeemer` are top-level exports**, not members of `Scalus`. The
+  runtime behaviour did not change, but the type declarations were wrong before. Import them
+  from the package root: `import { Result } from "scalus"`.
+- **`Emulator.withAddresses` funds 10 000 ADA per address** when you omit
+  `lovelacePerAddress`. It funded 10 000 lovelace before, which is below min-ada. This matches
+  the JVM API and what this README always documented.
+
 ## Emulator
 
 The emulator implements Cardano ledger validation locally. Transactions go through the same
@@ -134,6 +154,20 @@ const result = Scalus.evaluateScript(applied);
 // { isSuccess: true, budget: { memory: 1032n, steps: 203598n }, logs: [] }
 ```
 
+### Profile a Script
+
+`evaluateScriptProfile` evaluates like `evaluateScript` and also returns the CEK machine
+profiling data as JSON in `profileJson`: cost per source location, cost per builtin, and the
+transition edges.
+
+```typescript
+const result = Scalus.evaluateScriptProfile(applied);
+const profile = JSON.parse(result.profileJson!);
+```
+
+The interactive HTML report renderer stays on the JVM side, to keep this bundle small. Use the
+Scala `ProfileFormatter` to render the JSON.
+
 ### Evaluate All Scripts in a Transaction
 
 ```typescript
@@ -185,17 +219,15 @@ const custom = new SlotConfig(zeroTime, zeroSlot, slotLength);
 
 ## Browser Usage
 
-The bundle works in browsers with a CommonJS shim:
+`scalus.js` is a self-contained ES module. It has no runtime dependencies, so a browser can
+load it directly, with no bundler and no import map:
 
 ```html
+<script type="module">
+    import { Scalus, SlotConfig, Emulator } from "./scalus.js";
 
-<script>
-    var module = { exports: {} };
-    var exports = module.exports;
-</script>
-<script src="scalus.js"></script>
-<script>
-    const { Scalus, SlotConfig, Emulator } = module.exports;
+    const result = Scalus.evaluateScript(scriptDoubleCborHex);
+    console.log(result.isSuccess, result.budget.steps);
 </script>
 ```
 

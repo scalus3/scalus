@@ -54,8 +54,8 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 117917129L, steps = 36525228293L),
-                  since38 = ExUnits(memory = 103607789L, steps = 31616935235L)
+                  pre38 = ExUnits(memory = 105_717472, steps = 34308_484386L),
+                  since38 = ExUnits(memory = 91_408132, steps = 29400_191328L)
                 )
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
@@ -157,8 +157,8 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 240831859L, steps = 90236716164L),
-                  since38 = ExUnits(memory = 227768119L, steps = 85755313046L)
+                  pre38 = ExUnits(memory = 190_079128, steps = 81758_685060L),
+                  since38 = ExUnits(memory = 177_015388, steps = 77277_281942L)
                 )
             else
                 options.targetLoweringBackend match
@@ -262,8 +262,8 @@ class KnightsDataTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 401138782L, steps = 161594646965L),
-                  since38 = ExUnits(memory = 386806882L, steps = 156678706350L)
+                  pre38 = ExUnits(memory = 301_870697, steps = 145217_006269L),
+                  since38 = ExUnits(memory = 287_538797, steps = 140301_065654L)
                 )
             else
                 options.targetLoweringBackend match {

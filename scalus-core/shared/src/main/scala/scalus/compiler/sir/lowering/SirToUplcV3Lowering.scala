@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering
 
 import scalus.cardano.ledger.{Language, MajorProtocolVersion}
 import scalus.compiler.sir.lowering.*
-import scalus.compiler.sir.{Module, SIR, SIRType}
+import scalus.compiler.sir.{Module, MutualRecursionElimination, SIR, SIRType}
 import scalus.uplc.*
 
 import scala.collection.mutable.Map as MutableMap
@@ -16,7 +16,7 @@ class SirToUplcV3Lowering(
     warnListConversions: Boolean = false,
     noWarn: Boolean = false,
     targetLanguage: Language = Language.PlutusV3,
-    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV,
     intrinsicModules: Map[String, Module] = Map.empty,
     supportModules: Map[String, Module] = Map.empty
 ) {
@@ -25,7 +25,7 @@ class SirToUplcV3Lowering(
 
     def toLoweredValue(lctx: LoweringContext = newLoweringContext): LoweredValue = {
         given LoweringContext = lctx
-        val v0 = Lowering.lowerSIR(sir)
+        val v0 = Lowering.lowerSIR(MutualRecursionElimination(sir))
         val v1 =
             if upcastTo != SIRType.FreeUnificator then v0.upcastOne(upcastTo, v0.pos)
             else {
@@ -110,8 +110,7 @@ class SirToUplcV3Lowering(
                           retV.pos,
                           e
                         )
-            if lctx.zCombinatorNeeded then Term.Apply(Term.LamAbs("__Z", term), ExprBuilder.ZTerm)
-            else term
+            term
         catch
             case e: LoweringException =>
                 throw e
@@ -125,7 +124,6 @@ class SirToUplcV3Lowering(
             if targetLanguage == Language.PlutusV4 then MajorProtocolVersion.vanRossemPV
             else targetProtocolVersion
         val retval = LoweringContext(
-          zCombinatorNeeded = false,
           decls = MutableMap.empty,
           targetLanguage = targetLanguage,
           targetProtocolVersion = effectivePV,
@@ -144,7 +142,11 @@ class SirToUplcV3Lowering(
 
 object SirToUplcV3Lowering {
 
-    /** Create a SirToUplcV3Lowering from compiler Options, using default intrinsic/support modules.
+    /** Create a SirToUplcV3Lowering from compiler Options.
+      *
+      * The support modules are always the defaults; the intrinsic modules are selected by
+      * [[IntrinsicResolver.intrinsicModulesFor]] from `options.valueBuiltins`, which drops the
+      * CIP-153 `Value` intrinsics when the flag is off.
       */
     def fromOptions(
         sir: SIR,
@@ -160,7 +162,7 @@ object SirToUplcV3Lowering {
           noWarn = options.noWarn,
           targetLanguage = options.targetLanguage,
           targetProtocolVersion = options.targetProtocolVersion,
-          intrinsicModules = IntrinsicResolver.defaultIntrinsicModules,
+          intrinsicModules = IntrinsicResolver.intrinsicModulesFor(options.valueBuiltins),
           supportModules = IntrinsicResolver.defaultSupportModules
         )
 }

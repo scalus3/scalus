@@ -2,7 +2,7 @@ package scalus.compiler.sir.lowering.simple
 
 import scalus.*
 import scalus.uplc.builtin.ByteString.*
-import scalus.cardano.ledger.Word64
+import scalus.cardano.ledger.{MajorProtocolVersion, Word64}
 import scalus.compiler.compile
 import scalus.compiler.sir.*
 import scalus.cardano.onchain.plutus.v3.TxId
@@ -24,7 +24,11 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
 
     // Implement lower method for Sum of Products encoding
     override def lower(sir: SIR): Term =
-        SumOfProductsLowering(sir, generateErrorTraces = false).lower()
+        SumOfProductsLowering(
+          sir,
+          generateErrorTraces = false,
+          targetProtocolVersion = MajorProtocolVersion.plominPV
+        ).lower()
 
     // Provide PlutusVM for evaluation (V3 for Constr/Case support)
     override given vm: PlutusVM = PlutusVM.makePlutusV3VM()
@@ -32,7 +36,11 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
     // Extension for structural comparison tests (uses alpha-equivalence)
     extension (sir: SIR)
         infix def lowersTo(r: Term): Unit = {
-            val r1 = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
+            val r1 = SumOfProductsLowering(
+              sir,
+              generateErrorTraces = false,
+              targetProtocolVersion = MajorProtocolVersion.plominPV
+            ).lower()
             val deBruijnR1 = DeBruijn.deBruijnTerm(r1)
             val deBruijnR = DeBruijn.deBruijnTerm(r)
             assert(deBruijnR1 α_== deBruijnR)
@@ -115,7 +123,11 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
               BigInt
             ]
         }
-        val uplc = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
+        val uplc = SumOfProductsLowering(
+          sir,
+          generateErrorTraces = false,
+          targetProtocolVersion = MajorProtocolVersion.plominPV
+        ).lower()
         // println("compiled:" + uplc.pretty.render(100))
         val expected = Term.Constr(Word64.Zero, List.empty)
         // println("expected:" + expected.pretty.render(100))
@@ -165,7 +177,11 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
         val matchOnScrutinee =
             λ(scrutinee => Term.Case(scrutinee, List(BigInt(1), λ("h", "tl")(BigInt(2)))))
         val expected = matchOnScrutinee $ Term.Constr(Word64.Zero, List.empty)
-        val compiled = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
+        val compiled = SumOfProductsLowering(
+          sir,
+          generateErrorTraces = false,
+          targetProtocolVersion = MajorProtocolVersion.plominPV
+        ).lower()
 
         val djExpected = DeBruijn.deBruijnTerm(expected)
         val djCompiled = DeBruijn.deBruijnTerm(compiled)
@@ -195,7 +211,11 @@ class SumOfProductsLoweringTest extends SimpleLoweringTestBase {
         // floats/eliminates it; it stays a lambda wrapping the newtype-unwrapping body:
         // (lam scrutinee ((lam id BODY) scrutinee)) $ VALUE
         val expected = λ(scrutinee => λ(id => BigInt(1)) $ scrutinee) $ hex"DEADBEEF"
-        val compiled = SumOfProductsLowering(sir, generateErrorTraces = false).lower()
+        val compiled = SumOfProductsLowering(
+          sir,
+          generateErrorTraces = false,
+          targetProtocolVersion = MajorProtocolVersion.plominPV
+        ).lower()
 
         val djExpected = DeBruijn.deBruijnTerm(expected)
         val djCompiled = DeBruijn.deBruijnTerm(compiled)

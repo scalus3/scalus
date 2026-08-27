@@ -6,27 +6,46 @@ package scalus.examples.cape
   * https://github.com/IntersectMBO/UPLC-CAPE/blob/main/submissions/TEMPLATE/metadata.schema.json
   */
 object CapeMetadata {
-    def apply(
+    val SourceRepository = "https://github.com/scalus3/scalus"
+
+    def render(
         version: String,
+        compilerCommit: String,
         date: String,
-        sourceUrl: String,
-        notes: String
-    ): String =
-        s"""|{
-            |  "compiler": {
-            |    "name": "Scalus",
-            |    "version": "$version"
-            |  },
-            |  "compilation_config": {
-            |    "optimization_level": "release",
-            |    "target": "uplc",
-            |    "flags": ["Options.release"]
-            |  },
-            |  "submission": {
-            |    "date": "${date}",
-            |    "source_available": true,
-            |    "source_repository": "$sourceUrl",
-            |    "implementation_notes": "$notes"
-            |  }
-            |}""".stripMargin
+        sourceCommit: String,
+        notes: String,
+        minPlutusVersion: Option[String] = None
+    ): String = {
+        val compilationConfig = ujson.Obj(
+          "optimization_level" -> "release",
+          "target" -> "uplc",
+          "flags" -> ujson.Arr("Options.release")
+        )
+        minPlutusVersion.foreach(v => compilationConfig("min_plutus_version") = v)
+        ujson.write(
+          ujson.Obj(
+            "compiler" -> ujson.Obj(
+              "name" -> "Scalus",
+              "version" -> version,
+              "commit_hash" -> compilerCommit
+            ),
+            "compilation_config" -> compilationConfig,
+            "contributors" -> ujson.Arr(
+              ujson.Obj(
+                "name" -> "Alexander Nemish",
+                "organization" -> "Lantr",
+                "contact" -> "@nau"
+              )
+            ),
+            "submission" -> ujson.Obj(
+              "date" -> date,
+              "source_available" -> true,
+              "source_repository" -> SourceRepository,
+              "source_commit_hash" -> sourceCommit,
+              "implementation_notes" -> notes
+            )
+          ),
+          indent = 2
+        ) + "\n"
+    }
 }

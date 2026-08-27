@@ -13,7 +13,9 @@ on:
 jobs:
   publish:
     runs-on: ubuntu-22.04
-    timeout-minutes: 40
+    # Snapshot publishes take ~10 min, but a tag release signs and stages every artifact
+    # for Sonatype and needs well over 40 (the v1.0.0-M1 first attempt timed out at 40).
+    timeout-minutes: 90
     permissions:
       contents: read
       id-token: write
@@ -27,6 +29,11 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
+      - name: Verify llms-api.txt is fresh
+        run: |
+          nix develop .#ci --command bash -c "sbt --batch generateLlmsApi"
+          git diff --exit-code scalus-site/public/llms-api.txt \
+            || (echo "llms-api.txt is stale - run 'sbt generateLlmsApi' and commit" && exit 1)
       - run: nix develop .#ci --command bash -c "sbt ci-release"
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}

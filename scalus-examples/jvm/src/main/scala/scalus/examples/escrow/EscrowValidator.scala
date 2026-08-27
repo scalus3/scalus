@@ -99,14 +99,10 @@ object EscrowValidator extends Validator {
           "Contract output must contain exactly escrow amount plus initialization amount"
         )
 
-        contractOutput.datum match {
-            case OutputDatum.OutputDatum(inlineData) =>
-                require(
-                  inlineData === receivedData,
-                  "EscrowDatum must be preserved"
-                )
-            case _ => fail("Expected inline datum")
-        }
+        require(
+          contractOutput.datum.inlineOrFail[Data]("Expected inline datum") === receivedData,
+          "EscrowDatum must be preserved"
+        )
     }
 
     private inline def handlePay(

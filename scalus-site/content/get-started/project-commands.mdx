@@ -129,7 +129,13 @@ SCALUS_PROFILE=1 sbt test
 
 The same variable works with Scala CLI (`SCALUS_PROFILE=1 scala-cli test .`). Open
 `target/profile.html` in a browser to see where your validator spends its execution budget.
-See [Profiling](/docs/testing/profiling) for how to read the report and optimise from it.
+
+Scalus itself understands `SCALUS_PROFILE=full`: every script evaluation that goes through the
+ledger (Emulator, TxBuilder) or `runWithProfileReport` then writes per-script reports
+(`.profile.html`/`.json`/`.csv`, plus the UPLC source map) under `target/scalus`, indexed by
+`profile-manifest.json` and consumed by the
+[VS Code extension](/docs/smart-contract-optimisations/vscode-extension).
+See [Profiling](/docs/smart-contract-optimisations/profiling) for how to read the reports and optimise from them.
 
 ## Blueprint & deploy
 
@@ -137,9 +143,10 @@ The sbt build enables the `ScalusSbtPlugin`, which adds two tasks backed by the 
 object in your project:
 
 ```sh copy
-# Generate a CIP-57 blueprint under
-# target/scala-3.3.7/resource_managed/main/META-INF/scalus/blueprints/
-# (sbt package / publish also embed it in the JAR automatically)
+# Generate CIP-57 blueprints under
+# target/scala-3.3.7/resource_managed/main/META-INF/scalus/blueprints/<package>/
+# plus an aggregate plutus.json at the resource root
+# (sbt package / publish also embed them in the JAR automatically)
 sbt blueprint
 
 # Deploy the validator as a reference-script UTxO

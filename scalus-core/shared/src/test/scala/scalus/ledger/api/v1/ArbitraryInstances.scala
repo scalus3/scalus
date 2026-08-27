@@ -56,7 +56,32 @@ trait ArbitraryInstances extends test.ArbitraryInstances {
       */
     def genAssetName: Gen[ByteString] = Gen.choose(1, 32).flatMap(genByteStringOfN)
     def genPolicyId: Gen[ByteString] = genByteStringOfN(28)
-    def genAmount: Gen[BigInt] = iArb.arbitrary.map(_.value)
+
+    /** Token quantities, bounded to what a `Value` may legally hold.
+      *
+      * Same edge-case shape as `iArb`, but its wide `[-2^128, 2^128]` branch is narrowed to
+      * `[-2^64, 2^64]`: real ledger quantities fit Int64, and the CIP-153 builtins that `Value`
+      * operations lower to at PV11 reject quantities beyond +-(2^127) and fail when a
+      * `unionValue`/`scaleValue` result leaves that range (see
+      * `docs/superpowers/specs/2026-08-18-t7-value-builtins-lowering-design.md`). The bound stays
+      * well below 2^127 so that summing the up-to-11 generated assets cannot overflow either.
+      *
+      * The `* properties` test in `ValueTest` couples its `+-(2^62)` scaling-factor bound to this
+      * `+-(2^64)` amount bound (`2^64 * 2^62 = 2^126`), so widening this bound means narrowing that
+      * one in step.
+      */
+    def genAmount: Gen[BigInt] = Gen.oneOf[BigInt](
+      Gen.const[BigInt](0),
+      Gen.const[BigInt](-1),
+      Gen.const[BigInt](1),
+      Gen.const[BigInt](-1000),
+      Gen.const[BigInt](1000),
+      Gen.const[BigInt](Int.MaxValue),
+      Gen.const[BigInt](Int.MinValue),
+      Gen.const[BigInt](Long.MaxValue),
+      Gen.const[BigInt](Long.MinValue),
+      Gen.choose[BigInt](-BigInt(2).pow(64), BigInt(2).pow(64))
+    )
     def genToken: Gen[(ByteString, BigInt)] =
         for
             assetName <- genAssetName

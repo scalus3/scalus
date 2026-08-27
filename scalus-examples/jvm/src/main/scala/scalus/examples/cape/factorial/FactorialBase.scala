@@ -11,5 +11,5 @@ import scalus.*
 @Compile
 object FactorialBase {
     def factorial(n: BigInt): BigInt =
-        if n <= BigInt(0) then BigInt(1) else n * factorial(n - BigInt(1))
+        if n <= 0 then 1 else n * factorial(n - 1)
 }

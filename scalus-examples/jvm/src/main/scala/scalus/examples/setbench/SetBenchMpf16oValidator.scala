@@ -43,9 +43,7 @@ object SetBenchMpf16oValidator extends Validator {
         val outputs = txInfo.findOwnOutputsByCredential(contractAddr.credential)
         require(outputs.length === BigInt(1), "Expected one continuing output")
         val out = outputs.head
-        val outDatum = out.datum match
-            case OutputDatum.OutputDatum(d) => d.to[SetBenchDatum]
-            case _                          => fail("Expected inline datum")
+        val outDatum = out.datum.inlineOrFail[SetBenchDatum]("Expected inline datum")
         require(outDatum.remaining === state.remaining + delta, "Wrong remaining")
         require(outDatum.root === newTrie.root, "Wrong root")
         require(out.value.getLovelace >= state.remaining + delta, "Insufficient lovelace")

@@ -27,7 +27,7 @@ class PlutusVM(
     val machineParams: MachineParams,
     val semanticVariant: BuiltinSemanticsVariant,
     platformSpecific: PlatformSpecific,
-    val protocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV
+    val protocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV
 ) {
     private val builtins = new CardanoBuiltins(
       machineParams.builtinCostModel,
@@ -322,18 +322,8 @@ object PlutusVM {
       * @return
       *   A configured Plutus V3 VM instance
       */
-    def makePlutusV3VM(params: MachineParams): PlutusVM = {
-        val semanticVariant = BuiltinSemanticsVariant.fromProtocolAndPlutusVersion(
-          CardanoInfo.mainnet.majorProtocolVersion,
-          Language.PlutusV3
-        )
-        new PlutusVM(
-          Language.PlutusV3,
-          params,
-          semanticVariant,
-          platform
-        )
-    }
+    def makePlutusV3VM(params: MachineParams): PlutusVM =
+        makePlutusV3VM(params, CardanoInfo.mainnet.majorProtocolVersion)
 
     /** Creates a Plutus V3 VM with default parameters.
       *

@@ -10,6 +10,10 @@ class EvaluatorReportConfigTest extends AnyFunSuite {
         DumpArtifact.values.foreach(a => assert(!cfg.dumps(a)))
     }
 
+    test("artifacts default to target/scalus, not the working directory") {
+        assert(EvaluatorReportConfig().outputDir == "target/scalus")
+    }
+
     test("fromLegacyBoolean reproduces the historical artifact set") {
         val on = EvaluatorReportConfig.fromLegacyBoolean(true)
         assert(on.enabled)
@@ -86,9 +90,13 @@ class EvaluatorReportConfigTest extends AnyFunSuite {
     test("numeric overrides parse, bad values are ignored") {
         val cfg = EvaluatorReportConfig.fromEnv(
           EvaluatorReportConfig.disabled,
-          Map("SCALUS_PROFILE_THRESHOLD" -> "0.25", "SCALUS_PROFILE_MAX_ROWS" -> "nan")
+          Map("SCALUS_PROFILE_MAX_ROWS" -> "nan")
         )
-        assert(cfg.profileThreshold == 0.25)
         assert(cfg.maxRows == EvaluatorReportConfig.disabled.maxRows)
+        val cfg2 = EvaluatorReportConfig.fromEnv(
+          EvaluatorReportConfig.disabled,
+          Map("SCALUS_PROFILE_MAX_ROWS" -> "7")
+        )
+        assert(cfg2.maxRows == 7)
     }
 }

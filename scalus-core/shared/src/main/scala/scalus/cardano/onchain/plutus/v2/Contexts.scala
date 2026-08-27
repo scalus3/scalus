@@ -4,9 +4,11 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.FromData
 import scalus.uplc.builtin.ToData
-import scalus.cardano.onchain.plutus.v2.OutputDatum.NoOutputDatum
+import scalus.cardano.onchain.plutus.v2
+import v2.OutputDatum.NoOutputDatum
 import scalus.cardano.onchain.plutus.prelude.{<=>, ===, Eq, List, Option, Ord, Order, SortedMap}
 import scalus.uplc.builtin.ByteString.*
+import scalus.cardano.onchain.plutus.prelude.fail
 
 enum OutputDatum:
     case NoOutputDatum
@@ -15,7 +17,7 @@ enum OutputDatum:
 
 @Compile
 object OutputDatum {
-    given Eq[scalus.cardano.onchain.plutus.v2.OutputDatum] =
+    given Eq[v2.OutputDatum] =
         Eq.structural: (a, b) =>
             a match
                 case NoOutputDatum =>
@@ -31,11 +33,8 @@ object OutputDatum {
                         case OutputDatum(datum2) => datum == datum2
                         case _                   => false
 
-    given Ord[scalus.cardano.onchain.plutus.v2.OutputDatum] =
-        (
-            x: scalus.cardano.onchain.plutus.v2.OutputDatum,
-            y: scalus.cardano.onchain.plutus.v2.OutputDatum
-        ) =>
+    given Ord[v2.OutputDatum] =
+        (x: v2.OutputDatum, y: v2.OutputDatum) =>
             x match
                 case NoOutputDatum =>
                     y match
@@ -53,8 +52,49 @@ object OutputDatum {
                         case OutputDatum(datum2) => datum1 <=> datum2
                         case _                   => Order.Greater
 
-    given ToData[scalus.cardano.onchain.plutus.v2.OutputDatum] = ToData.derived
-    given FromData[scalus.cardano.onchain.plutus.v2.OutputDatum] = FromData.derived
+    given ToData[v2.OutputDatum] = ToData.derived
+    given FromData[v2.OutputDatum] = FromData.derived
+
+    extension (d: v2.OutputDatum) {
+
+        /** Extracts the inline datum and decodes it as `A`.
+          *
+          * Fails the script when the datum is not inline (`NoOutputDatum` or `OutputDatumHash`).
+          * This replaces the common pattern
+          * {{{
+          * output.datum match
+          *     case OutputDatum.OutputDatum(d) => d.to[MyDatum]
+          *     case _                          => fail("Expected inline datum")
+          * }}}
+          * with `output.datum.inlineOrFail[MyDatum]`.
+          *
+          * Being `inline`, the match is checked against the receiver's static type: calling this on
+          * a receiver the compiler already knows is `NoOutputDatum` or `OutputDatumHash` is
+          * rejected at compile time instead of failing at run time.
+          *
+          * @tparam A
+          *   the datum type to decode with its `FromData` instance
+          * @example
+          *   {{{
+          *   val datum = output.datum.inlineOrFail[CampaignDatum]
+          *   }}}
+          */
+        inline def inlineOrFail[A: FromData]: A = inlineOrFail[A]("Expected inline datum")
+
+        /** Extracts the inline datum and decodes it as `A`, failing with `message` when the datum
+          * is not inline.
+          *
+          * @tparam A
+          *   the datum type to decode with its `FromData` instance
+          * @example
+          *   {{{
+          *   val datum = output.datum.inlineOrFail[CampaignDatum]("Campaign must have inline datum")
+          *   }}}
+          */
+        inline def inlineOrFail[A: FromData](inline message: String): A = d match
+            case OutputDatum(datum) => datum.to[A]
+            case _                  => fail(message)
+    }
 }
 
 case class TxOut(

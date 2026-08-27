@@ -365,11 +365,17 @@ object JEmulator {
         wrapper
     }
 
+    /** Create an emulator that funds each address with `lovelacePerAddress` lovelace.
+      *
+      * @param lovelacePerAddress
+      *   lovelace per address; defaults to 10 000 ADA, the same default as the JVM
+      *   `Emulator.withAddresses`
+      */
     @JSExportStatic
     def withAddresses(
         addressesBech32: js.Array[String],
         slotConfig: SlotConfig,
-        lovelacePerAddress: js.BigInt = js.BigInt(10_000L)
+        lovelacePerAddress: js.BigInt = js.BigInt(10_000_000_000L)
     ): JEmulator = {
         val addresses = addressesBech32.toSeq.map(Address.fromString)
         val value = scalus.cardano.ledger.Value(

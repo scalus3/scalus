@@ -204,9 +204,9 @@ object AuctionValidator extends DataParameterizedValidator {
           "Continuing output must go to auction script address"
         )
 
-        val newDatum = continuingOutput.datum match
-            case OutputDatum.OutputDatum(newDatumData) => newDatumData.to[Datum]
-            case _ => fail("Continuing auction output must have inline datum")
+        val newDatum = continuingOutput.datum.inlineOrFail[Datum](
+          "Continuing auction output must have inline datum"
+        )
 
         // 7. Verify the new datum is correct
         val expectedNewDatum = Datum(
@@ -238,7 +238,7 @@ object AuctionValidator extends DataParameterizedValidator {
             case Option.Some(previousBidder) =>
                 // refundOutputIdx >= 0 means there should be a refund output
                 require(
-                  refundOutputIdx >= BigInt(0),
+                  refundOutputIdx >= 0,
                   "Refund output index required when previous bidder exists"
                 )
                 val refundOutput = txInfo.outputs.at(refundOutputIdx)
@@ -293,7 +293,7 @@ object AuctionValidator extends DataParameterizedValidator {
 
                 // 3. Winner must receive the NFT (the auctioned item) - use indexed lookup
                 require(
-                  winnerOutputIdx >= BigInt(0),
+                  winnerOutputIdx >= 0,
                   "Winner output index required when there is a winner"
                 )
                 val winnerOutput = txInfo.outputs.at(winnerOutputIdx)
@@ -331,9 +331,8 @@ object AuctionValidator extends DataParameterizedValidator {
                 // check is only `>=` its own bid), letting an attacker pay the seller once and pocket
                 // the rest. Requiring the seller output to carry this auction's scriptHash forces a
                 // distinct seller output per auction, closing the cross-instance double satisfaction.
-                val sellerOutputDatum = sellerOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d
-                    case _ => fail("Seller output must carry this auction's id datum")
+                val sellerOutputDatum = sellerOutput.datum
+                    .inlineOrFail[Data]("Seller output must carry this auction's id datum")
                 require(
                   sellerOutputDatum == scriptHash.toData,
                   "Seller output must be tagged with this auction's id"
@@ -402,15 +401,9 @@ object AuctionValidator extends DataParameterizedValidator {
         )
 
         // 3. Validate ALL tokens minted under this policy (prevents Other Token Name Attack)
-        val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.size === BigInt(1),
-          "Only one token name allowed per auction start"
-        )
-        val (mintedTokenName, mintedQuantity) = mintedTokens.toList.head
-        require(
-          mintedTokenName === itemId && mintedQuantity === BigInt(1),
-          "Must mint exactly one auction NFT with the specified itemId"
+          txInfo.mint.hasOnly(policyId, itemId, 1),
+          "Must mint exactly one auction NFT with the specified itemId and nothing else"
         )
 
         // 4. The auction end time must be in the future
@@ -421,7 +414,7 @@ object AuctionValidator extends DataParameterizedValidator {
 
         // 5. Starting bid must be positive
         require(
-          startingBid > BigInt(0),
+          startingBid > 0,
           "Starting bid must be positive"
         )
 
@@ -446,13 +439,11 @@ object AuctionValidator extends DataParameterizedValidator {
           auctionEndTime = auctionEndTime,
           itemId = itemId
         )
-        auctionOutput.datum match
-            case OutputDatum.OutputDatum(datumData) =>
-                require(
-                  datumData.to[Datum] === expectedDatum,
-                  "Initial auction datum must be correct"
-                )
-            case _ => fail("Auction output must have inline datum")
+        require(
+          auctionOutput.datum
+              .inlineOrFail[Datum]("Auction output must have inline datum") === expectedDatum,
+          "Initial auction datum must be correct"
+        )
 
     private inline def handleBurn(
         policyId: PolicyId,
@@ -461,7 +452,7 @@ object AuctionValidator extends DataParameterizedValidator {
         // For burning, verify all tokens of this policy are burned (negative quantity)
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
+          mintedTokens.forall { case (_, amount) => amount < 0 },
           "Only burning is allowed (all amounts must be negative)"
         )
 }

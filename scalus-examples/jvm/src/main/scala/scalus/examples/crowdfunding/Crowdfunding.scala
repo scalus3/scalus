@@ -177,13 +177,13 @@ object DonationMintingPolicy {
         campaignInputIdx: BigInt
     ): Unit =
         // 1. Verify amount is positive
-        require(amount > BigInt(0), "Donation amount must be positive")
+        require(amount > 0, "Donation amount must be positive")
 
         // 2. Find campaign input and verify it has the campaign NFT
         val campaignInput = txInfo.inputs.at(campaignInputIdx)
-        val campaignDatum = campaignInput.resolved.datum match
-            case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-            case _                          => fail("Campaign must have inline datum")
+        val campaignDatum =
+            campaignInput.resolved.datum
+                .inlineOrFail[CampaignDatum]("Campaign must have inline datum")
 
         // 3. Verify this donation policy matches the campaign's expected policy
         require(
@@ -197,19 +197,11 @@ object DonationMintingPolicy {
           "Donations must be before deadline"
         )
 
-        // 5. Verify exactly one donation token is minted
+        // 5. Verify exactly one donation token is minted and no other tokens under this
+        // policy (V011 protection)
         require(
-          txInfo.mint.quantityOf(policyId, donationTokenName) === BigInt(1),
-          "Exactly one donation token must be minted"
-        )
-
-        // 6. Verify no other tokens are minted under this policy (V011 protection)
-        val allMintedUnderPolicy = txInfo.mint.flatten.filter { case (pid, _, _) =>
-            pid === policyId
-        }
-        require(
-          allMintedUnderPolicy.length === BigInt(1),
-          "Only one token type may be minted under donation policy"
+          txInfo.mint.hasOnly(policyId, donationTokenName, 1),
+          "Exactly one donation token must be minted and nothing else"
         )
 
     /** Handle burning of donation tokens.
@@ -226,9 +218,9 @@ object DonationMintingPolicy {
     ): Unit =
         // 1. Verify campaign UTxO is being spent (this triggers CrowdfundingValidator)
         val campaignInput = txInfo.inputs.at(campaignInputIdx)
-        val campaignDatum = campaignInput.resolved.datum match
-            case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-            case _                          => fail("Campaign must have inline datum")
+        val campaignDatum =
+            campaignInput.resolved.datum
+                .inlineOrFail[CampaignDatum]("Campaign must have inline datum")
 
         // 2. Verify this is the correct campaign by checking donation policy matches
         require(
@@ -239,7 +231,7 @@ object DonationMintingPolicy {
         // 3. All tokens of this policy must be burned (negative quantity)
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
+          mintedTokens.forall { case (_, amount) => amount < 0 },
           "Only burning allowed during withdraw/reclaim"
         )
 }
@@ -379,13 +371,14 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 2. Amount must be positive
-        require(amount > BigInt(0), "Donation amount must be positive")
+        require(amount > 0, "Donation amount must be positive")
 
         // 3. Verify continuing campaign output
         val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-        val newDatum = campaignOutput.datum match
-            case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-            case _                          => fail("Campaign output must have inline datum")
+        val newDatum =
+            campaignOutput.datum.inlineOrFail[CampaignDatum](
+              "Campaign output must have inline datum"
+            )
 
         // 4. Verify datum update - only totalSum should change
         val expectedDatum = CampaignDatum(
@@ -421,14 +414,14 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 7. Verify donation UTxO has DonationDatum with correct amount
-        donationOutput.datum match
-            case OutputDatum.OutputDatum(d) =>
-                val donationDatum = d.to[DonationDatum]
-                require(
-                  donationDatum.amount === amount,
-                  "DonationDatum must contain correct amount"
-                )
-            case _ => fail("Donation output must have inline DonationDatum")
+        val donationDatum =
+            donationOutput.datum.inlineOrFail[DonationDatum](
+              "Donation output must have inline DonationDatum"
+            )
+        require(
+          donationDatum.amount === amount,
+          "DonationDatum must contain correct amount"
+        )
 
     /** Handle withdraw spend - validates fund transfer to recipient */
     private inline def handleWithdrawSpend(
@@ -488,9 +481,9 @@ object CrowdfundingValidator extends Validator {
         else
             // Partial withdrawal - verify updated campaign datum
             val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-            val newDatum = campaignOutput.datum match
-                case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-                case _                          => fail("Campaign output must have inline datum")
+            val newDatum = campaignOutput.datum.inlineOrFail[CampaignDatum](
+              "Campaign output must have inline datum"
+            )
             // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
             val expectedDatum = CampaignDatum(
               totalSum = currentDatum.totalSum,
@@ -554,9 +547,10 @@ object CrowdfundingValidator extends Validator {
                     val donationInput = txInfo.inputs.at(donationIdx)
 
                     // Get donor from DonationDatum and full UTxO value
-                    val donationDatum = donationInput.resolved.datum match
-                        case OutputDatum.OutputDatum(d) => d.to[DonationDatum]
-                        case _ => fail("Donation input must have inline DonationDatum")
+                    val donationDatum = donationInput.resolved.datum
+                        .inlineOrFail[DonationDatum](
+                          "Donation input must have inline DonationDatum"
+                        )
                     val donorPkh = donationDatum.donor
                     val donationAmount = donationDatum.amount
                     // Use actual UTxO lovelace to include min UTxO overhead
@@ -588,9 +582,9 @@ object CrowdfundingValidator extends Validator {
         else
             // Partial reclaim - verify updated campaign datum
             val campaignOutput = txInfo.outputs.at(campaignOutputIdx)
-            val newDatum = campaignOutput.datum match
-                case OutputDatum.OutputDatum(d) => d.to[CampaignDatum]
-                case _                          => fail("Campaign output must have inline datum")
+            val newDatum = campaignOutput.datum.inlineOrFail[CampaignDatum](
+              "Campaign output must have inline datum"
+            )
             // Verify all immutable fields remain unchanged, only withdrawn updates (V015 protection)
             val expectedDatum = CampaignDatum(
               totalSum = currentDatum.totalSum,
@@ -697,7 +691,7 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 2. Goal must be positive
-        require(goal > BigInt(0), "Goal must be positive")
+        require(goal > 0, "Goal must be positive")
 
         // 3. Deadline must be in the future
         require(
@@ -715,19 +709,11 @@ object CrowdfundingValidator extends Validator {
           scalus.uplc.builtin.Builtins.serialiseData(consumedUtxo.toData)
         )
 
-        // 5. Verify exactly one campaign NFT is minted
+        // 5. Verify exactly one campaign NFT is minted and no other tokens under this
+        // policy (V011 protection)
         require(
-          txInfo.mint.quantityOf(policyId, campaignId) === BigInt(1),
-          "Exactly one campaign NFT must be minted"
-        )
-
-        // 5a. Verify no other tokens are minted under this policy (V011 protection)
-        val allMintedUnderPolicy = txInfo.mint.flatten.filter { case (pid, _, _) =>
-            pid === policyId
-        }
-        require(
-          allMintedUnderPolicy.length === BigInt(1),
-          "Only one token type may be minted under campaign policy"
+          txInfo.mint.hasOnly(policyId, campaignId, 1),
+          "Exactly one campaign NFT must be minted and nothing else"
         )
 
         // 6. Find the output going to the script address
@@ -744,9 +730,9 @@ object CrowdfundingValidator extends Validator {
         )
 
         // 8. Get the donation policy ID from datum (computed off-chain)
-        val donationPolicyId = campaignOutput.datum match
-            case OutputDatum.OutputDatum(d) => d.to[CampaignDatum].donationPolicyId
-            case _                          => fail("Campaign output must have inline datum")
+        val donationPolicyId = campaignOutput.datum
+            .inlineOrFail[CampaignDatum]("Campaign output must have inline datum")
+            .donationPolicyId
 
         // 9. Verify the datum is correct
         val expectedDatum = CampaignDatum(
@@ -757,13 +743,13 @@ object CrowdfundingValidator extends Validator {
           withdrawn = BigInt(0),
           donationPolicyId = donationPolicyId
         )
-        campaignOutput.datum match
-            case OutputDatum.OutputDatum(datumData) =>
-                require(
-                  datumData.to[CampaignDatum] === expectedDatum,
-                  "Initial campaign datum must be correct"
-                )
-            case _ => fail("Campaign output must have inline datum")
+        require(
+          campaignOutput.datum
+              .inlineOrFail[CampaignDatum](
+                "Campaign output must have inline datum"
+              ) === expectedDatum,
+          "Initial campaign datum must be correct"
+        )
 
     private inline def handleBurn(
         policyId: PolicyId,
@@ -771,7 +757,7 @@ object CrowdfundingValidator extends Validator {
     ): Unit =
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
+          mintedTokens.forall { case (_, amount) => amount < 0 },
           "Only burning is allowed"
         )
 }

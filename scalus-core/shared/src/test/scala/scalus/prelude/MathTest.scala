@@ -30,7 +30,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           BigInt(0).absolute,
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 1802, steps = 391986)
+            compilerOptions -> ExUnits(memory = 1101, steps = 203937)
           )
         )
 
@@ -39,7 +39,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           BigInt(5).absolute,
           BigInt(5),
           Seq(
-            compilerOptions -> ExUnits(memory = 1802, steps = 391986)
+            compilerOptions -> ExUnits(memory = 1101, steps = 203937)
           )
         )
 
@@ -48,7 +48,7 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           BigInt(-7).absolute,
           BigInt(7),
           Seq(
-            compilerOptions -> ExUnits(memory = 2204, steps = 557194)
+            compilerOptions -> ExUnits(memory = 1503, steps = 369145)
           )
         )
 
@@ -62,14 +62,14 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           min(BigInt(1), BigInt(2)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 2102, steps = 439986)
+            compilerOptions -> ExUnits(memory = 1401, steps = 251937)
           )
         )
         assertEvalWithBudgets(
           min(BigInt(-1), BigInt(-5)),
           BigInt(-5),
           Seq(
-            compilerOptions -> ExUnits(memory = 2102, steps = 439986)
+            compilerOptions -> ExUnits(memory = 1401, steps = 251937)
           )
         )
 
@@ -83,14 +83,14 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           max(BigInt(1), BigInt(2)),
           BigInt(2),
           Seq(
-            compilerOptions -> ExUnits(memory = 2102, steps = 439986)
+            compilerOptions -> ExUnits(memory = 1401, steps = 251937)
           )
         )
         assertEvalWithBudgets(
           max(BigInt(-1), BigInt(-5)),
           BigInt(-1),
           Seq(
-            compilerOptions -> ExUnits(memory = 2102, steps = 439986)
+            compilerOptions -> ExUnits(memory = 1401, steps = 251937)
           )
         )
 
@@ -131,21 +131,21 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           gcd(BigInt(0), BigInt(0)),
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 6104, steps = 1208368)
+            compilerOptions -> ExUnits(memory = 4102, steps = 736270)
           )
         )
         assertEvalWithBudgets(
           gcd(BigInt(12), BigInt(18)),
           BigInt(6),
           Seq(
-            compilerOptions -> ExUnits(memory = 15713, steps = 3526537)
+            compilerOptions -> ExUnits(memory = 9808, steps = 2_202292)
           )
         )
         assertEvalWithBudgets(
           gcd(BigInt(-12), BigInt(18)),
           BigInt(6),
           Seq(
-            compilerOptions -> ExUnits(memory = 15713, steps = 3526537)
+            compilerOptions -> ExUnits(memory = 9808, steps = 2_202292)
           )
         )
 
@@ -160,21 +160,21 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           BigInt(0).sqRoot,
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 6104, steps = 1199872)
+            compilerOptions -> ExUnits(memory = 4102, steps = 727774)
           )
         )
         assertEvalWithBudgets(
           BigInt(1).sqRoot,
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 6104, steps = 1199872)
+            compilerOptions -> ExUnits(memory = 4102, steps = 727774)
           )
         )
         assertEvalWithBudgets(
           BigInt(17).sqRoot,
           BigInt(4),
           Seq(
-            compilerOptions -> ExUnits(memory = 35665, steps = 12814717)
+            compilerOptions -> ExUnits(memory = 25453, steps = 10_270129)
           )
         )
         assertEvalFailsWithMessage[RequirementError]("sqrt: negative radicand")(BigInt(-1).sqRoot)
@@ -185,21 +185,21 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           sqrt(BigInt("1000000000000")), // 10^12
           BigInt("1000000"),
           Seq(
-            compilerOptions -> ExUnits(memory = 37969, steps = 13425395)
+            compilerOptions -> ExUnits(memory = 26355, steps = 10_504709)
           )
         )
         assertEvalWithBudgets(
           sqrt(BigInt("1000000000000000000000000000000")), // 10^30
           BigInt("1000000000000000"),
           Seq(
-            compilerOptions -> ExUnits(memory = 42676, steps = 14828070)
+            compilerOptions -> ExUnits(memory = 30563, steps = 11_903433)
           )
         )
         assertEvalWithBudgets(
           sqrt(BigInt("1000000000000000000000000000000000000000000000000000000000000")), // 10^60
           BigInt("1000000000000000000000000000000"),
           Seq(
-            compilerOptions -> ExUnits(memory = 55213, steps = 18400170)
+            compilerOptions -> ExUnits(memory = 38395, steps = 14_343288)
           )
         )
 
@@ -208,49 +208,49 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           pow(BigInt(0), BigInt(0)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 6104, steps = 1209821)
+            compilerOptions -> ExUnits(memory = 4102, steps = 737723)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(2), BigInt(0)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 6104, steps = 1209821)
+            compilerOptions -> ExUnits(memory = 4102, steps = 737723)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(2), BigInt(3)),
           BigInt(8),
           Seq(
-            compilerOptions -> ExUnits(memory = 18928, steps = 4866941)
+            compilerOptions -> ExUnits(memory = 12922, steps = 3_450647)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(-2), BigInt(3)),
           BigInt(-8),
           Seq(
-            compilerOptions -> ExUnits(memory = 18928, steps = 4866941)
+            compilerOptions -> ExUnits(memory = 12922, steps = 3_450647)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(7), BigInt(2)),
           BigInt(49),
           Seq(
-            compilerOptions -> ExUnits(memory = 18124, steps = 4546780)
+            compilerOptions -> ExUnits(memory = 12118, steps = 3_130486)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(513), BigInt(3)),
           BigInt(135005697),
           Seq(
-            compilerOptions -> ExUnits(memory = 18928, steps = 4866941)
+            compilerOptions -> ExUnits(memory = 12922, steps = 3_450647)
           )
         )
         assertEvalWithBudgets(
           pow(BigInt(2), BigInt(42)),
           BigInt("4398046511104"),
           Seq(
-            compilerOptions -> ExUnits(memory = 42164, steps = 11220698)
+            compilerOptions -> ExUnits(memory = 28150, steps = 7_916012)
           )
         )
 
@@ -259,42 +259,42 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           exp2(BigInt(-2)),
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 2102, steps = 441439)
+            compilerOptions -> ExUnits(memory = 1401, steps = 253390)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(0)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 5309, steps = 3759450)
+            compilerOptions -> ExUnits(memory = 4608, steps = 3_571401)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(1)),
           BigInt(2),
           Seq(
-            compilerOptions -> ExUnits(memory = 5309, steps = 3759450)
+            compilerOptions -> ExUnits(memory = 4608, steps = 3_571401)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(4)),
           BigInt(16),
           Seq(
-            compilerOptions -> ExUnits(memory = 5309, steps = 3759450)
+            compilerOptions -> ExUnits(memory = 4608, steps = 3_571401)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(42)),
           BigInt("4398046511104"),
           Seq(
-            compilerOptions -> ExUnits(memory = 5309, steps = 3759450)
+            compilerOptions -> ExUnits(memory = 4608, steps = 3_571401)
           )
         )
         assertEvalWithBudgets(
           exp2(BigInt(256)),
           BigInt("115792089237316195423570985008687907853269984665640564039457584007913129639936"),
           Seq(
-            compilerOptions -> ExUnits(memory = 5319, steps = 3940485)
+            compilerOptions -> ExUnits(memory = 4618, steps = 3_752436)
           )
         )
 
@@ -345,41 +345,41 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           log(BigInt(10), base = BigInt(2)),
           BigInt(3),
           Seq(
-            compilerOptions -> ExUnits(memory = 16619, steps = 3945989)
+            compilerOptions -> ExUnits(memory = 10714, steps = 2_621744)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(42), base = BigInt(2)),
           BigInt(5),
           Seq(
-            compilerOptions -> ExUnits(memory = 23829, steps = 5807765)
+            compilerOptions -> ExUnits(memory = 15322, steps = 3_915422)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(42), base = BigInt(3)),
           BigInt(3),
           Seq(
-            compilerOptions -> ExUnits(memory = 16619, steps = 3945989)
+            compilerOptions -> ExUnits(memory = 10714, steps = 2_621744)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(5), base = BigInt(0)),
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 2702, steps = 535986)
+            compilerOptions -> ExUnits(memory = 1701, steps = 299937)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(4), base = BigInt(4)),
           BigInt(1),
           Seq(
-            compilerOptions -> ExUnits(memory = 9409, steps = 2084213)
+            compilerOptions -> ExUnits(memory = 6106, steps = 1_328066)
           )
         )
         assertEvalWithBudgets(
           log(BigInt(4), base = BigInt(42)),
           BigInt(0),
           Seq(
-            compilerOptions -> ExUnits(memory = 5804, steps = 1153325)
+            compilerOptions -> ExUnits(memory = 3802, steps = 681227)
           )
         )

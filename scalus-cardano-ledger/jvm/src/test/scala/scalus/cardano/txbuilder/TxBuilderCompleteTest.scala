@@ -460,6 +460,71 @@ class TxBuilderCompleteTest extends AnyFunSuite, ValidatorRulesTestKit {
         )
     }
 
+    test("complete caps auto-selected collateral at maxCollateralInputs (fragmented wallet)") {
+        val maxCollateralInputs = testEnv.protocolParams.maxCollateralInputs
+        val sUtxo = scriptUtxo(100, 20)
+
+        // Alice's wallet is fragmented into 1.2 ADA UTxOs: the initial 5 ADA collateral
+        // target cannot be covered by fewer than 5 of them without a cap.
+        val aliceUtxos = (0 until 20).map { i =>
+            input(i) -> Output(Alice.address, Value.lovelace(1_200_000))
+        }.toMap
+
+        val tx = TxBuilder(testEnv)
+            .spend(sUtxo, emptyRedeemer, alwaysOkScript)
+            .payTo(Bob.address, Value.ada(5))
+            .complete(Emulator(aliceUtxos + (sUtxo.input -> sUtxo.output)), Alice.address)
+            .await()
+            .transaction
+
+        val collateralInputs = tx.body.value.collateralInputs.toSeq
+        assert(collateralInputs.nonEmpty, "Should have collateral inputs")
+        assert(
+          collateralInputs.size <= maxCollateralInputs,
+          s"Collateral inputs (${collateralInputs.size}) must not exceed maxCollateralInputs ($maxCollateralInputs)"
+        )
+    }
+
+    test("complete fails fast when explicit collaterals exceed maxCollateralInputs") {
+        val sUtxo = scriptUtxo(100, 20)
+        val aliceUtxos = (0 until 4).map(i => input(i) -> adaOutput(Alice.address, 10)).toMap
+        val provider = Emulator(aliceUtxos + (sUtxo.input -> sUtxo.output))
+
+        val ex = intercept[TxBuilderException.LedgerValidationException] {
+            TxBuilder(testEnv)
+                .spend(sUtxo, emptyRedeemer, alwaysOkScript)
+                .payTo(Bob.address, Value.ada(5))
+                .collaterals(aliceUtxos)
+                .complete(provider, Alice.address)
+                .await()
+        }
+        assert(
+          ex.error.isInstanceOf[TransactionException.TooManyCollateralInputsException],
+          s"Expected TooManyCollateralInputsException, got ${ex.error}"
+        )
+    }
+
+    test(
+      "complete throws CollateralUnavailableException when collateral cannot be covered within maxCollateralInputs"
+    ) {
+        val sUtxo = scriptUtxo(100, 40)
+
+        // Required collateral is 150% of the 10 ADA fee = 15 ADA, but the best selection
+        // within maxCollateralInputs=3 UTxOs is only 9 ADA.
+        val aliceUtxos = (0 until 6).map(i => input(i) -> adaOutput(Alice.address, 3)).toMap
+        val provider = Emulator(aliceUtxos + (sUtxo.input -> sUtxo.output))
+
+        val ex = intercept[TxBuilderException.CollateralUnavailableException] {
+            TxBuilder(testEnv)
+                .spend(sUtxo, emptyRedeemer, alwaysOkScript)
+                .payTo(Bob.address, Value.ada(5))
+                .minFee(Coin.ada(10))
+                .complete(provider, Alice.address)
+                .await()
+        }
+        assert(ex.required.value > ex.bestAvailable.value)
+    }
+
     test("complete should handle mixed script and pubkey inputs") {
         val sUtxo = scriptUtxo(2, 10)
 

@@ -4,7 +4,6 @@ import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.{Eq, Ord, Order, Show}
 import scalus.utils.Hex.toHex
 
-import scala.annotation.threadUnsafe
 import scala.compiletime.asMatchable
 
 /** An immutable sequence of bytes.
@@ -42,7 +41,7 @@ class ByteString private[builtin] (val bytes: Array[Byte]) extends Serializable 
       *
       * Offchain operation, not available onchain.
       */
-    @threadUnsafe lazy val toHex: String = bytes.toHex
+    def toHex: String = bytes.toHex
 
     /** Converts the ByteString to a binary string representation
       *
@@ -117,8 +116,8 @@ object ByteString extends ByteStringOffchainApi, ByteStringFlatInstance {
     inline def fromBigIntLittleEndian(value: BigInt, size: BigInt = 0): ByteString =
         Builtins.integerToByteString(false, size, value)
 
-    // TODO it's not truly overriding and doesn't work in generic function,
-    //  see extension methods <, <=, >, >=, equiv, nonEquiv for [A: Ord]
+    // Monomorphic fast path, chosen over the generic [A: Ord] extension by static overload
+    // resolution only — generic code goes through Ord[A].compare with the same results.
 
     // These methods are available onchain
     // Because we make them inline and those are builtins

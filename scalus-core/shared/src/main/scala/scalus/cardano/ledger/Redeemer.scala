@@ -7,7 +7,6 @@ import org.typelevel.paiges.Doc.*
 import scalus.uplc.builtin.Data
 import scalus.utils.{Pretty, Style}
 
-import scala.annotation.threadUnsafe
 import scala.collection.immutable
 import scala.collection.immutable.TreeMap
 import scala.math.Ordered.orderingToOrdered
@@ -99,7 +98,6 @@ sealed trait Redeemers:
         case Redeemers.Map(redeemers)   => redeemers.isEmpty
 
     /** Calculate total execution units from all redeemers */
-    @threadUnsafe
     lazy val totalExUnits: ExUnits = this match
         case Redeemers.Array(redeemers) =>
             redeemers.foldLeft(ExUnits.zero)(_ + _.exUnits)

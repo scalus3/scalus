@@ -188,7 +188,7 @@ enum ShelleyPaymentPart {
     def toBytes: ByteString = asHash
 
     /** Convert to hex string */
-    def toHex: String = asHash.toString // Assuming Hash28 has proper toString
+    def toHex: String = asHash.toHex
 }
 
 /** The delegation part of a Shelley address - various ways to specify stake credentials */
@@ -217,7 +217,7 @@ enum ShelleyDelegationPart {
         case Null                             => ByteString.empty
 
     /** Convert to hex string */
-    def toHex: String = toBytes.toString
+    def toHex: String = toBytes.toHex
 }
 
 object ShelleyDelegationPart {
@@ -810,13 +810,14 @@ case class ByronAddress(bytes: ByteString) extends Address {
 
     /** Get network from address attributes.
       *
-      * Byron addresses encode network magic in attribute key 2. If absent or equals mainnet magic
-      * (764824073), returns Mainnet. Otherwise returns Testnet.
+      * Byron addresses encode network magic in attribute key 2 only for testnets; mainnet addresses
+      * omit the attribute. Matches cardano-ledger's `getNetwork` (`NetworkMainOrStage -> Mainnet`,
+      * `NetworkTestnet _ -> Testnet`): any explicit magic, including a redundant mainnet one,
+      * classifies as Testnet.
       */
     inline override def getNetwork: Option[Network] = parsed.networkMagic match {
-        case None             => Some(Network.Mainnet) // No magic = mainnet
-        case Some(764824073L) => Some(Network.Mainnet) // Explicit mainnet magic
-        case Some(_)          => Some(Network.Testnet) // Any other magic = testnet
+        case None    => Some(Network.Mainnet)
+        case Some(_) => Some(Network.Testnet)
     }
 
     def hasScript: Boolean = false // Byron addresses don't have scripts
@@ -1001,7 +1002,11 @@ sealed trait Address {
     /** Get script hash if available */
     def scriptHashOption: Option[ScriptHash]
 
-    def getNetwork: Option[Network] = None
+    /** The network this address belongs to. Every concrete address type knows its network (Byron
+      * derives it from the network-magic attribute), so this is always `Some` in practice; the
+      * `Option` remains for signature stability.
+      */
+    def getNetwork: Option[Network]
 
 }
 

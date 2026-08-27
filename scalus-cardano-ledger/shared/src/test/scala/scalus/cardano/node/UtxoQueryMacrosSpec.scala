@@ -69,8 +69,8 @@ class UtxoQueryMacrosSpec extends AnyFunSuite {
 
     test("buildQuery: inputs.contains(u.input) query") {
         val inputs = Set(
-          TransactionInput(testTxHash, 0),
-          TransactionInput(testTxHash, 1)
+          Input(testTxHash, 0),
+          Input(testTxHash, 1)
         )
         val query = UtxoQueryMacros.buildQuery { u =>
             inputs.contains(u.input)

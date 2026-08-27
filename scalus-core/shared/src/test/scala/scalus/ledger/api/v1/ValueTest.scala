@@ -1,11 +1,14 @@
 package scalus.cardano.onchain.plutus.v1
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
+import scalus.uplc.PlutusV3
+import scalus.uplc.Term.asTerm
 import scalus.uplc.builtin.Data.{fromData, toData}
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.ByteString.{hex, utf8}
 import scalus.cardano.ledger.LedgerToPlutusTranslation
+import scalus.cardano.onchain.RequirementError
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 
@@ -280,7 +283,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               )
             )
           ),
-          ExUnits(memory = 101199L, steps = 27882701L)
+          ExUnits(memory = 65647, steps = 16_079838)
         )
     }
 
@@ -439,7 +442,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => -v,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", -1000),
-          ExUnits(memory = 23326L, steps = 6257655L)
+          ExUnits(memory = 1413, steps = 990526)
         )
     }
 
@@ -448,7 +451,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => -v,
           Value.lovelace(1000),
           Value.lovelace(-1000),
-          ExUnits(memory = 23326L, steps = 6257655L)
+          ExUnits(memory = 1413, steps = 990526)
         )
     }
 
@@ -487,7 +490,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value(utf8"PolicyId", utf8"TokenName", 2000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 3000),
-          ExUnits(memory = 104699L, steps = 28962635L)
+          ExUnits(memory = 1446, steps = 1_068221)
         )
     }
 
@@ -496,7 +499,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value.zero,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 75062L, steps = 19938712L)
+          ExUnits(memory = 1425, steps = 885065)
         )
     }
 
@@ -505,7 +508,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => Value.zero + v,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 73598L, steps = 19448724L)
+          ExUnits(memory = 1425, steps = 896099)
         )
     }
 
@@ -514,7 +517,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value.lovelace(2000),
           Value.lovelace(1000),
           Value.lovelace(3000),
-          ExUnits(memory = 104699L, steps = 28962486L)
+          ExUnits(memory = 1446, steps = 1_068221)
         )
     }
 
@@ -523,7 +526,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value.zero,
           Value.lovelace(1000),
           Value.lovelace(1000),
-          ExUnits(memory = 75062L, steps = 19938712L)
+          ExUnits(memory = 1425, steps = 885065)
         )
     }
 
@@ -532,7 +535,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => Value.zero + v,
           Value.lovelace(1000),
           Value.lovelace(1000),
-          ExUnits(memory = 73598L, steps = 19448724L)
+          ExUnits(memory = 1425, steps = 896099)
         )
     }
 
@@ -549,7 +552,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000))))
             )
           ),
-          ExUnits(memory = 138204L, steps = 37957921L)
+          ExUnits(memory = 1468, steps = 1_106380)
         )
     }
 
@@ -558,7 +561,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value(utf8"PolicyId", utf8"TokenName", -1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
-          ExUnits(memory = 81895L, steps = 22195949L)
+          ExUnits(memory = 1424, steps = 1_030062)
         )
     }
 
@@ -567,7 +570,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v + Value.lovelace(-1000),
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 81895L, steps = 22195800L)
+          ExUnits(memory = 1424, steps = 1_030062)
         )
     }
 
@@ -593,7 +596,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.zero,
-          ExUnits(memory = 281548L, steps = 77867424L)
+          ExUnits(memory = 104613, steps = 27_995649)
         )
     }
 
@@ -618,7 +621,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.lovelace(1000),
-          ExUnits(memory = 214004L, steps = 58711748L)
+          ExUnits(memory = 55936, steps = 15_150352)
         )
     }
 
@@ -640,7 +643,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 208808L, steps = 57198233L)
+          ExUnits(memory = 55936, steps = 15_150352)
         )
     }
 
@@ -679,7 +682,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value(utf8"PolicyId", utf8"TokenName", 2000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", -1000),
-          ExUnits(memory = 104699L, steps = 28962635L)
+          ExUnits(memory = 1446, steps = 1_068221)
         )
     }
 
@@ -688,7 +691,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value.zero,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 75062L, steps = 19938712L)
+          ExUnits(memory = 1425, steps = 885065)
         )
     }
 
@@ -697,7 +700,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => Value.zero - v,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", -1000),
-          ExUnits(memory = 73598L, steps = 19448724L)
+          ExUnits(memory = 1858, steps = 1_238676)
         )
     }
 
@@ -706,7 +709,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value.lovelace(2000),
           Value.lovelace(1000),
           Value.lovelace(-1000),
-          ExUnits(memory = 104699L, steps = 28962486L)
+          ExUnits(memory = 1446, steps = 1_068221)
         )
     }
 
@@ -715,7 +718,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value.zero,
           Value.lovelace(1000),
           Value.lovelace(1000),
-          ExUnits(memory = 75062L, steps = 19938712L)
+          ExUnits(memory = 1425, steps = 885065)
         )
     }
 
@@ -724,7 +727,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => Value.zero - v,
           Value.lovelace(1000),
           Value.lovelace(-1000),
-          ExUnits(memory = 73598L, steps = 19448724L)
+          ExUnits(memory = 1858, steps = 1_238676)
         )
     }
 
@@ -741,7 +744,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               (Value.adaPolicyId, List((Value.adaTokenName, BigInt(-1000))))
             )
           ),
-          ExUnits(memory = 138204L, steps = 37957921L)
+          ExUnits(memory = 1468, steps = 1_106380)
         )
     }
 
@@ -750,7 +753,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
-          ExUnits(memory = 81895L, steps = 22195949L)
+          ExUnits(memory = 1424, steps = 1_030062)
         )
     }
 
@@ -759,7 +762,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v - Value.lovelace(1000),
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 81895L, steps = 22195800L)
+          ExUnits(memory = 1424, steps = 1_030062)
         )
     }
 
@@ -785,7 +788,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.zero,
-          ExUnits(memory = 281548L, steps = 77867424L)
+          ExUnits(memory = 105067, steps = 28_615803)
         )
     }
 
@@ -810,7 +813,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value.lovelace(1000),
-          ExUnits(memory = 214004L, steps = 58711748L)
+          ExUnits(memory = 56369, steps = 15_492929)
         )
     }
 
@@ -832,11 +835,26 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 208808L, steps = 57198233L)
+          ExUnits(memory = 56369, steps = 15_492929)
         )
     }
 
     test("* properties") {
+
+        /** Scaling factors, bounded so that the product stays a legal quantity.
+          *
+          * Shadows the ambient wide `iArb` for this test only. `genAmount` caps a generated
+          * quantity at `2^64`, and the CIP-153 `scaleValue` builtin that `Value.multiply` lowers to
+          * at PV11 fails when a scaled quantity leaves the `+-(2^127)` range (see
+          * `docs/superpowers/specs/2026-08-18-t7-value-builtins-lowering-design.md`). `2^62` is the
+          * largest bound that provably composes with that cap - `2^64 * 2^62 = 2^126`, one bit of
+          * headroom - so it exercises the guard's neighbourhood without tripping it. Widening
+          * `genAmount` means narrowing this in step. The overflow behaviour itself is pinned by the
+          * `*` PV11/PV10 divergence test below.
+          */
+        given Arbitrary[BigInt] =
+            Arbitrary(Gen.choose(-BigInt(2).pow(62), BigInt(2).pow(62)))
+
         checkEval { (value: Value) => (value * 0) === Value.zero }
 
         checkEval { (value: Value, factor: BigInt) =>
@@ -863,7 +881,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v * 2,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 2000),
-          ExUnits(memory = 24327L, steps = 6483449L)
+          ExUnits(memory = 1413, steps = 990526)
         )
     }
 
@@ -872,7 +890,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v * 0,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value.zero,
-          ExUnits(memory = 4501, steps = 780149)
+          ExUnits(memory = 1391, steps = 952367)
         )
     }
 
@@ -881,7 +899,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v * 2,
           Value.lovelace(1000),
           Value.lovelace(2000),
-          ExUnits(memory = 24327L, steps = 6483449L)
+          ExUnits(memory = 1413, steps = 990526)
         )
     }
 
@@ -890,7 +908,40 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v * 0,
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 4501, steps = 780149)
+          ExUnits(memory = 1391, steps = 952367)
+        )
+    }
+
+    /** Pins the documented PV11 strictness of `Value.multiply`.
+      *
+      * At PV11 `multiply` lowers to the CIP-153 `scaleValue` builtin, which fails when a scaled
+      * quantity leaves the `+-(2^127)` range; the portable PV10 lowering computes on unbounded
+      * `BigInt` and has no such bound. `* properties` above deliberately stays inside the safe
+      * range, so this is the one place the divergence is asserted. See
+      * `docs/superpowers/specs/2026-08-18-t7-value-builtins-lowering-design.md`.
+      */
+    test("* product outside the 128-bit quantity range fails at PV11, succeeds at PV10") {
+        // 1073741824 is 2^30; the input quantity is 2^100 (itself a legal quantity), so the
+        // product is 2^130 - out of range. The argument is applied after lowering, so the
+        // optimizer never sees it as a constant.
+        val compiled = PlutusV3.compile { (d: Data) =>
+            (fromData[Value](d) * 1073741824).toData
+        }
+        val pv10 = compiled.withOptions(
+          compilerOptions.copy(targetProtocolVersion = MajorProtocolVersion.plominPV)
+        )
+        val input: Data = Value(utf8"PolicyId", utf8"TokenName", BigInt(2).pow(100)).toData
+
+        val pv11Result = (compiled.program.term $ input.asTerm).evaluateDebug
+        assert(pv11Result.isFailure, s"expected a PV11 failure, got: $pv11Result")
+        // Pin the reason, so the test cannot pass on an unrelated failure.
+        assert(
+          pv11Result.toString.contains("128-bit"),
+          s"expected the scaleValue range check to fail, got: $pv11Result"
+        )
+        assert(
+          (pv10.program.term $ input.asTerm).evaluateDebug.isSuccess,
+          "expected the portable PV10 lowering to accept the overflowing product"
         )
     }
 
@@ -933,7 +984,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.getLovelace,
           Value.zero,
           BigInt(0),
-          ExUnits(memory = 8330, steps = 1_748_582)
+          ExUnits(memory = 1213, steps = 492985)
         )
     }
 
@@ -942,7 +993,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.getLovelace,
           Value.lovelace(1000),
           BigInt(1000),
-          ExUnits(memory = 32012L, steps = 8590256L)
+          ExUnits(memory = 1257, steps = 895629)
         )
     }
 
@@ -951,7 +1002,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.getLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           BigInt(0),
-          ExUnits(memory = 14026, steps = 3_293_898)
+          ExUnits(memory = 1257, steps = 895629)
         )
     }
 
@@ -960,7 +1011,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.getLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 0),
           BigInt(0),
-          ExUnits(memory = 8330, steps = 1_748_582)
+          ExUnits(memory = 1213, steps = 492985)
         )
     }
 
@@ -1071,7 +1122,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value.zero,
           BigInt(0),
-          ExUnits(memory = 8330, steps = 1_748_582)
+          ExUnits(memory = 1213, steps = 492985)
         )
     }
 
@@ -1080,7 +1131,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(utf8"CS", utf8"TN"),
           Value.zero,
           BigInt(0),
-          ExUnits(memory = 8330, steps = 1_748_582)
+          ExUnits(memory = 1213, steps = 492985)
         )
     }
 
@@ -1089,7 +1140,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value.lovelace(1000),
           BigInt(1000),
-          ExUnits(memory = 32012L, steps = 8590256L)
+          ExUnits(memory = 1257, steps = 895629)
         )
     }
 
@@ -1098,7 +1149,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(utf8"CS", utf8"TN"),
           Value.lovelace(1000),
           BigInt(0),
-          ExUnits(memory = 18194, steps = 4397816)
+          ExUnits(memory = 1257, steps = 895629)
         )
     }
 
@@ -1107,7 +1158,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(Value.adaPolicyId, Value.adaTokenName),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           BigInt(0),
-          ExUnits(memory = 14026, steps = 3_293_898)
+          ExUnits(memory = 1257, steps = 895629)
         )
     }
 
@@ -1116,7 +1167,204 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.quantityOf(utf8"PolicyId", utf8"TokenName"),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           BigInt(1000),
-          ExUnits(memory = 32012L, steps = 8590405L)
+          ExUnits(memory = 1257, steps = 895629)
+        )
+    }
+
+    test("containsAtLeast: superset with larger amounts contains subset") {
+        val a = Value.unsafeFromList(
+          List(
+            (Value.adaPolicyId, List((Value.adaTokenName, BigInt(1000)))),
+            (hex"aa", List((hex"01", BigInt(5)), (hex"02", BigInt(7))))
+          )
+        )
+        val b = Value.unsafeFromList(
+          List((hex"aa", List((hex"01", BigInt(5)))))
+        )
+        assert(a.containsAtLeast(b))
+        assert(!b.containsAtLeast(a))
+        assert(a.containsAtLeast(a))
+        assert(a.containsAtLeast(Value.zero))
+        assert(Value.zero.containsAtLeast(Value.zero))
+    }
+
+    test("containsAtLeast: missing token or smaller amount is not contained") {
+        val a = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(5))))))
+        val more = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(6))))))
+        val other = Value.unsafeFromList(List((hex"bb", List((hex"01", BigInt(1))))))
+        assert(!a.containsAtLeast(more))
+        assert(!a.containsAtLeast(other))
+    }
+
+    test("containsAtLeast: negative amounts on either side throw") {
+        val neg = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(-1))))))
+        val pos = Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(1))))))
+        assertThrows[RequirementError](pos.containsAtLeast(neg))
+        assertThrows[RequirementError](neg.containsAtLeast(pos))
+    }
+
+    test("containsAtLeast: evaluates on-chain") {
+        assertEvalEq(
+          Value
+              .unsafeFromList(List((hex"aa", List((hex"01", BigInt(5))))))
+              .containsAtLeast(Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(4))))))),
+          true
+        )
+        assertEvalEq(
+          Value
+              .unsafeFromList(List((hex"aa", List((hex"01", BigInt(3))))))
+              .containsAtLeast(Value.unsafeFromList(List((hex"aa", List((hex"01", BigInt(4))))))),
+          false
+        )
+    }
+
+    test("insertCoin properties") {
+        // The inserted keys must respect the CIP-153 32-byte key bound: the value produced
+        // here flows into the PV11 `unValueData` guard inside `quantityOf`. Shadows the
+        // ambient unbounded ByteString arbitrary for this test only.
+        given Arbitrary[ByteString] = Arbitrary(genAssetName)
+        checkEval { (value: Value, cs: PolicyId, tn: TokenName) =>
+            value.insertCoin(cs, tn, BigInt(7)).quantityOf(cs, tn) === BigInt(7) &&
+            value.insertCoin(cs, tn, BigInt(-3)).quantityOf(cs, tn) === BigInt(-3) &&
+            value.insertCoin(cs, tn, BigInt(0)).quantityOf(cs, tn) === BigInt(0)
+        }
+    }
+
+    test("insertCoin inserts a new token") {
+        assertEvalEq(
+          Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"bb", utf8"tokenY", BigInt(7)),
+          Value.unsafeFromList(
+            List(
+              (hex"aa", List((utf8"tokenX", BigInt(5)))),
+              (hex"bb", List((utf8"tokenY", BigInt(7))))
+            )
+          )
+        )
+    }
+
+    test("insertCoin replaces an existing amount instead of adding") {
+        assertEvalEq(
+          Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"aa", utf8"tokenX", BigInt(7)),
+          Value(hex"aa", utf8"tokenX", 7)
+        )
+    }
+
+    test("insertCoin zero amount deletes the token and drops an emptied policy") {
+        assertEvalEq(
+          Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"aa", utf8"tokenX", BigInt(0)),
+          Value.zero
+        )
+        assertEvalEq(
+          Value
+              .unsafeFromList(
+                List((hex"aa", List((utf8"tokenX", BigInt(5)), (utf8"tokenY", BigInt(7)))))
+              )
+              .insertCoin(hex"aa", utf8"tokenX", BigInt(0)),
+          Value(hex"aa", utf8"tokenY", 7)
+        )
+    }
+
+    test("insertCoin budget") {
+        assertEvalWithBudget(
+          (v: Value) => v.insertCoin(utf8"PolicyId", utf8"Other", BigInt(7)),
+          Value(utf8"PolicyId", utf8"TokenName", 1000),
+          Value.unsafeFromList(
+            List((utf8"PolicyId", List((utf8"Other", BigInt(7)), (utf8"TokenName", BigInt(1000)))))
+          ),
+          ExUnits(memory = 1689, steps = 1_175858)
+        )
+    }
+
+    test("insertCoin zero amount on an absent token is a no-op") {
+        assertEvalEq(
+          Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"bb", utf8"tokenY", BigInt(0)),
+          Value(hex"aa", utf8"tokenX", 5)
+        )
+    }
+
+    test("hasOnly properties") {
+        checkEval { (value: Value, cs: PolicyId, tn: TokenName) =>
+            val amount = value.quantityOf(cs, tn)
+            (value.hasOnly(cs, tn, amount) ===
+                (value.tokens(cs) === SortedMap.singleton(tn, amount))) &&
+            (value.hasOnly(cs, tn, BigInt(1)) ===
+                (value.tokens(cs) === SortedMap.singleton(tn, BigInt(1))))
+        }
+
+        checkEval { (cs: PolicyId, tn: TokenName, amount: BigInt) =>
+            Value(cs, tn, amount).hasOnly(cs, tn, amount) === (amount !== BigInt(0))
+        }
+    }
+
+    test("hasOnly: exactly one token under the policy") {
+        val solo = Value(hex"aa", utf8"BEACON", 1)
+        val multi = Value.unsafeFromList(
+          List(
+            (hex"11", List((utf8"tokenX", BigInt(5)))),
+            (hex"aa", List((utf8"BEACON", BigInt(1)))),
+            (hex"ff", List((utf8"tokenY", BigInt(2))))
+          )
+        )
+        assert(solo.hasOnly(hex"aa", utf8"BEACON", 1))
+        assert(multi.hasOnly(hex"aa", utf8"BEACON", 1))
+
+        assertEvalEq(Value(hex"aa", utf8"BEACON", 1).hasOnly(hex"aa", utf8"BEACON", 1), true)
+        assertEvalEq(
+          Value
+              .unsafeFromList(
+                List(
+                  (hex"11", List((utf8"tokenX", BigInt(5)))),
+                  (hex"aa", List((utf8"BEACON", BigInt(1)))),
+                  (hex"ff", List((utf8"tokenY", BigInt(2))))
+                )
+              )
+              .hasOnly(hex"aa", utf8"BEACON", 1),
+          true
+        )
+    }
+
+    test("hasOnly: extra token, wrong amount, absent policy, zero amount") {
+        val extraToken = Value.unsafeFromList(
+          List((hex"aa", List((utf8"BEACON", BigInt(1)), (utf8"BEACON1", BigInt(1)))))
+        )
+        val wrongAmount = Value(hex"aa", utf8"BEACON", 2)
+        assert(!extraToken.hasOnly(hex"aa", utf8"BEACON", 1))
+        assert(!wrongAmount.hasOnly(hex"aa", utf8"BEACON", 1))
+        assert(!wrongAmount.hasOnly(hex"bb", utf8"BEACON", 2))
+        assert(!Value.zero.hasOnly(hex"aa", utf8"BEACON", 0))
+
+        assertEvalEq(
+          Value
+              .unsafeFromList(
+                List((hex"aa", List((utf8"BEACON", BigInt(1)), (utf8"BEACON1", BigInt(1)))))
+              )
+              .hasOnly(hex"aa", utf8"BEACON", 1),
+          false
+        )
+        assertEvalEq(Value(hex"aa", utf8"BEACON", 2).hasOnly(hex"aa", utf8"BEACON", 1), false)
+    }
+
+    test("hasOnly: exact burn") {
+        val burn = Value(hex"aa", utf8"BEACON", -1)
+        assert(burn.hasOnly(hex"aa", utf8"BEACON", -1))
+        assert(!burn.hasOnly(hex"aa", utf8"BEACON", 1))
+
+        assertEvalEq(Value(hex"aa", utf8"BEACON", -1).hasOnly(hex"aa", utf8"BEACON", -1), true)
+    }
+
+    test("hasOnly: budget") {
+        val multi = Value.unsafeFromList(
+          List(
+            (hex"11", List((utf8"tokenX", BigInt(5)))),
+            (hex"aa", List((utf8"BEACON", BigInt(1)))),
+            (hex"ff", List((utf8"tokenY", BigInt(2))))
+          )
+        )
+        assertEvalWithBudget(
+          (v: Value) => v.hasOnly(hex"aa", utf8"BEACON", 1),
+          multi,
+          true,
+          ExUnits(memory = 8687, steps = 3_620482)
         )
     }
 
@@ -1126,12 +1374,31 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         }
     }
 
+    test("withoutLovelace keeps other tokens under the empty policy") {
+        // Pins the delete-the-ada-token semantics shared with the CIP-153 `insertCoin`
+        // builtin: only the (adaPolicyId, adaTokenName) coin goes; a non-ada token that
+        // sits under the empty policy survives. Ledger-shaped values never hit this case.
+        assertEvalEq(
+          Value
+              .unsafeFromList(
+                List(
+                  (
+                    Value.adaPolicyId,
+                    List((Value.adaTokenName, BigInt(1000)), (utf8"weird", BigInt(2)))
+                  )
+                )
+              )
+              .withoutLovelace,
+          Value(Value.adaPolicyId, utf8"weird", 2)
+        )
+    }
+
     test("withoutLovelace zero") {
         assertEvalWithBudget(
           (v: Value) => v.withoutLovelace,
           Value.zero,
           Value.zero,
-          ExUnits(memory = 4896, steps = 977963)
+          ExUnits(memory = 1559, steps = 678958)
         )
     }
 
@@ -1140,7 +1407,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.withoutLovelace,
           Value.lovelace(1000),
           Value.zero,
-          ExUnits(memory = 11196, steps = 2914061)
+          ExUnits(memory = 1645, steps = 1_099540)
         )
     }
 
@@ -1149,7 +1416,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.withoutLovelace,
           Value(utf8"PolicyId", utf8"TokenName", 1000),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 9160, steps = 2_279_137)
+          ExUnits(memory = 1667, steps = 1_137699)
         )
     }
 
@@ -1166,7 +1433,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           Value(utf8"PolicyId", utf8"TokenName", 1000),
-          ExUnits(memory = 11196, steps = 2914061)
+          ExUnits(memory = 1732, steps = 1_539900)
         )
     }
 
@@ -1184,7 +1451,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.flatten,
           Value.zero,
           List.empty,
-          ExUnits(memory = 6796L, steps = 1239650L)
+          ExUnits(memory = 5764, steps = 946656)
         )
     }
 
@@ -1193,7 +1460,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v.flatten,
           Value.lovelace(1000),
           List((Value.adaPolicyId, Value.adaTokenName, BigInt(1000))),
-          ExUnits(memory = 32864L, steps = 8919819L)
+          ExUnits(memory = 26680, steps = 6_562443)
         )
     }
 
@@ -1208,7 +1475,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               BigInt(1000)
             )
           ),
-          ExUnits(memory = 32864L, steps = 8919819L)
+          ExUnits(memory = 26680, steps = 6_562443)
         )
     }
 
@@ -1232,7 +1499,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               BigInt(1000)
             )
           ),
-          ExUnits(memory = 58932L, steps = 16599988L)
+          ExUnits(memory = 47596, steps = 12_178230)
         )
     }
 
@@ -1349,7 +1616,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
           (v: Value) => v === Value.lovelace(1000),
           Value.lovelace(1000),
           true,
-          ExUnits(memory = 3601, steps = 2085665)
+          ExUnits(memory = 901, steps = 1_653665)
         )
     }
 
@@ -1376,7 +1643,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(1000)
           ),
           true,
-          ExUnits(memory = 3601, steps = 2167502)
+          ExUnits(memory = 901, steps = 1_735502)
         )
     }
 
@@ -1420,7 +1687,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           true,
-          ExUnits(memory = 142347L, steps = 40375654L)
+          ExUnits(memory = 103704, steps = 27_583840)
         )
     }
 
@@ -1448,7 +1715,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           true,
-          ExUnits(memory = 141147L, steps = 40183654L)
+          ExUnits(memory = 103704, steps = 27_583840)
         )
     }
 
@@ -1529,7 +1796,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             )
           ),
           true,
-          ExUnits(memory = 241665L, steps = 69136210L)
+          ExUnits(memory = 175461, steps = 46_629283)
         )
     }
 
@@ -1547,7 +1814,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(1000)
           ),
           true,
-          ExUnits(memory = 4102, steps = 2323551)
+          ExUnits(memory = 1101, steps = 1_767502)
         )
     }
 
@@ -1565,7 +1832,7 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
             BigInt(1000)
           ),
           true,
-          ExUnits(memory = 1502, steps = 1_907_551)
+          ExUnits(memory = 1101, steps = 1_767502)
         )
     }
 

@@ -492,7 +492,6 @@ class TermAnalysisTest extends AnyFunSuite:
         assert(LengthOfArray.isTotal)
         assert(ListToArray.isTotal)
         assert(!IndexArray.isTotal)
-        assert(!MultiIndexArray.isTotal)
     }
 
     test("Value operations: total vs partial") {

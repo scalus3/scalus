@@ -25,9 +25,9 @@ object Ord:
         else if lessThanInteger(y, x) then Order.Greater
         else Order.Equal
 
-    // TODO it's not truly overriding and doesn't work in generic function,
-    //  see extension methods <, <=, >, >=, equiv, nonEquiv for [A: Ord]
-    //  Don't accidentally mixed with standard scala math.Ordering.BigInt
+    // Monomorphic fast path, chosen over the generic [A: Ord] extension by static overload
+    // resolution only — generic code (A not statically BigInt) goes through Ord[A].compare,
+    // which returns the same results via the Order enum. Not scala.math.Ordering.
     extension (self: BigInt)
         @nowarn inline infix def <(inline other: BigInt): Boolean = lessThanInteger(self, other)
         @nowarn inline infix def <=(inline other: BigInt): Boolean =
@@ -45,9 +45,7 @@ object Ord:
         else if y then Order.Less
         else Order.Equal
 
-    // TODO it's not truly overriding and doesn't work in generic function,
-    //  see extension methods <, <=, >, >=, equiv, nonEquiv for [A: Ord]
-    //  Don't accidentally mixed with standard scala math.Ordering.BigInt
+    // Monomorphic fast path; see the note on the BigInt extension above.
     extension (self: Boolean)
         @nowarn inline infix def <(inline other: Boolean): Boolean =
             if self then false else other

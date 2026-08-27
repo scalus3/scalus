@@ -50,26 +50,24 @@ final case class ProfileOutput(format: ProfileFormat, destination: ProfileDestin
   *   master switch; when `false` the evaluator writes nothing
   * @param outputDir
   *   directory artifacts are written to (plain string so the type stays cross-platform; created via
-  *   `platform.createDirectories`). Default `"."` is the current working directory, matching the
-  *   historical dump location.
+  *   `platform.createDirectories`). Default `"target/scalus"` follows the build-output convention
+  *   (git-ignored, swept by `clean` in sbt projects); set `"."` (or `SCALUS_DUMP_DIR=.`) for the
+  *   pre-1.0 behaviour of dumping into the working directory.
   * @param artifacts
   *   which [[DumpArtifact]]s to write
   * @param profile
   *   profile verbosity (rendering is wired in a later step)
   * @param profileOutputs
   *   explicit profile renderings; empty ⇒ derived from `profile`
-  * @param profileThreshold
-  *   rows below this fraction of total budget collapse into "... and N more"
   * @param maxRows
-  *   row cap per profile section
+  *   row cap per profile section (text rendering)
   */
 final case class EvaluatorReportConfig(
     enabled: Boolean = false,
-    outputDir: String = ".",
+    outputDir: String = "target/scalus",
     artifacts: Set[DumpArtifact] = Set(DumpArtifact.Flat),
     profile: ProfileLevel = ProfileLevel.Off,
     profileOutputs: Seq[ProfileOutput] = Nil,
-    profileThreshold: Double = 0.01,
     maxRows: Int = 50
 ) {
 
@@ -79,7 +77,9 @@ final case class EvaluatorReportConfig(
     /** The profile renderings to produce: explicit [[profileOutputs]] when set, otherwise derived
       * from the [[profile]] level (Summary ⇒ compact text to the console; Full ⇒ HTML + JSON + CSV
       * files). The `profile.json` is the machine-readable rendering editors/tools consume — e.g.
-      * the Scalus VS Code extension annotates source lines with per-line cost from it.
+      * the Scalus VS Code extension annotates source lines with per-line cost from it. File outputs
+      * are indexed in `profile-manifest.json` (written next to them), which is the discovery entry
+      * point: it maps each script/redeemer run to its rendered files.
       */
     def effectiveProfileOutputs: Seq[ProfileOutput] =
         if profileOutputs.nonEmpty then profileOutputs
@@ -105,8 +105,8 @@ object EvaluatorReportConfig {
       *
       * `true` reproduces the historical artifact set: the fully-applied `.flat` files plus the
       * per-builtin budget log (the latter only takes effect in `VALIDATE` mode). The on-disk layout
-      * changes — stable, overwriting filenames plus a `manifest.json` — but the set of artifacts is
-      * unchanged.
+      * changes — stable, overwriting filenames plus a `manifest.json`, written under the default
+      * `target/scalus` instead of the working directory — but the set of artifacts is unchanged.
       */
     def fromLegacyBoolean(debugDumpFilesForTesting: Boolean): EvaluatorReportConfig =
         if debugDumpFilesForTesting then
@@ -127,7 +127,6 @@ object EvaluatorReportConfig {
       *   - `SCALUS_PROFILE` — `off` | `summary` | `full`
       *   - `SCALUS_PROFILE_OUT` — comma list of destinations: `-`/`console` to display, or a file
       *     name (format inferred from `.html`/`.csv`/`.json`/`.txt`); enables profiling
-      *   - `SCALUS_PROFILE_THRESHOLD` — budget fraction (Double)
       *   - `SCALUS_PROFILE_MAX_ROWS` — Int
       *
       * `env` is injectable so the precedence rules can be unit-tested without touching the process
@@ -181,10 +180,6 @@ object EvaluatorReportConfig {
               profileOutputs = outs,
               profile = if cfg.profile == ProfileLevel.Off then ProfileLevel.Full else cfg.profile
             )
-        }
-
-        env.get("SCALUS_PROFILE_THRESHOLD").flatMap(_.trim.toDoubleOption).foreach { t =>
-            cfg = cfg.copy(profileThreshold = t)
         }
 
         env.get("SCALUS_PROFILE_MAX_ROWS").flatMap(_.trim.toIntOption).foreach { n =>

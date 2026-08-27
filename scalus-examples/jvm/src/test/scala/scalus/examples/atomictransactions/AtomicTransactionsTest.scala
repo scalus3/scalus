@@ -16,9 +16,9 @@ class AtomicTransactionsTest extends AnyFunSuite, ScalusTest {
     private def provider(): Emulator =
         Emulator(
           initialUtxos = Map(
-            TransactionInput(genesisHash, 0) -> TransactionOutput
+            Input(genesisHash, 0) -> TransactionOutput
                 .Babbage(Alice.address, Value.ada(10)),
-            TransactionInput(genesisHash, 1) -> TransactionOutput
+            Input(genesisHash, 1) -> TransactionOutput
                 .Babbage(Alice.address, Value.ada(10))
           ),
           initialContext = Context.testMainnet()

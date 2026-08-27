@@ -102,7 +102,9 @@ object ProtocolParams {
                 "committee_max_term_length" -> params.committeeMaxTermLength.toString,
                 "committee_min_size" -> params.committeeMinSize.toString,
                 "cost_models" -> params.costModels.models.map { (k, v) =>
-                    Language.fromId(k).show -> v.map(v => ujson.Num(v.toDouble))
+                    // Use the canonical language name ("PlutusV1", ...) so the value round-trips
+                    // through this reader and matches Blockfrost's own `cost_models` key naming.
+                    Language.fromId(k).toString -> v.map(v => ujson.Num(v.toDouble))
                 },
                 "drep_activity" -> params.dRepActivity.toString,
                 "drep_deposit" -> params.dRepDeposit.toString,
@@ -151,12 +153,17 @@ object ProtocolParams {
               ),
           json =>
               ProtocolParams(
-                collateralPercentage = json("collateral_percent").num.toLong,
+                collateralPercentage = json("collateral_percent").asLong,
                 committeeMaxTermLength = json("committee_max_term_length").asLongOr(0L),
                 committeeMinSize = json("committee_min_size").asLongOr(0L),
                 costModels = CostModels(
                   json("cost_models").obj.map { case (k, v) =>
-                      Language.valueOf(k).languageId -> v.obj.values.map(_.num.toLong).toIndexedSeq
+                      // Blockfrost's `cost_models` values are objects (opName -> cost), while its
+                      // `cost_models_raw` and this codec's own writer emit plain arrays. Accept both.
+                      val costs = v.arrOpt
+                          .map(_.iterator.map(_.num.toLong).toIndexedSeq)
+                          .getOrElse(v.obj.values.map(_.num.toLong).toIndexedSeq)
+                      Language.valueOf(k).languageId -> costs
                   }.toMap
                 ),
                 dRepActivity = json("drep_activity").asLongOr(0L),
@@ -202,31 +209,30 @@ object ProtocolParams {
                       UnitInterval.fromDouble(json("dvt_treasury_withdrawal").numOpt.getOrElse(0))
                 ),
                 executionUnitPrices = ExUnitPrices(
-                  // Use precision=15 to preserve tiny values like 7.21e-8
+                  // Use precision=15 to preserve tiny values like 7.21e-5
                   priceMemory = NonNegativeInterval(json("price_mem").num, precision = 15),
                   priceSteps = NonNegativeInterval(json("price_step").num, precision = 15)
                 ),
                 govActionDeposit = json("gov_action_deposit").asLongOr(0L),
                 govActionLifetime = json("gov_action_lifetime").asLongOr(0L),
-                maxBlockBodySize = json("max_block_size").num.toLong,
+                maxBlockBodySize = json("max_block_size").asLong,
                 maxBlockExecutionUnits = ExUnits(
                   memory = json("max_block_ex_mem").asLong,
                   steps = json("max_block_ex_steps").asLong
                 ),
-                maxBlockHeaderSize = json("max_block_header_size").num.toLong,
-                maxCollateralInputs = json("max_collateral_inputs").num.toLong,
+                maxBlockHeaderSize = json("max_block_header_size").asLong,
+                maxCollateralInputs = json("max_collateral_inputs").asLong,
                 maxTxExecutionUnits = ExUnits(
                   memory = json("max_tx_ex_mem").asLong,
                   steps = json("max_tx_ex_steps").asLong
                 ),
-                maxTxSize = json("max_tx_size").num.toLong,
+                maxTxSize = json("max_tx_size").asLong,
                 maxValueSize = json("max_val_size").asLong,
-                minFeeRefScriptCostPerByte =
-                    json("min_fee_ref_script_cost_per_byte").numOpt.map(_.toLong).getOrElse(0L),
+                minFeeRefScriptCostPerByte = json("min_fee_ref_script_cost_per_byte").asLongOr(0L),
                 minPoolCost = json("min_pool_cost").asLong,
                 monetaryExpansion = json("rho").num,
                 poolPledgeInfluence = json("a0").num,
-                poolRetireMaxEpoch = json("e_max").num.toLong,
+                poolRetireMaxEpoch = json("e_max").asLong,
                 poolVotingThresholds = PoolVotingThresholds(
                   motionNoConfidence = json("pvt_motion_no_confidence").numOpt
                       .map(UnitInterval.fromDouble)
@@ -253,10 +259,10 @@ object ProtocolParams {
                 ),
                 stakeAddressDeposit = json("key_deposit").asLong,
                 stakePoolDeposit = json("pool_deposit").asLong,
-                stakePoolTargetNum = json("n_opt").num.toLong,
+                stakePoolTargetNum = json("n_opt").asLong,
                 treasuryCut = json("tau").num,
-                txFeeFixed = json("min_fee_b").num.toLong,
-                txFeePerByte = json("min_fee_a").num.toLong,
+                txFeeFixed = json("min_fee_b").asLong,
+                txFeePerByte = json("min_fee_a").asLong,
                 utxoCostPerByte = json("coins_per_utxo_size").asLong
               )
         )
@@ -264,6 +270,21 @@ object ProtocolParams {
     val cardanoCliParamsReadWriter: ReadWriter[ProtocolParams] = {
         // Provide implicit ReadWriter for CostModels in Cardano CLI format
         given ReadWriter[CostModels] = CostModels.cardanoCliReadWriter
+        // NonNegativeInterval's default upickle codec rebuilds from Double at precision 6, which
+        // truncates tiny values such as priceSteps = 7.21e-5 to 7.2e-5. Read at precision 15
+        // (matching the Blockfrost reader) so the Double round-trip is exact. ExUnitPrices must be
+        // re-derived here so it picks up this override instead of the precision-6 instance baked
+        // into its `derives UpickleReadWriter` companion.
+        given ReadWriter[NonNegativeInterval] =
+            readwriter[Double].bimap[NonNegativeInterval](
+              _.toDouble,
+              d => NonNegativeInterval(d, precision = 15)
+            )
+        // UnitInterval fields (pool/dRep voting thresholds) intentionally keep their default
+        // precision-1e6 codec: unlike NonNegativeInterval (reduced-value equality) it has plain
+        // case-class equality, and both codecs build it via fromDouble, so it round-trips exactly
+        // for the standard threshold values (which have few decimal places).
+        given ReadWriter[ExUnitPrices] = macroRW
         macroRW
     }
 }

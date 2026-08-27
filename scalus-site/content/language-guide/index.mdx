@@ -34,7 +34,7 @@ Learn how to write smart contracts for Cardano using Scala 3. This guide covers 
 
 Scalus compiles to Untyped Plutus Core (UPLC), a minimalist lambda calculus optimized for blockchain execution. This means only a **subset of Scala features** is supported - those that can be efficiently translated to UPLC while maintaining security and determinism.
 
-**Supported**: Functions, pattern matching, case classes, enums, higher-order functions, recursion, `given`/`using`, inline macros
+**Supported**: Functions, pattern matching, case classes, enums, higher-order functions, recursion (including mutual recursion of top-level `def`s), `given`/`using`, inline macros
 
 **Not Supported**: Try-catch (except `throw`), mutable variables (`var`), complex pattern matching, JVM-specific features, effects, arbitrary type class instances
 

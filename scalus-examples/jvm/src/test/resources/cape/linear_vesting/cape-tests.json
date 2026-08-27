@@ -1,0 +1,854 @@
+{
+  "version": "3.0.0",
+  "description": "Test cases for linear vesting smart contract validator",
+  "data_structures": {
+    "beneficiary_pubkey": {
+      "type": "builtin_data",
+      "value": "B #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+    },
+    "impostor_pubkey": {
+      "type": "builtin_data",
+      "value": "B #cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+    },
+    "currency_symbol_raw": {
+      "type": "builtin_data",
+      "value": "B #dddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+    },
+    "token_name_raw": {
+      "type": "builtin_data",
+      "value": "B #76657374"
+    },
+    "vesting_datum": {
+      "type": "builtin_data",
+      "value": "Constr 0 [Constr 0 [Constr 0 [B #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa], Constr 1 []], Constr 0 [B #dddddddddddddddddddddddddddddddddddddddddddddddddddddddd, B #76657374], I 1000, I 0, I 100, I 10, I 10]"
+    },
+    "modified_vesting_datum": {
+      "type": "builtin_data",
+      "value": "Constr 0 [Constr 0 [Constr 0 [B #aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa], Constr 1 []], Constr 0 [B #dddddddddddddddddddddddddddddddddddddddddddddddddddddddd, B #76657374], I 2000, I 0, I 100, I 10, I 10]"
+    },
+    "successful_partial_unlock": {
+      "type": "script_context",
+      "script_context": {
+        "baseline": "spending",
+        "patches": [
+          {
+            "op": "set_redeemer",
+            "redeemer": "Constr 0 []"
+          },
+          {
+            "op": "set_script_datum",
+            "datum": "@vesting_datum"
+          },
+          {
+            "op": "add_signature",
+            "pubkey_hash": "@beneficiary_pubkey"
+          },
+          {
+            "op": "set_valid_range",
+            "from_time": 11
+          },
+          {
+            "op": "add_input_utxo",
+            "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
+            "value": {
+              "lovelace": 2000000,
+              "assets": [
+                {
+                  "currency_symbol": "@currency_symbol_raw",
+                  "token_name": "@token_name_raw",
+                  "quantity": 1000
+                }
+              ]
+            },
+            "is_own_input": true,
+            "datum": "@vesting_datum"
+          },
+          {
+            "op": "add_output_utxo",
+            "address": {
+              "type": "script",
+              "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+            },
+            "value": {
+              "lovelace": 2000000,
+              "assets": [
+                {
+                  "currency_symbol": "@currency_symbol_raw",
+                  "token_name": "@token_name_raw",
+                  "quantity": 900
+                }
+              ]
+            },
+            "datum": "@vesting_datum"
+          }
+        ]
+      }
+    },
+    "successful_full_unlock": {
+      "type": "script_context",
+      "script_context": {
+        "baseline": "spending",
+        "patches": [
+          {
+            "op": "set_redeemer",
+            "redeemer": "Constr 1 []"
+          },
+          {
+            "op": "set_script_datum",
+            "datum": "@vesting_datum"
+          },
+          {
+            "op": "add_signature",
+            "pubkey_hash": "@beneficiary_pubkey"
+          },
+          {
+            "op": "set_valid_range",
+            "from_time": 101
+          },
+          {
+            "op": "add_input_utxo",
+            "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
+            "value": {
+              "lovelace": 2000000,
+              "assets": [
+                {
+                  "currency_symbol": "@currency_symbol_raw",
+                  "token_name": "@token_name_raw",
+                  "quantity": 1000
+                }
+              ]
+            },
+            "is_own_input": true,
+            "datum": "@vesting_datum"
+          }
+        ]
+      }
+    }
+  },
+  "measurements": [
+    {
+      "name": "partial_unlock_first_installment",
+      "description": "PartialUnlock at time=11 with 900 tokens remaining should succeed (first installment unlocked)",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_mid_vesting",
+      "description": "PartialUnlock at time=50 with 500 tokens remaining should succeed (half vested)",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 50
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 500
+                    }
+                  ]
+                },
+                "datum": "@vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_near_end",
+      "description": "PartialUnlock at time=91 with 100 tokens remaining should succeed (9 installments unlocked)",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 91
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 100
+                    }
+                  ]
+                },
+                "datum": "@vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_between_installments",
+      "description": "PartialUnlock at time=25 with 800 tokens remaining should succeed (between installment boundaries)",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 25
+              },
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 800
+                    }
+                  ]
+                },
+                "datum": "@vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "full_unlock_after_period_end",
+      "description": "FullUnlock at time=101 (just after vesting period end) should succeed",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_full_unlock",
+            "patches": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "full_unlock_well_after",
+      "description": "FullUnlock at time=200 (well after vesting period end) should succeed",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_full_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 200
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "redeemer_integer_0",
+      "description": "Validator fails when redeemer is raw integer 0 instead of constructor 0()",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "I 0"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_integer_1",
+      "description": "Validator fails when redeemer is raw integer 1 instead of constructor 1()",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "I 1"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_integer_99",
+      "description": "Validator fails when redeemer is raw integer 99 (not a valid constructor)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "I 99"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_bytestring",
+      "description": "Validator fails when redeemer is bytestring instead of constructor",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "B #deadbeef"
+        }
+      ]
+    },
+    {
+      "name": "redeemer_list",
+      "description": "Validator fails when redeemer is list [1 2 3] instead of constructor",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": "List [I 1, I 2, I 3]"
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_missing_signature",
+      "description": "PartialUnlock without beneficiary signature should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@beneficiary_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_wrong_signature",
+      "description": "PartialUnlock with impostor signature instead of beneficiary should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@beneficiary_pubkey"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@impostor_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_no_signatures",
+      "description": "PartialUnlock with no signatures at all should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@beneficiary_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_before_first_unlock",
+      "description": "PartialUnlock at time=5 should fail (before firstUnlockPossibleAfter=10)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 5
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_at_first_unlock",
+      "description": "PartialUnlock at time=10 should fail (at boundary, must be strictly after firstUnlockPossibleAfter)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 10
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_zero_remaining",
+      "description": "PartialUnlock with 0 tokens remaining in output should fail (must use FullUnlock instead)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 0
+                    }
+                  ]
+                },
+                "datum": "@vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_not_decreasing",
+      "description": "PartialUnlock with output tokens equal to input (1000) should fail (no tokens actually withdrawn)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 1000
+                    }
+                  ]
+                },
+                "datum": "@vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_wrong_remaining_too_low",
+      "description": "PartialUnlock at time=11 with 800 tokens remaining should fail (expected minimum 900)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 800
+                    }
+                  ]
+                },
+                "datum": "@vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_wrong_remaining_too_high",
+      "description": "PartialUnlock at time=11 with 950 tokens remaining should fail (must withdraw at least 1 installment)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 950
+                    }
+                  ]
+                },
+                "datum": "@vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_datum_modified",
+      "description": "PartialUnlock with modified datum on continuing output should fail (datum must be preserved)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 900
+                    }
+                  ]
+                },
+                "datum": "@modified_vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_datum_missing",
+      "description": "PartialUnlock with no datum on continuing output should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "add_output_utxo",
+                "address": {
+                  "type": "script",
+                  "script_hash": "1111111111111111111111111111111111111111111111111111111111"
+                },
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 900
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_double_satisfaction",
+      "description": "PartialUnlock with two script inputs should fail (double satisfaction attack)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "add_input_utxo",
+                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
+                "value": {
+                  "lovelace": 2000000,
+                  "assets": [
+                    {
+                      "currency_symbol": "@currency_symbol_raw",
+                      "token_name": "@token_name_raw",
+                      "quantity": 1000
+                    }
+                  ]
+                },
+                "is_own_input": true,
+                "datum": "@vesting_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "full_unlock_missing_signature",
+      "description": "FullUnlock without beneficiary signature should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_full_unlock",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@beneficiary_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "full_unlock_wrong_signature",
+      "description": "FullUnlock with impostor signature instead of beneficiary should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_full_unlock",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@beneficiary_pubkey"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@impostor_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "full_unlock_before_period_end",
+      "description": "FullUnlock at time=50 should fail (vesting period not yet ended)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_full_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 50
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "full_unlock_at_period_end",
+      "description": "FullUnlock at time=100 should fail (at boundary, must be strictly after vestingPeriodEnd)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_full_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 100
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "partial_unlock_infinite_lower_bound",
+      "description": "PartialUnlock with no lower bound (-inf) should fail; the lower bound must be finite",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_partial_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "to_time": 90
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "full_unlock_infinite_lower_bound",
+      "description": "FullUnlock with no lower bound (-inf) should fail; the lower bound must be finite",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_full_unlock",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "to_time": 200
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

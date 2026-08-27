@@ -8,7 +8,7 @@ import scalus.cardano.onchain.plutus.prelude.{!==, <=>, ===, Eq, List, Option, O
 import scalus.compiler.{Compile, Ignore}
 import scalus.uplc.builtin.Builtins.*
 import scalus.uplc.builtin.Data.{fromData, toData}
-import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
+import scalus.uplc.builtin.{BuiltinList, BuiltinPair, ByteString, Data, FromData, ToData}
 
 import scala.annotation.tailrec
 
@@ -377,6 +377,10 @@ object Value extends ValueOffchainOps {
       *
       * This method traverses the `Value` and negates each token amount by subtracting it from zero.
       *
+      * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
+      * CIP-153 `scaleValue` builtin, which requires the value in canonical form and fails on a
+      * result outside the signed 128-bit range. See `Options.valueBuiltins`.
+      *
       * @param v
       *   The `Value` to negate
       * @return
@@ -415,6 +419,10 @@ object Value extends ValueOffchainOps {
       * This method performs an element-wise addition of the token amounts in both `Value`
       * instances, treating absent tokens as having zero amount.
       *
+      * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
+      * CIP-153 `unionValue` builtin, which requires both values in canonical form and fails on a
+      * sum outside the signed 128-bit range. See `Options.valueBuiltins`.
+      *
       * @param a
       *   First `Value` instance
       * @param b
@@ -436,6 +444,10 @@ object Value extends ValueOffchainOps {
       * This method subtracts the token amounts in the second `Value` from those in the first,
       * treating absent tokens as having zero amount.
       *
+      * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
+      * CIP-153 `scaleValue` + `unionValue` builtins, which require both values in canonical form
+      * and fail on a result outside the signed 128-bit range. See `Options.valueBuiltins`.
+      *
       * @param a
       *   The `Value` to subtract from
       * @param b
@@ -455,6 +467,10 @@ object Value extends ValueOffchainOps {
       *
       * This method scales each token amount in the `Value` by the given factor, effectively
       * multiplying all amounts by the same integer.
+      *
+      * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to the
+      * CIP-153 `scaleValue` builtin, which requires the value in canonical form and fails on a
+      * scaled amount outside the signed 128-bit range. See `Options.valueBuiltins`.
       *
       * @param v
       *   The `Value` to multiply
@@ -665,6 +681,12 @@ object Value extends ValueOffchainOps {
           *
           * If the `Value` contains no Lovelace, it returns zero.
           *
+          * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this delegates to
+          * `quantityOf` and thus lowers to the CIP-153 `lookupCoin` builtin, which requires the
+          * value in canonical form (strictly ascending keys, no zero amounts, no empty inner maps,
+          * keys at most 32 bytes, amounts within the signed 128-bit range) and makes the script
+          * fail otherwise. See `Options.valueBuiltins`.
+          *
           * @return
           *   The amount of Lovelace in this `Value`
           * @example
@@ -741,6 +763,12 @@ object Value extends ValueOffchainOps {
           * Returns the token amount for the given policy id and token name pair. If either the
           * policy id or token name is not found, returns zero.
           *
+          * At PV11 (vanRossem) with `Options.valueBuiltins` enabled (the default) this lowers to
+          * the CIP-153 `lookupCoin` builtin, which requires the value in canonical form (strictly
+          * ascending keys, no zero amounts, no empty inner maps, keys at most 32 bytes, amounts
+          * within the signed 128-bit range) and makes the script fail otherwise. See
+          * `Options.valueBuiltins`.
+          *
           * @param cs
           *   The policy id to look up
           * @param tn
@@ -771,6 +799,79 @@ object Value extends ValueOffchainOps {
             case Option.Some(tokens) => tokens.get(tn).getOrElse(0)
             case Option.None         => 0
 
+        /** Tests whether this `Value` contains at least the amounts in `other`.
+          *
+          * For every (policy id, token name, amount) entry in `other`, this `Value` must hold at
+          * least that amount. Fails (throws) when either value contains a negative amount -
+          * mirroring the CIP-153 `valueContains` builtin: for values in canonical form the result
+          * is identical on every protocol version. For non-canonical values (zero amounts, empty
+          * inner maps - only constructible via the unsafe constructors) the PV11 builtin lowering
+          * may fail or differ.
+          *
+          * At PV11 (vanRossem) this method lowers to the `valueContains` builtin, which requires
+          * both values to be in canonical form (strictly ascending keys, no zero amounts, no empty
+          * inner maps, keys at most 32 bytes, amounts within the signed 128-bit range); a
+          * non-canonical value makes the script fail. See `Options.valueBuiltins`.
+          *
+          * @example
+          *   {{{
+          *   val a = Value.lovelace(BigInt(1000))
+          *   val b = Value.lovelace(BigInt(400))
+          *   a.containsAtLeast(b) === true
+          *   b.containsAtLeast(a) === false
+          *   }}}
+          */
+        def containsAtLeast(other: Value): Boolean = {
+            prelude.require(
+              v.toSortedMap.forall { kv => kv._2.forall { tv => tv._2 >= BigInt(0) } },
+              "containsAtLeast: negative amount in this value"
+            )
+            prelude.require(
+              other.toSortedMap.forall { kv => kv._2.forall { tv => tv._2 >= BigInt(0) } },
+              "containsAtLeast: negative amount in other value"
+            )
+            other.toSortedMap.forall { kv =>
+                kv._2.forall { tv => v.quantityOf(kv._1, tv._1) >= tv._2 }
+            }
+        }
+
+        /** Returns a new `Value` with the amount of `(cs, tn)` set to `amount`.
+          *
+          * The amount is REPLACED, not added - unlike `+`. An `amount` of zero deletes the token,
+          * and the policy entry too when it held no other token, keeping the result canonical.
+          * Mirrors the CIP-153 `insertCoin` builtin.
+          *
+          * At PV11 (vanRossem) this method lowers to the `insertCoin` builtin, which requires the
+          * value to be in canonical form (strictly ascending keys, no zero amounts, no empty inner
+          * maps, keys at most 32 bytes, amounts within the signed 128-bit range) and rejects a
+          * `cs`/`tn` longer than 32 bytes (for non-zero `amount`) or an `amount` outside the signed
+          * 128-bit range; a violation makes the script fail. See `Options.valueBuiltins`.
+          *
+          * @param cs
+          *   The policy id of the coin to set
+          * @param tn
+          *   The token name of the coin to set
+          * @param amount
+          *   The new amount; zero deletes the coin
+          * @example
+          *   {{{
+          *   val value = Value(utf8"pid", utf8"TOKEN", BigInt(5))
+          *   value.insertCoin(utf8"pid", utf8"TOKEN", BigInt(7)) === Value(utf8"pid", utf8"TOKEN", BigInt(7))
+          *   value.insertCoin(utf8"pid", utf8"TOKEN", BigInt(0)) === Value.zero
+          *   }}}
+          */
+        def insertCoin(cs: PolicyId, tn: TokenName, amount: BigInt): Value =
+            if amount !== BigInt(0) then
+                val tokens = v.toSortedMap.get(cs).getOrElse(SortedMap.empty)
+                Value(v.toSortedMap.insert(cs, tokens.insert(tn, amount)))
+            else
+                v.toSortedMap.get(cs) match
+                    case Option.Some(tokens) =>
+                        val newTokens = tokens.delete(tn)
+                        if newTokens.isEmpty then Value(v.toSortedMap.delete(cs))
+                        else Value(v.toSortedMap.insert(cs, newTokens))
+                    case Option.None => v
+
         /** Get all tokens associated with a given policy.
           *
           * Returns the token `SortedMap` for the given policy id. If the policy id is not found,
@@ -800,10 +901,61 @@ object Value extends ValueOffchainOps {
         def tokens(cs: PolicyId): SortedMap[TokenName, BigInt] =
             v.toSortedMap.get(cs).getOrElse(SortedMap.empty)
 
-        /** Returns a new `Value` with all ADA/Lovelace tokens removed.
+        /** Tests whether the tokens under `cs` are exactly `{tn -> amount}`.
           *
-          * This method creates a copy of the value with the ADA policy id removed, effectively
-          * removing all Lovelace tokens while preserving other tokens.
+          * True iff this `Value` holds `amount` of `tn` under `cs` and NO other token of that
+          * policy id. Other policy ids are not constrained, so the check composes with other
+          * scripts acting in the same transaction. Negative amounts work too, e.g.
+          * `hasOnly(cs, tn, -1)` checks an exact single-token burn.
+          *
+          * This is the recommended way to verify an exact mint, e.g. that a minting policy forges
+          * exactly one beacon NFT and nothing else under its own policy id:
+          * `tx.mint.hasOnly(ownPolicyId, tn, 1)`. It costs a single `equalsData` on the policy's
+          * token map instead of an element-wise `SortedMap` comparison.
+          *
+          * The equality is on the underlying `Data` encoding, so it assumes this `Value` is in
+          * canonical form (strictly ascending keys, no zero amounts, no empty inner maps) - true
+          * for every ledger-provided value such as `tx.mint` or an output's value. A non-canonical
+          * value (constructible only via the unsafe constructors) may compare unequal to a
+          * semantically equal one. In particular `amount == 0` returns `false` on canonical values:
+          * they never store zero amounts.
+          *
+          * @param cs
+          *   The policy id whose tokens must be exactly `{tn -> amount}`
+          * @param tn
+          *   The single token name allowed under `cs`
+          * @param amount
+          *   The exact amount required for `tn`
+          * @example
+          *   {{{
+          *   val beacon = Value(utf8"pid", utf8"BEACON", 1)
+          *   beacon.hasOnly(utf8"pid", utf8"BEACON", 1) === true
+          *   beacon.hasOnly(utf8"pid", utf8"BEACON", 2) === false
+          *   beacon.hasOnly(utf8"other", utf8"BEACON", 1) === false
+          *
+          *   val two = Value.unsafeFromList(
+          *     List((utf8"pid", List((utf8"BEACON", BigInt(1)), (utf8"BEACON1", BigInt(1)))))
+          *   )
+          *   two.hasOnly(utf8"pid", utf8"BEACON", 1) === false
+          *   }}}
+          */
+        def hasOnly(cs: PolicyId, tn: TokenName, amount: BigInt): Boolean = {
+            val expectedTokens = SortedMap.singleton(tn, amount).toData
+            def go(pairs: BuiltinList[BuiltinPair[Data, Data]]): Boolean =
+                if pairs.isEmpty then false
+                else if equalsByteString(unBData(pairs.head.fst), cs) then
+                    equalsData(pairs.head.snd, expectedTokens)
+                else go(pairs.tail)
+            go(unMapData(v.toData))
+        }
+
+        /** Returns a new `Value` with the ADA/Lovelace coin removed.
+          *
+          * Deletes the `(adaPolicyId, adaTokenName)` coin - and the empty-policy entry with it when
+          * it held no other token - while preserving all other tokens. Equivalent to
+          * `insertCoin(adaPolicyId, adaTokenName, 0)` and shares its PV11 lowering to the CIP-153
+          * `insertCoin` builtin, including its canonical-form requirement. See
+          * `Options.valueBuiltins`.
           *
           * @return
           *   A new `Value` without any Lovelace tokens
@@ -829,7 +981,7 @@ object Value extends ValueOffchainOps {
           *   value.withoutLovelace === withoutAda
           *   }}}
           */
-        def withoutLovelace: Value = Value(v.toSortedMap.delete(adaPolicyId))
+        def withoutLovelace: Value = v.insertCoin(adaPolicyId, adaTokenName, BigInt(0))
 
         /** Flattens the `Value` into a list of policy id, token name, and amount triples.
           *

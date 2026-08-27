@@ -4,6 +4,7 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.compiler.*
 import scalus.compiler.sir.TargetLoweringBackend
+import scalus.compiler.sir.lowering.SirToUplcV3Lowering
 import scalus.cardano.onchain.plutus.prelude.SortedMap
 import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.eval.{PlutusVM, Result}
@@ -21,7 +22,8 @@ class DumpUplcTest extends AnyFunSuite {
             SortedMap.singleton(hex"484f534b59", BigInt("1000000000000000"))
         }
         println("=== LOWERED ===")
-        val lowered = scalus.toLoweredValue(compiled.sir)(true, false)
+        val lowered =
+            SirToUplcV3Lowering.fromOptions(compiled.sir, summon[Options]).toLoweredValue()
         println(lowered.show)
         println("=== UPLC ===")
         println(compiled.program.term.pretty.render(120))

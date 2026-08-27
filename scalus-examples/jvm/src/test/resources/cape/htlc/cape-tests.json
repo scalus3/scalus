@@ -1,0 +1,704 @@
+{
+  "version": "3.0.0",
+  "description": "Test cases for hashed time-locked contract (HTLC) validator",
+  "data_structures": {
+    "payer_pubkey": {
+      "type": "builtin_data",
+      "value": {
+        "bytes": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+      }
+    },
+    "recipient_pubkey": {
+      "type": "builtin_data",
+      "value": {
+        "bytes": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    },
+    "impostor_pubkey": {
+      "type": "builtin_data",
+      "value": {
+        "bytes": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    "htlc_datum": {
+      "type": "builtin_data",
+      "value": {
+        "constructor": 0,
+        "fields": [
+          {
+            "constructor": 0,
+            "fields": [
+              {
+                "constructor": 0,
+                "fields": [
+                  {
+                    "bytes": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"
+                  }
+                ]
+              },
+              {
+                "constructor": 1,
+                "fields": []
+              }
+            ]
+          },
+          {
+            "constructor": 0,
+            "fields": [
+              {
+                "constructor": 0,
+                "fields": [
+                  {
+                    "bytes": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+                  }
+                ]
+              },
+              {
+                "constructor": 1,
+                "fields": []
+              }
+            ]
+          },
+          {
+            "bytes": "5f78c33274e43fa9de5659265c1d917e25c03722dcb0b8d27db8d5feaa813953"
+          },
+          {
+            "int": 100
+          }
+        ]
+      }
+    },
+    "successful_claim": {
+      "type": "script_context",
+      "script_context": {
+        "baseline": "spending",
+        "patches": [
+          {
+            "op": "set_redeemer",
+            "redeemer": {
+              "constructor": 0,
+              "fields": [
+                {
+                  "bytes": "deadbeef"
+                }
+              ]
+            }
+          },
+          {
+            "op": "set_script_datum",
+            "datum": "@htlc_datum"
+          },
+          {
+            "op": "add_signature",
+            "pubkey_hash": "@recipient_pubkey"
+          },
+          {
+            "op": "set_valid_range",
+            "from_time": 50,
+            "to_time": 50
+          },
+          {
+            "op": "add_input_utxo",
+            "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
+            "value": {
+              "lovelace": 2000000
+            },
+            "is_own_input": true,
+            "datum": "@htlc_datum"
+          }
+        ]
+      }
+    },
+    "successful_refund": {
+      "type": "script_context",
+      "script_context": {
+        "baseline": "spending",
+        "patches": [
+          {
+            "op": "set_redeemer",
+            "redeemer": {
+              "constructor": 1,
+              "fields": []
+            }
+          },
+          {
+            "op": "set_script_datum",
+            "datum": "@htlc_datum"
+          },
+          {
+            "op": "add_signature",
+            "pubkey_hash": "@payer_pubkey"
+          },
+          {
+            "op": "set_valid_range",
+            "from_time": 200
+          },
+          {
+            "op": "add_input_utxo",
+            "utxo_ref": "3333333333333333333333333333333333333333333333333333333333333333:0",
+            "value": {
+              "lovelace": 2000000
+            },
+            "is_own_input": true,
+            "datum": "@htlc_datum"
+          }
+        ]
+      }
+    }
+  },
+  "measurements": [
+    {
+      "name": "claim_well_before_timeout",
+      "description": "Claim at time=50 with correct preimage and recipient signature should succeed",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": []
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_just_before_timeout",
+      "description": "Claim at time=99 (just before timeout=100) with correct preimage should succeed",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 99,
+                "to_time": 99
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_just_after_timeout",
+      "description": "Refund at time=101 (just after timeout=100) with payer signature should succeed",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 101
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_well_after_timeout",
+      "description": "Refund at time=200 with payer signature should succeed",
+      "expected": {
+        "type": "value",
+        "content": "(con unit ())"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": []
+          }
+        }
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "redeemer_integer_0",
+      "description": "Validator fails when redeemer is raw integer 0 instead of constructor 0(preimage)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": {
+            "int": 0
+          }
+        }
+      ]
+    },
+    {
+      "name": "redeemer_integer_1",
+      "description": "Validator fails when redeemer is raw integer 1 instead of constructor 1()",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": {
+            "int": 1
+          }
+        }
+      ]
+    },
+    {
+      "name": "redeemer_bytestring",
+      "description": "Validator fails when redeemer is bytestring instead of constructor",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": {
+            "bytes": "deadbeef"
+          }
+        }
+      ]
+    },
+    {
+      "name": "redeemer_list",
+      "description": "Validator fails when redeemer is list [1 2 3] instead of constructor",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "builtin_data",
+          "value": {
+            "list": [
+              {
+                "int": 1
+              },
+              {
+                "int": 2
+              },
+              {
+                "int": 3
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "redeemer_claim_without_preimage",
+      "description": "Validator fails when Claim is constructor 0() with no preimage field",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": {
+                  "constructor": 0,
+                  "fields": []
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_missing_signature",
+      "description": "Claim without recipient signature should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@recipient_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_wrong_signature_payer",
+      "description": "Claim with only payer signature (not recipient) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@recipient_pubkey"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@payer_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_wrong_signature_impostor",
+      "description": "Claim with only impostor signature (not recipient) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@recipient_pubkey"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@impostor_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_wrong_preimage",
+      "description": "Claim with preimage #cafebabe (hash does not match) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": {
+                  "constructor": 0,
+                  "fields": [
+                    {
+                      "bytes": "cafebabe"
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_empty_preimage",
+      "description": "Claim with empty preimage (hash does not match) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "set_redeemer",
+                "redeemer": {
+                  "constructor": 0,
+                  "fields": [
+                    {
+                      "bytes": ""
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_at_timeout",
+      "description": "Claim at time=100 (boundary, must be strictly before timeout) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 100,
+                "to_time": 100
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_after_timeout",
+      "description": "Claim at time=150 (after timeout) should fail even with correct preimage",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 150,
+                "to_time": 150
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_infinite_upper_bound",
+      "description": "Claim with from_time=50 and no upper bound (+inf) should fail; the upper bound must be finite",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 50
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "claim_double_satisfaction",
+      "description": "Claim with two script inputs should fail (double satisfaction attack)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_claim",
+            "patches": [
+              {
+                "op": "add_input_utxo",
+                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
+                "value": {
+                  "lovelace": 2000000
+                },
+                "is_own_input": true,
+                "datum": "@htlc_datum"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_missing_signature",
+      "description": "Refund without payer signature should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@payer_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_wrong_signature_recipient",
+      "description": "Refund with only recipient signature (not payer) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@payer_pubkey"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@recipient_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_wrong_signature_impostor",
+      "description": "Refund with only impostor signature (not payer) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "remove_signature",
+                "pubkey_hash": "@payer_pubkey"
+              },
+              {
+                "op": "add_signature",
+                "pubkey_hash": "@impostor_pubkey"
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_before_timeout",
+      "description": "Refund at time=50 (before timeout) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 50
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_at_timeout",
+      "description": "Refund at time=100 (boundary, must be strictly after timeout) should fail",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "from_time": 100
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_infinite_lower_bound",
+      "description": "Refund with no lower bound (-inf) should fail; the lower bound must be finite",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "set_valid_range",
+                "to_time": 200
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "refund_double_satisfaction",
+      "description": "Refund with two script inputs should fail (double satisfaction attack)",
+      "expected": {
+        "type": "error"
+      },
+      "inputs": [
+        {
+          "type": "script_context",
+          "script_context": {
+            "baseline": "@successful_refund",
+            "patches": [
+              {
+                "op": "add_input_utxo",
+                "utxo_ref": "4444444444444444444444444444444444444444444444444444444444444444:0",
+                "value": {
+                  "lovelace": 2000000
+                },
+                "is_own_input": true,
+                "datum": "@htlc_datum"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

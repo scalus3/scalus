@@ -3,7 +3,9 @@ package scalus.examples.amm
 import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
+import scalus.ScalaCompilerVersion
 import scalus.cardano.ledger.*
+import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.cardano.ledger.rules.{Context, PlutusScriptsTransactionMutator}
 import scalus.cardano.node.Emulator
 import scalus.cardano.txbuilder.TxBuilder
@@ -16,6 +18,18 @@ import scalus.utils.await
 
 class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
     import AmmTest.{*, given}
+
+    /** Asserts the total evaluated script ExUnits (all redeemers) and the tx fee of a built
+      * transaction. The fee is derived from tx size + script ExUnits, so it moves whenever the
+      * budget does.
+      */
+    private def assertScriptBudget(tx: Transaction, expected: ExUnits, expectedFee: Coin): Unit = {
+        val actual = tx.witnessSet.redeemers
+            .map(_.value.totalExUnits)
+            .getOrElse(fail("transaction has no redeemers"))
+        assert(actual == expected, s"Budget mismatch: got $actual")
+        assert(tx.body.value.fee == expectedFee, s"Fee mismatch: got ${tx.body.value.fee}")
+    }
 
     test(s"AmmValidator size: ${AmmContract.compiled.script.script.size} bytes") {
         info(s"Validator size: ${AmmContract.compiled.script.script.size} bytes")
@@ -91,6 +105,99 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
           newDatum.r1 == initialDatum.r1 - (BigInt(
             halfLp
           ) * initialDatum.r1 / initialDatum.lpSupply)
+        )
+    }
+
+    test("close: burns the pool NFT and reclaims min-ADA from an empty pool") {
+        val (provider, txCreator) = createSetup()
+        // Init an empty pool, deposit, then redeem ALL LP so the pool is empty again.
+        val utxos1 = provider.findUtxos(Alice.address).await().toOption.get
+        val createTx = txCreator.createEmptyPool(utxos1, 5_000_000L, Alice.address, Alice.signer)
+        provider.submit(createTx).await()
+        val emptyPool = Utxo(createTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
+
+        val utxos2 = provider.findUtxos(Alice.address).await().toOption.get
+        val depositTx =
+            txCreator.deposit(
+              utxos2,
+              emptyPool,
+              x0 = 1000L,
+              x1 = 4000L,
+              Alice.address,
+              Alice.signer
+            )
+        provider.submit(depositTx).await()
+        val funded = Utxo(depositTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
+        val allLp = txCreator.readPoolDatum(funded).lpSupply.toLong
+
+        val utxos3 = provider.findUtxos(Alice.address).await().toOption.get
+        val redeemTx = txCreator.redeem(utxos3, funded, allLp, Alice.address, Alice.signer)
+        provider.submit(redeemTx).await()
+        val drained = Utxo(redeemTx.utxos.find(_._2.address == txCreator.scriptAddress).get)
+        assert(txCreator.readPoolDatum(drained) == AmmDatum(BigInt(0), BigInt(0), BigInt(0)))
+
+        val utxos4 = provider.findUtxos(Alice.address).await().toOption.get
+        val closeTx = txCreator.close(utxos4, drained, Alice.address, Alice.signer)
+        assert(provider.submit(closeTx).await().isRight, "close should succeed")
+        // No pool output remains, and the pool NFT is gone.
+        assert(closeTx.utxos.find(_._2.address == txCreator.scriptAddress).isEmpty)
+    }
+
+    test("security: LP is not fungible across pools with the same params but different seeds") {
+        val (provider, poolA) = createSetup()
+        // A second pool with identical token pair + fee but a DIFFERENT seed UTxO.
+        val poolB = AmmOffchain(
+          env = env,
+          evaluator = poolA.evaluator,
+          contract = compiledContract,
+          params = ammParams.copy(seed = TxOutRef(TxId(genesisHash), 1))
+        )
+        // Different seed -> different applied script -> different LP policyId.
+        assert(poolA.policyId != poolB.policyId, "pools must have distinct policyIds")
+        assert(poolA.lpAssetName == poolB.lpAssetName, "same LP name, but under different policies")
+    }
+
+    // Budget assertions - total script ExUnits (mint policy + pool spend) for the whole tx. Dual
+    // baselines because the lowering differs across compiler generations; re-measure on both when
+    // the validator changes. See scalus-examples-dual-exunits-baselines.
+    test("budget: deposit") {
+        val (provider, txCreator) = createSetup()
+        val poolUtxo1 = initPoolWith(provider, txCreator, x0 = 1000L, x1 = 4000L)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val depositTx =
+            txCreator.deposit(utxos, poolUtxo1, x0 = 1000L, x1 = 4000L, Alice.address, Alice.signer)
+        assert(provider.submit(depositTx).await().isRight, "deposit should succeed")
+        assertScriptBudget(
+          depositTx,
+          ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 147306, steps = 60_533898),
+            since38 = ExUnits(memory = 147306, steps = 60_533898)
+          ),
+          ScalaCompilerVersion.baseline(
+            pre38 = Coin(404702L),
+            since38 = Coin(402326L)
+          )
+        )
+    }
+
+    test("budget: redeem") {
+        val (provider, txCreator) = createSetup()
+        val poolUtxo1 = initPoolWith(provider, txCreator, x0 = 1000L, x1 = 4000L)
+        val initialDatum = txCreator.readPoolDatum(poolUtxo1)
+        val utxos = provider.findUtxos(Alice.address).await().toOption.get
+        val halfLp = (initialDatum.lpSupply / 2).toLong
+        val redeemTx = txCreator.redeem(utxos, poolUtxo1, halfLp, Alice.address, Alice.signer)
+        assert(provider.submit(redeemTx).await().isRight, "redeem should succeed")
+        assertScriptBudget(
+          redeemTx,
+          ScalaCompilerVersion.baseline(
+            pre38 = ExUnits(memory = 135327, steps = 56_614863),
+            since38 = ExUnits(memory = 135327, steps = 56_614863)
+          ),
+          ScalaCompilerVersion.baseline(
+            pre38 = Coin(403596L),
+            since38 = Coin(401220L)
+          )
         )
     }
 
@@ -277,11 +384,15 @@ object AmmTest extends ScalusTest {
     val t0Name: AssetName = AssetName(ByteString.fromString("T0"))
     val t1Name: AssetName = AssetName(ByteString.fromString("T1"))
 
+    // Seed UTxO consumed at pool creation to make this pool's policyId unique.
+    val seedRef: TxOutRef = TxOutRef(TxId(genesisHash), 0)
+
     val ammParams: AmmParams = AmmParams(
       t0 = (t0PolicyId, t0Name.bytes),
       t1 = (t1PolicyId, t1Name.bytes),
       feeNumerator = BigInt(997),
-      feeDenominator = BigInt(1000)
+      feeDenominator = BigInt(1000),
+      seed = seedRef
     )
 
     private val compiledContract = AmmContract.compiled.withErrorTraces
@@ -291,11 +402,11 @@ object AmmTest extends ScalusTest {
             Value.asset(t0PolicyId, t0Name, 1_000_000L, Coin.ada(100)) +
                 Value.asset(t1PolicyId, t1Name, 1_000_000L)
         Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(Alice.address, tokenValue),
-          TransactionInput(genesisHash, 3) -> TransactionOutput(Alice.address, Value.ada(10_000)),
-          TransactionInput(genesisHash, 4) -> TransactionOutput(Bob.address, Value.ada(10_000))
+          Input(genesisHash, 0) -> Output(Alice.address, Value.ada(10_000)),
+          Input(genesisHash, 1) -> Output(Alice.address, Value.ada(10_000)),
+          Input(genesisHash, 2) -> Output(Alice.address, tokenValue),
+          Input(genesisHash, 3) -> Output(Alice.address, Value.ada(10_000)),
+          Input(genesisHash, 4) -> Output(Bob.address, Value.ada(10_000))
         )
     }
 

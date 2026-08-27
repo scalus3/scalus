@@ -39,9 +39,9 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
         // Setup: Create emulator with initial UTxOs
         val genesisHash = TestUtil.genesisHash
         val initialUtxos: Utxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(aliceAddress, Value.ada(100)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, Value.ada(50)),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(bobAddress, Value.ada(200))
+          Input(genesisHash, 0) -> Output(aliceAddress, Value.ada(100)),
+          Input(genesisHash, 1) -> Output(aliceAddress, Value.ada(50)),
+          Input(genesisHash, 2) -> Output(bobAddress, Value.ada(200))
         )
         val provider: BlockchainProvider = new Emulator(initialUtxos)
 
@@ -62,9 +62,9 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
     test("queryUtxos: find UTxOs with minimum lovelace") {
         val genesisHash = TestUtil.genesisHash
         val initialUtxos: Utxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(aliceAddress, Value.ada(100)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, Value.ada(50)),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(aliceAddress, Value.ada(10))
+          Input(genesisHash, 0) -> Output(aliceAddress, Value.ada(100)),
+          Input(genesisHash, 1) -> Output(aliceAddress, Value.ada(50)),
+          Input(genesisHash, 2) -> Output(aliceAddress, Value.ada(10))
         )
         val provider: BlockchainProvider = new Emulator(initialUtxos)
 
@@ -88,9 +88,9 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
         val valueWithAsset = Value.ada(10) + Value.asset(testPolicyId, testAssetName, 1000)
 
         val initialUtxos: Utxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(aliceAddress, Value.ada(100)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, valueWithAsset),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(bobAddress, Value.ada(200))
+          Input(genesisHash, 0) -> Output(aliceAddress, Value.ada(100)),
+          Input(genesisHash, 1) -> Output(aliceAddress, valueWithAsset),
+          Input(genesisHash, 2) -> Output(bobAddress, Value.ada(200))
         )
         val provider: BlockchainProvider = new Emulator(initialUtxos)
 
@@ -113,9 +113,9 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
         val valueWithAsset = Value.ada(10) + Value.asset(testPolicyId, testAssetName, 1000)
 
         val initialUtxos: Utxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(aliceAddress, Value.ada(100)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, valueWithAsset),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(bobAddress, valueWithAsset)
+          Input(genesisHash, 0) -> Output(aliceAddress, Value.ada(100)),
+          Input(genesisHash, 1) -> Output(aliceAddress, valueWithAsset),
+          Input(genesisHash, 2) -> Output(bobAddress, valueWithAsset)
         )
         val provider: BlockchainProvider = new Emulator(initialUtxos)
 
@@ -154,9 +154,9 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
         )
 
         val initialUtxos: Utxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(aliceAddress, Value.ada(100)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(bobAddress, Value.ada(50)),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(charlieAddress, Value.ada(200))
+          Input(genesisHash, 0) -> Output(aliceAddress, Value.ada(100)),
+          Input(genesisHash, 1) -> Output(bobAddress, Value.ada(50)),
+          Input(genesisHash, 2) -> Output(charlieAddress, Value.ada(200))
         )
         val provider: BlockchainProvider = new Emulator(initialUtxos)
 
@@ -182,11 +182,11 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
         val genesisHash = TestUtil.genesisHash
         // Create many small UTxOs
         val initialUtxos: Utxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(aliceAddress, Value.ada(10)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, Value.ada(20)),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(aliceAddress, Value.ada(30)),
-          TransactionInput(genesisHash, 3) -> TransactionOutput(aliceAddress, Value.ada(40)),
-          TransactionInput(genesisHash, 4) -> TransactionOutput(aliceAddress, Value.ada(50))
+          Input(genesisHash, 0) -> Output(aliceAddress, Value.ada(10)),
+          Input(genesisHash, 1) -> Output(aliceAddress, Value.ada(20)),
+          Input(genesisHash, 2) -> Output(aliceAddress, Value.ada(30)),
+          Input(genesisHash, 3) -> Output(aliceAddress, Value.ada(40)),
+          Input(genesisHash, 4) -> Output(aliceAddress, Value.ada(50))
         )
         val provider: BlockchainProvider = new Emulator(initialUtxos)
 
@@ -218,10 +218,10 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
         val genesisHash = TestUtil.genesisHash
         // Alice has small UTxOs, Bob has larger ones
         val initialUtxos: Utxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(aliceAddress, Value.ada(10)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, Value.ada(20)),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(bobAddress, Value.ada(100)),
-          TransactionInput(genesisHash, 3) -> TransactionOutput(bobAddress, Value.ada(200))
+          Input(genesisHash, 0) -> Output(aliceAddress, Value.ada(10)),
+          Input(genesisHash, 1) -> Output(aliceAddress, Value.ada(20)),
+          Input(genesisHash, 2) -> Output(bobAddress, Value.ada(100)),
+          Input(genesisHash, 3) -> Output(bobAddress, Value.ada(200))
         )
         val provider: BlockchainProvider = new Emulator(initialUtxos)
 
@@ -247,11 +247,11 @@ class UtxoQueryDslExamplesSpec extends AnyFunSuite {
     test("queryUtxos: limit restricts number of results") {
         val genesisHash = TestUtil.genesisHash
         val initialUtxos: Utxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput(aliceAddress, Value.ada(10)),
-          TransactionInput(genesisHash, 1) -> TransactionOutput(aliceAddress, Value.ada(20)),
-          TransactionInput(genesisHash, 2) -> TransactionOutput(aliceAddress, Value.ada(30)),
-          TransactionInput(genesisHash, 3) -> TransactionOutput(aliceAddress, Value.ada(40)),
-          TransactionInput(genesisHash, 4) -> TransactionOutput(aliceAddress, Value.ada(50))
+          Input(genesisHash, 0) -> Output(aliceAddress, Value.ada(10)),
+          Input(genesisHash, 1) -> Output(aliceAddress, Value.ada(20)),
+          Input(genesisHash, 2) -> Output(aliceAddress, Value.ada(30)),
+          Input(genesisHash, 3) -> Output(aliceAddress, Value.ada(40)),
+          Input(genesisHash, 4) -> Output(aliceAddress, Value.ada(50))
         )
         val provider: BlockchainProvider = new Emulator(initialUtxos)
 

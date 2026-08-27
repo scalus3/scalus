@@ -116,9 +116,9 @@ object UnfixedAuctionValidator extends Validator {
           "Continuing output must go to auction script address"
         )
 
-        val newDatum = continuingOutput.datum match
-            case OutputDatum.OutputDatum(newDatumData) => newDatumData.to[Datum]
-            case _ => fail("Continuing auction output must have inline datum")
+        val newDatum = continuingOutput.datum.inlineOrFail[Datum](
+          "Continuing auction output must have inline datum"
+        )
 
         val expectedNewDatum = Datum(
           seller = seller,
@@ -145,7 +145,7 @@ object UnfixedAuctionValidator extends Validator {
         currentHighestBidder match
             case Option.Some(previousBidder) =>
                 require(
-                  refundOutputIdx >= BigInt(0),
+                  refundOutputIdx >= 0,
                   "Refund output index required when previous bidder exists"
                 )
                 val refundOutput = txInfo.outputs.at(refundOutputIdx)
@@ -195,7 +195,7 @@ object UnfixedAuctionValidator extends Validator {
                 )
 
                 require(
-                  winnerOutputIdx >= BigInt(0),
+                  winnerOutputIdx >= 0,
                   "Winner output index required when there is a winner"
                 )
                 val winnerOutput = txInfo.outputs.at(winnerOutputIdx)
@@ -260,15 +260,9 @@ object UnfixedAuctionValidator extends Validator {
           "Seller must sign to start auction"
         )
 
-        val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.size === BigInt(1),
-          "Only one token name allowed per auction start"
-        )
-        val (mintedTokenName, mintedQuantity) = mintedTokens.toList.head
-        require(
-          mintedTokenName === itemId && mintedQuantity === BigInt(1),
-          "Must mint exactly one auction NFT with the specified itemId"
+          txInfo.mint.hasOnly(policyId, itemId, 1),
+          "Must mint exactly one auction NFT with the specified itemId and nothing else"
         )
 
         require(
@@ -277,7 +271,7 @@ object UnfixedAuctionValidator extends Validator {
         )
 
         require(
-          startingBid > BigInt(0),
+          startingBid > 0,
           "Starting bid must be positive"
         )
 
@@ -299,13 +293,11 @@ object UnfixedAuctionValidator extends Validator {
           auctionEndTime = auctionEndTime,
           itemId = itemId
         )
-        auctionOutput.datum match
-            case OutputDatum.OutputDatum(datumData) =>
-                require(
-                  datumData.to[Datum] === expectedDatum,
-                  "Initial auction datum must be correct"
-                )
-            case _ => fail("Auction output must have inline datum")
+        require(
+          auctionOutput.datum
+              .inlineOrFail[Datum]("Auction output must have inline datum") === expectedDatum,
+          "Initial auction datum must be correct"
+        )
 
     private inline def handleBurn(
         policyId: PolicyId,
@@ -313,7 +305,7 @@ object UnfixedAuctionValidator extends Validator {
     ): Unit =
         val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < BigInt(0) },
+          mintedTokens.forall { case (_, amount) => amount < 0 },
           "Only burning is allowed (all amounts must be negative)"
         )
 }

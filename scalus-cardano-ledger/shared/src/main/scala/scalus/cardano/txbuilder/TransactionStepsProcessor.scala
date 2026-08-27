@@ -693,7 +693,9 @@ private class TransactionStepsProcessor(private var _ctx: Context) {
         witness: PubKeyWitness.type | TwoArgumentPlutusScriptWitness | NativeScriptWitness,
         step: TransactionBuilderStep
     ): Result[Unit] = cert match {
-        // FIXME: verify
+        // Matches cardano-ledger's getVKeyWitnessConwayTxCert: UnregCert always requires the
+        // stake credential's witness (regardless of the deposit-refund field) — a key
+        // credential needs a vkey witness, a script credential a script witness.
         case Certificate.UnregCert(credential, _) =>
             for {
                 _ <- (credential, witness) match {

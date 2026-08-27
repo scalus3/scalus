@@ -161,7 +161,7 @@ object MintingPolicyV2 {
 }
 
 object MintingPolicySimpleBackend {
-    // Use SimpleSirToUplcLowering backend explicitly
+    // Use the ScottEncodingLowering backend explicitly
     given Options = Options(
       targetLoweringBackend = TargetLoweringBackend.ScottEncodingLowering
     )

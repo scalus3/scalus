@@ -329,7 +329,7 @@ trait ArbitraryInstances extends scalus.cardano.address.ArbitraryInstances {
         for
             transactionId <- arbitrary[TransactionHash]
             index <- Gen.frequency(5 -> Gen.choose(0, 10), 1 -> Gen.choose(11, 65535))
-        yield TransactionInput(transactionId, index)
+        yield Input(transactionId, index)
     }
 
     given Arbitrary[TransactionOutput] = autoDerived

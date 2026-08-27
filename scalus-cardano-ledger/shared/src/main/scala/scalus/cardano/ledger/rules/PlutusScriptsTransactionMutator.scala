@@ -32,7 +32,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
             if event.isValid then
                 val addedUtxos: Utxos = event.body.value.outputs.view.zipWithIndex.map {
                     case (SizedValue(output), index) =>
-                        TransactionInput(event.id, index) -> output
+                        Input(event.id, index) -> output
                 }.toMap
 
                 // TODO full transition
@@ -70,7 +70,7 @@ object PlutusScriptsTransactionMutator extends STS.Mutator {
                               * return output an index of maxBound.
                               */
                             val index = event.body.value.outputs.size.min(65535)
-                            TransactionInput(event.id, index) -> v.value
+                            Input(event.id, index) -> v.value
                         )
                         .toMap
 

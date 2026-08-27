@@ -150,7 +150,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 191122L, steps = 64729777L))
+          result.budget == (ExUnits(memory = 98685, steps = 37_918018))
         )
 
         provider.setSlot(currentSlot)
@@ -247,7 +247,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, depositTx, vaultUtxo.input)
         assert(result.isSuccess, s"Deposit should succeed: $result")
         assert(
-          result.budget == (ExUnits(memory = 217125L, steps = 70551808L))
+          result.budget == (ExUnits(memory = 97076, steps = 38_500816))
         )
 
         assert(provider.submit(depositTx).await().isRight)
@@ -403,7 +403,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val withdrawResult = runValidator(provider, withdrawTx, vaultUtxo.input)
         assert(withdrawResult.isSuccess, s"Withdraw should succeed: $withdrawResult")
         assert(
-          withdrawResult.budget == (ExUnits(memory = 191122L, steps = 64729777L))
+          withdrawResult.budget == (ExUnits(memory = 98685, steps = 37_918018))
         )
 
         provider.setSlot(withdrawSlot)
@@ -450,7 +450,7 @@ class VaultTransactionTest extends AnyFunSuite, ScalusTest {
         val finalizeResult = runValidator(provider, finalizeTx, pendingVaultUtxo.input)
         assert(finalizeResult.isSuccess, s"Finalize should succeed: $finalizeResult")
         assert(
-          finalizeResult.budget == (ExUnits(memory = 216106, steps = 67540346))
+          finalizeResult.budget == (ExUnits(memory = 96241, steps = 34_267973))
         )
 
         provider.setSlot(finalizeSlot)

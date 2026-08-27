@@ -1201,7 +1201,9 @@ final class SIRCompiler(
                         val moduleSym = typeRef.symbol.sourceModule
                         (moduleSym.owner.fullName.toString, moduleSym.fullName.toString)
                     case _ =>
-                        (e.symbol.owner.fullName.toString, e.symbol.fullName.toString)
+                        if e.symbol.owner.isTerm then
+                            error(LocalMutualRecursionNotSupported(name, e.srcPos), ("", ""))
+                        else (e.symbol.owner.fullName.toString, e.symbol.fullName.toString)
 
                 // Note: Data constructors (Data.I, Data.B, etc.) are now handled
                 // in compileExpr via Apply cases that emit the appropriate builtins

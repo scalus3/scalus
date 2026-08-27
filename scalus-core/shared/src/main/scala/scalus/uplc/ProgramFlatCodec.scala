@@ -11,8 +11,10 @@ object ProgramFlatCodec:
     /** Encodes [[DeBruijnedProgram]] as Flat encoded bytes.
       */
     def encodeFlat(deBruijned: DeBruijnedProgram): Array[Byte] =
-        // FIXME, why the hell + 2? +1 should always work with post align.
-        val encoderState = new EncoderState(flatCodec.bitSize(deBruijned) / 8 + 2)
+        // bitSize bits + the mandatory trailing filler byte: after writing bitSize bits the
+        // encoder has filled bitSize / 8 whole bytes, and filler() consumes exactly one more
+        // slot, so bitSize / 8 + 1 is the exact upper bound (same sizing as FlatCodec.encode).
+        val encoderState = new EncoderState(flatCodec.bitSize(deBruijned) / 8 + 1)
         flatCodec.encode(deBruijned, encoderState)
         encoderState.filler()
         val encoded = encoderState.result

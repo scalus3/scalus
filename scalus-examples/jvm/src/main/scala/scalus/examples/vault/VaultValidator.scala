@@ -8,7 +8,7 @@ import scalus.cardano.onchain.plutus.v1
 import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime}
 import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
 import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef, Validator}
-import scalus.cardano.onchain.plutus.prelude.{===, fail, require}
+import scalus.cardano.onchain.plutus.prelude.{===, require}
 
 // Datum
 case class State(
@@ -154,7 +154,7 @@ object VaultValidator extends Validator {
         val ownerCredential = Credential.PubKeyCredential(v1.PubKeyHash(datum.owner))
         val ownerOutputs =
             tx.findOwnOutputs(out => out.address.credential === ownerCredential)
-        require(ownerOutputs.size > BigInt(0), WrongAddressWithdrawal)
+        require(ownerOutputs.size > 0, WrongAddressWithdrawal)
         val totalToOwner =
             ownerOutputs.foldLeft(BigInt(0))((acc, out) => acc + out.value.getLovelace)
         require(totalToOwner >= datum.amount, VaultAmountChanged)
@@ -201,19 +201,14 @@ object VaultValidator extends Validator {
         scriptOutputs.head
     }
 
-    private def getVaultDatum(vaultOutput: TxOut) = vaultOutput.datum match {
-        case OutputDatum.OutputDatum(d) => d.to[State]
-        case _                          => fail(NoDatumProvided)
-    }
+    private def getVaultDatum(vaultOutput: TxOut) =
+        vaultOutput.datum.inlineOrFail[State](NoDatumProvided)
 
-    private def requireSameOwner(out: TxOut, datum: State): Unit =
-        out.datum match {
-            case OutputDatum.OutputDatum(newDatum) =>
-                val s = newDatum.to[State]
-                require(s.owner == datum.owner, VaultOwnerChanged)
-                require(s.recoveryKey == datum.recoveryKey, RecoveryKeyChanged)
-            case _ => fail(NoInlineDatum)
-        }
+    private def requireSameOwner(out: TxOut, datum: State): Unit = {
+        val s = out.datum.inlineOrFail[State](NoInlineDatum)
+        require(s.owner == datum.owner, VaultOwnerChanged)
+        require(s.recoveryKey == datum.recoveryKey, RecoveryKeyChanged)
+    }
 
     // Errors
     inline val NoDatumExists = "Contract has no datum"

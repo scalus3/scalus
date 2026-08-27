@@ -31,6 +31,7 @@ object IntrinsicResolver {
     private val SortedMapModule = "scalus.cardano.onchain.plutus.prelude.SortedMap$"
     private val AssocMapModule = "scalus.cardano.onchain.plutus.prelude.AssocMap$"
     private val OptionModule = "scalus.cardano.onchain.plutus.prelude.Option$"
+    private val ValueModule = "scalus.cardano.onchain.plutus.v1.Value$"
 
     /** Methods whose trailing implicit `Eq` argument is discarded during intrinsic resolution: the
       * V3 intrinsic compares structurally via `equalsRepr` instead of calling `eq`. Sound because
@@ -48,6 +49,33 @@ object IntrinsicResolver {
       OptionModule + ".contains"
     )
 
+    /** Methods that may dispatch a still-packed (`PackedSumDataList`) receiver through the
+      * `BuiltinList` (Data-element) providers, by unpacking it on demand (`unListData`, O(1)). See
+      * `dispatchPriority`.
+      *
+      * Safe only for methods that never hand an element back under the receiver's own labelling:
+      * these return a scalar (`contains`/`indexOf`) or a Data-element list that the provider
+      * relabels from the element TYPE via `typeProxyRepr` (`deleteFirst`/`distinct`/`diff`), so a
+      * packed receiver cannot mislabel anything. The spine ops
+      * (`head`/`tail`/`isEmpty`/`at`/`drop`) are deliberately absent: their repr rules read the
+      * element repr out of the RECEIVER's repr, and `PackedSumDataList` carries none, so
+      * `ListReprRules.elemRepr` falls through to the native default and labels a still-`Data`
+      * element as native (`Blake2b_256` applied to `VCon(Data)` in MembershipToken). Tracked as T17
+      * in docs/internal/CODEGEN_IMPROVEMENT_PLAN.md.
+      *
+      * Deliberately distinct from [[EqStripMethods]], which today holds the same List methods: that
+      * set answers "drop the trailing implicit `Eq`" (an arity property), this one answers "safe
+      * under the packed → BuiltinList view" (a representation property). An `Eq`-taking method that
+      * returned an element natively would belong in the first set and not in this one.
+      */
+    private val PackedListViewMethods: Set[String] = Set(
+      ListModule + ".contains",
+      ListModule + ".indexOf",
+      ListModule + ".deleteFirst",
+      ListModule + ".distinct",
+      ListModule + ".diff"
+    )
+
     private val ListOps = "scalus.compiler.intrinsics.BuiltinListOperations$"
     private val ListOpsV11 = "scalus.compiler.intrinsics.BuiltinListOperationsV11$"
     private val NativeListOps = "scalus.compiler.intrinsics.IntrinsicsNativeList$"
@@ -58,6 +86,7 @@ object IntrinsicResolver {
 
     private val SortedMapIntrinsicsModule = "scalus.compiler.intrinsics.SortedMapIntrinsics$"
     private val AssocMapIntrinsicsModule = "scalus.compiler.intrinsics.AssocMapIntrinsics$"
+    private val ValueIntrinsicsV11Module = "scalus.compiler.intrinsics.ValueIntrinsicsV11$"
 
     private val UplcConstrOptionOps = "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption$"
 
@@ -73,6 +102,7 @@ object IntrinsicResolver {
           "scalus.compiler.intrinsics.BuiltinPairListOperationsV11",
           "scalus.compiler.intrinsics.SortedMapIntrinsics",
           "scalus.compiler.intrinsics.AssocMapIntrinsics",
+          "scalus.compiler.intrinsics.ValueIntrinsicsV11",
           "scalus.compiler.intrinsics.IntrinsicsNativeList",
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrList",
           "scalus.compiler.intrinsics.IntrinsicsUplcConstrOption"
@@ -90,6 +120,14 @@ object IntrinsicResolver {
         // operate on Data-encoded inputs and don't need passthrough semantics.
         modules
     }
+
+    /** Intrinsic modules honoring `Options.valueBuiltins`: when false, the ValueIntrinsicsV11
+      * provider is absent, so `findProviderBinding` returns None and Value ops fall back to the
+      * linked SIR bodies.
+      */
+    def intrinsicModulesFor(valueBuiltins: Boolean): Map[String, Module] =
+        if valueBuiltins then defaultIntrinsicModules
+        else defaultIntrinsicModules - ValueIntrinsicsV11Module
 
     /** Support modules — bindings resolved on demand when referenced from intrinsic bodies. Unlike
       * intrinsic modules, these are NOT used for provider substitution.
@@ -114,6 +152,11 @@ object IntrinsicResolver {
 
     // Representation name constants for registry lookup
     private val BuiltinListRepr = "BuiltinList"
+
+    /** Name of a still-packed `Data` list. No registry entry carries it — a packed receiver only
+      * ever dispatches through the [[BuiltinListRepr]] view, see [[dispatchPriority]].
+      */
+    private val PackedSumDataListRepr = "PackedSumDataList"
     private val NativeBuiltinListRepr = "NativeBuiltinList"
     private val UplcConstrListRepr = "UplcConstrList"
     private val UplcConstrOptionRepr = "UplcConstrOption"
@@ -131,7 +174,7 @@ object IntrinsicResolver {
         Map[String, scalus.compiler.intrinsics.ArgReprConvertRule]
     )
 
-    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules, UplcConstrListReprRules, UplcConstrOptionReprRules}
+    import scalus.compiler.intrinsics.{ListReprRules, MapReprRules, NativeListReprRules, UplcConstrListReprRules, UplcConstrOptionReprRules, ValueReprRules}
 
     private val NoArgConvert: Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] = Map.empty
 
@@ -186,6 +229,9 @@ object IntrinsicResolver {
           MapReprRules.factoryRules,
           MapReprRules.factoryArgConvertRules
         )
+      ),
+      ValueModule -> List(
+        (WildcardRepr, 11, ValueIntrinsicsV11Module, ValueReprRules.rules, NoArgConvert)
       )
     )
 
@@ -221,6 +267,96 @@ object IntrinsicResolver {
         case SIR.LamAbs(_, body, _, _) => 1 + countTopLambdas(body)
         case _                         => 0
 
+    /** The registry entry chosen for a call: its provider binding, the rule tables to apply to the
+      * result and to the first argument, and the dispatch priority it won at (debug logging only).
+      */
+    private case class SelectedProvider(
+        binding: Binding,
+        reprRules: Map[String, scalus.compiler.intrinsics.ReprRule],
+        argConvertRules: Map[String, scalus.compiler.intrinsics.ArgReprConvertRule],
+        reprPriority: Int
+    )
+
+    /** Priority of the packed -> `BuiltinList` view. Above every exact name match (a representation
+      * is described by at most a handful of names) and below [[WildcardPriority]].
+      */
+    private val PackedViewPriority = 100
+
+    /** Priority of a [[WildcardRepr]] entry. It matches any receiver, so it must lose to every
+      * representation-specific entry and to every view.
+      */
+    private val WildcardPriority = 200
+
+    /** Can the entry serve `moduleName.methodName` for a receiver described by `names`, and at what
+      * priority (lower wins)?
+      *
+      * This is the single place that answers "what may dispatch where". Three ways to match, in
+      * order of preference:
+      *   1. The entry's representation is one of the receiver's own names ([[representationNames]])
+      *      — priority is the position, so a native-element list prefers the native provider over
+      *      the Data one.
+      *   2. The receiver is a still-packed `Data` list and the entry is the `BuiltinList`
+      *      (Data-element) provider: a packed list is viewable as one by unpacking on demand
+      *      (`unListData`, O(1)). Restricted to [[PackedListViewMethods]] — see there for why only
+      *      those methods are safe under a view.
+      *   3. The entry is a wildcard (factory methods whose arguments don't match the module type),
+      *      which matches anything but only for methods it carries a repr rule for.
+      *
+      * The packed receiver is recognised by NAME rather than by `repr ==
+      * SumCaseClassRepresentation.PackedSumDataList`, so it is also seen through a
+      * [[SumCaseClassRepresentation.SumReprProxy]], which [[representationNames]] dereferences.
+      */
+    private def dispatchPriority(
+        names: List[String],
+        entry: RegistryEntry,
+        moduleName: String,
+        methodName: String
+    ): Option[Int] = {
+        val (entryRepr, _, _, reprRules, _) = entry
+        names.indexOf(entryRepr) match
+            case i if i >= 0 => Some(i)
+            case _
+                if entryRepr == BuiltinListRepr && names.contains(PackedSumDataListRepr)
+                    && PackedListViewMethods.contains(s"$moduleName.$methodName") =>
+                Some(PackedViewPriority)
+            case _ if entryRepr == WildcardRepr && reprRules.contains(methodName) =>
+                Some(WildcardPriority)
+            case _ => None
+    }
+
+    /** Pick the provider for `moduleName.methodName` among `entries`, for a receiver in `repr`.
+      *
+      * The lowest [[dispatchPriority]] wins; ties go to the highest `minPV` the target protocol
+      * version satisfies. An entry whose provider module has no binding for `methodName` is
+      * skipped, leaving any lower-priority match in place.
+      */
+    private def selectProvider(
+        entries: List[RegistryEntry],
+        repr: LoweredValueRepresentation,
+        moduleName: String,
+        methodName: String
+    )(using lctx: LoweringContext): Option[SelectedProvider] = {
+        val names = representationNames(repr)
+        val pvVersion = lctx.targetProtocolVersion.version
+        var best: Option[SelectedProvider] = None
+        var bestPV = -1
+        var bestPriority = Int.MaxValue
+        for entry <- entries do {
+            val (_, minPV, providerModuleName, reprRules, argConvertRules) = entry
+            dispatchPriority(names, entry, moduleName, methodName) match
+                case Some(priority)
+                    if pvVersion >= minPV &&
+                        (priority < bestPriority || (priority == bestPriority && minPV > bestPV)) =>
+                    lctx.findProviderBinding(providerModuleName, methodName).foreach { b =>
+                        best = Some(SelectedProvider(b, reprRules, argConvertRules, priority))
+                        bestPV = minPV
+                        bestPriority = priority
+                    }
+                case _ => // not applicable, or already beaten
+        }
+        best
+    }
+
     def tryResolveFull(
         head: SIR,
         argSirs0: scala.List[SIR],
@@ -249,37 +385,14 @@ object IntrinsicResolver {
                 registry.get(moduleName) match
                     case None => None
                     case Some(entries) =>
-                        val pvVersion = lctx.targetProtocolVersion.version
-                        var bestBinding: Option[Binding] = None
-                        var bestPV = -1
-                        var bestReprPriority = Int.MaxValue
-                        var bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
-                            Map.empty
-                        var bestArgConvertRules
+                        val selected =
+                            selectProvider(entries, firstArgRepr, moduleName, methodName)
+                        val bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
+                            selected.map(_.reprRules).getOrElse(Map.empty)
+                        val bestArgConvertRules
                             : Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] =
-                            Map.empty
-                        for (repr, minPV, providerModuleName, reprRules, argConvertRules) <-
-                                entries
-                        do {
-                            val reprPriority = reprNames.indexOf(repr) match {
-                                case -1 if repr == WildcardRepr && reprRules.contains(methodName) =>
-                                    reprNames.size
-                                case -1 => -1
-                                case i  => i
-                            }
-                            if reprPriority >= 0 && pvVersion >= minPV &&
-                                (reprPriority < bestReprPriority || (reprPriority == bestReprPriority && minPV > bestPV))
-                            then
-                                lctx.findProviderBinding(providerModuleName, methodName).foreach {
-                                    b =>
-                                        bestBinding = Some(b)
-                                        bestPV = minPV
-                                        bestReprPriority = reprPriority
-                                        bestReprRules = reprRules
-                                        bestArgConvertRules = argConvertRules
-                                }
-                        }
-                        bestBinding.flatMap { binding =>
+                            selected.map(_.argConvertRules).getOrElse(Map.empty)
+                        selected.map(_.binding).flatMap { binding =>
                             val depth = countTopLambdas(binding.value)
                             if depth != argSirs.length then None
                             else {
@@ -396,47 +509,32 @@ object IntrinsicResolver {
                             lctx.log(
                               s"IntrinsicResolver: reprNames=$reprNames entries=${entries.map(e => s"(${e._1},${e._2},${e._3})").mkString(",")}"
                             )
-                        val pvVersion = lctx.targetProtocolVersion.version
-
                         // Find best matching provider: most specific repr name first,
                         // then highest minPV that satisfies constraints
-                        var bestBinding: Option[Binding] = None
-                        var bestPV = -1
-                        var bestReprPriority = Int.MaxValue
-                        var bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
-                            Map.empty
-                        var bestArgConvertRules
-                            : Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] =
-                            Map.empty
-                        for (repr, minPV, providerModuleName, reprRules, argConvertRules) <-
-                                entries
-                        do {
-                            val reprPriority = reprNames.indexOf(repr) match {
-                                case -1 if repr == WildcardRepr && reprRules.contains(methodName) =>
-                                    reprNames.size // wildcard has lowest priority
-                                case -1 => -1 // no match
-                                case i  => i
-                            }
-                            if reprPriority >= 0 && pvVersion >= minPV &&
-                                (reprPriority < bestReprPriority || (reprPriority == bestReprPriority && minPV > bestPV))
-                            then
-                                lctx.findProviderBinding(providerModuleName, methodName).foreach {
-                                    b =>
-                                        bestBinding = Some(b)
-                                        bestPV = minPV
-                                        bestReprPriority = reprPriority
-                                        bestReprRules = reprRules
-                                        bestArgConvertRules = argConvertRules
-                                }
-                        }
-
-                        if lctx.debug && bestBinding.isEmpty then
-                            lctx.log(s"IntrinsicResolver: no binding found for $methodName")
-                        if lctx.debug && bestBinding.isDefined then
-                            lctx.log(
-                              s"IntrinsicResolver: FOUND binding for $methodName, reprPriority=$bestReprPriority"
+                        val selected =
+                            selectProvider(
+                              entries,
+                              loweredArg.representation,
+                              moduleName,
+                              methodName
                             )
-                        bestBinding.map { binding =>
+                        val bestReprRules: Map[String, scalus.compiler.intrinsics.ReprRule] =
+                            selected.map(_.reprRules).getOrElse(Map.empty)
+                        val bestArgConvertRules
+                            : Map[String, scalus.compiler.intrinsics.ArgReprConvertRule] =
+                            selected.map(_.argConvertRules).getOrElse(Map.empty)
+
+                        if lctx.debug then
+                            selected match
+                                case None =>
+                                    lctx.log(
+                                      s"IntrinsicResolver: no binding found for $methodName"
+                                    )
+                                case Some(sel) =>
+                                    lctx.log(
+                                      s"IntrinsicResolver: FOUND binding for $methodName, reprPriority=${sel.reprPriority}"
+                                    )
+                        selected.map(_.binding).map { binding =>
                             // Before substituting the argSir into the provider body, rewrite any
                             // inner ExternalVar references to intrinsic-dispatched modules so
                             // their TypeLambda TypeVars are Transparent. The Scala plugin stamps
@@ -636,7 +734,7 @@ object IntrinsicResolver {
         case SumCaseClassRepresentation.SumPairBuiltinList(_, _) =>
             List(PairListRepr)
         case SumCaseClassRepresentation.PackedSumDataList =>
-            List("PackedSumDataList")
+            List(PackedSumDataListRepr)
         case SumCaseClassRepresentation.DataConstr =>
             List("DataConstr")
         case _ =>

@@ -7,7 +7,7 @@ addSbtPlugin("org.scala-native" % "sbt-scala-native" % "0.5.12")
 addSbtPlugin("org.portable-scala" % "sbt-scala-native-crossproject" % "1.3.2")
 // other
 addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.2")
-addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.11.2")
+addSbtPlugin("com.github.sbt" % "sbt-ci-release" % "1.12.0")
 // show welcome message
 addSbtPlugin("com.github.reibitto" % "sbt-welcome" % "0.6.0")
 addSbtPlugin("pl.project13.scala" % "sbt-jmh" % "0.4.8")
@@ -18,6 +18,6 @@ addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "1.1.6")
 // buildinfo
 addSbtPlugin("com.eed3si9n" % "sbt-buildinfo" % "0.13.1")
 // shared-source shim used by scalus-sbt-plugin (compiled here via unmanagedSourceDirectories below)
-addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.1.0")
+addSbtPlugin("com.github.sbt" % "sbt2-compat" % "0.2.0")
 
 Compile / unmanagedSourceDirectories += baseDirectory.value.getParentFile / "scalus-sbt-plugin" / "src" / "main" / "scala"

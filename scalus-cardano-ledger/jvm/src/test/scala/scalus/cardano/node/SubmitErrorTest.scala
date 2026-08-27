@@ -126,8 +126,8 @@ class SubmitErrorTest extends AnyFunSuite {
 
     test("fromException maps BadAllInputsUTxOException to UtxoNotAvailable with inputs") {
         val missingInputs = Set(
-          TransactionInput(sampleTxHash, 0),
-          TransactionInput(sampleTxHash, 1)
+          Input(sampleTxHash, 0),
+          Input(sampleTxHash, 1)
         )
         val ex = TransactionException.BadAllInputsUTxOException(
           sampleTxHash,
@@ -144,7 +144,7 @@ class SubmitErrorTest extends AnyFunSuite {
     }
 
     test("fromException maps BadAllInputsUTxOException with collateral inputs") {
-        val missingCollateral = Set(TransactionInput(sampleTxHash, 2))
+        val missingCollateral = Set(Input(sampleTxHash, 2))
         val ex = TransactionException.BadAllInputsUTxOException(
           sampleTxHash,
           missingInputs = Set.empty,
@@ -225,7 +225,7 @@ class SubmitErrorTest extends AnyFunSuite {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
 
         val initialUtxos = Map(
-          TransactionInput(genesisHash, 0) -> TransactionOutput.Babbage(
+          Input(genesisHash, 0) -> TransactionOutput.Babbage(
             Alice.address,
             Value.ada(100)
           )

@@ -673,30 +673,25 @@ object FlatInstances:
 
     given HashConsedFlat[SIRType.TypeVar] with
 
-        // FIXME (audit S2, deferred to 0.19.0): the optId codec below is buggy.
-        //   1. `Some(0L)` encodes as 0 and decodes back as `None` (see decodeHC) — the two are
-        //      indistinguishable. Reachable today because `NoSymbol.hashCode == 0` (audit T3).
-        //   2. `bitSizeHC` sizes `optId.getOrElse(0L) + 1` while `encodeHC` writes `optId.getOrElse(0L)`,
-        //      so the size is under-estimated for negative ids (e.g. -65) → possible encode-time
-        //      buffer overflow if ids ever go negative.
-        // The fix is a presence-bit layout (1 bit "has id" + the id only when present), but that
-        // changes the SIR module wire format and so requires a major `SIRVersion` bump (5 -> 6),
-        // which is a breaking change. Deferred out of the 0.18.x patch line: apply together with
-        // the `SIRVersion` bump when cutting 0.19.0.
-
         // Two-bit kind tag: 0 = Transparent, 1 = Unwrapped, 2 = Fixed.
-        // (Was a 1-bit Boolean before Unwrapped existed — all SIR modules must be
-        // recompiled after this change.)
         private val KindBits: Int = 2
 
+        // optId is an explicit presence bit followed by the id, so that Some(0) and
+        // negative ids round-trip correctly (audit S2). Format change over the previous
+        // getOrElse(0)-based layout — covered by the SIRVersion bump to (6, 0).
         override def bitSizeHC(a: SIRType.TypeVar, hashCons: HashConsed.State): Int =
-            summon[Flat[String]].bitSize(a.name) +
-                summon[Flat[Long]].bitSize(a.optId.getOrElse(0L) + 1) +
+            summon[Flat[String]].bitSize(a.name) + 1 +
+                a.optId.map(id => summon[Flat[Long]].bitSize(id)).getOrElse(0) +
                 KindBits
 
         override def encodeHC(a: SIRType.TypeVar, encode: HashConsedEncoderState): Unit =
             summon[Flat[String]].encode(a.name, encode.encode)
-            summon[Flat[Long]].encode(a.optId.getOrElse(0L), encode.encode)
+            a.optId match
+                case Some(id) =>
+                    encode.encode.bits(1, 1)
+                    summon[Flat[Long]].encode(id, encode.encode)
+                case None =>
+                    encode.encode.bits(1, 0)
             val tag = a.kind match
                 case SIRType.TypeVarKind.Transparent => 0
                 case SIRType.TypeVarKind.Unwrapped   => 1
@@ -705,9 +700,9 @@ object FlatInstances:
 
         override def decodeHC(decode: HashConsedDecoderState): SIRType.TypeVar =
             val name = summon[Flat[String]].decode(decode.decode)
-            val optId = summon[Flat[Long]].decode(decode.decode) match
-                case 0  => None
-                case id => Some(id)
+            val optId =
+                if decode.decode.bits8(1) == 1 then Some(summon[Flat[Long]].decode(decode.decode))
+                else None
             val kind = decode.decode.bits8(KindBits) match
                 case 0 => SIRType.TypeVarKind.Transparent
                 case 1 => SIRType.TypeVarKind.Unwrapped

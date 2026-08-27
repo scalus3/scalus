@@ -8,7 +8,7 @@ import scalus.utils.Macros
 case class Options(
     targetLoweringBackend: TargetLoweringBackend = SIRDefaultOptions.targetLoweringBackend,
     targetLanguage: Language = Language.PlutusV3,
-    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.changPV,
+    targetProtocolVersion: MajorProtocolVersion = MajorProtocolVersion.vanRossemPV,
     generateErrorTraces: Boolean = SIRDefaultOptions.generateErrorTraces,
     removeTraces: Boolean = SIRDefaultOptions.removeTraces,
     optimizeUplc: Boolean = SIRDefaultOptions.optimizeUplc,
@@ -32,7 +32,17 @@ case class Options(
       * the "Unification failure" / "casting unrelated types" diagnostics). Use to keep test logs
       * clean when a warning is a known false positive.
       */
-    noWarn: Boolean = false
+    noWarn: Boolean = false,
+    /** When true (the default) and `targetProtocolVersion >= vanRossemPV`, `plutus.v1.Value`
+      * operations (`quantityOf`, `+`, `-`, `*`, `negate`, `containsAtLeast`) lower to the CIP-153
+      * builtins (`lookupCoin`, `unionValue`, `scaleValue`, `valueContains`). The builtins require
+      * values in canonical form (strictly ascending keys, no zero amounts, no empty inner maps,
+      * keys <= 32 bytes, amounts within the signed 128-bit range) and make the script fail
+      * otherwise, and `unionValue`/`scaleValue` fail on 128-bit overflow - stricter than the
+      * portable lowering, which tolerates malformed values. Set to false to keep the portable
+      * lowering at any PV.
+      */
+    valueBuiltins: Boolean = true
 ) {
 
     /** Returns a copy with `addScalusTag` set to `enable`. */
@@ -67,9 +77,20 @@ object Options {
 
     /** Preset for van Rossem hard fork (protocol version 11) features. Enables case-on-builtins,
       * batch6 builtins, and dropList field access.
+      *
+      * Since the van Rossem hard fork (2026-07-18) this is the default, so this preset equals
+      * [[default]]; it is kept for source compatibility.
       */
     val vanRossem: Options = Options(
       targetProtocolVersion = MajorProtocolVersion.vanRossemPV
+    )
+
+    /** Preset targeting protocol version 10 (Plomin hard fork). Use to reproduce pre-van-Rossem
+      * output — e.g. to keep the script hash of a contract compiled before the PV11 default switch.
+      * PV11-only lowering (case-on-builtins, batch6 builtins, dropList field access) is disabled.
+      */
+    val plomin: Options = Options(
+      targetProtocolVersion = MajorProtocolVersion.plominPV
     )
 }
 

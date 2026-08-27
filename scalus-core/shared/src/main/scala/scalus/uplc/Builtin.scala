@@ -11,7 +11,6 @@ import scalus.uplc.eval.CekValue.*
 import scalus.uplc.eval.*
 import scalus.utils.Macros
 
-import scala.annotation.threadUnsafe
 import scala.collection.immutable.ArraySeq
 import scala.language.implicitConversions
 
@@ -1271,36 +1270,6 @@ class CardanoBuiltins(
           builtinCostModel.indexArray
         )
 
-    // [ forall a, list(integer), array(a) ] -> list(a)
-    val MultiIndexArray: BuiltinRuntime =
-        mkMeaning(
-          All(
-            "a",
-            DefaultUni.List(
-              Integer
-            ) ->: (DefaultUni.ProtoArray $ "a") ->: (DefaultUni.ProtoList $ "a")
-          ),
-          (_: Logger, args: Seq[CekValue]) =>
-              val indices = args(0).asList.map {
-                  case Constant.Integer(i) => i
-                  case _ => throw new KnownTypeUnliftingError(DefaultUni.Integer, args(0))
-              }
-              args(1) match
-                  case VCon(Constant.Array(tpe, arr)) =>
-                      val len = arr.length
-                      val result = indices.map { idx =>
-                          if idx < 0 || idx >= len then
-                              throw new BuiltinException(
-                                s"multiIndexArray: index $idx out of bounds for array of length $len"
-                              )
-                          arr(idx.toInt)
-                      }
-                      VCon(Constant.List(tpe, result))
-                  case _ => throw new DeserializationError(DefaultFun.MultiIndexArray, args(1))
-          ,
-          builtinCostModel.multiIndexArray
-        )
-
     // MaryEraValue builtins (CIP-0153)
 
     // ByteString -> ByteString -> Integer -> BuiltinValue -> BuiltinValue
@@ -1434,7 +1403,7 @@ class CardanoBuiltins(
       *
       * This map provides the forced versions of all builtins.
       */
-    @threadUnsafe lazy val forcedBuiltins: collection.Map[DefaultFun, Term] = {
+    lazy val forcedBuiltins: collection.Map[DefaultFun, Term] = {
         def forceBuiltin(scheme: TypeScheme, term: Term): Term = scheme match
             case TypeScheme.All(_, t) => Term.Force(forceBuiltin(t, term))
             case _                    => term

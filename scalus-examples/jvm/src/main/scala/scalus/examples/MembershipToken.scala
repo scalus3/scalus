@@ -70,22 +70,17 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
         val action = redeemer.to[MembershipRedeemer]
         action match
             case MembershipRedeemer.Mint(proofData) =>
-                require(txInfo.signatories.length > BigInt(0), "No signatories")
+                require(txInfo.signatories.length > 0, "No signatories")
                 val signer = txInfo.signatories.head
                 val proof = unBData(proofData)
                 MerkleTree.verifyMembership(merkleRoot, signer.hash, proof)
 
-                // Verify exactly 1 token minted with tokenName = signer's pkh
+                // Verify exactly 1 token minted with tokenName = signer's pkh and no other
+                // token under this policy
                 require(
-                  txInfo.mint.quantityOf(policyId, signer.hash) === BigInt(1),
-                  "Must mint exactly 1 membership token"
+                  txInfo.mint.hasOnly(policyId, signer.hash, 1),
+                  "Must mint exactly 1 membership token and nothing else"
                 )
-
-                // Verify only one token name under this policy
-                val allMinted = txInfo.mint.flatten.filter { case (pid, _, _) =>
-                    pid === policyId
-                }
-                require(allMinted.length === BigInt(1), "Only one token allowed per mint")
 
                 // Verify deposit UTxO at script address
                 val scriptCred = Credential.ScriptCredential(policyId)
@@ -94,12 +89,13 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
                 require(depositOutputs.length === BigInt(1), "Expected one deposit output")
                 val depositOut = depositOutputs.head
                 require(
-                  depositOut.value.getLovelace >= BigInt(2_000_000),
+                  depositOut.value.getLovelace >= 2_000_000,
                   "Deposit must be at least 2 ADA"
                 )
-                val depositDatum = depositOut.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[MembershipDatum]
-                    case _                          => fail("Expected inline datum on deposit")
+                val depositDatum =
+                    depositOut.datum.inlineOrFail[MembershipDatum](
+                      "Expected inline datum on deposit"
+                    )
                 require(
                   depositDatum.depositor === signer.hash,
                   "Deposit datum must reference the signer"

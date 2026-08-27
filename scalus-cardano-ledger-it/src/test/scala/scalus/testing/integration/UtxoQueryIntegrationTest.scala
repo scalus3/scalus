@@ -212,9 +212,11 @@ class UtxoQueryIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("UtxoQuery with HasAsset filter uses optimized endpoint") {
         // First mint some tokens
-        val alwaysSucceedsMinting = compile { (_: Data, _: Data) => () }
-        val mintingPolicyScript = Script.PlutusV2(
-          alwaysSucceedsMinting.toUplc().plutusV2.cborByteString
+        // PlutusV3, not V2: the yaci-cli 0.12.0-beta5 store omits the PlutusV2 cost model
+        // from /epochs/parameters, so V2 scripts cannot be evaluated with the devnet's params.
+        val alwaysSucceedsMinting = compile { (_: Data) => () }
+        val mintingPolicyScript = Script.PlutusV3(
+          alwaysSucceedsMinting.toUplc().plutusV3.cborByteString
         )
         val policyId = mintingPolicyScript.scriptHash
         val assetName = AssetName.fromString("QueryTestToken")

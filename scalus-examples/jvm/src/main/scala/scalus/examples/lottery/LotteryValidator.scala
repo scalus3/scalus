@@ -97,10 +97,9 @@ object LotteryValidator extends Validator {
 
                         val continuationOutput = continuationOutputs.head
 
-                        val newState = continuationOutput.datum match {
-                            case v2.OutputDatum.OutputDatum(datum) => datum.to[State]
-                            case _ => fail("continuation out must have an inline datum")
-                        }
+                        val newState = continuationOutput.datum.inlineOrFail[State](
+                          "continuation out must have an inline datum"
+                        )
 
                         // Verify state transition is valid
                         newState.lotteryState match {
@@ -141,10 +140,9 @@ object LotteryValidator extends Validator {
                         )
 
                         val continuationOutput = continuationOutputs.head
-                        val newState = continuationOutput.datum match {
-                            case v2.OutputDatum.OutputDatum(datum) => datum.to[State]
-                            case _ => fail("continuation out must have an inline datum")
-                        }
+                        val newState = continuationOutput.datum.inlineOrFail[State](
+                          "continuation out must have an inline datum"
+                        )
 
                         // Verify state transition is valid
                         newState.lotteryState match {

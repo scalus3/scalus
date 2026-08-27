@@ -142,7 +142,7 @@ Here's the same PreimageValidator across styles and protocol versions (1 signato
 | Direct builtins, PV11 | 374 B | 4,161,695 | 9,990 | 877 | 17,333 lovelace |
 
 Key observations:
-- **PV11 with zero code changes** (high-level PV9 vs PV11): 27% CPU savings -- just switch `targetProtocolVersion`
+- **PV11 with zero code changes** (high-level PV9 vs PV11): 27% CPU savings -- this is the default `targetProtocolVersion` since the van Rossem hard fork (use `Options.plomin` to target PV10)
 - **Direct builtins** (PV11 builtins vs PV11 high-level): further 14% CPU, 43% memory savings from manual Data access
 - **Transaction fee** difference is smaller than execution fee difference because the size component (44 lovelace/byte) dominates. Still, direct builtins on PV11 save **26%** on total transaction fee compared to high-level PV9.
 

@@ -6,7 +6,7 @@ description: How the Scalus Emulator enforces Plutus builtin availability per pr
 
 # Plutus Builtins and Protocol Versions
 
-The Scalus Emulator supports all Plutus builtins across all protocol versions. By default, `Emulator.withAddresses` and `Context.testMainnet()` use the latest mainnet protocol parameters, so builtins from recent hard forks are available without any extra configuration.
+The Scalus Emulator supports all Plutus builtins across all protocol versions. By default, `Emulator.withAddresses` and `Context.testMainnet()` use the latest mainnet protocol parameters -- protocol version 11 (van Rossem hard fork) -- so all builtins, including the batch6 additions (`expModInteger`, `dropList`, the array operations, `bls12_381_G1/G2_multiScalarMul`, and the `Value` builtins), are available without any extra configuration.
 
 ## How Builtin Availability Is Enforced
 

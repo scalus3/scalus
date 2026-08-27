@@ -19,7 +19,7 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
       "BLOCKFROST_API_KEY is not set, please set it before running the test"
     )
 
-    test("TxEvaluator PlutusV2") {
+    test("PlutusScriptEvaluator PlutusV2") {
         val evaluator = PlutusScriptEvaluator(
           CardanoInfo.mainnet,
           EvaluatorMode.EvaluateAndComputeCost
@@ -70,11 +70,11 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val redeemers = evaluator.evalPlutusScripts(tx, utxo)
         assert(redeemers.size == 1)
         val redeemerResult = redeemers.head
-        assert(redeemerResult.exUnits.memory == 13375L)
-        assert(redeemerResult.exUnits.steps == 3732169L)
+        assert(redeemerResult.exUnits.memory == 11373L)
+        assert(redeemerResult.exUnits.steps == 3260071L)
     }
 
-    test("TxEvaluator PlutusV3") {
+    test("PlutusScriptEvaluator PlutusV3") {
         val evaluator = PlutusScriptEvaluator(
           CardanoInfo.mainnet,
           EvaluatorMode.EvaluateAndComputeCost
@@ -125,8 +125,8 @@ class PlutusScriptEvaluatorTest extends AnyFunSuite {
         val redeemers = evaluator.evalPlutusScripts(tx, utxo)
         assert(redeemers.size == 1)
         val redeemerResult = redeemers.head
-        assert(redeemerResult.exUnits.memory == 12775L)
-        assert(redeemerResult.exUnits.steps == 3636169L)
+        assert(redeemerResult.exUnits.memory == 10773L)
+        assert(redeemerResult.exUnits.steps == 3164071L)
     }
 
     test("evaluate block 11544748") {

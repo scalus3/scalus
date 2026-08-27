@@ -6,7 +6,7 @@ package scalus.uplc.builtin
   * access time. This makes arrays ideal for random access patterns.
   *
   * Arrays are created from lists using `listToArray` and provide efficient indexed access via
-  * `indexArray` and `multiIndexArray`.
+  * `indexArray`.
   *
   * ==UPLC Builtin Operations==
   *
@@ -14,7 +14,6 @@ package scalus.uplc.builtin
   *   - `listToArray` - Convert a list to an array
   *   - `lengthOfArray` - Get the number of elements
   *   - `indexArray` - Access element at index (O(1))
-  *   - `multiIndexArray` - Access multiple elements by indices
   *
   * @tparam A
   *   the element type

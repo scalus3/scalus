@@ -92,7 +92,16 @@ trait EmulatorBase extends BlockchainProvider {
         CardanoInfo(ctx.env.params, ctx.env.network, ctx.slotConfig)
     }
 
-    def currentSlot: Future[SlotNo] = Future.successful(currentContext.env.slot)
+    def currentSlot: Future[SlotNo] = Future.successful(currentSlotSync)
+
+    /** The current slot, without the `Future` wrapper.
+      *
+      * An emulator's slot is in-memory state, so the effectful accessor above is a formality
+      * imposed by the `BlockchainReader` interface. Streaming needs the value synchronously while
+      * building a chain point, where handing back an already-completed `Future` and unwrapping it
+      * would be pure ceremony.
+      */
+    def currentSlotSync: SlotNo = currentContext.env.slot
 
     def fetchLatestParams: Future[ProtocolParams] = {
         val params = currentContext.env.params
@@ -126,6 +135,18 @@ trait EmulatorBase extends BlockchainProvider {
 
     def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
         Future.successful(Right(EmulatorBase.evalQuery(utxos, query)))
+
+    /** Whether this emulator has applied the transaction.
+      *
+      * Authoritative, unlike the inherited default, which infers status from the UTxOs a
+      * transaction produced: `findUtxos` here answers `Right(empty)` for a transaction it has never
+      * seen, and an emulator that has applied a transaction whose outputs are all since spent
+      * produces none either. The applied-transaction index knows the answer outright.
+      */
+    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
+        Future.successful(
+          if hasTx(txHash) then TransactionStatus.Confirmed else TransactionStatus.NotFound
+        )
 
     protected def processTransaction(
         context: Context,
@@ -161,6 +182,20 @@ case class EmulatorStakeRegistration(
     delegatedTo: Option[PoolKeyHash] = None
 )
 
+object EmulatorStakeRegistration {
+    // Java-friendly factories (no default args, no Option).
+    def of(credential: Credential): EmulatorStakeRegistration =
+        EmulatorStakeRegistration(credential)
+    def of(credential: Credential, rewards: Coin): EmulatorStakeRegistration =
+        EmulatorStakeRegistration(credential, rewards)
+    def of(
+        credential: Credential,
+        rewards: Coin,
+        delegatedTo: PoolKeyHash
+    ): EmulatorStakeRegistration =
+        EmulatorStakeRegistration(credential, rewards, Some(delegatedTo))
+}
+
 case class EmulatorPoolRegistration(params: Certificate.PoolRegistration)
 
 case class EmulatorDRepRegistration(
@@ -169,6 +204,14 @@ case class EmulatorDRepRegistration(
     anchor: Option[Anchor] = None
 )
 
+object EmulatorDRepRegistration {
+    // Java-friendly factories (no default args, no Option).
+    def of(credential: Credential, deposit: Coin): EmulatorDRepRegistration =
+        EmulatorDRepRegistration(credential, deposit)
+    def of(credential: Credential, deposit: Coin, anchor: Anchor): EmulatorDRepRegistration =
+        EmulatorDRepRegistration(credential, deposit, Some(anchor))
+}
+
 case class EmulatorInitialState(
     utxos: Utxos = Map.empty,
     stakeRegistrations: Seq[EmulatorStakeRegistration] = Seq.empty,
@@ -176,6 +219,62 @@ case class EmulatorInitialState(
     drepRegistrations: Seq[EmulatorDRepRegistration] = Seq.empty,
     datums: Map[DataHash, Data] = Map.empty
 )
+
+object EmulatorInitialState {
+
+    /** Java-friendly builder — the case class keeps its Scala default arguments, which Java cannot
+      * use.
+      */
+    def builder(): Builder = new Builder
+
+    final class Builder private[EmulatorInitialState] () {
+        private var _utxos: Utxos = Map.empty
+        private var _stakeRegistrations = Vector.empty[EmulatorStakeRegistration]
+        private var _poolRegistrations = Vector.empty[EmulatorPoolRegistration]
+        private var _drepRegistrations = Vector.empty[EmulatorDRepRegistration]
+        private var _datums: Map[DataHash, Data] = Map.empty
+
+        def utxos(utxos: java.util.Map[TransactionInput, TransactionOutput]): Builder = {
+            import scala.jdk.CollectionConverters.*
+            _utxos = utxos.asScala.toMap
+            this
+        }
+
+        def putUtxo(input: TransactionInput, output: TransactionOutput): Builder = {
+            _utxos = _utxos + (input -> output)
+            this
+        }
+
+        def datums(datums: java.util.Map[DataHash, Data]): Builder = {
+            import scala.jdk.CollectionConverters.*
+            _datums = datums.asScala.toMap
+            this
+        }
+
+        def addStakeRegistration(registration: EmulatorStakeRegistration): Builder = {
+            _stakeRegistrations = _stakeRegistrations :+ registration
+            this
+        }
+
+        def addPoolRegistration(registration: EmulatorPoolRegistration): Builder = {
+            _poolRegistrations = _poolRegistrations :+ registration
+            this
+        }
+
+        def addDRepRegistration(registration: EmulatorDRepRegistration): Builder = {
+            _drepRegistrations = _drepRegistrations :+ registration
+            this
+        }
+
+        def build(): EmulatorInitialState = EmulatorInitialState(
+          utxos = _utxos,
+          stakeRegistrations = _stakeRegistrations,
+          poolRegistrations = _poolRegistrations,
+          drepRegistrations = _drepRegistrations,
+          datums = _datums
+        )
+    }
+}
 
 object EmulatorBase {
 
@@ -227,18 +326,22 @@ object EmulatorBase {
         evalQueryRec(query)
     }
 
+    /** Creates initial UTxOs for the given addresses, 10,000 ADA each (like Yaci Devkit). */
+    def createInitialUtxos(addresses: Seq[Address]): Utxos =
+        createInitialUtxos(addresses, Value.ada(10_000L))
+
     /** Creates initial UTxOs for the given addresses.
       *
       * @param addresses
       *   The addresses to initialize with funds
       * @param initialValue
-      *   Initial value per address (default: 10,000 ADA like Yaci Devkit)
+      *   Initial value per address
       * @return
       *   A map of transaction inputs to outputs
       */
     def createInitialUtxos(
         addresses: Seq[Address],
-        initialValue: Value = Value.ada(10_000L)
+        initialValue: Value
     ): Utxos = {
         val genesisHash = TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
         addresses.zipWithIndex.map { case (address, index) =>

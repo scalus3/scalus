@@ -36,13 +36,14 @@ import scalus.cardano.ledger.MajorProtocolVersion
 // Use Options to select the backend and protocol version
 given Options = Options(
   targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering, // default
-  targetProtocolVersion = MajorProtocolVersion.changPV,               // default (V3)
+  targetProtocolVersion = MajorProtocolVersion.vanRossemPV,           // default (PV11)
   generateErrorTraces = true,
-  optimizeUplc = true
+  optimizeUplc = true,
+  valueBuiltins = true // default: lower Value ops to CIP-153 builtins at PV11
 )
 ```
 
-There are also convenient presets: `Options.default`, `Options.debug`, `Options.release`, and `Options.vanRossem` (for protocol version 11).
+There are also convenient presets: `Options.default`, `Options.debug`, `Options.release`, and `Options.plomin` (targets protocol version 10, reproducing pre-van-Rossem output and script hashes).
 
 The same `given Options` is picked up by `PlutusV3.compile`:
 
@@ -192,9 +193,12 @@ Notice how the optimized version:
 ## Optimization Techniques
 
 - **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** -- script evaluation, emulator-based transaction fees
+- **[Profiling](/docs/smart-contract-optimisations/profiling)** -- CEK machine budget profiling, per-line costs, machine-readable reports
+- **[VS Code Extension](/docs/smart-contract-optimisations/vscode-extension)** -- inline cost annotations and the compiled UPLC view in your editor
 - **[Algorithmic Optimisations](/docs/smart-contract-optimisations/algorithmic-optimisations)** -- design patterns for the biggest wins
 - **[Scala Metaprogramming](/docs/smart-contract-optimisations/scala-metaprogramming)** -- inlining, loop unrolling, constants, compile-time evaluation, conditional compilation
 - **[Low-Level Builtins](/docs/smart-contract-optimisations/low-level-builtins)** -- manual Data access, script context macros, budget comparison
+- **[Value Builtins](/docs/smart-contract-optimisations/value-builtins)** -- prelude `Value` operations lowered to CIP-153 builtins at PV11
 - **[Lowering Backends](/docs/smart-contract-optimisations/lowering-backends)** -- `@UplcRepr`, V3 Lowering vs template-based backends
 - **[UPLC Term DSL](/docs/smart-contract-optimisations/uplc-term-dsl)** -- hand-craft validators with full AST control (Plutarch-style)
 - **[UPLC Optimiser Pipeline](/docs/smart-contract-optimisations/uplc-optimiser-pipeline)** -- apply low-level optimiser passes to reduce execution costs

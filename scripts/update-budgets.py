@@ -274,7 +274,7 @@ def replace_sizes(size_mismatches: list) -> list[str]:
 # ── Test Runners ────────────────────────────────────────────────────────
 
 
-def run_sbtn(cmd: str, timeout: int = 600) -> tuple[str, int]:
+def run_sbtn(cmd: str, timeout: int = 1800) -> tuple[str, int]:
     """Run an sbtn command and return (output, returncode)."""
     print(f"  $ sbtn {cmd}")
     result = subprocess.run(

@@ -294,8 +294,17 @@ object BuiltinListOperationsV11 {
           dropList(n, typeProxy[BuiltinList[A]](self))
         )
 
+    // Guards keep List.at's documented contract: negative or past-the-end indices must fail
+    // (with the same message as the pre-PV11 implementation). A bare
+    // headList(dropList(index, xs)) would SUCCEED for a negative index on a non-empty list,
+    // because dropList drops nothing when n <= 0 — a JVM/UPLC semantics divergence.
     def at[A](self: List[A], index: BigInt): A =
-        headList(dropList(index, typeProxy[BuiltinList[A]](self)))
+        if index < BigInt(0) then throw new NoSuchElementException("Index out of bounds in List.at")
+        else
+            val rest = dropList(index, typeProxy[BuiltinList[A]](self))
+            if nullList(rest) then
+                throw new NoSuchElementException("Index out of bounds in List.at")
+            else headList(rest)
 
     def contains[A](self: List[A], elem: A): Boolean =
         BuiltinListSupport.contains(self, elem)

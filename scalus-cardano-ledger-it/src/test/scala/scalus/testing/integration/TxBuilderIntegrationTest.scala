@@ -86,11 +86,13 @@ class TxBuilderIntegrationTest extends AnyFunSuite with YaciDevKit {
 
     test("2. minting tokens") {
         runTxTest("MintingTokens") { ctx =>
-            // Simple always-succeeds minting policy for PlutusV2
-            // PlutusV2 scripts take (datum, redeemer, ctx) but for minting, only (redeemer, ctx)
-            val alwaysSucceedsMinting = compile { (_: Data, _: Data) => () }
-            val mintingPolicyScript = Script.PlutusV2(
-              alwaysSucceedsMinting.toUplc().plutusV2.cborByteString
+            // Simple always-succeeds minting policy for PlutusV3, which takes the whole
+            // ScriptContext as a single Data argument. Not PlutusV2: the yaci-cli 0.12.0-beta5
+            // store omits the PlutusV2 cost model from /epochs/parameters, so V2 scripts cannot
+            // be evaluated with the devnet's protocol params.
+            val alwaysSucceedsMinting = compile { (_: Data) => () }
+            val mintingPolicyScript = Script.PlutusV3(
+              alwaysSucceedsMinting.toUplc().plutusV3.cborByteString
             )
             val policyId = mintingPolicyScript.scriptHash
 

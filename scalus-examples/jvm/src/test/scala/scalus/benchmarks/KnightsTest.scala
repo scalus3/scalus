@@ -82,7 +82,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                 // After sort rewrite: mem=132_915_975, steps=26_318_962_327
                 // Pre-rewrite baseline: mem=139_827_710, steps=27_837_791_939
                 // Pre-annotation baseline: mem=142_291_986, steps=30_322_212_276.
-                ExUnits(memory = 132915975L, steps = 26318962327L)
+                ExUnits(memory = 119057995L, steps = 24581834427L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 324_452274L, steps = 92346_941030L)
             else if options.targetLoweringBackend == TargetLoweringBackend.SumOfProductsLowering
@@ -207,7 +207,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                 //   mem=445_174_581, steps=86_329_049_292.
                 // Pre-isCompatibleOn-fix: 550_142_929 / 111_902_743_585.
                 // Pre-annotation baseline: mem=447_798_345, steps=96_701_055_855.
-                ExUnits(memory = 470081489L, steps = 92591878616L)
+                ExUnits(memory = 380412589L, steps = 78244869412L)
             else
                 options.targetLoweringBackend match
                     case TargetLoweringBackend.SirToUplcV3Lowering =>
@@ -320,7 +320,7 @@ class KnightsTest extends AnyFunSuite, ScalusTest:
                 //   mem=873_898_759, steps=170_137_815_977.
                 // Pre-isCompatibleOn-fix: 1_072_962_493 / 218_211_607_720.
                 // Pre-annotation baseline: mem=856_547_657, steps=186_040_711_969.
-                ExUnits(memory = 915159867L, steps = 180393832273L)
+                ExUnits(memory = 734004267L, steps = 151408962577L)
             else
                 options.targetLoweringBackend match {
                     case TargetLoweringBackend.SirToUplcV3Lowering =>

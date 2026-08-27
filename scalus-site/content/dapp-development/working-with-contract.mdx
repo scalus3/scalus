@@ -113,23 +113,25 @@ The `Options` control how SIR is lowered to UPLC.
 case class Options(
     targetLoweringBackend: TargetLoweringBackend, // UPLC lowering strategy
     targetLanguage: Language,                     // PlutusV1, PlutusV2, PlutusV3
-    targetProtocolVersion: MajorProtocolVersion,  // default: changPV (9)
+    targetProtocolVersion: MajorProtocolVersion,  // default: vanRossemPV (11)
     generateErrorTraces: Boolean,                 // include error trace messages
     removeTraces: Boolean,                        // strip all trace calls
     optimizeUplc: Boolean,                        // apply UPLC optimizer
 )
 ```
 
-**Target protocol version** controls which UPLC features are available during lowering. The default is `changPV` (protocol version 9, the Chang hard fork). To use newer features like case-on-builtins, `dropList`, arrays, and `ripemd_160` (available from the van Rossem hard fork, protocol version 11), set `targetProtocolVersion`:
+**Target protocol version** controls which UPLC features are available during lowering. The default is `vanRossemPV` (protocol version 11, the van Rossem hard fork, live on mainnet since 2026-07-18). This enables case-on-builtins, `dropList` field access, arrays, and the other batch6 builtins.
+
+Compiling for an older protocol version changes the generated code (and therefore the script hash). To reproduce pre-van-Rossem output – for example, to verify the hash of a contract deployed before the switch – pin the target:
 
 ```scala
-// Use van Rossem hard fork features (protocol version 11)
+// Target protocol version 10 (Plomin) – disables PV11-only lowering
 private given Options = Options.release.copy(
-    targetProtocolVersion = MajorProtocolVersion.vanRossemPV
+    targetProtocolVersion = MajorProtocolVersion.plominPV
 )
 
-// Or use the vanRossem preset which sets this automatically
-private given Options = Options.vanRossem
+// Or use the plomin preset
+private given Options = Options.plomin
 ```
 
 ## Using Compiled Contracts

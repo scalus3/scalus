@@ -25,7 +25,7 @@ case class BettingTransactions(
         TxBuilder(env, evaluator)
             .spend(utxos)
             .output(
-              TransactionOutput(
+              Output(
                 deploymentAddress,
                 Value.zero,
                 None,

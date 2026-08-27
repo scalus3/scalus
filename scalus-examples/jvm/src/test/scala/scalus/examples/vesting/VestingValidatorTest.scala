@@ -312,7 +312,7 @@ class VestingValidatorTest extends AnyFunSuite, ScalusTest {
           )
         )
 
-        val result = compiled.runScript(scriptContext)
+        val result = compiled.scriptV3().runWithProfileReport(scriptContext)
         assert(
           result.isSuccess,
           "Second partial withdrawal should succeed at 75% of vesting period"

@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.*
-import scalus.cardano.ledger.ExUnits.given
 import scalus.cardano.ledger.{ExUnits, Word64}
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
@@ -14,7 +13,6 @@ import scalus.uplc.eval.Result.Success
 import scalus.uplc.{Constant, DeBruijn}
 
 import scala.language.implicitConversions
-import scala.math.Ordering.Implicits.*
 
 class CaseConstrApplyTest extends AnyFunSuite {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
@@ -52,7 +50,7 @@ class CaseConstrApplyTest extends AnyFunSuite {
                 assert(opt.term == Const(Constant.ByteString(hex"1012")))
                 assert(orig.budget == ExUnits(memory = 1100, steps = 160100))
                 assert(opt.budget == ExUnits(memory = 1000, steps = 144100))
-                assert(opt.budget < orig.budget)
+                assert(opt.budget.fitsWithin(orig.budget) && opt.budget != orig.budget)
             case _ => fail("Evaluation failed")
     }
 }

@@ -422,7 +422,6 @@ object TransactionException {
           s"Plutus script validation failed for transactionId $transactionId: $message"
         )
 
-    // TODO: placeholder for general exception, remove after finishing development
     final case class IllegalArgumentException(message: String) extends TransactionException(message)
 }
 

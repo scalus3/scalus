@@ -109,7 +109,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
         assert(result.isSuccess, s"Expected success but got: ${result}")
         assert(result.success.term α_== true.asTerm)
         val expectedBudget =
-            ExUnits(memory = 97187L, steps = 1604161198L)
+            ExUnits(memory = 64813, steps = 1648_999657)
         assert(result.budget == expectedBudget)
     }
 
@@ -385,7 +385,7 @@ class G2AccumulatorTest extends AnyFunSuite, EvalTestKit {
             )
         val result = compiled.program.term.evaluateDebug
         val expectedBudget =
-            ExUnits(memory = 79454942L, steps = 21407441563L)
+            ExUnits(memory = 44_943110, steps = 10021_925969L)
         assert(result.budget == expectedBudget)
     }
 }

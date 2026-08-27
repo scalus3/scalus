@@ -2,7 +2,7 @@ package scalus.examples.amm
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
-import scalus.cardano.onchain.plutus.prelude.Math
+import scalus.cardano.onchain.plutus.v3.{TxId, TxOutRef}
 import scalus.cardano.txbuilder.*
 import scalus.uplc.PlutusV3
 import scalus.uplc.builtin.Data.toData
@@ -21,7 +21,9 @@ case class AmmOffchain(
     val policyId: PolicyId = appliedScript.script.scriptHash
     val scriptAddress: Address = appliedScript.address(env.network)
 
-    val lpAssetName: AssetName = AssetName.fromString("lp")
+    // Single source of truth: the LP and pool-NFT names the on-chain policy pins.
+    val lpAssetName: AssetName = AssetName(AmmValidator.lpTokenName)
+    val poolNftAssetName: AssetName = AssetName(AmmValidator.poolNftName)
 
     def readPoolDatum(utxo: Utxo): AmmDatum =
         utxo.output.inlineDatum
@@ -33,20 +35,36 @@ case class AmmOffchain(
             .find(_.output.address == scriptAddress)
             .getOrElse(throw new Exception("Pool UTxO not found"))
 
-    /** Constructs the on-chain [[Value]] for the pool output from explicit reserves. */
+    /** Constructs the on-chain [[Value]] for the pool output: the pool NFT, plus each reserve that
+      * is non-zero (Cardano outputs cannot carry a zero-amount asset, so an empty pool holds only
+      * the NFT and min-ADA).
+      */
     private def poolValue(r0: BigInt, r1: BigInt, lovelace: Long): Value = {
         val (p0, n0) = params.t0
         val (p1, n1) = params.t1
-        Value.assets(
-          Map(
-            ScriptHash.fromArray(p0.bytes) -> Map(AssetName(n0) -> r0.toLong),
-            ScriptHash.fromArray(p1.bytes) -> Map(AssetName(n1) -> r1.toLong)
-          ),
-          lovelace = Coin(lovelace)
-        )
+        val withNft = Map(policyId -> Map(poolNftAssetName -> 1L))
+        val withT0 =
+            if r0 != BigInt(0) then
+                withNft + (ScriptHash.fromArray(p0.bytes) -> Map(AssetName(n0) -> r0.toLong))
+            else withNft
+        val withT1 =
+            if r1 != BigInt(0) then
+                withT0 + (ScriptHash.fromArray(p1.bytes) -> Map(AssetName(n1) -> r1.toLong))
+            else withT0
+        Value.assets(withT1, lovelace = Coin(lovelace))
     }
 
-    /** Initializes an AMM with an empty pool and lp = 0. */
+    /** Resolves the parameterized one-shot seed to a spendable UTxO from `utxos`. */
+    private def resolveSeed(utxos: Utxos): Utxo =
+        Utxo(
+          utxos
+              .find { case (in, _) => TxOutRef(TxId(in.transactionId), in.index) == params.seed }
+              .getOrElse(throw new Exception(s"Seed UTxO ${params.seed} not found in wallet"))
+        )
+
+    /** Initializes an AMM with an empty pool (lp = 0). Consumes the one-shot `seed` and mints the
+      * pool NFT via the `Init` redeemer, so this pool's `policyId` is unique.
+      */
     def createEmptyPool(
         utxos: Utxos,
         lovelace: Long,
@@ -55,11 +73,29 @@ case class AmmOffchain(
     ): Transaction = {
         val emptyDatum = AmmDatum(r0 = BigInt(0), r1 = BigInt(0), lpSupply = BigInt(0))
         TxBuilder(env, evaluator)
-            .payTo(scriptAddress, Value.lovelace(lovelace), emptyDatum)
+            .spend(resolveSeed(utxos))
+            .mint(script, Map(poolNftAssetName -> 1L), _ => AmmMintAction.Init.toData)
+            .payTo(scriptAddress, poolValue(BigInt(0), BigInt(0), lovelace), emptyDatum)
             .complete(utxos, sponsor)
             .sign(signer)
             .transaction
     }
+
+    /** Tears down an empty pool: spends it with `Close`, burns the pool NFT, and reclaims the
+      * min-ADA to the `sponsor`.
+      */
+    def close(
+        utxos: Utxos,
+        poolUtxo: Utxo,
+        sponsor: Address,
+        signer: TransactionSigner
+    ): Transaction =
+        TxBuilder(env, evaluator)
+            .spend(poolUtxo, _ => AmmRedeemer.Close.toData, script)
+            .mint(script, Map(poolNftAssetName -> -1L), _ => AmmMintAction.Close.toData)
+            .complete(utxos, sponsor)
+            .sign(signer)
+            .transaction
 
     /** Deposits `x0` of t0 and `x1` of t1 into the pool, minting LP tokens to the sender.
       *
@@ -76,25 +112,15 @@ case class AmmOffchain(
         signer: TransactionSigner
     ): Transaction = {
         val d = readPoolDatum(poolUtxo)
-        val lpMinted: Long =
-            if d.lpSupply == BigInt(0) then Math.sqrt(BigInt(x0) * BigInt(x1)).toLong
-            else {
-                val lp0 = (BigInt(x0) * d.lpSupply / d.r0).toLong
-                val lp1 = (BigInt(x1) * d.lpSupply / d.r1).toLong
-                lp0 min lp1
-            }
-        val newDatum = AmmDatum(
-          r0 = d.r0 + BigInt(x0),
-          r1 = d.r1 + BigInt(x1),
-          lpSupply = d.lpSupply + BigInt(lpMinted)
-        )
+        // Same math the on-chain validator will re-check, so the datum can't drift.
+        val newDatum = AmmMath.depositDatum(d, x0, x1)
+        val lpMinted: Long = (newDatum.lpSupply - d.lpSupply).toLong
         val newValue = poolValue(newDatum.r0, newDatum.r1, poolUtxo.output.value.coin.value)
-        val spendRedeemer = AmmRedeemer.Deposit(BigInt(x0), BigInt(x1)).toData
-        val mintRedeemer = ().toData
+        val spendRedeemer = AmmRedeemer.Deposit(x0, x1).toData
 
         TxBuilder(env, evaluator)
             .spend(poolUtxo, _ => spendRedeemer, script)
-            .mint(script, Map(lpAssetName -> lpMinted), _ => mintRedeemer)
+            .mint(script, Map(lpAssetName -> lpMinted), _ => AmmMintAction.ChangeLiquidity.toData)
             .payTo(scriptAddress, newValue, newDatum)
             .complete(utxos, sponsor)
             .sign(signer)
@@ -110,20 +136,13 @@ case class AmmOffchain(
         signer: TransactionSigner
     ): Transaction = {
         val d = readPoolDatum(poolUtxo)
-        val out0 = (BigInt(lp) * d.r0 / d.lpSupply).toLong
-        val out1 = (BigInt(lp) * d.r1 / d.lpSupply).toLong
-        val newDatum = AmmDatum(
-          r0 = d.r0 - BigInt(out0),
-          r1 = d.r1 - BigInt(out1),
-          lpSupply = d.lpSupply - BigInt(lp)
-        )
+        val newDatum = AmmMath.redeemDatum(d, lp)
         val newValue = poolValue(newDatum.r0, newDatum.r1, poolUtxo.output.value.coin.value)
-        val spendRedeemer = AmmRedeemer.Redeem(BigInt(lp)).toData
-        val mintRedeemer = ().toData
+        val spendRedeemer = AmmRedeemer.Redeem(lp).toData
 
         TxBuilder(env, evaluator)
             .spend(poolUtxo, _ => spendRedeemer, script)
-            .mint(script, Map(lpAssetName -> -lp), _ => mintRedeemer)
+            .mint(script, Map(lpAssetName -> -lp), _ => AmmMintAction.ChangeLiquidity.toData)
             .payTo(scriptAddress, newValue, newDatum)
             .complete(utxos, sponsor)
             .sign(signer)
@@ -142,18 +161,17 @@ case class AmmOffchain(
         signer: TransactionSigner
     ): Transaction = {
         val d = readPoolDatum(poolUtxo)
-        val dxAdj = BigInt(amountIn) * params.feeNumerator
-        val (_, newR0, newR1) =
-            if t0In then
-                val out = d.r1 * dxAdj / (d.r0 * params.feeDenominator + dxAdj)
-                (out, d.r0 + BigInt(amountIn), d.r1 - out)
-            else
-                val out = d.r0 * dxAdj / (d.r1 * params.feeDenominator + dxAdj)
-                (out, d.r0 - out, d.r1 + BigInt(amountIn))
-        val newDatum = AmmDatum(r0 = newR0, r1 = newR1, lpSupply = d.lpSupply)
+        val (_, newDatum) =
+            AmmMath.swapResult(
+              d,
+              params.feeNumerator,
+              params.feeDenominator,
+              t0In,
+              amountIn
+            )
         val newValue = poolValue(newDatum.r0, newDatum.r1, poolUtxo.output.value.coin.value)
         val spendRedeemer =
-            AmmRedeemer.Swap(t0In, BigInt(amountIn), BigInt(minAmountOut)).toData
+            AmmRedeemer.Swap(t0In, amountIn, minAmountOut).toData
 
         TxBuilder(env, evaluator)
             .spend(poolUtxo, _ => spendRedeemer, script)
@@ -169,10 +187,14 @@ case class AmmOffchain(
       */
     def swapQuote(pool: Utxo, t0In: Boolean, amountIn: Long): (Long, BigDecimal) = {
         val d = readPoolDatum(pool)
-        val dxAdj = BigInt(amountIn) * params.feeNumerator
-        val amountOut =
-            if t0In then d.r1 * dxAdj / (d.r0 * params.feeDenominator + dxAdj)
-            else d.r0 * dxAdj / (d.r1 * params.feeDenominator + dxAdj)
+        val (amountOut, _) =
+            AmmMath.swapResult(
+              d,
+              params.feeNumerator,
+              params.feeDenominator,
+              t0In,
+              amountIn
+            )
         val (reserveIn, reserveOut) = if t0In then (d.r0, d.r1) else (d.r1, d.r0)
         val midPrice = BigDecimal(reserveOut) / BigDecimal(reserveIn)
         val executionPrice = BigDecimal(amountOut) / BigDecimal(amountIn)

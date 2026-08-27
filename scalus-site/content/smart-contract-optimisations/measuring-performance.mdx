@@ -90,6 +90,25 @@ redeemers.foreach { r =>
 
 See the [Emulator](/docs/testing/emulator) page for full setup details.
 
+## Compiler Improvements Since 1.0.0
+
+Recent compiler work moved most budgets down without any source changes, so re-measure after
+upgrading Scalus:
+
+- **Self-application recursion** replaced the Z combinator in the recursion encoding. Measured:
+  the Knights benchmark dropped 19.8% memory and 16.1% CPU, the CAPE `fibonacci_25` fee fell
+  23%, and typical validators gained 4-12% CPU.
+- **Static-argument transformation** (part of `optimizeUplc = true`) stops re-passing loop
+  arguments that never change. Across the example corpus: 7.5% memory and 5.2% CPU on average,
+  with recursive folds over constant context improving far more.
+- **`Value` operations** lower to CIP-153 builtins at PV11, 13-75x cheaper per operation. See
+  [Value Builtins](/docs/smart-contract-optimisations/value-builtins).
+
+Because the generated UPLC changes between Scalus versions, script hashes and pinned budgets
+change too: tests that assert exact `ExUnits` or script hashes must be re-measured on upgrade,
+and deployed scripts keep the hash of the compiler that produced them (use
+`Options.plomin`-style pinned targets when you need to reproduce old output).
+
 ## What's Next?
 
 - **[Algorithmic Optimisations](/docs/smart-contract-optimisations/algorithmic-optimisations)** — start here for the biggest wins; design patterns that reduce on-chain work asymptotically.

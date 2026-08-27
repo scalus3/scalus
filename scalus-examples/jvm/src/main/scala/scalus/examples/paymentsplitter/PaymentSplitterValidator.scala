@@ -114,7 +114,7 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
                 val eqSumValue = sumOutput - payeeSumWithChange + split
                 val reminder = sumContractInputs - eqSumValue
                 require(
-                  reminder >= BigInt(0) && reminder < nPayed,
+                  reminder >= 0 && reminder < nPayed,
                   "value to be payed to payees is too low"
                 )
                 //    nOutputs * (split + 1) > sumContractInputs   <=>

@@ -29,7 +29,14 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
     }
 
     test("InputsAndReferenceInputsDisjointValidator rule failure") {
-        val context = Context()
+        // The disjointness requirement only applies for Babbage <= PV < 11 (van Rossem lifted
+        // it), so pin the context to PV10 to exercise the failure path.
+        val context = {
+            val c = Context()
+            c.copy(env =
+                c.env.copy(params = c.env.params.copy(protocolVersion = ProtocolVersion(10, 0)))
+            )
+        }
         val state = State()
         val transaction = {
             val inputs = genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
@@ -52,5 +59,25 @@ class InputsAndReferenceInputsDisjointValidatorTest extends AnyFunSuite, Validat
         assert(
           transaction.body.value.inputs.toSet == transaction.body.value.referenceInputs.toSet
         )
+    }
+
+    test("InputsAndReferenceInputsDisjointValidator allows overlap since PV11 (van Rossem)") {
+        val context = Context() // default params are PV11
+        val state = State()
+        val transaction = {
+            val inputs = genSetOfSizeFromArbitrary[TransactionInput](1, 4).sample.get
+            val tx = randomTransactionWithIsValidField
+            tx.copy(
+              body = KeepRaw(
+                tx.body.value.copy(
+                  inputs = TaggedSortedSet.from(inputs),
+                  referenceInputs = TaggedSortedSet.from(inputs)
+                )
+              )
+            )
+        }
+
+        val result = InputsAndReferenceInputsDisjointValidator.validate(context, state, transaction)
+        assert(result.isRight)
     }
 }

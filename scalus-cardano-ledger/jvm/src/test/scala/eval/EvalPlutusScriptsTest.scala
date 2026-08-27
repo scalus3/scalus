@@ -93,6 +93,62 @@ class EvalPlutusScriptsTest extends AnyFunSuite {
             val html = new String(Files.readAllBytes(dir.resolve(htmlName)), "UTF-8")
             assert(html.contains("Scalus CEK Machine Profile"))
             assert(html.contains("By Source Location"))
+            // Execution-unit prices are always attached, so the derived fee columns render.
+            assert(html.contains("Fee (lov)"), "expected a fee column in the HTML report")
+            assert(html.contains("fee=") && html.contains("ADA"), "expected a total fee line")
+            val csvName = files.find(_.endsWith(".profile.csv")).get
+            val csv = new String(Files.readAllBytes(dir.resolve(csvName)), "UTF-8")
+            assert(
+              csv.startsWith("section,key,detail,count,mem,cpu,fee\n"),
+              "expected a fee column in the CSV report"
+            )
+        } finally
+            Option(dir.toFile.listFiles())
+                .getOrElse(Array.empty[java.io.File])
+                .foreach(_.delete())
+            Files.deleteIfExists(dir)
+    }
+
+    test("profile = Full writes schemaVersion'd profile.json and a profile-manifest.json") {
+        val dir = Files.createTempDirectory("scalus-profile-manifest-test")
+        try {
+            val report = EvaluatorReportConfig(
+              enabled = true,
+              outputDir = dir.toString,
+              artifacts = Set.empty, // profile only, no .flat dump
+              profile = ProfileLevel.Full
+            )
+            // Two evaluations of the same tx must overwrite manifest runs, not duplicate them.
+            evalPlutusScripts(tx7430, utxo7430, SlotConfig.mainnet, report)
+            evalPlutusScripts(tx7430, utxo7430, SlotConfig.mainnet, report)
+
+            val files = Option(dir.toFile.listFiles())
+                .getOrElse(Array.empty[java.io.File])
+                .map(_.getName)
+
+            val jsonName = files.find(_.endsWith(".profile.json")).get
+            val profileJson = new String(Files.readAllBytes(dir.resolve(jsonName)), "UTF-8")
+            assert(profileJson.contains("\"schemaVersion\": 1"))
+
+            val manifest = new String(
+              Files.readAllBytes(dir.resolve("profile-manifest.json")),
+              "UTF-8"
+            )
+            assert(manifest.contains("\"schemaVersion\": 1"))
+            // The tx runs 2 scripts; re-evaluation must not duplicate the runs.
+            assert(
+              "\"scriptHash\"".r.findAllIn(manifest).size == 2,
+              s"expected 2 runs in manifest:\n$manifest"
+            )
+            assert(manifest.contains("\"language\""))
+            assert(manifest.contains("\"redeemer\""))
+            assert(manifest.contains("\"budget\""))
+            // Every file the manifest lists must exist on disk.
+            val listed = "\"file\": \"([^\"]+)\"".r.findAllMatchIn(manifest).map(_.group(1)).toSeq
+            assert(listed.nonEmpty)
+            listed.foreach { f =>
+                assert(Files.exists(dir.resolve(f)), s"manifest lists missing file $f")
+            }
         } finally
             Option(dir.toFile.listFiles())
                 .getOrElse(Array.empty[java.io.File])

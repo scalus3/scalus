@@ -6,6 +6,7 @@ import scalus.compiler.sir.lowering.Lowering.tpf
 import scalus.compiler.sir.*
 import scalus.uplc.*
 import scalus.uplc.UplcAnnotation
+import scalus.uplc.transform.Inliner
 import scalus.utils.{Pretty, Style}
 
 import scala.collection.mutable.{Map as MutableMap, Set as MutableSet}
@@ -34,6 +35,20 @@ trait LoweredValue {
 
     val createdEx = new RuntimeException("Lowered value created here")
     var debugMark = "i"
+
+    /** Simple name of the user function that was being lowered when this value was created, or `""`
+      * when it was created outside any named binding. Captured from
+      * [[LoweringContext.currentFunction]] at construction time, because term generation runs as a
+      * separate pass after lowering has finished and no longer knows where a value came from.
+      *
+      * Pure metadata: it is copied into the [[scalus.uplc.UplcAnnotation]] of every term this value
+      * emits (see [[ann]]) so tooling can group the compiled UPLC by source function. It never
+      * influences the generated code.
+      */
+    val functionName: String = LoweringContext.currentFunctionName
+
+    /** Annotation for a term emitted by this value: `p` plus [[functionName]]. */
+    def ann(p: SIRPosition): UplcAnnotation = UplcAnnotation(p, functionName)
 
     def sirType: SIRType
 
@@ -255,7 +270,7 @@ case class ConstantLoweredValue(
     override def isEffortLess: Boolean = true
     override def isConstant: Boolean = true
     override def termInternal(gctx: TermGenerationContext): Term =
-        Term.Const(sir.uplcConst, UplcAnnotation(pos))
+        Term.Const(sir.uplcConst, ann(pos))
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
         (Pretty[Term].pretty(Term.Const(sir.uplcConst), ctx.style) + Doc.text(":") + Doc.text(
@@ -432,7 +447,7 @@ class VariableLoweredValue(
         Set(this) ++ optRhs.map(rhs => rhs.usedUplevelVars).getOrElse(Set.empty)
 
     override def termInternal(gctx: TermGenerationContext): Term = {
-        if gctx.generatedVars.contains(id) then Term.Var(NamedDeBruijn(id), UplcAnnotation(pos))
+        if gctx.generatedVars.contains(id) then Term.Var(NamedDeBruijn(id), ann(pos))
         else
             optRhs match {
                 case Some(rhs) =>
@@ -446,7 +461,7 @@ class VariableLoweredValue(
                               s"VariableLoweredValue: generating term for undefined variable $name with id $id"
                             )
                         }
-                        Term.Var(NamedDeBruijn(id), UplcAnnotation(pos))
+                        Term.Var(NamedDeBruijn(id), ann(pos))
                     } else
                         throw new IllegalStateException(
                           s"Variable $name with id $id is not defined and has no rhs to generate term."
@@ -548,7 +563,7 @@ case class DependendVariableLoweredValue(
     override def optRhs: Option[LoweredValue] = Some(rhs)
 
     override def termInternal(gctx: TermGenerationContext): Term = {
-        if gctx.generatedVars.contains(id) then Term.Var(NamedDeBruijn(id), UplcAnnotation(pos))
+        if gctx.generatedVars.contains(id) then Term.Var(NamedDeBruijn(id), ann(pos))
         else rhs.termWithNeededVars(gctx)
 
     }
@@ -623,7 +638,7 @@ case class DelayLoweredValue(input: LoweredValue, override val pos: SIRPosition)
     extends ProxyLoweredValue(input) {
 
     override def termInternal(gctx: TermGenerationContext): Term = {
-        Term.Delay(input.termWithNeededVars(gctx), UplcAnnotation(pos))
+        Term.Delay(input.termWithNeededVars(gctx), ann(pos))
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -638,7 +653,7 @@ case class ForceLoweredValue(input: LoweredValue, override val pos: SIRPosition)
     extends ProxyLoweredValue(input) {
 
     override def termInternal(gctx: TermGenerationContext): Term = {
-        Term.Force(input.termWithNeededVars(gctx), UplcAnnotation(pos))
+        Term.Force(input.termWithNeededVars(gctx), ann(pos))
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -768,7 +783,7 @@ case class LambdaLoweredValue(newVar: VariableLoweredValue, body: LoweredValue, 
         Term.LamAbs(
           newVar.id,
           body.termWithNeededVars(gctx.addGeneratedVar(newVar.id)),
-          UplcAnnotation(pos)
+          ann(pos)
         )
     }
 
@@ -849,7 +864,7 @@ case class BuilinApply1LoweredVale(
         Term.Apply(
           fun.bn.tpf,
           arg.termWithNeededVars(gctx),
-          UplcAnnotation(pos)
+          ann(pos)
         )
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -874,10 +889,10 @@ case class BuilinApply2LoweredVale(
           Term.Apply(
             Lowering.forcedBuiltin(fun.bn),
             arg1.termWithNeededVars(gctx),
-            UplcAnnotation(pos)
+            ann(pos)
           ),
           arg2.termWithNeededVars(gctx),
-          UplcAnnotation(pos)
+          ann(pos)
         )
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -904,7 +919,7 @@ case class ApplyLoweredValue(
         Term.Apply(
           f.termWithNeededVars(gctx),
           arg.termWithNeededVars(gctx),
-          UplcAnnotation(pos)
+          ann(pos)
         )
     }
 
@@ -947,13 +962,13 @@ case class LetNonRecLoweredValue(
         val bodyTerm = body.termWithNeededVars(bodyGctx)
         bindings.foldRight(bodyTerm) { case ((varVal, rhs), term) =>
             Term.Apply(
-              Term.LamAbs(varVal.id, term, UplcAnnotation(pos)),
+              Term.LamAbs(varVal.id, term, ann(pos)),
               rhs.termWithNeededVars(
                 gctx.copy(
                   generatedVars = gctx.generatedVars + varVal.id
                 )
               ),
-              UplcAnnotation(pos)
+              ann(pos)
             )
         }
     }
@@ -990,28 +1005,40 @@ case class LetRecLoweredValue(
 
     override def pos: SIRPosition = inPos
 
-    /*  let rec f  = x => f (x + 1)
+    /*  let rec f = x => f (x + 1)
         in f 0
-        (\f -> f 0) (Z (\f. \x. f (x + 1)))
+        Self-application encoding (no fixpoint combinator):
+        (\f -> f 0) ((\f -> f f) (\f. \x. (f f) (x + 1)))
+        Each recursive call costs one Apply instead of the Z-combinator's
+        eta-wrapper dispatch (6 machine steps cheaper per call).
+        The fixpoint `(\f -> f f) rhs'` is kept as a closed subterm in argument
+        position (same top-level shape as the old `(\f -> body) (Z rhs)`) so
+        Inliner + PartialEvaluator can still constant-fold closed recursive
+        computations at compile time.
      */
     override def termInternal(gctx: TermGenerationContext): Term = {
         val nGctx = gctx.copy(
           generatedVars = gctx.generatedVars + newVar.id
         )
-        val fixed =
-            Term.Apply(
-              Term.Var(NamedDeBruijn("__Z")),
-              Term.LamAbs(
-                newVar.id,
-                rhs.termWithNeededVars(nGctx),
-                UplcAnnotation(pos)
-              ),
-              UplcAnnotation(pos)
-            )
+        val ann = this.ann(pos)
+        def selfApply = Term.Apply(
+          Term.Var(NamedDeBruijn(newVar.id)),
+          Term.Var(NamedDeBruijn(newVar.id)),
+          ann
+        )
+        // Capture-safe: lowering variable ids are globally unique and the
+        // replacement `f f` only references `newVar.id` itself.
+        val rhsSelfApp =
+            Inliner.substitute(rhs.termWithNeededVars(nGctx), newVar.id, selfApply)
+        val fixpoint = Term.Apply(
+          Term.LamAbs(newVar.id, selfApply, ann),
+          Term.LamAbs(newVar.id, rhsSelfApp, ann),
+          ann
+        )
         Term.Apply(
-          Term.LamAbs(newVar.id, body.termWithNeededVars(nGctx), UplcAnnotation(pos)),
-          fixed,
-          UplcAnnotation(pos)
+          Term.LamAbs(newVar.id, body.termWithNeededVars(nGctx), ann),
+          fixpoint,
+          ann
         )
     }
 
@@ -1053,7 +1080,7 @@ case class IfThenElseLoweredValue(
         (!(DefaultFun.IfThenElse.tpf $
             cond.termWithNeededVars(gctx) $
             ~thenBranch.termWithNeededVars(gctx) $
-            ~elseBranch.termWithNeededVars(gctx))).withPos(pos)
+            ~elseBranch.termWithNeededVars(gctx))).withAnnotationIfEmpty(ann(pos))
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -1096,7 +1123,7 @@ case class CaseBooleanLoweredValue(
             falseBranch.termWithNeededVars(gctx),
             trueBranch.termWithNeededVars(gctx)
           ),
-          UplcAnnotation(pos)
+          ann(pos)
         )
     }
 
@@ -1139,7 +1166,7 @@ case class CaseIntegerLoweredValue(
         Term.Case(
           scrutinee.termWithNeededVars(gctx),
           branches.map(_.termWithNeededVars(gctx)),
-          UplcAnnotation(pos)
+          ann(pos)
         )
     }
 
@@ -1194,15 +1221,15 @@ case class CaseListLoweredValue(
         val consCtx = gctx.copy(generatedVars = gctx.generatedVars + consHead.id + consTail.id)
         val consTerm = Term.LamAbs(
           consHead.id,
-          Term.LamAbs(consTail.id, consBranch.termWithNeededVars(consCtx), UplcAnnotation(pos)),
-          UplcAnnotation(pos)
+          Term.LamAbs(consTail.id, consBranch.termWithNeededVars(consCtx), ann(pos)),
+          ann(pos)
         )
         val branches = optNilBranch match
             case Some(nilBranch) =>
                 scala.collection.immutable.List(consTerm, nilBranch.termWithNeededVars(gctx))
             case None =>
                 scala.collection.immutable.List(consTerm)
-        Term.Case(scrutinee.termWithNeededVars(gctx), branches, UplcAnnotation(pos))
+        Term.Case(scrutinee.termWithNeededVars(gctx), branches, ann(pos))
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -1252,11 +1279,11 @@ case class CasePairLoweredValue(
           scala.collection.immutable.List(
             Term.LamAbs(
               fstVar.id,
-              Term.LamAbs(sndVar.id, body.termWithNeededVars(bodyCtx), UplcAnnotation(pos)),
-              UplcAnnotation(pos)
+              Term.LamAbs(sndVar.id, body.termWithNeededVars(bodyCtx), ann(pos)),
+              ann(pos)
             )
           ),
-          UplcAnnotation(pos)
+          ann(pos)
         )
     }
 
@@ -1343,28 +1370,28 @@ case class CaseDataLoweredValue(
               Term.LamAbs(
                 constrArgsVar.id,
                 constrBranch.termWithNeededVars(constrCtx),
-                UplcAnnotation(pos)
+                ann(pos)
               ),
-              UplcAnnotation(pos)
+              ann(pos)
             ),
             // Map branch (index 1): λentries.body
             Term.LamAbs(
               mapEntriesVar.id,
               mapBranch.termWithNeededVars(mapCtx),
-              UplcAnnotation(pos)
+              ann(pos)
             ),
             // List branch (index 2): λelements.body
             Term.LamAbs(
               listElementsVar.id,
               listBranch.termWithNeededVars(listCtx),
-              UplcAnnotation(pos)
+              ann(pos)
             ),
             // I branch (index 3): λvalue.body
-            Term.LamAbs(iValueVar.id, iBranch.termWithNeededVars(iCtx), UplcAnnotation(pos)),
+            Term.LamAbs(iValueVar.id, iBranch.termWithNeededVars(iCtx), ann(pos)),
             // B branch (index 4): λvalue.body
-            Term.LamAbs(bValueVar.id, bBranch.termWithNeededVars(bCtx), UplcAnnotation(pos))
+            Term.LamAbs(bValueVar.id, bBranch.termWithNeededVars(bCtx), ann(pos))
           ),
-          UplcAnnotation(pos)
+          ann(pos)
         )
     }
 
@@ -1417,7 +1444,7 @@ case class ChooseListLoweredValue(
         import scalus.compiler.sir.lowering.Lowering.tpf
         (!(DefaultFun.ChooseList.tpf $ listInput.termWithNeededVars(gctx)
             $ ~nilBody.termWithNeededVars(gctx)
-            $ ~consBody.termWithNeededVars(gctx))).withPosIfEmpty(pos)
+            $ ~consBody.termWithNeededVars(gctx))).withAnnotationIfEmpty(ann(pos))
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {
@@ -1493,7 +1520,7 @@ case class ChooseDataLoweredValue(
             $ ~mapBranch.termWithNeededVars(gctx)
             $ ~listBranch.termWithNeededVars(gctx)
             $ ~iBranch.termWithNeededVars(gctx)
-            $ ~bBranch.termWithNeededVars(gctx))).withPosIfEmpty(pos)
+            $ ~bBranch.termWithNeededVars(gctx))).withAnnotationIfEmpty(ann(pos))
     }
 
     override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc = {

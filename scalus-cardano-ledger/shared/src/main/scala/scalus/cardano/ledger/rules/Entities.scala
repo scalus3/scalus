@@ -4,8 +4,6 @@ package rules
 import scalus.cardano.address.Network
 import scalus.uplc.DebugScript
 
-import scala.annotation.threadUnsafe
-
 // It's mutable state for transient calculation
 case class Context(
     var fee: Coin = Coin.zero,
@@ -21,7 +19,8 @@ case class Context(
 )
 
 object Context {
-    def testMainnet(slot: SlotNo = 0): Context = Context(env = UtxoEnv.testMainnet(slot))
+    def testMainnet(): Context = testMainnet(0)
+    def testMainnet(slot: SlotNo): Context = Context(env = UtxoEnv.testMainnet(slot))
 }
 
 case class State(
@@ -38,10 +37,11 @@ case class UtxoEnv(slot: SlotNo, params: ProtocolParams, certState: CertState, n
 object UtxoEnv {
     // Uses CardanoInfo.mainnet.protocolParams (inlined at compile time via macro)
     // TODO: remove
-    @threadUnsafe lazy val default: UtxoEnv = UtxoEnvDefaults.default
+    lazy val default: UtxoEnv = UtxoEnvDefaults.default
 
     // TODO: remove
-    def testMainnet(slot: SlotNo = 0): UtxoEnv = UtxoEnvDefaults.testMainnet(slot)
+    def testMainnet(): UtxoEnv = testMainnet(0)
+    def testMainnet(slot: SlotNo): UtxoEnv = UtxoEnvDefaults.testMainnet(slot)
 }
 
 sealed trait STS {

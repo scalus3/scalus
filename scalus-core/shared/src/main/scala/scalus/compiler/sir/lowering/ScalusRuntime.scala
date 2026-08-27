@@ -4,7 +4,7 @@ import org.typelevel.paiges.Doc
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.sir.lowering.LoweredValue.Builder.*
 import scalus.compiler.sir.*
-import scalus.uplc.{Term, UplcAnnotation}
+import scalus.uplc.Term
 import scalus.compiler.sir.lowering.typegens.SumUplcConstrOps
 
 object ScalusRuntime {
@@ -21,8 +21,6 @@ object ScalusRuntime {
         initArrayToList(using lctx)
         // mapList is initialized on demand when first used
         initSupportBindings(lctx)
-        lctx.zCombinatorNeeded = false
-        // will set to true when some of initialized function will be used
     }
 
     /** Eagerly materialize every support-module binding into `lctx.scope` as a lazy named var.
@@ -47,7 +45,10 @@ object ScalusRuntime {
                 val prevFlag = lctx.inUplcConstrListScope
                 if isNativeConstr then lctx.inUplcConstrListScope = true
                 try
-                    val lowered = Lowering.lowerSIR(d.value)
+                    // Same attribution as a user binding: everything lowered here belongs to the
+                    // support def, so the UPLC source view can name prelude/support code too.
+                    val lowered =
+                        Lowering.loweringBinding(d.name, d.value)(Lowering.lowerSIR(d.value))
                     LoweredValue.Builder.lvNewLazyNamedVar(
                       d.name,
                       d.tp,
@@ -60,42 +61,31 @@ object ScalusRuntime {
         }
     }
 
-    def arrayToList(using lctx: LoweringContext): LoweredValue = {
+    def arrayToList(using lctx: LoweringContext): LoweredValue =
         retrieveRuntimeFunction(ARRAY_TO_LIST_NAME)
-    }
 
-    def mapList(using lctx: LoweringContext): LoweredValue = {
-        lctx.scope.getByName(MAP_LIST_NAME) match {
-            case Some(lv) =>
-                lctx.zCombinatorNeeded = true
-                lv
-            case None =>
-                initMapList
-                lctx.scope.getByName(MAP_LIST_NAME) match {
-                    case Some(lv) =>
-                        lctx.zCombinatorNeeded = true
-                        lv
-                    case None =>
-                        throw IllegalStateException(
-                          s"Can't find scalus runtime function ${MAP_LIST_NAME} after init"
-                        )
-                }
+    def mapList(using lctx: LoweringContext): LoweredValue =
+        lctx.scope.getByName(MAP_LIST_NAME).getOrElse {
+            initMapList
+            lctx.scope
+                .getByName(MAP_LIST_NAME)
+                .getOrElse(
+                  throw IllegalStateException(
+                    s"Can't find scalus runtime function $MAP_LIST_NAME after init"
+                  )
+                )
         }
-    }
 
     private def retrieveRuntimeFunction(
         name: String
-    )(using lctx: LoweringContext): LoweredValue = {
-        lctx.scope.getByName(name) match {
-            case Some(lv) =>
-                lctx.zCombinatorNeeded = true
-                lv
-            case None =>
-                throw IllegalStateException(
-                  s"Can't find scalus runtime function ${name} in context, check that context is initialized"
-                )
-        }
-    }
+    )(using lctx: LoweringContext): LoweredValue =
+        lctx.scope
+            .getByName(name)
+            .getOrElse(
+              throw IllegalStateException(
+                s"Can't find scalus runtime function $name in context, check that context is initialized"
+              )
+            )
 
     /** Unified list matching that uses Case on list for PlutusV4 and ChooseList for V1-V3.
       *
@@ -269,9 +259,6 @@ object ScalusRuntime {
       *
       * arrayToList converts a BuiltinArray[Data] to a BuiltinList[Data] by indexing the array
       * element-by-element with `indexArray` from front to back (see `genArrayToList`).
-      *
-      * NOTE: this deliberately does NOT use `multiIndexArray` — that is a Scalus-invented builtin
-      * with a non-Plutus flat tag (audit F1); nothing in lowering emits it.
       */
     private def initArrayToList(using lctx: LoweringContext): Unit = {
         val name = ARRAY_TO_LIST_NAME
@@ -656,7 +643,7 @@ object ScalusRuntime {
                 Term.Constr(
                   scalus.cardano.ledger.Word64(0L),
                   scala.List.empty,
-                  UplcAnnotation(constrPos)
+                  ann(constrPos)
                 )
             override def docDef(ctx: LoweredValue.PrettyPrintingContext): Doc =
                 Doc.text("Constr(0)")
@@ -724,7 +711,7 @@ object ScalusRuntime {
                                     convertedHead.termWithNeededVars(gctx),
                                     recCall.termWithNeededVars(gctx)
                                   ),
-                                  UplcAnnotation(AnnotationsDecl.empty.pos)
+                                  ann(AnnotationsDecl.empty.pos)
                                 )
                             override def docDef(
                                 ctx: LoweredValue.PrettyPrintingContext
@@ -750,7 +737,6 @@ object ScalusRuntime {
               pos
             )
         }
-        lctx.zCombinatorNeeded = true
         lvApplyDirect(goVar, input, listType, outSum, pos)
     }
 
@@ -936,7 +922,6 @@ object ScalusRuntime {
               pos
             )
         }
-        lctx.zCombinatorNeeded = true
         lvApplyDirect(goVar, input, listType, resolvedOutListRepr, pos)
     }
 

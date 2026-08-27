@@ -92,9 +92,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Identity output must be at script address with inline datum
                 val identityOutput = tx.outputs.at(identityOutIndex)
-                identityOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[IdentityDatum]
-                    case _                          => fail("Identity must have inline datum")
+                identityOutput.datum.inlineOrFail[IdentityDatum]("Identity must have inline datum")
 
                 // Output must be at own script address
                 identityOutput.address.credential match
@@ -107,20 +105,15 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Exactly one identity token minted, nothing else under this policy
                 require(
-                  tx.mint.quantityOf(policyId, idTn) === BigInt(1),
-                  "Must mint exactly 1 identity token"
-                )
-                require(
-                  tx.mint.tokens(policyId).size === BigInt(1),
-                  "Must mint only the identity token"
+                  tx.mint.hasOnly(policyId, idTn, 1),
+                  "Must mint exactly 1 identity token and nothing else"
                 )
 
             case MintAction.AddDelegate(identityRefInputIndex, delegationOutIndex) =>
                 // Identity must be present as reference input
                 val identityRefInput = tx.referenceInputs.at(identityRefInputIndex)
-                val identityDatum = identityRefInput.resolved.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[IdentityDatum]
-                    case _ => fail("Identity ref input must have inline datum")
+                val identityDatum = identityRefInput.resolved.datum
+                    .inlineOrFail[IdentityDatum]("Identity ref input must have inline datum")
 
                 // Must be signed by identity owner
                 require(
@@ -140,9 +133,9 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                     case _ => fail("Delegation must go to script address")
 
                 // Check delegation datum
-                val delegDatum = delegationOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[DelegationDatum]
-                    case _                          => fail("Delegation must have inline datum")
+                val delegDatum = delegationOutput.datum.inlineOrFail[DelegationDatum](
+                  "Delegation must have inline datum"
+                )
 
                 require(
                   delegDatum.identityTokenName === identityTn,
@@ -157,25 +150,20 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 // Build expected token name and check minting
                 val delegTn = delegationTokenName(identityTn, delegDatum.delegatePkh)
                 require(
-                  tx.mint.quantityOf(policyId, delegTn) === BigInt(1),
-                  "Must mint exactly 1 delegation token"
+                  tx.mint.hasOnly(policyId, delegTn, 1),
+                  "Must mint exactly 1 delegation token and nothing else"
                 )
 
                 require(
                   delegationOutput.value.quantityOf(policyId, delegTn) === BigInt(1),
                   "Delegation output must hold the delegation token"
                 )
-                require(
-                  tx.mint.tokens(policyId).size === BigInt(1),
-                  "Must mint only the delegation token"
-                )
 
             case MintAction.PublishAttribute(delegationRefInputIndex, attributeOutIndex) =>
                 // Delegation must be present as reference input
                 val delegationRefInput = tx.referenceInputs.at(delegationRefInputIndex)
-                val delegDatum = delegationRefInput.resolved.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[DelegationDatum]
-                    case _ => fail("Delegation ref input must have inline datum")
+                val delegDatum = delegationRefInput.resolved.datum
+                    .inlineOrFail[DelegationDatum]("Delegation ref input must have inline datum")
 
                 // Delegation must be at script address (proving it's valid/non-forged)
                 delegationRefInput.resolved.address.credential match
@@ -218,9 +206,9 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                     case _ => fail("Attribute must go to script address")
 
                 // Check attribute datum
-                val attrDatum = attributeOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[AttributeDatum]
-                    case _                          => fail("Attribute must have inline datum")
+                val attrDatum = attributeOutput.datum.inlineOrFail[AttributeDatum](
+                  "Attribute must have inline datum"
+                )
 
                 require(
                   attrDatum.identityTokenName === delegDatum.identityTokenName,
@@ -230,23 +218,19 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 // Build expected token name and check minting
                 val attrTn = attributeTokenName(delegDatum.identityTokenName, attrDatum.key)
                 require(
-                  tx.mint.quantityOf(policyId, attrTn) === BigInt(1),
-                  "Must mint exactly 1 attribute token"
+                  tx.mint.hasOnly(policyId, attrTn, 1),
+                  "Must mint exactly 1 attribute token and nothing else"
                 )
 
                 require(
                   attributeOutput.value.quantityOf(policyId, attrTn) === BigInt(1),
                   "Attribute output must hold the attribute token"
                 )
-                require(
-                  tx.mint.tokens(policyId).size === BigInt(1),
-                  "Must mint only the attribute token"
-                )
 
             case MintAction.Burn =>
                 // Ensure all quantities under this policy are negative (only burns allowed)
                 require(
-                  tx.mint.tokens(policyId).forall((_, qty) => qty < BigInt(0)),
+                  tx.mint.tokens(policyId).forall((_, qty) => qty < 0),
                   "Burn action must only burn tokens"
                 )
         }
@@ -300,9 +284,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                   "Must return identity token"
                 )
 
-                val newDatum = newOutput.datum match
-                    case OutputDatum.OutputDatum(d) => d.to[IdentityDatum]
-                    case _                          => fail("Must have inline datum")
+                val newDatum = newOutput.datum.inlineOrFail[IdentityDatum]("Must have inline datum")
 
                 require(newDatum.ownerPkh === newOwnerPkh, "Datum must reflect new owner")
 
@@ -360,7 +342,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
         // Find first token whose name starts with the prefix
         tokenMap
             .find { case (tn, qty) =>
-                qty > BigInt(0) && tn.take(prefixBs.length) === prefixBs
+                qty > 0 && tn.take(prefixBs.length) === prefixBs
             }
             .map(_._1)
             .getOrFail("Token with prefix not found")
@@ -378,8 +360,8 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
             }
             .getOrFail("Identity reference input not found")
 
-        identityRefInput.resolved.datum match
-            case OutputDatum.OutputDatum(d) => d.to[IdentityDatum].ownerPkh
-            case _                          => fail("Identity must have inline datum")
+        identityRefInput.resolved.datum
+            .inlineOrFail[IdentityDatum]("Identity must have inline datum")
+            .ownerPkh
     }
 }

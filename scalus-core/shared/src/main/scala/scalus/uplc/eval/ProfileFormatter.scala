@@ -278,7 +278,10 @@ object ProfileFormatter {
         sb.toString
     }
 
-    /** Compact summary suitable for console / log output: total budget plus the top-N by CPU. */
+    /** Compact summary suitable for console / log output: total budget plus the top-N entries in
+      * the profile's default order — memory-major `(mem, cpu)` descending, like every section of
+      * [[ProfilingData]].
+      */
     def summary(data: ProfilingData, topN: Int = 10): String = {
         val n = math.max(1, topN)
         val sb = new StringBuilder
@@ -289,8 +292,8 @@ object ProfileFormatter {
           s"Total: mem=${data.totalBudget.memory} cpu=${data.totalBudget.steps}${feeStr(data.totalBudget.memory, data.totalBudget.steps)}\n"
         )
         if data.byFunction.nonEmpty then
-            sb.append(s"Top $n by CPU (builtin):\n")
-            data.byFunction.sortBy(e => -e.cpu).take(n).foreach { e =>
+            sb.append(s"Top $n by memory (builtin):\n")
+            data.byFunction.sortBy(e => (-e.memory, -e.cpu)).take(n).foreach { e =>
                 sb.append(
                   "  " + e.name.padTo(
                     24,
@@ -299,8 +302,8 @@ object ProfileFormatter {
                 )
             }
         if data.bySourceLocation.nonEmpty then
-            sb.append(s"Top $n by CPU (source):\n")
-            data.bySourceLocation.sortBy(e => -e.cpu).take(n).foreach { e =>
+            sb.append(s"Top $n by memory (source):\n")
+            data.bySourceLocation.sortBy(e => (-e.memory, -e.cpu)).take(n).foreach { e =>
                 val loc = s"${shortFile(e.file)}:${e.line}"
                 sb.append(
                   "  " + loc.padTo(
@@ -377,8 +380,15 @@ object ProfileFormatter {
         sb.toString
     }
 
-    /** Renders the full profiling data as JSON (machine-readable). When the data carries execution
-      * unit prices, every entry and the total also include a derived `"fee"` in lovelace.
+    /** Version of the `profile.json` document produced by [[toJson]] (emitted as its
+      * `"schemaVersion"` field). Bump on any incompatible change to the JSON shape so consumers
+      * (e.g. the Scalus VS Code extension) can detect and reject profiles they don't understand.
+      */
+    val JsonSchemaVersion: Int = 1
+
+    /** Renders the full profiling data as JSON (machine-readable, schema version
+      * [[JsonSchemaVersion]]). When the data carries execution unit prices, every entry and the
+      * total also include a derived `"fee"` in lovelace.
       */
     def toJson(data: ProfilingData): String = {
         // `,"fee":<lovelace>` for an entry's (mem, cpu), or "" when no prices are attached.
@@ -386,6 +396,7 @@ object ProfileFormatter {
             feeLovelace(data.prices, mem, cpu).map(f => s""","fee":$f""").getOrElse("")
         val sb = new StringBuilder
         sb.append("{\n")
+        sb.append(s"""  "schemaVersion": $JsonSchemaVersion,\n""")
         sb.append(
           s"""  "totalBudget": { "mem": ${data.totalBudget.memory}, "cpu": ${data.totalBudget.steps}${feeJson(
                 data.totalBudget.memory,

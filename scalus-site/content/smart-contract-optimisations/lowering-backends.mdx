@@ -31,13 +31,13 @@ import scalus.cardano.ledger.MajorProtocolVersion
 
 given Options = Options(
   targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
-  targetProtocolVersion = MajorProtocolVersion.changPV,
+  targetProtocolVersion = MajorProtocolVersion.vanRossemPV,
   generateErrorTraces = true,
   optimizeUplc = true
 )
 ```
 
-The `Options.default`, `Options.debug`, `Options.release`, and `Options.vanRossem` presets all use V3 Lowering. To switch to a different backend, build `Options` directly with the `targetLoweringBackend` you want.
+The `Options.default`, `Options.debug`, `Options.release`, and `Options.plomin` presets all use V3 Lowering. To switch to a different backend, build `Options` directly with the `targetLoweringBackend` you want.
 
 ## V3 Lowering Backend (Default)
 
@@ -85,7 +85,7 @@ When to use it:
 ```scala mdoc:compile-only copy showLineNumbers
 given Options = Options(
   targetLoweringBackend = TargetLoweringBackend.SumOfProductsLowering,
-  targetProtocolVersion = MajorProtocolVersion.changPV
+  targetProtocolVersion = MajorProtocolVersion.vanRossemPV
 )
 ```
 

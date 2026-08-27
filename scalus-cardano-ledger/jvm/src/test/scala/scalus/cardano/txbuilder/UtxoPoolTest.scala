@@ -335,6 +335,73 @@ class UtxoPoolTest extends AnyFunSuite {
         )
     }
 
+    test("selectForCollateral: never selects more than maxCollateralInputs UTxOs") {
+        val maxInputs = testProtocolParams.maxCollateralInputs.toInt
+        // Fragmented wallet: no single UTxO covers 9 ADA, uncapped largest-first would take 4
+        val utxos = Map(
+          input(0) -> adaOutput(3),
+          input(1) -> adaOutput(2),
+          input(2) -> adaOutput(2),
+          input(3) -> adaOutput(2),
+          input(4) -> adaOutput(2),
+          input(5) -> adaOutput(2)
+        )
+        val pool = UtxoPool(utxos)
+        val selected = pool.selectForCollateral(Coin.ada(9), testProtocolParams)
+
+        assert(
+          selected.size <= maxInputs,
+          s"Should never select more than maxCollateralInputs=$maxInputs UTxOs, got ${selected.size}"
+        )
+        // Best effort within the cap: the largest UTxOs (3 + 2 + 2 = 7 ADA)
+        val total = selected.values.map(_.value.coin.value).sum
+        assert(
+          total == Coin.ada(7).value,
+          s"Should select the largest UTxOs within the cap, got $total lovelace"
+        )
+    }
+
+    test(
+      "selectForCollateral: falls back to largest UTxOs overall when preferred tiers cannot cover within cap"
+    ) {
+        val maxInputs = testProtocolParams.maxCollateralInputs.toInt
+        // ADA-only UTxOs are too small: even maxInputs of them only give 2.7 ADA.
+        // A single token UTxO covers the requirement alone.
+        val utxos = Map(
+          input(0) -> adaOutputLovelace(900_000),
+          input(1) -> adaOutputLovelace(900_000),
+          input(2) -> adaOutputLovelace(900_000),
+          input(3) -> tokenOutput(10, 100)
+        )
+        val pool = UtxoPool(utxos)
+        val selected = pool.selectForCollateral(Coin.ada(5), testProtocolParams)
+
+        assert(selected.size <= maxInputs, s"Selection must respect the cap, got ${selected.size}")
+        val total = selected.values.map(_.value.coin.value).sum
+        assert(
+          total >= Coin.ada(5).value,
+          s"Selection within the cap must cover the requirement, got $total lovelace"
+        )
+        assert(selected.contains(input(3)), "Should fall back to the large token UTxO")
+    }
+
+    test("replaceCollateral: replaces previous collateral selection instead of merging") {
+        val utxos = Map(
+          input(0) -> adaOutput(10),
+          input(1) -> adaOutput(5)
+        )
+        val pool = UtxoPool(utxos)
+        val first = Map(input(0) -> adaOutput(10))
+        val second = Map(input(1) -> adaOutput(5))
+
+        val updated = pool.withCollateral(first).replaceCollateral(second)
+
+        assert(
+          updated.collateral == second,
+          "replaceCollateral should discard the previous selection"
+        )
+    }
+
     // ============================================================================
     // withInputs / withCollateral tests
     // ============================================================================

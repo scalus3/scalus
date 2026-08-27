@@ -639,7 +639,11 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         isUnchecked: Boolean = false
     ): AnnotatedSIR = {
         if env.debug then println(s"compileMatch: ${tree.show}")
-        val bPrefix = s"_${tree.srcPos.startPos.source.name}_${tree.srcPos.line}_match_"
+        // The start column disambiguates multiple (possibly nested) matches on the same source
+        // line - each match gets its own name counter, so a line-only prefix produced identical
+        // generated names across them (audit M5).
+        val bPrefix =
+            s"_${tree.srcPos.startPos.source.name}_${tree.srcPos.line}_${tree.srcPos.startPos.column}_match_"
         val ctx = PatternMatchingContext(bPrefix, env, tree.srcPos)
         if isUnchecked then ctx.isUnchecked = true
         val parsedMatch = parseMatch(ctx, tree, env)

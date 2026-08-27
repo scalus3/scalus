@@ -1,0 +1,258 @@
+{
+  "version": "3.0.0",
+  "description": "Comprehensive ECD (Euclidean Common Divisor) function testing across multiple input pairs",
+  "measurements": [
+    {
+      "name": "ecd_0_12",
+      "description": "ECD of 0 and 12 should return 12 (edge case: first argument is zero)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 0)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 12)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 12)"
+      }
+    },
+    {
+      "name": "ecd_12_0",
+      "description": "ECD of 12 and 0 should return 12 (edge case: second argument is zero)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 12)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 0)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 12)"
+      }
+    },
+    {
+      "name": "ecd_7_7",
+      "description": "ECD of 7 and 7 should return 7 (edge case: identical numbers)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 7)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 7)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 7)"
+      }
+    },
+    {
+      "name": "ecd_6_9",
+      "description": "ECD of 6 and 9 should return 3",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 6)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 9)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 3)"
+      }
+    },
+    {
+      "name": "ecd_12_8",
+      "description": "ECD of 12 and 8 should return 4",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 12)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 8)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 4)"
+      }
+    },
+    {
+      "name": "ecd_15_25",
+      "description": "ECD of 15 and 25 should return 5",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 15)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 25)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 5)"
+      }
+    },
+    {
+      "name": "ecd_17_19",
+      "description": "ECD of 17 and 19 should return 1 (coprime numbers)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 17)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 19)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 1)"
+      }
+    },
+    {
+      "name": "ecd_13_29",
+      "description": "ECD of 13 and 29 should return 1 (coprime numbers)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 13)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 29)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 1)"
+      }
+    },
+    {
+      "name": "ecd_48_18",
+      "description": "ECD of 48 and 18 should return 6",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 48)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 18)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 6)"
+      }
+    },
+    {
+      "name": "ecd_100_75",
+      "description": "ECD of 100 and 75 should return 25",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 100)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 75)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 25)"
+      }
+    },
+    {
+      "name": "ecd_1071_462",
+      "description": "ECD of 1071 and 462 should return 21 (larger numbers)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 1071)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 462)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 21)"
+      }
+    },
+    {
+      "name": "ecd_2520_1890",
+      "description": "ECD of 2520 and 1890 should return 630 (larger numbers)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 2520)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 1890)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 630)"
+      }
+    },
+    {
+      "name": "ecd_negative_12_8",
+      "description": "ECD of -12 and 8 should return 4 (negative first argument handled via abs)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer -12)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer 8)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 4)"
+      }
+    },
+    {
+      "name": "ecd_12_negative_8",
+      "description": "ECD of 12 and -8 should return 4 (negative second argument handled via abs)",
+      "inputs": [
+        {
+          "type": "uplc",
+          "value": "(con integer 12)"
+        },
+        {
+          "type": "uplc",
+          "value": "(con integer -8)"
+        }
+      ],
+      "expected": {
+        "type": "value",
+        "content": "(con integer 4)"
+      }
+    }
+  ]
+}
