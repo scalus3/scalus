@@ -2,7 +2,7 @@ package scalus.cardano.node.stream.internal
 
 import scalus.cardano.infra.{ResyncRequiredException, UnsupportedSubscriptionException}
 import scalus.cardano.ledger.{CardanoInfo, ProtocolParams, TransactionHash}
-import scalus.cardano.node.TransactionStatus
+import scalus.cardano.node.{TransactionStatus, UtxoQuery, UtxoSource}
 import scalus.cardano.node.stream.*
 
 import scala.collection.mutable
@@ -288,7 +288,12 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             // `+ 1` on a saturating max, so an absurd confirmation depth cannot wrap the window
             // negative and empty the deque on the next prune.
             val retain = math.max(securityParam, deepestGate).min(Int.MaxValue - 1) + 1
-            while recent.size > retain do recent.removeHead()
+            // Pruned by *height*, not by entry count: under partial coverage several blocks can
+            // share a height (one per set of sources probed there), and counting entries would
+            // then evict heights that are still inside the rollback horizon. With one entry per
+            // height — every Complete-coverage provider — this is the same window as before.
+            val oldest = block.blockNo - retain
+            while recent.nonEmpty && recent.head.blockNo <= oldest do recent.removeHead()
             val newTip = ChainTip(block.point, block.blockNo)
             tip = newTip
 
@@ -393,12 +398,19 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             depthOf: S => Int,
             lastOf: S => BlockNo,
             advance: (S, BlockNo) => Unit,
-            emit: (S, AppliedBlock) => Seq[Mailbox[?]]
+            emit: (S, AppliedBlock) => Seq[Mailbox[?]],
+            covers: (S, AppliedBlock) => Boolean
         ): Seq[Mailbox[?]] = subs.toSeq.flatMap { sub =>
             val depth = depthOf(sub)
-            // Everything at or below the visible height that this subscription has not seen yet.
+            // Everything at or below the visible height that this subscription has not seen yet
+            // *and* that the provider actually examined on its behalf. Skipping the coverage test
+            // would not merely deliver an empty block: `emit` turns "no matches" into an `Idle`,
+            // and `advance` then moves the watermark past a height whose real events had not been
+            // looked for yet, so they could never be delivered afterwards.
             val visibleUpTo = tip.blockNo - depth
-            val due = recent.filter(b => b.blockNo > lastOf(sub) && b.blockNo <= visibleUpTo).toSeq
+            val due = recent
+                .filter(b => b.blockNo > lastOf(sub) && b.blockNo <= visibleUpTo && covers(sub, b))
+                .toSeq
             if due.isEmpty then Seq.empty
             else
                 advance(sub, due.last.blockNo)
@@ -410,21 +422,25 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => { utxoEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
+          (s, b) => { utxoEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) },
+          (s, b) => coversUtxoQuery(s.query.query, b.coverage)
         )
         val txs = deliveries[TxSubscription](
           txSubs.values,
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => { txEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
+          (s, b) => { txEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) },
+          (s, b) => coversTxQuery(s.query, b.coverage)
         )
         val blocks = deliveries[BlockSubscription](
           blockSubs.values,
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => { blockEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
+          (s, b) => { blockEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) },
+          // A block subscription wants the block itself, which only a complete observation has.
+          (_, b) => b.coverage == BlockCoverage.Complete
         )
         utxo ++ txs ++ blocks
     }
@@ -452,6 +468,50 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
       */
     private def wantsIdle(opts: SubscriptionOptions): Boolean =
         capabilities.idleSignals && opts.idleSignals
+
+    /** Whether a block's coverage is authoritative for a UTxO subscription.
+      *
+      * A union needs every arm covered — the events we would otherwise miss are exactly the ones
+      * the uncovered arm would have found — which also means a query spanning two sources is
+      * covered only by a block that probed both. That is why a provider is expected to emit one
+      * block per height carrying the union of everything it probed there, rather than one block per
+      * watcher.
+      */
+    private def coversUtxoQuery(query: UtxoQuery, coverage: BlockCoverage): Boolean = query match
+        case q: UtxoQuery.Simple => BlockCoverage.covers(coverage, q.source)
+        case UtxoQuery.Or(l, r, _, _, _) =>
+            coversUtxoQuery(l, coverage) && coversUtxoQuery(r, coverage)
+
+    /** Whether a block's coverage is authoritative for a transaction subscription.
+      *
+      * Deliberately conservative: a leaf with no [[UtxoSource]] equivalent — `MintsPolicy` has no
+      * per-asset source to probe, `InvolvesScript` and `Not` have no index at all — is treated as
+      * uncovered unless the whole block was observed. Under-claiming coverage costs a subscription
+      * some latency; over-claiming it loses events silently.
+      */
+    private def coversTxQuery(query: TransactionQuery, coverage: BlockCoverage): Boolean =
+        coverage match
+            case BlockCoverage.Complete => true
+            case BlockCoverage.Sources(probed) =>
+                def covered(q: TransactionQuery): Boolean = q match
+                    case TransactionQuery.InvolvesAddress(a) =>
+                        probed.contains(UtxoSource.FromAddress(a))
+                    case TransactionQuery.MintsAsset(p, n) =>
+                        probed.contains(UtxoSource.FromAsset(p, n))
+                    case TransactionQuery.SpendsInput(i) =>
+                        probed.exists {
+                            case UtxoSource.FromInputs(inputs) => inputs.contains(i)
+                            case _                             => false
+                        }
+                    // An intersection can be answered from any one covered arm, with the rest
+                    // post-filtering data the block already contains.
+                    case TransactionQuery.AllOf(qs) => qs.exists(covered)
+                    // A union is only as covered as its worst arm.
+                    case TransactionQuery.AnyOf(qs) => qs.nonEmpty && qs.forall(covered)
+                    case TransactionQuery.All | _: TransactionQuery.MintsPolicy |
+                        _: TransactionQuery.InvolvesScript | _: TransactionQuery.Not =>
+                        false
+                covered(query)
 
     private def utxoEvents(sub: UtxoSubscription, block: AppliedBlock): Seq[UtxoEvent] = {
         val wantCreated = sub.query.types.contains(UtxoEventType.Created)
