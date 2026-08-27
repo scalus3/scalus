@@ -147,6 +147,8 @@ val jvmReleaseTarget = Compile / scalacOptions ++= {
 // The compiler plugin is exempt: it uses CrossVersion.full, so its 3.8.x variants are distinct artifacts.
 val publishOnlyLts = publish / skip := (scalaVersion.value != scala3LtsVersion)
 
+val fs2Version = "3.12.0"
+
 // Compilation profiling options for analyzing compilation time
 lazy val profilingScalacOptions = Seq(
   "-Vprofile", // Basic compilation profiling with file complexity
@@ -230,6 +232,8 @@ lazy val root: Project = project
       scalusCardanoLedger.js,
       scalusTestkit.js,
       scalusTestkit.jvm,
+      scalusStreamingFs2.js,
+      scalusStreamingFs2.jvm,
       scalusExamples.js,
       scalusExamples.jvm,
       scalusUtxoCell.js,
@@ -255,6 +259,7 @@ lazy val jvm: Project = project
       scalusUplcJitCompiler,
       scalusCardanoLedger.jvm,
       scalusTestkit.jvm,
+      scalusStreamingFs2.jvm,
       scalusExamples.jvm,
       scalusUtxoCell.jvm,
       scalusDesignPatterns,
@@ -274,6 +279,7 @@ lazy val js: Project = project
       scalus.js,
       scalusCardanoLedger.js,
       scalusTestkit.js,
+      scalusStreamingFs2.js,
       scalusExamples.js,
       scalusUtxoCell.js,
     )
@@ -639,6 +645,23 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
           files.map(targetDir / _)
       }.taskValue
     )
+
+// fs2 adapter for the streaming facade: a ScalusAsyncStream instance and nothing else.
+// Deliberately tiny — the buffering and fan-out semantics live in scalus-cardano-ledger so that
+// every adapter shares one implementation of them rather than one interpretation each.
+lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
+    .in(file("scalus-streaming-fs2"))
+    .dependsOn(scalusCardanoLedger)
+    .settings(
+      name := "scalus-streaming-fs2",
+      publishOnlyLts,
+      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "co.fs2" %%% "fs2-core" % fs2Version,
+      libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
+    )
+    .jvmSettings(jvmReleaseTarget)
+    .jsSettings(jsModuleSettings *)
 
 lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-examples"))

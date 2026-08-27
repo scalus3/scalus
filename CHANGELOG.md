@@ -23,6 +23,24 @@
 
 ### Added
 
+- Streaming subscriptions in `scalus.cardano.node.stream`: `BlockchainStreamProvider` /
+  `BlockchainStreamReader` (and their `TF` variants over a generic effect) add rollback-aware
+  event subscriptions to the existing reader/provider pair. Everything that changes over time
+  now has both a one-shot read and a subscription, so `pollForConfirmation` becomes
+  `subscribeTransactionStatus` with no sleep loop and no missed-update window.
+
+  A provider declares only `StreamCapabilities`; whether a given request is served, and whether
+  it is cheap, is derived from that by `SubscriptionSupport.of` — so a provider can neither
+  refuse what it advertised nor accept what it did not. Subscriptions are registered
+  synchronously, which makes `subscribe` followed by `submit` race-free.
+
+  The stream type is chosen per call rather than per provider. `ScalusAsyncSource` needs nothing
+  beyond the stdlib and works on JVM and JS alike; the new `scalus-streaming-fs2` module adds
+  fs2 `Stream`s, and further adapters plug in through `ScalusAsyncStreamAdapter`.
+  `StreamingEmulator` implements the facade over the in-memory emulator, and
+  `StreamProviderConformance` in `scalus-testkit` holds any implementation to the capabilities
+  it declares
+
 - Scalus implementations of all 8 [UPLC-CAPE](https://github.com/IntersectMBO/UPLC-CAPE)
   benchmark scenarios in `scalus-examples`, each with a test pinning its script size and
   per-case execution budget, plus `scripts/cape-submit.sh` to generate, verify, measure and
