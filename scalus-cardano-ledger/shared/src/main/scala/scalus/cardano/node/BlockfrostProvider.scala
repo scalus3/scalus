@@ -129,6 +129,36 @@ class BlockfrostProvider(
         }
     }
 
+    /** Fetch a single page, distinguishing "no such resource" from "no results".
+      *
+      * [[fetchPage]] reads a 404 as an empty page, which is right when the subject may simply have
+      * no history — an address nobody has ever paid. It is wrong when the subject is a block this
+      * client itself reported: there a 404 means the block is no longer on the chain, and reading
+      * it as "nothing new yet" would leave a follower waiting quietly at a position that has been
+      * orphaned, reporting no events and no error while the chain moved on without it.
+      */
+    private def fetchPageOpt(
+        path: String,
+        page: Int = 1,
+        count: Int = 100,
+        order: String = "asc"
+    ): Future[Option[Seq[ujson.Value]]] = {
+        val separator = if path.contains('?') then '&' else '?'
+        val url = s"$baseUrl$path${separator}page=$page&count=$count&order=$order"
+        rateLimited(basicRequest.get(uri"$url").headers(headers).send(backend)).map { response =>
+            if response.code.isSuccess then
+                response.body match
+                    case Right(body) => Some(ujson.read(body, trace = false).arr.toSeq)
+                    case Left(error) =>
+                        throw RuntimeException(s"Failed to fetch $path (page=$page): $error")
+            else if response.code == StatusCode.NotFound then None
+            else
+                throw RuntimeException(
+                  s"HTTP ${response.code} for $path (page=$page): ${response.body}"
+                )
+        }
+    }
+
     /** Fetch all pages from a paginated endpoint, accumulating results.
       *
       * Blockfrost returns max 100 items per page. Fetches pages sequentially until a page returns
@@ -218,6 +248,24 @@ class BlockfrostProvider(
     ): Future[Seq[String]] =
         fetchPaginated(s"/addresses/$address/txs", page, count, order).map(_.map(_.str))
 
+    /** Fetch an address's transactions within an inclusive block-height range.
+      * `GET /addresses/{address}/transactions?from={from}&to={to}`
+      *
+      * This is what makes watching an address cost one request per block rather than a scan: the
+      * range is applied server-side, so a block in which the address did nothing comes back as an
+      * empty array instead of as a block that has to be fetched and searched.
+      *
+      * Blockfrost also accepts `height:txIndex` for finer bounds; whole heights are what a
+      * block-at-a-time watcher needs, and `from == to` asks about exactly one block.
+      */
+    def fetchAddressTransactionsInRange(
+        address: String,
+        from: Long,
+        to: Long
+    ): Future[Seq[AddressTransaction]] =
+        fetchAllPages(s"/addresses/$address/transactions?from=$from&to=$to")
+            .map(_.map(read[AddressTransaction](_)))
+
     // ── Blocks ──────────────────────────────────────────────────────────────
 
     /** Fetch the latest block. `GET /blocks/latest` */
@@ -251,6 +299,25 @@ class BlockfrostProvider(
         count: Int = 100
     ): Future[Seq[BlockInfo]] =
         fetchPaginated(s"/blocks/$hashOrNumber/next", page, count).map(_.map(read[BlockInfo](_)))
+
+    /** Fetch subsequent blocks, or `None` if Blockfrost no longer has this block.
+      * `GET /blocks/{hash_or_number}/next`
+      *
+      * The `None` is the point. Asking "what came after the block I last saw" and being told the
+      * block does not exist is how a reorg reaches a client that is following the chain forward: it
+      * costs no extra request, because it is the request the follower was making anyway.
+      *
+      * One page, deliberately. A client that has fallen further behind than `count` picks the rest
+      * up on its next poll, continuing from the block it actually applied — and the cap bounds the
+      * burst of per-block requests a single poll can set off, which on a metered plan is the
+      * difference between catching up and exhausting the day's quota.
+      */
+    def fetchBlockNextOrGone(
+        hashOrNumber: String,
+        count: Int = 100
+    ): Future[Option[Seq[BlockInfo]]] =
+        fetchPageOpt(s"/blocks/$hashOrNumber/next", count = count)
+            .map(_.map(_.map(read[BlockInfo](_))))
 
     /** Fetch preceding blocks. `GET /blocks/{hash_or_number}/previous` */
     def fetchBlockPrevious(
@@ -964,6 +1031,48 @@ class BlockfrostProvider(
             }
     }
 
+    /** Resolve what one transaction created and consumed. `GET /txs/{hash}/utxos`
+      *
+      * `spent` is the *resolved* consumed outputs, not bare inputs: a subscriber watching an
+      * address needs to know which of its UTxOs disappeared, and an input reference does not say.
+      * Blockfrost returns the address and value of each input, so resolving it here costs nothing
+      * beyond the request already being made.
+      *
+      * Collateral is why this is not a straight read of the two arrays. A phase-2 script failure
+      * consumes the transaction's *collateral* rather than its inputs, and the only output it
+      * leaves on chain is the collateral return; Blockfrost reports both outcomes through the same
+      * `inputs`/`outputs` arrays and distinguishes them with a `collateral` flag. So the flag
+      * decides which inputs were really spent. Reading collateral as never-spent would leave a
+      * subscriber holding a UTxO the chain has consumed — permanently, and with nothing to tell it
+      * otherwise. Reference inputs are never consumed and are excluded either way.
+      */
+    /** Resolve what one transaction created and consumed. `GET /txs/{hash}/utxos`
+      *
+      * `spent` is the *resolved* consumed outputs, not bare inputs: a subscriber watching an
+      * address needs to know which of its UTxOs disappeared, and an input reference does not say.
+      * Blockfrost returns the address and value of each input, so resolving it here costs nothing
+      * beyond the request already being made.
+      *
+      * Which inputs count as consumed is decided by [[BlockfrostProvider.parseTransactionEffects]],
+      * where the collateral rules live.
+      */
+    private[node] def fetchTransactionEffects(
+        txHash: TransactionHash
+    ): Future[BlockfrostTxEffects] =
+        fetchJson(s"/txs/${txHash.toHex}/utxos").flatMap { json =>
+            val parsed = BlockfrostProvider.parseTransactionEffects(txHash, json)
+            for
+                created <- resolveRefs(parsed.created)
+                spent <- resolveRefs(parsed.spent)
+            yield BlockfrostTxEffects(created, spent)
+        }
+
+    private def resolveRefs(parsed: Seq[ParsedUtxo]): Future[Utxos] =
+        enrichWithScriptRefs(
+          parsed.map(p => p.input -> p.output).toMap,
+          parsed.collect { case ParsedUtxo(input, _, Some(hash)) => input -> hash }.toMap
+        )
+
     /** Fetch UTxOs from a transaction using Blockfrost API */
     private def fetchUtxosFromTransaction(
         txId: TransactionHash
@@ -1024,6 +1133,23 @@ class BlockfrostProvider(
 }
 
 /** Companion object for BlockfrostProvider with factory methods and utilities. */
+/** What a transaction did to the UTxO set, as [[BlockfrostProvider.fetchTransactionEffects]]
+  * resolves it: the outputs it produced and the outputs it consumed.
+  */
+private[node] case class BlockfrostTxEffects(created: Utxos, spent: Utxos)
+
+/** A UTxO as Blockfrost describes it, before any reference script it declares has been fetched. */
+private[node] case class ParsedUtxo(
+    input: TransactionInput,
+    output: TransactionOutput,
+    referenceScript: Option[ScriptHash]
+)
+
+/** The same split as [[BlockfrostTxEffects]], at the stage where it is decided rather than resolved
+  * — which is where the collateral rules live, and so where they are worth testing.
+  */
+private[node] case class ParsedTxEffects(created: Seq[ParsedUtxo], spent: Seq[ParsedUtxo])
+
 object BlockfrostProvider {
 
     /** Blockfrost API URL for Cardano mainnet */
@@ -1168,7 +1294,52 @@ object BlockfrostProvider {
     /** Parse a single UTxO JSON into a (TransactionInput, TransactionOutput) pair. The output's
       * `scriptRef` is left empty; see [[referenceScriptHash]] and `resolveScriptRef`.
       */
-    private def parseUtxoOutput(
+    /** Decide what a transaction created and consumed, from `/txs/{hash}/utxos`.
+      *
+      * Collateral is why this is not a straight read of the two arrays. A phase-2 script failure
+      * consumes the transaction's *collateral* rather than its inputs, and the only output it
+      * leaves on chain is the collateral return; Blockfrost reports both outcomes through the same
+      * `inputs`/`outputs` arrays and distinguishes them with a `collateral` flag. So the flag
+      * decides which inputs were really spent. Reading collateral as never-spent would leave a
+      * subscriber holding a UTxO the chain has consumed — permanently, and with nothing to tell it
+      * otherwise. Reference inputs are never consumed and are excluded either way.
+      */
+    private[node] def parseTransactionEffects(
+        txHash: TransactionHash,
+        json: ujson.Value
+    ): ParsedTxEffects = {
+        def flag(v: ujson.Value, name: String): Boolean =
+            v.obj.get(name).collect { case ujson.Bool(b) => b }.getOrElse(false)
+
+        val inputs = json("inputs").arr.toSeq
+        val outputs = json("outputs").arr.toSeq
+        // An output flagged as collateral is a collateral *return*, which only a failed transaction
+        // produces. Its presence is therefore how this response says the script phase failed.
+        val invalid = outputs.exists(flag(_, "collateral"))
+
+        val created = outputs.zipWithIndex.map { case (out, position) =>
+            // `output_index` is authoritative where the API supplies it: a failed transaction's
+            // collateral return sits at the end of the body's output list, not at position 0 of
+            // this array.
+            val index = out.obj.get("output_index").map(_.num.toInt).getOrElse(position)
+            val (input, output) = parseUtxoOutput(TransactionInput(txHash, index), out)
+            ParsedUtxo(input, output, referenceScriptHash(out))
+        }
+        val spent = inputs
+            .filterNot(flag(_, "reference"))
+            .filter(in => flag(in, "collateral") == invalid)
+            .map { in =>
+                val ref = TransactionInput(
+                  TransactionHash.fromHex(in("tx_hash").str),
+                  in("output_index").num.toInt
+                )
+                val (input, output) = parseUtxoOutput(ref, in)
+                ParsedUtxo(input, output, referenceScriptHash(in))
+            }
+        ParsedTxEffects(created, spent)
+    }
+
+    private[node] def parseUtxoOutput(
         input: TransactionInput,
         json: ujson.Value
     ): (TransactionInput, TransactionOutput) = {

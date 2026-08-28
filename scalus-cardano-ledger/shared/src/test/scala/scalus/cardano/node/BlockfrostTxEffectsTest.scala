@@ -88,7 +88,7 @@ class BlockfrostTxEffectsTest extends AnyFunSuite {
     }
 
     test("reference inputs are never spent, whether the transaction succeeded or failed") {
-        val referenced = in(Party.Carol, "03", 2, reference = true)
+        val referenced = in(Party.Dave, "03", 2, reference = true)
         val succeeded = utxos(Seq(in(Party.Alice, "01", 0), referenced), Seq(out(Party.Bob, 0)))
         val failed = utxos(
           Seq(in(Party.Bob, "02", 1, collateral = true), referenced),
