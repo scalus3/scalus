@@ -368,48 +368,55 @@ object LedgerToPlutusTranslation {
                 v1.Interval(lower, upper)
     }
 
-    /** Process withdrawals for script context construction.
+    /** Withdrawals in the **ledger's** own order.
       *
-      * Withdrawals are sorted by staking credential for deterministic ordering as required by
-      * Cardano's validation rules.
+      * `body.withdrawals` is a `SortedMap[RewardAccount, Coin]` under `Ordering[RewardAccount]`,
+      * which mirrors the ledger's derived `Ord AccountAddress`: `(Network, Script < Key, hash)`. It
+      * is therefore iterated as-is, with no re-sort.
+      *
+      * This is the order of two distinct things:
+      *   - the V3 `txInfoWdrl` map, built by `transMap transAccountAddress`
+      *     (`Conway/TxInfo.hs:514`, `:549-551`);
+      *   - the container a `Withdrawing`/`Rewarding` redeemer index is resolved against, via
+      *     `Map.elemAt` on `Map AccountAddress Coin` (`Conway/TxBody.hs:672-673`).
+      *
+      * It is deliberately **not** the order V1/V2 receive for the withdrawals field itself; see
+      * [[getWithdrawals]].
+      */
+    private def ledgerOrderedWithdrawals(
+        withdrawals: Option[Withdrawals]
+    ): IndexedSeq[(v1.Credential, BigInt)] =
+        withdrawals
+            .map(_.withdrawals.toIndexedSeq.map { (rewardAccount, coin) =>
+                getRewardAccount(rewardAccount) -> BigInt(coin.value)
+            })
+            .getOrElse(IndexedSeq.empty)
+
+    /** Withdrawals in **Plutus** order, which is what the V1 and V2 withdrawals field receives.
+      *
+      * V1/V2 do not deliver the ledger's order here. The ledger builds a
+      * `Map PV1.StakingCredential Integer` keyed by the *Plutus* type and then `Map.toList`s it
+      * (`Alonzo/Plutus/TxInfo.hs:301-309`), so the order is the derived `Ord StakingCredential`:
+      * `PubKeyCredential` before `ScriptCredential`, then hash ascending.
+      *
+      * That is the **opposite** constructor order to V3, because the two eras key withdrawals by
+      * different types - `plutus-ledger-api`'s `Credential` is
+      * `PubKeyCredential | ScriptCredential` while the ledger's is `ScriptHashObj | KeyHashObj`. Do
+      * not "unify" these two helpers.
       */
     def getWithdrawals(
         withdrawals: Option[Withdrawals]
     ): scalus.cardano.onchain.plutus.prelude.List[(v1.StakingCredential, BigInt)] = {
-        scalus.cardano.onchain.plutus.prelude.List.from(getOrderedWithdrawals(withdrawals))
-    }
-
-    /** Process withdrawals for script context construction.
-      *
-      * Withdrawals are sorted by staking credential for deterministic ordering as required by
-      * Cardano's validation rules.
-      */
-    private def getOrderedWithdrawals(
-        withdrawals: Option[Withdrawals]
-    ): collection.SortedMap[v1.StakingCredential.StakingHash, BigInt] = {
-        given Ordering[v1.StakingCredential.StakingHash] = Ordering.by { cred =>
-            cred.cred match
-                case v1.Credential.PubKeyCredential(pkh)  => pkh.hash
-                case v1.Credential.ScriptCredential(hash) => hash
+        // Plutus `Ord Credential`: PubKeyCredential (constructor 0) before ScriptCredential (1).
+        val plutusOrder: Ordering[(v1.Credential, BigInt)] = Ordering.by {
+            case (v1.Credential.PubKeyCredential(pkh), _)  => (0, pkh.hash)
+            case (v1.Credential.ScriptCredential(hash), _) => (1, hash)
         }
-
-        val wdwls = mutable.TreeMap.empty[v1.StakingCredential.StakingHash, BigInt]
-        for w <- withdrawals do
-            for (rewardAccount, coin) <- w.withdrawals do
-                rewardAccount.address.payload match
-                    case StakePayload.Stake(hash) =>
-                        val cred = v1.Credential.PubKeyCredential(v1.PubKeyHash(hash))
-                        wdwls.put(
-                          v1.StakingCredential.StakingHash(cred),
-                          BigInt(coin.value)
-                        )
-                    case StakePayload.Script(hash) =>
-                        val cred = v1.Credential.ScriptCredential(hash)
-                        wdwls.put(
-                          v1.StakingCredential.StakingHash(cred),
-                          BigInt(coin.value)
-                        )
-        wdwls
+        scalus.cardano.onchain.plutus.prelude.List.from(
+          ledgerOrderedWithdrawals(withdrawals)
+              .sorted(plutusOrder)
+              .map((cred, coin) => v1.StakingCredential.StakingHash(cred) -> coin)
+        )
     }
 
     /** Convert Certificate to DCert for Plutus V1/V2 script contexts.
@@ -651,7 +658,8 @@ object LedgerToPlutusTranslation {
           mint = getMintValueV1V2(body.mint),
           dcert = scalus.cardano.onchain.plutus.prelude.List
               .from(body.certificates.toSeq.view.map(getDCert)),
-          withdrawals = SortedMap.fromList(getWithdrawals(body.withdrawals)),
+          // Already in Plutus order (see getWithdrawals); preserve it rather than re-sorting.
+          withdrawals = SortedMap.unsafeFromList(getWithdrawals(body.withdrawals)),
           validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
           signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.requiredSigners.toSet.view
@@ -774,9 +782,13 @@ object LedgerToPlutusTranslation {
                 else throw new IllegalStateException(s"Certificate not found: $index")
 
             case RedeemerTag.Reward =>
-                val withdrawals = getOrderedWithdrawals(body.withdrawals).toIndexedSeq
+                // Index source: `Map.elemAt` on `Map AccountAddress Coin`, i.e. LEDGER order,
+                // even though the V1/V2 withdrawals *field* is delivered in Plutus order.
+                val withdrawals = ledgerOrderedWithdrawals(body.withdrawals)
                 if withdrawals.isDefinedAt(index) then
-                    v1.ScriptPurpose.Rewarding(withdrawals(index)._1)
+                    v1.ScriptPurpose.Rewarding(
+                      v1.StakingCredential.StakingHash(withdrawals(index)._1)
+                    )
                 else throw new IllegalStateException(s"Withdrawal not found: $index")
 
             case _ =>
@@ -821,10 +833,10 @@ object LedgerToPlutusTranslation {
                 else throw new IllegalStateException(s"Certificate not found: $index")
 
             case RedeemerTag.Reward =>
-                val withdrawals = getOrderedWithdrawals(body.withdrawals).toIndexedSeq
+                // Index source: `Map.elemAt` on `Map AccountAddress Coin` (Conway/TxBody.hs:672).
+                val withdrawals = ledgerOrderedWithdrawals(body.withdrawals)
                 if withdrawals.isDefinedAt(index) then
-                    val (v1.StakingCredential.StakingHash(cred), _) = withdrawals(index)
-                    v3.ScriptPurpose.Rewarding(cred)
+                    v3.ScriptPurpose.Rewarding(withdrawals(index)._1)
                 else throw new IllegalStateException(s"Withdrawal not found: $index")
 
             case RedeemerTag.Proposing =>
