@@ -162,6 +162,8 @@ lazy val profilingScalacOptions = Seq(
 lazy val copySharedFiles = taskKey[Unit]("Copy shared files")
 lazy val prepareNpmPackage = taskKey[Unit]("Make an copy scalus bundle.js to npm directory")
 lazy val runNpmTests = taskKey[Unit]("Run npm TypeScript tests")
+lazy val generateDts = taskKey[Unit]("Generate scalus.d.ts from the Scala.js facades' TASTy")
+lazy val checkDtsUpToDate = taskKey[Unit]("Fail if the committed scalus.d.ts is stale")
 lazy val installNpmTestDeps =
     taskKey[File](
       "Install npm deps required by Scala.js tests (Node resolves them via node_modules walk-up)"
@@ -228,6 +230,8 @@ lazy val root: Project = project
       scalus.jvm,
       scalus.native,
       scalusUplcJitCompiler,
+      scalusTsExporter,
+      scalusTsExporterFixtures,
       scalusCardanoLedger.jvm,
       scalusCardanoLedger.js,
       scalusTestkit.js,
@@ -257,6 +261,7 @@ lazy val jvm: Project = project
       scalusPlugin,
       scalus.jvm,
       scalusUplcJitCompiler,
+      scalusTsExporter,
       scalusCardanoLedger.jvm,
       scalusTestkit.jvm,
       scalusStreamingFs2.jvm,
@@ -554,6 +559,49 @@ lazy val scalusUplcJitCompiler = project
       // Full stack traces for test failures (helps debug deep lowering errors)
       Test / testOptions += Tests.Argument("-oF"),
       inConfig(Test)(PluginDependency),
+      publish / skip := true
+    )
+
+// TypeScript definitions generator: reads TASTy of the Scala.js modules and
+// emits scalus.d.ts. See docs/superpowers/specs/2026-08-03-scalajs-typescript-definitions-generator-design.md
+lazy val scalusTsExporter = project
+    .in(file("scalus-ts-exporter"))
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-ts-exporter",
+      scalacOptions ++= commonScalacOptions,
+      libraryDependencies += "org.scala-lang" %% "scala3-tasty-inspector" % scalaVersion.value,
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      // Main calls sys.exit(1) when the generator finds export errors. sbt's TrapExit
+      // SecurityManager is gone on modern JDKs, so an in-process run would take the whole
+      // sbt JVM (and, under sbtn, the server) down with it. Forking turns that exit into a
+      // plain non-zero exit code, which `runner.run` reports as a task failure.
+      Compile / run / fork := true,
+      Test / fork := true,
+      Test / javaOptions ++= Seq(
+        s"-Dtsexport.fixtures.classes=${(scalusTsExporterFixtures / Compile / classDirectory).value.getAbsolutePath}",
+        s"-Dtsexport.fixtures.classpath=${(scalusTsExporterFixtures / Compile / fullClasspath).value.map(_.data.getAbsolutePath).mkString(java.io.File.pathSeparator)}",
+        s"-Dtsexport.sourceroot=${(ThisBuild / baseDirectory).value.getAbsolutePath}"
+      ),
+      // GoldenTest type-checks the generated fixtures with `node_modules/.bin/tsc` and
+      // `assume`s the check away when tsc is missing, which scalatest reports as a canceled
+      // test inside a green suite. ci-jvm runs these tests through the `jvm` aggregate, which
+      // otherwise never installs the root node_modules, so the tsc check silently never ran.
+      // Depend on the install task explicitly (same idiom as jsModuleSettings).
+      Test / executeTests := (Test / executeTests).dependsOn(ThisBuild / installNpmTestDeps).value,
+      Test / testOnly := (Test / testOnly).dependsOn(ThisBuild / installNpmTestDeps).evaluated,
+      publish / skip := true
+    )
+
+// Scala.js fixture code exercising every export shape the generator supports.
+// Compiled only so its TASTy can be inspected by scalusTsExporter tests.
+lazy val scalusTsExporterFixtures = project
+    .in(file("scalus-ts-exporter/fixtures"))
+    .enablePlugins(ScalaJSPlugin)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-ts-exporter-fixtures",
+      scalacOptions ++= commonScalacOptions,
       publish / skip := true
     )
 
@@ -888,6 +936,20 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
     )
     .jsSettings(jsModuleSettings *)
     .jsSettings(
+      // JS-only facade, so these belong here and not in the shared settings: submitTx (both
+      // overloads) and getDelegation narrowed their return types from js.Dynamic to typed
+      // js.Object traits (spec 2026-08-03 TS definitions generator, decision "Typed returns +
+      // MiMa filters"). Runtime shape unchanged. Verified required: without them
+      // `scalusCardanoLedgerJS/mimaReportBinaryIssues` reports 3 problems against
+      // org.scalus:scalus-cardano-ledger_sjs1_3:1.1.0.
+      mimaBinaryIssueFilters ++= Seq(
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.JEmulator.submitTx"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.JEmulator.getDelegation"
+        )
+      ),
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
       // The Scala.js linker emits standard ES modules; we run esbuild over the linker
       // output to collapse any internal chunks into one file and minify. @noble/* are
@@ -932,7 +994,86 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
               throw new RuntimeException("npm tests failed")
           }
       },
-      runNpmTests := runNpmTests.dependsOn(prepareNpmPackage).value
+      runNpmTests := runNpmTests.dependsOn(prepareNpmPackage).value,
+      // Generate scalus.d.ts from the facades' TASTy (scalus-core JS + this module).
+      // The file is committed; checkDtsUpToDate gates drift in ci-js.
+      // `Compile / fullClasspath` already forces `Compile / compile` (it contains the
+      // project's own exportedProducts), so the classpaths below are all the dependency
+      // this task needs. Arguments are passed to the runner as a real Seq[String]: the
+      // `runMain` command line splits on whitespace, which breaks on any checkout path (or
+      // classpath jar) containing a space.
+      generateDts := {
+          val _ = (scalus.js / Compile / compile).value
+          val coreClasses = (scalus.js / Compile / classDirectory).value.getAbsolutePath
+          val ledgerClasses = (Compile / classDirectory).value.getAbsolutePath
+          val cp = (Compile / fullClasspath).value
+              .map(_.data.getAbsolutePath)
+              .mkString(java.io.File.pathSeparator)
+          val out = ((Compile / sourceDirectory).value / "npm" / "scalus.d.ts").getAbsolutePath
+          val srcRoot = (ThisBuild / baseDirectory).value.getAbsolutePath
+          val args = List(
+            "--tasty-root",
+            coreClasses,
+            "--tasty-root",
+            ledgerClasses,
+            "--classpath",
+            cp,
+            "--output",
+            out,
+            "--source-root",
+            srcRoot
+          )
+          // `run / runner` (not the config-scoped `runner`) is the forked one, see the
+          // `Compile / run / fork` setting on scalusTsExporter.
+          val exporterCp = (scalusTsExporter / Runtime / fullClasspath).value.map(_.data)
+          (scalusTsExporter / Compile / run / runner).value
+              .run("scalus.tsexport.Main", exporterCp, args, streams.value.log)
+              .failed
+              .foreach(cause => sys.error(s"scalus-ts-exporter failed: ${cause.getMessage}"))
+      },
+      // The generated file is committed, so this gate must compare it with HEAD, not with the
+      // index: plain `git diff --exit-code` reports no difference for a staged change and for
+      // an untracked file, so an unreviewed (or never committed) scalus.d.ts passed it. Being
+      // unable to run the check at all (no git, no repository) is a different failure from a
+      // stale file and says so, instead of blaming the file.
+      checkDtsUpToDate := {
+          generateDts.value
+          val out = (Compile / sourceDirectory).value / "npm" / "scalus.d.ts"
+          val root = (ThisBuild / baseDirectory).value
+          val quiet = scala.sys.process.ProcessLogger(_ => (), _ => ())
+          def cannotCheck(reason: String): Nothing =
+              sys.error(
+                s"cannot check whether ${out.getName} is up to date: $reason. " +
+                    s"Compare $out with HEAD by hand."
+              )
+          def git(args: String*): Int =
+              try scala.sys.process.Process("git" +: args, root).!(quiet)
+              catch {
+                  case scala.util.control.NonFatal(e) =>
+                      cannotCheck(s"running git in $root failed (${e.getMessage})")
+              }
+          if (git("rev-parse", "--git-dir") != 0)
+              cannotCheck(s"$root is not a git checkout")
+          git("ls-files", "--error-unmatch", "--", out.getAbsolutePath) match {
+              case 0 => ()
+              case 1 =>
+                  sys.error(
+                    s"${out.getName} is not tracked by git. Run `git add $out` and commit the " +
+                        "generated file."
+                  )
+              case code => cannotCheck(s"`git ls-files` exited with $code")
+          }
+          git("diff", "--exit-code", "HEAD", "--", out.getAbsolutePath) match {
+              case 0 => ()
+              case 1 =>
+                  sys.error(
+                    s"${out.getName} is out of date. Run scalusCardanoLedgerJS/generateDts and " +
+                        "commit the result."
+                  )
+              case code => cannotCheck(s"`git diff HEAD` exited with $code")
+          }
+      },
+      prepareNpmPackage := prepareNpmPackage.dependsOn(generateDts).value
     )
 
 // sbt plugin for blueprint generation
@@ -1032,10 +1173,16 @@ def copyFiles(files: Seq[String], baseDir: File, targetDir: File, log: ManagedLo
 
 // ABI compatibility gate for the stable surface: scalus-core, scalus-cardano-ledger and
 // scalus-bloxbean-cardano-client-lib, checked against scalusCompatibleVersion.
+// Both cross-projects declare mimaPreviousArtifacts with %%%, so their Scala.js artifacts are
+// part of that stable surface as well, and JS-only code (scalus.cardano.node.JEmulator) can
+// break on its own. The JS variants are therefore checked here too. That makes ci-jvm compile
+// the Scala.js classes; there is no linking and no Node run involved.
 addCommandAlias(
   "mima",
   "scalusJVM/mimaReportBinaryIssues;" +
+      "scalusJS/mimaReportBinaryIssues;" +
       "scalusCardanoLedgerJVM/mimaReportBinaryIssues;" +
+      "scalusCardanoLedgerJS/mimaReportBinaryIssues;" +
       "scalus-bloxbean-cardano-client-lib/mimaReportBinaryIssues"
 )
 addCommandAlias(
@@ -1081,7 +1228,7 @@ addCommandAlias(
 )
 addCommandAlias(
   "ci-js",
-  "clean;js/Test/compile;js/test;scalusCardanoLedgerJS/runNpmTests"
+  "clean;js/Test/compile;js/test;scalusTsExporter/test;scalusCardanoLedgerJS/checkDtsUpToDate;scalusCardanoLedgerJS/runNpmTests"
 )
 addCommandAlias(
   "ci-native",
