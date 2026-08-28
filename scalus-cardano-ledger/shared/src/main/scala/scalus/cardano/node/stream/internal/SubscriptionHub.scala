@@ -55,6 +55,11 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
           * blocks that arrive in the meantime are still due once the seed lands.
           */
         var awaitingSeed: Boolean = false
+
+        /** A block this subscription still needed fell out of `recent` before its seed arrived, so
+          * the seed can no longer be reconciled with what will be replayed — see [[seedUtxo]].
+          */
+        var seedGapped: Boolean = false
     }
 
     private final class TxSubscription(
@@ -89,6 +94,15 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
         ]]]
     private val statuses = mutable.Map.empty[TransactionHash, TransactionStatus]
 
+    /** How far a subscription awaiting its snapshot may hold the retention window open.
+      *
+      * Generous — roughly forty minutes of mainnet blocks — because the alternative to holding is
+      * failing the subscription, and a snapshot read that takes longer than this is not slow, it is
+      * broken. Bounded at all because an awaiting subscription that is never completed must not be
+      * able to grow `recent` without limit.
+      */
+    private val seedRetentionBound: Int = 128
+
     /** Blocks not yet released to every subscription, newest last. Bounded by [[securityParam]],
       * which is also the rollback horizon: a reorg deeper than this cannot be reconciled from here.
       */
@@ -109,12 +123,22 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
 
     def nextSubscriptionId(): Long = synchronized { nextId += 1; nextId }
 
+    /** A closed hub applies no further blocks, so a subscription registered against it would never
+      * receive anything and never terminate. Called under the lock.
+      *
+      * The latest-value streams need this as much as the delta ones, and are easier to miss: they
+      * are not routed through [[require]], and `registerTip` would happily hand back a mailbox
+      * holding the last tip observed and then park the caller forever on the next pull.
+      */
+    private def requireOpenLocked(): Unit =
+        if closed then
+            throw new IllegalStateException("provider is closed; it serves no new subscriptions")
+
     /** Throw unless this provider can serve the request — synchronously, before anything is
       * registered, so the exception arrives at the call that caused it.
       */
     def require(request: SubscriptionRequest): Unit = {
-        if synchronized(closed) then
-            throw new IllegalStateException("provider is closed; it serves no new subscriptions")
+        synchronized(requireOpenLocked())
         // The hub delivers live events only. A provider whose capabilities advertise replay must
         // seed the subscription itself before registering it; silently downgrading a replay request
         // to a live-only stream would let a subscriber resume from a checkpoint and never learn it
@@ -209,14 +233,26 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
       * flight, which is why the caller may fire this from a `Future` continuation without checking.
       */
     def seedUtxo(id: Long, snapshot: scalus.cardano.ledger.Utxos): Unit = {
-        val touched = synchronized {
+        val (touched, gapped) = synchronized {
             utxoSubs.get(id).filter(_.awaitingSeed) match
-                case None => Seq.empty
+                case None => (Seq.empty, None)
+                case Some(sub) if sub.seedGapped =>
+                    utxoSubs.remove(id)
+                    (Seq.empty, Some(sub.mailbox))
                 case Some(sub) =>
                     seedLocked(sub, snapshot)
                     sub.awaitingSeed = false
-                    sub.mailbox +: releaseLocked()
+                    (sub.mailbox +: releaseLocked(), None)
         }
+        gapped.foreach(
+          _.fail(
+            ResyncRequiredException(
+              "the snapshot this subscription was to be seeded from took longer to read than the " +
+                  "hub can hold history for, so there is a range of blocks neither the seed nor " +
+                  "the replay can be shown to cover; subscribe again"
+            )
+          )
+        )
         touched.foreach(_.flush())
     }
 
@@ -282,6 +318,7 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
       */
     def registerTip(id: Long, mailbox: Mailbox[ChainTip]): Unit = {
         synchronized {
+            requireOpenLocked()
             tipSubs.put(id, mailbox)
             mailbox.offerBuffered(tip)
         }
@@ -292,6 +329,7 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
 
     def registerParams(id: Long, mailbox: Mailbox[ProtocolParams]): Unit = {
         synchronized {
+            requireOpenLocked()
             paramSubs.put(id, mailbox)
             mailbox.offerBuffered(params)
         }
@@ -317,6 +355,16 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
         mailboxes.foreach(_.fail(cause))
     }
 
+    /** Follow one transaction's status.
+      *
+      * **The hub only knows about transactions it is already following** — ones submitted through
+      * this provider, or already subscribed to (see [[setTrackedStatusLocked]]). For anything else
+      * it starts at `NotFound`, and if that transaction was confirmed in a block the hub applied
+      * *before* this call, nothing later revises it. A provider declaring
+      * [[SubscriptionKind.TransactionStatus]] therefore owes it either a `notifySubmit` at
+      * submission time or an authoritative initial read of its own; the emulator satisfies the
+      * first, which is why it can declare the kind.
+      */
     def registerTxStatus(
         id: Long,
         txHash: TransactionHash,
@@ -381,7 +429,21 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
                 blockSubs.values.map(s => effectiveDepth(s.opts))).maxOption.getOrElse(0)
             // `+ 1` on a saturating max, so an absurd confirmation depth cannot wrap the window
             // negative and empty the deque on the next prune.
-            val retain = math.max(securityParam, deepestGate).min(Int.MaxValue - 1) + 1
+            // A subscription still awaiting its seed needs every block above its watermark kept.
+            // The snapshot's own height is not knowable — it is whatever the backend served — so a
+            // block dropped from here is a block neither the seed nor the replay can be shown to
+            // account for. Held up to a bound; past that the subscription is failed rather than
+            // quietly short-changed.
+            val seedFloor = utxoSubs.values
+                .filter(_.awaitingSeed)
+                .map(s => block.blockNo - s.lastEmitted)
+                .maxOption
+                .getOrElse(0L)
+                .min(seedRetentionBound.toLong)
+                .max(0L)
+                .toInt
+            val retain =
+                math.max(math.max(securityParam, deepestGate), seedFloor).min(Int.MaxValue - 1) + 1
             // Pruned by *height*, not by entry count: under partial coverage several blocks can
             // share a height (one per set of sources probed there), and counting entries would
             // then evict heights that are still inside the rollback horizon. With one entry per
@@ -394,6 +456,14 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             // `recent` grow without limit and make `releaseLocked` scan it for every subscription
             // on every block. A cap costs one comparison and removes the failure mode.
             while recent.size > retain do recent.removeHead()
+            // Whatever survived pruning, a seed-pending subscription whose next block is no longer
+            // here has a hole nothing can fill afterwards.
+            recent.headOption.foreach { oldest =>
+                utxoSubs.values.foreach { sub =>
+                    if sub.awaitingSeed && sub.lastEmitted < oldest.blockNo - 1 then
+                        sub.seedGapped = true
+                }
+            }
             val newTip = ChainTip(block.point, block.blockNo)
             tip = newTip
 
@@ -442,6 +512,14 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
 
             val utxoTouched = utxoSubs.values.toSeq.flatMap { sub =>
                 if sub.lastEmitted <= target.blockNo then Seq.empty
+                else if sub.awaitingSeed then
+                    // Its watermark still has to come down — it is a delivery cursor as well as a
+                    // rollback trigger — but it has received nothing, and `RolledBack` as a
+                    // subscription's very first event would retract what it never saw. The same
+                    // reasoning as `noRollback`, and the same reasoning that keeps `releaseLocked`
+                    // away from it.
+                    sub.lastEmitted = target.blockNo
+                    Seq.empty
                 else
                     sub.lastEmitted = target.blockNo
                     sub.mailbox.offerBuffered(UtxoEvent.RolledBack(target.point))

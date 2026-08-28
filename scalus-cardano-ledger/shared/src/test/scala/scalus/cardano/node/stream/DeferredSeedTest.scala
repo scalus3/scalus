@@ -247,4 +247,62 @@ class DeferredSeedTest extends AnyFunSuite {
         h.applyBlock(block(1, Set(alice), created = Map(later)))
         assert(created(drain(mailbox)) == List(later._1))
     }
+
+    test("history a seed-pending subscription still needs is held rather than pruned") {
+        // At the default depth the retention window is one block, so without this the blocks that
+        // arrive while a snapshot is being read are gone before it lands.
+        val h = hub()
+        val id = h.nextSubscriptionId()
+        val mailbox = Mailbox.delta[UtxoEvent]()
+        h.registerUtxoDeferred(id, query(alice), opts, mailbox)
+        val first = utxo("01", 0, alice)
+        h.applyBlock(block(1, Set(alice), created = Map(first)))
+        for n <- 2L to 20L do h.applyBlock(block(n, Set(alice)))
+        h.seedUtxo(id, Map(first))
+        assert(
+          created(drain(mailbox)) == List(first._1),
+          "block 1 was still due when the seed landed, so it must have been kept and replayed"
+        )
+    }
+
+    test("a seed that arrives after history was lost fails, rather than skipping the gap") {
+        // Past the bound the hub cannot hold any more, and the snapshot's own height is not
+        // knowable — so there is a range of blocks neither the seed nor the replay can be shown to
+        // account for. Saying so beats a subscriber silently missing them.
+        val h = hub()
+        val id = h.nextSubscriptionId()
+        val mailbox = Mailbox.delta[UtxoEvent]()
+        h.registerUtxoDeferred(id, query(alice), opts, mailbox)
+        for n <- 1L to 200L do h.applyBlock(block(n, Set(alice)))
+        h.seedUtxo(id, Map(utxo("01", 0, alice)))
+        val pulled = mailbox.pull().value
+        assert(
+          pulled.exists(_.isFailure),
+          s"expected a resync failure rather than a quietly incomplete stream — got $pulled"
+        )
+    }
+
+    test("a rollback does not retract events a seed-pending subscription never received") {
+        // `RolledBack` as a subscription's very first event retracts what it never saw. Its
+        // watermark still has to come down, because that is the delivery cursor too.
+        val rollbackCaps = caps.copy(rollbackHorizon = Some(5))
+        val h = new SubscriptionHub(CardanoInfo.mainnet, rollbackCaps)
+        for n <- 1L to 5L do h.applyBlock(block(n, Set(alice)))
+        val id = h.nextSubscriptionId()
+        val mailbox = Mailbox.delta[UtxoEvent]()
+        h.registerUtxoDeferred(id, query(alice), opts, mailbox)
+        h.rollbackTo(ChainTip(point(3), 3))
+        h.seedUtxo(id, Map.empty)
+        val after = utxo("09", 0, alice)
+        h.applyBlock(block(4, Set(alice), created = Map(after)))
+        val events = drain(mailbox)
+        assert(
+          !events.exists(_.isInstanceOf[UtxoEvent.RolledBack]),
+          s"nothing had been delivered, so there was nothing to retract — got $events"
+        )
+        assert(
+          created(events) == List(after._1),
+          s"the watermark had to come down with the rollback for this to be due — got $events"
+        )
+    }
 }
