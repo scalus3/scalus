@@ -113,21 +113,8 @@ class BlockfrostProvider(
         page: Int = 1,
         count: Int = 100,
         order: String = "asc"
-    ): Future[Seq[ujson.Value]] = {
-        val separator = if path.contains('?') then '&' else '?'
-        val url = s"$baseUrl$path${separator}page=$page&count=$count&order=$order"
-        rateLimited(basicRequest.get(uri"$url").headers(headers).send(backend)).map { response =>
-            if response.code.isSuccess then
-                response.body match
-                    case Right(body) => ujson.read(body, trace = false).arr.toSeq
-                    case Left(_)     => Seq.empty
-            else if response.code == StatusCode.NotFound then Seq.empty
-            else
-                throw RuntimeException(
-                  s"HTTP ${response.code} for $path (page=$page): ${response.body}"
-                )
-        }
-    }
+    ): Future[Seq[ujson.Value]] =
+        fetchPageOpt(path, page, count, order).map(_.getOrElse(Seq.empty))
 
     /** Fetch a single page, distinguishing "no such resource" from "no results".
       *
@@ -1038,21 +1025,6 @@ class BlockfrostProvider(
       * Blockfrost returns the address and value of each input, so resolving it here costs nothing
       * beyond the request already being made.
       *
-      * Collateral is why this is not a straight read of the two arrays. A phase-2 script failure
-      * consumes the transaction's *collateral* rather than its inputs, and the only output it
-      * leaves on chain is the collateral return; Blockfrost reports both outcomes through the same
-      * `inputs`/`outputs` arrays and distinguishes them with a `collateral` flag. So the flag
-      * decides which inputs were really spent. Reading collateral as never-spent would leave a
-      * subscriber holding a UTxO the chain has consumed — permanently, and with nothing to tell it
-      * otherwise. Reference inputs are never consumed and are excluded either way.
-      */
-    /** Resolve what one transaction created and consumed. `GET /txs/{hash}/utxos`
-      *
-      * `spent` is the *resolved* consumed outputs, not bare inputs: a subscriber watching an
-      * address needs to know which of its UTxOs disappeared, and an input reference does not say.
-      * Blockfrost returns the address and value of each input, so resolving it here costs nothing
-      * beyond the request already being made.
-      *
       * Which inputs count as consumed is decided by [[BlockfrostProvider.parseTransactionEffects]],
       * where the collateral rules live.
       */
@@ -1060,11 +1032,22 @@ class BlockfrostProvider(
         txHash: TransactionHash
     ): Future[BlockfrostTxEffects] =
         fetchJson(s"/txs/${txHash.toHex}/utxos").flatMap { json =>
-            val parsed = BlockfrostProvider.parseTransactionEffects(txHash, json)
-            for
-                created <- resolveRefs(parsed.created)
-                spent <- resolveRefs(parsed.spent)
-            yield BlockfrostTxEffects(created, spent)
+            val failed = BlockfrostProvider.scriptPhaseFailed(json) match
+                case Some(known) => Future.successful(known)
+                // The one shape the response cannot settle: no outputs at all is either a
+                // transaction that produced none, or one whose collateral was consumed in full and
+                // so left no return. `valid_contract` is the only thing separating them, and
+                // guessing inverts `spent` in both directions — the subscriber is told its inputs
+                // are gone while they are still on chain, and never told its collateral was taken.
+                // Paid for only in this shape, which the common case is not.
+                case None => fetchTransactionInfo(txHash.toHex).map(!_.validContract)
+            failed.flatMap { invalid =>
+                val parsed = BlockfrostProvider.parseTransactionEffects(txHash, json, invalid)
+                for
+                    created <- resolveRefs(parsed.created)
+                    spent <- resolveRefs(parsed.spent)
+                yield BlockfrostTxEffects(created, spent)
+            }
         }
 
     private def resolveRefs(parsed: Seq[ParsedUtxo]): Future[Utxos] =
@@ -1132,7 +1115,6 @@ class BlockfrostProvider(
     }
 }
 
-/** Companion object for BlockfrostProvider with factory methods and utilities. */
 /** What a transaction did to the UTxO set, as [[BlockfrostProvider.fetchTransactionEffects]]
   * resolves it: the outputs it produced and the outputs it consumed.
   */
@@ -1150,6 +1132,7 @@ private[node] case class ParsedUtxo(
   */
 private[node] case class ParsedTxEffects(created: Seq[ParsedUtxo], spent: Seq[ParsedUtxo])
 
+/** Companion object for BlockfrostProvider with factory methods and utilities. */
 object BlockfrostProvider {
 
     /** Blockfrost API URL for Cardano mainnet */
@@ -1291,9 +1274,6 @@ object BlockfrostProvider {
             ScriptHash.fromHex(hex)
         }
 
-    /** Parse a single UTxO JSON into a (TransactionInput, TransactionOutput) pair. The output's
-      * `scriptRef` is left empty; see [[referenceScriptHash]] and `resolveScriptRef`.
-      */
     /** Decide what a transaction created and consumed, from `/txs/{hash}/utxos`.
       *
       * Collateral is why this is not a straight read of the two arrays. A phase-2 script failure
@@ -1304,24 +1284,41 @@ object BlockfrostProvider {
       * subscriber holding a UTxO the chain has consumed — permanently, and with nothing to tell it
       * otherwise. Reference inputs are never consumed and are excluded either way.
       */
+    private def flag(v: ujson.Value, name: String): Boolean =
+        v.obj.get(name).collect { case ujson.Bool(b) => b }.getOrElse(false)
+
+    /** Whether `/txs/{hash}/utxos` alone settles that the script phase failed.
+      *
+      * `Some(true)` when an output is flagged as collateral: only a collateral *return* is, and
+      * only a failed transaction produces one. `Some(false)` when there are outputs and none is — a
+      * successful transaction's. `None` when there are no outputs at all, which this response
+      * cannot tell apart from a failure whose collateral was consumed in full, leaving no return.
+      */
+    private[node] def scriptPhaseFailed(json: ujson.Value): Option[Boolean] = {
+        val outputs = json("outputs").arr.toSeq
+        if outputs.exists(flag(_, "collateral")) then Some(true)
+        else if outputs.nonEmpty then Some(false)
+        else None
+    }
+
     private[node] def parseTransactionEffects(
         txHash: TransactionHash,
-        json: ujson.Value
+        json: ujson.Value,
+        invalid: Boolean
     ): ParsedTxEffects = {
-        def flag(v: ujson.Value, name: String): Boolean =
-            v.obj.get(name).collect { case ujson.Bool(b) => b }.getOrElse(false)
-
         val inputs = json("inputs").arr.toSeq
         val outputs = json("outputs").arr.toSeq
-        // An output flagged as collateral is a collateral *return*, which only a failed transaction
-        // produces. Its presence is therefore how this response says the script phase failed.
-        val invalid = outputs.exists(flag(_, "collateral"))
 
         val created = outputs.zipWithIndex.map { case (out, position) =>
             // `output_index` is authoritative where the API supplies it: a failed transaction's
             // collateral return sits at the end of the body's output list, not at position 0 of
             // this array.
-            val index = out.obj.get("output_index").map(_.num.toInt).getOrElse(position)
+            // `collect` rather than `map`, for the reason `flag` uses it too: a field that is
+            // present but null makes `.num` throw instead of reaching this fallback.
+            val index = out.obj
+                .get("output_index")
+                .collect { case ujson.Num(n) => n.toInt }
+                .getOrElse(position)
             val (input, output) = parseUtxoOutput(TransactionInput(txHash, index), out)
             ParsedUtxo(input, output, referenceScriptHash(out))
         }
@@ -1339,6 +1336,9 @@ object BlockfrostProvider {
         ParsedTxEffects(created, spent)
     }
 
+    /** Parse a single UTxO JSON into a (TransactionInput, TransactionOutput) pair. The output's
+      * `scriptRef` is left empty; see [[referenceScriptHash]] and `resolveScriptRef`.
+      */
     private[node] def parseUtxoOutput(
         input: TransactionInput,
         json: ujson.Value

@@ -54,6 +54,16 @@ class BlockfrostTxEffectsTest extends AnyFunSuite {
     private def utxos(inputs: Seq[ujson.Obj], outputs: Seq[ujson.Obj]): ujson.Value =
         ujson.Obj("inputs" -> ujson.Arr.from(inputs), "outputs" -> ujson.Arr.from(outputs))
 
+    /** Parse, taking the verdict from the response itself — the path a caller takes whenever the
+      * response settles it, which is every fixture here but the ambiguous one.
+      */
+    private def effects(json: ujson.Value): ParsedTxEffects = {
+        val invalid = BlockfrostProvider
+            .scriptPhaseFailed(json)
+            .getOrElse(fail("this fixture is ambiguous; pass the verdict explicitly"))
+        BlockfrostProvider.parseTransactionEffects(txHash, json, invalid)
+    }
+
     test("a successful transaction spends its inputs and not its collateral") {
         val json = utxos(
           Seq(
@@ -63,13 +73,13 @@ class BlockfrostTxEffectsTest extends AnyFunSuite {
           ),
           Seq(out(Party.Bob, 0))
         )
-        val effects = BlockfrostProvider.parseTransactionEffects(txHash, json)
+        val parsed = effects(json)
         assert(
-          effects.spent.map(_.input) == Seq(TransactionInput(hashOf("01"), 0)),
+          parsed.spent.map(_.input) == Seq(TransactionInput(hashOf("01"), 0)),
           "unused collateral is still on chain; reporting it as spent would make a subscriber " +
-              s"drop a UTxO it still holds — got ${effects.spent.map(_.input)}"
+              s"drop a UTxO it still holds — got ${parsed.spent.map(_.input)}"
         )
-        assert(effects.created.map(_.input) == Seq(TransactionInput(txHash, 0)))
+        assert(parsed.created.map(_.input) == Seq(TransactionInput(txHash, 0)))
     }
 
     test("a failed transaction spends its collateral and not its inputs") {
@@ -79,11 +89,11 @@ class BlockfrostTxEffectsTest extends AnyFunSuite {
           // how this response says the scripts failed.
           Seq(out(Party.Bob, 3, collateral = true))
         )
-        val effects = BlockfrostProvider.parseTransactionEffects(txHash, json)
+        val parsed = effects(json)
         assert(
-          effects.spent.map(_.input) == Seq(TransactionInput(hashOf("02"), 1)),
+          parsed.spent.map(_.input) == Seq(TransactionInput(hashOf("02"), 1)),
           "the collateral was consumed and the ordinary inputs were not; a subscriber told the " +
-              s"opposite is wrong about both — got ${effects.spent.map(_.input)}"
+              s"opposite is wrong about both — got ${parsed.spent.map(_.input)}"
         )
     }
 
@@ -95,7 +105,7 @@ class BlockfrostTxEffectsTest extends AnyFunSuite {
           Seq(out(Party.Bob, 3, collateral = true))
         )
         for json <- Seq(succeeded, failed) do
-            val spent = BlockfrostProvider.parseTransactionEffects(txHash, json).spent
+            val spent = effects(json).spent
             assert(
               !spent.map(_.input).contains(TransactionInput(hashOf("03"), 2)),
               s"a reference input is read, not consumed — got ${spent.map(_.input)}"
@@ -109,7 +119,7 @@ class BlockfrostTxEffectsTest extends AnyFunSuite {
           Seq(in(Party.Bob, "02", 1, collateral = true)),
           Seq(out(Party.Bob, 7, collateral = true))
         )
-        val created = BlockfrostProvider.parseTransactionEffects(txHash, json).created
+        val created = effects(json).created
         assert(
           created.map(_.input) == Seq(TransactionInput(txHash, 7)),
           "an index taken from the array position would name a UTxO that does not exist, and miss " +
@@ -125,7 +135,7 @@ class BlockfrostTxEffectsTest extends AnyFunSuite {
             ujson.Obj("address" -> bech32(Party.Alice), "amount" -> ada(4))
           )
         )
-        val created = BlockfrostProvider.parseTransactionEffects(txHash, json).created
+        val created = effects(json).created
         assert(
           created.map(_.input) ==
               Seq(TransactionInput(txHash, 0), TransactionInput(txHash, 1)),
@@ -147,17 +157,63 @@ class BlockfrostTxEffectsTest extends AnyFunSuite {
           ),
           "outputs" -> ujson.Arr(ujson.Obj("address" -> bech32(Party.Bob), "amount" -> ada(9)))
         )
-        val effects = BlockfrostProvider.parseTransactionEffects(txHash, json)
-        assert(effects.spent.map(_.input) == Seq(TransactionInput(hashOf("01"), 0)))
-        assert(effects.created.size == 1)
+        val parsed = effects(json)
+        assert(parsed.spent.map(_.input) == Seq(TransactionInput(hashOf("01"), 0)))
+        assert(parsed.created.size == 1)
     }
 
     test("the resolved outputs carry address and value, not just references") {
         // What makes `spent` usable at all: a subscriber watching an address needs to know which of
         // its UTxOs disappeared, and an input reference alone does not say.
         val json = utxos(Seq(in(Party.Alice, "01", 0)), Seq(out(Party.Bob, 0)))
-        val spent = BlockfrostProvider.parseTransactionEffects(txHash, json).spent
+        val spent = effects(json).spent
         assert(spent.head.output.address == Party.Alice.address)
         assert(spent.head.output.value == Value.ada(10))
+    }
+
+    test("a failure that returns no collateral is not settled by the response alone") {
+        // Collateral may be consumed in full, leaving no return and so no outputs at all. That is
+        // indistinguishable here from a transaction that simply produced none, and guessing
+        // "successful" inverts `spent` in both directions: the subscriber is told its ordinary
+        // inputs are gone while they are still on chain, and never told its collateral was taken.
+        val json = utxos(
+          Seq(in(Party.Alice, "01", 0), in(Party.Bob, "02", 1, collateral = true)),
+          Seq.empty
+        )
+        assert(
+          BlockfrostProvider.scriptPhaseFailed(json).isEmpty,
+          "an empty outputs array settles nothing; only valid_contract does"
+        )
+        val failed = BlockfrostProvider.parseTransactionEffects(txHash, json, invalid = true)
+        assert(failed.spent.map(_.input) == Seq(TransactionInput(hashOf("02"), 1)))
+        assert(failed.created.isEmpty)
+        val succeeded = BlockfrostProvider.parseTransactionEffects(txHash, json, invalid = false)
+        assert(succeeded.spent.map(_.input) == Seq(TransactionInput(hashOf("01"), 0)))
+    }
+
+    test("the response settles the verdict wherever it can, so the extra lookup is rare") {
+        val ordinary = utxos(Seq(in(Party.Alice, "01", 0)), Seq(out(Party.Bob, 0)))
+        assert(BlockfrostProvider.scriptPhaseFailed(ordinary).contains(false))
+        val collateralReturn = utxos(
+          Seq(in(Party.Bob, "02", 1, collateral = true)),
+          Seq(out(Party.Bob, 3, collateral = true))
+        )
+        assert(BlockfrostProvider.scriptPhaseFailed(collateralReturn).contains(true))
+    }
+
+    test("a present-but-null output_index falls back to the array position") {
+        // `map(_.num)` would throw here instead of reaching the fallback, taking the whole feed
+        // down over one field.
+        val json = ujson.Obj(
+          "inputs" -> ujson.Arr(in(Party.Alice, "01", 0)),
+          "outputs" -> ujson.Arr(
+            ujson.Obj(
+              "address" -> bech32(Party.Bob),
+              "amount" -> ada(9),
+              "output_index" -> ujson.Null
+            )
+          )
+        )
+        assert(effects(json).created.map(_.input) == Seq(TransactionInput(txHash, 0)))
     }
 }
