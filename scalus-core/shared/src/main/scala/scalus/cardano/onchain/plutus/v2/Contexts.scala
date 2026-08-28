@@ -2,6 +2,7 @@ package scalus.cardano.onchain.plutus.v2
 
 import scalus.compiler.Compile
 import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.FromData
 import scalus.uplc.builtin.ToData
 import scalus.cardano.onchain.plutus.v2
@@ -124,6 +125,24 @@ object TxOut {
 
     given FromData[TxOut] = FromData.derived
 
+    extension (self: TxOut) {
+
+        /** Checks that this output carries `a` as an inline datum.
+          *
+          * Compares the whole `OutputDatum` with `===`, one `equalsData` around one `constrData`.
+          * Measured at 286 lovelace against 461 for `datum.inlineOrFail[A](msg) === a`, which takes
+          * the `OutputDatum` apart and then rewraps the decoded value before comparing. Use
+          * `datum.inlineOrFail` when the datum's fields are needed; use this when only its equality
+          * is.
+          *
+          * @example
+          *   {{{
+          *   require(output.hasInlineDatum(expectedDatum), "datum mismatch")
+          *   }}}
+          */
+        inline def hasInlineDatum[A: ToData](a: A): Boolean =
+            self.datum === OutputDatum.OutputDatum(a.toData)
+    }
 }
 
 case class TxInInfo(outRef: TxOutRef, resolved: TxOut)

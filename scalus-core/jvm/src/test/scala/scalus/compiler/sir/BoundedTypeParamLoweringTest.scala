@@ -86,7 +86,7 @@ class BoundedTypeParamLoweringTest extends AnyFunSuite {
         // between lowering's `rhs.sirType` computation and the `@Compile` module
         // bindings (`List$.flatMap` etc.) brought in by the linker as let-bindings.
         val compiled = compile {
-            PList.single(BigInt(1)).flatMap { x => PList.single(x + 1) }
+            PList.singleton(BigInt(1)).flatMap { x => PList.singleton(x + 1) }
         }
 
         val deepOffenders = scala.collection.mutable.ArrayBuffer.empty[(String, SIRType)]

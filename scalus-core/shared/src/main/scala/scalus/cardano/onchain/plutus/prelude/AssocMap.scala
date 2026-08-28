@@ -17,7 +17,7 @@ object AssocMap {
     import PairList.*
 
     def empty[A, B]: AssocMap[A, B] = AssocMap(List.empty[(A, B)])
-    def singleton[A, B](key: A, value: B): AssocMap[A, B] = AssocMap(List.single((key, value)))
+    def singleton[A, B](key: A, value: B): AssocMap[A, B] = AssocMap(List.singleton((key, value)))
     inline def unsafeFromList[A, B](lst: List[(A, B)]): AssocMap[A, B] = AssocMap(lst)
 
     def fromList[A: Eq, B](lst: List[(A, B)]): AssocMap[A, B] = AssocMap(
@@ -64,6 +64,11 @@ object AssocMap {
 
     extension [A, B](self: AssocMap[A, B])
         def toPairList: PairList[A, B] = PairList.toPairList(self.toList)
+
+        /** Returns the only entry of this map, or fails with `message` when the map is empty or has
+          * more than one entry.
+          */
+        inline def singleOrFail(inline message: String): (A, B) = self.toList.singleOrFail(message)
         inline def isEmpty: Boolean = self.toList.isEmpty
         inline def nonEmpty: Boolean = self.toList.nonEmpty
         inline def length: BigInt = self.toList.length

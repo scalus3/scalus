@@ -83,7 +83,7 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
 
     test("check that scalus.cardano.onchain.plutus.prelude.List is mapped to SumCaseClass") {
         val sir = compile {
-            scalus.cardano.onchain.plutus.prelude.List.single(BigInt(1))
+            scalus.cardano.onchain.plutus.prelude.List.singleton(BigInt(1))
         }
         sir.tp match
             case SIRType.SumCaseClass(dataDecl, typeArgs) =>
@@ -95,7 +95,7 @@ class SIRTypingScalaToSIRTest extends AnyFunSuite {
 
     test("check that scalus.cardano.onchain.plutus.prelude.List is mapped to SumCaseClass in fun") {
         val sir = compile { (x: BigInt) =>
-            scalus.cardano.onchain.plutus.prelude.List.single(x)
+            scalus.cardano.onchain.plutus.prelude.List.singleton(x)
         }
         sir.tp match
             case SIRType.Fun(SIRType.Integer, SIRType.SumCaseClass(dataDecl, typeArgs)) =>

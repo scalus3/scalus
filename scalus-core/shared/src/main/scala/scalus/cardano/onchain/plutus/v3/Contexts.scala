@@ -1,6 +1,7 @@
 package scalus.cardano.onchain.plutus.v3
 
 import scalus.compiler.Compile
+import scala.annotation.tailrec
 import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.uplc.builtin
 import scalus.uplc.builtin.Builtins.*
@@ -8,6 +9,7 @@ import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.FromData
 import scalus.uplc.builtin.Data.ToData
+import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.FromData
 import scalus.uplc.builtin.ToData
 import scalus.cardano.onchain.plutus.v1.*
@@ -65,6 +67,15 @@ object TxOutRef:
         (a.id <=> b.id) ifEqualThen (a.idx <=> b.idx)
     given FromData[TxOutRef] = FromData.derived
     given ToData[TxOutRef] = ToData.derived
+
+    extension (self: TxOutRef)
+        /** A token name unique to this output reference: `blake2b_256(serialiseData(ref.toData))`.
+          *
+          * The one-shot / state-token name. An off-chain mint must produce the identical bytes, so
+          * compute it here on both sides. Also the natural double-satisfaction tag:
+          * `OutputDatum.OutputDatum(ref.deriveTokenName.toData)`.
+          */
+        def deriveTokenName: TokenName = blake2b_256(serialiseData(self.toData))
 
 type Lovelace = BigInt
 type ColdCommitteeCredential = Credential
@@ -920,158 +931,150 @@ object TxInfo {
 
     extension (self: TxInfo) {
 
-        /** Finds a transaction input in this transaction's inputs by its output reference.
+        /** Finds a transaction input by its output reference.
           *
-          * @param outRef
-          *   the transaction output reference to search for
           * @return
-          *   Some(TxInInfo) if the input is found, None otherwise
-          * @example
-          *   {{{
-          * val txInfo = TxInfo(...)
-          * val outRef = TxOutRef(txId, 0)
-          * val maybeInput = txInfo.findOwnInput(outRef)
-          * // Returns Some(TxInInfo) if the outRef exists in txInfo.inputs
-          * // Returns None if the outRef is not found
-          *   }}}
+          *   `Some(TxInInfo)` if an input spends `outRef`, `None` otherwise
           */
-        def findOwnInput(outRef: TxOutRef): Option[TxInInfo] = {
-            Utils.findInput(self.inputs, outRef)
-        }
+        def findInput(outRef: TxOutRef): Option[TxInInfo] = Utils.findInput(self.inputs, outRef)
 
-        /** Finds a transaction input in this transaction's inputs by its output reference. Fails
-          * with the provided message if the input is not found.
+        /** Finds a transaction input by its output reference, or fails with `message`.
           *
-          * @param outRef
-          *   the transaction output reference to search for
-          * @param message
-          *   the error message to use if the input is not found
-          * @return
-          *   TxInInfo if the input is found
+          * A direct scan with no intermediate `Option`. As a statement it is also the one-shot
+          * check: `tx.findInputOrFail(seed, "seed must be spent")`.
+          *
           * @example
           *   {{{
-          * val txInfo = TxInfo(...)
-          * val outRef = TxOutRef(txId, 0)
-          * val input = txInfo.findOwnInputOrFail(outRef, "Input not found")
-          * // Returns TxInInfo if the outRef exists in txInfo.inputs
-          * // Fails with "Input not found" if the outRef is not found
+          *   val ownInput = tx.findInputOrFail(ownRef, "own input not found")
           *   }}}
           */
-        inline def findOwnInputOrFail(
+        inline def findInputOrFail(
             outRef: TxOutRef,
             inline message: String = "Tx input not found"
         ): TxInInfo = {
-            self.findOwnInput(outRef).getOrFail(message)
+            // Inlined on purpose: a non-inline scan taking the failure as a continuation (the
+            // findUniqueOrElse shape) measured worse here on every example, including one with
+            // four call sites, and grew the CAPE scripts by 22 B each.
+            @tailrec
+            def go(inputs: List[TxInInfo]): TxInInfo = inputs match
+                case List.Nil => fail(message)
+                case List.Cons(input, tail) =>
+                    if input.outRef === outRef then input else go(tail)
+            go(self.inputs)
         }
 
-        /** Finds a datum in this transaction's outputs or datum lookup map by its hash.
-          *
-          * @param datumHash
-          *   the hash of the datum to search for
-          * @return
-          *   Some(Datum) if the datum is found in either transaction outputs or datum lookup map,
-          *   None otherwise
-          * @example
-          *   {{{
-          * val txInfo = TxInfo(...)
-          * val datumHash = DatumHash(...)
-          * val maybeDatum = txInfo.findOwnDatum(datumHash)
-          * // Returns Some(Datum) if the datumHash exists in txInfo.data or txInfo.outputs
-          * // Returns None if the datumHash is not found
-          *   }}}
-          */
-        def findOwnDatum(datumHash: DatumHash): Option[Datum] = {
+        /** Finds a datum by its hash in this transaction's outputs or datum witness map. */
+        def findDatum(datumHash: DatumHash): Option[Datum] =
             Utils.findDatum(self.outputs, self.data, datumHash)
-        }
 
-        /** Finds all transaction outputs that are locked by a specific validator script.
+        /** Finds all outputs whose payment credential is the given script hash.
           *
-          * @param scriptHash
-          *   the hash of the validator script to search for
-          * @return
-          *   List of transaction outputs that are locked by the given validator script
-          * @example
-          *   {{{
-          * val txInfo = TxInfo(...)
-          * val validatorHash = ValidatorHash(...)
-          * val scriptOutputs = txInfo.findOwnScriptOutputs(validatorHash)
-          * // Returns List[TxOut] containing all outputs locked by the validator script
-          * // Returns empty List if no matching outputs are found
-          *   }}}
+          * Matches the PAYMENT credential only: the staking part of the address is not constrained.
+          * Do not use this to locate the continuing output of a script - an attacker can keep the
+          * payment credential and redirect the delegation rewards. Use
+          * [[findContinuingOutputOrFail]], which compares the whole address.
           */
-        def findOwnScriptOutputs(scriptHash: ValidatorHash): List[v2.TxOut] = {
+        def findOutputsByScriptHash(scriptHash: ValidatorHash): List[v2.TxOut] =
             Utils.findScriptOutputs(self.outputs, scriptHash)
-        }
 
-        /** Finds all transaction inputs in this transaction that are locked by a specific
-          * credential.
+        /** Finds all inputs whose resolved address has the given payment credential.
           *
-          * @param cred
-          *   the credential to search for in input addresses
-          * @return
-          *   List of transaction inputs whose resolved addresses match the given credential
+          * Matches the payment credential only; the staking part is not constrained.
+          */
+        def findInputsByCredential(cred: Credential): List[TxInInfo] =
+            self.inputs.filter(_.resolved.address.credential === cred)
+
+        /** Finds all outputs whose address has the given payment credential.
+          *
+          * Matches the PAYMENT credential only: the staking part of the address is not constrained.
+          * Do not use this to locate the continuing output of a script - an attacker can keep the
+          * payment credential and redirect the delegation rewards. Use
+          * [[findContinuingOutputOrFail]], which compares the whole address.
+          */
+        def findOutputsByCredential(cred: Credential): List[v2.TxOut] =
+            self.outputs.filter(_.address.credential === cred)
+
+        /** Finds the unique output paying back to `ownInput`'s address, or fails with `message`.
+          *
+          * Compares the WHOLE address, staking credential included. The credential-only finders
+          * ([[findOutputsByScriptHash]], [[findOutputsByCredential]]) leave the staking part
+          * unconstrained, which lets an attacker redirect the continuing output's delegation
+          * rewards. Fails when no output or more than one output pays to that address.
+          *
           * @example
           *   {{{
-          * val txInfo = TxInfo(...)
-          * val credential = Credential.PubKey(pubKeyHash)
-          * val inputs = txInfo.getOwnInputsByCredential(credential)
-          * // Returns List[TxInInfo] containing all inputs locked by the credential
-          * // Returns empty List if no matching inputs are found
+          *   val ownInput = tx.findInputOrFail(ownRef)
+          *   val continuing = tx.findContinuingOutputOrFail(ownInput, "expected one continuing output")
+          *   require(continuing.value.hasSameTokensAndAtLeastAda(ownInput.resolved.value), "value")
           *   }}}
           */
+        inline def findContinuingOutputOrFail(
+            ownInput: TxInInfo,
+            inline message: String
+        ): v2.TxOut =
+            self.outputs.findUniqueOrFail(_.address === ownInput.resolved.address, message)
+
+        /** Total value paid to `addr` across all outputs, as a whole `Value`.
+          *
+          * Compares the whole address. Sums every asset, not only lovelace; project with
+          * `.getLovelace` afterwards when only ADA matters.
+          */
+        def valuePaidTo(addr: Address): Value =
+            self.outputs.foldLeft(Value.zero) { (acc, out) =>
+                if out.address === addr then acc + out.value else acc
+            }
+
+        /** Total value spent from `addr` across all inputs, as a whole `Value`.
+          *
+          * Compares the whole address. Sums every asset, not only lovelace.
+          */
+        def valueSpentFrom(addr: Address): Value =
+            self.inputs.foldLeft(Value.zero) { (acc, input) =>
+                if input.resolved.address === addr then acc + input.resolved.value else acc
+            }
+
+        /** Deprecated spelling of [[findInput]]. Keeps its original body so existing budgets do not
+          * move until callers migrate.
+          */
+        @deprecated("use findInput", "1.1.1")
+        def findOwnInput(outRef: TxOutRef): Option[TxInInfo] = Utils.findInput(self.inputs, outRef)
+
+        /** Deprecated spelling of [[findInputOrFail]]. Keeps its original `Option`-based body so
+          * the budgets of existing callers do not move until they migrate.
+          */
+        @deprecated("use findInputOrFail", "1.1.1")
+        inline def findOwnInputOrFail(
+            outRef: TxOutRef,
+            inline message: String = "Tx input not found"
+        ): TxInInfo = findInput(outRef).getOrFail(message)
+
+        /** Deprecated spelling of [[findDatum]]; original body kept. */
+        @deprecated("use findDatum", "1.1.1")
+        def findOwnDatum(datumHash: DatumHash): Option[Datum] =
+            Utils.findDatum(self.outputs, self.data, datumHash)
+
+        /** Deprecated spelling of [[findOutputsByScriptHash]]; original body kept. */
+        @deprecated("use findOutputsByScriptHash", "1.1.1")
+        def findOwnScriptOutputs(scriptHash: ValidatorHash): List[v2.TxOut] =
+            Utils.findScriptOutputs(self.outputs, scriptHash)
+
+        /** Deprecated spelling of [[findInputsByCredential]]; original body kept. */
+        @deprecated("use findInputsByCredential", "1.1.1")
         def findOwnInputsByCredential(cred: Credential): List[TxInInfo] =
             self.inputs.filter(_.resolved.address.credential === cred)
 
-        /** Finds all transaction outputs in this transaction that are locked by a specific
-          * credential.
-          *
-          * @param cred
-          *   the credential to search for in output addresses
-          * @return
-          *   List of transaction outputs whose addresses match the given credential
-          * @example
-          *   {{{
-          * val txInfo = TxInfo(...)
-          * val credential = Credential.PubKey(pubKeyHash)
-          * val outputs = txInfo.getOwnOutputsByCredential(credential)
-          * // Returns List[TxOut] containing all outputs locked by the credential
-          * // Returns empty List if no matching outputs are found
-          *   }}}
-          */
+        /** Deprecated spelling of [[findOutputsByCredential]]; original body kept. */
+        @deprecated("use findOutputsByCredential", "1.1.1")
         def findOwnOutputsByCredential(cred: Credential): List[v2.TxOut] =
             self.outputs.filter(_.address.credential === cred)
 
-        /** Finds all transaction inputs in this transaction that match a given predicate.
-          *
-          * @param pred
-          *   the predicate function to test each input
-          * @return
-          *   List of transaction inputs that satisfy the predicate
-          * @example
-          *   {{{
-          * val txInfo = TxInfo(...)
-          * val inputs = txInfo.findOwnInputs(in => in.resolved.value.lovelace > 1000000)
-          * // Returns List[TxInInfo] containing all inputs with more than 1 ADA
-          * // Returns empty List if no inputs match the predicate
-          *   }}}
-          */
+        /** Same as `inputs.filter(pred)`. */
+        @deprecated("use inputs.filter", "1.1.1")
         def findOwnInputs(pred: TxInInfo => Boolean): List[TxInInfo] =
             self.inputs.filter(pred)
 
-        /** Finds all transaction outputs in this transaction that match a given predicate.
-          *
-          * @param pred
-          *   the predicate function to test each output
-          * @return
-          *   List of transaction outputs that satisfy the predicate
-          * @example
-          *   {{{
-          * val txInfo = TxInfo(...)
-          * val outputs = txInfo.findOwnOutputs(out => out.value.lovelace > 1000000)
-          * // Returns List[TxOut] containing all outputs with more than 1 ADA
-          * // Returns empty List if no outputs match the predicate
-          *   }}}
-          */
+        /** Same as `outputs.filter(pred)`. */
+        @deprecated("use outputs.filter", "1.1.1")
         def findOwnOutputs(pred: v2.TxOut => Boolean): List[v2.TxOut] =
             self.outputs.filter(pred)
 
@@ -1082,23 +1085,85 @@ object TxInfo {
         def isSignedBy(pubKeyHash: PubKeyHash): Boolean =
             self.signatories.contains(pubKeyHash)
 
-        /** Extracts the start time from the transaction's validity interval.
+        /** `true` if any of `keys` signed the transaction.
           *
-          * Returns the earliest valid time (lower bound) of the transaction's validity range. If
-          * the validity range has no finite lower bound (e.g., unbounded or negative infinity),
-          * returns 0.
-          *
-          * @return
-          *   the start time as PosixTime if the validity range has a finite lower bound, otherwise
-          *   0
-          * @example
-          *   {{{
-          * val txInfo = TxInfo(...)
-          * val startTime = txInfo.getValidityStartTime
-          * // Returns the PosixTime of the validity range's lower bound
-          * // Returns BigInt(0) if the lower bound is infinite or unbounded
-          *   }}}
+          * A direct scan; `keys.exists(tx.isSignedBy)` allocates an `Option` per call.
           */
+        def isSignedByAny(keys: List[PubKeyHash]): Boolean = {
+            @tailrec
+            def go(remaining: List[PubKeyHash]): Boolean = remaining match
+                case List.Nil => false
+                case List.Cons(key, tail) =>
+                    if self.signatories.contains(key) then true else go(tail)
+            go(keys)
+        }
+
+        /** The validity range's lower bound, or fails with `message` if it is unbounded.
+          *
+          * INCLUSIVE: the ledger builds it with `lowerBound` (closed), so this is the earliest time
+          * at which the transaction can be included. It is the value to compare against a "not
+          * before" deadline: `require(tx.validFromOrFail(msg) >= deadline, "too early")`.
+          *
+          * Pairs with `TxBuilder.validFrom`. Replaces `getValidityStartTime`, which returned `0`
+          * for an unbounded range and let a transaction with no lower bound pass every deadline.
+          */
+        inline def validFromOrFail(inline message: String): PosixTime =
+            self.validRange.from.boundType match
+                case IntervalBoundType.Finite(t) => t
+                case _                           => fail(message)
+
+        /** The validity range's upper bound, or fails with `message` if it is unbounded.
+          *
+          * EXCLUSIVE: the ledger builds it with `strictUpperBound` (open), so the transaction
+          * cannot be included at or after this time. A timestamp written into a datum from this
+          * value is an upper bound on the real posting time - it can be late, never early. It is
+          * the value to compare against a "not after" deadline:
+          * `require(tx.validToOrFail(msg) <= deadline, "too late")`.
+          *
+          * Pairs with `TxBuilder.validTo`.
+          */
+        inline def validToOrFail(inline message: String): PosixTime =
+            self.validRange.to.boundType match
+                case IntervalBoundType.Finite(t) => t
+                case _                           => fail(message)
+
+        /** `true` if at least one token is minted or burned under `policy` and every quantity under
+          * it is negative.
+          *
+          * Not `mint.tokens(policy).forall(_._2 < 0)`: `forall` over an EMPTY map is vacuously
+          * `true`, so that spelling passes a transaction that burns nothing at all. An auction that
+          * closes by burning its state NFT with the unguarded check lets a `Close` that mints
+          * nothing pay out while the NFT survives for replay. The emptiness guard is the operation.
+          * When the token name is known, `mint.hasOnly(policy, name, -1)` is stronger.
+          */
+        def onlyBurnsUnder(policy: PolicyId): Boolean = {
+            val burned = self.mint.tokens(policy)
+            burned.nonEmpty && burned.forall(_._2 < 0)
+        }
+
+        /** `true` if some output pays EXACTLY `value` to `addr` and carries `tag` as its datum.
+          *
+          * The tagged-output defence against double satisfaction: with a `TxOutRef`-derived tag
+          * (see `TxOutRef.deriveTokenName`) no single output can satisfy two script instances. All
+          * three comparisons are exact; a `>=` on the value would reopen the hole.
+          */
+        def hasPaidTagged(addr: Address, value: Value, tag: v2.OutputDatum): Boolean = {
+            @tailrec
+            def go(outputs: List[v2.TxOut]): Boolean = outputs match
+                case List.Nil => false
+                case List.Cons(out, tail) =>
+                    if out.address === addr && out.value === value && out.datum === tag then true
+                    else go(tail)
+            go(self.outputs)
+        }
+
+        /** Extracts the start time from the transaction's validity interval, or `0` if the range
+          * has no finite lower bound.
+          *
+          * A transaction with NO lower bound is then treated as happening at the Unix epoch, and
+          * every "has the deadline passed?" comparison flips. Use [[validFromOrFail]].
+          */
+        @deprecated("use validFromOrFail", "1.1.1")
         def getValidityStartTime: BigInt = self.validRange.from.boundType match
             case IntervalBoundType.Finite(t) => t
             case _                           => BigInt(0)
@@ -1146,6 +1211,9 @@ object Utils {
 
     /** Calculates the total amount of ADA (Lovelace) from a list of transaction outputs.
       *
+      * LOVELACE ONLY: native tokens in the outputs are ignored, so a check built on this sum lets
+      * them be stripped. Use `TxInfo.valuePaidTo(addr)` and compare the whole `Value`.
+      *
       * @param outputs
       *   the list of transaction outputs to sum
       * @return
@@ -1158,11 +1226,19 @@ object Utils {
       * // Returns BigInt(0) if the list is empty
       *   }}}
       */
+    @deprecated(
+      "lovelace-only; sum whole Values: TxInfo.valuePaidTo(addr) for a full address, or " +
+          "outputs.filter(_.address.credential === cred).foldLeft(Value.zero)(_ + _.value) for a key payee",
+      "1.1.1"
+    )
     def getAdaFromOutputs(outputs: List[v2.TxOut]): Lovelace = {
         outputs.map(_.value.getLovelace).foldLeft(BigInt(0))(_ + _)
     }
 
     /** Calculates the total amount of ADA (Lovelace) from a list of transaction inputs.
+      *
+      * LOVELACE ONLY: native tokens in the inputs are ignored. Use `TxInfo.valueSpentFrom(addr)`
+      * and compare the whole `Value`.
       *
       * @param inputs
       *   the list of transaction inputs to sum
@@ -1176,6 +1252,11 @@ object Utils {
       * // Returns BigInt(0) if the list is empty
       *   }}}
       */
+    @deprecated(
+      "lovelace-only; sum whole Values: TxInfo.valueSpentFrom(addr) for a full address, or " +
+          "inputs.filter(_.resolved.address.credential === cred).foldLeft(Value.zero)(_ + _.resolved.value) for a key payee",
+      "1.1.1"
+    )
     def getAdaFromInputs(inputs: List[TxInInfo]): Lovelace = {
         inputs.map(_.resolved.value.getLovelace).foldLeft(BigInt(0))(_ + _)
     }

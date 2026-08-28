@@ -1,6 +1,7 @@
 package scalus.cardano.onchain.plutus.v2
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.ledger.{Coin, ExUnits}
 import scalus.cardano.onchain.OnchainError
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
@@ -25,6 +26,56 @@ class OutputDatumTest extends AnyFunSuite with EvalTestKit {
         assertEvalFails[OnchainError](OutputDatum.NoOutputDatum.inlineOrFail[BigInt])
         assertEvalFails[OnchainError](
           (OutputDatum.OutputDatumHash(hex"deadbeef"): OutputDatum).inlineOrFail[BigInt]
+        )
+    }
+
+    test("TxOut.hasInlineDatum") {
+        import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
+        val addr = Address(Credential.PubKeyCredential(PubKeyHash(hex"aa")), Option.None)
+        val out = TxOut(addr, Value.lovelace(1), OutputDatum.OutputDatum(BigInt(42).toData))
+        assert(out.hasInlineDatum(BigInt(42)))
+        assert(!out.hasInlineDatum(BigInt(43)))
+        assert(!TxOut(addr, Value.lovelace(1)).hasInlineDatum(BigInt(42)))
+        assert(
+          !TxOut(addr, Value.lovelace(1), OutputDatum.OutputDatumHash(hex"bb"))
+              .hasInlineDatum(BigInt(42))
+        )
+
+        assertEval(
+          TxOut(
+            Address(Credential.PubKeyCredential(PubKeyHash(hex"aa")), Option.None),
+            Value.lovelace(1),
+            OutputDatum.OutputDatum(BigInt(42).toData)
+          ).hasInlineDatum(BigInt(42))
+        )
+        assertEval(
+          !TxOut(
+            Address(Credential.PubKeyCredential(PubKeyHash(hex"aa")), Option.None),
+            Value.lovelace(1),
+            OutputDatum.OutputDatum(BigInt(42).toData)
+          ).hasInlineDatum(BigInt(43))
+        )
+        assertEval(
+          !TxOut(
+            Address(Credential.PubKeyCredential(PubKeyHash(hex"aa")), Option.None),
+            Value.lovelace(1),
+            OutputDatum.OutputDatumHash(hex"bb")
+          ).hasInlineDatum(BigInt(42))
+        )
+    }
+
+    test("budget: TxOut.hasInlineDatum") {
+        import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
+        assertEvalWithBudgetAndFee(
+          (out: TxOut) => out.hasInlineDatum(BigInt(42)),
+          TxOut(
+            Address(Credential.PubKeyCredential(PubKeyHash(hex"aa")), Option.None),
+            Value.lovelace(1),
+            OutputDatum.OutputDatum(BigInt(42).toData)
+          ),
+          true,
+          ExUnits(memory = 2401, steps = 1_866114),
+          Coin(274)
         )
     }
 

@@ -32,7 +32,12 @@ object PairList {
 
     inline def empty[A, B]: PairList[A, B] = PairNil
 
-    inline def single[A, B](a: A, b: B): PairList[A, B] = PairCons((a, b), PairNil)
+    /** Creates a `PairList` with a single key-value pair. */
+    inline def singleton[A, B](a: A, b: B): PairList[A, B] = PairCons((a, b), PairNil)
+
+    /** Creates a `PairList` with a single key-value pair. Alias for [[singleton]]. */
+    @deprecated("use singleton", "1.1.1")
+    inline def single[A, B](a: A, b: B): PairList[A, B] = singleton(a, b)
 
     @Ignore
     def from[A, B](it: IterableOnce[(A, B)]): PairList[A, B] =
@@ -48,7 +53,7 @@ object PairList {
           *   If the `PairList` is empty.
           * @example
           *   {{{
-          *   PairList.single("a", 1).head === ("a", 1)
+          *   PairList.singleton("a", 1).head === ("a", 1)
           *   }}}
           */
         def head: (A, B) = self match

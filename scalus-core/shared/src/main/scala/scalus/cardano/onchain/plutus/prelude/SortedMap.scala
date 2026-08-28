@@ -20,7 +20,7 @@ case class SortedMap[A, B] private (toList: List[(A, B)])
 object SortedMap {
     import List.*
     import Option.*
-    import PairList.{empty as _, single as _, *}
+    import PairList.{empty as _, *}
 
     /** Constructs an empty `SortedMap`.
       *
@@ -41,11 +41,11 @@ object SortedMap {
       *   a `SortedMap` containing the single key-value pair
       * @example
       *   {{{
-      *   SortedMap.singleton("key", "value").toList === List.single(("key", "value"))
+      *   SortedMap.singleton("key", "value").toList === List.singleton(("key", "value"))
       *   }}}
       */
     def singleton[A, B](key: A, value: B): SortedMap[A, B] = SortedMap(
-      List.single((key, value))
+      List.singleton((key, value))
     )
 
     /** Constructs a `SortedMap` in unsafe way from a list of key-value pairs assuming that it's in
@@ -83,7 +83,7 @@ object SortedMap {
       */
     def fromList[A: Ord, B](lst: List[(A, B)]): SortedMap[A, B] = {
         def insertIfDoesNotExist(lst: List[(A, B)], key: A, value: B): List[(A, B)] = lst match
-            case Nil => single(key, value)
+            case Nil => List.singleton((key, value))
             case Cons(pair, tail) =>
                 pair match
                     case (k, v) =>
@@ -359,6 +359,21 @@ object SortedMap {
           */
         def toPairList: PairList[A, B] = PairList.toPairList(self.toList)
 
+        /** Returns the only entry of this map, or fails with `message` when the map is empty or has
+          * more than one entry.
+          *
+          * @param message
+          *   The failure message when the map is not of size one.
+          * @return
+          *   The only key-value pair.
+          * @example
+          *   {{{
+          *   SortedMap.singleton("key", BigInt(1)).singleOrFail("expected one") === ("key", BigInt(1))
+          *   SortedMap.empty[String, BigInt].singleOrFail("expected one") // fails
+          *   }}}
+          */
+        inline def singleOrFail(inline message: String): (A, B) = self.toList.singleOrFail(message)
+
         /** Checks if the `SortedMap` is empty.
           *
           * @return
@@ -414,7 +429,7 @@ object SortedMap {
           * @example
           *   {{{
           *   SortedMap.empty.keys === List.empty
-          *   SortedMap.singleton("key", "value").keys === List.single("key")
+          *   SortedMap.singleton("key", "value").keys === List.singleton("key")
           *   SortedMap.fromList(List.Cons(("a", 1), List.Cons(("b", 2), List.Nil))).keys === List.Cons("a", List.Cons("b", List.Nil))
           *   }}}
           */
@@ -429,7 +444,7 @@ object SortedMap {
           * @example
           *   {{{
           *   SortedMap.empty.values === List.empty
-          *   SortedMap.singleton("key", "value").values === List.single("value")
+          *   SortedMap.singleton("key", "value").values === List.singleton("value")
           *   SortedMap.fromList(List.Cons(("a", 1), List.Cons(("b", 2), List.Nil))).values === List.Cons(1, List.Cons(2, List.Nil))
           *   }}}
           */
@@ -479,7 +494,7 @@ object SortedMap {
           *   a new `SortedMap` with the same keys and transformed values
           * @example
           *   {{{
-          *   SortedMap.singleton("key", 1).mapValues(_ + 1).toList === List.single(("key", 2))
+          *   SortedMap.singleton("key", 1).mapValues(_ + 1).toList === List.singleton(("key", 2))
           *   SortedMap.fromList(List.Cons(("a", 1), List.Cons(("b", 2), List.Nil))).mapValues(_ * 2).toList === List.Cons(("a", 2), List.Cons(("b", 4), List.Nil))
           *   }}}
           */
@@ -710,7 +725,7 @@ object SortedMap {
           */
         def insert(key: A, value: B): SortedMap[A, B] = {
             def go(lst: PairList[A, B]): PairList[A, B] = lst match
-                case PairNil => PairList.single(key, value)
+                case PairNil => PairList.singleton(key, value)
                 case PairCons(pair, tail) =>
                     pair match
                         case (k, v) =>

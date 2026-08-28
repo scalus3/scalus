@@ -24,7 +24,7 @@ object Poly {
       *   the product polynomial coefficients
       */
     def getFinalPoly(binomials: List[BigInt]): List[BigInt] = {
-        binomials.foldLeft(List.single(BigInt(1))): (acc, term) =>
+        binomials.foldLeft(List.singleton(BigInt(1))): (acc, term) =>
             val shiftedPoly: List[BigInt] = List.Cons(0, acc)
             val multipliedPoly = acc.appended(BigInt(0)).map(_ * term)
             List.map2(shiftedPoly, multipliedPoly)(_ + _)

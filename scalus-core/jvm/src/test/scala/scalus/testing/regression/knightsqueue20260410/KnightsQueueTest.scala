@@ -61,7 +61,7 @@ object KnightsQueueRepro:
           size = size,
           moveNumber = BigInt(1),
           start = Option.Some(initSquare),
-          visited = List.single(initSquare)
+          visited = List.singleton(initSquare)
         )
 
     extension (self: Tile)

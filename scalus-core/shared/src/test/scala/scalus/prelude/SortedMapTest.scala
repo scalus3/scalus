@@ -1,10 +1,10 @@
 package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.onchain.RequirementError
+import scalus.cardano.onchain.{OnchainError, RequirementError}
 import scalus.cardano.onchain.plutus.prelude.{identity, Eq, List, Option, Ord, SortedMap, These}
 import scalus.uplc.builtin.Data.{fromData, toData, FromData}
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{Coin, ExUnits}
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
@@ -30,7 +30,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
 
     test("singleton") {
         check { (key: BigInt, value: BigInt) =>
-            SortedMap.singleton(key, value).toList === List.single((key, value))
+            SortedMap.singleton(key, value).toList === List.singleton((key, value))
         }
 
         { // Budget-only check: term representation changed from list data to list (pair data data)
@@ -86,6 +86,30 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
                     )
                 case Result.Failure(e, _, _, _) => fail(s"Expected success: $e")
         }
+    }
+
+    test("singleOrFail") {
+        assertEvalEq(
+          SortedMap.singleton(BigInt(1), BigInt(2)).singleOrFail("expected one"),
+          (BigInt(1), BigInt(2))
+        )
+        assertEvalWithBudgetAndFee(
+          (m: SortedMap[BigInt, BigInt]) => m.singleOrFail("expected one")._2,
+          SortedMap.singleton(BigInt(1), BigInt(2)),
+          BigInt(2),
+          ExUnits(memory = 8820, steps = 1_960097),
+          Coin(651)
+        )
+        assertEvalFailsWithMessage[OnchainError]("expected one")(
+          SortedMap.empty[BigInt, BigInt].singleOrFail("expected one")
+        )
+        assertEvalFailsWithMessage[OnchainError]("expected one")(
+          SortedMap
+              .fromList(
+                List.Cons((BigInt(1), BigInt(2)), List.Cons((BigInt(3), BigInt(4)), List.Nil))
+              )
+              .singleOrFail("expected one")
+        )
     }
 
     test("unsafeFromList") {
@@ -856,7 +880,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         assertEvalWithBudgets(
           (m: SortedMap[BigInt, BigInt]) => m.keys,
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          List.single(BigInt(1)),
+          List.singleton(BigInt(1)),
           Seq(
             compilerOptions -> ExUnits(memory = 12176, steps = 2_891880)
           )
@@ -894,7 +918,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         assertEvalWithBudgets(
           (m: SortedMap[BigInt, BigInt]) => m.values,
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          List.single(BigInt(1)),
+          List.singleton(BigInt(1)),
           Seq(
             compilerOptions -> ExUnits(memory = 12408, steps = 3_005543)
           )
@@ -1024,7 +1048,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         assertEvalWithBudget(
           (m: SortedMap[BigInt, BigInt]) => m.mapValues(_ + 1),
           SortedMap.singleton(BigInt(1), BigInt(1)),
-          SortedMap.fromStrictlyAscendingList(List.single((BigInt(1), BigInt(2)))),
+          SortedMap.fromStrictlyAscendingList(List.singleton((BigInt(1), BigInt(2)))),
           ExUnits(memory = 9054, steps = 2_082815)
         )
 
@@ -1595,7 +1619,9 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         check { (map: SortedMap[BigInt, BigInt], key: BigInt, value: BigInt) =>
             val result = map.insert(key, value)
             val expected =
-                SortedMap.fromList(map.toList.filterNot(_._1 === key) ++ List.single((key, value)))
+                SortedMap.fromList(
+                  map.toList.filterNot(_._1 === key) ++ List.singleton((key, value))
+                )
 
             result === expected
         }

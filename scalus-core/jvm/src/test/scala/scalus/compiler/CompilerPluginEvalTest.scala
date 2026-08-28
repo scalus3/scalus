@@ -56,7 +56,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         import scalus.cardano.onchain.plutus.prelude.List
         import scalus.cardano.onchain.plutus.prelude.List.*
         val compiled = compile {
-            val ls: List[BigInt] = single(BigInt(1))
+            val ls: List[BigInt] = singleton(BigInt(1))
             ls match
                 case Cons(h, _) => h
                 case Nil        => BigInt(0)
@@ -84,7 +84,7 @@ class CompilerPluginEvalTest extends AnyFunSuite {
         import scalus.cardano.onchain.plutus.prelude.List.*
         val compiled = compile {
             val ls: List[(BigInt, TxOutRef)] =
-                List.single((1, new TxOutRef(new TxId(hex"deadbeef"), 2)))
+                List.singleton((1, new TxOutRef(new TxId(hex"deadbeef"), 2)))
             ls match
                 case Cons(h @ (a, TxOutRef(TxId(_), idx)), _) => a + idx
                 case Nil                                      => BigInt(0)

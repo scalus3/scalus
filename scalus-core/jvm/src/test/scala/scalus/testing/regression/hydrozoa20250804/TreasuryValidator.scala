@@ -396,7 +396,7 @@ object TreasuryValidator extends Validator:
      * */
     def getFinalPolyScalus(binomial_poly: List[ScalusScalar]): List[ScalusScalar] = {
         binomial_poly
-            .foldLeft(List.single(ScalusScalar.one)): (acc, term) =>
+            .foldLeft(List.singleton(ScalusScalar.one)): (acc, term) =>
                 val shiftedPoly: List[ScalusScalar] = List.Cons(ScalusScalar.zero, acc)
                 val multipliedPoly = acc.map(s => s * term).appended(ScalusScalar.zero)
                 List.map2(shiftedPoly, multipliedPoly)((l, r) => l + r)

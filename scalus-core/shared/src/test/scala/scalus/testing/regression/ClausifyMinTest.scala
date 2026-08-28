@@ -31,7 +31,7 @@ object Min202507172:
     extension [A: Ord](self: List[A])
         def insertUniqueOrdered(elem: A): List[A] =
             self match
-                case List.Nil => List.single(elem)
+                case List.Nil => List.singleton(elem)
                 case List.Cons(head, tail) =>
                     elem <=> head match
                         case Order.Less    => self.prepended(elem)
@@ -73,7 +73,7 @@ class ClausifyMinTest extends AnyFunSuite:
         import Min202507172.*
         val sir = scalus.compiler
             .compile {
-                val lrVars: (List[BigInt], List[BigInt]) = (List.single(BigInt(1)), List.empty)
+                val lrVars: (List[BigInt], List[BigInt]) = (List.singleton(BigInt(1)), List.empty)
                 List.empty.insertUniqueOrdered(lrVars)
             }
         val uplc = sir.toUplcOptimized(generateErrorTraces = false)

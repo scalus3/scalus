@@ -30,14 +30,14 @@ class ContainsEqLoweringTest extends AnyFunSuite {
 
     test("contains on a concrete case-class element (structural, eq dropped)") {
         val compiled = PlutusV3.compile {
-            List.single(CPoint(BigInt(1), BigInt(2))).contains(CPoint(BigInt(1), BigInt(2)))
+            List.singleton(CPoint(BigInt(1), BigInt(2))).contains(CPoint(BigInt(1), BigInt(2)))
         }
         assert(compiled.program.term.evaluate == true.asTerm)
     }
 
     test("contains on a concrete case-class element — negative") {
         val compiled = PlutusV3.compile {
-            List.single(CPoint(BigInt(1), BigInt(2))).contains(CPoint(BigInt(9), BigInt(9)))
+            List.singleton(CPoint(BigInt(1), BigInt(2))).contains(CPoint(BigInt(9), BigInt(9)))
         }
         assert(compiled.program.term.evaluate == false.asTerm)
     }
@@ -45,7 +45,7 @@ class ContainsEqLoweringTest extends AnyFunSuite {
     test("contains via a generic function (abstract element type)") {
         val compiled = PlutusV3.compile {
             ContainsEqHelpers.genericContains(
-              List.single(CPoint(BigInt(1), BigInt(2))),
+              List.singleton(CPoint(BigInt(1), BigInt(2))),
               CPoint(BigInt(1), BigInt(2))
             )
         }

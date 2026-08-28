@@ -8,7 +8,7 @@ import org.scalatest.Assertions
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.{toData, FromData, ToData}
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits}
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.cardano.onchain.plutus.prelude.{Eq, Option as ScalusOption}
@@ -268,6 +268,83 @@ trait EvalTestKit extends Assertions with ScalaCheckPropertyChecks with Arbitrar
                     fail(s"""Expected success for $opts, but got failure: $exception;
                            |budget: $budget;
                            |costs: ${costs.toMap}""".stripMargin)
+
+    /** Mainnet execution-unit prices, used by the `*AndFee` assertions to pin fees in lovelace. */
+    protected final def mainnetPrices = CardanoInfo.mainnet.protocolParams.executionUnitPrices
+
+    /** Assert that code evaluates to `expected` with exactly `budget` execution units and exactly
+      * `fee` lovelace at mainnet prices, under the given `Options`. On a mismatch the message
+      * reports both the actual budget and the actual fee, so a pin can be updated in one run.
+      */
+    protected final inline def assertEvalWithBudgetAndFee[T: Eq](
+        inline code: T,
+        inline expected: T,
+        budget: ExUnits,
+        fee: Coin
+    )(using vm: PlutusVM, options: Options): Unit =
+        val compiled = PlutusV3.compile(code)
+        val compiledExpected = PlutusV3.compile(expected)
+        assert(
+          compiled.code === compiledExpected.code,
+          s"Expected ${compiledExpected.code}, but got ${compiled.code}"
+        )
+        compiled.program.term.evaluateDebug match
+            case Result.Success(term, exunits, costs, logs) =>
+                val actualFee = exunits.fee(mainnetPrices)
+                assert(
+                  exunits == budget && actualFee == fee,
+                  s"Budget/fee mismatch for $options: got $exunits fee=${actualFee.value}, " +
+                      s"expected $budget fee=${fee.value}"
+                )
+                val expectedTerm = compiledExpected.program.term.evaluate
+                assert(
+                  term α_== expectedTerm,
+                  s"Expected term $expectedTerm, but got ${term.show} (opts=$options)"
+                )
+            case Result.Failure(exception, budget, costs, logs) =>
+                fail(s"""Expected success for $options, but got failure: $exception;
+                       |budget: $budget;
+                       |costs: ${costs.toMap}""".stripMargin)
+
+    /** Same as the one-argument [[assertEvalWithBudgetAndFee]], with the argument passed as Data at
+      * runtime so constant folding cannot remove the work being measured.
+      */
+    protected final inline def assertEvalWithBudgetAndFee[A1, T: Eq](
+        inline code: A1 => T,
+        arg1: A1,
+        inline expected: T,
+        budget: ExUnits,
+        fee: Coin
+    )(using
+        vm: PlutusVM,
+        options: Options,
+        inline a1FromData: FromData[A1],
+        inline a1ToData: ToData[A1]
+    ): Unit =
+        val compiled = PlutusV3.compile { (d: Data) => code(d.to[A1]) }
+        val compiledExpected = PlutusV3.compile(expected)
+        assert(
+          code(arg1) === compiledExpected.code,
+          s"Expected ${compiledExpected.code}, but got ${code(arg1)}"
+        )
+        val applied = compiled.program.term $ toData[A1](arg1).asTerm
+        applied.evaluateDebug match
+            case Result.Success(term, exunits, costs, logs) =>
+                val actualFee = exunits.fee(mainnetPrices)
+                assert(
+                  exunits == budget && actualFee == fee,
+                  s"Budget/fee mismatch for $options: got $exunits fee=${actualFee.value}, " +
+                      s"expected $budget fee=${fee.value}"
+                )
+                val expectedTerm = compiledExpected.program.term.evaluate
+                assert(
+                  term α_== expectedTerm,
+                  s"Expected term $expectedTerm, but got ${term.show} (opts=$options)"
+                )
+            case Result.Failure(exception, budget, costs, logs) =>
+                fail(s"""Expected success for $options, but got failure: $exception;
+                       |budget: $budget;
+                       |costs: ${costs.toMap}""".stripMargin)
 
     /** Assert that code evaluates to different value than expected. */
     protected final inline def assertEvalNotEq[T: Eq](

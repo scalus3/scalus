@@ -11,7 +11,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
     test("head") {
         assertEvalWithBudgets(
           (pl: PairList[BigInt, BigInt]) => pl.head,
-          PairList.single(BigInt(1), BigInt(2)),
+          PairList.singleton(BigInt(1), BigInt(2)),
           (BigInt(1), BigInt(2)),
           Seq(
             compilerOptions -> ExUnits(memory = 3196, steps = 649447)
@@ -41,7 +41,7 @@ class PairListTest extends AnyFunSuite with EvalTestKit {
         )
         assertEvalWithBudgets(
           (pl: PairList[BigInt, BigInt]) => pl.isEmpty,
-          PairList.single(BigInt(1), BigInt(2)),
+          PairList.singleton(BigInt(1), BigInt(2)),
           false,
           Seq(
             compilerOptions -> ExUnits(memory = 1132, steps = 184723)

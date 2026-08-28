@@ -5,7 +5,7 @@ import scalus.compiler.{UplcRepr, UplcRepresentation}
 import scalus.cardano.ledger.{Input, TransactionHash, TransactionInput}
 import scalus.uplc.builtin.{Builtins, ByteString, Data, FromData, ToData}
 import scalus.uplc.builtin.Builtins.*
-import scalus.cardano.onchain.plutus.prelude.{<=>, ===, Eq, List, Option, Ord, Order}
+import scalus.cardano.onchain.plutus.prelude.{<=>, ===, fail, Eq, List, Option, Ord, Order}
 import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.onchain.plutus.v1.IntervalBoundType.Finite
 
@@ -127,6 +127,14 @@ object IntervalBound {
             case Order.Greater => lhs
 
     extension (self: IntervalBound) {
+
+        /** The bound's time, or `default` if the bound is not finite.
+          *
+          * Inventing a value for an unbounded side is a trap: `validRange.from.finite(0)` treats a
+          * transaction with NO lower bound as happening at the Unix epoch, and every "has the
+          * deadline passed?" comparison flips. Prefer [[finiteOrFail]], or `TxInfo.validFromOrFail`
+          * / `validToOrFail`, which also state the ledger's inclusivity convention.
+          */
         inline def finite(default: PosixTime): PosixTime = self.boundType match
             case IntervalBoundType.Finite(time) => time
             case _                              => default
@@ -309,28 +317,30 @@ object DCert {
 
     given Eq[DCert] = Eq.structural: (x: DCert, y: DCert) =>
         x match
-            case DCert.DelegRegKey(cred) =>
+            case DCert.DelegRegKey(lhsCred) =>
                 y match
-                    case DCert.DelegRegKey(cred) => cred === cred
-                    case _                       => false
+                    case DCert.DelegRegKey(rhsCred) => lhsCred === rhsCred
+                    case _                          => false
 
-            case DCert.DelegDeRegKey(cred) =>
+            case DCert.DelegDeRegKey(lhsCred) =>
                 y match
-                    case DCert.DelegDeRegKey(cred) => cred === cred
-                    case _                         => false
-            case DCert.DelegDelegate(cred, delegatee) =>
+                    case DCert.DelegDeRegKey(rhsCred) => lhsCred === rhsCred
+                    case _                            => false
+            case DCert.DelegDelegate(lhsCred, lhsDelegatee) =>
                 y match
-                    case DCert.DelegDelegate(cred, delegatee) =>
-                        cred === cred && delegatee === delegatee
+                    case DCert.DelegDelegate(rhsCred, rhsDelegatee) =>
+                        lhsCred === rhsCred && lhsDelegatee === rhsDelegatee
                     case _ => false
-            case DCert.PoolRegister(poolId, vrf) =>
+            case DCert.PoolRegister(lhsPoolId, lhsVrf) =>
                 y match
-                    case DCert.PoolRegister(poolId, vrf) => poolId === poolId && vrf === vrf
-                    case _                               => false
-            case DCert.PoolRetire(poolId, epoch) =>
+                    case DCert.PoolRegister(rhsPoolId, rhsVrf) =>
+                        lhsPoolId === rhsPoolId && lhsVrf === rhsVrf
+                    case _ => false
+            case DCert.PoolRetire(lhsPoolId, lhsEpoch) =>
                 y match
-                    case DCert.PoolRetire(poolId, epoch) => poolId === poolId && epoch === epoch
-                    case _                               => false
+                    case DCert.PoolRetire(rhsPoolId, rhsEpoch) =>
+                        lhsPoolId === rhsPoolId && lhsEpoch === rhsEpoch
+                    case _ => false
             case DCert.Genesis =>
                 y match
                     case DCert.Genesis => true
@@ -507,6 +517,35 @@ object Credential {
         def scriptOption: Option[ValidatorHash] = self match
             case Credential.ScriptCredential(hash) => Option.Some(hash)
             case _                                 => Option.None
+
+        /** The script hash of a `ScriptCredential`, or fails with `message` for a key credential.
+          *
+          * A direct match with no intermediate `Option`, unlike `scriptOption.getOrFail(message)`,
+          * which allocates one that nothing folds away.
+          *
+          * @example
+          *   {{{
+          *   Credential.ScriptCredential(hash).scriptHashOrFail("expected a script") === hash
+          *   Credential.PubKeyCredential(pkh).scriptHashOrFail("expected a script") // fails
+          *   }}}
+          */
+        inline def scriptHashOrFail(inline message: String): ValidatorHash = self match
+            case Credential.ScriptCredential(hash) => hash
+            case _                                 => fail(message)
+
+        /** The key hash of a `PubKeyCredential`, or fails with `message` for a script credential.
+          *
+          * A direct match with no intermediate `Option`, unlike `pubKeyOption.getOrFail(message)`.
+          *
+          * @example
+          *   {{{
+          *   Credential.PubKeyCredential(pkh).pubKeyHashOrFail("expected a key") === pkh
+          *   Credential.ScriptCredential(hash).pubKeyHashOrFail("expected a key") // fails
+          *   }}}
+          */
+        inline def pubKeyHashOrFail(inline message: String): PubKeyHash = self match
+            case Credential.PubKeyCredential(hash) => hash
+            case _                                 => fail(message)
     }
 }
 
@@ -573,6 +612,11 @@ object Address {
     /** Smart-constructor for an [[scalus.cardano.onchain.plutus.v1.Address]] from a
       * [[scalus.cardano.onchain.plutus.v1.ScriptHash]]. The resulting address has no delegation
       * rights whatsoever.
+      *
+      * The result has `stakingCredential = None`. Never compare it against a real output's address
+      * to locate a script's output: any output with a staking part will not match, and a check
+      * written as "some output equals this" is trivially bypassed. Use
+      * `TxInfo.findContinuingOutputOrFail` or compare against the address of a real input.
       */
     inline def fromScriptHash(script: ScriptHash): Address =
         fromCredential(Credential.ScriptCredential(script))
@@ -580,6 +624,9 @@ object Address {
     /** Smart-constructor for an [[scalus.cardano.onchain.plutus.v1.Address]] from a
       * [[scalus.cardano.onchain.plutus.v1.PubKeyHash]]. The resulting address has no delegation
       * rights whatsoever.
+      *
+      * The result has `stakingCredential = None`. Do not compare it against a real output's
+      * address: any output with a staking part will not match.
       */
     inline def fromPubKeyHash(pubKey: PubKeyHash): Address =
         fromCredential(Credential.PubKeyCredential(pubKey))
@@ -742,22 +789,22 @@ object ScriptPurpose {
 
     given Eq[ScriptPurpose] = Eq.structural: (x: ScriptPurpose, y: ScriptPurpose) =>
         x match
-            case ScriptPurpose.Minting(curSymbol) =>
+            case ScriptPurpose.Minting(lhsSymbol) =>
                 y match
-                    case ScriptPurpose.Minting(curSymbol) => curSymbol === curSymbol
+                    case ScriptPurpose.Minting(rhsSymbol) => lhsSymbol === rhsSymbol
                     case _                                => false
-            case ScriptPurpose.Spending(txOutRef) =>
+            case ScriptPurpose.Spending(lhsRef) =>
                 y match
-                    case ScriptPurpose.Spending(txOutRef) => txOutRef === txOutRef
-                    case _                                => false
-            case ScriptPurpose.Rewarding(stakingCred) =>
-                y match
-                    case ScriptPurpose.Rewarding(stakingCred) => stakingCred === stakingCred
-                    case _                                    => false
-            case ScriptPurpose.Certifying(cert) =>
-                y match
-                    case ScriptPurpose.Certifying(cert) => cert === cert
+                    case ScriptPurpose.Spending(rhsRef) => lhsRef === rhsRef
                     case _                              => false
+            case ScriptPurpose.Rewarding(lhsCred) =>
+                y match
+                    case ScriptPurpose.Rewarding(rhsCred) => lhsCred === rhsCred
+                    case _                                => false
+            case ScriptPurpose.Certifying(lhsCert) =>
+                y match
+                    case ScriptPurpose.Certifying(rhsCert) => lhsCert === rhsCert
+                    case _                                 => false
 
     given Ord[ScriptPurpose] = (x: ScriptPurpose, y: ScriptPurpose) =>
         x match

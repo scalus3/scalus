@@ -1,9 +1,10 @@
 package scalus.prelude
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.ExUnits
+import scalus.cardano.ledger.{Coin, ExUnits}
 import scalus.cardano.onchain.RequirementError
 import scalus.cardano.onchain.plutus.prelude.Math.*
+import scalus.cardano.onchain.plutus.prelude.{divCeil, divFloor, Math}
 import scalus.compiler.Options
 import scalus.compiler.sir.TargetLoweringBackend
 import scalus.testing.kit.EvalTestKit
@@ -382,4 +383,54 @@ class MathTest extends AnyFunSuite with EvalTestKit:
           Seq(
             compilerOptions -> ExUnits(memory = 3802, steps = 681227)
           )
+        )
+
+    test("divFloor and divCeil"):
+        checkEval: (a: BigInt, b: BigInt) =>
+            if b == BigInt(0) then true
+            else
+                val floor = Math.divFloor(a, b)
+                val ceil = Math.divCeil(a, b)
+                // floor <= a/b <= ceil, differing by exactly one when the division is inexact.
+                val floorBracketsQuotient =
+                    if b > 0 then floor * b <= a && a < (floor + 1) * b
+                    else floor * b >= a && a > (floor + 1) * b
+                val ceilBracketsQuotient =
+                    if b > 0 then ceil * b >= a && a > (ceil - 1) * b
+                    else ceil * b <= a && a < (ceil - 1) * b
+                floorBracketsQuotient && ceilBracketsQuotient &&
+                ((a % b == BigInt(0)) == (floor == ceil)) &&
+                (floor == ceil || ceil - floor == BigInt(1))
+
+        // The four sign cases, where Scala's `/` truncates toward zero.
+        assertEvalEq(Math.divFloor(7, 2), BigInt(3))
+        assertEvalEq(Math.divFloor(-7, 2), BigInt(-4))
+        assertEvalEq(Math.divFloor(7, -2), BigInt(-4))
+        assertEvalEq(Math.divFloor(-7, -2), BigInt(3))
+        assertEvalEq(Math.divCeil(7, 2), BigInt(4))
+        assertEvalEq(Math.divCeil(-7, 2), BigInt(-3))
+        assertEvalEq(Math.divCeil(7, -2), BigInt(-3))
+        assertEvalEq(Math.divCeil(-7, -2), BigInt(4))
+        assertEvalEq(Math.divCeil(6, 2), BigInt(3))
+        assertEvalEq(Math.divFloor(6, 2), BigInt(3))
+        // Infix form.
+        assertEvalEq(BigInt(7) divCeil BigInt(2), BigInt(4))
+        assertEvalEq(BigInt(-7) divFloor BigInt(2), BigInt(-4))
+
+    test("budget: divFloor"):
+        assertEvalWithBudgetAndFee(
+          (ab: (BigInt, BigInt)) => Math.divFloor(ab._1, ab._2),
+          (BigInt(-7), BigInt(2)),
+          BigInt(-4),
+          ExUnits(memory = 3989, steps = 1_331052),
+          Coin(327)
+        )
+
+    test("budget: divCeil"):
+        assertEvalWithBudgetAndFee(
+          (ab: (BigInt, BigInt)) => Math.divCeil(ab._1, ab._2),
+          (BigInt(-7), BigInt(2)),
+          BigInt(-3),
+          ExUnits(memory = 4793, steps = 1_661468),
+          Coin(397)
         )

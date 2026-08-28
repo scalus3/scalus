@@ -10,8 +10,13 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.Checkers.*
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
+import scalus.cardano.onchain.OnchainError
 import scalus.cardano.onchain.plutus.prelude.List.*
 import scalus.cardano.onchain.plutus.prelude.These.*
+import scalus.uplc.Term.asTerm
+import scalus.uplc.builtin.Data
+import scalus.uplc.builtin.Data.toData
+import scalus.uplc.eval.PlutusVM
 import scalus.uplc.test.ArbitraryInstances
 
 @Compile
@@ -40,6 +45,8 @@ private object AssocMapTest {
 
 class AssocMapTest extends AnyFunSuite with ScalaCheckPropertyChecks with ArbitraryInstances {
 
+    private given PlutusVM = PlutusVM.makePlutusV3VM()
+
     given compiler.Options = compiler.Options(
       targetLoweringBackend = compiler.sir.TargetLoweringBackend.SirToUplcV3Lowering,
       generateErrorTraces = true,
@@ -49,6 +56,30 @@ class AssocMapTest extends AnyFunSuite with ScalaCheckPropertyChecks with Arbitr
 
     test("empty") {
         assert(AssocMap.empty.toList == List.Nil)
+    }
+
+    test("singleOrFail") {
+        import AssocMapTest.*
+        assert(
+          AssocMap.singleton(BigInt(1), BigInt(2)).singleOrFail("expected one") == (
+            BigInt(1),
+            BigInt(2)
+          )
+        )
+        intercept[OnchainError](AssocMap.empty[BigInt, BigInt].singleOrFail("expected one"))
+        intercept[OnchainError](m1.singleOrFail("expected one"))
+        // On-chain: the same three cases through the compiler.
+        val compiled = compiler.compile { (d: Data) =>
+            d.to[AssocMap[BigInt, BigInt]].singleOrFail("expected one")._2
+        }
+        val term = compiled.toUplc()
+        assert(
+          (term $ AssocMap.singleton(BigInt(1), BigInt(2)).toData.asTerm).evaluate == BigInt(
+            2
+          ).asTerm
+        )
+        assert((term $ m1.toData.asTerm).evaluateDebug.isFailure)
+        assert((term $ AssocMap.empty[BigInt, BigInt].toData.asTerm).evaluateDebug.isFailure)
     }
 
     test("union") {

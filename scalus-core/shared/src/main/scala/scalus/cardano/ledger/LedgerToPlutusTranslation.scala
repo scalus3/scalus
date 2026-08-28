@@ -248,7 +248,7 @@ object LedgerToPlutusTranslation {
         val assets = mint.getOrElse(MultiAsset.empty)
         val adaEntry = Seq(
           ByteString.empty -> scalus.cardano.onchain.plutus.prelude.List
-              .single(ByteString.empty, BigInt(0))
+              .singleton(ByteString.empty, BigInt(0))
         )
         val allEntries = adaEntry ++ assets.assets.view.map { case (policyId, assets) =>
             val assetMap = scalus.cardano.onchain.plutus.prelude.List.from(assets.view.map:

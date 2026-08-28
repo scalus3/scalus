@@ -634,7 +634,7 @@ class CommonSubexpressionEliminationTest
         )
         given Options = opts
 
-        val compiled = PlutusV3.compile(List.single(BigInt(1)).at(0))
+        val compiled = PlutusV3.compile(List.singleton(BigInt(1)).at(0))
         val noCse = compiled.program.term
 
         val cse = new CommonSubexpressionElimination()

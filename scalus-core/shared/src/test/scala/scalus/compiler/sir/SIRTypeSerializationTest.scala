@@ -56,7 +56,7 @@ class SIRTypeSerializationTest extends AnyFunSuite {
               referenceScript = scalus.cardano.onchain.plutus.prelude.Option.None
             )
             val inputs = scalus.cardano.onchain.plutus.prelude.List
-                .single(new TxInInfo(outRef, outRefResolved))
+                .singleton(new TxInInfo(outRef, outRefResolved))
             val credential2 =
                 new Credential.PubKeyCredential(new PubKeyHash(ByteString.fromString("5")))
             val addressOut =
@@ -65,7 +65,7 @@ class SIRTypeSerializationTest extends AnyFunSuite {
                   stakingCredential = scalus.cardano.onchain.plutus.prelude.Option.None
                 )
             val valueOut = Value(ByteString.empty, ByteString.empty, 2)
-            val outputs = scalus.cardano.onchain.plutus.prelude.List.single(
+            val outputs = scalus.cardano.onchain.plutus.prelude.List.singleton(
               new TxOut(
                 addressOut,
                 valueOut,

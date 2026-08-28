@@ -983,6 +983,55 @@ object Value extends ValueOffchainOps {
           */
         def withoutLovelace: Value = v.insertCoin(adaPolicyId, adaTokenName, BigInt(0))
 
+        /** Checks that exactly one unit of the `(cs, tn)` asset is present. Other assets, under
+          * this policy or any other, are tolerated.
+          *
+          * This is the state-token / beacon check. The strict twin, which also rejects any other
+          * token under `cs`, is [[hasOnly]] with amount `1`. A quantity compared with `> 0` is a
+          * different predicate for any asset that is not an NFT; prefer this one for tokens that
+          * are minted exactly once.
+          *
+          * @param cs
+          *   The policy id
+          * @param tn
+          *   The token name
+          * @return
+          *   `true` if `quantityOf(cs, tn)` is exactly `1`
+          * @example
+          *   {{{
+          *   Value(utf8"pid", utf8"BEACON", 1).hasNft(utf8"pid", utf8"BEACON") === true
+          *   Value(utf8"pid", utf8"BEACON", 2).hasNft(utf8"pid", utf8"BEACON") === false
+          *   Value.lovelace(1).hasNft(utf8"pid", utf8"BEACON") === false
+          *   }}}
+          */
+        inline def hasNft(cs: PolicyId, tn: TokenName): Boolean =
+            v.quantityOf(cs, tn) === BigInt(1)
+
+        /** Checks that every non-ADA asset of this `Value` is exactly equal to `expected`'s and its
+          * lovelace is at least `expected`'s.
+          *
+          * This is the continuing-output value check. Neither plain comparison is right: `===`
+          * rejects a valid transaction whenever the builder must add lovelace to clear the
+          * minimum-ADA requirement, and a whole-value `>=` lets one output satisfy two "at least"
+          * obligations. Tokens exact, ADA open above.
+          *
+          * @param expected
+          *   The value the output must carry, up to extra lovelace
+          * @return
+          *   `true` if the non-ADA parts are equal and this value's lovelace is not below
+          *   `expected`'s
+          * @example
+          *   {{{
+          *   val expected = Value.lovelace(2_000_000) + Value(utf8"pid", utf8"TOKEN", 5)
+          *   (expected + Value.lovelace(500_000)).hasSameTokensAndAtLeastAda(expected) === true
+          *   expected.hasSameTokensAndAtLeastAda(expected) === true
+          *   (expected - Value.lovelace(1)).hasSameTokensAndAtLeastAda(expected) === false
+          *   (expected + Value(utf8"pid", utf8"TOKEN", 1)).hasSameTokensAndAtLeastAda(expected) === false
+          *   }}}
+          */
+        def hasSameTokensAndAtLeastAda(expected: Value): Boolean =
+            v.withoutLovelace === expected.withoutLovelace && v.getLovelace >= expected.getLovelace
+
         /** Flattens the `Value` into a list of policy id, token name, and amount triples.
           *
           * Converts the nested map structure into a flat list representation where each element

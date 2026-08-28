@@ -82,14 +82,14 @@ class SelfApplicationRecursionTest extends AnyFunSuite {
 
         // Trace-free (generateErrorTraces defaults to true, so disable explicitly):
         // the whole program folds to a constant.
-        val uplc = compile(List.single(BigInt(1)).last)
+        val uplc = compile(List.singleton(BigInt(1)).last)
             .toUplc(using Options(generateErrorTraces = false, optimizeUplc = true))()
         assert(uplc == 1.asTerm, s"expected full constant fold, got: ${uplc.show}")
 
         // With error traces (the original ListTest regression scenario) the fold is partial:
         // `last`'s "last of empty list" trace blocks PartialEvaluator (it refuses terms
         // containing Trace), so the final match survives while the recursion folds away.
-        val traced = compile(List.single(BigInt(1)).last)
+        val traced = compile(List.singleton(BigInt(1)).last)
             .toUplc(using Options(generateErrorTraces = true, optimizeUplc = true))()
         val result = traced.evaluateDebug
         assert(result.isSuccess, s"evaluation failed: $result")

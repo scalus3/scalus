@@ -10,8 +10,45 @@
   eta-reduction is unsound in call-by-value when the wrapper delays work, so a redex collapses
   only when the head provably accepts that many arguments without performing any
 
+### Changed
+
+- `scalus-design-patterns`: the validator callbacks of `UtxoIndexer`, `StakeValidator` and
+  `TransactionLevelMinterValidator` now return `Unit` and are expected to `require` / `fail` with
+  their own message, instead of returning `Boolean` and failing with a generic library message. A
+  `Boolean` callback could only ever report "validator failed", and a stray `false` from a missed
+  branch was silent. The generic `*ValidatorFailed` message constants are gone. The module has no
+  MiMa baseline yet, so this is an in-place change. **Migration hazard:** an existing `Boolean`
+  lambda still compiles against the `Unit` parameter (value discard) and then checks nothing;
+  after upgrading, grep every callback passed to these patterns and wrap its condition in
+  `require(..., message)`
+- Examples migrated to the safe API (`findInputOrFail`, `hasInlineDatum`, `hasNft`,
+  `validFromOrFail` / `validToOrFail`, `valuePaidTo` / `valueSpentFrom`, `onlyBurnsUnder`). Every
+  pinned budget moved downward; `HtlcValidator` shrank from 322 to 318 bytes and its CAPE script
+  from 582 to 548 bytes, and the CAPE two-party escrow moved from hand-navigated `Data` to the
+  typed `Validator` context, shrinking from 1174 to 1079 bytes with every measured budget lower. `EscrowValidator` now compares its continuing output as a whole `Value`,
+  so tokens can no longer be stripped from the escrow UTxO, and `VestingValidator`,
+  `DecentralizedIdentityValidator` and `OnChainCellOps` fail on an unbounded validity range where
+  they used to read it as the Unix epoch
+
+### Deprecated
+
+- `TxInfo.findOwnInput`, `findOwnInputOrFail`, `findOwnDatum`, `findOwnScriptOutputs`,
+  `findOwnInputsByCredential`, `findOwnOutputsByCredential` are renamed without the `Own`, which
+  is a Plutus inheritance that is wrong for every Scalus version (all take an explicit
+  argument); `findOwnInputs` / `findOwnOutputs` are `inputs.filter` / `outputs.filter`
+- `TxInfo.getValidityStartTime` returned `0` for an unbounded range, so a transaction with no
+  lower bound passed every "not before" deadline; use `validFromOrFail(msg)`
+- `Utils.getAdaFromOutputs` / `getAdaFromInputs` sum lovelace only and let native tokens be
+  stripped; use `TxInfo.valuePaidTo(addr)` / `valueSpentFrom(addr)`
+- `List.single` / `PairList.single`; use `singleton`
+- Scaladoc warnings on `IntervalBound.finite(default)`, `Address.fromScriptHash` /
+  `fromPubKeyHash` (no staking part) and the payment-credential-only output finders
+
 ### Fixed
 
+- `Eq[DCert]` and `Eq[ScriptPurpose]` (Plutus V1) compared every field to itself: the inner
+  pattern binder shadowed the outer one, so any two values with the same constructor were equal
+  off-chain. On-chain the lowering replaces `Eq` with structural `equalsData`, which hid it
 - `dischargeCekValEnv` returned `Constr` and `Case` nodes untouched, so a variable inside a
   constructor argument or a case branch kept its unresolved name whenever a CEK value was
   discharged back to a term
@@ -23,6 +60,23 @@
 
 ### Added
 
+- On-chain safe API, nineteen operations the research corpus showed contract authors
+  re-implement by hand with a measurable rate of security-relevant divergence. Prelude:
+  `List.findUniqueOrFail(p, msg)` (one pass, fails on zero or two matches, where `find` accepts a
+  second), `List.singleOrFail(msg)` and `SortedMap`/`AssocMap.singleOrFail(msg)` (the only
+  element of a size-one collection, where `head` accepts the first of many),
+  `a divFloor b` / `a divCeil b` (explicit rounding, one `divideInteger` each). `Credential`:
+  `scriptHashOrFail(msg)`, `pubKeyHashOrFail(msg)`. `Value`: `hasNft(policy, name)` (exactly
+  one; the strict twin is `hasOnly(policy, name, 1)`), `hasSameTokensAndAtLeastAda(expected)`
+  (tokens exact, ADA open above, the continuing-output value check). `TxOut.hasInlineDatum(x)`,
+  measured cheaper than `datum.inlineOrFail[T](msg) === x` (286 vs 461 lovelace) because the
+  decode form unwraps and rewraps before `equalsData`. `TxInfo`: `findContinuingOutputOrFail`
+  (compares the whole address, staking part included), `valuePaidTo` / `valueSpentFrom` (whole
+  `Value`, not lovelace only), `isSignedByAny`, `validFromOrFail` / `validToOrFail` (lower bound
+  inclusive, upper bound exclusive, as the ledger builds them), `onlyBurnsUnder` (guards the
+  empty sub-map that makes `forall` vacuously true), `hasPaidTagged` (the tagged-output
+  double-satisfaction defence). `TxOutRef.deriveTokenName` is `blake2b_256(serialiseData(ref))`
+- `List.singleton` and `PairList.singleton`, the constructor name the map types already used
 - Streaming subscriptions in `scalus.cardano.node.stream`: `BlockchainStreamProvider` /
   `BlockchainStreamReader` (and their `TF` variants over a generic effect) add rollback-aware
   event subscriptions to the existing reader/provider pair. Everything that changes over time

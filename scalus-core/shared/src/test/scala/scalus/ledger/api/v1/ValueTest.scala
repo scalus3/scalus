@@ -1,7 +1,7 @@
 package scalus.cardano.onchain.plutus.v1
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.cardano.ledger.{ExUnits, MajorProtocolVersion}
+import scalus.cardano.ledger.{Coin, ExUnits, MajorProtocolVersion}
 import scalus.uplc.PlutusV3
 import scalus.uplc.Term.asTerm
 import scalus.uplc.builtin.Data.{fromData, toData}
@@ -1279,6 +1279,97 @@ class ValueTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
         assertEvalEq(
           Value(hex"aa", utf8"tokenX", 5).insertCoin(hex"bb", utf8"tokenY", BigInt(0)),
           Value(hex"aa", utf8"tokenX", 5)
+        )
+    }
+
+    test("hasNft") {
+        checkEval { (value: Value, cs: PolicyId, tn: TokenName) =>
+            value.hasNft(cs, tn) === (value.quantityOf(cs, tn) === BigInt(1))
+        }
+        assertEval(Value(hex"aa", utf8"BEACON", 1).hasNft(hex"aa", utf8"BEACON"))
+        assertEval(!Value(hex"aa", utf8"BEACON", 2).hasNft(hex"aa", utf8"BEACON"))
+        assertEval(!Value.lovelace(1).hasNft(hex"aa", utf8"BEACON"))
+        // Other assets are tolerated, under the same policy or another.
+        assertEval(
+          Value
+              .unsafeFromList(
+                List(
+                  (hex"aa", List((utf8"BEACON", BigInt(1)), (utf8"OTHER", BigInt(9)))),
+                  (hex"ff", List((utf8"tokenY", BigInt(2))))
+                )
+              )
+              .hasNft(hex"aa", utf8"BEACON")
+        )
+    }
+
+    test("budget: hasNft") {
+        assertEvalWithBudgetAndFee(
+          (v: Value) => v.hasNft(hex"aa", utf8"BEACON"),
+          Value.lovelace(2_000_000) + Value(hex"aa", utf8"BEACON", 1) + Value(hex"ff", utf8"X", 3),
+          true,
+          ExUnits(memory = 1746, steps = 1_789014),
+          Coin(230)
+        )
+    }
+
+    test("budget: hasSameTokensAndAtLeastAda") {
+        assertEvalWithBudgetAndFee(
+          (v: Value) =>
+              v.hasSameTokensAndAtLeastAda(
+                Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5)
+              ),
+          Value.lovelace(2_500_000) + Value(hex"aa", utf8"TOKEN", 5),
+          true,
+          ExUnits(memory = 20170, steps = 11_586206),
+          Coin(2000)
+        )
+    }
+
+    test("hasSameTokensAndAtLeastAda") {
+        // Reference: tokens exact, ADA >=.
+        checkEval { (value: Value, expected: Value) =>
+            value.hasSameTokensAndAtLeastAda(expected) ===
+                (value.withoutLovelace === expected.withoutLovelace &&
+                    value.getLovelace >= expected.getLovelace)
+        }
+        assertEval(
+          (Value.lovelace(2_500_000) + Value(hex"aa", utf8"TOKEN", 5))
+              .hasSameTokensAndAtLeastAda(
+                Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5)
+              )
+        )
+        assertEval(
+          (Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5))
+              .hasSameTokensAndAtLeastAda(
+                Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5)
+              )
+        )
+        // ADA below.
+        assertEval(
+          !(Value.lovelace(1_999_999) + Value(hex"aa", utf8"TOKEN", 5))
+              .hasSameTokensAndAtLeastAda(
+                Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5)
+              )
+        )
+        // Token delta in either direction.
+        assertEval(
+          !(Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 6))
+              .hasSameTokensAndAtLeastAda(
+                Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5)
+              )
+        )
+        assertEval(
+          !(Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5) + Value(hex"bb", utf8"X", 1))
+              .hasSameTokensAndAtLeastAda(
+                Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5)
+              )
+        )
+        assertEval(
+          !Value
+              .lovelace(2_000_000)
+              .hasSameTokensAndAtLeastAda(
+                Value.lovelace(2_000_000) + Value(hex"aa", utf8"TOKEN", 5)
+              )
         )
     }
 

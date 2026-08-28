@@ -37,7 +37,7 @@ object OrderReprDefs {
       * `SumUplcConstr` <-> container-element boundary rather than the direct scrutinee path.
       */
     def viaList(a: BigInt, b: BigInt, c: BigInt, d: BigInt): BigInt = {
-        val orders = List.Cons(a <=> b, List.single(c <=> d))
+        val orders = List.Cons(a <=> b, List.singleton(c <=> d))
         orders.foldLeft(BigInt(0)) { (acc, o) =>
             acc + (o match
                 case Order.Less    => BigInt(1)

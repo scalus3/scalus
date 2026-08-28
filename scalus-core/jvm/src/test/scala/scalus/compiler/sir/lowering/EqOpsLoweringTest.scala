@@ -32,7 +32,7 @@ class EqOpsLoweringTest extends AnyFunSuite {
     test("indexOf on a case-class element list (UplcConstr, eq dropped)") {
         val compiled = PlutusV3.compile {
             List
-                .Cons(CPoint(BigInt(1), BigInt(2)), List.single(CPoint(BigInt(3), BigInt(4))))
+                .Cons(CPoint(BigInt(1), BigInt(2)), List.singleton(CPoint(BigInt(3), BigInt(4))))
                 .indexOf(CPoint(BigInt(3), BigInt(4)))
         }
         assert(compiled.program.term.evaluate == BigInt(1).asTerm)
@@ -40,14 +40,14 @@ class EqOpsLoweringTest extends AnyFunSuite {
 
     test("indexOf — element not present returns -1") {
         val compiled = PlutusV3.compile {
-            List.single(CPoint(BigInt(1), BigInt(2))).indexOf(CPoint(BigInt(9), BigInt(9)))
+            List.singleton(CPoint(BigInt(1), BigInt(2))).indexOf(CPoint(BigInt(9), BigInt(9)))
         }
         assert(compiled.program.term.evaluate == BigInt(-1).asTerm)
     }
 
     test("indexOf on a BigInt list (builtin/native repr)") {
         val compiled = PlutusV3.compile {
-            List.Cons(BigInt(10), List.Cons(BigInt(20), List.single(BigInt(30))))
+            List.Cons(BigInt(10), List.Cons(BigInt(20), List.singleton(BigInt(30))))
                 .indexOf(BigInt(20))
         }
         assert(compiled.program.term.evaluate == BigInt(1).asTerm)
@@ -56,7 +56,7 @@ class EqOpsLoweringTest extends AnyFunSuite {
     test("indexOf via a generic function (abstract element type)") {
         val compiled = PlutusV3.compile {
             EqOpsHelpers.genericIndexOf(
-              List.single(CPoint(BigInt(5), BigInt(6))),
+              List.singleton(CPoint(BigInt(5), BigInt(6))),
               CPoint(BigInt(5), BigInt(6))
             )
         }
@@ -101,10 +101,10 @@ class EqOpsLoweringTest extends AnyFunSuite {
             val xs: List[BigInt] =
                 List.Cons(
                   BigInt(1),
-                  List.Cons(BigInt(2), List.Cons(BigInt(2), List.single(BigInt(3))))
+                  List.Cons(BigInt(2), List.Cons(BigInt(2), List.singleton(BigInt(3))))
                 )
             val expected: List[BigInt] =
-                List.Cons(BigInt(1), List.Cons(BigInt(2), List.single(BigInt(3))))
+                List.Cons(BigInt(1), List.Cons(BigInt(2), List.singleton(BigInt(3))))
             xs.deleteFirst(BigInt(2)) === expected
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -112,7 +112,7 @@ class EqOpsLoweringTest extends AnyFunSuite {
 
     test("deleteFirst — element not present leaves the list unchanged") {
         val compiled = PlutusV3.compile {
-            val xs: List[BigInt] = List.Cons(BigInt(1), List.single(BigInt(2)))
+            val xs: List[BigInt] = List.Cons(BigInt(1), List.singleton(BigInt(2)))
             xs.deleteFirst(BigInt(9)) === xs
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -122,10 +122,13 @@ class EqOpsLoweringTest extends AnyFunSuite {
         val compiled = PlutusV3.compile {
             val xs: List[CPoint] = List.Cons(
               CPoint(BigInt(1), BigInt(1)),
-              List.Cons(CPoint(BigInt(2), BigInt(2)), List.single(CPoint(BigInt(2), BigInt(2))))
+              List.Cons(CPoint(BigInt(2), BigInt(2)), List.singleton(CPoint(BigInt(2), BigInt(2))))
             )
             val expected: List[CPoint] =
-                List.Cons(CPoint(BigInt(1), BigInt(1)), List.single(CPoint(BigInt(2), BigInt(2))))
+                List.Cons(
+                  CPoint(BigInt(1), BigInt(1)),
+                  List.singleton(CPoint(BigInt(2), BigInt(2)))
+                )
             xs.deleteFirst(CPoint(BigInt(2), BigInt(2))) === expected
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -134,9 +137,9 @@ class EqOpsLoweringTest extends AnyFunSuite {
     test("deleteFirst via a generic function (abstract element type)") {
         val compiled = PlutusV3.compile {
             EqOpsHelpers.genericDeleteFirst(
-              List.Cons(CPoint(BigInt(1), BigInt(1)), List.single(CPoint(BigInt(2), BigInt(2)))),
+              List.Cons(CPoint(BigInt(1), BigInt(1)), List.singleton(CPoint(BigInt(2), BigInt(2)))),
               CPoint(BigInt(1), BigInt(1)),
-              List.single(CPoint(BigInt(2), BigInt(2)))
+              List.singleton(CPoint(BigInt(2), BigInt(2)))
             )
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -150,11 +153,11 @@ class EqOpsLoweringTest extends AnyFunSuite {
               BigInt(1),
               List.Cons(
                 BigInt(2),
-                List.Cons(BigInt(1), List.Cons(BigInt(3), List.single(BigInt(2))))
+                List.Cons(BigInt(1), List.Cons(BigInt(3), List.singleton(BigInt(2))))
               )
             )
             val expected: List[BigInt] =
-                List.Cons(BigInt(1), List.Cons(BigInt(2), List.single(BigInt(3))))
+                List.Cons(BigInt(1), List.Cons(BigInt(2), List.singleton(BigInt(3))))
             xs.distinct === expected
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -164,10 +167,13 @@ class EqOpsLoweringTest extends AnyFunSuite {
         val compiled = PlutusV3.compile {
             val xs: List[CPoint] = List.Cons(
               CPoint(BigInt(1), BigInt(1)),
-              List.Cons(CPoint(BigInt(2), BigInt(2)), List.single(CPoint(BigInt(1), BigInt(1))))
+              List.Cons(CPoint(BigInt(2), BigInt(2)), List.singleton(CPoint(BigInt(1), BigInt(1))))
             )
             val expected: List[CPoint] =
-                List.Cons(CPoint(BigInt(1), BigInt(1)), List.single(CPoint(BigInt(2), BigInt(2))))
+                List.Cons(
+                  CPoint(BigInt(1), BigInt(1)),
+                  List.singleton(CPoint(BigInt(2), BigInt(2)))
+                )
             xs.distinct === expected
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -176,8 +182,8 @@ class EqOpsLoweringTest extends AnyFunSuite {
     test("distinct via a generic function (abstract element type)") {
         val compiled = PlutusV3.compile {
             EqOpsHelpers.genericDistinct(
-              List.Cons(BigInt(5), List.Cons(BigInt(5), List.single(BigInt(6)))),
-              List.Cons(BigInt(5), List.single(BigInt(6)))
+              List.Cons(BigInt(5), List.Cons(BigInt(5), List.singleton(BigInt(6)))),
+              List.Cons(BigInt(5), List.singleton(BigInt(6)))
             )
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -188,9 +194,9 @@ class EqOpsLoweringTest extends AnyFunSuite {
     test("diff on a BigInt list (native repr)") {
         val compiled = PlutusV3.compile {
             val xs: List[BigInt] =
-                List.Cons(BigInt(1), List.Cons(BigInt(2), List.single(BigInt(3))))
-            val ys: List[BigInt] = List.single(BigInt(2))
-            val expected: List[BigInt] = List.Cons(BigInt(1), List.single(BigInt(3)))
+                List.Cons(BigInt(1), List.Cons(BigInt(2), List.singleton(BigInt(3))))
+            val ys: List[BigInt] = List.singleton(BigInt(2))
+            val expected: List[BigInt] = List.Cons(BigInt(1), List.singleton(BigInt(3)))
             xs.diff(ys) === expected
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -200,11 +206,14 @@ class EqOpsLoweringTest extends AnyFunSuite {
         val compiled = PlutusV3.compile {
             val xs: List[CPoint] = List.Cons(
               CPoint(BigInt(1), BigInt(1)),
-              List.Cons(CPoint(BigInt(2), BigInt(2)), List.single(CPoint(BigInt(3), BigInt(3))))
+              List.Cons(CPoint(BigInt(2), BigInt(2)), List.singleton(CPoint(BigInt(3), BigInt(3))))
             )
-            val ys: List[CPoint] = List.single(CPoint(BigInt(2), BigInt(2)))
+            val ys: List[CPoint] = List.singleton(CPoint(BigInt(2), BigInt(2)))
             val expected: List[CPoint] =
-                List.Cons(CPoint(BigInt(1), BigInt(1)), List.single(CPoint(BigInt(3), BigInt(3))))
+                List.Cons(
+                  CPoint(BigInt(1), BigInt(1)),
+                  List.singleton(CPoint(BigInt(3), BigInt(3)))
+                )
             xs.diff(ys) === expected
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -213,9 +222,9 @@ class EqOpsLoweringTest extends AnyFunSuite {
     test("diff via a generic function (abstract element type)") {
         val compiled = PlutusV3.compile {
             EqOpsHelpers.genericDiff(
-              List.Cons(BigInt(1), List.Cons(BigInt(2), List.single(BigInt(3)))),
-              List.single(BigInt(2)),
-              List.Cons(BigInt(1), List.single(BigInt(3)))
+              List.Cons(BigInt(1), List.Cons(BigInt(2), List.singleton(BigInt(3)))),
+              List.singleton(BigInt(2)),
+              List.Cons(BigInt(1), List.singleton(BigInt(3)))
             )
         }
         assert(compiled.program.term.evaluate == true.asTerm)
@@ -234,7 +243,7 @@ class EqOpsLoweringTest extends AnyFunSuite {
             @UplcRepr(UplcRepresentation.UplcConstr)
             val xs: List[CPoint] = List.Cons(
               CPoint(BigInt(1), BigInt(1)),
-              List.Cons(CPoint(BigInt(2), BigInt(2)), List.single(CPoint(BigInt(2), BigInt(2))))
+              List.Cons(CPoint(BigInt(2), BigInt(2)), List.singleton(CPoint(BigInt(2), BigInt(2))))
             )
             // delete first (2,2) -> [(1,1), (2,2)]
             val r = xs.deleteFirst(CPoint(BigInt(2), BigInt(2)))
@@ -251,10 +260,10 @@ class EqOpsLoweringTest extends AnyFunSuite {
             @UplcRepr(UplcRepresentation.UplcConstr)
             val xs: List[CPoint] = List.Cons(
               CPoint(BigInt(1), BigInt(1)),
-              List.Cons(CPoint(BigInt(2), BigInt(2)), List.single(CPoint(BigInt(1), BigInt(1))))
+              List.Cons(CPoint(BigInt(2), BigInt(2)), List.singleton(CPoint(BigInt(1), BigInt(1))))
             )
             @UplcRepr(UplcRepresentation.UplcConstr)
-            val ys: List[CPoint] = List.single(CPoint(BigInt(2), BigInt(2)))
+            val ys: List[CPoint] = List.singleton(CPoint(BigInt(2), BigInt(2)))
             val d = xs.distinct // -> [(1,1), (2,2)]
             val f = xs.diff(ys) // -> [(1,1), (1,1)]
             d.length === BigInt(2) &&

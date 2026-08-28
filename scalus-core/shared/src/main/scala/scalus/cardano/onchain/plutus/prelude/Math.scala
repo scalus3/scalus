@@ -3,6 +3,7 @@ package scalus.cardano.onchain.plutus.prelude
 import scalus.compiler.Compile
 import scalus.uplc.builtin
 import scalus.uplc.builtin.Builtins.byteStringToInteger
+import scalus.uplc.builtin.Builtins.divideInteger
 import scalus.uplc.builtin.Builtins.integerToByteString
 import scalus.uplc.builtin.Builtins.shiftByteString
 import scalus.uplc.builtin.ByteString
@@ -48,6 +49,32 @@ object Math:
       *   The maximum.
       */
     inline def max(x: BigInt, y: BigInt): BigInt = if x >= y then x else y
+
+    /** Integer division rounding toward negative infinity.
+      *
+      * Scala's `/` truncates toward zero, so it rounds UP for negative results. Fee and share
+      * arithmetic must state its rounding direction: round the protocol's share down and the user's
+      * obligation up, or a fraction is extracted per transaction. One `divideInteger`.
+      *
+      * @example
+      *   {{{
+      *   divFloor(7, 2) == 3
+      *   divFloor(-7, 2) == -4
+      *   }}}
+      */
+    inline def divFloor(a: BigInt, b: BigInt): BigInt = divideInteger(a, b)
+
+    /** Integer division rounding toward positive infinity.
+      *
+      * The floor of the negation: one `divideInteger` and two `subtractInteger`, no comparison.
+      *
+      * @example
+      *   {{{
+      *   divCeil(7, 2) == 4
+      *   divCeil(-7, 2) == -3
+      *   }}}
+      */
+    inline def divCeil(a: BigInt, b: BigInt): BigInt = -divideInteger(-a, b)
 
     /** Restrict the value of an integer between two min and max bounds
       *
@@ -338,6 +365,26 @@ extension (self: BigInt)
       *   [[scalus.cardano.onchain.plutus.prelude.Math.sqrt]]
       */
     inline def sqRoot: BigInt = Math.sqrt(self)
+
+    /** Integer division rounding toward negative infinity: `total divFloor parts`.
+      *
+      * Alphanumeric infix operators have the LOWEST precedence: `a divFloor n * fee` parses as
+      * `a divFloor (n * fee)`. Parenthesize operand expressions.
+      *
+      * @see
+      *   [[scalus.cardano.onchain.plutus.prelude.Math.divFloor]]
+      */
+    inline infix def divFloor(other: BigInt): BigInt = Math.divFloor(self, other)
+
+    /** Integer division rounding toward positive infinity: `total divCeil parts`.
+      *
+      * Alphanumeric infix operators have the LOWEST precedence: `a divCeil n * fee` parses as
+      * `a divCeil (n * fee)`. Parenthesize operand expressions.
+      *
+      * @see
+      *   [[scalus.cardano.onchain.plutus.prelude.Math.divCeil]]
+      */
+    inline infix def divCeil(other: BigInt): BigInt = Math.divCeil(self, other)
 
     /** Checks if this integer has a given integer square root `x`.
       *
