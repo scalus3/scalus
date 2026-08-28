@@ -37,12 +37,6 @@ given Ordering[TransactionInput] with
             case 0 => x.getIndex.compareTo(y.getIndex)
             case c => c
 
-given Ordering[v1.StakingCredential.StakingHash] = Ordering.by { cred =>
-    cred.cred match
-        case v1.Credential.PubKeyCredential(pkh)  => pkh.hash
-        case v1.Credential.ScriptCredential(hash) => hash
-}
-
 given Ordering[Redeemer] with
     def compare(x: Redeemer, y: Redeemer): Int =
         x.getTag.value.compareTo(y.getTag.value) match
@@ -498,16 +492,54 @@ object Interop {
                 v1.Interval(lower, upper)
     }
 
+    /** Withdrawals in the **ledger's** order: `(Network, Script < Key, hash)`, matching the derived
+      * `Ord AccountAddress` (`Address.hs:183-190` over `Credential.hs:98-101`).
+      *
+      * A reward address is one header byte followed by the 28-byte credential hash, and the header
+      * carries both facts: bit 4 is set for a script credential, the low nibble is the network.
+      * Ordering on the raw address bytes therefore sorts by credential kind *above* network and
+      * puts keys before scripts - wrong on both axes - which is what the previous
+      * `sortBy(_.getBytes)` did.
+      *
+      * This is the order V3 delivers `txInfoWdrl` in, and the order a Rewarding redeemer index is
+      * resolved against (`Map.elemAt` on `Map AccountAddress Coin`, Conway/TxBody.hs:672).
+      */
+    private def ledgerOrderedWithdrawals(
+        withdrawals: util.List[Withdrawal]
+    ): IndexedSeq[(v1.Credential, BigInt)] = {
+        withdrawals.asScala.toIndexedSeq
+            .map { w =>
+                val bytes = Address(w.getRewardAddress).getBytes
+                val header = bytes(0) & 0xff
+                val network = header & 0x0f
+                val isScript = (header & 0x10) != 0
+                val hash = ByteString.fromArray(bytes.drop(1))
+                val cred =
+                    if isScript then v1.Credential.ScriptCredential(hash)
+                    else v1.Credential.PubKeyCredential(v1.PubKeyHash(hash))
+                ((network, if isScript then 0 else 1, hash), cred -> BigInt(w.getCoin))
+            }
+            .sortBy(_._1)
+            .map(_._2)
+    }
+
+    /** Withdrawals in **Plutus** order, which is what the V1/V2 withdrawals field receives: the
+      * ledger keys that map by the Plutus type and `Map.toList`s it
+      * (`Alonzo/Plutus/TxInfo.hs:301-309`), so `PubKeyCredential` sorts before `ScriptCredential`.
+      * Deliberately the opposite constructor order to V3; do not unify.
+      */
     def getWithdrawals(
         withdrawals: util.List[Withdrawal]
     ): scalus.cardano.onchain.plutus.prelude.List[(v1.StakingCredential, BigInt)] = {
-        // get sorted withdrawals
-        val wdwls = mutable.TreeMap.empty[v1.StakingCredential.StakingHash, BigInt]
-        for w <- withdrawals.asScala do
-            val addr = Address(w.getRewardAddress)
-            val cred = addr.getDelegationCredential.map(getCredential).get
-            wdwls.put(v1.StakingCredential.StakingHash(cred), BigInt(w.getCoin))
-        scalus.cardano.onchain.plutus.prelude.List.from(wdwls)
+        val plutusOrder: Ordering[(v1.Credential, BigInt)] = Ordering.by {
+            case (v1.Credential.PubKeyCredential(pkh), _)  => (0, pkh.hash)
+            case (v1.Credential.ScriptCredential(hash), _) => (1, hash)
+        }
+        scalus.cardano.onchain.plutus.prelude.List.from(
+          ledgerOrderedWithdrawals(withdrawals)
+              .sorted(plutusOrder)
+              .map((cred, coin) => v1.StakingCredential.StakingHash(cred) -> coin)
+        )
     }
 
     def getDCert(cert: Certificate): v1.DCert = {
@@ -729,7 +761,9 @@ object Interop {
           fee = v1.Value.lovelace(body.getFee ?? BigInteger.ZERO),
           mint = getMintValue(body.getMint ?? util.List.of()),
           dcert = scalus.cardano.onchain.plutus.prelude.List.from(certs.asScala.map(getDCert)),
-          withdrawals = SortedMap.fromList(getWithdrawals(body.getWithdrawals ?? util.List.of())),
+          // Already in Plutus order (see getWithdrawals); preserve rather than re-sorting.
+          withdrawals =
+              SortedMap.unsafeFromList(getWithdrawals(body.getWithdrawals ?? util.List.of())),
           validRange = getInterval(tx, slotConfig, protocolVersion),
           signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.getRequiredSigners.asScala
@@ -807,18 +841,12 @@ object Interop {
                 if certs.isDefinedAt(index) then v1.ScriptPurpose.Certifying(getDCert(certs(index)))
                 else throw new IllegalStateException(s"Wrong cert index: $index in $certificates")
             case RedeemerTag.Reward =>
-                val rewardAccounts = withdrawals.asScala
-                    .map(ra => Address(ra.getRewardAddress))
-                    .sortBy(a => ByteString.fromArray(a.getBytes)) // for ordering
+                // Index source is LEDGER order, even though the V1/V2 field uses Plutus order.
+                val rewardAccounts = ledgerOrderedWithdrawals(withdrawals)
                 if rewardAccounts.isDefinedAt(index) then
-                    val address = rewardAccounts(index)
-                    if address.getAddressType == AddressType.Reward then
-                        val cred = getCredential(address.getDelegationCredential.get)
-                        v1.ScriptPurpose.Rewarding(v1.StakingCredential.StakingHash(cred))
-                    else
-                        throw new IllegalStateException(
-                          s"Wrong reward address type: $address in $withdrawals"
-                        )
+                    v1.ScriptPurpose.Rewarding(
+                      v1.StakingCredential.StakingHash(rewardAccounts(index)._1)
+                    )
                 else throw new IllegalStateException(s"Wrong reward index: $index in $withdrawals")
             case _ =>
                 throw new IllegalStateException(
@@ -868,18 +896,10 @@ object Interop {
                     v3.ScriptPurpose.Certifying(index, getTxCertV3(certs(index)))
                 else throw new IllegalStateException(s"Wrong cert index: $index in $certificates")
             case RedeemerTag.Reward =>
-                val rewardAccounts = withdrawals.asScala
-                    .map(ra => Address(ra.getRewardAddress))
-                    .sortBy(a => ByteString.fromArray(a.getBytes)) // for ordering
+                // Index source is LEDGER order (Map.elemAt on Map AccountAddress Coin).
+                val rewardAccounts = ledgerOrderedWithdrawals(withdrawals)
                 if rewardAccounts.isDefinedAt(index) then
-                    val address = rewardAccounts(index)
-                    if address.getAddressType == AddressType.Reward then
-                        val cred = getCredential(address.getDelegationCredential.get)
-                        v3.ScriptPurpose.Rewarding(cred)
-                    else
-                        throw new IllegalStateException(
-                          s"Wrong reward address type: $address in $withdrawals"
-                        )
+                    v3.ScriptPurpose.Rewarding(rewardAccounts(index)._1)
                 else throw new IllegalStateException(s"Wrong reward index: $index in $withdrawals")
 
             case RedeemerTag.Proposing =>
@@ -1141,12 +1161,6 @@ object Interop {
         val body = tx.getBody
         val certs = body.getCerts ?? util.List.of()
         val rdmrs = tx.getWitnessSet.getRedeemers ?? util.List.of()
-        val withdrawals =
-            val wdvls = getWithdrawals(body.getWithdrawals ?? util.List.of())
-            wdvls.map {
-                case (v1.StakingCredential.StakingHash(cred), coin) => cred -> coin
-                case w => throw new IllegalStateException(s"Invalid withdrawal: $w")
-            }
         v3.TxInfo(
           inputs = scalus.cardano.onchain.plutus.prelude.List
               .from(body.getInputs.asScala.sorted.map(getTxInInfoV3(_, utxos))),
@@ -1159,7 +1173,12 @@ object Interop {
           mint = getValue(body.getMint ?? util.List.of()),
           certificates =
               scalus.cardano.onchain.plutus.prelude.List.from(certs.asScala.map(getTxCertV3)),
-          withdrawals = SortedMap.fromList(withdrawals),
+          // Delivered in LEDGER order, unlike V1/V2; already ordered, so preserve it.
+          withdrawals = SortedMap.unsafeFromList(
+            scalus.cardano.onchain.plutus.prelude.List.from(
+              ledgerOrderedWithdrawals(body.getWithdrawals ?? util.List.of())
+            )
+          ),
           validRange = getInterval(tx, slotConfig, protocolVersion),
           signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.getRequiredSigners.asScala

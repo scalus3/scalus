@@ -795,6 +795,14 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
       mimaPreviousArtifacts := Set(organization.value %% name.value % scalusCompatibleVersion),
+      mimaBinaryIssueFilters ++= Seq(
+        // Removed: it ordered staking credentials by raw hash bytes, ignoring whether the
+        // credential is a script or a key, which is an order no node emits. Withdrawal
+        // ordering now goes through ledgerOrderedWithdrawals / getWithdrawals in Interop.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.bloxbean.Interop#package.given_Ordering_StakingHash"
+        )
+      ),
       libraryDependencies += "com.bloxbean.cardano" % "cardano-client-lib" % cardanoClientLibVersion,
       libraryDependencies += "org.slf4j" % "slf4j-api" % slf4jVersion,
       libraryDependencies += "org.slf4j" % "slf4j-simple" % slf4jVersion % "test",
