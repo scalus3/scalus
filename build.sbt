@@ -848,7 +848,16 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // so the default evaluation path skips hex encoding entirely.
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
-        )
+        ),
+        // The streaming hub's internals churn while the provider implementations are built —
+        // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: CLAUDE.md
+        // reserves wildcards for wholly-internal packages, and a wildcard over the whole
+        // `...node.stream` package would also silence a genuine break in the public facade
+        // (`BlockchainStreamProvider`, `StreamCapabilities`, `SubscriptionOptions`, …).
+        // The proposal does declare the public facade unfrozen for a release or two as well; when
+        // a break there is actually needed, it gets its own filter naming the symbol, so the thing
+        // being broken is visible in review rather than pre-authorised in bulk.
+        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*")
       ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,

@@ -22,28 +22,54 @@ enum SubscriptionKind {
     case Utxo
     case Transaction
     case Block
+
+    /** Following one transaction from the mempool into a block and back out again.
+      *
+      * Declared separately from [[Transaction]] because it is a different question. A provider that
+      * observes only the sources it was asked to watch can serve transaction *subscriptions* — it
+      * matches what it fetched — while having no way to answer "what happened to this particular
+      * hash", because a transaction it was never asked about is a transaction it never looked up.
+      * Left undeclared, such a provider reports `Pending` forever for a transaction that is
+      * confirmed on chain, which is worse than refusing: the subscriber has no way to tell a
+      * transaction that has not landed from one the provider never watched.
+      */
+    case TransactionStatus
 }
 
 object SubscriptionKind {
-    val all: Set[SubscriptionKind] = Set(Utxo, Transaction, Block)
+    val all: Set[SubscriptionKind] = Set(Utxo, Transaction, Block, TransactionStatus)
 }
 
-/** What it costs a provider to examine a block it was not asked about.
+/** What happens to a subscription the provider cannot serve from an index.
   *
-  * The distinction is not how clever the matching is — it is whether the provider already holds the
-  * block's contents. An in-memory ledger, a chain-sync follower and a gRPC stream all see every
-  * transaction anyway, so a subscription that matches everything costs them nothing beyond the
-  * fan-out they already do. A REST provider whose cheap path is per-address endpoints has to fetch
-  * the block and then a UTxO set per transaction in it, which is the difference between a handful
-  * of requests a day and a spent quota.
+  * The distinction between the first two is not how clever the matching is — it is whether the
+  * provider already holds the block's contents. An in-memory ledger, a chain-sync follower and a
+  * gRPC stream all see every transaction anyway, so a subscription that matches everything costs
+  * them nothing beyond the fan-out they already do. A REST provider whose cheap path is per-address
+  * endpoints has to fetch the block and then a UTxO set per transaction in it, which is the
+  * difference between a handful of requests a day and a spent quota.
+  *
+  * The third is a different kind of answer, and it needs to be stated rather than approximated by
+  * the second: a provider built entirely out of per-source lookups has no request sequence that
+  * would answer "every transaction" at all. Calling that `Metered` would let a caller consent, via
+  * `allowUnindexedScan`, to something that cannot happen — and the subscription would then be
+  * accepted and deliver nothing, forever, with no error. Consenting to an impossibility is worse
+  * than being refused.
   */
-enum ScanCost {
+enum ScanSupport {
 
     /** The provider already has every block's contents; scanning adds nothing. */
     case Free
 
-    /** Examining a block the provider would not otherwise fetch costs it real requests. */
+    /** Examining a block the provider would not otherwise fetch costs it real requests, so a caller
+      * must opt in with `SubscriptionOptions.allowUnindexedScan`.
+      */
     case Metered
+
+    /** The provider cannot examine a block it was not asked about at all, so it serves exactly what
+      * [[StreamCapabilities.pushdown]] covers and refuses everything else.
+      */
+    case Unsupported
 }
 
 /** How far back a provider can start a subscription.
@@ -96,7 +122,7 @@ enum ReplaySupport {
 case class StreamCapabilities(
     kinds: Set[SubscriptionKind],
     pushdown: Set[PushdownKind],
-    scanning: ScanCost,
+    scanning: ScanSupport,
     replay: ReplaySupport,
     rollbackHorizon: Option[Int],
     maxConfirmations: Option[Int],
@@ -116,7 +142,7 @@ object StreamCapabilities {
     ): StreamCapabilities = StreamCapabilities(
       kinds = kinds,
       pushdown = PushdownKind.all,
-      scanning = ScanCost.Free,
+      scanning = ScanSupport.Free,
       replay = replay,
       rollbackHorizon = rollbackHorizon,
       maxConfirmations = None,

@@ -25,6 +25,14 @@ case class SubscriptionOptions(
     /** Seed the subscription from the provider's snapshot view: emit a synthetic
       * [[UtxoEvent.Created]] for every UTxO already matching the query, before live deltas start.
       * `false` yields a live-only stream. Irrelevant for non-UTxO subscriptions.
+      *
+      * Not purely a matter of taste on a provider that fetches per source rather than whole blocks.
+      * Such a provider only observes a query's sources from the point it is told to watch them, and
+      * the block spanning that moment may already have been assembled without them. The seed is
+      * what covers that block — it is a snapshot of state *after* it. Turning the seed off
+      * therefore accepts that events in that one block may never be delivered, with no error and no
+      * `Idle`. A live-only subscriber that cannot tolerate this should subscribe, then reconcile
+      * against its own `findUtxos` read.
       */
     includeExistingUtxos: Boolean = true,
 

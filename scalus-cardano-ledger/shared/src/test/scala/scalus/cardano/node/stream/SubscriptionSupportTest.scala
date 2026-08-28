@@ -20,7 +20,7 @@ class SubscriptionSupportTest extends AnyFunSuite {
     private val blockfrostLike = StreamCapabilities(
       kinds = SubscriptionKind.all,
       pushdown = Set(PushdownKind.Address, PushdownKind.Asset),
-      scanning = ScanCost.Metered,
+      scanning = ScanSupport.Metered,
       replay = ReplaySupport.Scoped(Set(PushdownKind.Address, PushdownKind.Asset)),
       rollbackHorizon = Some(50),
       maxConfirmations = Some(100),
@@ -30,7 +30,7 @@ class SubscriptionSupportTest extends AnyFunSuite {
     /** An in-process provider: the whole ledger is in memory, so nothing costs extra. */
     private val inMemory = blockfrostLike.copy(
       pushdown = PushdownKind.all,
-      scanning = ScanCost.Free,
+      scanning = ScanSupport.Free,
       replay = ReplaySupport.NoReplay,
       maxConfirmations = None
     )
@@ -169,4 +169,90 @@ class SubscriptionSupportTest extends AnyFunSuite {
         )
         assert(verdict == SubscriptionSupport.Unindexed)
     }
+    test("a provider that cannot scan refuses, rather than letting a caller consent") {
+        val lookupOnly = StreamCapabilities(
+          kinds = SubscriptionKind.all,
+          pushdown = Set(PushdownKind.Address),
+          scanning = ScanSupport.Unsupported,
+          replay = ReplaySupport.NoReplay,
+          rollbackHorizon = None,
+          maxConfirmations = None,
+          idleSignals = true
+        )
+        val everyTransaction = SubscriptionRequest.Transaction(
+          TransactionQuery.All,
+          // Consent given — and it must not help, because the scan is not expensive, it is
+          // impossible. Classifying this as Unindexed would accept the subscription and then
+          // deliver nothing, forever, with no error.
+          SubscriptionOptions(allowUnindexedScan = true)
+        )
+        assert(
+          SubscriptionSupport
+              .of(everyTransaction, lookupOnly)
+              .isInstanceOf[
+                SubscriptionSupport.Unsupported
+              ],
+          "a lookup-only provider serves exactly what it can push down and refuses the rest"
+        )
+    }
+
+    test("a metered provider still accepts the same request when the caller consents") {
+        val metered = StreamCapabilities(
+          kinds = SubscriptionKind.all,
+          pushdown = Set(PushdownKind.Address),
+          scanning = ScanSupport.Metered,
+          replay = ReplaySupport.NoReplay,
+          rollbackHorizon = None,
+          maxConfirmations = None,
+          idleSignals = true
+        )
+        val everyTransaction = SubscriptionRequest.Transaction(
+          TransactionQuery.All,
+          SubscriptionOptions(allowUnindexedScan = true)
+        )
+        assert(
+          SubscriptionSupport.of(everyTransaction, metered) == SubscriptionSupport.Unindexed,
+          "Unsupported must not have swallowed the case it was carved out of"
+        )
+    }
+
+    test("a provider that does not declare TransactionStatus refuses to follow a transaction") {
+        val noStatus = StreamCapabilities(
+          kinds = Set(SubscriptionKind.Utxo, SubscriptionKind.Transaction),
+          pushdown = Set(PushdownKind.Address),
+          scanning = ScanSupport.Unsupported,
+          replay = ReplaySupport.NoReplay,
+          rollbackHorizon = None,
+          maxConfirmations = None,
+          idleSignals = true
+        )
+        val request = SubscriptionRequest.TransactionStatus(someTxHash)
+        assert(
+          SubscriptionSupport.of(request, noStatus).isInstanceOf[SubscriptionSupport.Unsupported],
+          "a provider that only observes the sources it was asked to watch cannot say what " +
+              "happened to an arbitrary hash, and reporting Pending forever would be worse than " +
+              "refusing — the subscriber could not tell that apart from a transaction that has " +
+              "genuinely not landed"
+        )
+    }
+
+    test("following a transaction is a lookup, so it is Indexed wherever it is served") {
+        val withStatus = StreamCapabilities(
+          kinds = SubscriptionKind.all,
+          pushdown = Set(PushdownKind.Address),
+          // Even where no scan is possible at all: a hash is the most direct lookup there is.
+          scanning = ScanSupport.Unsupported,
+          replay = ReplaySupport.NoReplay,
+          rollbackHorizon = None,
+          maxConfirmations = None,
+          idleSignals = true
+        )
+        assert(
+          SubscriptionSupport.of(
+            SubscriptionRequest.TransactionStatus(someTxHash),
+            withStatus
+          ) == SubscriptionSupport.Indexed
+        )
+    }
+
 }

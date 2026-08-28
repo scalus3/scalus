@@ -1,8 +1,8 @@
 package scalus.cardano.node.stream.internal
 
 import scalus.cardano.infra.{ResyncRequiredException, UnsupportedSubscriptionException}
-import scalus.cardano.ledger.{CardanoInfo, ProtocolParams, TransactionHash}
-import scalus.cardano.node.TransactionStatus
+import scalus.cardano.ledger.{CardanoInfo, ProtocolParams, TransactionHash, Utxos}
+import scalus.cardano.node.{TransactionStatus, UtxoQuery, UtxoSource}
 import scalus.cardano.node.stream.*
 
 import scala.collection.mutable
@@ -159,7 +159,7 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             val wantsCreated = query.types.contains(UtxoEventType.Created)
             if opts.includeExistingUtxos && wantsCreated then
                 QueryMatching
-                    .matching(query.query, seed)
+                    .matching(query.query, rewindSeed(seed, sub.lastEmitted))
                     .foreach(u =>
                         mailbox.offerBuffered(
                           UtxoEvent.Created(u, u.input.transactionId, ChainPoint.origin)
@@ -288,6 +288,17 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             // `+ 1` on a saturating max, so an absurd confirmation depth cannot wrap the window
             // negative and empty the deque on the next prune.
             val retain = math.max(securityParam, deepestGate).min(Int.MaxValue - 1) + 1
+            // Pruned by *height*, not by entry count: under partial coverage several blocks can
+            // share a height (one per set of sources probed there), and counting entries would
+            // then evict heights that are still inside the rollback horizon. With one entry per
+            // height — every Complete-coverage provider — this is the same window as before.
+            val oldest = block.blockNo - retain
+            while recent.nonEmpty && recent.head.blockNo <= oldest do recent.removeHead()
+            // Belt and braces. The height window is the meaningful bound, but it bounds nothing if
+            // a provider breaks the one-block-per-ascending-height contract `AppliedBlock`
+            // documents — several entries per height, or a height that goes backwards, would let
+            // `recent` grow without limit and make `releaseLocked` scan it for every subscription
+            // on every block. A cap costs one comparison and removes the failure mode.
             while recent.size > retain do recent.removeHead()
             val newTip = ChainTip(block.point, block.blockNo)
             tip = newTip
@@ -361,7 +372,21 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
         touched.foreach(_.flush())
     }
 
-    def closeAll(): Unit = {
+    /** Fail every subscription with `cause`, and stop accepting new ones.
+      *
+      * Distinct from [[closeAll]], and the distinction is the subscriber's whole world: a closed
+      * stream ended, so whatever it delivered was the truth; a failed stream means the view is
+      * untrustworthy and must be rebuilt. A follower that loses track of the chain owes subscribers
+      * the second, never the first.
+      */
+    def failAll(cause: Throwable): Unit = terminateAll(_.fail(cause))
+
+    def closeAll(): Unit = terminateAll(_.close())
+
+    /** Shared by both terminations so that a future subscription kind cannot be remembered on one
+      * path and forgotten on the other — which would leak it silently on whichever was missed.
+      */
+    private def terminateAll(finish: Mailbox[?] => Unit): Unit = {
         val mailboxes = synchronized {
             closed = true
             val all: Seq[Mailbox[?]] =
@@ -379,26 +404,28 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             statusSubs.clear()
             all
         }
-        mailboxes.foreach(_.close())
+        mailboxes.foreach(finish)
     }
 
-    // ------------------------------------------------------------------
-    // Internals — all called under the monitor
-    // ------------------------------------------------------------------
-
-    /** Release, per subscription, every block that has now reached its confirmation depth. */
     private def releaseLocked(): Seq[Mailbox[?]] = {
         def deliveries[S](
             subs: Iterable[S],
             depthOf: S => Int,
             lastOf: S => BlockNo,
             advance: (S, BlockNo) => Unit,
-            emit: (S, AppliedBlock) => Seq[Mailbox[?]]
+            emit: (S, AppliedBlock) => Seq[Mailbox[?]],
+            covers: (S, AppliedBlock) => Boolean
         ): Seq[Mailbox[?]] = subs.toSeq.flatMap { sub =>
             val depth = depthOf(sub)
-            // Everything at or below the visible height that this subscription has not seen yet.
+            // Everything at or below the visible height that this subscription has not seen yet
+            // *and* that the provider actually examined on its behalf. Skipping the coverage test
+            // would not merely deliver an empty block: `emit` turns "no matches" into an `Idle`,
+            // and `advance` then moves the watermark past a height whose real events had not been
+            // looked for yet, so they could never be delivered afterwards.
             val visibleUpTo = tip.blockNo - depth
-            val due = recent.filter(b => b.blockNo > lastOf(sub) && b.blockNo <= visibleUpTo).toSeq
+            val due = recent
+                .filter(b => b.blockNo > lastOf(sub) && b.blockNo <= visibleUpTo && covers(sub, b))
+                .toSeq
             if due.isEmpty then Seq.empty
             else
                 advance(sub, due.last.blockNo)
@@ -410,21 +437,25 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => { utxoEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
+          (s, b) => { utxoEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) },
+          (s, b) => coversUtxoQuery(s.query.query, b.coverage)
         )
         val txs = deliveries[TxSubscription](
           txSubs.values,
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => { txEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
+          (s, b) => { txEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) },
+          (s, b) => coversTxQuery(s.query, b.coverage)
         )
         val blocks = deliveries[BlockSubscription](
           blockSubs.values,
           s => effectiveDepth(s.opts),
           _.lastEmitted,
           (s, n) => s.lastEmitted = n,
-          (s, b) => { blockEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) }
+          (s, b) => { blockEvents(s, b).foreach(s.mailbox.offerBuffered); Seq(s.mailbox) },
+          // A block subscription wants the block itself, which only a complete observation has.
+          (_, b) => b.coverage == BlockCoverage.Complete
         )
         utxo ++ txs ++ blocks
     }
@@ -443,6 +474,32 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
       * that range offer it a `RolledBack` retracting events it never received — which is exactly
       * the guarantee `noRollback` sells.
       */
+    /** The seed as it stood at `from`, rather than at the tip.
+      *
+      * A snapshot describes the chain *now*, but a subscription's watermark starts at
+      * `tip - depth`, so the blocks in between are still to be delivered. Seeding from the current
+      * snapshot therefore double-reports them: a UTxO created in one of those blocks arrives once
+      * in the seed and again when the block is released. Worse in the other direction, a UTxO
+      * created before the window and spent inside it is missing from the snapshot, so the
+      * subscriber is handed a `Spent` for something it never saw created.
+      *
+      * The hub is holding those blocks already, and `AppliedTransaction.spent` carries the
+      * *resolved* outputs, so the snapshot can simply be wound back over them: drop what they
+      * created, restore what they consumed. A UTxO both created and spent inside the window belongs
+      * to neither — it did not exist at `from` — which is why `created` is subtracted from the
+      * restored set too.
+      *
+      * At the default depth of zero there are no pending blocks and this is the snapshot unchanged.
+      */
+    private def rewindSeed(snapshot: scalus.cardano.ledger.Utxos, from: BlockNo): Utxos = {
+        val pending = recent.filter(_.blockNo > from).toSeq.flatMap(_.txs)
+        if pending.isEmpty then snapshot
+        else
+            val createdSince = pending.flatMap(_.created.keys).toSet
+            val spentSince = pending.flatMap(_.spent).toMap
+            (snapshot -- createdSince) ++ (spentSince -- createdSince)
+    }
+
     private def watermark(opts: SubscriptionOptions): BlockNo =
         math.max(0L, tip.blockNo - effectiveDepth(opts))
 
@@ -452,6 +509,53 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
       */
     private def wantsIdle(opts: SubscriptionOptions): Boolean =
         capabilities.idleSignals && opts.idleSignals
+
+    /** Whether a block's coverage is authoritative for a UTxO subscription.
+      *
+      * A union needs every arm covered — the events we would otherwise miss are exactly the ones
+      * the uncovered arm would have found — which also means a query spanning two sources is
+      * covered only by a block that probed both. That is why a provider is expected to emit one
+      * block per height carrying the union of everything it probed there, rather than one block per
+      * watcher.
+      */
+    private def coversUtxoQuery(query: UtxoQuery, coverage: BlockCoverage): Boolean =
+        // Settled by one comparison for every complete-coverage provider — which is every provider
+        // but the metered one — instead of walking the query tree per subscription per block.
+        coverage == BlockCoverage.Complete || (query match
+            case q: UtxoQuery.Simple => BlockCoverage.covers(coverage, q.source)
+            case UtxoQuery.Or(l, r, _, _, _) =>
+                coversUtxoQuery(l, coverage) && coversUtxoQuery(r, coverage))
+
+    /** Whether a block's coverage is authoritative for a transaction subscription.
+      *
+      * Deliberately conservative: a leaf with no [[UtxoSource]] equivalent — `MintsPolicy` has no
+      * per-asset source to probe, `InvolvesScript` and `Not` have no index at all — is treated as
+      * uncovered unless the whole block was observed. Under-claiming coverage costs a subscription
+      * some latency; over-claiming it loses events silently.
+      */
+    private def coversTxQuery(query: TransactionQuery, coverage: BlockCoverage): Boolean =
+        coverage match
+            case BlockCoverage.Complete => true
+            case BlockCoverage.Sources(probed) =>
+                def covered(q: TransactionQuery): Boolean = q match
+                    case TransactionQuery.InvolvesAddress(a) =>
+                        probed.contains(UtxoSource.FromAddress(a))
+                    case TransactionQuery.MintsAsset(p, n) =>
+                        probed.contains(UtxoSource.FromAsset(p, n))
+                    case TransactionQuery.SpendsInput(i) =>
+                        probed.exists {
+                            case UtxoSource.FromInputs(inputs) => inputs.contains(i)
+                            case _                             => false
+                        }
+                    // An intersection can be answered from any one covered arm, with the rest
+                    // post-filtering data the block already contains.
+                    case TransactionQuery.AllOf(qs) => qs.exists(covered)
+                    // A union is only as covered as its worst arm.
+                    case TransactionQuery.AnyOf(qs) => qs.nonEmpty && qs.forall(covered)
+                    case TransactionQuery.All | _: TransactionQuery.MintsPolicy |
+                        _: TransactionQuery.InvolvesScript | _: TransactionQuery.Not =>
+                        false
+                covered(query)
 
     private def utxoEvents(sub: UtxoSubscription, block: AppliedBlock): Seq[UtxoEvent] = {
         val wantCreated = sub.query.types.contains(UtxoEventType.Created)
