@@ -73,7 +73,12 @@ private[stream] final class HubDriver(
             if stopped then false
             else { stopped = true; true }
         }
-        if first then hub.failAll(t)
+        if first then {
+            // Stop the follower too. Nothing will read its events again, and a metered one left
+            // running keeps spending quota on a feed with no consumer.
+            follower.close()
+            hub.failAll(t)
+        }
     }
 
     /** Stop pumping and end every subscription.

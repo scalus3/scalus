@@ -99,15 +99,32 @@ private[stream] final class BlockfrostChainFollower(
 
     /** The highest height whose set of probed sources has already been decided.
       *
-      * Updated in the same critical section that reads `watched`, which is what lets `watch` report
-      * a position a caller can rely on: a block already being assembled has a height at or below
-      * this, and every block assembled afterwards sees the new source set.
+      * Two assignment sites, with different arguments for why each is safe:
+      *
+      *   - `emitBlock` updates it in the same critical section that reads `watched`, which is what
+      *     lets `watch` report a position a caller can rely on: a block already being assembled has
+      *     a height at or below this, and every block assembled afterwards sees the new set.
+      *   - `start` seeds it from the chain tip. That one rests not on the lock but on the backend's
+      *     `/blocks/{hash}/next` contract — nothing at or below the starting tip is ever emitted,
+      *     so nothing at or below it needs covering.
+      *
+      * Note this is deliberately ahead of `last`, which is the actual delivery cursor: sources are
+      * fixed before any of the block's requests are issued, so a block can be counted here while
+      * none of its transactions have been fetched yet.
       */
     private var committed: BlockNo = 0L
 
     override def events: ScalusAsyncSource[ChainEvent] = mailbox
 
     override def watch(sources: Set[UtxoSource]): BlockNo = synchronized {
+        // A stopped follower will never assemble another block, so a position promising coverage
+        // above it would be a lie the caller has no way to detect: it would register, and then
+        // wait forever with no events, no Idle and no error.
+        if stopped then
+            throw new IllegalStateException(
+              "this follower is closed and will produce no further blocks; a subscription " +
+                  "registered against it could never be covered"
+            )
         watched = sources
         committed
     }
@@ -117,7 +134,14 @@ private[stream] final class BlockfrostChainFollower(
         mailbox.close()
     }
 
-    private def isStopped: Boolean = synchronized(stopped)
+    /** Stopped, or pointless to continue.
+      *
+      * A bounded mailbox fails its consumer on overflow and then silently discards everything
+      * offered afterwards, so without this check the loop keeps polling — one `/blocks/next` per
+      * interval plus a request per watched address per block, against a metered daily quota — for a
+      * feed nobody can ever read again.
+      */
+    private def isStopped: Boolean = synchronized(stopped) || mailbox.isClosed
 
     /** Start polling. The loop is a `Future` chain, not a thread, so it works on Scala.js too. */
     def start(): Unit = {
@@ -144,6 +168,7 @@ private[stream] final class BlockfrostChainFollower(
             case Success(_) => loop()
             case Failure(t) => mailbox.fail(t)
         }
+    else close()
 
     private def poll(): Future[Unit] = {
         val from = synchronized(last)
@@ -192,7 +217,11 @@ private[stream] final class BlockfrostChainFollower(
             // Fixing this block's source set and recording that it is fixed must be one step; a
             // `watch` landing between them would be told this height was already covered by the
             // new set when it was not.
-            committed = block.blockNo
+            // Monotonic: a backend that serves a stale `/blocks/{hash}/next` page — a lagging
+            // replica is the realistic case — must not be able to drag this backwards, or a
+            // `watch` landing next would be handed a position implying coverage of heights that
+            // were already assembled with the old source set.
+            committed = math.max(committed, block.blockNo)
             watched.collect { case UtxoSource.FromAddress(a) => a }
         }
         val probed: Set[UtxoSource] = addresses.map(UtxoSource.FromAddress(_))

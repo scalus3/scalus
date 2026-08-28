@@ -158,6 +158,7 @@ class BlockfrostChainFollowerTest extends AnyFunSuite {
           "no subscriptions means no per-address cost, but the tip must still advance"
         )
     }
+
     test("watch reports the height its source set takes effect from") {
         val api = new FakeApi(ref(10L), chain = Seq(ref(11L), ref(12L)))
         val f = follower(api, polls = 1)

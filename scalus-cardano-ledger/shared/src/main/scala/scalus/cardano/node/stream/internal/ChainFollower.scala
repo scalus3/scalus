@@ -46,13 +46,22 @@ private[stream] trait ChainFollower {
       * takes effect**.
       *
       * A metered follower polls per source, so it must be told what anyone is actually subscribed
-      * to; one that reads whole blocks ignores this and reports its current height.
+      * to. One that reads whole blocks ignores `sources` and returns `0`: every block it produces
+      * has `BlockCoverage.Complete`, so "everything above 0 covers you" is simply true, and
+      * reporting its current height instead would understate what it covers and push the caller to
+      * lean on a snapshot it does not need.
       *
       * The return value is what makes a subscription's start point exact rather than approximate.
       * Registering a subscription and telling the follower to watch its sources are two steps, and
       * a block processed between them is covered by neither: the subscriber would be registered
       * from the tip, silently miss that block — nobody having fetched it on its behalf — and the
       * hub would then advance it past that height when the next covered block arrived.
+      *
+      * **The argument is the complete set, and calls must be serialised.** `sources` replaces what
+      * was being watched rather than adding to it, so a caller passes the union of every live
+      * subscription's sources every time. Two concurrent callers each passing only their own would
+      * leave one of them silently unwatched while holding a position that promises otherwise —
+      * which is the very failure this return value exists to prevent, reintroduced one layer up.
       *
       * So a follower returns the last height whose source set was already fixed. Every block above
       * it is guaranteed to have been assembled with `sources` included, which lets the caller
