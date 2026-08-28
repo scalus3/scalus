@@ -3,7 +3,7 @@ package scalus.cardano.node.stream
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
 import scalus.cardano.node.stream.internal.{AppliedBlock, AppliedTransaction, Mailbox, SubscriptionHub}
-import scalus.cardano.node.{UtxoQuery, UtxoSource}
+import scalus.cardano.node.{TransactionStatus, UtxoQuery, UtxoSource}
 import scalus.testing.kit.Party
 import scalus.uplc.builtin.ByteString
 
@@ -276,4 +276,82 @@ class SubscriptionHubTest extends AnyFunSuite {
         )
     }
 
+    test("an observed transaction nobody follows does not enter the status table") {
+        // The table has no eviction, so recording every transaction in every block would make it
+        // grow for the life of the provider — invisible in an emulator, whose life is one test, and
+        // unbounded in a provider following a busy address for weeks.
+        val h = hub()
+        val hash = TransactionHash.fromByteString(ByteString.fromHex("cd" * 32))
+        h.applyBlock(
+          AppliedBlock(
+            point(1),
+            1,
+            Seq(AppliedTransaction(Transaction.empty, Map.empty, Map.empty))
+          )
+        )
+        assert(
+          h.statusOf(Transaction.empty.id).isEmpty,
+          "no opinion is the honest answer for a transaction nothing here is following; the " +
+              "caller falls back to whatever it considers authoritative"
+        )
+        assert(h.statusOf(hash).isEmpty)
+    }
+
+    test("a transaction submitted through this provider is still followed into its block") {
+        val h = hub()
+        h.notifySubmit(Transaction.empty.id)
+        assert(h.statusOf(Transaction.empty.id).contains(TransactionStatus.Pending))
+        h.applyBlock(
+          AppliedBlock(
+            point(1),
+            1,
+            Seq(AppliedTransaction(Transaction.empty, Map.empty, Map.empty))
+          )
+        )
+        assert(
+          h.statusOf(Transaction.empty.id).contains(TransactionStatus.Confirmed),
+          "bounding the table must not stop it tracking the transactions it exists to track"
+        )
+    }
+
+    test("a subscribed transaction is followed into its block even if never submitted here") {
+        val h = hub()
+        val mailbox = Mailbox.latestValue[TransactionStatus]()
+        h.registerTxStatus(h.nextSubscriptionId(), Transaction.empty.id, mailbox)
+        h.applyBlock(
+          AppliedBlock(
+            point(1),
+            1,
+            Seq(AppliedTransaction(Transaction.empty, Map.empty, Map.empty))
+          )
+        )
+        assert(
+          drain(mailbox).lastOption.contains(TransactionStatus.Confirmed),
+          "subscribing is the other way a transaction becomes this hub's business"
+        )
+    }
+
+    test("failParams ends the parameter subscribers and nobody else") {
+        val h = hub()
+        val params = Mailbox.latestValue[ProtocolParams]()
+        val utxo = Mailbox.delta[UtxoEvent]()
+        h.registerParams(h.nextSubscriptionId(), params)
+        h.registerUtxo(
+          h.nextSubscriptionId(),
+          addressQuery(UtxoEventType.all),
+          SubscriptionOptions(includeExistingUtxos = false),
+          utxo,
+          Map.empty
+        )
+        h.failParams(new RuntimeException("429"))
+        assert(
+          params.pull().value.exists(_.isFailure),
+          "a subscriber holding a parameter value that may now be wrong must be told"
+        )
+        assert(
+          !utxo.isClosed,
+          "the chain feed is a different request against the same backend and is still working; " +
+              "failing it over an hourly parameter poll would be collateral damage"
+        )
+    }
 }

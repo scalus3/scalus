@@ -1,7 +1,7 @@
 package scalus.cardano.node.stream.internal
 
 import scalus.cardano.infra.{CancelToken, CancelledException, ScalusBufferOverflowException}
-import scalus.cardano.node.stream.ScalusAsyncSource
+import scalus.cardano.node.stream.{DeltaBufferPolicy, ScalusAsyncSource, SubscriptionOptions}
 
 import scala.collection.mutable
 import scala.concurrent.{ExecutionContext, Future, Promise}
@@ -58,6 +58,21 @@ sealed trait Mailbox[A] extends ScalusAsyncSource[A] {
     /** Signal producer failure. Idempotent. */
     def fail(t: Throwable): Unit
 
+    /** Raise this mailbox's bound by `n` further events.
+      *
+      * For the snapshot seed, which is the subscription's *initial state* rather than evidence of a
+      * consumer falling behind — so it must not consume the allowance that exists to catch a
+      * stalled consumer. A wallet holding more UTxOs than the bound must still be able to
+      * subscribe.
+      *
+      * Granted here rather than folded into the bound at construction because the exact count is
+      * known only once the seed has been matched against the query, and for a provider that fetches
+      * its snapshot asynchronously it is not knowable at `subscribe` time at all. Saturating: an
+      * absurd `n` pins the bound at `Int.MaxValue` rather than wrapping it negative, which would
+      * fail the very subscription this call exists to make possible.
+      */
+    def allowExtra(n: Int): Unit
+
     def isClosed: Boolean
 }
 
@@ -68,6 +83,21 @@ object Mailbox {
       */
     def delta[A](maxSize: Int = Int.MaxValue, onCancel: () => Unit = () => ()): Mailbox[A] =
         new DeltaMailbox[A](maxSize, onCancel)
+
+    /** Delta mailbox sized by a subscription's own buffer policy.
+      *
+      * The bound covers live events only, which is what the policy is about: how far behind a
+      * consumer may fall before its view is declared untrustworthy. A snapshot seed is not a
+      * backlog and is not counted here — the hub grants a separate allowance for it once it knows
+      * how large it actually is (see [[Mailbox.allowExtra]]).
+      */
+    def deltaFor[A](opts: SubscriptionOptions, onCancel: () => Unit): Mailbox[A] =
+        delta[A](
+          opts.bufferPolicy match
+              case DeltaBufferPolicy.Bounded(n) => n
+              case DeltaBufferPolicy.Unbounded  => Int.MaxValue,
+          onCancel
+        )
 
     /** Size-1 latest-value mailbox. */
     def latestValue[A](onCancel: () => Unit = () => ()): Mailbox[A] =
@@ -233,10 +263,17 @@ private[stream] abstract class BaseMailbox[A](onCancel: () => Unit) extends Mail
 }
 
 /** FIFO, single-producer single-consumer, fail-on-overflow when bounded. */
-private[stream] final class DeltaMailbox[A](maxSize: Int, onCancel: () => Unit)
+private[stream] final class DeltaMailbox[A](initialMaxSize: Int, onCancel: () => Unit)
     extends BaseMailbox[A](onCancel) {
 
+    // Guarded by this mailbox's monitor, the same one `enqueue` is called under.
+    private var maxSize: Int = initialMaxSize
+
     private val buffer = mutable.Queue.empty[A]
+
+    def allowExtra(n: Int): Unit = synchronized {
+        if n > 0 then maxSize = if n > Int.MaxValue - maxSize then Int.MaxValue else maxSize + n
+    }
 
     protected def takeNext(): Option[A] = if buffer.isEmpty then None else Some(buffer.dequeue())
 
@@ -259,6 +296,11 @@ private[stream] final class LatestValueMailbox[A](onCancel: () => Unit)
     extends BaseMailbox[A](onCancel) {
 
     private var latest: Option[A] = None
+
+    /** No-op: a size-1 coalescing cell has no backlog to overflow, so there is no allowance to
+      * grant. A seed of any size collapses to its last value, which is the correct semantics here.
+      */
+    def allowExtra(n: Int): Unit = ()
 
     protected def takeNext(): Option[A] = {
         val v = latest

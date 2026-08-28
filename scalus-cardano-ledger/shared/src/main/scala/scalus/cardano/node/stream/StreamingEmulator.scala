@@ -109,13 +109,8 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     ): C[UtxoEvent] = {
         hub.require(SubscriptionRequest.Utxo(query, opts))
         val id = hub.nextSubscriptionId()
-        val seed = emulator.utxos
-        // `seed.size` over-counts (the hub enqueues only the UTxOs the query matches) and that is
-        // deliberate: it is an upper bound, computed without running the match twice.
-        val headroom = if opts.includeExistingUtxos then seed.size else 0
-        val mailbox =
-            Mailbox.delta[UtxoEvent](bufferSize(opts, headroom), () => hub.unregisterUtxo(id))
-        hub.registerUtxo(id, query, opts, mailbox, seed)
+        val mailbox = Mailbox.deltaFor[UtxoEvent](opts, () => hub.unregisterUtxo(id))
+        hub.registerUtxo(id, query, opts, mailbox, emulator.utxos)
         summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
 
@@ -126,7 +121,7 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
         hub.require(SubscriptionRequest.Transaction(query, opts))
         val id = hub.nextSubscriptionId()
         val mailbox =
-            Mailbox.delta[TransactionEvent](bufferSize(opts), () => hub.unregisterTransaction(id))
+            Mailbox.deltaFor[TransactionEvent](opts, () => hub.unregisterTransaction(id))
         hub.registerTransaction(id, query, opts, mailbox)
         summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
@@ -137,7 +132,7 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     ): C[BlockEvent] = {
         hub.require(SubscriptionRequest.Block(query, opts))
         val id = hub.nextSubscriptionId()
-        val mailbox = Mailbox.delta[BlockEvent](bufferSize(opts), () => hub.unregisterBlock(id))
+        val mailbox = Mailbox.deltaFor[BlockEvent](opts, () => hub.unregisterBlock(id))
         hub.registerBlock(id, query, opts, mailbox)
         summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
     }
@@ -178,20 +173,6 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     }
 
     // ── internals ───────────────────────────────────────────────────────────
-
-    /** Mailbox capacity for a delta subscription.
-      *
-      * `seedHeadroom` is the number of events the snapshot seed may enqueue before any live event
-      * arrives (see `SubscriptionHub.registerUtxo`, which buffers one `Created` per matching UTxO).
-      * It is added to the bound rather than counted against it: the seed is the subscription's
-      * initial state, not evidence of a consumer falling behind, and a wallet with more UTxOs than
-      * the bound must not be refused a subscription it can perfectly well keep up with.
-      */
-    private def bufferSize(opts: SubscriptionOptions, seedHeadroom: Int = 0): Int =
-        opts.bufferPolicy match
-            case DeltaBufferPolicy.Bounded(n) =>
-                if seedHeadroom > Int.MaxValue - n then Int.MaxValue else n + seedHeadroom
-            case DeltaBufferPolicy.Unbounded => Int.MaxValue
 
     private def buildBlock(txs: Seq[(Transaction, TransactionHash)]): AppliedBlock = {
         blockNo += 1
