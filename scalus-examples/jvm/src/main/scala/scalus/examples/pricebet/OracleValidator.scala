@@ -5,7 +5,7 @@ import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.examples.pricebet.MintOracleRedeemer.{Burn, Mint}
 import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2
-import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, TxInfo, TxOutRef}
+import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, PolicyId, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.prelude.*
 
 // Parameter
@@ -41,7 +41,7 @@ object OracleValidator extends DataParameterizedValidator {
     inline def mint(
         param: Data,
         redeemer: Data,
-        policyId: scalus.cardano.onchain.plutus.v3.PolicyId,
+        policyId: PolicyId,
         tx: TxInfo
     ): Unit = {
         val mintRedeemer = redeemer.to[MintOracleRedeemer]
@@ -51,8 +51,7 @@ object OracleValidator extends DataParameterizedValidator {
         mintRedeemer match {
             case Mint =>
                 // Verify the seed UTXO is being spent
-                val seedUtxoIsSpent = tx.inputs.exists(_.outRef === config.seedUtxo)
-                require(seedUtxoIsSpent, "Must spend seed utxo to mint the beacon")
+                tx.findInputOrFail(config.seedUtxo, "Must spend seed utxo to mint the beacon")
 
                 // Verify exactly one beacon token is minted with quantity 1 and nothing else
                 // under this policy
@@ -83,7 +82,7 @@ object OracleValidator extends DataParameterizedValidator {
         val config = param.to[OracleConfig]
         val r = redeemer.to[SpendOracleRedeemer]
         val state = datum.getOrFail("Must have inline datum").to[OracleState]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
 
         // Verify exchange rate is non-zero
         state.exchangeRate.checkDenominator()
@@ -121,12 +120,13 @@ object OracleValidator extends DataParameterizedValidator {
 
             case SpendOracleRedeemer.Burn =>
                 // Verify the beacon token is being burned in this transaction
-                val ownScriptHash = ownInput.resolved.address.credential match {
-                    case scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential(hash) => hash
-                    case _ => fail("Own input must be a script")
-                }
-                val burnedAmount = tx.mint.quantityOf(ownScriptHash, config.beaconName)
-                require(burnedAmount === BigInt(-1), "Must burn the beacon token")
+                val ownScriptHash =
+                    ownInput.resolved.address.credential
+                        .scriptHashOrFail("Own input must be a script")
+                require(
+                  tx.mint.hasOnly(ownScriptHash, config.beaconName, -1),
+                  "Must burn the beacon token"
+                )
         }
     }
 

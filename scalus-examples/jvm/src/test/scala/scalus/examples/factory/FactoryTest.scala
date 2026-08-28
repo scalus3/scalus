@@ -5,7 +5,7 @@ import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.ByteString.given
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.onchain.RequirementError
+import scalus.cardano.onchain.{OnchainError, RequirementError}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
@@ -194,7 +194,7 @@ class FactoryTest
     }
 
     test("validateCreate fails when seed UTxO is not consumed") {
-        assertEvalFailsWithMessage[RequirementError](Factory.SeedUtxoMustBeConsumed) {
+        assertEvalFailsWithMessage[OnchainError](Factory.SeedUtxoMustBeConsumed) {
             val creator = PubKeyHash(
               ByteString.fromHex("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
             )
@@ -293,7 +293,7 @@ class FactoryTest
     }
 
     test("validateCreate fails with missing product output") {
-        assertEvalFailsWithMessage[NoSuchElementException](Factory.MissingProductOutput) {
+        assertEvalFailsWithMessage[OnchainError](Factory.MissingProductOutput) {
             val creator = PubKeyHash(
               ByteString.fromHex("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
             )
@@ -489,7 +489,7 @@ class FactoryTest
     }
 
     test("validateSpend fails when no factory token in input") {
-        assertEvalFailsWithMessage[NoSuchElementException](Factory.NoFactoryToken) {
+        assertEvalFailsWithMessage[OnchainError](Factory.MustHaveExactlyOneFactoryToken) {
             val creator = PubKeyHash(
               ByteString.fromHex("deadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeefdeadbeef")
             )

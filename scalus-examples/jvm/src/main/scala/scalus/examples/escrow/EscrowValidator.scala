@@ -51,14 +51,21 @@ object EscrowValidator extends Validator {
         val receivedData = datum.getOrFail("Datum not found")
         val escrowDatum: Config = receivedData.to[Config]
         val action = redeemer.to[Action]
-        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-        val contractAddress = ownInput.address
-        val contractInputs = txInfo.findOwnInputsByCredential(contractAddress.credential)
-        val contractBalance = Utils.getAdaFromInputs(contractInputs)
+        val ownInput = txInfo.findInputOrFail(txOutRef)
+        val contractAddress = ownInput.resolved.address
+        // Exactly one escrow may be spent per transaction: the payout checks below sum the
+        // buyer's and seller's outputs by credential, so two escrows spent together could be
+        // settled by one payout (double satisfaction).
+        txInfo.inputs.findUniqueOrFail(
+          _.resolved.address.credential === contractAddress.credential,
+          "Exactly one escrow input may be spent"
+        )
+        // Lovelace by design: the escrow holds ADA only. Summed by the full own address.
+        val contractBalance = txInfo.valueSpentFrom(contractAddress).getLovelace
 
         action match {
             case Action.Deposit =>
-                handleDeposit(escrowDatum, txInfo, contractAddress, contractBalance, receivedData)
+                handleDeposit(escrowDatum, txInfo, ownInput, contractBalance, receivedData)
             case Action.Pay =>
                 handlePay(escrowDatum, txInfo, contractBalance)
             case Action.Refund =>
@@ -69,7 +76,7 @@ object EscrowValidator extends Validator {
     private inline def handleDeposit(
         escrowDatum: Config,
         txInfo: TxInfo,
-        contractAddress: Address,
+        ownInput: TxInInfo,
         contractBalance: Lovelace,
         receivedData: Data
     ): Unit = {
@@ -78,31 +85,32 @@ object EscrowValidator extends Validator {
           "Buyer must sign deposit transaction"
         )
 
-        val buyerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
-        val contractOutputs = txInfo.findOwnOutputsByCredential(contractAddress.credential)
+        val contractAddress = ownInput.resolved.address
+        // Unique output to the WHOLE own address, staking part included.
+        val contractOutput =
+            txInfo.findContinuingOutputOrFail(ownInput, "Expected exactly one contract output")
 
-        require(contractOutputs.length === BigInt(1), "Expected exactly one contract output")
-        val contractOutput = contractOutputs.head
-
-        require(buyerOutputs.length === BigInt(1), "Expected exactly one buyer output")
+        val buyerCredential = Credential.PubKeyCredential(escrowDatum.buyer)
+        require(
+          txInfo.outputs.count(_.address.credential === buyerCredential) === BigInt(1),
+          "Expected exactly one buyer output"
+        )
 
         require(
           contractBalance === escrowDatum.initializationAmount,
           "Contract must contain only initialization amount before deposit"
         )
 
+        // Whole-value check: the continuing output carries exactly the escrow amount plus the
+        // initialization amount, and nothing else. Summing lovelace alone would let native
+        // tokens be stripped from (or dust added to) the escrow UTxO.
         require(
-          Utils.getAdaFromOutputs(
-            contractOutputs
-          ) === escrowDatum.escrowAmount + escrowDatum.initializationAmount,
+          txInfo.valuePaidTo(contractAddress) ===
+              Value.lovelace(escrowDatum.escrowAmount + escrowDatum.initializationAmount),
           "Contract output must contain exactly escrow amount plus initialization amount"
         )
 
-        require(
-          contractOutput.datum.inlineOrFail[Data]("Expected inline datum") === receivedData,
-          "EscrowDatum must be preserved"
-        )
+        require(contractOutput.hasInlineDatum(receivedData), "EscrowDatum must be preserved")
     }
 
     private inline def handlePay(
@@ -116,9 +124,9 @@ object EscrowValidator extends Validator {
         )
 
         val buyerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
+            txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
         val sellerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
+            txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
 
         require(
           sellerOutputs.nonEmpty,
@@ -135,10 +143,10 @@ object EscrowValidator extends Validator {
           "Only buyer can release payment"
         )
 
+        // The seller is a key, paid in lovelace by design.
         require(
-          Utils.getAdaFromOutputs(
-            sellerOutputs
-          ) === escrowDatum.escrowAmount + escrowDatum.initializationAmount,
+          sellerOutputs.foldLeft(Value.zero)(_ + _.value).getLovelace ===
+              escrowDatum.escrowAmount + escrowDatum.initializationAmount,
           "Seller must receive exactly escrow amount plus initialization amount"
         )
     }
@@ -154,9 +162,9 @@ object EscrowValidator extends Validator {
         )
 
         val buyerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
+            txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.buyer))
         val sellerOutputs =
-            txInfo.findOwnOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
+            txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
 
         require(
           sellerOutputs.nonEmpty,
@@ -173,8 +181,9 @@ object EscrowValidator extends Validator {
           "Only seller can issue refund"
         )
 
+        // The buyer is a key, paid in lovelace by design.
         require(
-          Utils.getAdaFromOutputs(buyerOutputs) === escrowDatum.escrowAmount,
+          buyerOutputs.foldLeft(Value.zero)(_ + _.value).getLovelace === escrowDatum.escrowAmount,
           "Buyer must receive exactly the escrow amount back"
         )
     }

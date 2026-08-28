@@ -61,7 +61,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
     }
 
     test(s"HTLC validator size is ${HtlcContract.compiled.script.script.size} bytes") {
-        assert(HtlcContract.compiled.script.script.size == 322)
+        assert(HtlcContract.compiled.script.script.size == 318)
     }
 
     test("VALIDATOR: receiver reveals preimage before timeout") {
@@ -185,7 +185,7 @@ class HtlcTest extends AnyFunSuite, ScalusTest {
           signer = Alice.signer
         )
 
-        assertResult(ExUnits(memory = 23694L, steps = 8652711L)):
+        assertResult(ExUnits(memory = 24194L, steps = 8732711L)):
             timeoutTx.witnessSet.redeemers.get.value.totalExUnits
 
         provider.setSlot(afterSlot)

@@ -3,9 +3,7 @@ package scalus.examples.factory
 import scalus.compiler.Compile
 
 import scalus.*
-import scalus.uplc.builtin.Builtins
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
-import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.ByteString.given
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
@@ -59,8 +57,7 @@ object Factory {
       * @return
       *   blake2b_256(serialiseData(seedUtxo))
       */
-    def computeTokenName(seedUtxo: TxOutRef): TokenName =
-        Builtins.blake2b_256(Builtins.serialiseData(seedUtxo.toData))
+    def computeTokenName(seedUtxo: TxOutRef): TokenName = seedUtxo.deriveTokenName
 
     /** Validate product creation (minting policy logic for `Create`).
       *
@@ -93,7 +90,7 @@ object Factory {
         tx: TxInfo
     ): Unit = {
         // Seed UTxO must be consumed (one-shot guarantee)
-        require(tx.inputs.exists(_.outRef === seedUtxo), SeedUtxoMustBeConsumed)
+        tx.findInputOrFail(seedUtxo, SeedUtxoMustBeConsumed)
 
         // Compute expected token name from seed UTxO
         val expectedTokenName = computeTokenName(seedUtxo)
@@ -103,12 +100,12 @@ object Factory {
 
         // Find a product output at the spending script address with the NFT and correct datum
         val scriptCred = Credential.ScriptCredential(spendingScriptHash)
-        val productOutput = tx.outputs
-            .find { output =>
-                output.address.credential === scriptCred
-                && output.value.quantityOf(policyId, expectedTokenName) === BigInt(1)
-            }
-            .getOrFail(MissingProductOutput)
+        val productOutput = tx.outputs.findUniqueOrFail(
+          output =>
+              output.address.credential === scriptCred
+                  && output.value.hasNft(policyId, expectedTokenName),
+          MissingProductOutput
+        )
 
         // Verify inline datum and authorize against the product's own creator. The creator is taken
         // from the product datum (not the first signatory) so it is order-independent and the
@@ -139,10 +136,7 @@ object Factory {
         tx: TxInfo
     ): Unit = {
         // Check exactly 1 token burned under this policy
-        val mintedTokens = tx.mint.toSortedMap.get(policyId).getOrFail(NoTokensMinted)
-        val (_, quantity) = mintedTokens.toList match
-            case List.Cons(pair, List.Nil) => pair
-            case _                         => fail(MustBurnExactlyOneToken)
+        val (_, quantity) = tx.mint.tokens(policyId).singleOrFail(MustBurnExactlyOneToken)
         require(quantity === BigInt(-1), MustBurnExactlyOneToken)
     }
 
@@ -171,20 +165,15 @@ object Factory {
         require(tx.isSignedBy(datum.creator), CreatorMustSign)
 
         // Extract the factory NFT token name from our own input
-        val ownFactoryTokens =
-            ownInputValue.toSortedMap.get(factoryPolicyId).getOrFail(NoFactoryToken)
-        val (tokenName, _) = ownFactoryTokens.toList match
-            case List.Cons(pair, List.Nil) => pair
-            case _                         => fail(MustHaveExactlyOneFactoryToken)
+        val (tokenName, _) =
+            ownInputValue.tokens(factoryPolicyId).singleOrFail(MustHaveExactlyOneFactoryToken)
 
-        // The NFT must be burned (qty = -1)
-        val burnQty = tx.mint.quantityOf(factoryPolicyId, tokenName)
-        require(burnQty === BigInt(-1), ProductNFTMustBeBurned)
+        // Exactly this NFT must be burned (qty = -1) and nothing else under the factory policy
+        require(tx.mint.hasOnly(factoryPolicyId, tokenName, -1), ProductNFTMustBeBurned)
     }
 
     inline val CreatorMustSign = "Creator must sign the transaction"
     inline val SeedUtxoMustBeConsumed = "Seed UTxO must be consumed"
-    inline val NoTokensMinted = "No tokens minted under this policy"
     inline val MustMintExactlyOneToken = "Must mint exactly one token"
     inline val MissingProductOutput = "No product output found at spending script"
     inline val MissingInlineDatum = "Product output must have an inline datum"

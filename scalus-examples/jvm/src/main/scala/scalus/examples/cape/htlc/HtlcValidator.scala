@@ -39,7 +39,7 @@ enum HtlcRedeemer derives FromData, ToData:
   * is what rejects the `claim_infinite_upper_bound` and `refund_infinite_lower_bound` fixtures.
   *
   * Everything else is the standard prelude plumbing shared with the other CAPE validators:
-  * `TxInfo.findOwnInputOrFail`, `TxInfo.isSignedBy`, and `List.count` for the double-satisfaction
+  * `TxInfo.findInputOrFail`, `TxInfo.isSignedBy`, and `List.count` for the double-satisfaction
   * guard. An earlier revision hand-navigated the raw `ScriptContext` `Data` and hand-rolled local
   * copies of all of these to dodge the cost of the library versions; those are dropped in favor of
   * the canonical forms, since library and compiler fixes are the intended remedy for a cost gap,
@@ -59,11 +59,11 @@ object HtlcValidator extends Validator {
         txOutRef: TxOutRef
     ): Unit = {
         val d = datum.getOrFail(DatumNotFound).to[HtlcDatum]
-        val ownCred = txInfo.findOwnInputOrFail(txOutRef).resolved.address.credential
+        val ownCred = txInfo.findInputOrFail(txOutRef).resolved.address.credential
         // Double-satisfaction guard: spending several HTLC UTxOs in one transaction would let a
         // single preimage (or a single refund deadline) unlock all of them at once.
-        require(
-          txInfo.inputs.count(_.resolved.address.credential === ownCred) === BigInt(1),
+        txInfo.inputs.findUniqueOrFail(
+          _.resolved.address.credential === ownCred,
           MultipleScriptInputs
         )
         redeemer.to[HtlcRedeemer] match
@@ -76,9 +76,8 @@ object HtlcValidator extends Validator {
                 require(txInfo.validRange.isEntirelyAfter(d.timeout), TooEarlyToRefund)
     }
 
-    def pkhOf(address: Address): PubKeyHash = address.credential match
-        case Credential.PubKeyCredential(pkh) => pkh
-        case _                                => fail(ExpectedPubKeyAddress)
+    def pkhOf(address: Address): PubKeyHash =
+        address.credential.pubKeyHashOrFail(ExpectedPubKeyAddress)
 
     // Error messages
     inline val DatumNotFound = "No datum"

@@ -22,8 +22,7 @@ object SetBenchImtValidator extends Validator {
         import scalus.cardano.onchain.plutus.crypto.tree.IncrementalMerkleTree
 
         val state = datum.getOrFail("No datum").to[ImtDatum]
-        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-        val contractAddr = ownInput.address
+        val ownInput = txInfo.findInputOrFail(txOutRef)
         val K = BigInt(2_000_000)
 
         val action = redeemer.to[ImtRedeemer]
@@ -58,9 +57,7 @@ object SetBenchImtValidator extends Validator {
 
         val newRemaining = state.remaining + delta
 
-        val outputs = txInfo.findOwnOutputsByCredential(contractAddr.credential)
-        require(outputs.length === BigInt(1), "Expected one continuing output")
-        val out = outputs.head
+        val out = txInfo.findContinuingOutputOrFail(ownInput, "Expected one continuing output")
         val outDatum = out.datum.inlineOrFail[ImtDatum]("Expected inline datum")
         require(outDatum.remaining === newRemaining, "Wrong remaining")
         require(outDatum.root === newRoot, "Wrong root")

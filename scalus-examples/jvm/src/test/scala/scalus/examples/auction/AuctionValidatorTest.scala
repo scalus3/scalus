@@ -1,7 +1,6 @@
 package scalus.examples.auction
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.ScalaCompilerVersion
 import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.address.ShelleyAddress
 import scalus.cardano.ledger.*
@@ -66,10 +65,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).runWithBudget()
         assert(
-          budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 87043, steps = 35_740727),
-            since38 = ExUnits(memory = 83987, steps = 34_662865)
-          )
+          budget == ExUnits(memory = 80899, steps = 33_431373)
         )
     }
 
@@ -79,10 +75,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).runWithBudget()
         assert(
-          budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 104723, steps = 42_618565),
-            since38 = ExUnits(memory = 101667, steps = 41_540703)
-          )
+          budget == ExUnits(memory = 98579, steps = 40_309211)
         )
     }
 
@@ -92,10 +85,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).runWithBudget()
         assert(
-          budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 166862, steps = 56_339860),
-            since38 = ExUnits(memory = 163806, steps = 55_261998)
-          )
+          budget == ExUnits(memory = 138143, steps = 49_701837)
         )
     }
 
@@ -105,10 +95,7 @@ class AuctionValidatorTest extends AnyFunSuite, ScalusTest {
           expected = Expected.Success
         ).runWithBudget()
         assert(
-          budget == ScalaCompilerVersion.baseline(
-            pre38 = ExUnits(memory = 146263, steps = 45_833252),
-            since38 = ExUnits(memory = 143207, steps = 44_755390)
-          )
+          budget == ExUnits(memory = 116837, steps = 39_174046)
         )
     }
 }

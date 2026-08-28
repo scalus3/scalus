@@ -9,8 +9,7 @@ import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Coin, Transac
 import scalus.cardano.node.BlockchainProvider
 import scalus.cardano.txbuilder.{TransactionSigner, TxBuilder}
 import scalus.compiler.Options
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
@@ -119,15 +118,10 @@ object AuctionValidator extends DataParameterizedValidator {
                 val input = txInfo.inputs.at(inputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, inputValue, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          value,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, value, inlineDatum.to[Datum])
-                    case _ => fail("Auction input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Auction input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[Datum]("Auction input must have inline datum")
 
                 handleBid(
                   txInfo,
@@ -144,15 +138,10 @@ object AuctionValidator extends DataParameterizedValidator {
                 val input = txInfo.inputs.at(inputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, inputValue, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          value,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, value, inlineDatum.to[Datum])
-                    case _ => fail("Auction input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Auction input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[Datum]("Auction input must have inline datum")
 
                 handleEnd(txInfo, scriptHash, currentDatum, sellerOutputIdx, winnerOutputIdx)
 
@@ -223,7 +212,7 @@ object AuctionValidator extends DataParameterizedValidator {
 
         // 8. Verify the auction NFT is preserved in the continuing output
         require(
-          continuingOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
+          continuingOutput.value.hasNft(scriptHash, itemId),
           "Auction NFT must be preserved"
         )
 
@@ -301,17 +290,12 @@ object AuctionValidator extends DataParameterizedValidator {
                   winnerOutput.address === Address.fromPubKeyHash(winner),
                   "Winner output must go to the winner"
                 )
-                // Verify winner receives exactly this auction's NFT (prevents double satisfaction)
-                // If multiple auctions shared this output, it would have multiple NFTs
-                val totalNftsInWinnerOutput =
-                    winnerOutput.value.tokens(scriptHash).values.foldLeft(BigInt(0))(_ + _)
+                // Verify winner receives exactly this auction's NFT and no other token under this
+                // policy (prevents double satisfaction): if multiple auctions shared this output,
+                // it would carry multiple NFTs.
                 require(
-                  totalNftsInWinnerOutput === BigInt(1),
-                  "Winner output must have exactly one auction NFT (no bundling)"
-                )
-                require(
-                  winnerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
-                  "Winner must receive this auction's NFT"
+                  winnerOutput.value.hasOnly(scriptHash, itemId, 1),
+                  "Winner must receive exactly this auction's NFT (no bundling)"
                 )
 
                 // 3. Seller must receive the highest bid amount - use indexed lookup
@@ -331,10 +315,8 @@ object AuctionValidator extends DataParameterizedValidator {
                 // check is only `>=` its own bid), letting an attacker pay the seller once and pocket
                 // the rest. Requiring the seller output to carry this auction's scriptHash forces a
                 // distinct seller output per auction, closing the cross-instance double satisfaction.
-                val sellerOutputDatum = sellerOutput.datum
-                    .inlineOrFail[Data]("Seller output must carry this auction's id datum")
                 require(
-                  sellerOutputDatum == scriptHash.toData,
+                  sellerOutput.hasInlineDatum(scriptHash),
                   "Seller output must be tagged with this auction's id"
                 )
 
@@ -351,16 +333,11 @@ object AuctionValidator extends DataParameterizedValidator {
                   sellerOutput.address === Address.fromPubKeyHash(seller),
                   "Seller output must go to the seller"
                 )
-                // Verify seller receives exactly this auction's NFT (prevents double satisfaction)
-                val totalNftsInSellerOutput =
-                    sellerOutput.value.tokens(scriptHash).values.foldLeft(BigInt(0))(_ + _)
+                // Verify seller receives exactly this auction's NFT and no other token under this
+                // policy (prevents double satisfaction)
                 require(
-                  totalNftsInSellerOutput === BigInt(1),
-                  "Seller output must have exactly one auction NFT (no bundling)"
-                )
-                require(
-                  sellerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
-                  "Seller must receive back this auction's NFT"
+                  sellerOutput.value.hasOnly(scriptHash, itemId, 1),
+                  "Seller must receive back exactly this auction's NFT (no bundling)"
                 )
 
     inline override def mint(
@@ -389,10 +366,7 @@ object AuctionValidator extends DataParameterizedValidator {
         auctionEndTime: PosixTime
     ): Unit =
         // 1. Verify the one-shot UTxO is being spent (ensures unique policyId per auction)
-        require(
-          txInfo.inputs.exists(_.outRef === oneShot),
-          "Must spend the one-shot UTxO to create auction"
-        )
+        txInfo.findInputOrFail(oneShot, "Must spend the one-shot UTxO to create auction")
 
         // 2. Seller must sign the transaction
         require(
@@ -418,16 +392,16 @@ object AuctionValidator extends DataParameterizedValidator {
           "Starting bid must be positive"
         )
 
-        // 6. Find the output going to the script address
-        val auctionOutput = txInfo.outputs.filter { out =>
-            out.address === Address.fromScriptHash(policyId)
-        }.match
-            case List.Cons(out, List.Nil) => out
-            case _ => fail("There must be exactly one output to the auction script")
+        // 6. Find the unique output going to the script address
+        val scriptAddress = Address.fromScriptHash(policyId)
+        val auctionOutput = txInfo.outputs.findUniqueOrFail(
+          _.address === scriptAddress,
+          "There must be exactly one output to the auction script"
+        )
 
         // 7. Verify the output contains the minted NFT
         require(
-          auctionOutput.value.quantityOf(policyId, itemId) === BigInt(1),
+          auctionOutput.value.hasNft(policyId, itemId),
           "Auction output must contain the minted NFT"
         )
 
@@ -440,8 +414,7 @@ object AuctionValidator extends DataParameterizedValidator {
           itemId = itemId
         )
         require(
-          auctionOutput.datum
-              .inlineOrFail[Datum]("Auction output must have inline datum") === expectedDatum,
+          auctionOutput.hasInlineDatum(expectedDatum),
           "Initial auction datum must be correct"
         )
 
@@ -449,10 +422,10 @@ object AuctionValidator extends DataParameterizedValidator {
         policyId: PolicyId,
         txInfo: TxInfo
     ): Unit =
-        // For burning, verify all tokens of this policy are burned (negative quantity)
-        val mintedTokens = txInfo.mint.tokens(policyId)
+        // Every quantity under this policy must be negative. onlyBurnsUnder also rejects an
+        // empty sub-map, where a bare forall would be vacuously true.
         require(
-          mintedTokens.forall { case (_, amount) => amount < 0 },
+          txInfo.onlyBurnsUnder(policyId),
           "Only burning is allowed (all amounts must be negative)"
         )
 }

@@ -47,14 +47,17 @@ object SimpleTransferValidator extends Validator {
     ): Unit = {
         val datumData = datum.getOrFail("Datum not found")
         val Parties(owner, recipient) = datumData.to[Parties]
-        val contract = tx.findOwnInputOrFail(ownRef).resolved
-        val contractAddress = contract.address.credential
-        val contractInputs = tx.findOwnInputsByCredential(contractAddress)
-        val contractOutputs = tx.findOwnOutputsByCredential(contractAddress)
+        val ownInput = tx.findInputOrFail(ownRef)
+        val contract = ownInput.resolved
+        val contractCredential = contract.address.credential
+        val contractOutputs = tx.findOutputsByCredential(contractCredential)
         val balance = contract.value
 
         // eliminate double satisfaction by ensuring exactly one contract own input and at most one own output
-        require(contractInputs.size === BigInt(1), "Contract should have exactly one own input")
+        tx.inputs.findUniqueOrFail(
+          _.resolved.address.credential === contractCredential,
+          "Contract should have exactly one own input"
+        )
         require(
           contractOutputs.size <= 1,
           "Contract should have at most one own output"
@@ -64,18 +67,16 @@ object SimpleTransferValidator extends Validator {
             case Action.Deposit(amount) =>
                 require(tx.isSignedBy(owner), "Deposit must be signed by owner")
                 require(amount.isPositive, "Negative amount")
-                // eliminate double satisfaction by ensuring exactly one contract own input and one own output
-                require(
-                  contractOutputs.size === BigInt(1),
+                // exactly one own output (by credential, checked above), at the whole own address
+                val contractOutput = contractOutputs.singleOrFail(
                   "Contract should have exactly one own output"
                 )
-                val contractOutput = contractOutputs.head
+                require(contractOutput.address === contract.address, "Own output address changed")
                 require(
                   contractOutput.value === balance + amount,
                   "Contract has received incorrect amount"
                 )
-                val expectedDatum = OutputDatum.OutputDatum(datumData)
-                require(contractOutput.datum === expectedDatum, "Output datum changed")
+                require(contractOutput.hasInlineDatum(datumData), "Output datum changed")
             case Action.Withdraw(withdraw) =>
                 require(tx.isSignedBy(recipient), "Withdraw must be signed by recipient")
                 require(withdraw.isPositive, "Negative amount")
@@ -83,18 +84,18 @@ object SimpleTransferValidator extends Validator {
                     // if withdrawing all, there should be no contract output
                     require(contractOutputs.isEmpty, "Contract own output is not empty")
                 else if (balance - withdraw).isPositive then
-                    // eliminate double satisfaction by ensuring exactly one contract own input and one own output
-                    require(
-                      contractOutputs.size === BigInt(1),
+                    val contractOutput = contractOutputs.singleOrFail(
                       "Contract should have exactly one own output"
                     )
-                    val contractOutput = contractOutputs.head
+                    require(
+                      contractOutput.address === contract.address,
+                      "Own output address changed"
+                    )
                     require(
                       contractOutput.value === balance - withdraw,
                       "Contract balance is incorrect"
                     )
-                    val expectedDatum = OutputDatum.OutputDatum(datumData)
-                    require(contractOutput.datum === expectedDatum, "Output datum changed")
+                    require(contractOutput.hasInlineDatum(datumData), "Output datum changed")
                 else fail("Withdraw exceeds balance")
     }
 }

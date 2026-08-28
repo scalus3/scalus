@@ -4,7 +4,7 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Builtins.blake2b_224
 import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.{Credential, IntervalBoundType, PolicyId, PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{IntervalBoundType, PolicyId, PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
@@ -95,10 +95,11 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 identityOutput.datum.inlineOrFail[IdentityDatum]("Identity must have inline datum")
 
                 // Output must be at own script address
-                identityOutput.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Identity must go to script address")
-                    case _ => fail("Identity must go to script address")
+                require(
+                  identityOutput.address.credential
+                      .scriptHashOrFail("Identity must go to script address") === policyId,
+                  "Identity must go to script address"
+                )
 
                 // Find the identity token name from the output (starts with "i")
                 val idTn = findTokenWithPrefix(identityOutput.value, policyId, "i")
@@ -117,7 +118,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Must be signed by identity owner
                 require(
-                  tx.signatories.exists(_ === identityDatum.ownerPkh),
+                  tx.isSignedBy(identityDatum.ownerPkh),
                   "Must be signed by identity owner"
                 )
 
@@ -127,10 +128,11 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Delegation output must be at script address
                 val delegationOutput = tx.outputs.at(delegationOutIndex)
-                delegationOutput.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Delegation must go to script address")
-                    case _ => fail("Delegation must go to script address")
+                require(
+                  delegationOutput.address.credential
+                      .scriptHashOrFail("Delegation must go to script address") === policyId,
+                  "Delegation must go to script address"
+                )
 
                 // Check delegation datum
                 val delegDatum = delegationOutput.datum.inlineOrFail[DelegationDatum](
@@ -155,7 +157,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 )
 
                 require(
-                  delegationOutput.value.quantityOf(policyId, delegTn) === BigInt(1),
+                  delegationOutput.value.hasNft(policyId, delegTn),
                   "Delegation output must hold the delegation token"
                 )
 
@@ -166,10 +168,11 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                     .inlineOrFail[DelegationDatum]("Delegation ref input must have inline datum")
 
                 // Delegation must be at script address (proving it's valid/non-forged)
-                delegationRefInput.resolved.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Delegation must be at script address")
-                    case _ => fail("Delegation must be at script address")
+                require(
+                  delegationRefInput.resolved.address.credential
+                      .scriptHashOrFail("Delegation must be at script address") === policyId,
+                  "Delegation must be at script address"
+                )
 
                 // The delegation must actually hold its delegation token. Being at the script
                 // address with a datum-shaped value is not enough — anyone can pay a forged
@@ -179,31 +182,32 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 val delegTn =
                     delegationTokenName(delegDatum.identityTokenName, delegDatum.delegatePkh)
                 require(
-                  delegationRefInput.resolved.value.quantityOf(policyId, delegTn) === BigInt(1),
+                  delegationRefInput.resolved.value.hasNft(policyId, delegTn),
                   "Delegation reference input must hold the delegation token"
                 )
 
                 // Must be signed by delegate
                 require(
-                  tx.signatories.exists(_ === delegDatum.delegatePkh),
+                  tx.isSignedBy(delegDatum.delegatePkh),
                   "Must be signed by delegate"
                 )
 
                 // Check delegation validity: entire tx validity range must fall within delegation period
-                val txStartTime = tx.getValidityStartTime
+                val txStartTime =
+                    tx.validFromOrFail("Transaction must have a finite lower validity bound")
                 require(txStartTime >= delegDatum.validFrom, "Delegation not yet valid")
 
-                val txEndTime = tx.validRange.to.boundType match
-                    case IntervalBoundType.Finite(t) => t
-                    case _ => fail("Transaction must have a finite upper validity bound")
+                val txEndTime =
+                    tx.validToOrFail("Transaction must have a finite upper validity bound")
                 require(txEndTime <= delegDatum.validUntil, "Delegation expired")
 
                 // Attribute output must be at script address
                 val attributeOutput = tx.outputs.at(attributeOutIndex)
-                attributeOutput.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Attribute must go to script address")
-                    case _ => fail("Attribute must go to script address")
+                require(
+                  attributeOutput.address.credential
+                      .scriptHashOrFail("Attribute must go to script address") === policyId,
+                  "Attribute must go to script address"
+                )
 
                 // Check attribute datum
                 val attrDatum = attributeOutput.datum.inlineOrFail[AttributeDatum](
@@ -223,16 +227,14 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 )
 
                 require(
-                  attributeOutput.value.quantityOf(policyId, attrTn) === BigInt(1),
+                  attributeOutput.value.hasNft(policyId, attrTn),
                   "Attribute output must hold the attribute token"
                 )
 
             case MintAction.Burn =>
-                // Ensure all quantities under this policy are negative (only burns allowed)
-                require(
-                  tx.mint.tokens(policyId).forall((_, qty) => qty < 0),
-                  "Burn action must only burn tokens"
-                )
+                // Every quantity under this policy must be negative; onlyBurnsUnder also
+                // rejects an empty sub-map, where a bare forall would be vacuously true.
+                require(tx.onlyBurnsUnder(policyId), "Burn action must only burn tokens")
         }
     }
 
@@ -245,11 +247,9 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val scriptAddress = ownInput.resolved.address
-        val policyId = scriptAddress.credential match
-            case Credential.ScriptCredential(hash) => hash
-            case _                                 => fail("Expected script credential")
+        val policyId = scriptAddress.credential.scriptHashOrFail("Expected script credential")
 
         redeemer.to[SpendAction] match {
             case SpendAction.TransferOwnership(newOwnerPkh, identityOutIndex) =>
@@ -262,25 +262,26 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
 
                 // Must be signed by current owner
                 require(
-                  tx.signatories.exists(_ === datum.ownerPkh),
+                  tx.isSignedBy(datum.ownerPkh),
                   "Must be signed by current owner"
                 )
 
                 // Must be signed by new owner (accept transfer)
                 require(
-                  tx.signatories.exists(_ === newOwnerPkh),
+                  tx.isSignedBy(newOwnerPkh),
                   "Must be signed by new owner"
                 )
 
                 // Identity token must be returned to script address with new datum
                 val newOutput = tx.outputs.at(identityOutIndex)
-                newOutput.address.credential match
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash === policyId, "Identity must return to script address")
-                    case _ => fail("Identity must return to script address")
+                require(
+                  newOutput.address.credential
+                      .scriptHashOrFail("Identity must return to script address") === policyId,
+                  "Identity must return to script address"
+                )
 
                 require(
-                  newOutput.value.quantityOf(policyId, identityTn) === BigInt(1),
+                  newOutput.value.hasNft(policyId, identityTn),
                   "Must return identity token"
                 )
 
@@ -297,7 +298,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 val ownerPkh = findIdentityOwner(tx, policyId, datum.identityTokenName)
 
                 require(
-                  tx.signatories.exists(_ === ownerPkh),
+                  tx.isSignedBy(ownerPkh),
                   "Must be signed by identity owner to revoke"
                 )
 
@@ -315,7 +316,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
                 val ownerPkh = findIdentityOwner(tx, policyId, attrDatum.identityTokenName)
 
                 require(
-                  tx.signatories.exists(_ === ownerPkh),
+                  tx.isSignedBy(ownerPkh),
                   "Must be signed by identity owner to revoke"
                 )
 
@@ -356,7 +357,7 @@ object DecentralizedIdentityValidator extends DataParameterizedValidator {
     ): PubKeyHash = {
         val identityRefInput = tx.referenceInputs
             .find { txInInfo =>
-                txInInfo.resolved.value.quantityOf(policyId, identityTokenName) === BigInt(1)
+                txInInfo.resolved.value.hasNft(policyId, identityTokenName)
             }
             .getOrFail("Identity reference input not found")
 

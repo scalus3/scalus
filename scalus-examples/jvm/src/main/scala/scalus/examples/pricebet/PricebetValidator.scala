@@ -4,7 +4,7 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.Data
-import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{DataParameterizedValidator, TxInInfo, TxInfo, TxOutRef}
 import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.prelude.*
@@ -54,7 +54,7 @@ object PricebetValidator extends DataParameterizedValidator {
         val state = datum.getOrFail("Datum must be present").to[PricebetState]
         val action = redeemer.to[Action]
         val config = param.to[PricebetConfig]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
 
         action match {
             case Action.Join =>
@@ -62,14 +62,10 @@ object PricebetValidator extends DataParameterizedValidator {
                 require(state.player.isEmpty, "Player already joined")
 
                 // Find continuation output
-                val continuationOutputs =
-                    tx.outputs.filter(out => out.address === ownInput.resolved.address)
-                require(
-                  continuationOutputs.length === BigInt(1),
+                val continuationOutput = tx.findContinuingOutputOrFail(
+                  ownInput,
                   "Must have exactly one continuation output"
                 )
-
-                val continuationOutput = continuationOutputs.head
                 val initialBetAmount = ownInput.resolved.value.getLovelace
 
                 // Verify continuation output has 2x the bet
@@ -84,8 +80,7 @@ object PricebetValidator extends DataParameterizedValidator {
                 )
 
                 // Find who signed and verify they're the player
-                require(newState.player.isDefined, "Player must be set in new datum")
-                val playerPkh = newState.player.get
+                val playerPkh = newState.player.getOrFail("Player must be set in new datum")
                 require(tx.isSignedBy(playerPkh), "Must be signed by player")
 
                 // Verify other fields unchanged
@@ -99,19 +94,18 @@ object PricebetValidator extends DataParameterizedValidator {
 
             case Action.Win(index) =>
                 // Verify player exists and signed
-                require(state.player.isDefined, "No player joined yet")
-                val playerPkh = state.player.get
+                val playerPkh = state.player.getOrFail("No player joined yet")
                 require(tx.isSignedBy(playerPkh), "Must be signed by player")
 
                 // Verify before deadline
                 require(!tx.validRange.isEntirelyAfter(state.deadline), "Deadline passed")
 
                 val oracleInput: TxInInfo = tx.referenceInputs.at(index)
-                oracleInput.resolved.address.credential match {
-                    case Credential.PubKeyCredential(hash) => fail(OracleInputMustBeOracleScript)
-                    case Credential.ScriptCredential(hash) =>
-                        require(hash == config.oracleScriptHash, OracleInputMustBeOracleScript)
-                }
+                require(
+                  oracleInput.resolved.address.credential
+                      .scriptHashOrFail(OracleInputMustBeOracleScript) === config.oracleScriptHash,
+                  OracleInputMustBeOracleScript
+                )
 
                 // Authenticate the oracle UTxO by its beacon NFT — being at the oracle script
                 // address is not enough, since anyone can pay a forged datum to that address. The
@@ -120,7 +114,7 @@ object PricebetValidator extends DataParameterizedValidator {
                 // ([[OracleBeaconName]]), so it lives in the contract rather than the datum.
                 require(
                   oracleInput.resolved.value
-                      .quantityOf(config.oracleScriptHash, OracleBeaconName) === BigInt(1),
+                      .hasNft(config.oracleScriptHash, OracleBeaconName),
                   OracleInputMustHaveBeacon
                 )
 
@@ -144,7 +138,7 @@ object PricebetValidator extends DataParameterizedValidator {
 
             case Action.Timeout =>
                 // Verify owner signed
-                require(tx.signatories.exists(_ === state.owner), "Must be signed by owner")
+                require(tx.isSignedBy(state.owner), "Must be signed by owner")
 
                 // Verify deadline passed
                 require(tx.validRange.isEntirelyAfter(state.deadline), "Deadline not reached")

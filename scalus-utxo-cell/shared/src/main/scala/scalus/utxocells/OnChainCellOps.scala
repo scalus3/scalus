@@ -4,7 +4,7 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data
 import scalus.uplc.builtin.Data.toData
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PolicyId, PosixTime, PubKeyHash, Value}
+import scalus.cardano.onchain.plutus.v1.{Address, PolicyId, PosixTime, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
@@ -19,32 +19,22 @@ object CellContextOps {
         self.scriptInfo match
             case ScriptInfo.MintingScript(pid) => pid
             case ScriptInfo.SpendingScript(ownRef, _) =>
-                val ownInput = self.txInfo.findOwnInputOrFail(ownRef)
-                ownInput.resolved.address.credential match
-                    case Credential.ScriptCredential(hash) => hash
-                    case _ => fail("CellContext: input is not a script")
+                val ownInput = self.txInfo.findInputOrFail(ownRef)
+                ownInput.resolved.address.credential
+                    .scriptHashOrFail("CellContext: input is not a script")
             case _ => fail("CellContext: unsupported script info")
 
     def ownInputValue(self: ScriptContext): Value =
         self.scriptInfo match
             case ScriptInfo.SpendingScript(ownRef, _) =>
-                self.txInfo.findOwnInputOrFail(ownRef).resolved.value
+                self.txInfo.findInputOrFail(ownRef).resolved.value
             case _ => fail("CellContext: not spending")
 
     def mint(self: ScriptContext, tokenName: ByteString, amount: BigInt): Unit = {
         val policyId = ownPolicyId(self)
-        val mintedTokens = self.txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.length === BigInt(1),
-          "CellContext: only one token name may be minted under this policy"
-        )
-        require(
-          mintedTokens.keys.head === tokenName,
-          "CellContext: unexpected token name minted"
-        )
-        require(
-          mintedTokens.values.head === amount,
-          "CellContext: mint quantity mismatch"
+          self.txInfo.mint.hasOnly(policyId, tokenName, amount),
+          "CellContext: exactly this token and quantity, and nothing else, may be minted under this policy"
         )
     }
 
@@ -64,18 +54,19 @@ object CellContextOps {
     def setContinuingValue(self: ScriptContext, value: Value): Unit = {
         self.scriptInfo match
             case ScriptInfo.SpendingScript(ownRef, _) =>
-                val ownInput = self.txInfo.findOwnInputOrFail(ownRef)
-                val scriptHash = ownInput.resolved.address.credential match
-                    case Credential.ScriptCredential(hash) => hash
-                    case _ => fail("CellContext: input is not a script")
-                val outputs = self.txInfo.findOwnScriptOutputs(scriptHash)
-                require(outputs.length === BigInt(1), "CellContext: expected one continuing output")
-                UtxoCellLib.verifyStakingCredential(
-                  ownInput.resolved.address,
-                  outputs.head.address
+                val ownAddress = self.txInfo.findInputOrFail(ownRef).resolved.address
+                // Exactly one output at the script credential, and it must keep the whole
+                // address (staking credential included, V016).
+                val continuingOutput = self.txInfo.outputs.findUniqueOrFail(
+                  _.address.credential === ownAddress.credential,
+                  "CellContext: expected one continuing output"
                 )
                 require(
-                  UtxoCellLib.valueGeq(outputs.head.value, value),
+                  continuingOutput.address === ownAddress,
+                  "CellContext: continuing output must keep the staking credential"
+                )
+                require(
+                  UtxoCellLib.valueGeq(continuingOutput.value, value),
                   "CellContext: continuing output value insufficient"
                 )
             case _ => fail("CellContext: not spending")
@@ -93,15 +84,16 @@ object CellTxInfoOps {
 
     def requireValidAfter(self: Data, time: PosixTime): Unit =
         require(
-          self.to[TxInfo].getValidityStartTime >= time,
+          self.to[TxInfo].validFromOrFail("CellContext: validity range has no lower bound") >= time,
           "CellContext: validity range not after required time"
         )
 
     def requireValidBefore(self: Data, time: PosixTime): Unit =
-        self.to[TxInfo].validRange.to.boundType match
-            case IntervalBoundType.Finite(t) =>
-                require(t <= time, "CellContext: validity range not before required time")
-            case _ => fail("CellContext: no finite upper bound on validity range")
+        require(
+          self.to[TxInfo]
+              .validToOrFail("CellContext: no finite upper bound on validity range") <= time,
+          "CellContext: validity range not before required time"
+        )
 }
 
 /** On-chain substitute for [[CellOutputs]]. Receives `List[TxOut]` (as Data) as `self`.

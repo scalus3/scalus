@@ -68,7 +68,7 @@ object CounterCell extends Validator {
         UtxoCellLib.verifySpendResult(result, tx, ownRef)
         result.nextState match
             case Option.None =>
-                val ownInput = tx.findOwnInputOrFail(ownRef)
+                val ownInput = tx.findInputOrFail(ownRef)
                 val policyId = ownInput.resolved.address.credential match
                     case Credential.ScriptCredential(hash) => hash
                     case _ => fail("CounterCell: input is not a script")

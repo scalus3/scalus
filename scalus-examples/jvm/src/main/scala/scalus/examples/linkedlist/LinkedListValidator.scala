@@ -174,10 +174,9 @@ object LinkedListValidator extends DataParameterizedValidator {
     ): Unit = {
         val cfg = param.to[ListConfig]
         val action = redeemer.to[ListAction]
-        val ownInput = tx.findOwnInputOrFail(ownRef, "Own input not found")
-        val nftPolicyId = ownInput.resolved.value.toSortedMap.toList match
-            case List.Cons((_, _), List.Cons((nftPol, _), List.Nil)) => nftPol
-            case _ => fail("Cannot find NFT policy in own UTxO")
+        val ownInput = tx.findInputOrFail(ownRef, "Own input not found")
+        val (nftPolicyId, _) = ownInput.resolved.value.withoutLovelace.toSortedMap
+            .singleOrFail("Cannot find NFT policy in own UTxO")
 
         action match {
             case ListAction.SpendForUpdate(elemInputIdx, contElemOutputIdx) =>

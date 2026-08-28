@@ -24,8 +24,7 @@ object SetBenchMpf16bValidator extends Validator {
 
         val state = datum.getOrFail("No datum").to[SetBenchDatum]
         val trie = FusedMerklePatriciaForestry(state.root)
-        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-        val contractAddr = ownInput.address
+        val ownInput = txInfo.findInputOrFail(txOutRef)
         val K = BigInt(2_000_000)
 
         val action = redeemer.to[SetBenchRedeemer]
@@ -41,9 +40,7 @@ object SetBenchMpf16bValidator extends Validator {
                 -K
             case _: SetBenchRedeemer.Deposit => K
 
-        val outputs = txInfo.findOwnOutputsByCredential(contractAddr.credential)
-        require(outputs.length === BigInt(1), "Expected one continuing output")
-        val out = outputs.head
+        val out = txInfo.findContinuingOutputOrFail(ownInput, "Expected one continuing output")
         val outDatum = out.datum.inlineOrFail[SetBenchDatum]("Expected inline datum")
         require(outDatum.remaining === state.remaining + delta, "Wrong remaining")
         require(outDatum.root === newTrie.root, "Wrong root")

@@ -49,7 +49,7 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
             .map(payee => Credential.PubKeyCredential(PubKeyHash(payee)))
 
         val myTxInputCredential =
-            tx.findOwnInputOrFail(ownRef).resolved.address.credential
+            tx.findInputOrFail(ownRef).resolved.address.credential
 
         // Find the first and single payee that triggers the payout and pays the fee
         //  and calculate the sum of contract inputs
@@ -82,9 +82,9 @@ object NaivePaymentSplitterValidator extends DataParameterizedValidator {
             ) { case (state, output) =>
                 val (sum, sumsPerPayee) = state
                 val value = output.value.getLovelace
-                val payee: Credential.PubKeyCredential = output.address.credential match
-                    case Credential.PubKeyCredential(pkh) => Credential.PubKeyCredential(pkh)
-                    case _                                => fail("Output to script is not allowed")
+                val payee: Credential.PubKeyCredential = Credential.PubKeyCredential(
+                  output.address.credential.pubKeyHashOrFail("Output to script is not allowed")
+                )
                 sumsPerPayee.get(payee) match
                     case None => (sum + value, sumsPerPayee.insert(payee, value))
                     case Some(prevSum) =>

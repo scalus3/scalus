@@ -8,8 +8,6 @@ import scalus.uplc.builtin.Data.FromData
 import scalus.uplc.builtin.Data.ToData
 import scalus.uplc.builtin.ToData.*
 import scalus.cardano.onchain.plutus.v1.Address
-import scalus.cardano.onchain.plutus.v1.Credential.ScriptCredential
-import scalus.cardano.onchain.plutus.v2.OutputDatum.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
@@ -74,55 +72,37 @@ object BettingValidator extends Validator {
         txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit =
-        val (scriptHash, address, value, Config(player1, player2, oracle, expiration)) =
-            txInfo.findOwnInputOrFail(txOutRef, "Bet spent input must be present") match
-                case TxInInfo(
-                      _,
-                      TxOut(
-                        address @ Address(Credential.ScriptCredential(scriptHash), _),
-                        value,
-                        OutputDatum(currentDatum),
-                        _
-                      )
-                    ) =>
-                    (scriptHash, address, value, currentDatum.to[Config])
-                case _ => fail("Initial bet datum must be inline")
+        val ownInput = txInfo.findInputOrFail(txOutRef, "Bet spent input must be present")
+        val TxOut(address, value, currentDatum, _) = ownInput.resolved
+        val scriptHash = address.credential.scriptHashOrFail("Bet input must sit at the script")
+        val Config(player1, player2, oracle, expiration) =
+            currentDatum.inlineOrFail[Config]("Initial bet datum must be inline")
 
         redeemer.to[Action] match
             case Action.Join =>
-                val (
-                  outputAddress,
-                  outputValue,
-                  Config(newPlayer1, joiningPlayer, newOracle, newExpiration)
-                ) = txInfo
-                    .findOwnScriptOutputs(scriptHash)
-                    .match
-                        case List.Cons(
-                              TxOut(outAddr, outValue, OutputDatum(newDatum), _),
-                              List.Nil
-                            ) =>
-                            (outAddr, outValue, newDatum.to[Config])
-                        case _ =>
-                            fail(
-                              "There must be a single continuing spent output with inline new betting config that goes to the script"
-                            )
+                // V016 fix: the continuing output is matched on the full address, staking
+                // credential included.
+                val continuingOutput = txInfo.findContinuingOutputOrFail(
+                  ownInput,
+                  "There must be a single continuing spent output with inline new betting config that goes to the script"
+                )
+                val outputValue = continuingOutput.value
+                val Config(newPlayer1, joiningPlayer, newOracle, newExpiration) =
+                    continuingOutput.datum.inlineOrFail[Config](
+                      "The continuing bet output must carry the new betting config as an inline datum"
+                    )
                 require(
-                  player2.hash.length === BigInt(0),
+                  player2.hash.isEmpty,
                   "Current bet must not have a player2 yet"
                 )
                 require(
-                  value.policyIds.contains(scriptHash),
+                  value.tokens(scriptHash).nonEmpty,
                   "Input must contain the bet token"
                 )
                 // V002 fix: Verify bet token is preserved in output
                 require(
-                  outputValue.policyIds.contains(scriptHash),
+                  outputValue.tokens(scriptHash).nonEmpty,
                   "Output must contain the bet token"
-                )
-                // V016 fix: Verify full address including staking credential
-                require(
-                  outputAddress === address,
-                  "Output address must match input address (including staking credential)"
                 )
                 require(
                   txInfo.isSignedBy(joiningPlayer),
@@ -170,7 +150,7 @@ object BettingValidator extends Validator {
                   "Winner must be either player1 or player2"
                 )
                 require(
-                  player2.hash.length != BigInt(0),
+                  player2.hash.nonEmpty,
                   "Both players must have joined (player2 is not None)"
                 )
                 require(
@@ -192,9 +172,7 @@ object BettingValidator extends Validator {
                 )
                 // Burn the bet NFT so the bet is one-shot and cannot be re-locked into a forged bet.
                 require(
-                  txInfo.mint.quantityOf(scriptHash, betTokenName(value, scriptHash)) === BigInt(
-                    -1
-                  ),
+                  txInfo.mint.hasOnly(scriptHash, betTokenName(value, scriptHash), -1),
                   "The bet token must be burned when announcing the winner"
                 )
 
@@ -212,15 +190,13 @@ object BettingValidator extends Validator {
                 // Exactly one bet input — the per-player refund check below sums outputs by address,
                 // so batching two bets in one tx could let one refund satisfy both. One input per
                 // reclaim keeps the accounting sound.
-                require(
-                  txInfo.findOwnInputsByCredential(address.credential).length === BigInt(1),
+                txInfo.inputs.findUniqueOrFail(
+                  _.resolved.address.credential === address.credential,
                   "Reclaim must spend exactly one bet input"
                 )
                 // Burn the bet NFT so a reclaimed bet's token can't be re-locked into a forged bet.
                 require(
-                  txInfo.mint.quantityOf(scriptHash, betTokenName(value, scriptHash)) === BigInt(
-                    -1
-                  ),
+                  txInfo.mint.hasOnly(scriptHash, betTokenName(value, scriptHash), -1),
                   "The bet token must be burned on timeout"
                 )
                 if player2.hash.isEmpty then
@@ -243,16 +219,11 @@ object BettingValidator extends Validator {
 
     /** The bet NFT's token name — the single asset under the bet's own policy in its UTxO value. */
     private inline def betTokenName(value: Value, scriptHash: PolicyId): TokenName =
-        value.tokens(scriptHash).toList match
-            case List.Cons((name, _), List.Nil) => name
-            case _                              => fail("Bet UTxO must hold exactly one bet token")
+        value.tokens(scriptHash).singleOrFail("Bet UTxO must hold exactly one bet token")._1
 
     /** Sum the lovelace paid to a public key's (enterprise) address across all outputs. */
     private inline def totalPaidTo(txInfo: TxInfo, pkh: PubKeyHash): BigInt =
-        txInfo.outputs.foldLeft(BigInt(0)) { (acc, out) =>
-            if out.address === Address.fromPubKeyHash(pkh) then acc + out.value.getLovelace
-            else acc
-        }
+        txInfo.valuePaidTo(Address.fromPubKeyHash(pkh)).getLovelace
 
     /** Minting policy:
       *
@@ -265,9 +236,9 @@ object BettingValidator extends Validator {
     ): Unit =
         // Exactly one token type under this policy, either minted (+1, a new bet) or burned (-1, a
         // bet ending). (V003/V011 fix.)
-        val quantity = tx.mint.tokens(policyId).toList match
-            case List.Cons((_, qty), List.Nil) => qty
-            case _ => fail("Must mint or burn exactly one token type under this policy")
+        val (_, quantity) = tx.mint
+            .tokens(policyId)
+            .singleOrFail("Must mint or burn exactly one token type under this policy")
 
         if quantity === BigInt(-1) then
             // Burning the bet NFT at the end of a bet. The token can only ever sit in a bet UTxO at
@@ -278,15 +249,16 @@ object BettingValidator extends Validator {
             ()
         else
             require(quantity === BigInt(1), "Must mint exactly one token")
+            val scriptAddress = Address.fromScriptHash(policyId)
             val Config(player1, player2, oracle, expiration) = tx.outputs
-                .filter:
-                    _.address === Address.fromScriptHash(policyId)
-                .match
-                    case List.Cons(TxOut(_, _, OutputDatum(datum), _), List.Nil) => datum.to[Config]
-                    case _ =>
-                        fail(
-                          "There must be a single output with inline initial betting config that goes to the script"
-                        )
+                .findUniqueOrFail(
+                  _.address === scriptAddress,
+                  "There must be a single output with inline initial betting config that goes to the script"
+                )
+                .datum
+                .inlineOrFail[Config](
+                  "The initial bet output must carry the betting config as an inline datum"
+                )
             require(
               tx.isSignedBy(player1),
               "Player1 must sign the transaction (they're creating the bet)"

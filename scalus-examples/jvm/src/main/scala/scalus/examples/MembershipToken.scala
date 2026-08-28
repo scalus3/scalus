@@ -70,8 +70,10 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
         val action = redeemer.to[MembershipRedeemer]
         action match
             case MembershipRedeemer.Mint(proofData) =>
-                require(txInfo.signatories.length > 0, "No signatories")
-                val signer = txInfo.signatories.head
+                // The signer is the member being registered. Exactly one required signer is
+                // allowed: the ledger orders required signers by key hash, so with two the
+                // "first" one would be whichever hash sorts lower, not whoever the builder meant.
+                val signer = txInfo.signatories.singleOrFail("Expected exactly one signatory")
                 val proof = unBData(proofData)
                 MerkleTree.verifyMembership(merkleRoot, signer.hash, proof)
 
@@ -84,32 +86,24 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
 
                 // Verify deposit UTxO at script address
                 val scriptCred = Credential.ScriptCredential(policyId)
-                val depositOutputs =
-                    txInfo.findOwnOutputsByCredential(scriptCred)
-                require(depositOutputs.length === BigInt(1), "Expected one deposit output")
-                val depositOut = depositOutputs.head
+                val depositOut = txInfo.outputs.findUniqueOrFail(
+                  _.address.credential === scriptCred,
+                  "Expected one deposit output"
+                )
                 require(
                   depositOut.value.getLovelace >= 2_000_000,
                   "Deposit must be at least 2 ADA"
                 )
-                val depositDatum =
-                    depositOut.datum.inlineOrFail[MembershipDatum](
-                      "Expected inline datum on deposit"
-                    )
                 require(
-                  depositDatum.depositor === signer.hash,
+                  depositOut.hasInlineDatum(MembershipDatum(signer.hash)),
                   "Deposit datum must reference the signer"
                 )
 
             case MembershipRedeemer.Burn =>
                 // Verify exactly 1 token burned
-                val allMinted = txInfo.mint.flatten.filter { case (pid, _, _) =>
-                    pid === policyId
-                }
-                require(allMinted.length === BigInt(1), "Expected exactly one burn entry")
-                allMinted.foreach { case (_, _, qty) =>
-                    require(qty === BigInt(-1), "Must burn exactly 1 token")
-                }
+                val (_, qty) =
+                    txInfo.mint.tokens(policyId).singleOrFail("Expected exactly one burn entry")
+                require(qty === BigInt(-1), "Must burn exactly 1 token")
     }
 
     inline override def spend(
@@ -123,10 +117,9 @@ object MembershipTokenValidator extends ParameterizedValidator[ByteString] {
         action match
             case MembershipRedeemer.Burn =>
                 val depositDatum = datum.getOrFail("Expected datum").to[MembershipDatum]
-                val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-                val policyId = ownInput.address.credential match
-                    case Credential.ScriptCredential(hash) => hash
-                    case _                                 => fail("Expected script credential")
+                val ownInput = txInfo.findInputOrFail(txOutRef).resolved
+                val policyId =
+                    ownInput.address.credential.scriptHashOrFail("Expected script credential")
 
                 // Verify the membership token is burned
                 require(

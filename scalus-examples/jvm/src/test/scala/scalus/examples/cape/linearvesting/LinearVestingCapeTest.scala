@@ -16,7 +16,7 @@ class LinearVestingCapeTest extends AnyFunSuite with ScalusTest {
     private val suite = CapeTestSuite.load("/cape/linear_vesting/cape-tests.json")
 
     test(s"Script size: ${program.cborByteString.length} bytes") {
-        assert(program.cborByteString.length == 651)
+        assert(program.cborByteString.length == 660)
     }
 
     // Pins for the default CIP-0153 build (Options.releaseUntagged): Value.quantityOf lowers to
@@ -24,12 +24,12 @@ class LinearVestingCapeTest extends AnyFunSuite with ScalusTest {
     // JVM harness (CapeTestSuite) always builds and CAPE's upstream fixture builder emits since
     // the canonical-Value-ordering fix (see docs/internal/UPLC_CAPE_VALUE_CANONICALITY_PR.md).
     private val expectedBudgets: Map[String, ExUnits] = Map(
-      "partial_unlock_first_installment" -> ExUnits(memory = 72239, steps = 33350416),
-      "partial_unlock_mid_vesting" -> ExUnits(memory = 72239, steps = 33350416),
-      "partial_unlock_near_end" -> ExUnits(memory = 72239, steps = 33350416),
-      "partial_unlock_between_installments" -> ExUnits(memory = 72239, steps = 33350416),
-      "full_unlock_after_period_end" -> ExUnits(memory = 24022, steps = 9079746),
-      "full_unlock_well_after" -> ExUnits(memory = 24022, steps = 9079746)
+      "partial_unlock_first_installment" -> ExUnits(memory = 63888, steps = 31013223),
+      "partial_unlock_mid_vesting" -> ExUnits(memory = 63888, steps = 31013223),
+      "partial_unlock_near_end" -> ExUnits(memory = 63888, steps = 31013223),
+      "partial_unlock_between_installments" -> ExUnits(memory = 63888, steps = 31013223),
+      "full_unlock_after_period_end" -> ExUnits(memory = 23422, steps = 8983746),
+      "full_unlock_well_after" -> ExUnits(memory = 23422, steps = 8983746)
     )
 
     for c <- suite.cases do

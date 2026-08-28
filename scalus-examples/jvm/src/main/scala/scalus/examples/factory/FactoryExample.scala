@@ -57,10 +57,9 @@ object FactoryExample extends Validator {
         val productDatum = datum.getOrFail("Datum required").to[ProductDatum]
 
         // Derive the factory policy from our own script address
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val factoryPolicyId =
-            ownInput.resolved.address.credential.scriptOption
-                .getOrFail("Own address must be Script")
+            ownInput.resolved.address.credential.scriptHashOrFail("Own address must be Script")
 
         Factory.validateSpend(
           datum = productDatum,

@@ -2,9 +2,8 @@ package scalus.examples.lottery
 
 import scalus.uplc.builtin.Builtins.sha2_256
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.{PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef, Validator}
-import scalus.cardano.onchain.plutus.{v1, v2}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.compiler.Compile
 
@@ -68,12 +67,12 @@ enum Action derives ToData, FromData:
 object LotteryValidator extends Validator {
 
     inline def spend(
-        datum: scalus.cardano.onchain.plutus.prelude.Option[Data],
+        datum: Option[Data],
         redeemer: Data,
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val amount = ownInput.resolved.value.getLovelace
 
         val action = redeemer.to[Action]
@@ -88,14 +87,10 @@ object LotteryValidator extends Validator {
                         val isValid = sha2_256(preimage) === state.playerOneSecret
                         require(isValid, "Fraudulent attempt")
 
-                        val continuationOutputs =
-                            tx.outputs.filter(out => out.address === ownInput.resolved.address)
-                        require(
-                          continuationOutputs.length == BigInt(1),
+                        val continuationOutput = tx.findContinuingOutputOrFail(
+                          ownInput,
                           "Must have exactly one continuation output"
                         )
-
-                        val continuationOutput = continuationOutputs.head
 
                         val newState = continuationOutput.datum.inlineOrFail[State](
                           "continuation out must have an inline datum"
@@ -105,10 +100,7 @@ object LotteryValidator extends Validator {
                         newState.lotteryState match {
                             case LotteryState.PlayerOneRevealed(length, pkh) =>
                                 require(length === preimage.length, "Length mismatch")
-                                require(
-                                  tx.signatories.exists(_ === pkh),
-                                  "Must be signed by player one"
-                                )
+                                require(tx.isSignedBy(pkh), "Must be signed by player one")
                             case _ => fail("Invalid state transition")
                         }
 
@@ -132,14 +124,10 @@ object LotteryValidator extends Validator {
                         require(isValid, "Fraudulent attempt")
 
                         // Find the continuation output with updated state
-                        val continuationOutputs =
-                            tx.outputs.filter(out => out.address === ownInput.resolved.address)
-                        require(
-                          continuationOutputs.length === BigInt(1),
+                        val continuationOutput = tx.findContinuingOutputOrFail(
+                          ownInput,
                           "Must have exactly one continuation output"
                         )
-
-                        val continuationOutput = continuationOutputs.head
                         val newState = continuationOutput.datum.inlineOrFail[State](
                           "continuation out must have an inline datum"
                         )
@@ -148,10 +136,7 @@ object LotteryValidator extends Validator {
                         newState.lotteryState match {
                             case LotteryState.PlayerTwoRevealed(length, pkh) =>
                                 require(length === preimage.length, "Length mismatch")
-                                require(
-                                  tx.signatories.exists(_ === pkh),
-                                  "Must be signed by player two"
-                                )
+                                require(tx.isSignedBy(pkh), "Must be signed by player two")
                             case _ => fail("Invalid state transition")
                         }
 
@@ -206,11 +191,9 @@ object LotteryValidator extends Validator {
 
                         // Verify output to player one contains all the money
                         val supposedWinnerOutput = tx.outputs.at(winnerOutputIdx)
-                        supposedWinnerOutput.address.credential match {
-                            case v1.Credential.PubKeyCredential(hash) =>
-                                require(hash === playerOnePkh, "Wrong winner")
-                            case v1.Credential.ScriptCredential(_) => fail("Winner must be pubkey")
-                        }
+                        val winnerPkh = supposedWinnerOutput.address.credential
+                            .pubKeyHashOrFail("Winner must be pubkey")
+                        require(winnerPkh === playerOnePkh, "Wrong winner")
                         require(
                           supposedWinnerOutput.value.getLovelace >= amount,
                           "Insufficient payout"
@@ -261,11 +244,9 @@ object LotteryValidator extends Validator {
                           "Fraudulent attempt"
                         )
                         val supposedWinnerOutput = tx.outputs.at(winnerOutputIdx)
-                        supposedWinnerOutput.address.credential match {
-                            case v1.Credential.PubKeyCredential(hash) =>
-                                require(hash === playerTwoPkh, "Wrong winner")
-                            case v1.Credential.ScriptCredential(_) => fail("Winner must be pubkey")
-                        }
+                        val winnerPkh = supposedWinnerOutput.address.credential
+                            .pubKeyHashOrFail("Winner must be pubkey")
+                        require(winnerPkh === playerTwoPkh, "Wrong winner")
                         require(
                           supposedWinnerOutput.value.getLovelace >= amount,
                           "Insufficient payout"
@@ -295,10 +276,8 @@ object LotteryValidator extends Validator {
 
     /** True if some output pays at least `amount` lovelace to the public-key `pkh`. */
     private inline def paysAtLeast(tx: TxInfo, pkh: PubKeyHash, amount: BigInt): Boolean =
-        tx.outputs.exists { out =>
-            out.address.credential match
-                case v1.Credential.PubKeyCredential(h) =>
-                    h === pkh && out.value.getLovelace >= amount
-                case _ => false
-        }
+        val credential = Credential.PubKeyCredential(pkh)
+        tx.outputs.exists(out =>
+            out.address.credential === credential && out.value.getLovelace >= amount
+        )
 }

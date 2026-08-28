@@ -7,7 +7,6 @@ import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{Address, PolicyId, Value}
 import scalus.cardano.onchain.plutus.v2
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 
@@ -43,25 +42,7 @@ object UtxoCellLib {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        result.nextState match
-            case Option.Some(nextState) =>
-                val ownInput = tx.findOwnInputOrFail(ownRef)
-                val scriptHash = ownInput.resolved.address.credential match
-                    case Credential.ScriptCredential(hash) => hash
-                    case _ => fail("UtxoCell: input is not a script")
-                val outputs = tx.findOwnScriptOutputs(scriptHash)
-                require(outputs.length === BigInt(1), "UtxoCell: expected one continuing output")
-                val continuingOutput = outputs.head
-                verifyStakingCredential(ownInput.resolved.address, continuingOutput.address)
-                continuingOutput.datum match
-                    case OutputDatum.OutputDatum(inlineData) =>
-                        require(
-                          inlineData === nextState.toData,
-                          "UtxoCell: continuing output datum mismatch"
-                        )
-                    case _ => fail("UtxoCell: expected inline datum on continuing output")
-            case Option.None =>
-                ()
+        verifyContinuingOutput(result.nextState, tx, ownRef)
         verifyOutputs(result.outputs, tx)
     }
 
@@ -78,21 +59,22 @@ object UtxoCellLib {
     ): Unit = {
         nextState match
             case Option.Some(state) =>
-                val ownInput = tx.findOwnInputOrFail(ownRef)
-                val scriptHash = ownInput.resolved.address.credential match
-                    case Credential.ScriptCredential(hash) => hash
-                    case _ => fail("UtxoCell: input is not a script")
-                val outputs = tx.findOwnScriptOutputs(scriptHash)
-                require(outputs.length === BigInt(1), "UtxoCell: expected one continuing output")
-                val continuingOutput = outputs.head
-                verifyStakingCredential(ownInput.resolved.address, continuingOutput.address)
-                continuingOutput.datum match
-                    case OutputDatum.OutputDatum(inlineData) =>
-                        require(
-                          inlineData === state.toData,
-                          "UtxoCell: continuing output datum mismatch"
-                        )
-                    case _ => fail("UtxoCell: expected inline datum on continuing output")
+                val ownAddress = tx.findInputOrFail(ownRef).resolved.address
+                // Exactly one output at the script credential, and it must keep the whole
+                // address (staking credential included, V016). Uniqueness is by credential so
+                // the beacon cannot be moved to a second output at a different staking part.
+                val continuingOutput = tx.outputs.findUniqueOrFail(
+                  _.address.credential === ownAddress.credential,
+                  "UtxoCell: expected one continuing output"
+                )
+                require(
+                  continuingOutput.address === ownAddress,
+                  "UtxoCell: continuing output must keep the staking credential"
+                )
+                require(
+                  continuingOutput.hasInlineDatum(state),
+                  "UtxoCell: continuing output datum mismatch"
+                )
             case Option.None =>
                 ()
     }
@@ -160,33 +142,23 @@ object UtxoCellLib {
         policyId: PolicyId,
         tx: TxInfo
     ): Unit = {
-        val mintedTokens = tx.mint.tokens(policyId)
         require(
-          mintedTokens.length === BigInt(1),
-          "UtxoCell: only the beacon token may be minted under this policy"
+          tx.mint.hasOnly(policyId, tokenName, 1),
+          "UtxoCell: exactly one beacon token and nothing else may be minted under this policy"
+        )
+        val scriptCredential = Credential.ScriptCredential(policyId)
+        val output = tx.outputs.findUniqueOrFail(
+          _.address.credential === scriptCredential,
+          "UtxoCell: expected one output at script address"
         )
         require(
-          mintedTokens.keys.head === tokenName,
-          "UtxoCell: unexpected token name minted"
-        )
-        require(
-          mintedTokens.values.head === BigInt(1),
-          "UtxoCell: beacon token must be minted exactly once"
-        )
-        val outputs = tx.findOwnScriptOutputs(policyId)
-        require(outputs.length === BigInt(1), "UtxoCell: expected one output at script address")
-        val output = outputs.head
-        require(
-          output.value.quantityOf(policyId, tokenName) === BigInt(1),
+          output.value.hasNft(policyId, tokenName),
           "UtxoCell: initial output must contain the beacon token"
         )
-        output.datum match
-            case OutputDatum.OutputDatum(inlineData) =>
-                require(
-                  inlineData === initialState.toData,
-                  "UtxoCell: initial state datum mismatch"
-                )
-            case _ => fail("UtxoCell: expected inline datum on initial output")
+        require(
+          output.hasInlineDatum(initialState),
+          "UtxoCell: initial state datum mismatch"
+        )
     }
 
     /** Verify that a beacon token is burned exactly once (for terminal transitions).
@@ -198,18 +170,9 @@ object UtxoCellLib {
         policyId: PolicyId,
         tx: TxInfo
     ): Unit = {
-        val mintedTokens = tx.mint.tokens(policyId)
         require(
-          mintedTokens.length === BigInt(1),
-          "UtxoCell: only the beacon token may be burned under this policy"
-        )
-        require(
-          mintedTokens.keys.head === tokenName,
-          "UtxoCell: unexpected token name in burn"
-        )
-        require(
-          mintedTokens.values.head === BigInt(-1),
-          "UtxoCell: beacon token must be burned exactly once"
+          tx.mint.hasOnly(policyId, tokenName, -1),
+          "UtxoCell: exactly one beacon token and nothing else may be burned under this policy"
         )
     }
 
@@ -227,10 +190,9 @@ object UtxoCellLib {
         verifyContinuingOutput[Data](nextDatum, tx, ownRef)
         nextDatum match
             case Option.None =>
-                val ownInput = tx.findOwnInputOrFail(ownRef)
-                val policyId = ownInput.resolved.address.credential match
-                    case Credential.ScriptCredential(hash) => hash
-                    case _ => fail("UtxoFlow: input is not a script")
+                val ownInput = tx.findInputOrFail(ownRef)
+                val policyId = ownInput.resolved.address.credential
+                    .scriptHashOrFail("UtxoFlow: input is not a script")
                 verifyBurnBeacon(beaconName, policyId, tx)
             case _ => ()
     }

@@ -2,8 +2,7 @@ package scalus.examples.auction
 
 import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
+import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash}
 import scalus.cardano.onchain.plutus.v3.{Datum as _, *}
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.Validator
@@ -39,15 +38,10 @@ object UnfixedAuctionValidator extends Validator {
                 val input = txInfo.inputs.at(inputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, inputValue, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          value,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, value, inlineDatum.to[Datum])
-                    case _ => fail("Auction input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Auction input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[Datum]("Auction input must have inline datum")
 
                 handleBid(
                   txInfo,
@@ -63,15 +57,10 @@ object UnfixedAuctionValidator extends Validator {
                 val input = txInfo.inputs.at(inputIdx)
                 require(input.outRef === txOutRef, "Input index does not match txOutRef")
 
-                val (scriptHash, inputValue, currentDatum) = input.resolved match
-                    case TxOut(
-                          Address(Credential.ScriptCredential(sh), _),
-                          value,
-                          OutputDatum.OutputDatum(inlineDatum),
-                          _
-                        ) =>
-                        (sh, value, inlineDatum.to[Datum])
-                    case _ => fail("Auction input must have script credential and inline datum")
+                val scriptHash = input.resolved.address.credential
+                    .scriptHashOrFail("Auction input must have script credential")
+                val currentDatum = input.resolved.datum
+                    .inlineOrFail[Datum]("Auction input must have inline datum")
 
                 handleEnd(txInfo, scriptHash, currentDatum, sellerOutputIdx, winnerOutputIdx)
 
@@ -133,7 +122,7 @@ object UnfixedAuctionValidator extends Validator {
         )
 
         require(
-          continuingOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
+          continuingOutput.value.hasNft(scriptHash, itemId),
           "Auction NFT must be preserved"
         )
 
@@ -204,7 +193,7 @@ object UnfixedAuctionValidator extends Validator {
                   "Winner output must go to the winner"
                 )
                 require(
-                  winnerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
+                  winnerOutput.value.hasNft(scriptHash, itemId),
                   "Winner must receive the auction NFT"
                 )
 
@@ -230,7 +219,7 @@ object UnfixedAuctionValidator extends Validator {
                   "Seller output must go to the seller"
                 )
                 require(
-                  sellerOutput.value.quantityOf(scriptHash, itemId) === BigInt(1),
+                  sellerOutput.value.hasNft(scriptHash, itemId),
                   "Seller must receive back the auction NFT"
                 )
 
@@ -275,14 +264,14 @@ object UnfixedAuctionValidator extends Validator {
           "Starting bid must be positive"
         )
 
-        val auctionOutput = txInfo.outputs.filter { out =>
-            out.address === Address.fromScriptHash(policyId)
-        }.match
-            case List.Cons(out, List.Nil) => out
-            case _ => fail("There must be exactly one output to the auction script")
+        val scriptAddress = Address.fromScriptHash(policyId)
+        val auctionOutput = txInfo.outputs.findUniqueOrFail(
+          _.address === scriptAddress,
+          "There must be exactly one output to the auction script"
+        )
 
         require(
-          auctionOutput.value.quantityOf(policyId, itemId) === BigInt(1),
+          auctionOutput.value.hasNft(policyId, itemId),
           "Auction output must contain the minted NFT"
         )
 
@@ -294,8 +283,7 @@ object UnfixedAuctionValidator extends Validator {
           itemId = itemId
         )
         require(
-          auctionOutput.datum
-              .inlineOrFail[Datum]("Auction output must have inline datum") === expectedDatum,
+          auctionOutput.hasInlineDatum(expectedDatum),
           "Initial auction datum must be correct"
         )
 
@@ -303,9 +291,8 @@ object UnfixedAuctionValidator extends Validator {
         policyId: PolicyId,
         txInfo: TxInfo
     ): Unit =
-        val mintedTokens = txInfo.mint.tokens(policyId)
         require(
-          mintedTokens.forall { case (_, amount) => amount < 0 },
+          txInfo.onlyBurnsUnder(policyId),
           "Only burning is allowed (all amounts must be negative)"
         )
 }

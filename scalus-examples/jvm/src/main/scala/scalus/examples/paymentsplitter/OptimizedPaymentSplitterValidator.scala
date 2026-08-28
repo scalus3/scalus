@@ -136,7 +136,7 @@ object OptimizedPaymentSplitterValidator extends DataParameterizedValidator {
             .map(payee => Credential.PubKeyCredential(PubKeyHash(payee)))
 
         val verification = redeemer.to[SplitVerificationRedeemer]
-        val ownScriptHash = stakingKey.scriptOption.getOrFail("Staking key must be Script")
+        val ownScriptHash = stakingKey.scriptHashOrFail("Staking key must be Script")
         val ownScriptCredential = Credential.ScriptCredential(ownScriptHash)
         val payeeWithChangeCredential = Credential.PubKeyCredential(verification.payeeWithChange)
 

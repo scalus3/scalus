@@ -1,18 +1,11 @@
 package scalus.examples.cape.twopartyescrow
 
-import scalus.compiler.{offsetOf, Compile}
-
-import scalus.cardano.onchain
-import scalus.cardano.onchain.plutus
+import scalus.compiler.Compile
 import scalus.cardano.onchain.plutus.prelude.*
-import scalus.cardano.onchain.plutus.prelude.Option.*
-import scalus.cardano.onchain.plutus.v2
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
-import scalus.uplc.builtin.Builtins
 import scalus.uplc.builtin.ByteString.*
 import scalus.uplc.builtin.Data
-import scalus.uplc.builtin.Data.{toData, FromData, ToData}
+import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.*
 
 // CAPE spec: datum is Constr(0, [state, depositTime])
@@ -24,33 +17,38 @@ enum EscrowState derives FromData, ToData:
 
 case class EscrowDatum(state: EscrowState, depositTime: BigInt) derives FromData, ToData
 
-/** UPLC-CAPE Two-Party Escrow Validator
+/** UPLC-CAPE Two-Party Escrow validator: deposit, then accept or refund.
   *
-  * Parameters baked in (per CAPE spec):
-  *   - buyerKeyHash: 64 a's
-  *   - sellerKeyHash: 64 b's
-  *   - escrowPrice: 75 ADA (75_000_000 lovelace)
-  *   - deadlineSeconds: 1800
+  * Parameters baked in (per CAPE spec): buyer key hash (64 a's), seller key hash (64 b's), price 75
+  * ADA, refund deadline 1800 seconds after the deposit. The redeemer is a bare integer: 0 =
+  * Deposit, 1 = Accept, 2 = Refund; anything else fails.
   *
-  * Redeemer: integer 0=Deposit, 1=Accept, 2=Refund
+  *   - `Deposit` creates the escrow UTxO, so there is no own input to match against: the escrow
+  *     output is the unique output at a script credential, it must carry exactly the price and an
+  *     inline `EscrowDatum(Deposited, depositTime)`, where `depositTime` is the upper bound of the
+  *     transaction's validity range (finite, `t - 1` when exclusive, per the CAPE convention).
+  *   - `Accept` and `Refund` spend the escrow UTxO: the datum must be `Deposited`, the party must
+  *     sign, the party must be paid exactly the price (across any number of outputs, datum or not),
+  *     and nothing may stay at the script's own credential. `Refund` additionally requires the
+  *     validity range to lie entirely after `depositTime + 1800`, which also rejects an unbounded
+  *     lower bound.
   *
-  * Deposit is invoked without a matching "own" spent input (the buyer is funding a fresh escrow
-  * UTXO, not spending an existing one), so it locates the escrow output by credential type (any
-  * `ScriptCredential`) instead of via the own-input's resolved address. Accept and Refund do spend
-  * an existing script UTXO, so they resolve their own address via `findOwnInputOrFail` as before.
+  * Spending several escrow UTxOs in one transaction is allowed by the CAPE fixtures
+  * (`accept_with_multiple_inputs`), so there is deliberately no single-own-input guard here.
   *
-  * The deposit time is recorded as the *upper* bound of the deposit transaction's valid range (it
-  * must be finite); the refund deadline check reads the *lower* bound of the refund transaction's
-  * valid range (it must also be finite, and strictly after `depositTime + deadlineSeconds`).
+  * All context plumbing is the standard prelude: `Validator`, `TxInfo.isSignedBy`,
+  * `TxInfo.validToOrFail`, `Interval.isEntirelyAfter`, `List.findUniqueOrFail`,
+  * `TxOut.hasInlineDatum`, `TxInfo.findInputOrFail` and `TxInfo.findOutputsByCredential`. An
+  * earlier revision hand-navigated the raw `ScriptContext` `Data` and hand-rolled local copies of
+  * all of these; those are dropped in favor of the canonical forms, since library and compiler
+  * fixes are the intended remedy for a cost gap, not validator-level workarounds.
   *
   * @see
   *   [[https://github.com/IntersectMBO/UPLC-CAPE]]
   */
 @Compile
-object TwoPartyEscrowValidator {
+object TwoPartyEscrowValidator extends Validator {
 
-    // CAPE parameters baked in as top-level inline defs so they are properly inlined
-    // into the @Compile object
     private inline def buyerKeyHash: PubKeyHash =
         PubKeyHash(hex"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
     private inline def sellerKeyHash: PubKeyHash =
@@ -58,219 +56,99 @@ object TwoPartyEscrowValidator {
     private inline def escrowPrice: Lovelace = BigInt(75_000_000)
     private inline def deadlineSeconds: BigInt = BigInt(1800)
 
-    inline def validate(scData: Data): Unit = {
-        // ScriptContext = Constr 0 [txInfo, redeemer, scriptInfo]. `scData.to[ScriptContext]`
-        // would eagerly decode `txInfo` as a full 16-field `TxInfo` (`derives FromData`
-        // materializes every constructor field, e.g. fee/mint/certificates/withdrawals/
-        // redeemers/data/id/votes/proposalProcedures/currentTreasuryAmount/treasuryDonation --
-        // none of which this validator reads); navigate to the 3 top-level fields directly
-        // instead and keep `txInfo` as raw `Data` so `spend` can pull only what it needs.
-        val scFields = Builtins.unConstrData(scData).snd
-        val txInfoData = scFields.head
-        val afterTxInfo = scFields.tail
-        val redeemer = afterTxInfo.head
-        afterTxInfo.tail.head.to[ScriptInfo] match
-            case ScriptInfo.SpendingScript(txOutRef, datum) =>
-                spend(datum, redeemer, txInfoData, txOutRef)
-            case _ => fail("Only spending scripts are supported by this validator")
-    }
-
-    inline def spend(
+    inline override def spend(
         datum: Option[Data],
         redeemer: Data,
-        txInfoData: Data,
+        txInfo: TxInfo,
         txOutRef: TxOutRef
     ): Unit = {
         val action = redeemer.to[BigInt]
-
-        // TxInfo = Constr 0 [inputs, referenceInputs, outputs, fee, mint, certificates,
-        // withdrawals, validRange, signatories, redeemers, data, id, votes, proposalProcedures,
-        // currentTreasuryAmount, treasuryDonation]. `outputs`/`signatories` are read by every
-        // action; `dropList` jumps straight to each one instead of decoding (and discarding) the
-        // fields before it. `inputs` and `validRange` are only decoded on the branches that
-        // actually read them (Deposit never resolves an own input; Accept never reads the valid
-        // range), same as before this rewrite.
-        val txInfoFields = Builtins.unConstrData(txInfoData).snd
-        val outputs = Builtins
-            .dropList(offsetOf[TxInfo](_.outputs), txInfoFields)
-            .head
-            .to[List[v2.TxOut]]
-        val signatories = Builtins
-            .dropList(offsetOf[TxInfo](_.signatories), txInfoFields)
-            .head
-            .to[List[PubKeyHash]]
-
-        if action == BigInt(0) then
-            val validRange = Builtins
-                .dropList(offsetOf[TxInfo](_.validRange), txInfoFields)
-                .head
-                .to[Interval]
-            handleDeposit(signatories, validRange, outputs)
-        else
-            // Accept and Refund both spend an existing script UTXO, so resolve the own
-            // credential once and share it (Deposit never reaches this branch, so it never
-            // pays for the own-input search).
-            val inputs = txInfoFields.head.to[List[TxInInfo]]
-            val ownCredential = findOwnCredential(inputs, txOutRef)
-            if action == BigInt(1) then handleAccept(datum, signatories, outputs, ownCredential)
-            else if action == BigInt(2) then
-                val validRange =
-                    Builtins
-                        .dropList(offsetOf[TxInfo](_.validRange), txInfoFields)
-                        .head
-                        .to[Interval]
-                handleRefund(datum, signatories, validRange, outputs, ownCredential)
-            else fail("Invalid redeemer")
+        if action == BigInt(0) then deposit(txInfo)
+        else if action == BigInt(1) then accept(datum, txInfo, txOutRef)
+        else if action == BigInt(2) then refund(datum, txInfo, txOutRef)
+        else fail(InvalidRedeemer)
     }
 
-    inline def handleDeposit(
-        signatories: List[PubKeyHash],
-        validRange: Interval,
-        outputs: List[TxOut]
-    ): Unit = {
-        requireSignedBy(signatories, buyerKeyHash, "Buyer must sign deposit")
-
-        // Deposit time is the upper bound of the valid range; it must be finite so the refund
-        // deadline (depositTime + deadlineSeconds) can be computed safely.
-        val depositTime = requireFiniteUpperBound(validRange)
-
-        val expectedDatum = EscrowDatum(
-          state = EscrowState.Deposited,
-          depositTime = depositTime
-        ).toData
-
-        // No own input exists yet (the escrow UTXO is being created), so the escrow output is
-        // identified by credential type rather than by matching an own-input address.
-        val output =
-            outputs.filter(out => out.address.credential.scriptOption.isDefined) match
-                case List.Cons(head, List.Nil) => head
-                case _                         => fail("Expected exactly one script output")
-
+    def deposit(txInfo: TxInfo): Unit = {
+        require(txInfo.isSignedBy(buyerKeyHash), BuyerMustSignDeposit)
+        // The deposit time is the validity range's upper bound. The ledger makes a finite upper
+        // bound exclusive, and the CAPE convention records an exclusive bound `t` as `t - 1`.
+        val depositTime =
+            txInfo.validToOrFail(UpperBoundMustBeFinite) -
+                (if txInfo.validRange.to.isInclusive then BigInt(0) else BigInt(1))
+        // No own input exists yet (the escrow UTxO is being created), so the escrow output is the
+        // unique output locked by a script credential.
+        val output = txInfo.outputs.findUniqueOrFail(
+          out => isScript(out.address.credential),
+          ExpectedOneScriptOutput
+        )
+        require(output.value === Value.lovelace(escrowPrice), OutputMustHoldEscrowPrice)
         require(
-          output.value.toData == Value.lovelace(escrowPrice).toData,
-          "Output must contain exactly the escrow price"
+          output.hasInlineDatum(EscrowDatum(EscrowState.Deposited, depositTime)),
+          WrongDepositDatum
         )
+        require(output.referenceScript.isEmpty, NoReferenceScript)
+    }
+
+    def accept(datum: Option[Data], txInfo: TxInfo, txOutRef: TxOutRef): Unit = {
+        requireDeposited(datum)
+        require(txInfo.isSignedBy(sellerKeyHash), SellerMustSignAccept)
+        settle(txInfo, txOutRef, sellerKeyHash, SellerMustReceiveEscrowPrice)
+    }
+
+    def refund(datum: Option[Data], txInfo: TxInfo, txOutRef: TxOutRef): Unit = {
+        val d = requireDeposited(datum)
+        require(txInfo.isSignedBy(buyerKeyHash), BuyerMustSignRefund)
         require(
-          output.datum.toData == OutputDatum.OutputDatum(expectedDatum).toData,
-          "Output must have the expected deposit datum"
+          txInfo.validRange.isEntirelyAfter(d.depositTime + deadlineSeconds),
+          DeadlineNotPassed
         )
-        output.referenceScript match
-            case Option.None => ()
-            case _           => fail("Output must not carry a reference script")
+        settle(txInfo, txOutRef, buyerKeyHash, BuyerMustReceiveEscrowPrice)
     }
 
-    inline def handleAccept(
-        datum: Option[Data],
-        signatories: List[PubKeyHash],
-        outputs: List[TxOut],
-        ownCredential: Credential
-    ): Unit = {
-        // Parse datum and verify state is Deposited
-        val receivedData = datum.getOrFail("Datum not found")
-        val escrowDatum = receivedData.to[EscrowDatum]
-        escrowDatum.state match
+    /** Decodes the datum and requires the escrow to be in the `Deposited` state. */
+    def requireDeposited(datum: Option[Data]): EscrowDatum = {
+        val d = datum.getOrFail(DatumNotFound).to[EscrowDatum]
+        d.state match
             case EscrowState.Deposited => ()
-            case _                     => fail("Escrow must be in Deposited state")
-
-        requireSignedBy(signatories, sellerKeyHash, "Seller must sign accept")
-
-        // Verify seller receives exactly escrow price, and no funds remain in the script -- in
-        // one traversal of `outputs` (the previous version walked it twice: once via foldLeft
-        // for the sum, once via findOutputsByCredential + isEmpty for the "no funds remain"
-        // check).
-        settleAndVerify(
-          outputs,
-          Credential.PubKeyCredential(sellerKeyHash).toData,
-          ownCredential,
-          escrowPrice,
-          "Seller must receive exactly escrow price"
-        )
+            case _                     => fail(NotDeposited)
+        d
     }
 
-    inline def handleRefund(
-        datum: Option[Data],
-        signatories: List[PubKeyHash],
-        validRange: Interval,
-        outputs: List[TxOut],
-        ownCredential: Credential
-    ): Unit = {
-        // Parse datum and verify state is Deposited
-        val escrowDatum = datum.getOrFail("Datum not found").to[EscrowDatum]
-        escrowDatum.state match
-            case EscrowState.Deposited => ()
-            case _                     => fail("Escrow must be in Deposited state")
-
-        requireSignedBy(signatories, buyerKeyHash, "Buyer must sign refund")
-
-        // Time check: valid range must be entirely after deadline
-        val deadline = escrowDatum.depositTime + deadlineSeconds
-        require(validRange.isEntirelyAfter(deadline), "Deadline has not passed")
-
-        // Verify buyer receives exactly escrow price, and no funds remain in the script -- see
-        // the comment in handleAccept.
-        settleAndVerify(
-          outputs,
-          Credential.PubKeyCredential(buyerKeyHash).toData,
-          ownCredential,
-          escrowPrice,
-          "Buyer must receive exactly escrow price"
-        )
-    }
-
-    /** Sums the lovelace paid to `partyCred` and asserts it equals `expectedAmount`, while also
-      * asserting no output remains at `ownCredential` (the script's own address) -- both checks in
-      * a single pass over `outputs`, decoding each output's credential exactly once.
+    /** The party is paid exactly the escrow price, across any number of outputs, and nothing stays
+      * at the script's own credential - both checked in one pass over the outputs. The party is a
+      * key, so its outputs are matched by payment credential rather than by a full address.
       */
-    def settleAndVerify(
-        outputs: List[TxOut],
-        partyCred: Data,
-        ownCredential: Credential,
-        expectedAmount: BigInt,
-        message: String
-    ): Unit = {
-        // Hoisted out of `go` so it's computed once instead of once per output.
-        val ownCredData = ownCredential.toData
-        def go(outs: List[TxOut], sum: BigInt): BigInt = outs match
-            case List.Nil => sum
-            case List.Cons(out, tail) =>
-                val credData = out.address.credential.toData
-                if credData == ownCredData then fail("No funds should remain in script")
-                else go(tail, if credData == partyCred then sum + out.value.lovelaceAmount else sum)
-        require(go(outputs, 0) == expectedAmount, message)
-    }
-
-    def findOwnCredential(inputs: List[TxInInfo], txOutRef: TxOutRef): Credential =
-        findOwnInputOrFail(inputs, txOutRef).resolved.address.credential
-
-    def findOwnInputOrFail(inputs: List[TxInInfo], txOutRef: TxOutRef): TxInInfo = {
-        // Hoisted out of `go` so it's computed once instead of once per input.
-        val txOutRefData = txOutRef.toData
-        def go(inputs: List[TxInInfo]): TxInInfo = inputs match
-            case List.Cons(head, tail) =>
-                if head.outRef.toData == txOutRefData then head
-                else go(tail)
-            case List.Nil => fail("Own input not found")
-        go(inputs)
-    }
-
-    /** Extracts the finite upper bound of `range`, applying the exclusive/inclusive adjustment (a
-      * finite exclusive bound `t` denotes upper bound `t - 1`). Fails if the upper bound is
-      * infinite.
-      */
-    def requireFiniteUpperBound(range: Interval): BigInt =
-        range.to.boundType match
-            case IntervalBoundType.Finite(t) => if range.to.isInclusive then t else t - 1
-            case _                           => fail("Valid range upper bound must be finite")
-
-    def requireSignedBy(
-        signatories: List[PubKeyHash],
-        party: PubKeyHash,
-        message: String
-    ): Unit = {
-        def go(signatories: List[PubKeyHash]): Unit = signatories match {
-            case List.Nil              => fail(message)
-            case List.Cons(head, tail) => if head.toData == party.toData then () else go(tail)
+    def settle(txInfo: TxInfo, txOutRef: TxOutRef, party: PubKeyHash, message: String): Unit = {
+        val ownCredential = txInfo.findInputOrFail(txOutRef).resolved.address.credential
+        val partyCredential = Credential.PubKeyCredential(party)
+        val paid = txInfo.outputs.foldLeft(BigInt(0)) { (sum, out) =>
+            val credential = out.address.credential
+            if credential === ownCredential then fail(FundsRemainInScript)
+            else if credential === partyCredential then sum + out.value.getLovelace
+            else sum
         }
-        go(signatories)
+        require(paid === escrowPrice, message)
     }
+
+    def isScript(credential: Credential): Boolean = credential match
+        case Credential.ScriptCredential(_) => true
+        case _                              => false
+
+    // Error messages
+    inline val InvalidRedeemer = "Invalid redeemer"
+    inline val DatumNotFound = "Datum not found"
+    inline val NotDeposited = "Escrow must be in Deposited state"
+    inline val BuyerMustSignDeposit = "Buyer must sign deposit"
+    inline val UpperBoundMustBeFinite = "Valid range upper bound must be finite"
+    inline val ExpectedOneScriptOutput = "Expected exactly one script output"
+    inline val OutputMustHoldEscrowPrice = "Output must contain exactly the escrow price"
+    inline val WrongDepositDatum = "Output must have the expected deposit datum"
+    inline val NoReferenceScript = "Output must not carry a reference script"
+    inline val SellerMustSignAccept = "Seller must sign accept"
+    inline val SellerMustReceiveEscrowPrice = "Seller must receive exactly escrow price"
+    inline val BuyerMustSignRefund = "Buyer must sign refund"
+    inline val DeadlineNotPassed = "Deadline has not passed"
+    inline val BuyerMustReceiveEscrowPrice = "Buyer must receive exactly escrow price"
+    inline val FundsRemainInScript = "No funds should remain in script"
 }

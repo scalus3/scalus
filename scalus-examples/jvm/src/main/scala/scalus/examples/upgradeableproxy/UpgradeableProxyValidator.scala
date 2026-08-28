@@ -48,21 +48,18 @@ object ProxyValidator extends Validator {
     ): Unit = {
         val d = datum.getOrFail(MissingDatum).to[ProxyDatum]
         val r = redeemer.to[ProxyRedeemer]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
 
         // Reject spending more than one proxy UTxO at once: otherwise a single continuation
         // output could satisfy several script inputs (double satisfaction) and the value of the
         // extra inputs would be swept off to the attacker.
-        require(
-          tx.findOwnInputsByCredential(ownInput.resolved.address.credential).length === BigInt(1),
+        val ownCredential = ownInput.resolved.address.credential
+        tx.inputs.findUniqueOrFail(
+          _.resolved.address.credential === ownCredential,
           MultipleProxyInputs
         )
 
-        val continuationOutput =
-            tx.outputs
-                .filter(out => out.address === ownInput.resolved.address)
-                .headOption
-                .getOrFail(MissingContinuation)
+        val continuationOutput = tx.findContinuingOutputOrFail(ownInput, MissingContinuation)
 
         val continuationDatum =
             continuationOutput.datum.inlineOrFail[ProxyDatum](ContinuationMustHaveInlineDatum)

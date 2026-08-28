@@ -8,7 +8,7 @@ import scalus.cardano.onchain.plutus.v1
 import scalus.cardano.onchain.plutus.v1.{Credential, PosixTime}
 import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
 import scalus.cardano.onchain.plutus.v3.{TxInInfo, TxInfo, TxOutRef, Validator}
-import scalus.cardano.onchain.plutus.prelude.{===, require}
+import scalus.cardano.onchain.plutus.prelude.*
 
 // Datum
 case class State(
@@ -28,7 +28,7 @@ enum Action derives FromData, ToData:
     case FinalizeWithdrawal
     case Cancel
 
-enum Status derives FromData, ToData:
+enum Status derives FromData, ToData, Eq:
     case Idle
     case Pending
 
@@ -64,7 +64,7 @@ object Status {
 object VaultValidator extends Validator {
 
     inline override def spend(
-        d: scalus.cardano.onchain.plutus.prelude.Option[Data],
+        d: Option[Data],
         redeemer: Data,
         tx: TxInfo,
         ownRef: TxOutRef
@@ -79,11 +79,10 @@ object VaultValidator extends Validator {
     }
 
     def deposit(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
-        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
+        val ownInput = tx.findInputOrFail(ownRef, OwnInputNotFound)
 
-        val out = getVaultOutput(tx, ownRef)
+        val out = getVaultOutput(tx, ownInput)
         requireSameOwner(out, datum)
-        requireOutputToOwnAddress(ownInput, out, WrongDepositDestination)
 
         val value = out.value
         require(value.withoutLovelace.isZero, CannotAddTokens)
@@ -91,15 +90,15 @@ object VaultValidator extends Validator {
         require(value.getLovelace > ownInput.resolved.value.getLovelace, AdaNotConserved)
         requireEntireVaultIsSpent(datum, ownInput.resolved)
         val newDatum = getVaultDatum(out)
-        require(newDatum.amount == value.getLovelace, VaultAmountChanged)
-        require(newDatum.waitTime == datum.waitTime, WaitTimeChanged)
+        require(newDatum.amount === value.getLovelace, VaultAmountChanged)
+        require(newDatum.waitTime === datum.waitTime, WaitTimeChanged)
         require(
-          newDatum.finalizationDeadline == datum.finalizationDeadline,
+          newDatum.finalizationDeadline === datum.finalizationDeadline,
           FinalizationDeadlineChanged
         )
         // A deposit must not change the withdrawal state machine — otherwise anyone could flip a
         // Pending withdrawal back to Idle (or vice versa) just by adding funds.
-        require(newDatum.status.toData == datum.status.toData, DepositMustNotChangeStatus)
+        require(newDatum.status === datum.status, DepositMustNotChangeStatus)
     }
 
     def initiateWithdrawal(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
@@ -114,14 +113,9 @@ object VaultValidator extends Validator {
           OwnerMustSign
         )
 
-        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
-        val out = getVaultOutput(tx, ownRef)
+        val ownInput = tx.findInputOrFail(ownRef, OwnInputNotFound)
+        val out = getVaultOutput(tx, ownInput)
         requireSameOwner(out, datum)
-        requireOutputToOwnAddress(
-          ownInput,
-          out,
-          NotExactlyOneVaultOutput
-        )
 
         // Verify value is conserved during initiation
         require(
@@ -133,12 +127,12 @@ object VaultValidator extends Validator {
         // The lower bound (getValidityStartTime) can be backdated arbitrarily, which would let an
         // attacker set finalizationDeadline in the past and finalize immediately, defeating the
         // wait. The ledger guarantees the upper bound is >= now, so deadline >= now + waitTime.
-        val requestTime = tx.validRange.to.finiteOrFail(NoFinalizationUpperBound)
+        val requestTime = tx.validToOrFail(NoFinalizationUpperBound)
         val finalizationDeadline = requestTime + datum.waitTime
         val newDatum = getVaultDatum(out)
         require(newDatum.status.isPending, MustBePending)
         require(
-          newDatum.finalizationDeadline == finalizationDeadline,
+          newDatum.finalizationDeadline === finalizationDeadline,
           IncorrectDatumFinalization
         )
     }
@@ -146,15 +140,14 @@ object VaultValidator extends Validator {
     def finalize(tx: TxInfo, ownRef: TxOutRef, datum: State): Unit = {
         require(datum.status.isPending, ContractMustBePending)
         require(tx.validRange.isEntirelyAfter(datum.finalizationDeadline), DeadlineNotPassed)
-        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
+        val ownInput = tx.findInputOrFail(ownRef, OwnInputNotFound)
         requireEntireVaultIsSpent(datum, ownInput.resolved)
 
-        val scriptOutputs = tx.findOwnOutputsByCredential(ownInput.resolved.address.credential)
-        require(scriptOutputs.size == BigInt(0), WithdrawalsMustNotSendBackToVault)
+        val scriptOutputs = tx.findOutputsByCredential(ownInput.resolved.address.credential)
+        require(scriptOutputs.isEmpty, WithdrawalsMustNotSendBackToVault)
         val ownerCredential = Credential.PubKeyCredential(v1.PubKeyHash(datum.owner))
-        val ownerOutputs =
-            tx.findOwnOutputs(out => out.address.credential === ownerCredential)
-        require(ownerOutputs.size > 0, WrongAddressWithdrawal)
+        val ownerOutputs = tx.findOutputsByCredential(ownerCredential)
+        require(ownerOutputs.nonEmpty, WrongAddressWithdrawal)
         val totalToOwner =
             ownerOutputs.foldLeft(BigInt(0))((acc, out) => acc + out.value.getLovelace)
         require(totalToOwner >= datum.amount, VaultAmountChanged)
@@ -171,16 +164,17 @@ object VaultValidator extends Validator {
         // There must be a pending request to cancel.
         require(datum.status.isPending, NothingToCancel)
 
-        val out = getVaultOutput(tx, ownRef)
+        val ownInput = tx.findInputOrFail(ownRef, OwnInputNotFound)
+        val out = getVaultOutput(tx, ownInput)
         requireSameOwner(out, datum)
         val vaultDatum = getVaultDatum(out)
-        require(vaultDatum.amount == datum.amount, VaultAmountChanged)
+        require(vaultDatum.amount === datum.amount, VaultAmountChanged)
         require(
-          out.value.getLovelace == datum.amount,
+          out.value.getLovelace === datum.amount,
           WrongOutputAmount
         )
         require(vaultDatum.status.isIdle, StateNotIdle)
-        require(vaultDatum.waitTime == datum.waitTime, WaitTimeChanged)
+        require(vaultDatum.waitTime === datum.waitTime, WaitTimeChanged)
     }
 
     // Helper functions
@@ -188,26 +182,21 @@ object VaultValidator extends Validator {
     private def requireEntireVaultIsSpent(datum: State, output: TxOut): Unit = {
         val amountToSpend = datum.amount
         val adaSpent = output.value.getLovelace
-        require(amountToSpend == adaSpent, AdaLeftover)
+        require(amountToSpend === adaSpent, AdaLeftover)
     }
 
-    private def requireOutputToOwnAddress(ownInput: TxInInfo, out: TxOut, message: String): Unit =
-        require(out.address.credential === ownInput.resolved.address.credential, message)
-
-    private def getVaultOutput(tx: TxInfo, ownRef: TxOutRef): TxOut = {
-        val ownInput = tx.findOwnInputOrFail(ownRef, OwnInputNotFound)
-        val scriptOutputs = tx.findOwnOutputsByCredential(ownInput.resolved.address.credential)
-        require(scriptOutputs.size == BigInt(1), NotExactlyOneVaultOutput)
-        scriptOutputs.head
-    }
+    // The unique continuing output to the vault's WHOLE address (staking part included), so a
+    // spender cannot redirect the vault's delegation rewards by changing the staking credential.
+    private def getVaultOutput(tx: TxInfo, ownInput: TxInInfo): TxOut =
+        tx.findContinuingOutputOrFail(ownInput, NotExactlyOneVaultOutput)
 
     private def getVaultDatum(vaultOutput: TxOut) =
         vaultOutput.datum.inlineOrFail[State](NoDatumProvided)
 
     private def requireSameOwner(out: TxOut, datum: State): Unit = {
         val s = out.datum.inlineOrFail[State](NoInlineDatum)
-        require(s.owner == datum.owner, VaultOwnerChanged)
-        require(s.recoveryKey == datum.recoveryKey, RecoveryKeyChanged)
+        require(s.owner === datum.owner, VaultOwnerChanged)
+        require(s.recoveryKey === datum.recoveryKey, RecoveryKeyChanged)
     }
 
     // Errors
@@ -218,8 +207,6 @@ object VaultValidator extends Validator {
     inline val VaultAmountChanged = "Datum amount must match output lovelace amount"
     inline val CannotAddTokens = "Deposits must only contain ADA"
     inline val AdaNotConserved = "Deposits must add ADA to the vault"
-    inline val WrongDepositDestination =
-        "Deposit transactions can only be made to the vault"
     inline val NotExactlyOneVaultOutput =
         "Vault transaction must have exactly 1 output to the vault script"
     inline val OwnInputNotFound = "Own input not found"

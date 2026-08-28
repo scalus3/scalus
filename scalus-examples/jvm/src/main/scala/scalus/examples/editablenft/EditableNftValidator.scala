@@ -6,7 +6,6 @@ import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.cardano.onchain.plutus.v1.{Credential, PolicyId}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
-import scalus.uplc.builtin.Data.toData
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 
@@ -132,11 +131,9 @@ object EditableNftValidator extends DataParameterizedValidator {
         ownRef: TxOutRef
     ): Unit = {
         val datum = d.getOrFail(DatumRequired).to[ReferenceNftDatum]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val scriptAddress = ownInput.resolved.address
-        val policyId = scriptAddress.credential match
-            case Credential.ScriptCredential(hash) => hash
-            case _                                 => fail(ExpectedScriptCredential)
+        val policyId = scriptAddress.credential.scriptHashOrFail(ExpectedScriptCredential)
 
         val userTokenName = userNftName(datum.tokenId)
         val refTokenName = refNftName(datum.tokenId)
@@ -145,26 +142,25 @@ object EditableNftValidator extends DataParameterizedValidator {
             case SpendRedeemer.Spend(userNftInputIndex, refNftOutputIndex) => {
                 val userTokenInput = tx.inputs.at(userNftInputIndex)
                 val hasUserToken =
-                    userTokenInput.resolved.value.quantityOf(policyId, userTokenName) === BigInt(1)
+                    userTokenInput.resolved.value.hasNft(policyId, userTokenName)
 
                 require(hasUserToken, MustPresentUserToken)
 
                 val newOutput = tx.outputs.at(refNftOutputIndex)
                 val correctAddress = newOutput.address === scriptAddress
                 val correctQuantity =
-                    newOutput.value.quantityOf(policyId, refTokenName) === BigInt(1)
+                    newOutput.value.hasNft(policyId, refTokenName)
                 val validContinuation = correctAddress && correctQuantity
                 require(validContinuation, MustReturnRefNft)
 
-                val newDatum =
-                    newOutput.datum.inlineOrFail[ReferenceNftDatum](ContinuationMustHaveInlineDatum)
-
                 // Sealed policy enforcement
                 if datum.isSealed then
-                    // check the entire datum
-                    require(newDatum.toData === d.get, SealedNftImmutable)
+                    // check the entire datum: the continuation must carry it unchanged
+                    require(newOutput.hasInlineDatum(datum), SealedNftImmutable)
                 else
                     // just check the token id, rest is ok to change
+                    val newDatum = newOutput.datum
+                        .inlineOrFail[ReferenceNftDatum](ContinuationMustHaveInlineDatum)
                     require(newDatum.tokenId === datum.tokenId, TokenIdImmutable)
             }
             case SpendRedeemer.Burn => {

@@ -39,16 +39,17 @@ enum VestingRedeemer derives FromData, ToData:
   * installments, are both computed with ceiling division so the last unlock never releases
   * fractionally more than the schedule allows.
   *
-  * All context plumbing uses the standard prelude idioms: `TxInfo.findOwnInputOrFail`,
-  * `TxInfo.isSignedBy`, `List.count`, a plain `txInfo.outputs.find` for the first continuing
-  * output, and `OutputDatum.inlineOrFail`. Earlier revisions hand-rolled several of these because
-  * the prelude versions measured slower; the local copies are dropped in favor of the canonical
-  * forms anyway - library/compiler-level fixes, not validator-level workarounds, are the intended
-  * remedy for the cost gap. A compiler fix that dispatches `List.contains` (and siblings) to the
-  * `equalsData`-scan intrinsic for lazily-decoded (`PackedSumDataList`) receivers such as
-  * `txInfo.signatories` is pending review on the `feat/intrinsic-eq-packed-list` branch and is NOT
-  * part of this branch; the numbers here are measured without it. See
-  * `docs/internal/CAPE_COMPETITIVE_ANALYSIS.md` for the deltas and leaderboard standing.
+  * All context plumbing uses the standard prelude idioms: `TxInfo.findInputOrFail`,
+  * `TxInfo.isSignedBy`, `List.findUniqueOrFail`, a plain `txInfo.outputs.find` for the first
+  * continuing output, `TxOut.hasInlineDatum` and the prelude's `divCeil`. Earlier revisions
+  * hand-rolled several of these because the prelude versions measured slower; the local copies are
+  * dropped in favor of the canonical forms anyway - library/compiler-level fixes, not
+  * validator-level workarounds, are the intended remedy for the cost gap. A compiler fix that
+  * dispatches `List.contains` (and siblings) to the `equalsData`-scan intrinsic for lazily-decoded
+  * (`PackedSumDataList`) receivers such as `txInfo.signatories` is pending review on the
+  * `feat/intrinsic-eq-packed-list` branch and is NOT part of this branch; the numbers here are
+  * measured without it. See `docs/internal/CAPE_COMPETITIVE_ANALYSIS.md` for the deltas and
+  * leaderboard standing.
   *
   * The continuing output is the *first* output at the script credential, not a uniqueness check:
   * CAPE builds measurement fixtures by patching an `add_output_utxo` onto a baseline that already
@@ -71,9 +72,7 @@ object LinearVestingValidator extends Validator {
     ): Unit = {
         val datumData = datum.getOrFail(DatumNotFound)
         val d = datumData.to[VestingDatum]
-        val beneficiaryPkh = d.beneficiary.credential match
-            case Credential.PubKeyCredential(pkh) => pkh
-            case _                                => fail(ExpectedPubKeyBeneficiary)
+        val beneficiaryPkh = d.beneficiary.credential.pubKeyHashOrFail(ExpectedPubKeyBeneficiary)
         require(txInfo.isSignedBy(beneficiaryPkh), NoBeneficiarySignature)
         // The ledger always constructs a finite validity-range lower bound as inclusive
         // (LedgerToPlutusTranslation.getInterval calls IntervalBound.finiteInclusive for every
@@ -81,18 +80,18 @@ object LinearVestingValidator extends Validator {
         // bound). finiteOrFail alone is therefore correct here without an inclusive/exclusive
         // adjustment -- unlike the upper bound, whose closure genuinely varies by protocol
         // version.
-        val currentTime = txInfo.validRange.from.finiteOrFail(LowerBoundMustBeFinite)
+        val currentTime = txInfo.validFromOrFail(LowerBoundMustBeFinite)
         redeemer.to[VestingRedeemer] match
             case VestingRedeemer.FullUnlock =>
                 require(currentTime > d.vestingPeriodEnd, VestingPeriodNotOver)
             case VestingRedeemer.PartialUnlock =>
                 require(currentTime > d.firstUnlockPossibleAfter, TooEarlyToUnlock)
-                val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
+                val ownInput = txInfo.findInputOrFail(txOutRef).resolved
                 val ownCred = ownInput.address.credential
                 // Double-satisfaction guard: spending several script UTxOs at once would let one
                 // continuing output satisfy all of them, siphoning off the extra inputs' funds.
-                require(
-                  txInfo.inputs.count(_.resolved.address.credential === ownCred) === BigInt(1),
+                txInfo.inputs.findUniqueOrFail(
+                  _.resolved.address.credential === ownCred,
                   MultipleScriptInputs
                 )
                 val oldRemaining =
@@ -106,18 +105,13 @@ object LinearVestingValidator extends Validator {
                 require(newRemaining > BigInt(0), NothingLeftUseFullUnlock)
                 require(newRemaining < oldRemaining, MustWithdrawSomething)
                 val timeBetween =
-                    divCeil(d.vestingPeriodEnd - d.vestingPeriodStart, d.totalInstallments)
-                val futureInstallments = divCeil(d.vestingPeriodEnd - currentTime, timeBetween)
+                    (d.vestingPeriodEnd - d.vestingPeriodStart) divCeil d.totalInstallments
+                val futureInstallments = (d.vestingPeriodEnd - currentTime) divCeil timeBetween
                 val expectedRemaining =
-                    divCeil(futureInstallments * d.totalVestingQty, d.totalInstallments)
+                    (futureInstallments * d.totalVestingQty) divCeil d.totalInstallments
                 require(newRemaining === expectedRemaining, WrongRemainingQuantity)
-                require(
-                  continuing.datum.inlineOrFail[Data](ContinuingOutputMustCarryDatum) === datumData,
-                  DatumMustBePreserved
-                )
+                require(continuing.hasInlineDatum(datumData), DatumMustBePreserved)
     }
-
-    def divCeil(x: BigInt, y: BigInt): BigInt = 1 + ((x - 1) / y)
 
     // Error messages
     inline val DatumNotFound = "No datum"

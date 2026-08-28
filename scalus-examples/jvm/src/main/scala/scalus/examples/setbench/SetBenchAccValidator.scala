@@ -42,10 +42,8 @@ object SetBenchAccValidator extends Validator {
         require(state.remaining >= K, "Insufficient remaining for withdrawal")
         val newRemaining = state.remaining - K
 
-        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-        val outputs = txInfo.findOwnOutputsByCredential(ownInput.address.credential)
-        require(outputs.length === BigInt(1), "Expected one continuing output")
-        val out = outputs.head
+        val ownInput = txInfo.findInputOrFail(txOutRef)
+        val out = txInfo.findContinuingOutputOrFail(ownInput, "Expected one continuing output")
         val outDatum = out.datum.inlineOrFail[SetBenchDatum]("Expected inline datum")
         require(outDatum.remaining === newRemaining, "Wrong remaining")
         require(outDatum.root === newRoot, "Wrong root")

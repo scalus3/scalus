@@ -54,12 +54,12 @@ object HtlcValidator {
         val config = datum.getOrFail(InvalidDatum).to[Config]
         redeemer.to[Action] match
             case Action.Timeout =>
-                val validFrom = tx.validRange.from.finite(0)
+                val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
                 // validFrom is inclusive, hence 10 <= 10 is correct
                 require(config.timeout <= validFrom, InvalidCommitterTimePoint)
                 require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
             case Action.Reveal(preimage) =>
-                val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+                val validTo = tx.validToOrFail(ValidRangeMustBeBound)
                 // validTo is exclusive, hence 10 <= 10 is correct
                 require(validTo <= config.timeout, InvalidReceiverTimePoint)
                 require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)

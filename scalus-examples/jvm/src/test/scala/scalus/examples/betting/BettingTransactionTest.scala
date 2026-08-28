@@ -289,7 +289,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, joinTx, betUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 159395, steps = 61_822934))
+          result.budget == (ExUnits(memory = 115915, steps = 45_504080))
         )
 
         provider.setSlot(beforeSlot - 1)
@@ -514,7 +514,7 @@ class BettingTransactionTest extends AnyFunSuite, ScalusTest {
         val result = runValidator(provider, winTx, joinedBetUtxo.input)
         assert(result.isSuccess)
         assert(
-          result.budget == (ExUnits(memory = 106190, steps = 40_538709))
+          result.budget == (ExUnits(memory = 103598, steps = 40_027168))
         )
 
         provider.setSlot(env.slotConfig.timeToSlot(afterTime))

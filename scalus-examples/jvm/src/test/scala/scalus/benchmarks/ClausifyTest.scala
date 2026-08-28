@@ -112,7 +112,7 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val result = compile {
             // (a = a = a) = (a = a) = (a = a)
             val formula = (1 <-> (1 <-> 1)) <-> ((1 <-> 1) <-> (1 <-> 1))
-            val expected = List.single[LRVars]((List.single[Var](1), List.empty[Var]))
+            val expected = List.singleton[LRVars]((List.singleton[Var](1), List.empty[Var]))
             require(formula.clauses === expected)
         }
             .toUplcOptimized(false)
@@ -1258,7 +1258,7 @@ object ClausifyTest:
             extension [A: Ord](self: List[A])
                 def insertUniqueOrdered(elem: A): List[A] =
                     self match
-                        case List.Nil => List.single(elem)
+                        case List.Nil => List.singleton(elem)
                         case List.Cons(head, tail) =>
                             elem <=> head match
                                 case Order.Less    => self.prepended(elem)

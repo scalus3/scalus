@@ -409,7 +409,7 @@ object KnightsTest:
           size = size,
           moveNumber = BigInt(1),
           start = Option.Some(initSquare),
-          visited = List.single(initSquare)
+          visited = List.singleton(initSquare)
         )
 
     def startTour(tile: Tile, size: BigInt): ChessSet =

@@ -118,30 +118,6 @@ object AmmValidator extends DataParameterizedValidator {
     inline def readPoolDatum(out: TxOut): AmmDatum =
         out.datum.inlineOrFail[AmmDatum]("Pool output must have inline datum")
 
-    /** Finds the unique pool output at `addr`; fails if absent or ambiguous. */
-    inline def findPoolOutput(outputs: List[TxOut], addr: Address): TxOut = {
-        val matching = outputs.filter(_.address === addr)
-        matching match
-            case List.Cons(out, List.Nil) => out
-            case List.Nil                 => fail("No pool output found")
-            case _                        => fail("Multiple pool outputs found")
-    }
-
-    /** Finds the unique output locked by this script (`policyId == scriptHash`). Used at `Init`,
-      * where there is no pool input to read the address from.
-      */
-    inline def findScriptOutput(outputs: List[TxOut], policyId: PolicyId): TxOut = {
-        val matching = outputs.filter { out =>
-            out.address.credential match
-                case Credential.ScriptCredential(sh) => sh === policyId
-                case _                               => false
-        }
-        matching match
-            case List.Cons(out, List.Nil) => out
-            case List.Nil                 => fail("No pool output found")
-            case _                        => fail("Multiple pool outputs found")
-    }
-
     /** The single NFT minted at `Init` that authenticates a pool UTxO. */
     val poolNftName: TokenName = utf8"POOL"
 
@@ -156,37 +132,37 @@ object AmmValidator extends DataParameterizedValidator {
         redeemer.to[AmmMintAction] match
             case AmmMintAction.Init =>
                 // Consume the one-shot seed so this policyId can only ever be initialized once.
-                require(
-                  tx.inputs.exists(_.outRef === param.to[AmmParams].seed),
-                  "Init: must spend the seed UTxO"
-                )
+                tx.findInputOrFail(param.to[AmmParams].seed, "Init: must spend the seed UTxO")
                 // Mint exactly the pool NFT and nothing else, into a fresh empty pool that holds it.
                 require(
                   tx.mint.hasOnly(policyId, poolNftName, 1),
                   "Init: must mint exactly one pool NFT"
                 )
-                val poolOut = findScriptOutput(tx.outputs, policyId)
+                // There is no pool input yet, so the fresh pool output is located by its payment
+                // credential (`policyId == scriptHash`); the staking part is the creator's choice.
+                val poolOut = tx.outputs.findUniqueOrFail(
+                  _.address.credential === Credential.ScriptCredential(policyId),
+                  "Init: expected exactly one pool output"
+                )
                 require(
-                  readPoolDatum(poolOut) === AmmDatum(BigInt(0), BigInt(0), BigInt(0)),
+                  poolOut.hasInlineDatum(AmmDatum(BigInt(0), BigInt(0), BigInt(0))),
                   "Init: pool must start empty"
                 )
                 require(
-                  poolOut.value.quantityOf(policyId, poolNftName) === BigInt(1),
+                  poolOut.value.hasNft(policyId, poolNftName),
                   "Init: empty pool must hold the pool NFT"
                 )
 
             case AmmMintAction.ChangeLiquidity =>
                 // Locate the pool input we're spending, and its continuation.
-                val poolInput = tx.inputs
-                    .find { inp =>
-                        inp.resolved.address.credential match
-                            case Credential.ScriptCredential(sh) => sh === policyId
-                            case _                               => false
-                    }
-                    .getOrFail("Mint: no pool input found")
+                val poolInput = tx.inputs.findUniqueOrFail(
+                  _.resolved.address.credential === Credential.ScriptCredential(policyId),
+                  "Mint: expected exactly one pool input"
+                )
                 val poolDatum = readPoolDatum(poolInput.resolved)
-                val continuationDatum =
-                    readPoolDatum(findPoolOutput(tx.outputs, poolInput.resolved.address))
+                val continuationDatum = readPoolDatum(
+                  tx.findContinuingOutputOrFail(poolInput, "Mint: expected exactly one pool output")
+                )
 
                 // The tx must mint/burn exactly `lpDelta` of the LP token and NOTHING else under
                 // this policy: `hasOnly` pins the token name and rejects any other name in one check
@@ -210,11 +186,9 @@ object AmmValidator extends DataParameterizedValidator {
         ownRef: TxOutRef
     ): Unit = {
         val params = param.to[AmmParams]
-        val ownInput = tx.findOwnInputOrFail(ownRef, "Own pool input not found")
-        val poolAddress = ownInput.resolved.address
-        val poolPolicyId = poolAddress.credential match
-            case Credential.ScriptCredential(sh) => sh
-            case _                               => fail("Own pool input must be script-locked")
+        val ownInput = tx.findInputOrFail(ownRef, "Own pool input not found")
+        val poolPolicyId = ownInput.resolved.address.credential
+            .scriptHashOrFail("Own pool input must be script-locked")
         val datum = d.getOrFail("Pool datum missing").to[AmmDatum]
 
         redeemer.to[AmmRedeemer] match {
@@ -232,9 +206,12 @@ object AmmValidator extends DataParameterizedValidator {
                 )
 
             case action =>
-                val poolOutput = findPoolOutput(tx.outputs, poolAddress)
-                val newDatum = readPoolDatum(poolOutput)
-                action match {
+                val poolOutput =
+                    tx.findContinuingOutputOrFail(ownInput, "Expected exactly one pool output")
+                // Each handler computes the datum the continuing output must carry and checks it
+                // with `hasInlineDatum` (one data equality, no decoding); the value it returns is
+                // that verified datum, so the reserve binding below can read its fields.
+                val newDatum = action match {
                     case AmmRedeemer.Deposit(x0, x1) =>
                         require(x0 > 0 && x1 > 0, "Deposit: amounts must be positive")
                         if datum.lpSupply !== BigInt(0) then
@@ -245,7 +222,11 @@ object AmmValidator extends DataParameterizedValidator {
                           expectedDatum.lpSupply - datum.lpSupply > 0,
                           "Deposit: zero LP minted"
                         )
-                        require(newDatum === expectedDatum, "Deposit: output datum mismatch")
+                        require(
+                          poolOutput.hasInlineDatum(expectedDatum),
+                          "Deposit: output datum mismatch"
+                        )
+                        expectedDatum
                     case AmmRedeemer.Redeem(lp) =>
                         // We don't check where the redeemed tokens go: the ledger already guarantees
                         // the tx balances, and the reserve binding below ties the new datum reserves
@@ -255,7 +236,11 @@ object AmmValidator extends DataParameterizedValidator {
                         require(lp <= datum.lpSupply, "Redeem: LP amount exceeds supply")
 
                         val expectedDatum = AmmMath.redeemDatum(datum, lp)
-                        require(newDatum === expectedDatum, "Redeem: output datum mismatch")
+                        require(
+                          poolOutput.hasInlineDatum(expectedDatum),
+                          "Redeem: output datum mismatch"
+                        )
+                        expectedDatum
 
                     case AmmRedeemer.Swap(t0In, amountIn, minAmountOut) =>
                         // As with Redeem, we validate only the datum transition; the reserve binding
@@ -276,7 +261,11 @@ object AmmValidator extends DataParameterizedValidator {
                           expectedDatum.r0 * expectedDatum.r1 >= datum.r0 * datum.r1,
                           "Swap: invariant violated"
                         )
-                        require(newDatum === expectedDatum, "Swap: output datum mismatch")
+                        require(
+                          poolOutput.hasInlineDatum(expectedDatum),
+                          "Swap: output datum mismatch"
+                        )
+                        expectedDatum
                     case AmmRedeemer.Close => fail("unreachable")
                 }
 
@@ -294,7 +283,7 @@ object AmmValidator extends DataParameterizedValidator {
                 )
                 // The pool NFT must stay with the pool - it can only be burned via `Close`.
                 require(
-                  poolOutput.value.quantityOf(poolPolicyId, poolNftName) === BigInt(1),
+                  poolOutput.value.hasNft(poolPolicyId, poolNftName),
                   "Pool output must retain the pool NFT"
                 )
         }

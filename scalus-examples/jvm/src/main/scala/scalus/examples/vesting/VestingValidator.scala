@@ -50,22 +50,21 @@ object VestingValidator extends Validator {
 
         require(requestedAmount > 0, NonPositiveAmount)
 
-        val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
-        val contractAddress = ownInput.address
+        val ownInputInfo = txInfo.findInputOrFail(txOutRef)
+        val ownInput = ownInputInfo.resolved
+        val ownCredential = ownInput.address.credential
 
         // Reject spending more than one vesting UTxO at once: otherwise a single continuing
         // output could satisfy several script inputs (double satisfaction) and the remaining
         // locked funds of the extra inputs would be siphoned off.
-        require(
-          txInfo.findOwnInputsByCredential(contractAddress.credential).length === BigInt(1),
+        txInfo.inputs.findUniqueOrFail(
+          _.resolved.address.credential === ownCredential,
           MultipleVestingInputs
         )
 
         val contractAmount = ownInput.value.getLovelace
 
-        val contractOutputs = txInfo.findOwnOutputsByCredential(contractAddress.credential)
-
-        val txEarliestTime = txInfo.getValidityStartTime
+        val txEarliestTime = txInfo.validFromOrFail(NoValidityLowerBound)
 
         val released = vestingConfig.initialAmount - contractAmount
 
@@ -82,11 +81,12 @@ object VestingValidator extends Validator {
 
         val beneficiaryCred = Credential.PubKeyCredential(vestingConfig.beneficiary)
 
-        val beneficiaryInputs = txInfo.findOwnInputsByCredential(beneficiaryCred)
-        val beneficiaryOutputs = txInfo.findOwnOutputsByCredential(beneficiaryCred)
+        val beneficiaryInputs = txInfo.findInputsByCredential(beneficiaryCred)
+        val beneficiaryOutputs = txInfo.findOutputsByCredential(beneficiaryCred)
 
-        val adaInInputs = Utils.getAdaFromInputs(beneficiaryInputs)
-        val adaInOutputs = Utils.getAdaFromOutputs(beneficiaryOutputs)
+        // The beneficiary is a key, paid in lovelace by design; sum the whole value and project.
+        val adaInInputs = beneficiaryInputs.foldLeft(Value.zero)(_ + _.resolved.value).getLovelace
+        val adaInOutputs = beneficiaryOutputs.foldLeft(Value.zero)(_ + _.value).getLovelace
 
         val expectedOutput =
             requestedAmount + adaInInputs - txInfo.fee
@@ -98,14 +98,11 @@ object VestingValidator extends Validator {
 
         if requestedAmount === contractAmount then ()
         else
-            require(contractOutputs.length === BigInt(1), NotExactlyOneContractOutput)
-
-            val contractOutput = contractOutputs.head
-
-            // Pin the continuing output to the exact own input address: matching the payment
-            // credential alone would let the staking credential (and thus delegation rewards)
-            // be redirected to the attacker.
-            require(contractOutput.address === ownInput.address, ContinuingAddressMismatch)
+            // The unique output to the exact own input address: matching the payment credential
+            // alone would let the staking credential (and thus delegation rewards) be redirected
+            // to the attacker.
+            val contractOutput =
+                txInfo.findContinuingOutputOrFail(ownInputInfo, NotExactlyOneContractOutput)
 
             // The continuing output must preserve the entire remaining value — ADA and any
             // native tokens — minus only the withdrawn lovelace. A lovelace-only check would
@@ -115,10 +112,7 @@ object VestingValidator extends Validator {
               ContinuingValueMismatch
             )
 
-            require(
-              contractOutput.datum === OutputDatum.OutputDatum(vestingDatum),
-              InvalidDatum
-            )
+            require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
     }
 
     def linearVesting(vestingDatum: Config, timestamp: BigInt): BigInt = {
@@ -127,7 +121,8 @@ object VestingValidator extends Validator {
         if timestamp < min then 0
         else if timestamp >= max then vestingDatum.initialAmount
         else
-            vestingDatum.initialAmount * (timestamp - vestingDatum.startTimestamp) / vestingDatum.duration
+            val elapsed = timestamp - vestingDatum.startTimestamp
+            vestingDatum.initialAmount * elapsed divFloor vestingDatum.duration
     }
 
     // Error messages
@@ -138,8 +133,8 @@ object VestingValidator extends Validator {
     inline val AmountExceedsAvailable = "Requested amount exceeds the available vested amount"
     inline val BeneficiaryOutputMismatch = "Beneficiary output mismatch"
     inline val NotExactlyOneContractOutput = "Expected exactly one contract output"
-    inline val ContinuingAddressMismatch = "Continuing output must keep the vesting address"
     inline val ContinuingValueMismatch =
         "Continuing output must preserve the remaining vested value"
     inline val InvalidDatum = "VestingDatum mismatch"
+    inline val NoValidityLowerBound = "Transaction validity range must have a lower bound"
 }
