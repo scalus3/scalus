@@ -36,8 +36,7 @@ jobs:
           version: 10
           run_install: false
 
-      - name: Setup Java (for Scaladoc generation)
-        if: inputs.api_mode == 'regenerate'
+      - name: Setup Java (for Scaladoc and llms-api.txt generation)
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
@@ -45,12 +44,27 @@ jobs:
           cache: 'sbt'
 
       - name: Setup sbt
-        if: inputs.api_mode == 'regenerate'
         uses: sbt/setup-sbt@v1
 
       - name: Generate Scaladoc API documentation
         if: inputs.api_mode == 'regenerate'
         run: sbt docs/unidoc
+
+      - name: Generate llms-api.txt from the latest release tag
+        # The cheatsheet documents the RELEASED API, so it is generated from the newest tag
+        # rather than from this branch - master is normally ahead of what users can depend on.
+        # It is a build artifact: Next.js copies public/ into out/, so it ships with the site
+        # and is never committed.
+        run: |
+          set -euo pipefail
+          TAG=$(git describe --tags --abbrev=0 --match 'v*')
+          echo "Generating llms-api.txt from $TAG"
+          git worktree add ../release-src "$TAG"
+          (cd ../release-src && sbt --batch generateLlmsApi)
+          mkdir -p scalus-site/public
+          cp ../release-src/scalus-site/public/llms-api.txt scalus-site/public/llms-api.txt
+          git worktree remove --force ../release-src
+          head -1 scalus-site/public/llms-api.txt
 
       - name: Preserve /api folder from gh-pages
         if: inputs.api_mode == 'preserve'

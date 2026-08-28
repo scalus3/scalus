@@ -29,11 +29,6 @@ jobs:
       - uses: DeterminateSystems/magic-nix-cache-action@main
         with:
           use-flakehub: false
-      - name: Verify llms-api.txt is fresh
-        run: |
-          nix develop .#ci --command bash -c "sbt --batch generateLlmsApi"
-          git diff --exit-code scalus-site/public/llms-api.txt \
-            || (echo "llms-api.txt is stale - run 'sbt generateLlmsApi' and commit" && exit 1)
       - run: nix develop .#ci --command bash -c "sbt ci-release"
         env:
           PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}

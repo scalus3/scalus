@@ -41,3 +41,6 @@ test-logs-archive/
 scalus-examples/jvm/src/test/resources/scalus/examples/AikenMpfData/build/
 scalus-examples/jvm/src/test/resources/scalus/examples/AikenMpfData/artifacts/
 scalus-examples/jvm/src/test/resources/scalus/examples/AikenMpfData/aiken.lock
+
+# Generated at site-deploy time from the latest release tag (deploy-site.yml)
+scalus-site/public/llms-api.txt
