@@ -834,9 +834,12 @@ object LedgerToPlutusTranslation {
                 else throw new IllegalStateException(s"Proposal not found: $index")
 
             case RedeemerTag.Voting =>
-                val voting = body.votingProcedures
-                    .map(_.procedures.toSeq.sortBy(_._1.toString))
-                    .getOrElse(Seq.empty)
+                // Index source: the ledger resolves a Voting index with `fromIndex` into
+                // `votingProceduresTxBodyL`, i.e. `Map.elemAt` on `Map Voter _`
+                // (Conway/TxBody.hs:676-677), so the position is in `Ord Voter` order.
+                // `procedures` is already a SortedMap under that ordering; sorting it by
+                // toString here named the wrong voter.
+                val voting = body.votingProcedures.map(_.procedures.toSeq).getOrElse(Seq.empty)
                 if voting.isDefinedAt(index) then
                     v3.ScriptPurpose.Voting(getVoterV3(voting(index)._1))
                 else throw new IllegalStateException(s"Voter not found: $index")
@@ -982,6 +985,17 @@ object LedgerToPlutusTranslation {
     }
 
     /** Convert voting procedures for V3 script contexts.
+      *
+      * Delivered order: the ledger builds this with `transMap transVoter (transMap ...)`
+      * (`Conway/TxInfo.hs:701-704`), i.e. `Map.toList` over `Map Voter (Map GovActionId _)`. So the
+      * outer order is the ledger's derived `Ord Voter` (`Procedures.hs:338-342`: constructors
+      * Committee < DRep < StakePool, and within each the credential Script < Key) and the inner
+      * order is `Ord GovActionId` (transaction id, then the index numerically).
+      *
+      * `vp.procedures` is already a `SortedMap` under exactly those orders (`Voter.scala:94`,
+      * `GovActionId.scala:30`), so it is iterated as-is. It previously went through
+      * `.sortBy(_._1.toString)`, which produced neither order: it put `…HotKey` before
+      * `…HotScript`, and gov-action index 10 before 2.
       */
     def getVotingProcedures(
         votingProcs: Option[VotingProcedures]
@@ -991,12 +1005,11 @@ object LedgerToPlutusTranslation {
             case Some(vp) =>
                 SortedMap.unsafeFromList(
                   scalus.cardano.onchain.plutus.prelude.List.from(
-                    vp.procedures.toArray.sortBy(_._1.toString).map { case (voter, procedures) =>
+                    vp.procedures.toSeq.map { case (voter, procedures) =>
                         getVoterV3(voter) -> SortedMap.unsafeFromList(
                           scalus.cardano.onchain.plutus.prelude.List.from(
-                            procedures.toSeq.sortBy(_._1.toString).map {
-                                case (govActionId, procedure) =>
-                                    getGovActionId(govActionId) -> getVoteV3(procedure)
+                            procedures.toSeq.map { case (govActionId, procedure) =>
+                                getGovActionId(govActionId) -> getVoteV3(procedure)
                             }
                           )
                         )

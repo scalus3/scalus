@@ -222,7 +222,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         )
     }
 
-    test("V3 votes: DEFECT 3 - toString sort destroys the ledger's Voter order") {
+    test("V3 votes: ordering matches (was defect 3, fixed)") {
         val c = cell(
           Golden.PlutusV3,
           i => mapKeys(i.txInfoField(12)).map(voterKey),
@@ -237,10 +237,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         )
         info(c.summary)
         assert(c.compared > 0, "no V3 instance had >= 2 voters; the probe proved nothing")
-        assert(
-          c.mismatches.nonEmpty,
-          "V3 vote ordering now matches the ledger - defect 3 appears fixed, flip this cell to assert equality"
-        )
+        assert(c.mismatches.isEmpty, s"V3 vote ordering diverged: ${c.summary}")
     }
 
     test("V3 data: ordering matches (hash-keyed, no constructor involved)") {
