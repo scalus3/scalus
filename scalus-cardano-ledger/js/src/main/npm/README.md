@@ -15,10 +15,10 @@ npm install scalus
 ## Upgrading from 0.18.x
 
 The npm package now carries the same version number as the Scalus JVM libraries, so 0.18.1 is
-followed by 1.1.1. Four changes affect existing code:
+followed by 1.1.1. Six changes affect existing code:
 
-- **Protocol version 11 (van Rossem) is the default.** `Scalus.evaluateScript` and
-  `Scalus.evalPlutusScripts` use the mainnet PV11 cost models. Version 0.18.1 used PV10
+- **Protocol version 11 (van Rossem) is the default.** `evaluateScript` and
+  `evalPlutusScripts` use the mainnet PV11 cost models. Version 0.18.1 used PV10
   (Plomin). Execution budgets therefore differ. Pass `protocolMajorVersion` to
   `evalPlutusScripts` to select another version.
 - **`scalus.js` is an ES module.** Import it with `import` or with
@@ -27,10 +27,22 @@ followed by 1.1.1. Four changes affect existing code:
   The old CommonJS shim for browsers no longer works. See [Browser Usage](#browser-usage).
 - **`ExUnits`, `Result` and `Redeemer` are top-level exports**, not members of `Scalus`. The
   runtime behaviour did not change, but the type declarations were wrong before. Import them
-  from the package root: `import { Result } from "scalus"`.
-- **`Emulator.withAddresses` funds 10 000 ADA per address** when you omit
-  `lovelacePerAddress`. It funded 10 000 lovelace before, which is below min-ada. This matches
-  the JVM API and what this README always documented.
+  from the package root: `import { ExUnits } from "scalus"`.
+- **The evaluation functions are top-level exports too**, and two classes were renamed:
+  `Result` is now `EvaluationResult` and `Redeemer` is now `RedeemerBudget`. Prefer
+  `import { evaluateScript } from "scalus"` over `Scalus.evaluateScript`. The `Scalus`
+  object and the old class names still work as deprecated **value** aliases and will be
+  removed in a later release.
+- **`Scalus.Result` and `Scalus.Redeemer` in a type position no longer compile.** Version
+  0.18.1 declared `Scalus` as a TypeScript `namespace` that also re-exported the class
+  *types*; the generated declarations export it as a `const`, so
+  `const r: Scalus.Result = ...` now fails with
+  `'Scalus' refers to a value, but is being used as a type`. Calls through the object
+  (`Scalus.evaluateScript(...)`) are unaffected. Import the types from the package root
+  instead: `import { EvaluationResult, ExUnits, RedeemerBudget } from "scalus"`.
+- **`Emulator.withAddresses` funds 10 000 ada per address** when you omit
+  `lovelacePerAddress`, that is `10_000_000_000n` lovelace. It funded 10 000 lovelace before,
+  which is below min-ada, so seeded outputs were unusable.
 
 ## Emulator
 
@@ -61,8 +73,11 @@ const result = emulator.submitTx(txCborBytes);
 // or { isSuccess: false, error: "…", logs: ["…"] }
 ```
 
-Every UTxO returned by the emulator is a CBOR-encoded `Map[TransactionInput, TransactionOutput]`
-entry. Decode it using your favourite CBOR codec library.
+`getAllUtxos` and `getUtxosForAddress` return one CBOR map per UTxO, each holding a single
+entry; `getUtxosCbor` returns the whole set in one map. In both cases the map keys are
+transaction inputs (a `[transactionHash, outputIndex]` pair) and the values are transaction
+outputs, exactly as in the Cardano ledger CDDL. Decode them with your favourite CBOR codec
+library.
 
 ### Time Control
 
@@ -116,7 +131,7 @@ registrations, DRep registrations, and a datum store:
 ```typescript
 const emulator = Emulator.withState(
   {
-    utxos: utxoMapCbor,           // Uint8Array — CBOR Map[TxIn, TxOut]
+    utxos: utxoMapCbor,           // Uint8Array: CBOR map, input -> output
     stakeRegistrations: [
       { credentialType: "key", credentialHash: "abcd…", rewards: 42_000_000n },
       { credentialType: "key", credentialHash: "1234…", rewards: 0n, delegatedTo: poolIdHex },
@@ -142,15 +157,15 @@ All fields except `utxos` are optional.
 ### Evaluate a Single Script
 
 ```typescript
-import { Scalus } from "scalus";
+import { applyDataArgToScript, evaluateScript } from "scalus";
 
 // Scripts are represented as double-CBOR-encoded hex strings
 const script = "545301010023357389210753756363657373004981";
 
 // Apply a data argument (Plutus Data JSON format)
-const applied = Scalus.applyDataArgToScript(script, JSON.stringify({ int: 42 }));
+const applied = applyDataArgToScript(script, JSON.stringify({ int: 42 }));
 
-const result = Scalus.evaluateScript(applied);
+const result = evaluateScript(applied);
 // { isSuccess: true, budget: { memory: 1032n, steps: 203598n }, logs: [] }
 ```
 
@@ -161,23 +176,26 @@ profiling data as JSON in `profileJson`: cost per source location, cost per buil
 transition edges.
 
 ```typescript
-const result = Scalus.evaluateScriptProfile(applied);
+const result = evaluateScriptProfile(applied);
 const profile = JSON.parse(result.profileJson!);
 ```
 
-The interactive HTML report renderer stays on the JVM side, to keep this bundle small. Use the
-Scala `ProfileFormatter` to render the JSON.
+This package gives you the data, not the report. The renderer that turns the JSON into the
+interactive HTML report (`ProfileFormatter`) is a Scala-side tool, shipped with the Scalus
+library for the JVM; it is left out here so the bundle stays small.
 
 ### Evaluate All Scripts in a Transaction
 
 ```typescript
-import { Scalus, SlotConfig } from "scalus";
+import { evalPlutusScripts, SlotConfig } from "scalus";
 
+// One cost model per Plutus version, indexed by position: [0] is V1, [1] is V2, [2] is V3.
+// Give a model for every version the transaction uses; an earlier version cannot be skipped.
 const costModels = [plutusV1Costs, plutusV2Costs, plutusV3Costs]; // number[][]
 
-const redeemers = Scalus.evalPlutusScripts(
+const redeemers = evalPlutusScripts(
   txCborBytes,        // Uint8Array
-  utxoCborBytes,      // Uint8Array — CBOR Map[TxIn, TxOut]
+  utxoCborBytes,      // Uint8Array: CBOR map, input -> output
   SlotConfig.mainnet,
   costModels
 );
@@ -187,8 +205,14 @@ for (const r of redeemers) {
 }
 ```
 
+Each `r.tag` is one of `"Spend"`, `"Mint"`, `"Cert"`, `"Reward"`, `"Voting"` or
+`"Proposing"`, and `r.index` is the position within that group, counting from 0.
+
 On failure, `evalPlutusScripts` throws a `PlutusScriptEvaluationError` with
-`.message` and `.logs` (the script's trace output).
+`.message` and `.logs` (the script's trace output). Only script failures arrive that way;
+malformed transaction or UTxO CBOR throws an ordinary error. `evaluateScript` and
+`evaluateScriptProfile` never throw at all: they report a failure as a result with
+`isSuccess: false` and the message in `logs[0]`.
 
 ### Plutus Data JSON Format
 
@@ -211,11 +235,15 @@ import { SlotConfig } from "scalus";
 
 const cfg = SlotConfig.mainnet; // or .preview, .preprod
 const time = cfg.slotToTime(100_000); // POSIX ms
-const slot = cfg.timeToSlot(time);
+const slot = cfg.timeToSlot(time);    // fractional unless `time` is on a slot boundary
 
 // Custom config
 const custom = new SlotConfig(zeroTime, zeroSlot, slotLength);
 ```
+
+`timeToSlot` does not round. With one-second slots, `cfg.timeToSlot(Date.now())` almost
+always has a fraction, so round it yourself (for example with `Math.floor`) before you use it
+as a slot number.
 
 ## Browser Usage
 
@@ -224,12 +252,18 @@ load it directly, with no bundler and no import map:
 
 ```html
 <script type="module">
-    import { Scalus, SlotConfig, Emulator } from "./scalus.js";
+    import { evaluateScript, SlotConfig, Emulator } from "./scalus.js";
 
-    const result = Scalus.evaluateScript(scriptDoubleCborHex);
+    const result = evaluateScript(scriptDoubleCborHex);
     console.log(result.isSuccess, result.budget.steps);
 </script>
 ```
+
+## TypeScript Definitions
+
+`scalus.d.ts` is generated from the Scala sources by `scalus-ts-exporter`
+(`sbt scalusCardanoLedgerJS/generateDts`). Do not edit it by hand. CI fails
+if it drifts from the Scala facades.
 
 ## License
 

@@ -49,13 +49,13 @@ The `evaluate.ts` file currently uses an absolute path to the Scalus bundle. You
 line 2 in `evaluate.ts`:
 
 ```typescript
-import {Scalus, SlotConfig} from "scalus";
+import { evaluateScript, SlotConfig } from "scalus";
 ```
 
 Change it to a relative path or the correct absolute path for your system:
 
 ```typescript
-const {Scalus, SlotConfig} = require("../../../../../scalus-cardano-ledger/js/src/main/npm/scalus.js");
+const { evaluateScript, SlotConfig } = require("../../../../../scalus-cardano-ledger/js/src/main/npm/scalus.js");
 ```
 
 ## Running the Examples
@@ -97,7 +97,7 @@ The script will output:
 
 ## API Overview
 
-### Scalus.applyDataArgToScript(script, dataJson)
+### applyDataArgToScript(script, dataJson)
 
 Applies a data argument to a UPLC script.
 
@@ -105,14 +105,14 @@ Applies a data argument to a UPLC script.
 - **dataJson**: JSON string representing the Plutus Data argument
 - **Returns**: Hex-encoded script with the argument applied
 
-### Scalus.evaluateScript(script)
+### evaluateScript(script)
 
 Evaluates a UPLC script.
 
 - **script**: Hex-encoded UPLC script
 - **Returns**: Evaluation result object with `success` flag and `budget` information
 
-### Scalus.evalPlutusScripts(txBytes, utxoBytes, slotConfig)
+### evalPlutusScripts(txBytes, utxoBytes, slotConfig)
 
 Evaluates all Plutus scripts in a transaction.
 

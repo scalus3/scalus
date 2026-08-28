@@ -250,9 +250,9 @@ const result = emulator.submitTx(hexToBytes(txCbor));
 For evaluating Plutus scripts without submitting transactions, use `evalPlutusScripts`:
 
 ```typescript
-import { Scalus, SlotConfig } from "scalus";
+import { evalPlutusScripts, SlotConfig } from "scalus";
 
-const redeemers = Scalus.evalPlutusScripts(
+const redeemers = evalPlutusScripts(
   txCborBytes,
   utxoCborBytes,
   SlotConfig.preview,
@@ -266,13 +266,13 @@ for (const redeemer of redeemers) {
 
 ### Profiling a script
 
-`Scalus.evaluateScript(doubleCborHex)` runs a single fully-applied script (for example the output of `Scalus.applyDataArgToScript`) and returns a `Result` with `isSuccess`, `budget`, and `logs`. `Scalus.evaluateScriptProfile(doubleCborHex)` does the same but also collects [CEK machine profiling data](/docs/smart-contract-optimisations/profiling), exposed on the result as `profileJson` — per-source-location and per-builtin cost plus the transition edges. It is `undefined` for the plain `evaluateScript` (which has zero profiling overhead).
+`evaluateScript(doubleCborHex)` runs a single fully-applied script (for example the output of `applyDataArgToScript`) and returns an `EvaluationResult` with `isSuccess`, `budget`, and `logs`. `evaluateScriptProfile(doubleCborHex)` does the same but also collects [CEK machine profiling data](/docs/smart-contract-optimisations/profiling), exposed on the result as `profileJson` — per-source-location and per-builtin cost plus the transition edges. It is `undefined` for the plain `evaluateScript` (which has zero profiling overhead).
 
 ```typescript
-import { Scalus } from "scalus";
+import { evaluateScriptProfile } from "scalus";
 
-// `applied` is a fully-applied script, e.g. from Scalus.applyDataArgToScript(...)
-const result = Scalus.evaluateScriptProfile(applied);
+// `applied` is a fully-applied script, e.g. from applyDataArgToScript(...)
+const result = evaluateScriptProfile(applied);
 
 console.log(`success=${result.isSuccess}, cpu=${result.budget.steps}, mem=${result.budget.memory}`);
 
