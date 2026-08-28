@@ -42,20 +42,14 @@ private[stream] trait ChainFollower {
       */
     def events: ScalusAsyncSource[ChainEvent]
 
-    /** Which sources the follower should observe from now on, and **the height from which that
-      * takes effect**.
+    /** Which sources the follower should observe from now on, and **the point from which that takes
+      * effect**.
       *
       * A metered follower polls per source, so it must be told what anyone is actually subscribed
-      * to. One that reads whole blocks ignores `sources` and returns `0`: every block it produces
-      * has `BlockCoverage.Complete`, so "everything above 0 covers you" is simply true, and
-      * reporting its current height instead would understate what it covers and push the caller to
-      * lean on a snapshot it does not need.
-      *
-      * The return value is what makes a subscription's start point exact rather than approximate.
-      * Registering a subscription and telling the follower to watch its sources are two steps, and
-      * a block processed between them is covered by neither: the subscriber would be registered
-      * from the tip, silently miss that block — nobody having fetched it on its behalf — and the
-      * hub would then advance it past that height when the next covered block arrived.
+      * to. One that reads whole blocks ignores `sources` and returns [[ChainPoint.origin]]: every
+      * block it produces has `BlockCoverage.Complete`, so "everything after the origin covers you"
+      * is simply true, and reporting its current position instead would understate what it covers
+      * and push the caller onto a snapshot it does not need.
       *
       * **The argument is the complete set, and calls must be serialised.** `sources` replaces what
       * was being watched rather than adding to it, so a caller passes the union of every live
@@ -63,12 +57,26 @@ private[stream] trait ChainFollower {
       * leave one of them silently unwatched while holding a position that promises otherwise —
       * which is the very failure this return value exists to prevent, reintroduced one layer up.
       *
-      * So a follower returns the last height whose source set was already fixed. Every block above
-      * it is guaranteed to have been assembled with `sources` included, which lets the caller
-      * register the subscription at exactly that height instead of at whatever the tip happened to
-      * be. The guarantee becomes structural rather than a matter of how the two calls interleave.
+      * The return value is what makes a subscription's start point exact rather than approximate.
+      * Registering a subscription and telling the follower to watch its sources are two steps, and
+      * a block processed between them is covered by neither: the subscriber would be registered
+      * from the tip, silently miss that block — nobody having fetched it on its behalf — and the
+      * hub would then advance it past that point when the next covered block arrived. So a follower
+      * returns the last position whose source set was already fixed; everything after it is
+      * guaranteed to have been assembled with `sources` included, and the caller closes the
+      * remaining gap with a snapshot taken afterwards.
+      *
+      * **A [[ChainPoint]], not a height.** Heights are only unique within a fork, and this seam is
+      * meant for followers that emit [[ChainEvent.RollBackward]]. After a reorg, "block 100" on the
+      * abandoned fork and on the new one are different blocks, and a caller told "everything above
+      * 100 covers you" would silently assign the replacement 100 to a snapshot describing the fork
+      * that no longer exists. A point names the block.
+      *
+      * A follower that rolls back therefore **must lower this to the rollback target** as it emits
+      * the `RollBackward`, since the blocks it replays afterwards are new blocks that no previous
+      * `watch` can have accounted for.
       */
-    def watch(sources: Set[scalus.cardano.node.UtxoSource]): scalus.cardano.node.stream.BlockNo
+    def watch(sources: Set[scalus.cardano.node.UtxoSource]): scalus.cardano.node.stream.ChainPoint
 
     def close(): Unit
 }

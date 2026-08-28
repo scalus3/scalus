@@ -10,7 +10,7 @@ import scalus.testing.kit.Party
 import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.duration.*
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 /** The polling loop, driven against a fake Blockfrost.
   *
@@ -24,6 +24,7 @@ class BlockfrostChainFollowerTest extends AnyFunSuite {
     private given ExecutionContext = ExecutionContext.parasitic
 
     private val alice = Party.Alice.address
+    private val bob = Party.Bob.address
 
     private def point(n: Long): ChainPoint = {
         val bytes = new Array[Byte](32)
@@ -65,6 +66,33 @@ class BlockfrostChainFollowerTest extends AnyFunSuite {
             txQueries = hash :: txQueries
             Future.failed(new AssertionError("no transactions in these fixtures"))
         }
+    }
+
+    /** A Blockfrost whose address query can be held open, so a `watch` can land while a block is
+      * part-way through being assembled.
+      */
+    private class GatedApi(tip: BlockRef, chain: Seq[BlockRef]) extends BlockfrostChainApi {
+        private val gate = Promise[Seq[TransactionHash]]()
+        @volatile var parked = false
+
+        override def latestBlock(): Future[BlockRef] = Future.successful(tip)
+
+        override def blocksAfter(block: BlockRef): Future[Option[Seq[BlockRef]]] =
+            Future.successful(Some(chain.filter(_.blockNo > block.blockNo)))
+
+        override def addressTransactionsIn(
+            address: Address,
+            from: BlockNo,
+            to: BlockNo
+        ): Future[Seq[TransactionHash]] = {
+            parked = true
+            gate.future
+        }
+
+        override def transaction(hash: TransactionHash): Future[ObservedTransaction] =
+            Future.failed(new AssertionError("no transactions in these fixtures"))
+
+        def release(): Unit = gate.success(Seq.empty)
     }
 
     /** Runs the loop synchronously: every future is already completed, so `delay` returning a
@@ -159,47 +187,54 @@ class BlockfrostChainFollowerTest extends AnyFunSuite {
         )
     }
 
-    test("watch reports the height its source set takes effect from") {
-        val api = new FakeApi(ref(10L), chain = Seq(ref(11L), ref(12L)))
-        val f = follower(api, polls = 1)
-        f.start()
-
-        // The follower has processed up to 12, so a set installed now governs 13 onwards.
-        assert(
-          f.watch(Set(UtxoSource.FromAddress(alice))) == 12L,
-          "a subscription registered against this position is covered by every block above it, " +
-              "which is what makes its start point exact rather than whatever the tip happened " +
-              "to be when the two calls interleaved"
-        )
-    }
-
-    test("watch before any block reports the position nothing was observed from") {
+    test("watch before anything is observed reports the origin") {
         val api = new FakeApi(ref(10L))
         val f = follower(api, polls = 0)
 
         assert(
-          f.watch(Set(UtxoSource.FromAddress(alice))) == 0L,
-          "nothing has been observed yet, so a subscription registered here must not be treated " +
-              "as having already been delivered anything"
+          f.watch(Set(UtxoSource.FromAddress(alice))) == ChainPoint.origin,
+          "nothing has been observed yet, so there is no block a subscription must start after"
         )
     }
 
-    test("a block already being assembled is not claimed by a later watch") {
-        val api = new FakeApi(ref(10L), chain = Seq(ref(11L)))
+    test("watch reports the position its source set takes effect from") {
+        val api = new FakeApi(ref(10L), chain = Seq(ref(11L), ref(12L)))
         val f = follower(api, polls = 1)
         f.start()
 
-        // Block 11 fixed its source set (empty) before this call, so watch must not report a
-        // position that would imply 11 was covered by the new set.
-        val from = f.watch(Set(UtxoSource.FromAddress(alice)))
-        val emitted = drain(f.events).collect { case ChainEvent.RollForward(b) => b }
-
-        assert(emitted.map(_.blockNo) == List(11L))
         assert(
-          emitted.head.coverage == BlockCoverage.Sources(Set.empty),
-          "block 11 was assembled before the watch, and says so"
+          f.watch(Set(UtxoSource.FromAddress(alice))) == point(12L),
+          "12 was the last block whose sources were decided, so a subscription registered now is " +
+              "covered from 13 onwards and the caller's snapshot must cover the rest"
         )
-        assert(from >= 11L, "so a subscription starting here must start above block 11, not at it")
     }
 
+    test("a block still being assembled is not claimed by a watch that lands during it") {
+        // The real interleaving: the follower parks mid-block, holding the source set it already
+        // read, and a watch arrives while it is parked. Assembled-inline fixtures cannot reach
+        // this, and it is the only case that distinguishes recording the source set *before* the
+        // block's requests from recording it after.
+        val api = new GatedApi(ref(10L), chain = Seq(ref(11L)))
+        val f = follower(api, polls = 1)
+        f.watch(Set(UtxoSource.FromAddress(alice)))
+        f.start()
+
+        assert(api.parked, "block 11 should be mid-assembly, waiting on its address query")
+
+        val from = f.watch(Set(UtxoSource.FromAddress(alice), UtxoSource.FromAddress(bob)))
+        assert(
+          from == point(11L),
+          "block 11 fixed its sources before this watch, so the caller must be told to start " +
+              "after 11 — reporting 10 would claim 11 covers bob when it was assembled without him"
+        )
+
+        api.release()
+        val emitted = drain(f.events).collect { case ChainEvent.RollForward(b) => b }
+        assert(
+          emitted.map(_.coverage) == List(
+            BlockCoverage.Sources(Set(UtxoSource.FromAddress(alice)))
+          ),
+          "and the block itself reports only what it actually probed"
+        )
+    }
 }

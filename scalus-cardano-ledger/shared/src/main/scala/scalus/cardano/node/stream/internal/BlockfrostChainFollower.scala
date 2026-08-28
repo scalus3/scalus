@@ -97,26 +97,30 @@ private[stream] final class BlockfrostChainFollower(
     private var stopped = false
     private var started = false
 
-    /** The highest height whose set of probed sources has already been decided.
+    /** The block whose set of probed sources was most recently decided.
       *
       * Two assignment sites, with different arguments for why each is safe:
       *
       *   - `emitBlock` updates it in the same critical section that reads `watched`, which is what
       *     lets `watch` report a position a caller can rely on: a block already being assembled has
-      *     a height at or below this, and every block assembled afterwards sees the new set.
+      *     been recorded here, and every block assembled afterwards sees the new set.
       *   - `start` seeds it from the chain tip. That one rests not on the lock but on the backend's
       *     `/blocks/{hash}/next` contract — nothing at or below the starting tip is ever emitted,
       *     so nothing at or below it needs covering.
       *
-      * Note this is deliberately ahead of `last`, which is the actual delivery cursor: sources are
-      * fixed before any of the block's requests are issued, so a block can be counted here while
-      * none of its transactions have been fetched yet.
+      * Kept as a whole [[BlockRef]] rather than a point so the height is available for the
+      * monotonicity guard, while `watch` returns the point — see [[ChainFollower.watch]] for why a
+      * height alone cannot name a position across a fork.
+      *
+      * Deliberately ahead of `last`, which is the actual delivery cursor: sources are fixed before
+      * any of the block's requests are issued, so a block can be recorded here while none of its
+      * transactions have been fetched yet.
       */
-    private var committed: BlockNo = 0L
+    private var committed: Option[BlockRef] = None
 
     override def events: ScalusAsyncSource[ChainEvent] = mailbox
 
-    override def watch(sources: Set[UtxoSource]): BlockNo = synchronized {
+    override def watch(sources: Set[UtxoSource]): ChainPoint = synchronized {
         // A stopped follower will never assemble another block, so a position promising coverage
         // above it would be a lie the caller has no way to detect: it would register, and then
         // wait forever with no events, no Idle and no error.
@@ -126,7 +130,7 @@ private[stream] final class BlockfrostChainFollower(
                   "registered against it could never be covered"
             )
         watched = sources
-        committed
+        committed.map(_.point).getOrElse(ChainPoint.origin)
     }
 
     override def close(): Unit = {
@@ -154,9 +158,9 @@ private[stream] final class BlockfrostChainFollower(
                 case Success(tip) =>
                     synchronized {
                         last = Some(tip)
-                        // Nothing below the tip is ever emitted, so this is the first height a
+                        // Nothing below the tip is ever emitted, so this is the first position a
                         // subscription could be observed from.
-                        committed = tip.blockNo
+                        committed = Some(tip)
                     }
                     loop()
                 case Failure(t) => mailbox.fail(t)
@@ -219,9 +223,11 @@ private[stream] final class BlockfrostChainFollower(
             // new set when it was not.
             // Monotonic: a backend that serves a stale `/blocks/{hash}/next` page — a lagging
             // replica is the realistic case — must not be able to drag this backwards, or a
-            // `watch` landing next would be handed a position implying coverage of heights that
-            // were already assembled with the old source set.
-            committed = math.max(committed, block.blockNo)
+            // `watch` landing next would be handed a position implying coverage of blocks that
+            // were already assembled with the old source set. This follower never rolls back (it
+            // fails instead), so monotonicity here is unconditional; one that did would have to
+            // lower it deliberately, as ChainFollower.watch describes.
+            if committed.forall(_.blockNo <= block.blockNo) then committed = Some(block)
             watched.collect { case UtxoSource.FromAddress(a) => a }
         }
         val probed: Set[UtxoSource] = addresses.map(UtxoSource.FromAddress(_))
