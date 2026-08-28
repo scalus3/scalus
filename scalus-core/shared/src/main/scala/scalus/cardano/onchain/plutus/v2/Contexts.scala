@@ -7,7 +7,7 @@ import scalus.uplc.builtin.FromData
 import scalus.uplc.builtin.ToData
 import scalus.cardano.onchain.plutus.v2
 import v2.OutputDatum.NoOutputDatum
-import scalus.cardano.onchain.plutus.prelude.{<=>, ===, Eq, List, Option, Ord, Order, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{<=>, ===, AssocMap, Eq, List, Option, Ord, Order, SortedMap}
 import scalus.uplc.builtin.ByteString.*
 import scalus.cardano.onchain.plutus.prelude.fail
 
@@ -173,7 +173,7 @@ case class TxInfo(
     withdrawals: SortedMap[StakingCredential, BigInt],
     validRange: PosixTimeRange,
     signatories: List[PubKeyHash],
-    redeemers: SortedMap[ScriptPurpose, Redeemer],
+    redeemers: AssocMap[ScriptPurpose, Redeemer],
     data: SortedMap[DatumHash, Datum],
     id: TxId
 )
@@ -190,7 +190,7 @@ object TxInfo {
       withdrawals = SortedMap.empty,
       validRange = Interval.always,
       signatories = List.empty,
-      redeemers = SortedMap.empty,
+      redeemers = AssocMap.empty,
       data = SortedMap.empty,
       id = TxId(hex"0000000000000000000000000000000000000000000000000000000000000000")
     )
@@ -205,7 +205,7 @@ object TxInfo {
             a.withdrawals === b.withdrawals &&
             a.validRange === b.validRange &&
             a.signatories === b.signatories &&
-            a.redeemers === b.redeemers &&
+            a.redeemers.toList === b.redeemers.toList &&
             a.data === b.data &&
             a.id === b.id
 
@@ -220,7 +220,7 @@ object TxInfo {
             (x.withdrawals <=> y.withdrawals) ifEqualThen
             (x.validRange <=> y.validRange) ifEqualThen
             (x.signatories <=> y.signatories) ifEqualThen
-            (x.redeemers <=> y.redeemers) ifEqualThen
+            (x.redeemers.toList <=> y.redeemers.toList) ifEqualThen
             (x.data <=> y.data) ifEqualThen
             (x.id <=> y.id)
 

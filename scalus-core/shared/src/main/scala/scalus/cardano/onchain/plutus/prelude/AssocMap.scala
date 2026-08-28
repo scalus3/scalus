@@ -124,6 +124,16 @@ object AssocMap {
             go(self.toList)
         }
 
+        /** Retrieves the value associated with a key, or fails with a custom message.
+          *
+          * Mirrors `SortedMap.getOrFail`, so a map can be switched between the two representations
+          * without rewriting its call sites.
+          */
+        inline def getOrFail(
+            key: A,
+            inline message: String = "AssocMap doesn't contain searching key"
+        ): B = get(key).getOrFail(message)
+
         def contains(key: A): Boolean = get(key).isDefined
 
         def insert(key: A, value: B): AssocMap[A, B] = {

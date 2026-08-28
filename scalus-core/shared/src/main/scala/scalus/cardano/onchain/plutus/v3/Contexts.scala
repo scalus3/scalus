@@ -705,6 +705,14 @@ object ScriptPurpose:
                         lhsIndex === rhsIndex && lhsProcedure === rhsProcedure
                     case _ => false
 
+    /** WARNING: this ordering is content-based and does NOT match the order the ledger delivers
+      * redeemers in. Redeemer keys are positional - the ledger's map is
+      * `Map (PlutusPurpose AsIx era) (Data, ExUnits)` and `AsIx` keeps only the `Word32`
+      * (`Alonzo/TxWits.hs:145`, `Alonzo/Scripts.hs:281-283`) - so the order is
+      * `(constructor, index)` and no content-based `Ord` can track it in general. That is why
+      * `TxInfo.redeemers` is an `AssocMap` with a linear `Eq` lookup rather than a `SortedMap`. Do
+      * not reintroduce a sorted redeemer map on the strength of this instance.
+      */
     given Ord[ScriptPurpose] = (x: ScriptPurpose, y: ScriptPurpose) =>
         x match
             case Minting(cs1) =>
@@ -872,7 +880,7 @@ case class TxInfo(
     withdrawals: SortedMap[Credential, Lovelace] = SortedMap.empty,
     validRange: Interval = Interval.always,
     signatories: List[PubKeyHash] = List.Nil,
-    redeemers: SortedMap[ScriptPurpose, Redeemer] = SortedMap.empty,
+    redeemers: AssocMap[ScriptPurpose, Redeemer] = AssocMap.empty,
     data: SortedMap[DatumHash, Datum] = SortedMap.empty,
     id: TxId,
     votes: SortedMap[Voter, SortedMap[GovernanceActionId, Vote]] = SortedMap.empty,
@@ -894,7 +902,7 @@ object TxInfo {
             lhs.withdrawals === rhs.withdrawals &&
             lhs.validRange === rhs.validRange &&
             lhs.signatories === rhs.signatories &&
-            lhs.redeemers === rhs.redeemers &&
+            lhs.redeemers.toList === rhs.redeemers.toList &&
             lhs.data === rhs.data &&
             lhs.id === rhs.id &&
             lhs.votes === rhs.votes &&
@@ -913,7 +921,7 @@ object TxInfo {
             (x.withdrawals <=> y.withdrawals) ifEqualThen
             (x.validRange <=> y.validRange) ifEqualThen
             (x.signatories <=> y.signatories) ifEqualThen
-            (x.redeemers <=> y.redeemers) ifEqualThen
+            (x.redeemers.toList <=> y.redeemers.toList) ifEqualThen
             (x.data <=> y.data) ifEqualThen
             (x.id <=> y.id) ifEqualThen
             (x.votes <=> y.votes) ifEqualThen

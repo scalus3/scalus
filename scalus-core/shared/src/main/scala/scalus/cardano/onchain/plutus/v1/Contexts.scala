@@ -838,6 +838,14 @@ object ScriptPurpose {
                     case ScriptPurpose.Certifying(rhsCert) => lhsCert === rhsCert
                     case _                                 => false
 
+    /** WARNING: this ordering is content-based and does NOT match the order the ledger delivers
+      * redeemers in. Redeemer keys are positional - the ledger's map is
+      * `Map (PlutusPurpose AsIx era) (Data, ExUnits)` and `AsIx` keeps only the `Word32`
+      * (`Alonzo/TxWits.hs:145`, `Alonzo/Scripts.hs:281-283`) - so the order is
+      * `(constructor, index)` and no content-based `Ord` can track it in general. That is why
+      * `TxInfo.redeemers` is an `AssocMap` with a linear `Eq` lookup rather than a `SortedMap`. Do
+      * not reintroduce a sorted redeemer map on the strength of this instance.
+      */
     given Ord[ScriptPurpose] = (x: ScriptPurpose, y: ScriptPurpose) =>
         x match
             case ScriptPurpose.Minting(sym1) =>

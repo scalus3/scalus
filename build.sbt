@@ -439,7 +439,26 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[Problem]("scalus.uplc.builtin.internal.*"),
         // scalus.uplc.internal: public utilitarian tooling (UPLC source-map renderer, profile
         // report writer) whose contract is the on-disk artifact formats, not the Scala API.
-        ProblemFilters.exclude[Problem]("scalus.uplc.internal.*")
+        ProblemFilters.exclude[Problem]("scalus.uplc.internal.*"),
+        // TxInfo.redeemers changed from SortedMap to AssocMap. Redeemer keys are positional -
+        // the ledger's map is `Map (PlutusPurpose AsIx era) _` and AsIx keeps only the index -
+        // so no content-based Ord can track their order, and a sorted map's short-circuiting
+        // lookup silently missed present keys. AssocMap does a linear Eq scan, as
+        // PlutusTx.AssocMap and Aiken's Pairs do. Deliberate breaking change; the on-chain Data
+        // encoding is unchanged, since both carry @UplcRepr(PackedDataMap).
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.apply"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.copy"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.this"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.apply"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.copy"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.this"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo._10"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.copy$default$10"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.redeemers"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.<init>$default$10"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo._10"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.copy$default$10"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.redeemers")
       ),
 
       // enable when debug compilation of tests

@@ -11,7 +11,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
-import scalus.cardano.onchain.plutus.prelude.{List, Option as POption, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, Option as POption, SortedMap}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for the Batch Auction Example.
@@ -262,7 +262,7 @@ class BatchAuctionTest extends AnyFunSuite with ScalusTest {
                 (ScriptPurpose.Spending(outRef), action.action.toData)
             }
 
-            val redeemers = SortedMap.fromList(
+            val redeemers = AssocMap.fromList(
               List.from(
                 spendingRedeemers :+ (ScriptPurpose.Rewarding(stakingCredential), rewardingRedeemer)
               )

@@ -26,7 +26,7 @@ class TransactionLevelMinterValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               mint = Value.zero,
-              redeemers = SortedMap.singleton(ScriptPurpose.Minting(minterScriptHash), ().toData),
+              redeemers = AssocMap.singleton(ScriptPurpose.Minting(minterScriptHash), ().toData),
               id = TxId(ByteString.empty)
             )
 
@@ -51,7 +51,7 @@ class TransactionLevelMinterValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               mint = Value.zero,
-              redeemers = SortedMap.empty,
+              redeemers = AssocMap.empty,
               id = TxId(ByteString.empty)
             )
 
@@ -75,7 +75,7 @@ class TransactionLevelMinterValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               mint = Value.zero,
-              redeemers = SortedMap.singleton(ScriptPurpose.Minting(minterScriptHash), ().toData),
+              redeemers = AssocMap.singleton(ScriptPurpose.Minting(minterScriptHash), ().toData),
               id = TxId(ByteString.empty)
             )
 
@@ -99,7 +99,7 @@ class TransactionLevelMinterValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               mint = Value.zero,
-              redeemers = SortedMap.singleton(ScriptPurpose.Minting(minterScriptHash), ().toData),
+              redeemers = AssocMap.singleton(ScriptPurpose.Minting(minterScriptHash), ().toData),
               id = TxId(ByteString.empty)
             )
 
@@ -119,7 +119,7 @@ class TransactionLevelMinterValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               mint = Value(minterScriptHash, ByteString.empty, BigInt(1)),
-              redeemers = SortedMap.empty,
+              redeemers = AssocMap.empty,
               id = TxId(ByteString.empty)
             )
 
@@ -139,7 +139,7 @@ class TransactionLevelMinterValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               mint = Value.zero,
-              redeemers = SortedMap.empty,
+              redeemers = AssocMap.empty,
               id = TxId(ByteString.empty)
             )
 

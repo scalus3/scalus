@@ -158,7 +158,7 @@ class CompatibilityWithAikenTest extends AnyFunSuite, ScalusTest {
             outputs = txOutputs,
             fee = fee,
             signatories = extraSignatories.map(x => PubKeyHash(x)),
-            redeemers = SortedMap.fromList(
+            redeemers = AssocMap.fromList(
               scalus.cardano.onchain.plutus.prelude
                   .List((ScriptPurpose.Spending(txOutRef), redeemer))
             ),

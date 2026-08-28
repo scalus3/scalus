@@ -11,7 +11,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2.{OutputDatum, TxOut}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
-import scalus.cardano.onchain.plutus.prelude.{List, Option as POption, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, Option as POption, SortedMap}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for the Multi-Pool DEX Example.
@@ -434,7 +434,7 @@ class MultiPoolDexTest extends AnyFunSuite with ScalusTest {
               outputs = List.from(txOutputs),
               fee = BigInt(200000),
               withdrawals = SortedMap.fromList(List.from(withdrawalEntries)),
-              redeemers = SortedMap.fromList(List.from(spendingRedeemers ++ rewardingRedeemers)),
+              redeemers = AssocMap.fromList(List.from(spendingRedeemers ++ rewardingRedeemers)),
               id = txId
             )
         }

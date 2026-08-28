@@ -5,7 +5,7 @@ import org.scalacheck.{Arbitrary, Gen}
 import scalus.*
 import scalus.cardano.onchain.plutus.v1.{Interval, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2
-import scalus.cardano.onchain.plutus.prelude.{List, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, SortedMap}
 
 object ArbitraryInstances extends ArbitraryInstances
 trait ArbitraryInstances extends v2.ArbitraryInstances {
@@ -47,7 +47,7 @@ trait ArbitraryInstances extends v2.ArbitraryInstances {
           withdrawals = SortedMap.empty,
           validRange = interval,
           signatories = signatories,
-          redeemers = SortedMap.empty,
+          redeemers = AssocMap.empty,
           data = SortedMap.empty,
           id = id,
         )

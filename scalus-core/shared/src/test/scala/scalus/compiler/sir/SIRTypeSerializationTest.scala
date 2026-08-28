@@ -86,7 +86,7 @@ class SIRTypeSerializationTest extends AnyFunSuite {
               withdrawals = SortedMap.empty,
               validRange = Interval.always,
               signatories = scalus.cardano.onchain.plutus.prelude.List.empty,
-              redeemers = SortedMap.empty,
+              redeemers = AssocMap.empty,
               data = SortedMap.empty,
               id = txId,
               votes = SortedMap.empty,

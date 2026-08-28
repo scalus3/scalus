@@ -196,7 +196,7 @@ object UtxoIndexer {
 
     /** Helper to filter redeemers by Spend purpose and matching stake credential. */
     private def filterAndCoerceRedeemers[A](
-        redeemers: SortedMap[ScriptPurpose, Redeemer],
+        redeemers: AssocMap[ScriptPurpose, Redeemer],
         stakeCredential: Credential,
         coercerAndExtractor: Data => (A, Credential)
     ): List[A] = {

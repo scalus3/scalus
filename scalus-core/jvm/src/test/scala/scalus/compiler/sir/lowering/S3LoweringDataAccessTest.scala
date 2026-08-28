@@ -210,7 +210,7 @@ class S3LoweringDataAccessTest extends AnyFunSuite {
             withdrawals = SortedMap.empty,
             validRange = Interval.always,
             signatories = scalus.cardano.onchain.plutus.prelude.List.empty,
-            redeemers = SortedMap.empty,
+            redeemers = AssocMap.empty,
             data = SortedMap.empty,
             id = TxId(hex"61822dde476439a526070f36d3d1667ad099b462c111cd85e089f5e7f6"),
             votes = SortedMap.empty,

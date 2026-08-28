@@ -152,7 +152,7 @@ class InvalidMkConsReprTest extends AnyFunSuite {
             fee = 2,
             certificates = scalus.cardano.onchain.plutus.prelude.List(txCert),
             signatories = scalus.cardano.onchain.plutus.prelude.List(pkhA),
-            redeemers = SortedMap.fromList(
+            redeemers = AssocMap.fromList(
               scalus.cardano.onchain.plutus.prelude
                   .List((ScriptPurpose.Spending(txOutRef), Data.unit))
             ),
@@ -262,7 +262,7 @@ class InvalidMkConsReprTest extends AnyFunSuite {
             fee = 2,
             certificates = scalus.cardano.onchain.plutus.prelude.List(txCert),
             signatories = scalus.cardano.onchain.plutus.prelude.List(pkhA),
-            redeemers = SortedMap.fromList(
+            redeemers = AssocMap.fromList(
               scalus.cardano.onchain.plutus.prelude
                   .List((ScriptPurpose.Spending(txOutRef), Data.unit))
             ),

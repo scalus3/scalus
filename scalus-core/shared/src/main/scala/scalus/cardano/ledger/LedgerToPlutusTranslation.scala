@@ -10,7 +10,7 @@ import scalus.cardano.onchain.plutus.*
 import scalus.cardano.onchain.plutus.v1.{DCert, ScriptPurpose, StakingCredential}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.GovernanceActionId
-import scalus.cardano.onchain.plutus.prelude.{asScalus, List, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{asScalus, AssocMap, List, SortedMap}
 
 import scala.annotation.nowarn
 import scala.collection.mutable
@@ -679,7 +679,11 @@ object LedgerToPlutusTranslation {
             body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
-          redeemers = SortedMap.unsafeFromList(
+          // Assoc list, not a sorted map: redeemer keys are positional, ordered by
+          // (constructor, AsIx), so no content-based Ord can track them. `redeemers.sorted` uses
+          // Ordering[Redeemer] = (tag.ordinal, index), whose tag ordinals match
+          // ConwayPlutusPurpose exactly, so this IS the ledger's order.
+          redeemers = AssocMap.unsafeFromList(
             scalus.cardano.onchain.plutus.prelude.List.from(redeemers.sorted.map { redeemer =>
                 val purpose = getScriptPurposeV2(tx, redeemer)
                 purpose -> redeemer.data
@@ -742,7 +746,11 @@ object LedgerToPlutusTranslation {
             body.requiredSigners.toSet.view
                 .map(hash => v1.PubKeyHash(hash))
           ),
-          redeemers = SortedMap.unsafeFromList(
+          // Assoc list, not a sorted map: redeemer keys are positional, ordered by
+          // (constructor, AsIx), so no content-based Ord can track them. `redeemers.sorted` uses
+          // Ordering[Redeemer] = (tag.ordinal, index), whose tag ordinals match
+          // ConwayPlutusPurpose exactly, so this IS the ledger's order.
+          redeemers = AssocMap.unsafeFromList(
             scalus.cardano.onchain.plutus.prelude.List.from(redeemers.sorted.map { redeemer =>
                 val purpose = getScriptPurposeV3(tx, redeemer)
                 purpose -> redeemer.data

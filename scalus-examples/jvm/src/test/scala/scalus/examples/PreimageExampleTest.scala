@@ -27,7 +27,7 @@ class PreimageExampleTest extends BaseValidatorTest {
             withdrawals = scalus.cardano.onchain.plutus.prelude.SortedMap.empty,
             validRange = Interval.always,
             signatories = signatories,
-            redeemers = scalus.cardano.onchain.plutus.prelude.SortedMap.empty,
+            redeemers = scalus.cardano.onchain.plutus.prelude.AssocMap.empty,
             data = scalus.cardano.onchain.plutus.prelude.SortedMap.empty,
             id = TxId(hex"1e0612fbd127baddfcd555706de96b46c4d4363ac78c73ab4dee6e6a7bf61fe9")
           ),

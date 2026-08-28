@@ -11,7 +11,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.{RewardingScript, SpendingScript}
-import scalus.cardano.onchain.plutus.prelude.{List, Option as POption, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List, Option as POption, SortedMap}
 import scalus.testing.kit.ScalusTest
 
 /** Tests for the Stake Validator Payment Splitter pattern.
@@ -257,7 +257,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
             val firstScriptOutRef = TxOutRef(lockTxId, 0)
             val stakingCredential = Credential.ScriptCredential(scriptHash)
 
-            val redeemers = SortedMap.fromList(
+            val redeemers = AssocMap.fromList(
               List(
                 (ScriptPurpose.Spending(firstScriptOutRef), spendingRedeemer),
                 (ScriptPurpose.Rewarding(stakingCredential), rewardingRedeemer)
@@ -361,7 +361,7 @@ class StakeValidatorPaymentSplitterTest extends AnyFunSuite with ScalusTest {
             val firstScriptOutRef = TxOutRef(lockTxId, 0)
             val stakingCredential = Credential.ScriptCredential(scriptHash)
 
-            val redeemers = SortedMap.fromList(
+            val redeemers = AssocMap.fromList(
               List(
                 (ScriptPurpose.Spending(firstScriptOutRef), spendingRedeemer),
                 (ScriptPurpose.Rewarding(stakingCredential), rewardingRedeemer)

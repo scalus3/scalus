@@ -22,7 +22,7 @@ import scalus.cardano.onchain.plutus.v1.{DCert, ScriptPurpose, StakingCredential
 import scalus.cardano.onchain.plutus.v3.GovernanceActionId
 import scalus.cardano.onchain.plutus.{v1, v2, v3}
 import scalus.cardano.onchain.plutus.prelude.List.toScalaList
-import scalus.cardano.onchain.plutus.prelude.{asScalus, List as PList, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{asScalus, AssocMap, List as PList, SortedMap}
 import scalus.uplc.eval.*
 
 import java.math.BigInteger
@@ -772,7 +772,8 @@ object Interop {
                 .map(v1.PubKeyHash.apply)
                 .toSeq
           ),
-          redeemers = SortedMap.unsafeFromList(
+          // Assoc list: redeemer keys are positional, so no content Ord tracks them.
+          redeemers = AssocMap.unsafeFromList(
             scalus.cardano.onchain.plutus.prelude.List.from(rdmrs.asScala.sorted.map { redeemer =>
                 val purpose = getScriptPurposeV2(
                   redeemer,
@@ -1187,7 +1188,8 @@ object Interop {
                 .map(v1.PubKeyHash.apply)
                 .toSeq
           ),
-          redeemers = SortedMap.unsafeFromList(
+          // Assoc list: redeemer keys are positional, so no content Ord tracks them.
+          redeemers = AssocMap.unsafeFromList(
             scalus.cardano.onchain.plutus.prelude.List.from(rdmrs.asScala.sorted.map { redeemer =>
                 val purpose = getScriptPurposeV3(tx, redeemer)
                 purpose -> toScalusData(redeemer.getData)

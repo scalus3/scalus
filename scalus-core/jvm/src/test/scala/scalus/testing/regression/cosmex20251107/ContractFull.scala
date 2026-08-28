@@ -543,7 +543,7 @@ object CosmexContract extends DataParameterizedValidator {
     inline def handlePayoutTransfer(
         params: ExchangeParams,
         state: OnChainState,
-        redeemers: SortedMap[ScriptPurpose, Redeemer],
+        redeemers: AssocMap[ScriptPurpose, Redeemer],
         inputs: List[TxInInfo],
         ownIdx: BigInt,
         transferValue: Value,
@@ -780,7 +780,7 @@ object CosmexContract extends DataParameterizedValidator {
         ownOutput: TxOut,
         ownTxInResolvedTxOut: TxOut,
         params: ExchangeParams,
-        redeemers: SortedMap[ScriptPurpose, Redeemer],
+        redeemers: AssocMap[ScriptPurpose, Redeemer],
         inputs: List[TxInInfo],
         state: OnChainState
     ): Boolean =

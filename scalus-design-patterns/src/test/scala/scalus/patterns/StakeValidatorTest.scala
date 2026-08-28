@@ -24,7 +24,7 @@ class StakeValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               withdrawals = SortedMap.singleton(credential, 0),
-              redeemers = SortedMap.singleton(ScriptPurpose.Rewarding(credential), ().toData),
+              redeemers = AssocMap.singleton(ScriptPurpose.Rewarding(credential), ().toData),
               id = TxId(ByteString.empty)
             )
 
@@ -45,7 +45,7 @@ class StakeValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               withdrawals = SortedMap.singleton(credential, 0),
-              redeemers = SortedMap.empty,
+              redeemers = AssocMap.empty,
               id = TxId(ByteString.empty)
             )
 
@@ -66,7 +66,7 @@ class StakeValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               withdrawals = SortedMap.empty,
-              redeemers = SortedMap.singleton(ScriptPurpose.Rewarding(credential), ().toData),
+              redeemers = AssocMap.singleton(ScriptPurpose.Rewarding(credential), ().toData),
               id = TxId(ByteString.empty)
             )
 
@@ -87,7 +87,7 @@ class StakeValidatorTest
             val txInfo = TxInfo(
               inputs = List.empty,
               withdrawals = SortedMap.singleton(credential, 0),
-              redeemers = SortedMap.singleton(ScriptPurpose.Rewarding(credential), ().toData),
+              redeemers = AssocMap.singleton(ScriptPurpose.Rewarding(credential), ().toData),
               id = TxId(ByteString.empty)
             )
 

@@ -10,7 +10,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
-import scalus.cardano.onchain.plutus.prelude.{List as SList, Option as SOption, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption, SortedMap}
 import scalus.cardano.ledger.ExUnits
 import scalus.testing.kit.ScalusTest
 
@@ -126,7 +126,7 @@ class NaivePaymentSplitterValidatorTest
             inputs = SList(feePayerInput, contractInput),
             outputs = outputs,
             fee = BigInt(2),
-            redeemers = SortedMap.fromList(
+            redeemers = AssocMap.fromList(
               SList((ScriptPurpose.Spending(txOutRef), Data.unit))
             ),
             id = txId
@@ -197,7 +197,7 @@ class NaivePaymentSplitterValidatorTest
             inputs = allInputs,
             outputs = txOutputs,
             fee = tc.fee,
-            redeemers = SortedMap.fromList(
+            redeemers = AssocMap.fromList(
               SList((ScriptPurpose.Spending(txOutRef), redeemer))
             ),
             id = txId

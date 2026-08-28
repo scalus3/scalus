@@ -52,7 +52,7 @@ class MintingPolicyExampleTest extends BaseValidatorTest {
             withdrawals = SortedMap.empty,
             validRange = Interval.always,
             signatories = scalus.cardano.onchain.plutus.prelude.List.Nil,
-            redeemers = SortedMap.empty,
+            redeemers = AssocMap.empty,
             data = SortedMap.empty,
             id = TxId(hex"1e0612fbd127baddfcd555706de96b46c4d4363ac78c73ab4dee6e6a7bf61fe9")
           ),
