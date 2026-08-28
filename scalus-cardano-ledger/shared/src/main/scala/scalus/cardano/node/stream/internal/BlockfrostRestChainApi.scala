@@ -12,8 +12,8 @@ import scala.util.Success
 /** [[BlockfrostChainApi]] over the real REST endpoints.
   *
   * Nothing but translation: HTTP and JSON live in [[BlockfrostProvider]], polling and ordering live
-  * in [[BlockfrostChainFollower]], and this maps between their vocabularies. Keeping it that thin is
-  * what lets the follower's failure modes — reorg detection, request ordering, the watch/observe
+  * in [[BlockfrostChainFollower]], and this maps between their vocabularies. Keeping it that thin
+  * is what lets the follower's failure modes — reorg detection, request ordering, the watch/observe
   * race — be tested against a fake without a server.
   */
 private[stream] final class BlockfrostRestChainApi(provider: BlockfrostProvider)(using

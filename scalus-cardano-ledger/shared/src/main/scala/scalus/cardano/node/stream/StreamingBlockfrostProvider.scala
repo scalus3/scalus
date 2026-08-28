@@ -44,11 +44,11 @@ import scala.util.{Failure, Success}
   *
   * Being registered is not the same as being observed. Telling the follower to watch an address and
   * registering the subscription are two steps, and a block processed between them would be covered
-  * by neither. So `subscribe` watches first, *then* reads the snapshot, *then* hands the snapshot to
-  * the hub — a snapshot taken after the watch already contains the effects of any block the watch
-  * did not reach in time. Subscriptions that opt out of the seed (`includeExistingUtxos = false`)
-  * and transaction subscriptions, which have no snapshot to take, keep the residual: they can miss
-  * events in the one block spanning their own `subscribe` call. That is documented on
+  * by neither. So `subscribe` watches first, *then* reads the snapshot, *then* hands the snapshot
+  * to the hub — a snapshot taken after the watch already contains the effects of any block the
+  * watch did not reach in time. Subscriptions that opt out of the seed (`includeExistingUtxos =
+  * false`) and transaction subscriptions, which have no snapshot to take, keep the residual: they
+  * can miss events in the one block spanning their own `subscribe` call. That is documented on
   * [[SubscriptionOptions.includeExistingUtxos]] rather than papered over.
   *
   * @param provider
@@ -96,8 +96,9 @@ class StreamingBlockfrostProvider private[stream] (
     /** Begin following the chain. Idempotent.
       *
       * Explicit rather than done in the constructor: this starts spending a metered quota, and a
-      * caller is entitled to build the provider, inspect it, and decide. [[StreamingBlockfrostProvider.apply]]
-      * returns one already started, which is what almost every caller wants.
+      * caller is entitled to build the provider, inspect it, and decide.
+      * [[StreamingBlockfrostProvider.apply]] returns one already started, which is what almost
+      * every caller wants.
       */
     def start(): Unit = {
         driver.start()

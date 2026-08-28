@@ -34,20 +34,6 @@ class BlockfrostRestChainApiTest extends AnyFunSuite {
            |"slot_leader":"pool1","size":100,"tx_count":2,"previous_block":null,
            |"next_block":null,"confirmations":3}""".stripMargin
 
-    private def api(
-        respond: PartialFunction[String, sttp.client4.Response[String]]
-    ): BlockfrostRestChainApi = {
-        given Backend[Future] = BackendStub.asynchronousFuture.whenRequestMatchesPartial {
-            case req if respond.isDefinedAt(req.uri.toString) =>
-                respond(req.uri.toString).copy(body = sttp.client4.testing.StubBody.Adjust(
-                  respond(req.uri.toString).body
-                ))
-        }
-        new BlockfrostRestChainApi(
-          new BlockfrostProvider("k", "http://stub.invalid", 5, CardanoInfo.mainnet)
-        )
-    }
-
     private def await[A](f: Future[A]): A = Await.result(f, 5.seconds)
 
     test("a 404 on /next is reported as a reorg, not as an empty page") {
@@ -61,7 +47,8 @@ class BlockfrostRestChainApiTest extends AnyFunSuite {
     }
 
     test("an empty /next page means the tip, and is not a reorg") {
-        given Backend[Future] = BackendStub.asynchronousFuture.whenAnyRequest.thenRespondAdjust("[]")
+        given Backend[Future] =
+            BackendStub.asynchronousFuture.whenAnyRequest.thenRespondAdjust("[]")
         val client = new BlockfrostProvider("k", "http://stub.invalid", 5, CardanoInfo.mainnet)
         val ref = BlockRef(ChainPoint(1, BlockHash.fromHex(blockHash)), 1)
         assert(
@@ -95,7 +82,9 @@ class BlockfrostRestChainApiTest extends AnyFunSuite {
         // losing it would be a silent change in cost rather than in behaviour.
         @volatile var seen: Option[String] = None
         given Backend[Future] = BackendStub.asynchronousFuture
-            .whenRequestMatches { req => seen = Some(req.uri.toString); true }
+            .whenRequestMatches { req =>
+                seen = Some(req.uri.toString); true
+            }
             .thenRespondAdjust("[]")
         val client = new BlockfrostProvider("k", "http://stub.invalid", 5, CardanoInfo.mainnet)
         await(new BlockfrostRestChainApi(client).addressTransactionsIn(Party.Alice.address, 7, 7))
@@ -110,7 +99,9 @@ class BlockfrostRestChainApiTest extends AnyFunSuite {
     test("only Shelley addresses are watchable") {
         assert(BlockfrostRestChainApi.isWatchable(Party.Alice.address))
         val byron: Address =
-            ByronAddress.fromBase58("Ae2tdPwUPEZDoUnyXuAgqzhkjNXNJeiZ5nqwprg9sArZmRNjySfJ5uz4FjB").get
+            ByronAddress
+                .fromBase58("Ae2tdPwUPEZDoUnyXuAgqzhkjNXNJeiZ5nqwprg9sArZmRNjySfJ5uz4FjB")
+                .get
         assert(!BlockfrostRestChainApi.isWatchable(byron))
         assertThrows[IllegalArgumentException](BlockfrostRestChainApi.bech32(byron))
     }
