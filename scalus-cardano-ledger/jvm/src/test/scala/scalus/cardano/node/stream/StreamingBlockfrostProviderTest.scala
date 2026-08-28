@@ -25,6 +25,7 @@ import scala.concurrent.{ExecutionContext, Future}
 class StreamingBlockfrostProviderTest extends AnyFunSuite {
 
     private given ExecutionContext = ExecutionContext.global
+    private given CardanoInfo = CardanoInfo.mainnet
 
     private val alice = Party.Alice.address
     private val bob = Party.Bob.address
@@ -68,15 +69,14 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
       * `onSnapshotRequest` runs when that request is served, which is how the tests below observe
       * what had already happened by the time the snapshot was read.
       */
-    private def stubbedClient(
-        utxosFor: Address => String = _ => "[]",
-        onSnapshotRequest: () => Unit = () => ()
-    ): BlockfrostProvider = {
-        given Backend[Future] = BackendStub.asynchronousFuture.whenAnyRequest
-            .thenRespondAdjust {
-                onSnapshotRequest()
-                "[]"
+    private def stubbedClient(onSnapshotRequest: () => Unit = () => ()): BlockfrostProvider = {
+        // Recorded in the matcher, which the stub evaluates per request; the response body is a
+        // value it evaluates once, so a side effect there would fire before any subscription.
+        given Backend[Future] = BackendStub.asynchronousFuture
+            .whenRequestMatches { _ =>
+                onSnapshotRequest(); true
             }
+            .thenRespondAdjust("[]")
         new BlockfrostProvider("stub-key", "http://stub.invalid", 5, CardanoInfo.mainnet)
     }
 
@@ -134,7 +134,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
           p.subscribeTransactionQuery[ScalusAsyncSource](TransactionQuery.All, consenting)
         )
         val byAsset = UtxoEventQuery(
-          UtxoQuery(UtxoSource.FromAsset(PolicyId.fromHex("00" * 28), AssetName.fromHex("cafe"))),
+          UtxoQuery(UtxoSource.FromAsset(ScriptHash.fromHex("00" * 28), AssetName.fromHex("cafe"))),
           UtxoEventType.all
         )
         assertThrows[UnsupportedSubscriptionException](
@@ -215,6 +215,9 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         val p = providerWith(follower)
         val src: ScalusAsyncSource[UtxoEvent] =
             p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(alice), liveOnly)
+        // Pulled before the block is offered, and held: a fresh `pull` each time round the spin
+        // would start a new wait once the first one completed, and never look at what it delivered.
+        val pulled = src.pull()
         val created: Utxos =
             Map(TransactionInput(txHash("01"), 0) -> TransactionOutput(alice, Value.ada(10)))
         follower.mailbox.offer(
@@ -229,11 +232,15 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
           )
         )
         eventually(
-          src.pull().value.flatMap(_.toOption).flatten.exists {
+          pulled.value.isDefined,
+          "the driver pumps the follower's events into the hub; nothing arrived"
+        )
+        assert(
+          pulled.value.flatMap(_.toOption).flatten.exists {
               case UtxoEvent.Created(u, _, _) => u.input == TransactionInput(txHash("01"), 0)
               case _                          => false
           },
-          "the driver pumps the follower's events into the hub; nothing arrived"
+          s"expected the block's Created event, got ${pulled.value}"
         )
     }
 
@@ -245,7 +252,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         p.close()
         assert(follower.closed, "a metered follower left running keeps spending quota")
         assert(
-          src.pull().value.exists(_.contains(None)),
+          src.pull().value.exists(_.toOption.exists(_.isEmpty)),
           "a close that left subscribers parked on promises would leak what it was called to free"
         )
     }
@@ -265,7 +272,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
     test("every query this provider accepts names at least one address to watch") {
         // The two have to agree about what "indexed by address" means. If they drift, a
         // subscription is accepted that no block can ever cover: no events, no Idle, no error.
-        val policy = PolicyId.fromHex("00" * 28)
+        val policy = ScriptHash.fromHex("00" * 28)
         val name = AssetName.fromHex("cafe")
         val utxoQueries = Seq(
           UtxoQuery(UtxoSource.FromAddress(alice)),
@@ -302,12 +309,18 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
 
     /** Spin briefly: the driver's pump and the seed read complete on the execution context, not on
       * this thread, so a bare assertion would race them.
+      *
+      * The last evaluation is what is asserted on, rather than a fresh one. Some of these
+      * conditions consume what they observe — a `pull` takes the event — and re-evaluating after
+      * the loop would ask an emptied mailbox and fail on every condition that had just held.
       */
     private def eventually(condition: => Boolean, clue: String): Unit = {
         var remaining = 500
-        while remaining > 0 && !condition do
+        var held = condition
+        while remaining > 0 && !held do
             remaining -= 1
             Thread.sleep(10)
-        assert(condition, clue)
+            held = condition
+        assert(held, clue)
     }
 }

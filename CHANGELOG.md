@@ -141,6 +141,18 @@
   `StreamProviderConformance` in `scalus-testkit` holds any implementation to the capabilities
   it declares
 
+- `StreamingBlockfrostProvider`, the first streaming provider over a real backend. It follows the
+  chain by polling `/blocks/{hash}/next` and asks `/addresses/{a}/transactions` what each watched
+  address did in each new block, so cost scales with how many addresses are subscribed rather than
+  with how busy the chain is, and `pollInterval` is the one dial.
+
+  What that costs in capability is declared rather than discovered: `ScanSupport.Unsupported` and
+  `pushdown = {Address}`, no `Block` kind (it holds no blocks) and no `TransactionStatus` kind (it
+  cannot follow a hash it was never asked to watch, and reporting `Pending` forever would be
+  indistinguishable from a transaction that had not landed). Reorgs are detected and fail every
+  subscription with `ResyncRequiredException` rather than being reconciled, which is why
+  `rollbackHorizon` is `None` and `RolledBack` never arrives
+
 - Scalus implementations of all 8 [UPLC-CAPE](https://github.com/IntersectMBO/UPLC-CAPE)
   benchmark scenarios in `scalus-examples`, each with a test pinning its script size and
   per-case execution budget, plus `scripts/cape-submit.sh` to generate, verify, measure and
