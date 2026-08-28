@@ -1,6 +1,7 @@
 package scalus.cardano.node
 
 import io.bullet.borer.Cbor
+import scalus.interop.{TsName, TsType}
 import scalus.uplc.DebugScript
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.cardano.address.Address
@@ -12,17 +13,27 @@ import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
 import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
 
-/** JavaScript wrapper for the Emulator.
+/** An in-memory Cardano ledger for tests and local development.
   *
-  * Provides a JavaScript-friendly API for the Cardano emulator.
+  * A submitted transaction goes through the same phase-1 checks a node performs (fees, value
+  * conservation, signatures, validity interval, min-ada, script and datum witnesses, certificates)
+  * and then phase-2 Plutus script execution, over most of the node's UTxO ledger rules. Everything
+  * lives in this object: no node, no network, no disk. The ledger starts with what you seed it
+  * with, and disappears with the process.
   *
   * @param initialUtxosCbor
-  *   CBOR-encoded initial UTxO set
+  *   The UTxO set to start from, as CBOR: a map whose keys are transaction inputs (a
+  *   `[transactionHash, outputIndex]` pair) and whose values are transaction outputs, as in the
+  *   Cardano ledger CDDL. This is the same shape `getUtxosCbor` gives back.
   * @param slotConfig
-  *   Slot configuration
+  *   Slot arithmetic for the emulated network, for example `SlotConfig.preview`.
   * @param initialStakeRewards
-  *   Optional map from script hash hex to lovelace amount (as a numeric string), pre-registering
-  *   stake credentials with the given reward balances. Use `"0"` for the zero-withdrawal trick.
+  *   Stake credentials to register before the first transaction: a map from a hex-encoded 28-byte
+  *   script hash to a reward balance in lovelace, written as a decimal string. Only script
+  *   credentials can be seeded here; use `Emulator.withState` to seed key credentials. A balance of
+  *   `"0"` is the usual case: a reward (staking) validator only runs when a transaction withdraws
+  *   from its address, and a withdrawal of zero lovelace is enough, but the address must already be
+  *   registered for the transaction to be valid.
   */
 @JSExportTopLevel("Emulator")
 class JEmulator(
@@ -56,30 +67,34 @@ class JEmulator(
             )
     }
 
-    /** Submit a transaction to the emulator.
+    /** Validates a transaction and, if it passes, applies it to the ledger state.
       *
+      * @param txCborBytes
+      *   CBOR bytes of the signed transaction, as it would be sent to a node.
       * @return
-      *   Object with isSuccess, txHash (on success), or error and logs (on failure)
+      *   `{ isSuccess: true, txHash }` when the transaction was accepted, otherwise
+      *   `{ isSuccess: false, error }` naming the rule it broke, plus `logs` when a Plutus script
+      *   failed and produced trace output. A rejected transaction leaves the ledger unchanged.
       */
-    def submitTx(txCborBytes: Uint8Array): js.Dynamic = {
+    def submitTx(txCborBytes: Uint8Array): JSubmitResult = {
         val tx = Transaction.fromCbor(txCborBytes.toArray.map(_.toByte))
         formatSubmitResult(emulator.submitSync(tx))
     }
 
-    /** Submit a transaction with debug scripts for diagnostic replay.
-      *
-      * Debug scripts are provided as a dictionary mapping script hash hex to double-CBOR hex of the
-      * debug-compiled script. The language version is resolved from the release script in the
-      * transaction.
+    /** Submits a transaction the same way, but keeps a debug build of each script at hand. A
+      * release script that fails with no trace output is replayed with its debug build, so the
+      * failure message carries real diagnostics instead of nothing.
       *
       * @param txCborBytes
-      *   CBOR-encoded transaction bytes
+      *   CBOR bytes of the signed transaction.
       * @param debugScripts
-      *   dictionary mapping scriptHashHex to doubleCborHex of debug script
+      *   Map from the hex-encoded script hash of a script in the transaction, to the double-CBOR
+      *   hex of the debug build of that same script. Its Plutus version is taken from the script in
+      *   the transaction; an entry that matches no script there is ignored, with a console warning.
       * @return
-      *   Object with isSuccess, txHash (on success), or error and logs (on failure)
+      *   The same shape as the one-argument `submitTx`.
       */
-    def submitTx(txCborBytes: Uint8Array, debugScripts: js.Dictionary[String]): js.Dynamic = {
+    def submitTx(txCborBytes: Uint8Array, debugScripts: js.Dictionary[String]): JSubmitResult = {
         val tx = Transaction.fromCbor(txCborBytes.toArray.map(_.toByte))
 
         // Resolve scripts from the transaction to determine language versions
@@ -117,33 +132,45 @@ class JEmulator(
         formatSubmitResult(emulator.submitSync(tx, debugScriptsMap))
     }
 
-    private def formatSubmitResult(result: Either[SubmitError, TransactionHash]): js.Dynamic =
+    private def formatSubmitResult(result: Either[SubmitError, TransactionHash]): JSubmitResult =
         result match {
             case Right(txHash) =>
-                js.Dynamic.literal(isSuccess = true, txHash = txHash.toHex)
+                js.Dynamic
+                    .literal(isSuccess = true, txHash = txHash.toHex)
+                    .asInstanceOf[JSubmitResult]
             case Left(submitError) =>
                 submitError match {
                     case NodeSubmitError.ScriptFailure(msg, logs, _, _) if logs.nonEmpty =>
-                        js.Dynamic.literal(
-                          isSuccess = false,
-                          error = msg,
-                          logs = js.Array(logs*)
-                        )
+                        js.Dynamic
+                            .literal(
+                              isSuccess = false,
+                              error = msg,
+                              logs = js.Array(logs*)
+                            )
+                            .asInstanceOf[JSubmitResult]
                     case _ =>
-                        js.Dynamic.literal(isSuccess = false, error = submitError.message)
+                        js.Dynamic
+                            .literal(isSuccess = false, error = submitError.message)
+                            .asInstanceOf[JSubmitResult]
                 }
         }
 
-    /** Get all UTxOs as CBOR. */
+    /** The whole UTxO set in a single CBOR map: keys are transaction inputs (a
+      * `[transactionHash, outputIndex]` pair), values are transaction outputs, as in the Cardano
+      * ledger CDDL. `getAllUtxos` returns the same data instead as one small map per UTxO.
+      */
     def getUtxosCbor(): Uint8Array = {
         val bytes = Cbor.encode(emulator.utxos).toByteArray
         new Uint8Array(byteArray2Int8Array(bytes).buffer)
     }
 
-    /** Get UTxOs for a specific address.
+    /** The UTxOs that sit at one address.
       *
+      * @param addressBech32
+      *   The address in bech32 form, for example `addr_test1...`.
       * @return
-      *   Array of CBOR-encoded UTxO entries (each entry is a Map[Input, Output])
+      *   One CBOR map per UTxO, each holding exactly one input-to-output entry, so a single UTxO
+      *   can be decoded and passed around on its own.
       */
     def getUtxosForAddress(addressBech32: String): js.Array[Uint8Array] = {
         val address = Address.fromString(addressBech32)
@@ -157,10 +184,11 @@ class JEmulator(
         result
     }
 
-    /** Get all UTxOs as CBOR-encoded entries.
+    /** Every UTxO in the ledger.
       *
       * @return
-      *   Array of CBOR-encoded UTxO entries (each entry is a Map[Input, Output])
+      *   One CBOR map per UTxO, each holding exactly one input-to-output entry. Use `getUtxosCbor`
+      *   for the whole set in one map instead.
       */
     def getAllUtxos(): js.Array[Uint8Array] = {
         val result = js.Array[Uint8Array]()
@@ -172,12 +200,13 @@ class JEmulator(
         result
     }
 
-    /** Get the reward balance for a script-based stake credential.
+    /** The reward balance of a script stake credential. Key (pub-key) credentials are not supported
+      * here; read those with `getDelegation`, which takes any credential.
       *
       * @param scriptHashHex
-      *   Hex-encoded script hash
+      *   Hex-encoded 28-byte script hash.
       * @return
-      *   Reward amount in lovelace as BigInt, or null if not registered
+      *   The balance in lovelace, or `null` if that credential is not registered.
       */
     def getStakeReward(scriptHashHex: String): js.BigInt | Null = {
         val cred = Credential.ScriptHash(ScriptHash.fromHex(scriptHashHex))
@@ -186,6 +215,10 @@ class JEmulator(
             case None               => null
     }
 
+    /** Moves the clock to an absolute slot, forwards or backwards. Only validity intervals and
+      * time-aware scripts see the difference; no blocks are produced in between and no rewards are
+      * paid out. A fractional value is truncated.
+      */
     def setSlot(slot: Double): Unit = {
         emulator.setSlot(slot.toLong)
     }
@@ -196,7 +229,12 @@ class JEmulator(
     /** Advance the current slot by `n` slots. */
     def tick(n: Double): Unit = emulator.tick(n.toLong)
 
-    /** True once the tx with the given hash has been accepted. */
+    /** Whether a transaction with this hash was accepted by this emulator.
+      *
+      * @param txHashBytes
+      *   The raw 32 bytes of the transaction hash, not a hex string. (`getStakeReward` takes hex;
+      *   this one does not.)
+      */
     def hasTx(txHashBytes: Uint8Array): Boolean = {
         val hash = TransactionHash.fromByteString(
           ByteString.unsafeFromArray(txHashBytes.toArray.map(_.toByte))
@@ -204,8 +242,18 @@ class JEmulator(
         emulator.hasTx(hash)
     }
 
-    /** Delegation + reward balance for a stake credential (CBOR-encoded). */
-    def getDelegation(stakeCredentialCbor: Uint8Array): js.Dynamic = {
+    /** The pool a stake credential delegates to, and its reward balance.
+      *
+      * @param stakeCredentialCbor
+      *   The credential itself, CBOR-encoded: `[0, keyHash]` for a key credential or
+      *   `[1, scriptHash]` for a script credential, the `stake_credential` of the Cardano ledger
+      *   CDDL. The result is a plain object, not CBOR.
+      * @return
+      *   `poolId` is `null` when the credential delegates to no pool. `rewards` is `0n` both for a
+      *   registered credential with no rewards and for one that was never registered, so use
+      *   `getStakeReward` when you need to tell the two apart.
+      */
+    def getDelegation(stakeCredentialCbor: Uint8Array): JDelegationInfo = {
         val bytes = stakeCredentialCbor.toArray.map(_.toByte)
         val cred = Cbor.decode(bytes).to[Credential].value
         val info = emulator.getDelegation(cred)
@@ -213,13 +261,22 @@ class JEmulator(
             case Some(pk) =>
                 new Uint8Array(byteArray2Int8Array(pk.bytes).buffer): Uint8Array | Null
             case None => null
-        js.Dynamic.literal(
-          poolId = pool,
-          rewards = js.BigInt(info.rewards.value.toString)
-        )
+        js.Dynamic
+            .literal(
+              poolId = pool,
+              rewards = js.BigInt(info.rewards.value.toString)
+            )
+            .asInstanceOf[JDelegationInfo]
     }
 
-    /** Look up a datum by hash. Returns `null` if unknown, else CBOR bytes. */
+    /** Looks a datum up by its hash, across the datums seeded into this emulator and the ones
+      * witnessed by accepted transactions.
+      *
+      * @param datumHashBytes
+      *   The raw 32 bytes of the datum hash, not a hex string.
+      * @return
+      *   The datum as CBOR, or `null` if this emulator has never seen it.
+      */
     def getDatum(datumHashBytes: Uint8Array): Uint8Array | Null = {
         val hash = DataHash.fromByteString(
           ByteString.unsafeFromArray(datumHashBytes.toArray.map(_.toByte))
@@ -231,6 +288,11 @@ class JEmulator(
             case None => null
     }
 
+    /** An independent copy of the whole ledger state: UTxOs, registrations and rewards, the datum
+      * store, the accepted transactions, and the current slot. The copy and the original evolve
+      * separately from then on, so one expensive setup can branch into several test scenarios
+      * without being rebuilt.
+      */
     def snapshot(): JEmulator = {
         val snapshotEmulator = emulator.snapshot()
         val emptyUtxosCbor = Cbor.encode(Map.empty: Utxos).toByteArray
@@ -244,53 +306,122 @@ class JEmulator(
     }
 }
 
-/** JS-shape of [[EmulatorInitialState]]. */
+/** Result of `Emulator.submitTx`. Read `isSuccess` first: the other three fields are each present
+  * for one outcome only.
+  */
+@TsName("SubmitResult")
+trait JSubmitResult extends js.Object {
+    val isSuccess: Boolean
+
+    /** Transaction hash hex; present on success. */
+    val txHash: js.UndefOr[String]
+
+    /** Error message; present on failure. */
+    val error: js.UndefOr[String]
+
+    /** Script trace logs; present on script failure. */
+    val logs: js.UndefOr[js.Array[String]]
+}
+
+/** Delegation info returned by `Emulator.getDelegation`. */
+@TsName("DelegationInfo")
+trait JDelegationInfo extends js.Object {
+
+    /** Pool key hash bytes, or null if not delegated. */
+    val poolId: Uint8Array | Null
+
+    /** Reward balance in lovelace. */
+    val rewards: js.BigInt
+}
+
+/** Ledger state to seed an emulator with, passed to `Emulator.withState`. Only `utxos` is required.
+  */
+@TsName("EmulatorInitialState")
 trait JEmulatorInitialState extends js.Object {
+
+    /** The starting UTxO set as CBOR: a map from transaction input (a
+      * `[transactionHash, outputIndex]` pair) to transaction output, as in the Cardano ledger CDDL.
+      */
     val utxos: Uint8Array
+
+    /** Stake credentials that count as already registered, with their reward balances and, if you
+      * want, the pool each delegates to.
+      */
     val stakeRegistrations: js.UndefOr[js.Array[JStakeRegistration]] = js.undefined
+
+    /** Stake pools that count as already registered, so transactions may delegate to them. */
     val poolRegistrations: js.UndefOr[js.Array[JPoolRegistration]] = js.undefined
+
+    /** DReps that count as already registered, so transactions may delegate votes to them. */
     val drepRegistrations: js.UndefOr[js.Array[JDRepRegistration]] = js.undefined
+
+    /** Datums to put in the emulator's datum store, where `getDatum` looks them up by hash. The
+      * store is only a lookup table: every accepted transaction adds the datums it witnesses to it,
+      * and validation still requires a transaction to carry the datums it needs.
+      */
     val datums: js.UndefOr[js.Array[JDatumEntry]] = js.undefined
 }
 
+/** Stake registration entry for `EmulatorInitialState`. */
+@TsName("StakeRegistration")
 trait JStakeRegistration extends js.Object {
 
-    /** "key" or "script" */
+    /** Credential type: "key" for pub key hash, "script" for script hash. */
+    @TsType("\"key\" | \"script\"")
     val credentialType: String
 
     /** Hex-encoded 28-byte credential hash */
     val credentialHash: String
+
+    /** Starting reward balance in lovelace. */
     val rewards: js.BigInt
 
-    /** Hex-encoded 28-byte pool key hash (optional) */
+    /** Hex-encoded 28-byte key hash of the pool this credential delegates to. Leave it out for a
+      * credential that is registered but delegates to nothing.
+      */
     val delegatedTo: js.UndefOr[String] = js.undefined
 }
 
+/** Pool registration entry for `EmulatorInitialState`. */
+@TsName("PoolRegistration")
 trait JPoolRegistration extends js.Object {
 
-    /** CBOR-encoded PoolRegistration certificate */
+    /** The pool's parameters, as one CBOR-encoded Cardano certificate: the whole 10-element
+      * `pool_registration` array, tag `3` first, then operator key hash, VRF key hash, pledge,
+      * cost, margin, reward account, owners, relays and metadata. The bare parameter list without
+      * the certificate tag is rejected.
+      */
     val params: Uint8Array
 }
 
+/** DRep registration entry for `EmulatorInitialState`. */
+@TsName("DRepRegistration")
 trait JDRepRegistration extends js.Object {
 
-    /** "key" or "script" */
+    /** Credential type: "key" for pub key hash, "script" for script hash. */
+    @TsType("\"key\" | \"script\"")
     val credentialType: String
 
     /** Hex-encoded 28-byte credential hash */
     val credentialHash: String
+
+    /** Deposit held for this DRep registration, in lovelace. */
     val deposit: js.BigInt
 
-    /** CBOR-encoded anchor (optional) */
+    /** The DRep's metadata anchor as CBOR: a `[url, dataHash]` pair, where `dataHash` is the
+      * 32-byte hash of the document the URL points at.
+      */
     val anchor: js.UndefOr[Uint8Array] = js.undefined
 }
 
+/** Datum entry for `EmulatorInitialState`. */
+@TsName("DatumEntry")
 trait JDatumEntry extends js.Object {
 
     /** Hex-encoded 32-byte datum hash */
     val hash: String
 
-    /** Hex-encoded CBOR-encoded datum */
+    /** The datum itself as CBOR, hex-encoded. Its hash must be `hash`; nothing checks that. */
     val datum: String
 }
 
@@ -311,7 +442,15 @@ object JEmulator {
                   s"credentialType must be \"key\" or \"script\", got: \"$other\""
                 )
 
-    /** Seeded constructor: accepts initial ledger state with JSON-friendly fields. */
+    /** Creates an emulator seeded with a full starting ledger state: UTxOs, and optionally stake
+      * credentials, stake pools, DReps and datums. Unlike the constructor, this takes both key and
+      * script stake credentials, and takes hashes as hex rather than CBOR.
+      *
+      * @param state
+      *   The starting state. Every field except `utxos` may be left out.
+      * @param slotConfig
+      *   Slot arithmetic for the emulated network.
+      */
     @JSExportStatic
     def withState(state: JEmulatorInitialState, slotConfig: SlotConfig): JEmulator = {
         val utxos = decodeCbor[Utxos](state.utxos)
@@ -365,11 +504,15 @@ object JEmulator {
         wrapper
     }
 
-    /** Create an emulator that funds each address with `lovelacePerAddress` lovelace.
+    /** Creates an emulator whose ledger holds one output per address, each carrying only ada. This
+      * is the quickest way to get a funded wallet or two for a test.
       *
+      * @param addressesBech32
+      *   The addresses to fund, in bech32 form.
+      * @param slotConfig
+      *   Slot arithmetic for the emulated network.
       * @param lovelacePerAddress
-      *   lovelace per address; defaults to 10 000 ADA, the same default as the JVM
-      *   `Emulator.withAddresses`
+      *   Lovelace in each output. Defaults to `10_000_000_000n`, that is 10 000 ada.
       */
     @JSExportStatic
     def withAddresses(
