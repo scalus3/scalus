@@ -309,11 +309,15 @@ object NonNegativeInterval {
       * structure.
       */
     given ToData[NonNegativeInterval] = (interval: NonNegativeInterval) => {
+        // Reduced to lowest terms; see the note on UnitInterval's ToData. The ledger encodes a
+        // GHC `Ratio`, which is always in lowest terms, so an unreduced pair never reaches a
+        // script on chain. Only the Plutus encoding normalises; CBOR still round-trips exactly.
+        val reduced = interval.reduce
         listData(
           BuiltinList.from(
             List(
-              iData(interval.numerator),
-              iData(interval.denominator)
+              iData(reduced.numerator),
+              iData(reduced.denominator)
             )
           )
         )

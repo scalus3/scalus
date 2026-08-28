@@ -92,15 +92,27 @@ object UnitInterval {
       * structure.
       */
     given ToData[UnitInterval] = (interval: UnitInterval) => {
+        // Reduced to lowest terms, because the ledger's is. Its `toPlutusData` is
+        // `(num :% denom) -> List [I num, I denom]` (Plutus/ToPlutusData.hs:78) over a GHC
+        // `Ratio`, and `%` always yields lowest terms, so the chain never shows an unreduced
+        // pair. Emitting the numerator and denominator verbatim meant a proposal carrying,
+        // say, 6/10 gave a Scalus-evaluated script different Data than the chain.
+        // Only the Plutus encoding normalises; the CBOR codec still round-trips byte for byte.
+        val g = gcd(interval.numerator, interval.denominator)
         listData(
           BuiltinList.from(
             List(
-              iData(interval.numerator),
-              iData(interval.denominator)
+              iData(interval.numerator / g),
+              iData(interval.denominator / g)
             )
           )
         )
     }
+
+    /** Greatest common divisor, for reducing before Plutus Data encoding. `denominator > 0` is a
+      * class invariant and `numerator >= 0`, so no sign handling is needed.
+      */
+    private def gcd(a: Long, b: Long): Long = if b == 0 then math.max(a, 1) else gcd(b, a % b)
 
     /** FromData instance for UnitInterval. Decodes from array [numerator, denominator] in Plutus
       * Data. Note: The tag (30) is NOT included in the Plutus Data representation, only the array

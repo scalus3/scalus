@@ -17,6 +17,7 @@ import upickle.default.{readwriter, ReadWriter as UpickleReadWriter}
 import java.util
 import scala.annotation.targetName
 import scala.collection.immutable.{SortedMap, TreeMap}
+import scala.collection.mutable
 import scala.compiletime.asMatchable
 
 enum Era(val value: Int) extends Enumeration {
@@ -750,11 +751,21 @@ object CostModels {
       * values.
       */
     given ToData[CostModels] = (costModels: CostModels) => {
-        val pairs = costModels.models.map { case (langId, costs) =>
-            val costDataList = listData(BuiltinList.from(costs.map(c => iData(c)).toList))
-            BuiltinPair(iData(langId), costDataList)
-        }.toList
-        mapData(BuiltinList.from(pairs))
+        // Ascending by language id, because the ledger's is: it encodes a `Data.Map Word8` via
+        // `Map.toAscList` (Plutus/ToPlutusData.hs:58, :95 over flattenCostModels), and Plutus
+        // documents the contract for this field - "the keys are stored in ascending order"
+        // (PlutusLedgerApi/V3/Contexts.hs:302). `models` is a plain Map, whose iteration order
+        // follows insertion for small maps and hashing otherwise, so it tracked the CBOR source
+        // order instead. Reachable because the ledger's map decoder stopped enforcing canonical
+        // order at decoder version 9, so a proposal may legitimately arrive unsorted.
+        // Sort before mapping, not after: `Map.map` is strict (it materialises a new
+        // collection), and once mapped the language id is buried inside a BuiltinPair and can no
+        // longer be used as a sort key. One array, sorted in place, then a lazy view straight
+        // into BuiltinList.from, which takes an IterableOnce.
+        val entries = costModels.models.to(mutable.ArraySeq).sortInPlaceBy(_._1)
+        mapData(BuiltinList.from(entries.view.map { (langId, costs) =>
+            BuiltinPair(iData(langId), listData(BuiltinList.from(costs.view.map(c => iData(c)))))
+        }))
     }
 
     /** FromData instance for CostModels. Decodes from a map with language IDs as keys and cost
