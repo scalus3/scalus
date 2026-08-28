@@ -97,8 +97,22 @@ object LedgerToPlutusTranslation {
                           )
                         )
                     case ShelleyDelegationPart.Pointer(pointer) =>
-                        // For pointer addresses, we don't include staking credential in script context
-                        scalus.cardano.onchain.plutus.prelude.Option.None
+                        // The ledger does translate pointer addresses, in every Plutus version:
+                        // `transStakeReference (StakeRefPtr (Ptr slot txIx certIx))
+                        //    = Just (PV1.StakingPtr slot txIx certIx)`
+                        // (libs/cardano-ledger-core/.../Plutus/TxInfo.hs:133-137, byte-identical
+                        // at the deployed mainnet tag). V1/V2 reach it via transAddr
+                        // (Babbage/TxInfo.hs:153) and V3 via Babbage.transTxOutV2
+                        // (Conway/TxInfo.hs:454, :500). Dropping it made every script reading
+                        // `output.address.stakingCredential` see None where the chain shows a
+                        // StakingPtr, which changes both the script's behaviour and its ExUnits.
+                        scalus.cardano.onchain.plutus.prelude.Option.Some(
+                          v1.StakingCredential.StakingPtr(
+                            BigInt(pointer.slot.slot),
+                            BigInt(pointer.txIdx),
+                            BigInt(pointer.certIdx)
+                          )
+                        )
                     case ShelleyDelegationPart.Null =>
                         scalus.cardano.onchain.plutus.prelude.Option.None
 
