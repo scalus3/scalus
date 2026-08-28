@@ -11,8 +11,8 @@ import scalus.uplc.builtin.ByteString
 import sttp.client4.Backend
 import sttp.client4.testing.BackendStub
 
-import scala.concurrent.duration.DurationInt
-import scala.concurrent.{ExecutionContext, Future}
+import scala.concurrent.duration.{DurationInt, FiniteDuration}
+import scala.concurrent.{ExecutionContext, Future, Promise}
 
 /** The provider's own job, which is everything the follower and the hub do not do: refusing what it
   * cannot cover, telling the follower what to watch before registering anything, and letting go of
@@ -53,8 +53,12 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         def start(): Unit = started = true
         def events: ScalusAsyncSource[ChainEvent] = mailbox
         def watch(sources: Set[UtxoSource]): ChainPoint = synchronized {
+            if closed then throw new IllegalStateException("watch on a closed follower")
             calls = calls :+ sources
             ChainPoint.origin
+        }
+        def stopWatching(sources: Set[UtxoSource]): Unit = synchronized {
+            if !closed then calls = calls :+ sources
         }
         def close(): Unit = { closed = true; mailbox.close() }
 
@@ -77,6 +81,34 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
                 onSnapshotRequest(); true
             }
             .thenRespondAdjust("[]")
+        new BlockfrostProvider("stub-key", "http://stub.invalid", 5, CardanoInfo.mainnet)
+    }
+
+    /** A `delay` the test steps by hand, so the parameter loop runs exactly as many times as the
+      * test wants it to and no faster than the test can observe.
+      */
+    private class SteppableDelay extends (FiniteDuration => Future[Unit]) {
+        private var waiting: List[Promise[Unit]] = Nil
+        def apply(d: FiniteDuration): Future[Unit] = synchronized {
+            val p = Promise[Unit]()
+            waiting = p :: waiting
+            p.future
+        }
+        def pending: Int = synchronized(waiting.size)
+        def step(): Unit = {
+            val next = synchronized {
+                val head = waiting.lastOption
+                waiting = waiting.dropRight(1)
+                head
+            }
+            next.foreach(_.success(()))
+        }
+    }
+
+    /** A client whose every request fails, so the parameter refresh cannot succeed. */
+    private def failingParamsClient(): BlockfrostProvider = {
+        given Backend[Future] =
+            BackendStub.asynchronousFuture.whenAnyRequest.thenRespondServerError()
         new BlockfrostProvider("stub-key", "http://stub.invalid", 5, CardanoInfo.mainnet)
     }
 
@@ -269,27 +301,51 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
 
     // ── the extraction agrees with the classifier ───────────────────────────
 
-    test("every query this provider accepts names at least one address to watch") {
-        // The two have to agree about what "indexed by address" means. If they drift, a
-        // subscription is accepted that no block can ever cover: no events, no Idle, no error.
+    test("every query this provider accepts is covered by the sources it hands the follower") {
+        // The extraction and the classifier have to agree about what "indexed by address" means,
+        // and the hub's coverage predicate has to agree with both. Asserting the set is non-empty
+        // would not catch the interesting drift; asserting that a block probing exactly that set
+        // actually reaches the subscription does. `Idle` is the signal, because it fires precisely
+        // when a block covers a subscription and matches nothing in it.
         val policy = ScriptHash.fromHex("00" * 28)
         val name = AssetName.fromHex("cafe")
+        val caps = StreamingBlockfrostProvider.capabilities
+        val opts = SubscriptionOptions(includeExistingUtxos = false, idleSignals = true)
+
         val utxoQueries = Seq(
           UtxoQuery(UtxoSource.FromAddress(alice)),
           UtxoQuery(UtxoSource.FromAddress(alice) || UtxoSource.FromAddress(bob)),
           UtxoQuery(UtxoSource.FromAddress(alice) && UtxoSource.FromAsset(policy, name)),
+          // The arm order that a left-biased extraction would get wrong: the asset is not
+          // pushdownable here, so the address arm is the one that must be observed.
           UtxoQuery(UtxoSource.FromAsset(policy, name) && UtxoSource.FromAddress(bob)),
           UtxoQuery(UtxoSource.FromAddress(alice)) || UtxoQuery(UtxoSource.FromAddress(bob))
         )
         for q <- utxoQueries do
-            val request = SubscriptionRequest.Utxo(UtxoEventQuery(q), SubscriptionOptions())
-            if SubscriptionSupport.of(request, StreamingBlockfrostProvider.capabilities) ==
-                    SubscriptionSupport.Indexed
-            then
-                assert(
-                  StreamingBlockfrostProvider.utxoQuerySources(q).nonEmpty,
-                  s"accepted but nothing to watch: $q"
+            val request = SubscriptionRequest.Utxo(UtxoEventQuery(q), opts)
+            if SubscriptionSupport.of(request, caps) == SubscriptionSupport.Indexed then
+                val follower = new FakeFollower
+                val p = providerWith(follower)
+                val src: ScalusAsyncSource[UtxoEvent] =
+                    p.subscribeUtxoQuery[ScalusAsyncSource](UtxoEventQuery(q), opts)
+                val pulled = src.pull()
+                follower.mailbox.offer(
+                  ChainEvent.RollForward(
+                    AppliedBlock(
+                      point(1),
+                      1,
+                      Seq.empty,
+                      None,
+                      BlockCoverage.Sources(follower.watching.map(UtxoSource.FromAddress(_)))
+                    )
+                  )
                 )
+                eventually(pulled.value.isDefined, s"accepted but never covered: $q")
+                assert(
+                  pulled.value.flatMap(_.toOption).flatten.exists(_.isInstanceOf[UtxoEvent.Idle]),
+                  s"expected an Idle for $q, got ${pulled.value}"
+                )
+                p.close()
 
         val txQueries = Seq(
           TransactionQuery.InvolvesAddress(alice),
@@ -297,14 +353,28 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
           TransactionQuery.InvolvesAddress(alice) || TransactionQuery.InvolvesAddress(bob)
         )
         for q <- txQueries do
-            val request = SubscriptionRequest.Transaction(q, SubscriptionOptions())
-            if SubscriptionSupport.of(request, StreamingBlockfrostProvider.capabilities) ==
-                    SubscriptionSupport.Indexed
-            then
+            val request = SubscriptionRequest.Transaction(q, opts)
+            if SubscriptionSupport.of(request, caps) == SubscriptionSupport.Indexed then
                 assert(
-                  StreamingBlockfrostProvider.transactionQuerySources(q).nonEmpty,
+                  SubscriptionSupport.sourcesFor(request, caps).nonEmpty,
                   s"accepted but nothing to watch: $q"
                 )
+    }
+
+    test("an intersection is watched through one arm, not both") {
+        // Both arms would double this subscription's per-block request cost for the life of the
+        // provider, on a backend the whole design exists to economise on. One covered arm answers
+        // an intersection; the other post-filters data already in hand.
+        val follower = new FakeFollower
+        val p = providerWith(follower)
+        val query = UtxoEventQuery(
+          UtxoQuery(UtxoSource.FromAddress(alice) && UtxoSource.FromAddress(bob))
+        )
+        p.subscribeUtxoQuery[ScalusAsyncSource](query, liveOnly)
+        assert(
+          follower.watching.size == 1,
+          s"one address is enough to cover an intersection — got ${follower.watching}"
+        )
     }
 
     /** Spin briefly: the driver's pump and the seed read complete on the execution context, not on
@@ -322,5 +392,83 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
             Thread.sleep(10)
             held = condition
         assert(held, clue)
+    }
+
+    test("a failing feed fails every subscription, not just the first") {
+        // The release hook of a terminating subscription shrinks the watched set, and a throw from
+        // there aborts `failAll`'s fan-out partway — leaving every subscription after the first
+        // parked on a promise with the feed already dead.
+        val follower = new FakeFollower
+        val p = providerWith(follower)
+        val sources = Seq(alice, bob, alice).map(a =>
+            p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(a), liveOnly)
+        )
+        val pulls = sources.map(_.pull())
+        follower.mailbox.fail(
+          new RuntimeException("the chain forked below the last reported block")
+        )
+        eventually(
+          pulls.forall(_.value.exists(_.isFailure)),
+          s"only some subscriptions were failed: ${pulls.map(_.value)}"
+        )
+    }
+
+    test("start is idempotent, so a second call does not run a second parameter loop") {
+        val follower = new FakeFollower
+        val delay = new SteppableDelay
+        val p = new StreamingBlockfrostProvider(stubbedClient(), follower, 1.hour, delay)
+        p.start()
+        p.start()
+        assert(
+          delay.pending == 1,
+          s"two parameter loops would double the refresh rate against a metered quota, and race " +
+              s"each other's updates — got ${delay.pending}"
+        )
+    }
+
+    test("one failed parameter refresh is retried rather than ending the feed") {
+        // Parameters change at epoch boundaries five days apart, so a single failed hourly poll
+        // cannot have made the held value wrong. Failing subscribers over it would be noise.
+        val follower = new FakeFollower
+        val delay = new SteppableDelay
+        val client = failingParamsClient()
+        val p = new StreamingBlockfrostProvider(client, follower, 1.hour, delay)
+        p.start()
+        val params: ScalusAsyncSource[ProtocolParams] =
+            p.subscribeProtocolParams[ScalusAsyncSource]()
+        assert(params.pull().value.isDefined, "the current value is delivered on subscribe")
+        delay.step()
+        eventually(delay.pending == 1, "the loop should have scheduled its next attempt")
+        assert(
+          params.pull().value.isEmpty,
+          "one failure must not fail the subscriber; the value it holds cannot yet be stale"
+        )
+    }
+
+    test("a run of failed refreshes fails the subscribers and stops offering the feed") {
+        val follower = new FakeFollower
+        val delay = new SteppableDelay
+        val p = new StreamingBlockfrostProvider(failingParamsClient(), follower, 1.hour, delay)
+        p.start()
+        val params: ScalusAsyncSource[ProtocolParams] =
+            p.subscribeProtocolParams[ScalusAsyncSource]()
+        params.pull()
+        for _ <- 1 to StreamingBlockfrostProvider.maxParamFailures do
+            eventually(delay.pending == 1, "the loop should still be scheduling attempts")
+            delay.step()
+        eventually(
+          params.pull().value.exists(_.isFailure),
+          "by now the held value may genuinely be stale, and the subscriber must be told"
+        )
+        assertThrows[IllegalStateException](p.subscribeProtocolParams[ScalusAsyncSource]())
+    }
+
+    test("a closed provider serves no new tip or parameter subscriptions") {
+        // Every other subscribe method refuses through `hub.require`; these two are not routed
+        // through it, and would hand back a stream holding one stale value and then park forever.
+        val p = providerWith(new FakeFollower)
+        p.close()
+        assertThrows[IllegalStateException](p.subscribeTip[ScalusAsyncSource]())
+        assertThrows[IllegalStateException](p.subscribeProtocolParams[ScalusAsyncSource]())
     }
 }

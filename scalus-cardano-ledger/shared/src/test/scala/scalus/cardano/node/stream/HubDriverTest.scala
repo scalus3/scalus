@@ -47,6 +47,7 @@ class HubDriverTest extends AnyFunSuite {
         override def events: ScalusAsyncSource[ChainEvent] = mailbox
         // Complete coverage: everything after the origin covers any subscription.
         override def watch(sources: Set[UtxoSource]): ChainPoint = ChainPoint.origin
+        override def stopWatching(sources: Set[UtxoSource]): Unit = ()
         override def close(): Unit = { closed = true; mailbox.close() }
     }
 

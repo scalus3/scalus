@@ -87,5 +87,17 @@ private[stream] trait ChainFollower {
       */
     def watch(sources: Set[scalus.cardano.node.UtxoSource]): scalus.cardano.node.stream.ChainPoint
 
+    /** Replace the watched set without asking for a position, and without failing on a stopped
+      * follower.
+      *
+      * For shrinking, when a subscription ends. [[watch]] refuses a stopped follower because the
+      * position it would return could not be honoured — but shrinking asks for no position, and the
+      * path that shrinks is exactly the path a *failed feed* takes: every subscription is being
+      * terminated, each termination fires its release hook, and a throw from one of those aborts
+      * the fan-out and strands every subscription after it. So this one is quiet by contract, not
+      * by a liveness check the caller could lose a race against.
+      */
+    def stopWatching(sources: Set[scalus.cardano.node.UtxoSource]): Unit
+
     def close(): Unit
 }
