@@ -201,7 +201,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
 
     // ================= V3 =================
 
-    test("V3 withdrawals: DEFECT 1 - Ord[Credential] disagrees with the ledger") {
+    test("V3 withdrawals: ordering matches, in ledger order (was defect 1, fixed)") {
         val c = cell(
           Golden.PlutusV3,
           i => mapKeys(i.txInfoField(6)).map(credentialKey),
@@ -216,10 +216,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         )
         info(c.summary)
         assert(c.compared > 0, "no V3 instance had >= 2 withdrawals; the probe proved nothing")
-        assert(
-          c.mismatches.nonEmpty,
-          "V3 withdrawal ordering now matches the ledger - defect 1 appears fixed, flip this cell to assert equality"
-        )
+        assert(c.mismatches.isEmpty, s"V3 withdrawal ordering diverged: ${c.summary}")
     }
 
     test("V3 votes: ordering matches (was defect 3, fixed)") {

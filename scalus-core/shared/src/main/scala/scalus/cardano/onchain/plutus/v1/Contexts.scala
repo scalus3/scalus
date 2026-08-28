@@ -494,16 +494,29 @@ object Credential {
                     case Credential.PubKeyCredential(hash2) => false
                     case Credential.ScriptCredential(hash2) => hash === hash2
 
+    /** Ordering follows the **ledger's** `Ord (Credential kr)`, which is derived on
+      * `ScriptHashObj | KeyHashObj` (`libs/cardano-ledger-core/.../Credential.hs:98-101`), so
+      * script credentials sort **before** key credentials.
+      *
+      * That is the opposite of the Plutus constructor tags (`PubKeyCredential` is 0,
+      * `ScriptCredential` is 1), and it is deliberate: V3 delivers `txInfoWdrl` keyed by the
+      * ledger's `Credential`, converted only after `Map.toList` has fixed the order
+      * (`Conway/TxInfo.hs:697-699`, `:549-551`). Ordering by the Plutus tags instead made
+      * `withdrawals.get` return None for a key that is present.
+      *
+      * Note this does NOT apply to `StakingCredential`, which V1/V2 deliver in Plutus order. See
+      * the `Ord[StakingCredential]` instance below.
+      */
     given Ord[Credential] = (a: Credential, b: Credential) =>
         a match
-            case Credential.PubKeyCredential(hash) =>
-                b match
-                    case Credential.PubKeyCredential(hash2) => hash <=> hash2
-                    case Credential.ScriptCredential(_)     => Order.Less
             case Credential.ScriptCredential(hash) =>
                 b match
-                    case Credential.PubKeyCredential(_)     => Order.Greater
                     case Credential.ScriptCredential(hash2) => hash <=> hash2
+                    case Credential.PubKeyCredential(_)     => Order.Less
+            case Credential.PubKeyCredential(hash) =>
+                b match
+                    case Credential.ScriptCredential(_)     => Order.Greater
+                    case Credential.PubKeyCredential(hash2) => hash <=> hash2
 
     given FromData[Credential] = FromData.derived
 
@@ -567,11 +580,30 @@ object StakingCredential {
                     case StakingCredential.StakingPtr(a2, b2, c2) =>
                         a === a2 && b === b2 && c === c2
 
+    /** Ordering follows **Plutus's** derived `Ord StakingCredential`, i.e. `PubKeyCredential`
+      * before `ScriptCredential`, then hash.
+      *
+      * This is deliberately NOT `Ord[Credential]`, and must not be rewritten to delegate to it. The
+      * two eras key withdrawals by different types: V1/V2 build a
+      * `Map PV1.StakingCredential Integer` keyed by the *Plutus* type and `Map.toList` it
+      * (`Alonzo/Plutus/TxInfo.hs:301-309`), so they deliver Plutus order, while V3 keys by the
+      * ledger's `Credential` and delivers the ledger's order. `Ord[Credential]` follows V3; this
+      * instance follows V1/V2.
+      */
     given Ord[StakingCredential] = (lhs: StakingCredential, rhs: StakingCredential) =>
         lhs match
             case StakingCredential.StakingHash(cred) =>
                 rhs match
-                    case StakingCredential.StakingHash(cred2)  => cred <=> cred2
+                    case StakingCredential.StakingHash(cred2) =>
+                        cred match
+                            case Credential.PubKeyCredential(h1) =>
+                                cred2 match
+                                    case Credential.PubKeyCredential(h2) => h1 <=> h2
+                                    case Credential.ScriptCredential(_)  => Order.Less
+                            case Credential.ScriptCredential(h1) =>
+                                cred2 match
+                                    case Credential.PubKeyCredential(_)  => Order.Greater
+                                    case Credential.ScriptCredential(h2) => h1 <=> h2
                     case StakingCredential.StakingPtr(_, _, _) => Order.Less
             case StakingCredential.StakingPtr(a, b, c) =>
                 rhs match

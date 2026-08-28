@@ -705,12 +705,6 @@ object LedgerToPlutusTranslation {
         val redeemers =
             tx.witnessSet.redeemers.map(_.value.toIndexedSeq).getOrElse(IndexedSeq.empty)
 
-        // Process withdrawals for V3 format
-        val withdrawals = getWithdrawals(body.withdrawals).map {
-            case (v1.StakingCredential.StakingHash(cred), coin) => cred -> coin
-            case w => throw new IllegalStateException(s"Invalid withdrawal: $w")
-        }
-
         v3.TxInfo(
           inputs = scalus.cardano.onchain.plutus.prelude.List
               .from(body.inputs.toSet.view.map(getTxInInfoV3(_, utxos))),
@@ -722,7 +716,13 @@ object LedgerToPlutusTranslation {
           mint = getMintValueV3(body.mint),
           certificates = scalus.cardano.onchain.plutus.prelude.List
               .from(body.certificates.toSeq.view.map(getTxCertV3)),
-          withdrawals = SortedMap.fromList(withdrawals),
+          // Delivered in LEDGER order, unlike V1/V2: `transMap transAccountAddress`
+          // (Conway/TxInfo.hs:514, :549-551). Already ordered, so preserve it.
+          withdrawals = SortedMap.unsafeFromList(
+            scalus.cardano.onchain.plutus.prelude.List.from(
+              ledgerOrderedWithdrawals(body.withdrawals)
+            )
+          ),
           validRange = getInterval(body.validityStartSlot, body.ttl, slotConfig, protocolVersion),
           signatories = scalus.cardano.onchain.plutus.prelude.List.from(
             body.requiredSigners.toSet.view
