@@ -23,7 +23,7 @@ class HubDriverTest extends AnyFunSuite {
     private val caps = StreamCapabilities(
       kinds = SubscriptionKind.all,
       pushdown = PushdownKind.all,
-      scanning = ScanCost.Free,
+      scanning = ScanSupport.Free,
       replay = ReplaySupport.NoReplay,
       rollbackHorizon = None,
       maxConfirmations = None,

@@ -27,7 +27,7 @@ class BlockCoverageTest extends AnyFunSuite {
       kinds = SubscriptionKind.all,
       pushdown = PushdownKind.all,
       // Metered is the whole reason partial coverage exists.
-      scanning = ScanCost.Metered,
+      scanning = ScanSupport.Metered,
       replay = ReplaySupport.NoReplay,
       rollbackHorizon = None,
       maxConfirmations = None,

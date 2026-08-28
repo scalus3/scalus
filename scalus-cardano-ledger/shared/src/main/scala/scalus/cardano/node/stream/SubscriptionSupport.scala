@@ -130,8 +130,14 @@ object SubscriptionSupport {
                 // there is nothing for the caller to consent to. Making it demand
                 // `allowUnindexedScan` would refuse "watch every transaction" on an in-memory
                 // ledger, where that is the cheapest thing you can ask for.
-                case ScanCost.Free    => Indexed
-                case ScanCost.Metered => Unindexed
+                case ScanSupport.Free    => Indexed
+                case ScanSupport.Metered => Unindexed
+                case ScanSupport.Unsupported =>
+                    Unsupported(
+                      "this provider serves only subscriptions it can look up by query source " +
+                          s"(${caps.pushdown.mkString(", ")}); it has no way to examine a block " +
+                          "it was not asked about, so this cannot be served at any price"
+                    )
 
     private def isIndexed(request: SubscriptionRequest, pushdown: Set[PushdownKind]): Boolean =
         request match

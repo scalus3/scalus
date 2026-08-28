@@ -22,7 +22,7 @@ class SubscriptionHubTest extends AnyFunSuite {
     ): StreamCapabilities = StreamCapabilities(
       kinds = SubscriptionKind.all,
       pushdown = PushdownKind.all,
-      scanning = ScanCost.Free,
+      scanning = ScanSupport.Free,
       replay = ReplaySupport.NoReplay,
       rollbackHorizon = rollbackHorizon,
       maxConfirmations = None,

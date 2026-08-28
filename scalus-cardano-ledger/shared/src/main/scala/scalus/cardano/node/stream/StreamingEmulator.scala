@@ -237,7 +237,7 @@ object StreamingEmulator {
     def capabilities(securityParam: Int): StreamCapabilities = StreamCapabilities(
       kinds = Set(SubscriptionKind.Utxo, SubscriptionKind.Transaction),
       pushdown = PushdownKind.all,
-      scanning = ScanCost.Free,
+      scanning = ScanSupport.Free,
       replay = ReplaySupport.NoReplay,
       rollbackHorizon = if securityParam > 0 then Some(securityParam) else None,
       maxConfirmations = None,
