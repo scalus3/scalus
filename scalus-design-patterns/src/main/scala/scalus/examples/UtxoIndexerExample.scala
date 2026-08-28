@@ -9,6 +9,7 @@ import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.compiler.Options
 import scalus.cardano.onchain.plutus.v3.{TxInfo, TxOutRef}
 import scalus.patterns.UtxoIndexer
+import scalus.cardano.onchain.plutus.prelude.Option
 import scalus.cardano.onchain.plutus.v3.Validator
 import scalus.uplc.PlutusV3
 
@@ -19,7 +20,7 @@ case class IndexerRedeemer(inputIdx: BigInt, outputIdx: BigInt) derives FromData
 @Compile
 object IndexerValidator extends Validator:
     inline override def spend(
-        datum: scalus.cardano.onchain.plutus.prelude.Option[Data],
+        datum: Option[Data],
         redeemer: Data,
         tx: TxInfo,
         ownRef: TxOutRef
@@ -32,14 +33,14 @@ object IndexerValidator extends Validator:
           inputIdx,
           outputIdx,
           tx,
-          // Custom validation logic goes here
+          // Custom validation logic goes here: each check is a `require` with its own message
           (input, output) => {
               trace("Validating input-output pair")(())
               // In a real validator, you'd check something meaningful like:
-              // - Value is preserved: input.resolved.value.lovelace === output.value.lovelace
-              // - Datum is correct
-              // - Address matches, etc.
-              true // Simplified for example
+              // require(output.value.hasSameTokensAndAtLeastAda(input.resolved.value), "value")
+              // require(output.hasInlineDatum(expectedDatum), "datum")
+              // require(output.address === input.resolved.address, "address")
+              () // Simplified for example
           }
         )
     }

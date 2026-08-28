@@ -56,7 +56,7 @@ import scalus.patterns.StakeValidator
 
 // Spending endpoint - minimal, runs per UTxO
 inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, ownRef: TxOutRef): Unit = {
-    val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+    val ownScriptHash = tx.findInputOrFail(ownRef).resolved.address.credential
         .scriptOption.getOrFail("Own address must be Script")
 
     // Option 1: Just check stake validator ran (withdraw zero trick)
@@ -65,7 +65,8 @@ inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, o
     // Option 2: Also validate redeemer and withdrawal amount
     StakeValidator.spend(
       withdrawalScriptHash = ownScriptHash,
-      withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0),
+      withdrawalRedeemerValidator =
+          (redeemer, lovelace) => require(lovelace === BigInt(0), "Withdrawal must be zero"),
       txInfo = tx
     )
 }
@@ -120,7 +121,7 @@ import scalus.patterns.TransactionLevelMinterValidator
 
 // Spending endpoint - minimal, runs per UTxO
 inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, ownRef: TxOutRef): Unit = {
-    val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
+    val ownScriptHash = tx.findInputOrFail(ownRef).resolved.address.credential
         .scriptOption.getOrFail("Own address must be Script")
 
     // Option 1: Just check minting policy ran
@@ -427,7 +428,7 @@ object FactoryExample extends Validator {
         datum: Option[Data], redeemer: Data, tx: TxInfo, ownRef: TxOutRef
     ): Unit = {
         val productDatum = datum.getOrFail("Datum required").to[ProductDatum]
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val factoryPolicyId = ownInput.resolved.address.credential
             .scriptOption.getOrFail("Own address must be Script")
         Factory.validateSpend(productDatum, factoryPolicyId, ownInput.resolved.value, tx)

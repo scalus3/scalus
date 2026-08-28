@@ -14,6 +14,15 @@ import scala.annotation.tailrec
 /** Indexer pattern for matching inputs to outputs by index. Indices are computed off-chain using
   * SpendWithDelayedRedeemer after the transaction is built.
   *
+  * Every validator callback returns `Unit` and is expected to `require`/`fail` with its own
+  * message. A `Boolean` callback would only ever fail with a generic message, and a stray `false`
+  * from a missed branch is silent; `Unit` plus `require` makes each check name itself.
+  *
+  * The singular patterns (`validateInput`, `oneToOne`, `oneToMany`) solve the missed-input problem -
+  * proving that the input at `inputIdx` is this script's own input - not double satisfaction. A
+  * single output can still satisfy several script inputs of the same script in one transaction
+  * unless the caller also constrains the number of own inputs or tags the output.
+  *
   * @see
   *   [[https://github.com/Anastasia-Labs/aiken-design-patterns/tree/main/lib/aiken-design-patterns]]
   */
@@ -25,11 +34,11 @@ object UtxoIndexer {
         ownRef: TxOutRef,
         inputIdx: BigInt,
         tx: TxInfo,
-        validator: TxInInfo => Boolean
+        validator: TxInInfo => Unit
     ): Unit = {
         val input = tx.inputs.at(inputIdx)
         require(input.outRef === ownRef, InputIndexMismatch)
-        require(validator(input), ValidatorFailed)
+        validator(input)
     }
 
     /** Validates a one-to-one relationship between an input and output at specified indices. */
@@ -38,13 +47,13 @@ object UtxoIndexer {
         inputIdx: BigInt,
         outputIdx: BigInt,
         tx: TxInfo,
-        validator: (TxInInfo, TxOut) => Boolean
+        validator: (TxInInfo, TxOut) => Unit
     ): Unit = {
         val input = tx.inputs.at(inputIdx)
         require(input.outRef === ownRef, InputIndexMismatch)
 
         val output = tx.outputs.at(outputIdx)
-        require(validator(input, output), ValidatorFailed)
+        validator(input, output)
     }
 
     /** Validates a one-to-many relationship between an input and multiple outputs.
@@ -57,8 +66,8 @@ object UtxoIndexer {
         inputIdx: BigInt,
         outputIndices: List[BigInt],
         tx: TxInfo,
-        perOutputValidator: (TxInInfo, BigInt, TxOut) => Boolean,
-        collectiveValidator: (TxInInfo, List[TxOut]) => Boolean
+        perOutputValidator: (TxInInfo, BigInt, TxOut) => Unit,
+        collectiveValidator: (TxInInfo, List[TxOut]) => Unit
     ): Unit = {
         val input = tx.inputs.at(inputIdx)
         require(input.outRef === ownRef, InputIndexMismatch)
@@ -66,7 +75,7 @@ object UtxoIndexer {
         val allOutputs =
             validateAndCollectOutputs(outputIndices, tx.outputs, input, perOutputValidator)
 
-        require(collectiveValidator(input, allOutputs), CollectiveValidatorFailed)
+        collectiveValidator(input, allOutputs)
     }
 
     /** Validates multiple script inputs without redeemers, each with a corresponding output.
@@ -78,7 +87,7 @@ object UtxoIndexer {
         indexPairs: List[(BigInt, BigInt)],
         scriptHash: ValidatorHash,
         tx: TxInfo,
-        validator: (BigInt, TxInInfo, BigInt, TxOut) => Boolean
+        validator: (BigInt, TxInInfo, BigInt, TxOut) => Unit
     ): Unit = {
         val scriptCredential = Credential.ScriptCredential(scriptHash)
 
@@ -101,7 +110,7 @@ object UtxoIndexer {
         stakeScriptHash: ValidatorHash,
         tx: TxInfo,
         redeemerCoercerAndStakeExtractor: Data => (A, Credential),
-        validator: (BigInt, TxInInfo, A, BigInt, TxOut) => Boolean
+        validator: (BigInt, TxInInfo, A, BigInt, TxOut) => Unit
     ): Unit = {
         val spendingCredential = Credential.ScriptCredential(spendingScriptHash)
         val stakeCredential = Credential.ScriptCredential(stakeScriptHash)
@@ -131,14 +140,14 @@ object UtxoIndexer {
         indices: List[BigInt],
         outputs: List[TxOut],
         input: TxInInfo,
-        validator: (TxInInfo, BigInt, TxOut) => Boolean,
+        validator: (TxInInfo, BigInt, TxOut) => Unit,
         acc: List[TxOut] = List.Nil
     ): List[TxOut] = {
         indices match
             case List.Nil => acc
             case List.Cons(currIdx, rest) =>
                 val output = outputs.at(currIdx)
-                require(validator(input, currIdx, output), PerOutputValidatorFailed)
+                validator(input, currIdx, output)
                 validateAndCollectOutputs(rest, outputs, input, validator, List.Cons(output, acc))
     }
 
@@ -149,7 +158,7 @@ object UtxoIndexer {
         indexPairs: List[(BigInt, BigInt)],
         outputs: List[TxOut],
         scriptCredential: Credential,
-        validator: (BigInt, TxInInfo, BigInt, TxOut) => Boolean,
+        validator: (BigInt, TxInInfo, BigInt, TxOut) => Unit,
         currentIdx: BigInt = BigInt(0)
     ): List[(BigInt, BigInt)] = {
         inputs match
@@ -165,10 +174,7 @@ object UtxoIndexer {
                         case List.Cons((inIdx, outIdx), restPairs) =>
                             require(currentIdx === inIdx, InputIndexMismatch)
                             val output = outputs.at(outIdx)
-                            require(
-                              validator(inIdx, input, outIdx, output),
-                              MultiValidationFailed
-                            )
+                            validator(inIdx, input, outIdx, output)
                             processMultipleInputs(
                               restInputs,
                               restPairs,
@@ -213,7 +219,7 @@ object UtxoIndexer {
         inputs: List[TxInInfo],
         outputs: List[TxOut],
         spendingCredential: Credential,
-        validator: (BigInt, TxInInfo, A, BigInt, TxOut) => Boolean
+        validator: (BigInt, TxInInfo, A, BigInt, TxOut) => Unit
     ): List[A] = {
         indexPairs match
             case List.Nil => redeemers
@@ -228,10 +234,7 @@ object UtxoIndexer {
                           InputNotFromSpendingScript
                         )
                         val output = outputs.at(outIdx)
-                        require(
-                          validator(inIdx, input, redeemer, outIdx, output),
-                          MultiValidationFailed
-                        )
+                        validator(inIdx, input, redeemer, outIdx, output)
                         processMultipleInputsWithRedeemers(
                           restPairs,
                           restRedeemers,
@@ -243,13 +246,9 @@ object UtxoIndexer {
     }
 
     inline val InputIndexMismatch = "Input index does not match ownRef"
-    inline val ValidatorFailed = "Validator failed for input-output pair"
-    inline val PerOutputValidatorFailed = "Per-output validator failed"
-    inline val CollectiveValidatorFailed = "Collective validator failed"
     inline val MoreScriptUtxosSpentThanSpecified =
         "More UTxOs of the script are spent than specified"
     inline val UnprocessedIndexPairs = "All index pairs must be processed"
-    inline val MultiValidationFailed = "Validation failed"
     inline val TooManyIndicesSpecified = "Too many indices specified"
     inline val InputNotFromSpendingScript = "Input not from spending script"
     inline val UnprocessedRedeemers = "All redeemers must be processed"

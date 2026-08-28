@@ -88,7 +88,7 @@ object MarketplaceValidator {
                     case MarketplaceRedeemer.Cancel =>
                         // Only seller can cancel
                         require(
-                          sc.txInfo.signatories.contains(listing.seller),
+                          sc.txInfo.isSignedBy(listing.seller),
                           "Only seller can cancel"
                         )
             case _ => fail("Unsupported script purpose")
@@ -117,28 +117,19 @@ object NFTMintingPolicy {
         val sc = scData.to[ScriptContext]
         sc.scriptInfo match
             case ScriptInfo.MintingScript(policyId) =>
-                // Get minted amount for our token
-                val mintedAmount = sc.txInfo.mint.quantityOf(policyId, params.tokenName)
-
-                require(mintedAmount === BigInt(1), "Must mint exactly 1 NFT")
-
-                // Verify no other tokens are minted under this policy (V011 protection)
-                val allMintedUnderPolicy = sc.txInfo.mint.flatten.filter { case (pid, _, _) =>
-                    pid === policyId
-                }
+                // Mint exactly 1 of our token and nothing else under this policy (V011 protection)
                 require(
-                  allMintedUnderPolicy.length === BigInt(1),
-                  "Only one token type may be minted"
+                  sc.txInfo.mint.hasOnly(policyId, params.tokenName, 1),
+                  "Must mint exactly 1 NFT and no other token under this policy"
                 )
 
-                // Find outputs containing our NFT
-                val nftOutputs = sc.txInfo.outputs.filter { output =>
-                    output.value.quantityOf(policyId, params.tokenName) > 0
-                }
-
-                require(nftOutputs.length === BigInt(1), "NFT must go to exactly one output")
-
-                val nftOutput = nftOutputs.head
+                // Find the single output holding units of this token. The policy is not one-shot
+                // (no seed UTxO), so units can accumulate across transactions; any positive
+                // quantity counts, not exactly one.
+                val nftOutput = sc.txInfo.outputs.findUniqueOrFail(
+                  _.value.quantityOf(policyId, params.tokenName) > 0,
+                  "NFT must go to exactly one output"
+                )
 
                 // Verify the output goes to the expected marketplace script
                 ParameterValidationOnChain.verifyAddressScript(

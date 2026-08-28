@@ -105,7 +105,7 @@ object ParameterValidationOnChain {
         credential: Credential,
         expectedHash: ValidatorHash
     ): Unit = {
-        val actualHash = credential.scriptOption.getOrFail(ExpectedScriptCredential)
+        val actualHash = credential.scriptHashOrFail(ExpectedScriptCredential)
         require(actualHash === expectedHash, ScriptHashMismatch)
     }
 

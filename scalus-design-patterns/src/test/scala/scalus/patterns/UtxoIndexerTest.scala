@@ -1,6 +1,8 @@
 package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.onchain.plutus.prelude.fail as onchainFail
+import scalus.cardano.onchain.OnchainError
 import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.cardano.onchain.RequirementError
@@ -26,7 +28,7 @@ class UtxoIndexerTest
             val input = TxInInfo(ownRef, TxOut(address, value))
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
+              inputs = List.singleton(input),
               id = txId
             )
 
@@ -34,7 +36,8 @@ class UtxoIndexerTest
               ownRef = ownRef,
               inputIdx = 0,
               tx = txInfo,
-              validator = input => input.resolved.value.getLovelace >= BigInt(1_000_000)
+              validator = input =>
+                  require(input.resolved.value.getLovelace >= BigInt(1_000_000), "min value")
             )
         }
     }
@@ -51,7 +54,7 @@ class UtxoIndexerTest
             val input = TxInInfo(wrongRef, TxOut(address, value))
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
+              inputs = List.singleton(input),
               id = txId
             )
 
@@ -59,13 +62,13 @@ class UtxoIndexerTest
               ownRef = ownRef,
               inputIdx = 0,
               tx = txInfo,
-              validator = _ => true
+              validator = _ => ()
             )
         }
     }
 
     test("failed validateInput with insufficient value") {
-        assertEvalFailsWithMessage[RequirementError](UtxoIndexer.ValidatorFailed) {
+        assertEvalFailsWithMessage[RequirementError]("min value") {
             val txId = TxId(ByteString.empty)
             val ownRef = TxOutRef(txId, 0)
             val address =
@@ -75,7 +78,7 @@ class UtxoIndexerTest
             val input = TxInInfo(ownRef, TxOut(address, value))
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
+              inputs = List.singleton(input),
               id = txId
             )
 
@@ -83,7 +86,8 @@ class UtxoIndexerTest
               ownRef = ownRef,
               inputIdx = 0,
               tx = txInfo,
-              validator = input => input.resolved.value.getLovelace >= BigInt(1_000_000)
+              validator = input =>
+                  require(input.resolved.value.getLovelace >= BigInt(1_000_000), "min value")
             )
         }
     }
@@ -100,8 +104,8 @@ class UtxoIndexerTest
             val output = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
-              outputs = List.single(output),
+              inputs = List.singleton(input),
+              outputs = List.singleton(output),
               id = txId
             )
 
@@ -110,7 +114,7 @@ class UtxoIndexerTest
               inputIdx = 0,
               outputIdx = 0,
               tx = txInfo,
-              validator = (_, _) => true
+              validator = (_, _) => ()
             )
         }
     }
@@ -128,8 +132,8 @@ class UtxoIndexerTest
             val output = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
-              outputs = List.single(output),
+              inputs = List.singleton(input),
+              outputs = List.singleton(output),
               id = txId
             )
 
@@ -138,13 +142,13 @@ class UtxoIndexerTest
               inputIdx = 0,
               outputIdx = 0,
               tx = txInfo,
-              validator = (_, _) => true
+              validator = (_, _) => ()
             )
         }
     }
 
     test("failed oneToOne with validator failure") {
-        assertEvalFailsWithMessage[RequirementError](UtxoIndexer.ValidatorFailed) {
+        assertEvalFailsWithMessage[OnchainError]("validator failed") {
             val txId = TxId(ByteString.empty)
             val ownRef = TxOutRef(txId, 0)
             val address =
@@ -155,8 +159,8 @@ class UtxoIndexerTest
             val output = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
-              outputs = List.single(output),
+              inputs = List.singleton(input),
+              outputs = List.singleton(output),
               id = txId
             )
 
@@ -165,7 +169,7 @@ class UtxoIndexerTest
               inputIdx = 0,
               outputIdx = 0,
               tx = txInfo,
-              validator = (_, _) => false
+              validator = (_, _) => onchainFail("validator failed")
             )
         }
     }
@@ -197,7 +201,7 @@ class UtxoIndexerTest
               inputIdx = 1,
               outputIdx = 2,
               tx = txInfo,
-              validator = (_, _) => true
+              validator = (_, _) => ()
             )
         }
     }
@@ -214,18 +218,19 @@ class UtxoIndexerTest
             val output = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
-              outputs = List.single(output),
+              inputs = List.singleton(input),
+              outputs = List.singleton(output),
               id = txId
             )
 
             UtxoIndexer.oneToMany(
               ownRef = ownRef,
               inputIdx = 0,
-              outputIndices = List.single(0),
+              outputIndices = List.singleton(0),
               tx = txInfo,
-              perOutputValidator = (_, _, _) => true,
-              collectiveValidator = (_, outputs) => outputs.length === BigInt(1)
+              perOutputValidator = (_, _, _) => (),
+              collectiveValidator =
+                  (_, outputs) => require(outputs.length === BigInt(1), "output count")
             )
         }
     }
@@ -244,7 +249,7 @@ class UtxoIndexerTest
             val output2 = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
+              inputs = List.singleton(input),
               outputs = List(output0, output1, output2),
               id = txId
             )
@@ -254,8 +259,9 @@ class UtxoIndexerTest
               inputIdx = 0,
               outputIndices = List(0, 1, 2),
               tx = txInfo,
-              perOutputValidator = (_, _, _) => true,
-              collectiveValidator = (_, outputs) => outputs.length === BigInt(3)
+              perOutputValidator = (_, _, _) => (),
+              collectiveValidator =
+                  (_, outputs) => require(outputs.length === BigInt(3), "output count")
             )
         }
     }
@@ -276,7 +282,7 @@ class UtxoIndexerTest
             val output4 = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
+              inputs = List.singleton(input),
               outputs = List(output0, output1, output2, output3, output4),
               id = txId
             )
@@ -286,9 +292,10 @@ class UtxoIndexerTest
               inputIdx = 0,
               outputIndices = List(0, 2, 4),
               tx = txInfo,
-              perOutputValidator =
-                  (_, idx, _) => idx === BigInt(0) || idx === BigInt(2) || idx === BigInt(4),
-              collectiveValidator = (_, outputs) => outputs.length === BigInt(3)
+              perOutputValidator = (_, idx, _) =>
+                  require(idx === BigInt(0) || idx === BigInt(2) || idx === BigInt(4), "idx"),
+              collectiveValidator =
+                  (_, outputs) => require(outputs.length === BigInt(3), "output count")
             )
         }
     }
@@ -306,24 +313,24 @@ class UtxoIndexerTest
             val output = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
-              outputs = List.single(output),
+              inputs = List.singleton(input),
+              outputs = List.singleton(output),
               id = txId
             )
 
             UtxoIndexer.oneToMany(
               ownRef = ownRef,
               inputIdx = 0,
-              outputIndices = List.single(0),
+              outputIndices = List.singleton(0),
               tx = txInfo,
-              perOutputValidator = (_, _, _) => true,
-              collectiveValidator = (_, _) => true
+              perOutputValidator = (_, _, _) => (),
+              collectiveValidator = (_, _) => ()
             )
         }
     }
 
     test("failed oneToMany with per-output validator failure") {
-        assertEvalFailsWithMessage[RequirementError](UtxoIndexer.PerOutputValidatorFailed) {
+        assertEvalFailsWithMessage[OnchainError]("per-output validator failed") {
             val txId = TxId(ByteString.empty)
             val ownRef = TxOutRef(txId, 0)
             val address =
@@ -335,7 +342,7 @@ class UtxoIndexerTest
             val output1 = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
+              inputs = List.singleton(input),
               outputs = List(output0, output1),
               id = txId
             )
@@ -345,14 +352,15 @@ class UtxoIndexerTest
               inputIdx = 0,
               outputIndices = List(0, 1),
               tx = txInfo,
-              perOutputValidator = (_, _, _) => false, // Always fails
-              collectiveValidator = (_, _) => true
+              perOutputValidator =
+                  (_, _, _) => onchainFail("per-output validator failed"), // Always fails
+              collectiveValidator = (_, _) => ()
             )
         }
     }
 
     test("failed oneToMany with collective validator failure") {
-        assertEvalFailsWithMessage[RequirementError](UtxoIndexer.CollectiveValidatorFailed) {
+        assertEvalFailsWithMessage[OnchainError]("collective validator failed") {
             val txId = TxId(ByteString.empty)
             val ownRef = TxOutRef(txId, 0)
             val address =
@@ -364,7 +372,7 @@ class UtxoIndexerTest
             val output1 = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input),
+              inputs = List.singleton(input),
               outputs = List(output0, output1),
               id = txId
             )
@@ -374,8 +382,9 @@ class UtxoIndexerTest
               inputIdx = 0,
               outputIndices = List(0, 1),
               tx = txInfo,
-              perOutputValidator = (_, _, _) => true,
-              collectiveValidator = (_, _) => false // Always fails
+              perOutputValidator = (_, _, _) => (),
+              collectiveValidator =
+                  (_, _) => onchainFail("collective validator failed") // Always fails
             )
         }
     }
@@ -394,16 +403,16 @@ class UtxoIndexerTest
             val output0 = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input0),
-              outputs = List.single(output0),
+              inputs = List.singleton(input0),
+              outputs = List.singleton(output0),
               id = txId
             )
 
             UtxoIndexer.multiOneToOneNoRedeemer(
-              indexPairs = List.single((0, 0)),
+              indexPairs = List.singleton((0, 0)),
               scriptHash = scriptHash,
               tx = txInfo,
-              validator = (_, _, _, _) => true
+              validator = (_, _, _, _) => ()
             )
         }
     }
@@ -469,10 +478,10 @@ class UtxoIndexerTest
             )
 
             UtxoIndexer.multiOneToOneNoRedeemer(
-              indexPairs = List.single((0, 0)), // Only one pair, but two script inputs
+              indexPairs = List.singleton((0, 0)), // Only one pair, but two script inputs
               scriptHash = scriptHash,
               tx = txInfo,
-              validator = (_, _, _, _) => true
+              validator = (_, _, _, _) => ()
             )
         }
     }
@@ -491,7 +500,7 @@ class UtxoIndexerTest
             val output1 = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input0),
+              inputs = List.singleton(input0),
               outputs = List(output0, output1),
               id = txId
             )
@@ -500,13 +509,13 @@ class UtxoIndexerTest
               indexPairs = List((0, 0), (1, 1)), // Two pairs, but only one script input
               scriptHash = scriptHash,
               tx = txInfo,
-              validator = (_, _, _, _) => true
+              validator = (_, _, _, _) => ()
             )
         }
     }
 
     test("failed multiOneToOneNoRedeemer with validator failure") {
-        assertEvalFailsWithMessage[RequirementError](UtxoIndexer.MultiValidationFailed) {
+        assertEvalFailsWithMessage[OnchainError]("validator failed") {
             val txId = TxId(ByteString.empty)
             val scriptHash = ByteString.empty
             val scriptCredential = Credential.ScriptCredential(scriptHash)
@@ -517,16 +526,16 @@ class UtxoIndexerTest
             val output0 = TxOut(address, value)
 
             val txInfo = TxInfo(
-              inputs = List.single(input0),
-              outputs = List.single(output0),
+              inputs = List.singleton(input0),
+              outputs = List.singleton(output0),
               id = txId
             )
 
             UtxoIndexer.multiOneToOneNoRedeemer(
-              indexPairs = List.single((0, 0)),
+              indexPairs = List.singleton((0, 0)),
               scriptHash = scriptHash,
               tx = txInfo,
-              validator = (_, _, _, _) => false // Always fails
+              validator = (_, _, _, _) => onchainFail("validator failed") // Always fails
             )
         }
     }

@@ -5,7 +5,7 @@ import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.toData
 import scalus.cardano.ledger.Script
-import scalus.cardano.onchain.RequirementError
+import scalus.cardano.onchain.{OnchainError, RequirementError}
 import scalus.examples.{MarketplaceBaseProgram, ParameterValidationUsage}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
@@ -117,7 +117,7 @@ class ParameterValidationTest
     }
 
     test("verifyScriptCredential fails for pub key credential") {
-        assertEvalFailsWithMessage[NoSuchElementException](
+        assertEvalFailsWithMessage[OnchainError](
           ParameterValidationOnChain.ExpectedScriptCredential
         ) {
             val expectedHash =

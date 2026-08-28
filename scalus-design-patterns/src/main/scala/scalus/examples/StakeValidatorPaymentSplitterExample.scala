@@ -87,8 +87,8 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
         ownRef: TxOutRef
     ): Unit = {
         // Get own script hash from the input being spent
-        val ownCredential = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-        val ownScriptHash = ownCredential.scriptOption.getOrFail("Own address must be Script")
+        val ownCredential = tx.findInputOrFail(ownRef).resolved.address.credential
+        val ownScriptHash = ownCredential.scriptHashOrFail("Own address must be Script")
 
         // Just check that reward endpoint was triggered (withdraw zero trick)
         StakeValidator.spendMinimal(ownScriptHash, tx)
@@ -110,7 +110,7 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
             .map(payee => Credential.PubKeyCredential(PubKeyHash(payee)))
 
         val verification = redeemer.to[SplitVerificationRedeemer]
-        val ownScriptHash = stakingKey.scriptOption.getOrFail("Staking key must be Script")
+        val ownScriptHash = stakingKey.scriptHashOrFail("Staking key must be Script")
         val ownScriptCredential = Credential.ScriptCredential(ownScriptHash)
         val payeeWithChangeCredential = Credential.PubKeyCredential(verification.payeeWithChange)
 
@@ -141,19 +141,17 @@ object StakeValidatorPaymentSplitterValidator extends DataParameterizedValidator
                     val outputCredential = output.address.credential
                     val value = output.value.getLovelace
 
-                    outputCredential match
-                        case Credential.PubKeyCredential(pkh) =>
-                            require(payees.contains(outputCredential), "Output must be to a payee")
-                            if pkh === verification.payeeWithChange then
-                                (n + 1, sum + value, changeSum + value)
-                            else
-                                // Non-change payee must receive exactly splitPerPayee
-                                require(
-                                  value === verification.splitPerPayee,
-                                  "Payee must receive exact split"
-                                )
-                                (n + 1, sum + value, changeSum)
-                        case _ => fail("Output to script is not allowed")
+                    val pkh = outputCredential.pubKeyHashOrFail("Output to script is not allowed")
+                    require(payees.contains(outputCredential), "Output must be to a payee")
+                    if pkh === verification.payeeWithChange then
+                        (n + 1, sum + value, changeSum + value)
+                    else
+                        // Non-change payee must receive exactly splitPerPayee
+                        require(
+                          value === verification.splitPerPayee,
+                          "Payee must receive exact split"
+                        )
+                        (n + 1, sum + value, changeSum)
             }
 
         require(actualNPayed === verification.nPayed, "nPayed mismatch")

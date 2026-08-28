@@ -1,6 +1,8 @@
 package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.onchain.plutus.prelude.fail as onchainFail
+import scalus.cardano.onchain.OnchainError
 import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.toData
@@ -18,8 +20,8 @@ class TransactionLevelMinterValidatorTest
     ignore("success spend") {
         assertEvalSuccess {
             val minterScriptHash = ByteString.empty
-            val minterRedeemerValidator = (redeemer: Redeemer) => true
-            val minterTokensValidator = (tokens: SortedMap[TokenName, BigInt]) => true
+            val minterRedeemerValidator = (redeemer: Redeemer) => ()
+            val minterTokensValidator = (tokens: SortedMap[TokenName, BigInt]) => ()
 
             val txInfo = TxInfo(
               inputs = List.empty,
@@ -43,8 +45,8 @@ class TransactionLevelMinterValidatorTest
           TransactionLevelMinterValidator.MissingRedeemer
         ) {
             val minterScriptHash = ByteString.empty
-            val minterRedeemerValidator = (redeemer: Redeemer) => true
-            val minterTokensValidator = (tokens: SortedMap[TokenName, BigInt]) => true
+            val minterRedeemerValidator = (redeemer: Redeemer) => ()
+            val minterTokensValidator = (tokens: SortedMap[TokenName, BigInt]) => ()
 
             val txInfo = TxInfo(
               inputs = List.empty,
@@ -64,12 +66,11 @@ class TransactionLevelMinterValidatorTest
 
     // TODO: UPLC error
     ignore("failed spend with minter redeemer validator failed") {
-        assertEvalFailsWithMessage[RequirementError](
-          TransactionLevelMinterValidator.MinterRedeemerValidatorFailed
-        ) {
+        assertEvalFailsWithMessage[OnchainError]("minter redeemer validator failed") {
             val minterScriptHash = ByteString.empty
-            val minterRedeemerValidator = (redeemer: Redeemer) => false
-            val minterTokensValidator = (tokens: SortedMap[TokenName, BigInt]) => true
+            val minterRedeemerValidator =
+                (redeemer: Redeemer) => onchainFail("minter redeemer validator failed")
+            val minterTokensValidator = (tokens: SortedMap[TokenName, BigInt]) => ()
 
             val txInfo = TxInfo(
               inputs = List.empty,
@@ -89,12 +90,11 @@ class TransactionLevelMinterValidatorTest
 
     // TODO: UPLC error
     ignore("failed spend with minter tokens validator failed") {
-        assertEvalFailsWithMessage[RequirementError](
-          TransactionLevelMinterValidator.MinterTokensValidatorFailed
-        ) {
+        assertEvalFailsWithMessage[OnchainError]("minter tokens validator failed") {
             val minterScriptHash = ByteString.empty
-            val minterRedeemerValidator = (redeemer: Redeemer) => true
-            val minterTokensValidator = (tokens: SortedMap[TokenName, BigInt]) => false
+            val minterRedeemerValidator = (redeemer: Redeemer) => ()
+            val minterTokensValidator = (tokens: SortedMap[TokenName, BigInt]) =>
+                onchainFail("minter tokens validator failed")
 
             val txInfo = TxInfo(
               inputs = List.empty,

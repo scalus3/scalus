@@ -1,6 +1,8 @@
 package scalus.patterns
 
 import org.scalatest.funsuite.AnyFunSuite
+import scalus.cardano.onchain.plutus.prelude.fail as onchainFail
+import scalus.cardano.onchain.OnchainError
 import scalus.*
 import scalus.uplc.builtin.ByteString
 import scalus.uplc.builtin.Data.toData
@@ -28,7 +30,7 @@ class StakeValidatorTest
 
             StakeValidator.spend(
               withdrawalScriptHash = scriptHash,
-              withdrawalRedeemerValidator = (redeemer, lovelace) => true,
+              withdrawalRedeemerValidator = (redeemer, lovelace) => (),
               txInfo = txInfo
             )
         }
@@ -49,7 +51,7 @@ class StakeValidatorTest
 
             StakeValidator.spend(
               withdrawalScriptHash = scriptHash,
-              withdrawalRedeemerValidator = (redeemer, lovelace) => true,
+              withdrawalRedeemerValidator = (redeemer, lovelace) => (),
               txInfo = txInfo
             )
         }
@@ -70,7 +72,7 @@ class StakeValidatorTest
 
             StakeValidator.spend(
               withdrawalScriptHash = scriptHash,
-              withdrawalRedeemerValidator = (redeemer, lovelace) => true,
+              withdrawalRedeemerValidator = (redeemer, lovelace) => (),
               txInfo = txInfo
             )
         }
@@ -78,9 +80,7 @@ class StakeValidatorTest
 
     // TODO: UPLC error
     ignore("failed spend with withdrawal redeemer validator failed") {
-        assertEvalFailsWithMessage[RequirementError](
-          StakeValidator.WithdrawalRedeemerValidatorFailed
-        ) {
+        assertEvalFailsWithMessage[OnchainError]("redeemer validator failed") {
             val scriptHash = ByteString.empty
             val credential = Credential.ScriptCredential(scriptHash)
 
@@ -93,7 +93,8 @@ class StakeValidatorTest
 
             StakeValidator.spend(
               withdrawalScriptHash = scriptHash,
-              withdrawalRedeemerValidator = (redeemer, lovelace) => false,
+              withdrawalRedeemerValidator =
+                  (redeemer, lovelace) => onchainFail("redeemer validator failed"),
               txInfo = txInfo
             )
         }
@@ -146,7 +147,7 @@ class StakeValidatorTest
             )
 
             StakeValidator.withdraw(
-              withdrawalValidator = (redeemer, validatorHash, tx) => true,
+              withdrawalValidator = (redeemer, validatorHash, tx) => (),
               redeemer = ().toData,
               credential = credential,
               txInfo = txInfo
@@ -166,7 +167,7 @@ class StakeValidatorTest
 //            )
 //
 //            StakeValidator.withdraw(
-//              withdrawalValidator = (redeemer, validatorHash, tx) => true,
+//              withdrawalValidator = (redeemer, validatorHash, tx) => (),
 //              redeemer = ().toData,
 //              credential = credential,
 //              txInfo = txInfo

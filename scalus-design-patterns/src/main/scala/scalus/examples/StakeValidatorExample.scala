@@ -22,19 +22,20 @@ object StakeValidatorExample extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownCredential = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-        val ownWithdrawal = ownCredential.scriptOption.getOrFail("Own address must be Script")
+        val ownCredential = tx.findInputOrFail(ownRef).resolved.address.credential
+        val ownWithdrawal = ownCredential.scriptHashOrFail("Own address must be Script")
 
         StakeValidator.spend(
           withdrawalScriptHash = ownWithdrawal,
-          withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0),
+          withdrawalRedeemerValidator =
+              (redeemer, lovelace) => require(lovelace === BigInt(0), "Withdrawal must be zero"),
           txInfo = tx
         )
     }
 
     inline override def reward(redeemer: Redeemer, stakingKey: Credential, tx: TxInfo): Unit = {
         StakeValidator.withdraw(
-          withdrawalValidator = (redeemer, validatorHash, txInfo) => true,
+          withdrawalValidator = (redeemer, validatorHash, txInfo) => (),
           redeemer = redeemer,
           credential = stakingKey,
           txInfo = tx

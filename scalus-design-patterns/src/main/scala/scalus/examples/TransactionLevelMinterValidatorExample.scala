@@ -43,19 +43,26 @@ object TransactionLevelMinterValidatorExample extends Validator {
         require(ownRef === outRef)
 
         // Getting the validator's script hash.
-        val ownHash = ownCredential.scriptOption.getOrFail("Own address must be Script")
+        val ownHash = ownCredential.scriptHashOrFail("Own address must be Script")
 
         /** Utilizing the design pattern, where the underlying logic expects a single "BEACON" token
           * to be either burnt or minted.
           */
         TransactionLevelMinterValidator.spend(
           minterScriptHash = ownHash,
-          minterRedeemerValidator = _.to[SampleMintRedeemer].maxUtxosToSpend > 0,
+          minterRedeemerValidator = redeemer =>
+              require(
+                redeemer.to[SampleMintRedeemer].maxUtxosToSpend > 0,
+                "maxUtxosToSpend must be positive"
+              ),
           minterTokensValidator = tnQtyDict => {
-              val (tokenName, mintQuantity) = tnQtyDict.toList.head
+              val (tokenName, mintQuantity) = tnQtyDict.singleOrFail("Exactly one BEACON entry")
               require(tokenName === utf8"BEACON")
-              if sampleSpendRedeemer.burn then mintQuantity === BigInt(-1)
-              else mintQuantity === BigInt(1)
+              require(
+                if sampleSpendRedeemer.burn then mintQuantity === BigInt(-1)
+                else mintQuantity === BigInt(1),
+                "BEACON quantity must be -1 on burn and 1 on mint"
+              )
           },
           txInfo = tx
         )
@@ -66,12 +73,9 @@ object TransactionLevelMinterValidatorExample extends Validator {
       */
     inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Unit = {
         val sampleMintRedeemer = redeemer.to[SampleMintRedeemer]
-        val scriptInputsCount = tx.inputs.foldRight(BigInt(0)) { (input, acc) =>
-            input.resolved.address.credential match
-                case Credential.ScriptCredential(validatorHash) =>
-                    if validatorHash === policyId then acc + 1 else acc
-                case _ => acc
-        }
+        val ownCredential = Credential.ScriptCredential(policyId)
+        val scriptInputsCount =
+            tx.inputs.count(_.resolved.address.credential === ownCredential)
 
         require(scriptInputsCount === sampleMintRedeemer.maxUtxosToSpend)
     }

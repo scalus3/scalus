@@ -213,7 +213,7 @@ object OrderValidator extends Validator {
                 // PRODUCTION: add a deadline field to OrderDatum and allow anyone to
                 // reclaim the order after expiry, preventing stuck orders.
                 require(
-                  tx.signatories.exists(pkh => pkh === order.owner),
+                  tx.isSignedBy(order.owner),
                   "Cancel requires owner signature"
                 )
     }

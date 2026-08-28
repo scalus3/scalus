@@ -26,25 +26,26 @@ object TransactionLevelMinterValidator {
       */
     def spend(
         minterScriptHash: ValidatorHash,
-        minterRedeemerValidator: Redeemer => Boolean,
-        minterTokensValidator: SortedMap[TokenName, BigInt] => Boolean,
+        minterRedeemerValidator: Redeemer => Unit,
+        minterTokensValidator: SortedMap[TokenName, BigInt] => Unit,
         txInfo: TxInfo
     ): Unit =
         val scriptPurpose = ScriptPurpose.Minting(minterScriptHash)
-        val tokens = txInfo.mint.toSortedMap.get(minterScriptHash).getOrElse(SortedMap.empty)
+        val tokens = txInfo.mint.tokens(minterScriptHash)
 
         val redeemer: Redeemer = txInfo.redeemers.getOrFail(scriptPurpose, MissingRedeemer)
-        require(minterRedeemerValidator(redeemer), MinterRedeemerValidatorFailed)
-        require(minterTokensValidator(tokens), MinterTokensValidatorFailed)
+        minterRedeemerValidator(redeemer)
+        minterTokensValidator(tokens)
 
     /** A minimal version of [`spend`](#spend), where the only validation is presence of at least
       * one minting/burning action with the given policy ID.
+      *
+      * This proves that the minting policy RAN, not which redeemer it ran with. Any branch of the
+      * policy satisfies it; use [`spend`] with a redeemer validator to pin the endpoint.
       */
     def spendMinimal(minterScriptHash: ValidatorHash, txInfo: TxInfo): Unit =
         txInfo.mint.toSortedMap.getOrFail(minterScriptHash, MissingMint)
 
     inline val MissingRedeemer = "There isn't a redeemer for the script purpose"
-    inline val MinterRedeemerValidatorFailed = "Minter redeemer validator failed"
-    inline val MinterTokensValidatorFailed = "Minter tokens validator failed"
     inline val MissingMint = "There isn't a mint for the minter script hash"
 }

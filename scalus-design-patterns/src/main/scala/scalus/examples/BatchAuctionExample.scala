@@ -6,7 +6,6 @@ import scalus.*
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.compiler.Options
 import scalus.cardano.onchain.plutus.v1.{Credential, PubKeyHash}
-import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.patterns.MerkelizedValidator
 import scalus.cardano.onchain.plutus.prelude.*
@@ -80,9 +79,9 @@ object BatchAuctionValidator extends DataParameterizedValidator {
         val bidRedeemer = redeemer.to[BidRedeemer]
 
         // Get own script hash
-        val ownInput = tx.findOwnInputOrFail(ownRef)
+        val ownInput = tx.findInputOrFail(ownRef)
         val ownCredential = ownInput.resolved.address.credential
-        val ownScriptHash = ownCredential.scriptOption.getOrFail("Must be script address")
+        val ownScriptHash = ownCredential.scriptHashOrFail("Must be script address")
 
         // KEY DIFFERENCE: We use MerkelizedValidator to get the verified redeemer
         // This allows us to read the clearing price that was verified by the stake validator
@@ -133,7 +132,7 @@ object BatchAuctionValidator extends DataParameterizedValidator {
         tx: TxInfo
     ): Unit = {
         val settlement = redeemer.to[AuctionSettlementRedeemer]
-        val ownScriptHash = stakingKey.scriptOption.getOrFail("Must be script credential")
+        val ownScriptHash = stakingKey.scriptHashOrFail("Must be script credential")
         val ownScriptCredential = Credential.ScriptCredential(ownScriptHash)
 
         // Collect all bids from inputs
@@ -141,9 +140,8 @@ object BatchAuctionValidator extends DataParameterizedValidator {
             case ((demand, count), input) =>
                 if input.resolved.address.credential === ownScriptCredential then
                     // This is a bid input - parse its datum
-                    val bidDatum = input.resolved.datum match
-                        case OutputDatum.OutputDatum(d) => d.to[BidDatum]
-                        case _                          => fail("Bid must have inline datum")
+                    val bidDatum =
+                        input.resolved.datum.inlineOrFail[BidDatum]("Bid must have inline datum")
 
                     // Count demand at or above clearing price
                     if bidDatum.bidPrice >= settlement.clearingPrice then
