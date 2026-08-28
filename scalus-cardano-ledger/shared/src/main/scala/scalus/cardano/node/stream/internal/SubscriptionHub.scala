@@ -1,7 +1,7 @@
 package scalus.cardano.node.stream.internal
 
 import scalus.cardano.infra.{ResyncRequiredException, UnsupportedSubscriptionException}
-import scalus.cardano.ledger.{CardanoInfo, ProtocolParams, TransactionHash}
+import scalus.cardano.ledger.{CardanoInfo, ProtocolParams, TransactionHash, Utxos}
 import scalus.cardano.node.{TransactionStatus, UtxoQuery, UtxoSource}
 import scalus.cardano.node.stream.*
 
@@ -159,7 +159,7 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             val wantsCreated = query.types.contains(UtxoEventType.Created)
             if opts.includeExistingUtxos && wantsCreated then
                 QueryMatching
-                    .matching(query.query, seed)
+                    .matching(query.query, rewindSeed(seed, sub.lastEmitted))
                     .foreach(u =>
                         mailbox.offerBuffered(
                           UtxoEvent.Created(u, u.input.transactionId, ChainPoint.origin)
@@ -474,6 +474,32 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
       * that range offer it a `RolledBack` retracting events it never received — which is exactly
       * the guarantee `noRollback` sells.
       */
+    /** The seed as it stood at `from`, rather than at the tip.
+      *
+      * A snapshot describes the chain *now*, but a subscription's watermark starts at
+      * `tip - depth`, so the blocks in between are still to be delivered. Seeding from the current
+      * snapshot therefore double-reports them: a UTxO created in one of those blocks arrives once
+      * in the seed and again when the block is released. Worse in the other direction, a UTxO
+      * created before the window and spent inside it is missing from the snapshot, so the
+      * subscriber is handed a `Spent` for something it never saw created.
+      *
+      * The hub is holding those blocks already, and `AppliedTransaction.spent` carries the
+      * *resolved* outputs, so the snapshot can simply be wound back over them: drop what they
+      * created, restore what they consumed. A UTxO both created and spent inside the window belongs
+      * to neither — it did not exist at `from` — which is why `created` is subtracted from the
+      * restored set too.
+      *
+      * At the default depth of zero there are no pending blocks and this is the snapshot unchanged.
+      */
+    private def rewindSeed(snapshot: scalus.cardano.ledger.Utxos, from: BlockNo): Utxos = {
+        val pending = recent.filter(_.blockNo > from).toSeq.flatMap(_.txs)
+        if pending.isEmpty then snapshot
+        else
+            val createdSince = pending.flatMap(_.created.keys).toSet
+            val spentSince = pending.flatMap(_.spent).toMap
+            (snapshot -- createdSince) ++ (spentSince -- createdSince)
+    }
+
     private def watermark(opts: SubscriptionOptions): BlockNo =
         math.max(0L, tip.blockNo - effectiveDepth(opts))
 

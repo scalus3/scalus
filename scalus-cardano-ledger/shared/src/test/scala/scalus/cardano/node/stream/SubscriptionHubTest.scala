@@ -2,7 +2,7 @@ package scalus.cardano.node.stream
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.*
-import scalus.cardano.node.stream.internal.{AppliedBlock, Mailbox, SubscriptionHub}
+import scalus.cardano.node.stream.internal.{AppliedBlock, AppliedTransaction, Mailbox, SubscriptionHub}
 import scalus.cardano.node.{UtxoQuery, UtxoSource}
 import scalus.testing.kit.Party
 import scalus.uplc.builtin.ByteString
@@ -165,4 +165,115 @@ class SubscriptionHubTest extends AnyFunSuite {
         )
         assertThrows[scalus.cardano.infra.UnsupportedSubscriptionException](h.require(request))
     }
+    private def input(txByte: Byte, index: Int): TransactionInput = {
+        val bytes = new Array[Byte](32)
+        bytes(31) = txByte
+        TransactionInput(TransactionHash.fromByteString(ByteString.fromArray(bytes)), index)
+    }
+
+    private def output(): TransactionOutput = TransactionOutput(alice, Value.ada(3))
+
+    /** A block whose single transaction creates and spends the given UTxOs. */
+    private def blockWith(n: Long, created: Utxos, spent: Utxos): AppliedBlock =
+        AppliedBlock(
+          point(n),
+          n,
+          Seq(AppliedTransaction(Transaction.empty, created, spent))
+        )
+
+    test("the seed is wound back over blocks that have not been delivered yet") {
+        val h = hub(caps(rollbackHorizon = Some(3)))
+        val fresh = input(1, 0)
+        (1L to 4L).foreach(n => h.applyBlock(block(n)))
+        // Block 5 creates `fresh`, and a depth-2 subscription has not been delivered it yet.
+        h.applyBlock(blockWith(5L, created = Map(fresh -> output()), spent = Map.empty))
+
+        val mailbox = Mailbox.delta[UtxoEvent]()
+        h.registerUtxo(
+          h.nextSubscriptionId(),
+          addressQuery(UtxoEventType.all),
+          SubscriptionOptions(includeExistingUtxos = true, confirmations = 2),
+          mailbox,
+          // The snapshot describes the chain now, so it contains `fresh`.
+          Map(fresh -> output())
+        )
+
+        assert(
+          drain(mailbox).isEmpty,
+          "block 5 will be delivered later and will report this UTxO's creation itself; seeding " +
+              "it as well would report the same UTxO twice"
+        )
+    }
+
+    test("a UTxO spent in an undelivered block is restored to the seed") {
+        val h = hub(caps(rollbackHorizon = Some(3)))
+        val old = input(2, 0)
+        (1L to 4L).foreach(n => h.applyBlock(block(n)))
+        // Block 5 spends a UTxO that existed before the subscription's watermark.
+        h.applyBlock(blockWith(5L, created = Map.empty, spent = Map(old -> output())))
+
+        val mailbox = Mailbox.delta[UtxoEvent]()
+        h.registerUtxo(
+          h.nextSubscriptionId(),
+          addressQuery(UtxoEventType.all),
+          SubscriptionOptions(includeExistingUtxos = true, confirmations = 2),
+          mailbox,
+          // Already spent, so the current snapshot does not contain it.
+          Map.empty
+        )
+
+        assert(
+          drain(mailbox).collect { case UtxoEvent.Created(u, _, _) => u.input } == List(old),
+          "block 5's Spent is still to be delivered, and a Spent for a UTxO the subscriber was " +
+              "never told about is not something it can act on"
+        )
+    }
+
+    // Specification rather than regression: with the rewind removed the snapshot is already
+    // empty here, so this one pins the intended rule without being able to catch its loss.
+    test("a UTxO created and spent within the undelivered window is in neither") {
+        val h = hub(caps(rollbackHorizon = Some(3)))
+        val ephemeral = input(3, 0)
+        (1L to 4L).foreach(n => h.applyBlock(block(n)))
+        h.applyBlock(blockWith(5L, created = Map(ephemeral -> output()), spent = Map.empty))
+        h.applyBlock(blockWith(6L, created = Map.empty, spent = Map(ephemeral -> output())))
+
+        val mailbox = Mailbox.delta[UtxoEvent]()
+        h.registerUtxo(
+          h.nextSubscriptionId(),
+          addressQuery(UtxoEventType.all),
+          SubscriptionOptions(includeExistingUtxos = true, confirmations = 2),
+          mailbox,
+          Map.empty
+        )
+
+        assert(
+          drain(mailbox).isEmpty,
+          "it did not exist at the watermark, and both its creation and its spend are still to " +
+              "be delivered"
+        )
+    }
+
+    // Likewise a guard, not a regression test: at depth 0 there is nothing pending, so the two
+    // implementations agree by construction. It pins that the rewind stays a no-op there.
+    test("with no confirmation gate the seed is the snapshot unchanged") {
+        val h = hub()
+        val u = input(4, 0)
+        h.applyBlock(blockWith(1L, created = Map(u -> output()), spent = Map.empty))
+
+        val mailbox = Mailbox.delta[UtxoEvent]()
+        h.registerUtxo(
+          h.nextSubscriptionId(),
+          addressQuery(UtxoEventType.all),
+          SubscriptionOptions(includeExistingUtxos = true),
+          mailbox,
+          Map(u -> output())
+        )
+
+        assert(
+          drain(mailbox).collect { case UtxoEvent.Created(x, _, _) => x.input } == List(u),
+          "nothing is pending at depth 0, so the rewind must be a no-op"
+        )
+    }
+
 }
