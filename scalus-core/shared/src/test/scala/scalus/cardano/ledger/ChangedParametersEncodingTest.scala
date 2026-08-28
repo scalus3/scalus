@@ -55,3 +55,34 @@ class ChangedParametersEncodingTest extends AnyFunSuite {
         assert(raw.numerator == 6 && raw.denominator == 10)
     }
 }
+
+/** The ledger bounds urls and DNS names by UTF-8 byte length (`textSizeN` uses `lengthWord8`,
+  * BaseTypes.hs:643-657; CDDL `text .size (0 .. 128)`). We used to check `String.length`, which
+  * counts UTF-16 units and is never larger, so we accepted values the chain rejects.
+  */
+class TextByteLengthTest extends AnyFunSuite {
+
+    // 64 characters, 4 UTF-8 bytes each = 256 bytes: well within 128 chars, well over 128 bytes.
+    private val over = "😀" * 64
+
+    test("an over-long url is rejected by byte length, not character count") {
+        assert(over.length <= 128, "precondition: within the old character-count bound")
+        assert(over.getBytes(java.nio.charset.StandardCharsets.UTF_8).length > 128)
+        assertThrows[IllegalArgumentException](
+          Anchor(over, Hash[Blake2b_256, HashPurpose.DataHash](zeros32))
+        )
+        assertThrows[IllegalArgumentException](PoolMetadata(over, zeros32))
+        // Relay validates on decode rather than on construction, so exercise that path.
+        val encoded = io.bullet.borer.Cbor.encode(Relay.SingleHostName(None, over)).toByteArray
+        assertThrows[io.bullet.borer.Borer.Error[?]](
+          io.bullet.borer.Cbor.decode(encoded).to[Relay].value
+        )
+    }
+
+    test("a 128-byte ASCII url is still accepted") {
+        val ok = "a" * 128
+        assert(PoolMetadata(ok, zeros32).url == ok)
+    }
+
+    private def zeros32 = scalus.uplc.builtin.ByteString.fromHex("00" * 32)
+}
