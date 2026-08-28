@@ -324,8 +324,17 @@ object LedgerToPlutusTranslation {
     /** Create validity interval for transaction from slot configuration.
       *
       * This function converts slot-based validity ranges to POSIX time intervals as required by
-      * Plutus script contexts. The interval bounds depend on the protocol version for backward
-      * compatibility.
+      * Plutus script contexts.
+      *
+      * The upper bound is always **exclusive**. Conway's `transValidityInterval` uses
+      * `strictUpperBound` for both the open-lower and closed shapes, and is not gated on the
+      * protocol version (`Conway/TxInfo.hs:798-810`). Only the older Alonzo/Babbage translation
+      * used an inclusive `PV1.to` for the open-lower shape (`Alonzo/Plutus/TxInfo.hs:260-270`).
+      * Scalus supports protocol version 10 and above, so that branch is unreachable and has been
+      * removed.
+      *
+      * @param protocolVersion
+      *   no longer affects the result; retained for source and binary compatibility.
       */
     // @nowarn: Suppress Long→Double implicit conversion warning. This is intentional for
     // cross-platform compatibility: JS SlotConfig uses Double (JavaScript's number type),
@@ -339,15 +348,10 @@ object LedgerToPlutusTranslation {
         protocolVersion: MajorProtocolVersion
     ): v1.Interval = {
         (validityStartSlot, ttl) match
-            case (None, None)          => v1.Interval.always
+            case (None, None) => v1.Interval.always
             case (None, Some(validTo)) =>
-                // upper bound is inclusive for protocol versions <= 8 (pre-Conway)
-                // and exclusive for protocol versions > 9 (post-Conway)
-                val closure = protocolVersion.version <= 8
-                val upper = v1.IntervalBound(
-                  v1.IntervalBoundType.Finite(BigInt(slotConfig.slotToTime(validTo).toLong)),
-                  closure
-                )
+                val upper =
+                    v1.IntervalBound.finiteExclusive(BigInt(slotConfig.slotToTime(validTo).toLong))
                 v1.Interval(v1.IntervalBound.negInf, upper)
             case (Some(validFrom), None) =>
                 v1.Interval(
