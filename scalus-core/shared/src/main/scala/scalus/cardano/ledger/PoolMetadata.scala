@@ -2,6 +2,7 @@ package scalus.cardano.ledger
 
 import io.bullet.borer.derivation.ArrayBasedCodecs.*
 import io.bullet.borer.*
+import scalus.uplc.builtin.ByteString
 
 /** Represents metadata for a stake pool in the Cardano blockchain.
   *
@@ -11,9 +12,14 @@ import io.bullet.borer.*
   * @param url
   *   URL where the metadata can be found
   * @param metadataHash
-  *   Hash of the metadata for verification
+  *   Hash of the metadata for verification. Conventionally a 32-byte Blake2b-256 digest, but the
+  *   ledger does not constrain it: the CDDL says `pool_metadata = [url, bytes]` (conway.cddl:494,
+  *   unchanged since Allegra) and Haskell holds it as `pmHash :: !ByteArray` with a decoder that
+  *   checks no length (State/StakePool.hs:293-296, :522-524). It is therefore a plain `ByteString`,
+  *   not a fixed-width `MetadataHash`; typing it as the latter made us reject pool registrations
+  *   the chain accepts.
   */
-case class PoolMetadata(url: String, metadataHash: MetadataHash) derives Codec {
+case class PoolMetadata(url: String, metadataHash: ByteString) derives Codec {
     // Validate URL length
     require(url.length <= 128, s"URL must be at most 128 characters, got ${url.length}")
 }

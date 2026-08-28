@@ -147,7 +147,7 @@ object GovAction {
                 w.writeArrayOpen(5)
                     .writeInt(4) // Tag for UpdateCommittee
                     .write(prevActionId)
-                    .write(removedMembers)
+                    .write(TaggedOrderedSet.from(removedMembers))
                     .write(addedMembers)
                     .write(threshold)
                     .writeArrayClose()
@@ -198,7 +198,10 @@ object GovAction {
 
                 case 4 => // UpdateCommittee
                     val prevActionId = r.read[Option[GovActionId]]()
-                    val removedMembers = r.read[ScalaSet[Credential]]()
+                    // `set<committee_cold_credential>` (conway.cddl:749): Conway encodes sets
+                    // with the optional 258 tag. A plain Set decoder rejects the tag outright,
+                    // so read it tag-aware; readTagged accepts both tagged and untagged input.
+                    val removedMembers = TaggedOrderedSet.readTagged[Credential](r).toSet
                     val addedMembers = r.read[Map[Credential, Long]]()
                     val threshold = r.read[UnitInterval]()
                     GovAction.UpdateCommittee(prevActionId, removedMembers, addedMembers, threshold)

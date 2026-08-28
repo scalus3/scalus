@@ -184,51 +184,24 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         info(s"V3 instances inspected for validity ranges: ${v3s.size}")
     }
 
-    /** Tripwire for the blocker described above.
-      *
-      * Every corpus transaction currently fails Scalus's CBOR decoder, so no ordering cell can run.
-      * The failures are content-level, not structural: the corpus UTxO field decodes 100/100, and
-      * the transaction CBOR is well-formed Conway. Scalus's decoders are simply stricter than the
-      * ledger's for fields the ledger leaves unconstrained - e.g. Haskell's `PoolMetadata` carries
-      * `pmHash :: !ByteArray` with no length bound
-      * (`libs/cardano-ledger-core/src/Cardano/Ledger/State/StakePool.hs:293-296`), while Scalus
-      * requires a 32-byte `MetadataHash`.
-      *
-      * This asserts the blocker is still present. When it fails, the decoders have been relaxed and
-      * the `ignore(...)` cells below should be turned back into `test(...)`.
+    /** Decode coverage. The corpus is QuickCheck output, so some instances carry values no real
+      * transaction can hold (uints above 2^63, a negative protocol major version). Those are
+      * skipped, but the count is asserted so that silent erosion of coverage fails the build.
       */
-    test("BLOCKED: corpus transactions do not decode, so ordering cells cannot run") {
-        var decoded = 0
-        val reasons = scala.collection.mutable.Map.empty[String, Int]
-        for inst <- Golden.instances do
-            Try(inst.transaction) match
-                case scala.util.Success(_) => decoded += 1
-                case scala.util.Failure(e) =>
-                    val kind = Option(e.getMessage).getOrElse("").take(48)
-                    reasons.updateWith(kind)(o => Some(o.getOrElse(0) + 1))
+    test("corpus decode coverage") {
+        val decoded = Golden.instances.count(i => Try(i.transaction).isSuccess)
         val utxoDecoded = Golden.instances.count(i => Try(i.utxo).isSuccess)
         info(s"transactions decoded: $decoded/100 ; utxo sets decoded: $utxoDecoded/100")
-        info(
-          "failure reasons: " + reasons.toSeq
-              .sortBy(-_._2)
-              .take(5)
-              .map((k, n) => s"$n x $k")
-              .mkString(" | ")
-        )
+        assert(utxoDecoded == 100, "every UTxO set must decode")
         assert(
-          utxoDecoded == 100,
-          "the UTxO field decodes cleanly, confirming the corpus slicing is correct"
-        )
-        assert(
-          decoded == 0,
-          s"$decoded transaction(s) now decode - the strict-decoder blocker is (partly) fixed. " +
-              "Convert the ignore(...) ordering cells below back into test(...)."
+          decoded >= 83,
+          s"only $decoded/100 transactions decode, down from 83 - a decoder regressed"
         )
     }
 
     // ================= V3 =================
 
-    ignore("V3 withdrawals: DEFECT 1 - Ord[Credential] disagrees with the ledger") {
+    test("V3 withdrawals: DEFECT 1 - Ord[Credential] disagrees with the ledger") {
         val c = cell(
           Golden.PlutusV3,
           i => mapKeys(i.txInfoField(6)).map(credentialKey),
@@ -249,7 +222,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         )
     }
 
-    ignore("V3 votes: DEFECT 3 - toString sort destroys the ledger's Voter order") {
+    test("V3 votes: DEFECT 3 - toString sort destroys the ledger's Voter order") {
         val c = cell(
           Golden.PlutusV3,
           i => mapKeys(i.txInfoField(12)).map(voterKey),
@@ -270,7 +243,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         )
     }
 
-    ignore("V3 data: ordering matches (hash-keyed, no constructor involved)") {
+    test("V3 data: ordering matches (hash-keyed, no constructor involved)") {
         val c = cell(
           Golden.PlutusV3,
           i => mapKeys(i.txInfoField(10)).map(k => Hex.bytesToHex(newtypeBytes(k))),
@@ -290,7 +263,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
 
     // ================= V2 =================
 
-    ignore("V2 withdrawals: ordering matches (ledger delivers Plutus order here)") {
+    test("V2 withdrawals: ordering matches (ledger delivers Plutus order here)") {
         val c = cell(
           Golden.PlutusV2,
           i => mapKeys(i.txInfoField(6)).map(stakingCredentialKey),
@@ -308,7 +281,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         assert(c.mismatches.isEmpty, s"V2 withdrawal ordering diverged: ${c.summary}")
     }
 
-    ignore("V2 data: ordering matches") {
+    test("V2 data: ordering matches") {
         val c = cell(
           Golden.PlutusV2,
           i => mapKeys(i.txInfoField(10)).map(k => Hex.bytesToHex(newtypeBytes(k))),
@@ -328,7 +301,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
 
     // ================= V1 =================
 
-    ignore("V1 withdrawals: DEFECT 7 - raw-hash order, with no fromList to mask it") {
+    test("V1 withdrawals: DEFECT 7 - raw-hash order, with no fromList to mask it") {
         val c = cell(
           Golden.PlutusV1,
           i => listPairKeys(i.txInfoField(5)).map(stakingCredentialKey),

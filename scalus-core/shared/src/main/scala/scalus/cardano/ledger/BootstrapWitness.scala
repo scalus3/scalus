@@ -16,15 +16,20 @@ case class BootstrapWitness(
     /** Signature (64 bytes) */
     signature: ByteString,
 
-    /** Chain code (32 bytes) */
+    /** Chain code. Conventionally 32 bytes, but the ledger does not constrain it: the CDDL says
+      * `chain_code : bytes` (conway.cddl:778) and Haskell holds it as an unconstrained
+      * `ChainCode ByteArray` (Keys/Bootstrap.hs:67). Requiring 32 here made us reject transactions
+      * the chain accepts.
+      */
     chainCode: ByteString,
 
     /** Attributes */
     attributes: ByteString
 ) derives Codec:
+    // vkey and signature ARE constrained by the CDDL (`bytes .size 32` / `.size 64`), so those
+    // checks stay; chain_code and attributes are plain `bytes` and must not be checked.
     require(publicKey.size == 32, s"Public key must be 32 bytes, got ${publicKey.size}")
     require(signature.size == 64, s"Signature must be 64 bytes, got ${signature.size}")
-    require(chainCode.size == 32, s"Chain code must be 32 bytes, got ${chainCode.size}")
 
     /** Rebuilds the `addrRoot` of the corresponding Byron address, matching cardano-ledger's
       * `bootstrapWitKeyHash` (Cardano/Ledger/Keys/Bootstrap.hs): Blake2b-224 of SHA3-256 of the
