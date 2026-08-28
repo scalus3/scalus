@@ -42,13 +42,24 @@ private[stream] trait ChainFollower {
       */
     def events: ScalusAsyncSource[ChainEvent]
 
-    /** Which sources the follower should observe from now on.
+    /** Which sources the follower should observe from now on, and **the height from which that
+      * takes effect**.
       *
       * A metered follower polls per source, so it must be told what anyone is actually subscribed
-      * to; one that reads whole blocks ignores this. Called by the provider as subscriptions come
-      * and go, and the follower is expected to cope with it changing between polls.
+      * to; one that reads whole blocks ignores this and reports its current height.
+      *
+      * The return value is what makes a subscription's start point exact rather than approximate.
+      * Registering a subscription and telling the follower to watch its sources are two steps, and
+      * a block processed between them is covered by neither: the subscriber would be registered
+      * from the tip, silently miss that block — nobody having fetched it on its behalf — and the
+      * hub would then advance it past that height when the next covered block arrived.
+      *
+      * So a follower returns the last height whose source set was already fixed. Every block above
+      * it is guaranteed to have been assembled with `sources` included, which lets the caller
+      * register the subscription at exactly that height instead of at whatever the tip happened to
+      * be. The guarantee becomes structural rather than a matter of how the two calls interleave.
       */
-    def watch(sources: Set[scalus.cardano.node.UtxoSource]): Unit
+    def watch(sources: Set[scalus.cardano.node.UtxoSource]): scalus.cardano.node.stream.BlockNo
 
     def close(): Unit
 }

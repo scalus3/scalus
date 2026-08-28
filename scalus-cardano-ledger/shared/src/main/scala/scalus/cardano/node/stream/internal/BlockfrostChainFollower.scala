@@ -97,9 +97,20 @@ private[stream] final class BlockfrostChainFollower(
     private var stopped = false
     private var started = false
 
+    /** The highest height whose set of probed sources has already been decided.
+      *
+      * Updated in the same critical section that reads `watched`, which is what lets `watch` report
+      * a position a caller can rely on: a block already being assembled has a height at or below
+      * this, and every block assembled afterwards sees the new source set.
+      */
+    private var committed: BlockNo = 0L
+
     override def events: ScalusAsyncSource[ChainEvent] = mailbox
 
-    override def watch(sources: Set[UtxoSource]): Unit = synchronized { watched = sources }
+    override def watch(sources: Set[UtxoSource]): BlockNo = synchronized {
+        watched = sources
+        committed
+    }
 
     override def close(): Unit = {
         synchronized { stopped = true }
@@ -117,7 +128,12 @@ private[stream] final class BlockfrostChainFollower(
         if begin then
             api.latestBlock().onComplete {
                 case Success(tip) =>
-                    synchronized { last = Some(tip) }
+                    synchronized {
+                        last = Some(tip)
+                        // Nothing below the tip is ever emitted, so this is the first height a
+                        // subscription could be observed from.
+                        committed = tip.blockNo
+                    }
                     loop()
                 case Failure(t) => mailbox.fail(t)
             }
@@ -172,7 +188,13 @@ private[stream] final class BlockfrostChainFollower(
         // whole watched set would tell the hub this block is authoritative for, say, a FromAsset
         // subscription that was never looked up — which is precisely the silent event loss
         // BlockCoverage exists to prevent, committed by the thing that reports the coverage.
-        val addresses = synchronized(watched).collect { case UtxoSource.FromAddress(a) => a }
+        val addresses = synchronized {
+            // Fixing this block's source set and recording that it is fixed must be one step; a
+            // `watch` landing between them would be told this height was already covered by the
+            // new set when it was not.
+            committed = block.blockNo
+            watched.collect { case UtxoSource.FromAddress(a) => a }
+        }
         val probed: Set[UtxoSource] = addresses.map(UtxoSource.FromAddress(_))
         val hashes = sequentiallyCollect(addresses.toSeq)(a =>
             api.addressTransactionsIn(a, block.blockNo, block.blockNo)

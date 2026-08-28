@@ -158,4 +158,47 @@ class BlockfrostChainFollowerTest extends AnyFunSuite {
           "no subscriptions means no per-address cost, but the tip must still advance"
         )
     }
+    test("watch reports the height its source set takes effect from") {
+        val api = new FakeApi(ref(10L), chain = Seq(ref(11L), ref(12L)))
+        val f = follower(api, polls = 1)
+        f.start()
+
+        // The follower has processed up to 12, so a set installed now governs 13 onwards.
+        assert(
+          f.watch(Set(UtxoSource.FromAddress(alice))) == 12L,
+          "a subscription registered against this position is covered by every block above it, " +
+              "which is what makes its start point exact rather than whatever the tip happened " +
+              "to be when the two calls interleaved"
+        )
+    }
+
+    test("watch before any block reports the position nothing was observed from") {
+        val api = new FakeApi(ref(10L))
+        val f = follower(api, polls = 0)
+
+        assert(
+          f.watch(Set(UtxoSource.FromAddress(alice))) == 0L,
+          "nothing has been observed yet, so a subscription registered here must not be treated " +
+              "as having already been delivered anything"
+        )
+    }
+
+    test("a block already being assembled is not claimed by a later watch") {
+        val api = new FakeApi(ref(10L), chain = Seq(ref(11L)))
+        val f = follower(api, polls = 1)
+        f.start()
+
+        // Block 11 fixed its source set (empty) before this call, so watch must not report a
+        // position that would imply 11 was covered by the new set.
+        val from = f.watch(Set(UtxoSource.FromAddress(alice)))
+        val emitted = drain(f.events).collect { case ChainEvent.RollForward(b) => b }
+
+        assert(emitted.map(_.blockNo) == List(11L))
+        assert(
+          emitted.head.coverage == BlockCoverage.Sources(Set.empty),
+          "block 11 was assembled before the watch, and says so"
+        )
+        assert(from >= 11L, "so a subscription starting here must start above block 11, not at it")
+    }
+
 }

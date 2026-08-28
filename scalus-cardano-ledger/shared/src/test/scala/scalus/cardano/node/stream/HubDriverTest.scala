@@ -41,7 +41,7 @@ class HubDriverTest extends AnyFunSuite {
         val mailbox: Mailbox[ChainEvent] = Mailbox.delta[ChainEvent]()
         var closed = false
         override def events: ScalusAsyncSource[ChainEvent] = mailbox
-        override def watch(sources: Set[UtxoSource]): Unit = ()
+        override def watch(sources: Set[UtxoSource]): BlockNo = 0L
         override def close(): Unit = { closed = true; mailbox.close() }
     }
 
