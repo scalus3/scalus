@@ -105,11 +105,14 @@ enum GovAction {
 
 object GovAction {
 
-    /** Ordering matches Haskell's derived Ord constructor order. Note: This only compares by
-      * constructor tag (ordinal), not by fields. Full field comparison would require Ordering for
-      * many nested types.
-      */
-    given Ordering[GovAction] = Ordering.by(_.ordinal)
+    // No Ordering[GovAction] on purpose. One used to exist, comparing only `_.ordinal`, which
+    // made any two actions sharing a constructor compare equal: `compare(a, b) == 0` without
+    // `a == b`. That breaks the Ordering contract, and a SortedSet would have silently dropped
+    // distinct proposals. It existed only to let Ordering[ProposalProcedure] compile, and that
+    // in turn became unused once `proposalProcedures` moved to the insertion-ordered
+    // TaggedOrderedSet; both are now deleted. A sound ordering would need Ordering instances
+    // for ProtocolParamUpdate, Constitution and the rest of the nested tree, and nothing sorts
+    // governance actions - the ledger keeps them in submitter order.
 
     /** CBOR Encoder for GovAction. Encodes as a tagged structure based on the action type.
       */

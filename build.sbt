@@ -458,7 +458,13 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.<init>$default$10"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo._10"),
         ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.copy$default$10"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.redeemers")
+        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.redeemers"),
+        // Deleted: both compared only the GovAction constructor ordinal, so distinct proposals
+        // compared equal and a SortedSet would have silently dropped one - a violation of the
+        // Ordering contract, not merely a weak order. Neither was used: proposalProcedures is a
+        // TaggedOrderedSet, which preserves submitter order and never sorts.
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.GovAction.given_Ordering_GovAction"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.ProposalProcedure.given_Ordering_ProposalProcedure")
       ),
 
       // enable when debug compilation of tests

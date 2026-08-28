@@ -25,10 +25,9 @@ case class ProposalProcedure(
 ) derives Codec
 
 object ProposalProcedure {
-
-    /** Ordering matches Haskell's derived Ord: compare fields in declaration order (deposit,
-      * rewardAccount, govAction, anchor)
-      */
-    given Ordering[ProposalProcedure] =
-        Ordering.by(p => (p.deposit.value, p.rewardAccount, p.govAction, p.anchor))
+    // No Ordering[ProposalProcedure] on purpose. It compared `govAction` via an Ordering that
+    // looked only at the constructor ordinal, so distinct proposals compared equal and a
+    // SortedSet would have dropped one. It was also unused: `proposalProcedures` is a
+    // TaggedOrderedSet, which preserves submitter order and never sorts, matching the ledger's
+    // OSet. Add one back only with a genuinely antisymmetric comparison.
 }
