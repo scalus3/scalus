@@ -96,6 +96,10 @@ measured step counts ──► budget ────────► #prep_uplc tar
                                           by blaster ──► Z3
 ```
 
+The exporter also evaluates each target on the JVM and emits `#guard` lines asserting the Lean
+CEK produces the same value. That is free differential testing of the two CEK implementations,
+and it makes an under-sized budget fail loudly instead of silently making theorems vacuous.
+
 Two halves, one generated interface between them. The Scala half owns *what* gets compiled
 and *with which options*; the Lean half owns *what is claimed about it*. The generated
 directory is the whole contract, and it is committed, so the Lean half builds with no JVM
@@ -175,8 +179,15 @@ Options.releaseUntagged.copy(valueBuiltins = false)
 `fromFrameToInt` gives `none` and conditional properties hold vacuously. This is sound but
 easy to misread.
 
-The exporter runs Scalus's own CEK over each target's sample inputs, takes the maximum step
-count, and writes `budget = 2 x max` into `Generated/Targets.lean`.
+**Budgets are calibrated in Lean, not in Scala.** Scalus's CEK and the Lean model do not count
+the same thing: Plutus charges per `Eval` transition, while the Lean `runSteps` counts `Eval`
+and `Return`. Measured, the Lean count is about 1.85x the Scalus one (`min` 23 vs 13, `abs`
+26 vs 14, `gcd 12 18` 161 vs 87). A budget derived as `2 x scalusSteps` would therefore carry
+almost no real headroom: for `gcd` it yields 174, while `gcd -19 14` needs 203 Lean steps. That
+is exactly the false-positive described below.
+
+So: budgets are named constants in the hand-written proof files, set from measurements taken
+with the Lean calibration helper, with generous headroom. The exporter does not guess them.
 
 One rule, in the README and in every CI failure message:
 
@@ -187,7 +198,7 @@ counterexample at `x = -19, y = 14`. It was false: the optimized program halts a
 the unoptimized at 307, and the budget was 300. Both return 1.
 
 A calibration helper goes in `ScalusProofs/Prelude.lean`, using the executable CEK to find the
-exact minimum halting step count without invoking the prover:
+exact minimum halting step count for the Lean machine without invoking the prover:
 
 ```lean
 def steps (p : PlutusScript) (xs : List Integer) (hi : Nat) : Option Nat :=
