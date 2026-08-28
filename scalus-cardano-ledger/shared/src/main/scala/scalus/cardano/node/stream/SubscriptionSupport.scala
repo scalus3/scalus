@@ -8,15 +8,22 @@ enum SubscriptionRequest {
     case Transaction(query: TransactionQuery, opts: SubscriptionOptions)
     case Block(query: BlockQuery, opts: SubscriptionOptions)
 
+    /** Following one transaction's status. Carries no options: latest-value streams take none, as
+      * [[SubscriptionOptions]] explains.
+      */
+    case TransactionStatus(txHash: scalus.cardano.ledger.TransactionHash)
+
     def options: SubscriptionOptions = this match
-        case Utxo(_, o)        => o
-        case Transaction(_, o) => o
-        case Block(_, o)       => o
+        case Utxo(_, o)           => o
+        case Transaction(_, o)    => o
+        case Block(_, o)          => o
+        case _: TransactionStatus => SubscriptionOptions()
 
     def kind: SubscriptionKind = this match
-        case _: Utxo        => SubscriptionKind.Utxo
-        case _: Transaction => SubscriptionKind.Transaction
-        case _: Block       => SubscriptionKind.Block
+        case _: Utxo              => SubscriptionKind.Utxo
+        case _: Transaction       => SubscriptionKind.Transaction
+        case _: Block             => SubscriptionKind.Block
+        case _: TransactionStatus => SubscriptionKind.TransactionStatus
 }
 
 /** The verdict on a subscription request. */
@@ -103,6 +110,10 @@ object SubscriptionSupport {
                     // looking up a source cannot serve one at all. `isIndexed` answers `true` for
                     // blocks because there is nothing to *scan*, which is the opposite question.
                     request match
+                        case _: SubscriptionRequest.TransactionStatus =>
+                            // Nothing to replay: the status of a transaction is a current fact,
+                            // not a history the subscriber can resume through.
+                            None
                         case _: SubscriptionRequest.Block =>
                             Some(
                               Unsupported(
@@ -145,6 +156,9 @@ object SubscriptionSupport {
             case SubscriptionRequest.Transaction(q, _) => indexedTxQuery(q, pushdown)
             // Every block is a match, so there is nothing to look up and nothing to scan for.
             case SubscriptionRequest.Block(_, _) => true
+            // A hash is the most direct lookup there is; a provider that serves this kind at all
+            // serves it without scanning.
+            case _: SubscriptionRequest.TransactionStatus => true
 
     private def indexedUtxoQuery(query: UtxoQuery, pushdown: Set[PushdownKind]): Boolean =
         query match

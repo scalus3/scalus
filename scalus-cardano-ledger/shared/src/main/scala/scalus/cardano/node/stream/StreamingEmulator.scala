@@ -159,6 +159,7 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     def subscribeTransactionStatus[C[_]: ScalusAsyncStreamAdapter](
         txHash: TransactionHash
     ): C[TransactionStatus] = {
+        hub.require(SubscriptionRequest.TransactionStatus(txHash))
         val id = hub.nextSubscriptionId()
         val mailbox =
             Mailbox.latestValue[TransactionStatus](() => hub.unregisterTxStatus(txHash, id))
@@ -235,7 +236,11 @@ object StreamingEmulator {
       * the declared horizon so the hub and the classifier agree on the depth.
       */
     def capabilities(securityParam: Int): StreamCapabilities = StreamCapabilities(
-      kinds = Set(SubscriptionKind.Utxo, SubscriptionKind.Transaction),
+      kinds = Set(
+        SubscriptionKind.Utxo,
+        SubscriptionKind.Transaction,
+        SubscriptionKind.TransactionStatus
+      ),
       pushdown = PushdownKind.all,
       scanning = ScanSupport.Free,
       replay = ReplaySupport.NoReplay,

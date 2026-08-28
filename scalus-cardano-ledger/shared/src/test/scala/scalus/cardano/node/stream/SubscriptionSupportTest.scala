@@ -216,4 +216,43 @@ class SubscriptionSupportTest extends AnyFunSuite {
         )
     }
 
+    test("a provider that does not declare TransactionStatus refuses to follow a transaction") {
+        val noStatus = StreamCapabilities(
+          kinds = Set(SubscriptionKind.Utxo, SubscriptionKind.Transaction),
+          pushdown = Set(PushdownKind.Address),
+          scanning = ScanSupport.Unsupported,
+          replay = ReplaySupport.NoReplay,
+          rollbackHorizon = None,
+          maxConfirmations = None,
+          idleSignals = true
+        )
+        val request = SubscriptionRequest.TransactionStatus(someTxHash)
+        assert(
+          SubscriptionSupport.of(request, noStatus).isInstanceOf[SubscriptionSupport.Unsupported],
+          "a provider that only observes the sources it was asked to watch cannot say what " +
+              "happened to an arbitrary hash, and reporting Pending forever would be worse than " +
+              "refusing — the subscriber could not tell that apart from a transaction that has " +
+              "genuinely not landed"
+        )
+    }
+
+    test("following a transaction is a lookup, so it is Indexed wherever it is served") {
+        val withStatus = StreamCapabilities(
+          kinds = SubscriptionKind.all,
+          pushdown = Set(PushdownKind.Address),
+          // Even where no scan is possible at all: a hash is the most direct lookup there is.
+          scanning = ScanSupport.Unsupported,
+          replay = ReplaySupport.NoReplay,
+          rollbackHorizon = None,
+          maxConfirmations = None,
+          idleSignals = true
+        )
+        assert(
+          SubscriptionSupport.of(
+            SubscriptionRequest.TransactionStatus(someTxHash),
+            withStatus
+          ) == SubscriptionSupport.Indexed
+        )
+    }
+
 }

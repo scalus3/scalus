@@ -351,6 +351,8 @@ abstract class StreamProviderConformance extends AnyFunSuite {
             )
         case SubscriptionKind.Block =>
             SubscriptionRequest.Block(BlockQuery.All, SubscriptionOptions())
+        case SubscriptionKind.TransactionStatus =>
+            SubscriptionRequest.TransactionStatus(f.payTo(f.freshAddress(), Value.ada(1)))
 
     /** Every shape worth classifying: indexed, unindexed, and unindexed-but-accepted. */
     private def candidateRequests(f: StreamConformanceFixture): Seq[SubscriptionRequest] = {
@@ -380,6 +382,8 @@ abstract class StreamProviderConformance extends AnyFunSuite {
                 case SubscriptionRequest.Transaction(q, o) =>
                     p.subscribeTransactionQuery(q, o).cancel()
                 case SubscriptionRequest.Block(q, o) => p.subscribeBlockQuery(q, o).cancel()
+                case SubscriptionRequest.TransactionStatus(h) =>
+                    p.subscribeTransactionStatus(h).cancel()
             Right(())
         catch case e: UnsupportedSubscriptionException => Left(e)
     }

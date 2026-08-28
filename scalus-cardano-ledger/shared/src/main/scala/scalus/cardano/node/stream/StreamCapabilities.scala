@@ -22,10 +22,22 @@ enum SubscriptionKind {
     case Utxo
     case Transaction
     case Block
+
+    /** Following one transaction from the mempool into a block and back out again.
+      *
+      * Declared separately from [[Transaction]] because it is a different question. A provider that
+      * observes only the sources it was asked to watch can serve transaction *subscriptions* — it
+      * matches what it fetched — while having no way to answer "what happened to this particular
+      * hash", because a transaction it was never asked about is a transaction it never looked up.
+      * Left undeclared, such a provider reports `Pending` forever for a transaction that is
+      * confirmed on chain, which is worse than refusing: the subscriber has no way to tell a
+      * transaction that has not landed from one the provider never watched.
+      */
+    case TransactionStatus
 }
 
 object SubscriptionKind {
-    val all: Set[SubscriptionKind] = Set(Utxo, Transaction, Block)
+    val all: Set[SubscriptionKind] = Set(Utxo, Transaction, Block, TransactionStatus)
 }
 
 /** What happens to a subscription the provider cannot serve from an index.
