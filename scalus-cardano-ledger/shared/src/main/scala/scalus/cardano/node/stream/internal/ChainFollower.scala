@@ -34,6 +34,15 @@ private[stream] enum ChainEvent {
   */
 private[stream] trait ChainFollower {
 
+    /** Begin producing events.
+      *
+      * Separate from construction so that a follower is not off polling a chain — spending a
+      * metered quota — before whoever built it has finished wiring up a consumer. [[HubDriver]]
+      * calls this as it starts pumping, so the two halves of the lifecycle cannot be started out of
+      * order. Idempotent, and a closed follower stays closed.
+      */
+    def start(): Unit
+
     /** The follower's event stream. Single-consumer — [[HubDriver]] is the consumer.
       *
       * A failed pull ends the follower: the driver propagates the cause to every subscription

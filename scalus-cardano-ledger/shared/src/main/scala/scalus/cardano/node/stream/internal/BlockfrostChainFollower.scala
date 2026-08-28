@@ -148,7 +148,7 @@ private[stream] final class BlockfrostChainFollower(
     private def isStopped: Boolean = synchronized(stopped) || mailbox.isClosed
 
     /** Start polling. The loop is a `Future` chain, not a thread, so it works on Scala.js too. */
-    def start(): Unit = {
+    override def start(): Unit = {
         val begin = synchronized {
             if started || stopped then false
             else { started = true; true }
