@@ -63,6 +63,19 @@ private[stream] trait BlockfrostChainApi {
   * addresses are watched*, not with how busy the chain is, which is the whole reason this polls per
   * address rather than fetching blocks.
   *
+  * Two per transaction is the floor rather than the figure. A transaction whose outputs cannot be
+  * classified from `/txs/{hash}/utxos` alone costs a third (see
+  * `BlockfrostProvider.scriptPhaseFailed`), and one touching a reference script costs a further two
+  * per script hash the client has not already cached.
+  *
+  * ## A transient failure is not survived
+  *
+  * There is no retry or backoff anywhere on this path: any non-2xx that is not a 404 throws, and
+  * the failure travels straight to every subscriber. On a metered backend where a 429 is a normal
+  * event that is a real gap — and so is the converse, a lagging replica answering 404 for a block
+  * it has not indexed yet, which is reported here as a reorg. Both are known and deliberate for
+  * now; see the M2 plan.
+  *
   * ## Reorgs: detected, not reconciled
   *
   * When `/blocks/{hash}/next` 404s, the block we last reported is no longer on chain. This follower
@@ -131,6 +144,12 @@ private[stream] final class BlockfrostChainFollower(
             )
         watched = sources
         committed.map(_.point).getOrElse(ChainPoint.origin)
+    }
+
+    override def stopWatching(sources: Set[UtxoSource]): Unit = synchronized {
+        // A stopped follower assembles nothing, so there is nothing left to stop watching; see
+        // ChainFollower.stopWatching for why this must not throw.
+        if !stopped then watched = sources
     }
 
     override def close(): Unit = {

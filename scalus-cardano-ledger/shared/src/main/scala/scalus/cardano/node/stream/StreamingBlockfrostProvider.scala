@@ -32,6 +32,14 @@ import scala.util.{Failure, Success}
   * A caller consulting `SubscriptionSupport.of` before subscribing therefore gets exactly the
   * answer `subscribe` will give.
   *
+  * ## A dead feed is loud, but a transient one is not survived
+  *
+  * Any HTTP failure the follower cannot classify ends every subscription, and nothing retries. That
+  * is right for a feed that has genuinely gone — a subscriber left believing a stale view is worse
+  * than one told to resync — and it is heavy-handed for the 429 a metered backend produces as a
+  * matter of course. The protocol-parameter loop, which is independent of the chain feed, does
+  * retry and reports only after a run of failures; the chain feed does not yet.
+  *
   * ## Reorgs are detected, not reconciled
   *
   * `rollbackHorizon = None`, and that stays truthful: this provider never emits `RolledBack`. When
@@ -88,6 +96,18 @@ class StreamingBlockfrostProvider private[stream] (
     private val watchedBy = mutable.LinkedHashMap.empty[Long, Set[UtxoSource]]
 
     private var closed: Boolean = false
+    private var started: Boolean = false
+
+    /** Consecutive failed parameter refreshes. A poll that fails is retried at the next interval —
+      * parameters change at epoch boundaries, so one missed read cannot matter — but a run of them
+      * means the value subscribers hold may genuinely be wrong, and they are told.
+      */
+    private var paramFailures: Int = 0
+
+    /** Set once the refresh loop has given up, so `subscribeProtocolParams` refuses rather than
+      * handing back a stream frozen at the last value it happened to see.
+      */
+    private var paramsAbandoned: Boolean = false
 
     def executionContext: ExecutionContext = provider.executionContext
 
@@ -101,8 +121,14 @@ class StreamingBlockfrostProvider private[stream] (
       * every caller wants.
       */
     def start(): Unit = {
-        driver.start()
-        refreshParamsLater()
+        val begin = synchronized {
+            if started then false
+            else { started = true; true }
+        }
+        if begin then {
+            driver.start()
+            refreshParamsLater()
+        }
     }
 
     // ── one-shot reads: straight through to the Blockfrost client ───────────
@@ -154,8 +180,9 @@ class StreamingBlockfrostProvider private[stream] (
         query: UtxoEventQuery,
         opts: SubscriptionOptions
     ): C[UtxoEvent] = {
-        hub.require(SubscriptionRequest.Utxo(query, opts))
-        val sources = requireWatchable(StreamingBlockfrostProvider.utxoQuerySources(query.query))
+        val request = SubscriptionRequest.Utxo(query, opts)
+        hub.require(request)
+        val sources = requireWatchable(SubscriptionSupport.sourcesFor(request, capabilities))
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.deltaFor[UtxoEvent](opts, () => releaseUtxo(id))
         // Watch, then snapshot, then register — see the class doc. The point `watch` returns is not
@@ -185,8 +212,9 @@ class StreamingBlockfrostProvider private[stream] (
         query: TransactionQuery,
         opts: SubscriptionOptions
     ): C[TransactionEvent] = {
-        hub.require(SubscriptionRequest.Transaction(query, opts))
-        val sources = requireWatchable(StreamingBlockfrostProvider.transactionQuerySources(query))
+        val request = SubscriptionRequest.Transaction(query, opts)
+        hub.require(request)
+        val sources = requireWatchable(SubscriptionSupport.sourcesFor(request, capabilities))
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.deltaFor[TransactionEvent](opts, () => releaseTransaction(id))
         // No seed to take: "the transactions that already happened" is not a state a snapshot can
@@ -218,6 +246,13 @@ class StreamingBlockfrostProvider private[stream] (
     }
 
     def subscribeProtocolParams[C[_]: ScalusAsyncStreamAdapter](): C[ProtocolParams] = {
+        // A stream that silently never updates is indistinguishable from parameters that have not
+        // changed, which is the whole reason the refresh loop reports rather than retries forever.
+        if synchronized(paramsAbandoned) then
+            throw new IllegalStateException(
+              "this provider's protocol-parameter feed failed and was abandoned; its value can no " +
+                  "longer be trusted to be current"
+            )
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ProtocolParams](() => hub.unregisterParams(id))
         hub.registerParams(id, mailbox)
@@ -287,12 +322,14 @@ class StreamingBlockfrostProvider private[stream] (
       *
       * Shrinking matters on a metered backend: a cancelled subscription that kept its address in
       * the watched set would go on costing one request per block for the life of the provider.
+      *
+      * Through `stopWatching` rather than `watch`, because this runs from a mailbox's release hook
+      * and one of the paths that fires those is `hub.failAll` — a follower that has just failed the
+      * feed is already stopped, and a throw here would abort the fan-out partway and strand every
+      * subscription after the first.
       */
     private def unwatch(id: Long): Unit = synchronized {
-        // A closed provider has a stopped follower, which refuses `watch` — rightly, since a
-        // position it returned could not be honoured. Nothing is left to stop watching anyway.
-        if watchedBy.remove(id).isDefined && !closed then
-            follower.watch(watchedBy.values.flatten.toSet)
+        if watchedBy.remove(id).isDefined then follower.stopWatching(watchedBy.values.flatten.toSet)
         ()
     }
 
@@ -326,8 +363,24 @@ class StreamingBlockfrostProvider private[stream] (
                     else provider.refreshCardanoInfo.map(i => hub.updateParams(i.protocolParams))
                 )
                 .onComplete {
-                    case Success(_) => refreshParamsLater()
-                    case Failure(t) => hub.failParams(t)
+                    case Success(_) =>
+                        synchronized { paramFailures = 0 }
+                        refreshParamsLater()
+                    case Failure(t) =>
+                        // A poll is a poll: one failure is retried at the next interval rather than
+                        // ending anything, because parameters change every five days and a single
+                        // 429 says nothing about them. A run of them is different — by then the
+                        // value subscribers hold may really be stale — so the subscribers are
+                        // failed and the feed is declared dead, rather than left retrying silently
+                        // or, worse, handing later subscribers a frozen stream.
+                        val giveUp = synchronized {
+                            paramFailures += 1
+                            if paramFailures >= StreamingBlockfrostProvider.maxParamFailures then
+                                paramsAbandoned = true
+                                true
+                            else false
+                        }
+                        if giveUp then hub.failParams(t) else refreshParamsLater()
                 }
 }
 
@@ -341,6 +394,15 @@ object StreamingBlockfrostProvider {
       * for the per-address and per-transaction reads that actually carry events.
       */
     val defaultPollInterval: FiniteDuration = 10.seconds
+
+    /** Consecutive failed parameter refreshes before the feed is declared dead.
+      *
+      * More than one, because a single failed poll says nothing: parameters change at epoch
+      * boundaries five days apart, so one missed hourly read cannot have made the held value wrong.
+      * Not many more, because by the time a run of them has gone by the value may genuinely be
+      * stale, and a subscriber holding a stale `minFeeA` builds a transaction the network rejects.
+      */
+    val maxParamFailures: Int = 3
 
     /** How often to re-read protocol parameters, by default. Parameters change at epoch boundaries,
       * five days apart, so hourly is already far more often than it can matter.
@@ -384,37 +446,4 @@ object StreamingBlockfrostProvider {
         streaming.start()
         streaming
     }
-
-    /** The address sources a UTxO query needs watched, as flat leaves.
-      *
-      * Flattened rather than kept as the composite the caller wrote, because that is the shape both
-      * consumers want: the follower probes one address endpoint at a time, and `BlockCoverage`
-      * tests membership of exactly these leaves when deciding whether a block covers the query.
-      *
-      * An intersection contributes whatever addresses it has, which is enough — one covered arm
-      * answers an `And`, and the rest post-filters data already in hand. A union whose other arm is
-      * not an address never reaches here: [[SubscriptionSupport.of]] refuses it, because a union is
-      * only as indexed as its worst arm.
-      */
-    private[stream] def utxoQuerySources(query: UtxoQuery): Set[UtxoSource] = {
-        def fromSource(source: UtxoSource): Set[UtxoSource] = source match
-            case a: UtxoSource.FromAddress => Set(a)
-            case UtxoSource.Or(l, r)       => fromSource(l) ++ fromSource(r)
-            case UtxoSource.And(l, r)      => fromSource(l) ++ fromSource(r)
-            case _                         => Set.empty
-        query match
-            case q: UtxoQuery.Simple         => fromSource(q.source)
-            case UtxoQuery.Or(l, r, _, _, _) => utxoQuerySources(l) ++ utxoQuerySources(r)
-    }
-
-    /** The address sources a transaction query needs watched, on the same principle as
-      * [[utxoQuerySources]] — and matching how `SubscriptionHub` decides whether a block's coverage
-      * answers such a query.
-      */
-    private[stream] def transactionQuerySources(query: TransactionQuery): Set[UtxoSource] =
-        query match
-            case TransactionQuery.InvolvesAddress(a) => Set(UtxoSource.FromAddress(a))
-            case TransactionQuery.AllOf(qs)          => qs.flatMap(transactionQuerySources).toSet
-            case TransactionQuery.AnyOf(qs)          => qs.flatMap(transactionQuerySources).toSet
-            case _                                   => Set.empty
 }
