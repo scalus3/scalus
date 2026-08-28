@@ -849,14 +849,15 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
         ),
-        // TEMPORARY, and meant to be removed. The streaming facade is declared out of the
-        // cross-language interop surface — it has two higher-kinded parameters, context bounds and
-        // macro subscribe methods, none of it reachable from Java, Kotlin or JS — and is
-        // deliberately unfrozen for one or two releases while the Blockfrost and Ogmios providers
-        // shake its shapes out. Freeze it after that and delete this filter.
-        // Without it, the first release that ships this package freezes it: it is absent from the
-        // previous published artifact today, which is the only reason MiMa is currently silent.
-        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.*")
+        // The streaming hub's internals churn while the provider implementations are built —
+        // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: CLAUDE.md
+        // reserves wildcards for wholly-internal packages, and a wildcard over the whole
+        // `...node.stream` package would also silence a genuine break in the public facade
+        // (`BlockchainStreamProvider`, `StreamCapabilities`, `SubscriptionOptions`, …).
+        // The proposal does declare the public facade unfrozen for a release or two as well; when
+        // a break there is actually needed, it gets its own filter naming the symbol, so the thing
+        // being broken is visible in review rather than pre-authorised in bulk.
+        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*")
       ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,

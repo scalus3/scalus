@@ -84,12 +84,18 @@ private[stream] final class BlockfrostChainFollower(
 )(using ec: ExecutionContext)
     extends ChainFollower {
 
-    private val mailbox = Mailbox.delta[ChainEvent]()
+    /** Bounded for the same reason subscriber buffers are: an unbounded producer queue turns a
+      * driver that cannot keep up into an OOM naming nothing, instead of a failure naming this
+      * feed. Each entry holds a whole `AppliedBlock`, and the driver is the only consumer and pulls
+      * in a loop, so reaching this bound at all means something is already wrong.
+      */
+    private val mailbox = Mailbox.delta[ChainEvent](BlockfrostChainFollower.eventBufferBound)
 
     // Guarded by `this`: mutated from the poll loop and from `watch` on the caller's thread.
     private var watched: Set[UtxoSource] = Set.empty
     private var last: Option[BlockRef] = None
     private var stopped = false
+    private var started = false
 
     override def events: ScalusAsyncSource[ChainEvent] = mailbox
 
@@ -104,12 +110,17 @@ private[stream] final class BlockfrostChainFollower(
 
     /** Start polling. The loop is a `Future` chain, not a thread, so it works on Scala.js too. */
     def start(): Unit = {
-        api.latestBlock().onComplete {
-            case Success(tip) =>
-                synchronized { last = Some(tip) }
-                loop()
-            case Failure(t) => mailbox.fail(t)
+        val begin = synchronized {
+            if started || stopped then false
+            else { started = true; true }
         }
+        if begin then
+            api.latestBlock().onComplete {
+                case Success(tip) =>
+                    synchronized { last = Some(tip) }
+                    loop()
+                case Failure(t) => mailbox.fail(t)
+            }
     }
 
     private def loop(): Unit = if !isStopped then
@@ -144,17 +155,32 @@ private[stream] final class BlockfrostChainFollower(
             acc.flatMap(_ => if isStopped then Future.unit else f(a))
         )
 
+    /** Like `Future.sequence`, but one request at a time.
+      *
+      * Deliberately not concurrent. Rate limiting is the *expected* steady state for a metered
+      * backend, and firing a block's per-address and per-transaction requests all at once maximises
+      * the chance of provoking the 429 this follower has no way to survive. Latency is the cheaper
+      * thing to spend here.
+      */
+    private def sequentiallyCollect[A, B](items: Seq[A])(f: A => Future[B]): Future[Seq[B]] =
+        items.foldLeft(Future.successful(Vector.empty[B]))((acc, a) =>
+            acc.flatMap(bs => f(a).map(bs :+ _))
+        )
+
     private def emitBlock(block: BlockRef): Future[Unit] = {
-        val sources = synchronized(watched)
-        val addresses = sources.collect { case UtxoSource.FromAddress(a) => a }
-        val hashes = Future
-            .sequence(
-              addresses.toSeq.map(a => api.addressTransactionsIn(a, block.blockNo, block.blockNo))
-            )
+        // Only address sources are probed, so only address sources may be claimed. Declaring the
+        // whole watched set would tell the hub this block is authoritative for, say, a FromAsset
+        // subscription that was never looked up — which is precisely the silent event loss
+        // BlockCoverage exists to prevent, committed by the thing that reports the coverage.
+        val addresses = synchronized(watched).collect { case UtxoSource.FromAddress(a) => a }
+        val probed: Set[UtxoSource] = addresses.map(UtxoSource.FromAddress(_))
+        val hashes = sequentiallyCollect(addresses.toSeq)(a =>
+            api.addressTransactionsIn(a, block.blockNo, block.blockNo)
+        )
             // One transaction can touch several watched addresses; the hub must see it once.
             .map(_.flatten.distinct)
         hashes
-            .flatMap(hs => Future.sequence(hs.map(api.transaction)))
+            .flatMap(hs => sequentiallyCollect(hs)(api.transaction))
             .map { observed =>
                 val applied = observed.map(o => AppliedTransaction(o.tx, o.created, o.spent))
                 mailbox.offer(
@@ -166,11 +192,17 @@ private[stream] final class BlockfrostChainFollower(
                       block = None,
                       // Every height is reported, matches or not, and always with the full set of
                       // sources probed at it — both halves of AppliedBlock's contract.
-                      coverage = BlockCoverage.Sources(sources)
+                      coverage = BlockCoverage.Sources(probed)
                     )
                   )
                 )
                 synchronized { last = Some(block) }
             }
     }
+}
+
+private[stream] object BlockfrostChainFollower {
+
+    /** Blocks the follower may run ahead of the driver by. See the mailbox's own note. */
+    val eventBufferBound: Int = 256
 }

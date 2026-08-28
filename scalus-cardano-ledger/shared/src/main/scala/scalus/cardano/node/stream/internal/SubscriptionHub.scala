@@ -294,6 +294,12 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             // height — every Complete-coverage provider — this is the same window as before.
             val oldest = block.blockNo - retain
             while recent.nonEmpty && recent.head.blockNo <= oldest do recent.removeHead()
+            // Belt and braces. The height window is the meaningful bound, but it bounds nothing if
+            // a provider breaks the one-block-per-ascending-height contract `AppliedBlock`
+            // documents — several entries per height, or a height that goes backwards, would let
+            // `recent` grow without limit and make `releaseLocked` scan it for every subscription
+            // on every block. A cap costs one comparison and removes the failure mode.
+            while recent.size > retain do recent.removeHead()
             val newTip = ChainTip(block.point, block.blockNo)
             tip = newTip
 
@@ -373,7 +379,14 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
       * untrustworthy and must be rebuilt. A follower that loses track of the chain owes subscribers
       * the second, never the first.
       */
-    def failAll(cause: Throwable): Unit = {
+    def failAll(cause: Throwable): Unit = terminateAll(_.fail(cause))
+
+    def closeAll(): Unit = terminateAll(_.close())
+
+    /** Shared by both terminations so that a future subscription kind cannot be remembered on one
+      * path and forgotten on the other — which would leak it silently on whichever was missed.
+      */
+    private def terminateAll(finish: Mailbox[?] => Unit): Unit = {
         val mailboxes = synchronized {
             closed = true
             val all: Seq[Mailbox[?]] =
@@ -391,35 +404,9 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
             statusSubs.clear()
             all
         }
-        mailboxes.foreach(_.fail(cause))
+        mailboxes.foreach(finish)
     }
 
-    def closeAll(): Unit = {
-        val mailboxes = synchronized {
-            closed = true
-            val all: Seq[Mailbox[?]] =
-                utxoSubs.values.toSeq.map(_.mailbox) ++
-                    txSubs.values.toSeq.map(_.mailbox) ++
-                    blockSubs.values.toSeq.map(_.mailbox) ++
-                    tipSubs.values.toSeq ++
-                    paramSubs.values.toSeq ++
-                    statusSubs.values.flatMap(_.values).toSeq
-            utxoSubs.clear()
-            txSubs.clear()
-            blockSubs.clear()
-            tipSubs.clear()
-            paramSubs.clear()
-            statusSubs.clear()
-            all
-        }
-        mailboxes.foreach(_.close())
-    }
-
-    // ------------------------------------------------------------------
-    // Internals — all called under the monitor
-    // ------------------------------------------------------------------
-
-    /** Release, per subscription, every block that has now reached its confirmation depth. */
     private def releaseLocked(): Seq[Mailbox[?]] = {
         def deliveries[S](
             subs: Iterable[S],
@@ -505,10 +492,13 @@ final class SubscriptionHub(val cardanoInfo: CardanoInfo, val capabilities: Stre
       * block per height carrying the union of everything it probed there, rather than one block per
       * watcher.
       */
-    private def coversUtxoQuery(query: UtxoQuery, coverage: BlockCoverage): Boolean = query match
-        case q: UtxoQuery.Simple => BlockCoverage.covers(coverage, q.source)
-        case UtxoQuery.Or(l, r, _, _, _) =>
-            coversUtxoQuery(l, coverage) && coversUtxoQuery(r, coverage)
+    private def coversUtxoQuery(query: UtxoQuery, coverage: BlockCoverage): Boolean =
+        // Settled by one comparison for every complete-coverage provider — which is every provider
+        // but the metered one — instead of walking the query tree per subscription per block.
+        coverage == BlockCoverage.Complete || (query match
+            case q: UtxoQuery.Simple => BlockCoverage.covers(coverage, q.source)
+            case UtxoQuery.Or(l, r, _, _, _) =>
+                coversUtxoQuery(l, coverage) && coversUtxoQuery(r, coverage))
 
     /** Whether a block's coverage is authoritative for a transaction subscription.
       *

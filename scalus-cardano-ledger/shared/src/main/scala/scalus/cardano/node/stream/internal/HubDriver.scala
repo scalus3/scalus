@@ -1,6 +1,6 @@
 package scalus.cardano.node.stream.internal
 
-import scala.concurrent.ExecutionContext
+import scala.concurrent.{ExecutionContext, Future}
 import scala.util.{Failure, Success}
 
 /** Pumps a [[ChainFollower]]'s events into a [[SubscriptionHub]].
@@ -18,9 +18,22 @@ private[stream] final class HubDriver(
 )(using ec: ExecutionContext) {
 
     @volatile private var stopped = false
+    @volatile private var started = false
 
-    /** Begin pumping. Idempotent in the sense that a stopped driver stays stopped. */
-    def start(): Unit = if !stopped then pump()
+    /** Begin pumping.
+      *
+      * Idempotent: a second call is ignored, and a stopped driver stays stopped. Two pumps would
+      * both pull from a source documented as single-consumer — `Mailbox.pull` hands concurrent
+      * callers the same promise — so a single event would be applied twice, appending the same
+      * block to `recent` and re-emitting its deltas.
+      */
+    def start(): Unit = {
+        val begin = synchronized {
+            if started || stopped then false
+            else { started = true; true }
+        }
+        if begin then pump()
+    }
 
     private def pump(): Unit =
         follower.events.pull().onComplete {
@@ -28,11 +41,19 @@ private[stream] final class HubDriver(
                 // Applying can throw — a rollback deeper than the horizon, a capability the
                 // provider declared it does not have. That is a failure of the whole feed, not of
                 // one event, so it travels the same path as a follower failure.
-                try
-                    apply(event)
-                    if !stopped then pump()
-                catch
-                    case t: Throwable => fail(t)
+                val continue =
+                    try
+                        apply(event)
+                        true
+                    catch
+                        case t: Throwable =>
+                            fail(t)
+                            false
+                // Re-dispatched rather than called here. A buffered backlog completes every pull
+                // synchronously, and under an inline executor a direct recursive call would nest
+                // one frame per drained event until the stack gave out — turning a queue that
+                // merely got long into a dead feed.
+                if continue && !stopped then Future.unit.foreach(_ => pump())
             // The follower ended cleanly: no more chain events are coming, so subscriptions are
             // complete rather than broken.
             case Success(None) => if !stopped then hub.closeAll()
@@ -47,13 +68,26 @@ private[stream] final class HubDriver(
       * it has no way to know is stale. Failing them all is the only honest option — the same
       * reasoning as a bounded buffer overflowing rather than dropping.
       */
-    private def fail(t: Throwable): Unit = if !stopped then {
-        stopped = true
-        hub.failAll(t)
+    private def fail(t: Throwable): Unit = {
+        val first = synchronized {
+            if stopped then false
+            else { stopped = true; true }
+        }
+        if first then hub.failAll(t)
     }
 
+    /** Stop pumping and end every subscription.
+      *
+      * Closing the hub here rather than relying on the follower's end-of-stream is deliberate: the
+      * pump is stopped by this call, so nothing is left to observe that end, and subscribers would
+      * be left parked on promises that never complete.
+      */
     def close(): Unit = {
-        stopped = true
+        val first = synchronized {
+            if stopped then false
+            else { stopped = true; true }
+        }
         follower.close()
+        if first then hub.closeAll()
     }
 }

@@ -55,7 +55,15 @@ object BlockCoverage {
         probed.contains(source) || (source match
             case UtxoSource.Or(l, r)  => coveredBy(l, probed) && coveredBy(r, probed)
             case UtxoSource.And(l, r) => coveredBy(l, probed) || coveredBy(r, probed)
-            case _                    => false)
+            // Probing a superset of the inputs asked about does cover them, so this is a
+            // membership test rather than set equality — matching how `SubscriptionHub`'s
+            // `SpendsInput` branch answers the same underlying question.
+            case UtxoSource.FromInputs(wanted) =>
+                probed.exists {
+                    case UtxoSource.FromInputs(have) => wanted.subsetOf(have)
+                    case _                           => false
+                }
+            case _ => false)
 }
 
 /** A block as the subscription hub consumes it.
