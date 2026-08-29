@@ -446,25 +446,55 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         // lookup silently missed present keys. AssocMap does a linear Eq scan, as
         // PlutusTx.AssocMap and Aiken's Pairs do. Deliberate breaking change; the on-chain Data
         // encoding is unchanged, since both carry @UplcRepr(PackedDataMap).
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.apply"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.copy"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.this"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.apply"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.copy"),
-        ProblemFilters.exclude[IncompatibleMethTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.this"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo._10"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.copy$default$10"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v2.TxInfo.redeemers"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.<init>$default$10"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo._10"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.copy$default$10"),
-        ProblemFilters.exclude[IncompatibleResultTypeProblem]("scalus.cardano.onchain.plutus.v3.TxInfo.redeemers"),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v2.TxInfo.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v2.TxInfo.copy"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v2.TxInfo.this"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.apply"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.copy"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.this"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v2.TxInfo._10"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v2.TxInfo.copy$default$10"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v2.TxInfo.redeemers"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.<init>$default$10"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo._10"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.copy$default$10"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.onchain.plutus.v3.TxInfo.redeemers"
+        ),
         // Deleted: both compared only the GovAction constructor ordinal, so distinct proposals
         // compared equal and a SortedSet would have silently dropped one - a violation of the
         // Ordering contract, not merely a weak order. Neither was used: proposalProcedures is a
         // TaggedOrderedSet, which preserves submitter order and never sorts.
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.GovAction.given_Ordering_GovAction"),
-        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.cardano.ledger.ProposalProcedure.given_Ordering_ProposalProcedure")
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.GovAction.given_Ordering_GovAction"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.ProposalProcedure.given_Ordering_ProposalProcedure"
+        )
       ),
 
       // enable when debug compilation of tests
