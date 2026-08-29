@@ -28,7 +28,7 @@ NOT pre-verified: the sbt project wiring, the exporter itself, and the proof fil
 - All Lean paths inside `#import_uplc` are relative to the Lake workspace root, which is `scalus-lean-proofs/lean/`.
 - Run `sbtn scalafmtAll` before every commit that touches Scala. `ci-jvm` runs `scalafmtCheckAll` and one unformatted file fails the whole job.
 - Never add a `Co-Authored-By: Claude` trailer or a "Generated with" footer to any commit message.
-- Commit directly to `master`. No feature branch, no PR. Rebase before pushing.
+- Work happens in the git worktree at `.claude/worktrees/lean-proofs` on branch `worktree-lean-proofs`, which is based on `origin/master`. Commit there. Do not commit to `master`, do not push, and do not open a PR.
 
 ---
 
@@ -87,7 +87,7 @@ lean-toolchain; nixpkgs 25.11 ships Z3 4.15.4, which Blaster accepts."
 - Create: `scalus-lean-proofs/src/main/scala/scalus/lean/ProofTarget.scala`
 - Create: `scalus-lean-proofs/src/main/scala/scalus/lean/ProofTargets.scala`
 - Create: `scalus-lean-proofs/src/test/scala/scalus/lean/ProofTargetsTest.scala`
-- Modify: `build.sbt` (add project after `lazy val generateLlmsApi` block ending at line 813; add to `jvm` aggregate at line 262)
+- Modify: `build.sbt` (add project after the `lazy val generateLlmsApi` block ending at line 836; add to `jvm` aggregate at line 267)
 
 **Interfaces:**
 - Consumes: nothing.
@@ -100,7 +100,7 @@ lean-toolchain; nixpkgs 25.11 ships Z3 4.15.4, which Blaster accepts."
 
 - [ ] **Step 1: Add the sbt project**
 
-In `build.sbt`, immediately after the `generateLlmsApi := Def.taskDyn { ... }.value` block (which ends at line 813 with `}.value`), insert:
+In `build.sbt`, immediately after the `generateLlmsApi := Def.taskDyn { ... }.value` block (which ends at line 836 with `}.value`), insert:
 
 ```scala
 // Compiles selected prelude functions to UPLC and exports them for the Lean/Blaster
@@ -119,7 +119,7 @@ lazy val scalusLeanProofs = project
     )
 ```
 
-Then add `scalusLeanProofs,` to the `jvm` aggregate list, immediately after the `llmApiGen,` line (line 262).
+Then add `scalusLeanProofs,` to the `jvm` aggregate list, immediately after the `llmApiGen,` line (line 267).
 
 - [ ] **Step 2: Write the failing test**
 
@@ -255,7 +255,9 @@ object ProofTargets {
 
     /** Programs with no integer samples, used only by the hand-written Sanity.lean. */
     val sanity: Seq[ProofTarget] = Seq(
-      ProofTarget("always_ok", PlutusV3.alwaysOk.program, 1, Seq.empty),
+      // NB: compiled here rather than reusing `PlutusV3.alwaysOk`, which is a library constant
+      // built with `valueBuiltins = true` and so would violate the module's pinned Options.
+      ProofTarget("always_ok", PlutusV3.compile((_: Data) => ()).program, 1, Seq.empty),
       ProofTarget("always_fail", PlutusV3.compile((_: Data) => fail("nope")).program, 1, Seq.empty)
     )
 
@@ -793,7 +795,7 @@ alwaysOk always succeeds and alwaysFail never does, with a negative control."
 - Modify: `scalus-lean-proofs/lean/ScalusProofs.lean` (add `import ScalusProofs.Math`)
 
 **Interfaces:**
-- Consumes: `ScalusProofs.Generated.{mathAbs, mathMin, mathMax, mathClamp, mathGcd, mathExp2, mathSqrt}`, `ScalusProofs.Prelude.{runInts, steps}`.
+- Consumes: `ScalusProofs.Generated.{mathAbs, mathMin, mathMax, mathClamp, mathExp2}` and `ScalusProofs.Prelude.{ints, steps}`. (`mathGcd` belongs to Task 7; `mathSqrt` is exported but deliberately gets no properties, see the deviations section.)
 - Produces: nothing other tasks depend on.
 
 - [ ] **Step 1: Calibrate the budgets**
