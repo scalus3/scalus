@@ -4,6 +4,8 @@ sidebarTitle: Plutus Data
 description: Convert between Scala types and Plutus Data automatically. Derive FromData and ToData instances for type-safe datum and redeemer handling in Cardano validators.
 ---
 
+import { Callout } from 'nextra/components'
+
 # FromData and ToData
 
 On-chain, all data is stored in a universal format called `Data` (Plutus Core Data). Datums, redeemers, and script context are all encoded as `Data`. Scalus provides type-safe conversions to work with your Scala types instead of raw `Data`.
@@ -17,6 +19,14 @@ val owner = datum.to[PubKeyHash]
 // Convert a typed value to Data
 val data = myValue.toData
 ```
+
+<Callout type="warning">
+  On-chain, `to[T]` is a *retag*, not a decoder: it compiles to nothing. No constructor tag is
+  checked, no field count is verified, and fields are read from the underlying `Data` only when
+  your code touches them. In particular, never cast to a concrete variant of a sealed hierarchy
+  (`redeemer.to[Order.Buy]`) – match on the parent type instead. See
+  [The Constructor Tag](/docs/security/datum-validation#the-constructor-tag).
+</Callout>
 
 ## Using Data in Validators
 
