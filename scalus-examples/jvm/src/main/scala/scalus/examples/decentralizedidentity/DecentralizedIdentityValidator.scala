@@ -4,7 +4,7 @@ import scalus.compiler.Compile
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Builtins.blake2b_224
 import scalus.uplc.builtin.Data.{FromData, ToData}
-import scalus.cardano.onchain.plutus.v1.{IntervalBoundType, PolicyId, PosixTime, PubKeyHash}
+import scalus.cardano.onchain.plutus.v1.{PolicyId, PosixTime, PubKeyHash}
 import scalus.cardano.onchain.plutus.v2.OutputDatum
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*

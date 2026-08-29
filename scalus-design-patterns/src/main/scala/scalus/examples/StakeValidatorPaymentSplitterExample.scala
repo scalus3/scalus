@@ -12,7 +12,6 @@ import scalus.patterns.StakeValidator
 import scalus.cardano.onchain.plutus.prelude.*
 import scalus.cardano.onchain.plutus.v3.DataParameterizedValidator
 import scalus.cardano.onchain.plutus.prelude.List.*
-import scalus.cardano.onchain.plutus.prelude.Option.*
 import scalus.uplc.PlutusV3
 
 /** Stake Validator Payment Splitter - demonstrates the Stake Validator pattern (withdraw zero

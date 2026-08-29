@@ -10,7 +10,7 @@ import scalus.cardano.onchain.plutus.v1.{Address, PubKeyHash, Value}
 import scalus.cardano.onchain.plutus.v2.TxOut
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.v3.ScriptInfo.SpendingScript
-import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption, SortedMap}
+import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as SList, Option as SOption}
 import scalus.cardano.ledger.ExUnits
 import scalus.testing.kit.ScalusTest
 

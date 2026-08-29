@@ -1,7 +1,7 @@
 package scalus.examples.vault
 
 import scalus.compiler.Compile
-import scalus.uplc.builtin.Data.{toData, FromData, ToData}
+import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.{ByteString, Data}
 import scalus.examples.vault.Action.{Cancel, Deposit, FinalizeWithdrawal, InitiateWithdrawal}
 import scalus.cardano.onchain.plutus.v1

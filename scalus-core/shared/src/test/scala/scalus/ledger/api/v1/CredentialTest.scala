@@ -3,7 +3,6 @@ package scalus.cardano.onchain.plutus.v1
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.ledger.{Coin, ExUnits}
 import scalus.cardano.onchain.OnchainError
-import scalus.cardano.onchain.plutus.prelude.*
 import scalus.testing.kit.EvalTestKit
 import scalus.uplc.builtin.ByteString.hex
 

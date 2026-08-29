@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.prelude.{AssocMap, List as PList, Option as POption}
 import scalus.cardano.onchain.plutus.v3
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.uplc.builtin.ByteString.given
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.PlutusV3
 import scalus.uplc.Term.asTerm

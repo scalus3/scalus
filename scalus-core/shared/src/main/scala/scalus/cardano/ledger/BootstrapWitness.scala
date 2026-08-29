@@ -18,8 +18,7 @@ case class BootstrapWitness(
 
     /** Chain code. Conventionally 32 bytes, but the ledger does not constrain it: the CDDL says
       * `chain_code : bytes` (conway.cddl:778) and Haskell holds it as an unconstrained
-      * `ChainCode ByteArray` (Keys/Bootstrap.hs:67). Requiring 32 here made us reject transactions
-      * the chain accepts.
+      * `ChainCode ByteArray` (Keys/Bootstrap.hs:67). Do not add a length check.
       */
     chainCode: ByteString,
 

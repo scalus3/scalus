@@ -20,9 +20,7 @@ case class Anchor(url: String, dataHash: DataHash) derives Codec:
     // The ledger bounds these by UTF-8 BYTE length, not character count: `textSizeN` uses
     // `lengthWord8` and the CDDL says `text .size (0 .. 128)`
     // (BaseTypes.hs:643-657, conway.cddl:489/496). Scala's String.length counts UTF-16 units,
-    // which is <= the UTF-8 byte length for any non-ASCII text, so checking it accepted values
-    // the chain rejects. (128 applies from decoder version 9; earlier versions used 64, which
-    // is moot since we support protocol version 10 and above.)
+    // which is <= the UTF-8 byte length for any non-ASCII text, so it must not be used here.
     require(
       url.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 128,
       s"Anchor URL must be at most 128 UTF-8 bytes, got ${url.getBytes(java.nio.charset.StandardCharsets.UTF_8).length}"

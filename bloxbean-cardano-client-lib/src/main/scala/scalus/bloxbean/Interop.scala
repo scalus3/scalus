@@ -1,6 +1,6 @@
 package scalus.bloxbean
 
-import com.bloxbean.cardano.client.address.{Address, AddressType, Credential, CredentialType}
+import com.bloxbean.cardano.client.address.{Address, Credential, CredentialType}
 import com.bloxbean.cardano.client.api.model.{ProtocolParams, Utxo}
 import com.bloxbean.cardano.client.api.util.CostModelUtil
 import com.bloxbean.cardano.client.plutus.spec.*
@@ -511,6 +511,11 @@ object Interop {
             .map { w =>
                 val bytes = Address(w.getRewardAddress).getBytes
                 val header = bytes(0) & 0xff
+                // Reward addresses have 111 in the top three bits (CIP-19).
+                require(
+                  (header & 0xe0) == 0xe0,
+                  s"Not a reward address in withdrawals: ${w.getRewardAddress}"
+                )
                 val network = header & 0x0f
                 val isScript = (header & 0x10) != 0
                 val hash = ByteString.fromArray(bytes.drop(1))

@@ -30,9 +30,8 @@ object RewardAccount {
       *
       * This matters beyond serialisation: the ledger resolves a `Withdrawing`/`Rewarding` redeemer
       * index with `Map.elemAt` over `Map AccountAddress Coin` (`Conway/TxBody.hs:672-673`), so this
-      * ordering decides which withdrawal an index names. Comparing only `(network, hash)` and
-      * ignoring the constructor produced an order no node emits, and made us assign redeemer
-      * indices the node resolves to a different withdrawal.
+      * ordering decides which withdrawal an index names. The credential kind must be compared
+      * between the network and the hash.
       */
     given Ordering[RewardAccount] with
         private def credentialTag(p: StakePayload): Int = p match

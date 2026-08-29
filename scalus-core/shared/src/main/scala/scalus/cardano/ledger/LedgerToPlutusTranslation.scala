@@ -13,7 +13,6 @@ import scalus.cardano.onchain.plutus.v3.GovernanceActionId
 import scalus.cardano.onchain.plutus.prelude.{asScalus, AssocMap, List, SortedMap}
 
 import scala.annotation.nowarn
-import scala.collection.mutable
 import scala.math.BigInt
 
 /** Advanced interoperability layer for scalus.cardano.ledger domain model.
@@ -103,9 +102,7 @@ object LedgerToPlutusTranslation {
                         // (libs/cardano-ledger-core/.../Plutus/TxInfo.hs:133-137, byte-identical
                         // at the deployed mainnet tag). V1/V2 reach it via transAddr
                         // (Babbage/TxInfo.hs:153) and V3 via Babbage.transTxOutV2
-                        // (Conway/TxInfo.hs:454, :500). Dropping it made every script reading
-                        // `output.address.stakingCredential` see None where the chain shows a
-                        // StakingPtr, which changes both the script's behaviour and its ExUnits.
+                        // (Conway/TxInfo.hs:454, :500).
                         scalus.cardano.onchain.plutus.prelude.Option.Some(
                           v1.StakingCredential.StakingPtr(
                             BigInt(pointer.slot.slot),
@@ -1027,9 +1024,7 @@ object LedgerToPlutusTranslation {
       * order is `Ord GovActionId` (transaction id, then the index numerically).
       *
       * `vp.procedures` is already a `SortedMap` under exactly those orders (`Voter.scala:94`,
-      * `GovActionId.scala:30`), so it is iterated as-is. It previously went through
-      * `.sortBy(_._1.toString)`, which produced neither order: it put `…HotKey` before
-      * `…HotScript`, and gov-action index 10 before 2.
+      * `GovActionId.scala:30`), so it is iterated as-is. Do not re-sort it.
       */
     def getVotingProcedures(
         votingProcs: Option[VotingProcedures]

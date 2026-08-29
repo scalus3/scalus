@@ -4,7 +4,6 @@ import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.onchain.plutus.prelude.===
 import scalus.cardano.onchain.plutus.v1
 import scalus.uplc.builtin.ByteString
-import scalus.uplc.builtin.ByteString.given
 
 /** Regression tests for the shadowed-binder bug in the hand-written `Eq` instances.
   *
