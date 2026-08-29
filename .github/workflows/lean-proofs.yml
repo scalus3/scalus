@@ -1,0 +1,71 @@
+name: Lean-Proofs
+on:
+  workflow_dispatch:
+  schedule:
+    # 03:17 UTC daily. Off the hour to avoid the GitHub Actions rush.
+    - cron: '17 3 * * *'
+jobs:
+  proofs:
+    name: blaster
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - uses: nixbuild/nix-quick-install-action@v34
+      - uses: DeterminateSystems/magic-nix-cache-action@main
+        with:
+          use-flakehub: false
+      - name: Cache elan and lake
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.elan
+            scalus-lean-proofs/lean/.lake
+          key: lean-${{ hashFiles('scalus-lean-proofs/lean/lean-toolchain', 'scalus-lean-proofs/lean/lake-manifest.json') }}
+      - name: Build the proof suite
+        working-directory: scalus-lean-proofs/lean
+        run: |
+          nix develop ../..#lean --accept-flake-config --command bash -c "lake build"
+      - name: Run the proofs
+        working-directory: scalus-lean-proofs/lean
+        run: |
+          nix develop ../..#lean --accept-flake-config --command bash -c '
+            fail=0
+            declare -A expected=(
+              ["ScalusProofs/Sanity.lean"]=3
+              ["ScalusProofs/Math.lean"]=11
+              ["ScalusProofs/Data.lean"]=6
+            )
+            for f in ScalusProofs/Sanity.lean ScalusProofs/Math.lean ScalusProofs/Data.lean; do
+              echo "=== $f ==="
+              out=$(lake env lean "$f" 2>&1)
+              rc=$?
+              echo "$out"
+              count=$(printf "%s" "$out" | grep -o "✅" | wc -l | tr -d " ")
+              if [ "$rc" -ne 0 ]; then
+                echo "FAILED ($f): lean exited $rc"
+                fail=1
+              elif printf "%s" "$out" | grep -qE "Undetermined|❌"; then
+                echo "FAILED ($f): unexpected verdict"
+                fail=1
+              elif [ "$count" -ne "${expected[$f]}" ]; then
+                echo "FAILED ($f): expected ${expected[$f]} checkmarks, got $count (a sorry or a missing check can hide as a plain pass)"
+                fail=1
+              fi
+            done
+            exit $fail
+          '
+      - name: Report results
+        uses: sarisia/actions-status-discord@v1
+        if: always()
+        with:
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "[${{ github.event.repository.name }}] Lean-Proofs ${{ job.status == 'success' && '✅' || '❌' }}"
+          url: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          username: "GitHub Actions"
+          nodetail: true
+          notimestamp: true
