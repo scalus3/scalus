@@ -29,6 +29,20 @@
   so tokens can no longer be stripped from the escrow UTxO, and `VestingValidator`,
   `DecentralizedIdentityValidator` and `OnChainCellOps` fail on an unbounded validity range where
   they used to read it as the Unix epoch
+- `TxInfo.redeemers` (Plutus V2 and V3) is an `AssocMap[ScriptPurpose, Redeemer]` instead of a
+  `SortedMap`. Redeemer keys are positional: the ledger keys its map by `PlutusPurpose AsIx era`,
+  which keeps only the `Word32` index, so no content-based `Ord` can reproduce their order. A
+  sorted map's short-circuiting lookup therefore walked past keys that were present and returned
+  `None`. `AssocMap` does a linear `Eq` scan, which is what `PlutusTx.AssocMap` and Aiken's
+  `Pairs` do for the same field. The on-chain `Data` encoding is unchanged, since both types
+  carry `@UplcRepr(PackedDataMap)`. **Migration hazard:** `redeemers.get(purpose)` still
+  compiles, so the break is loud only where `SortedMap`-specific members were used; code written
+  against the old lookup missing a present key will now find it
+- `Ordering[GovAction]` and `Ordering[ProposalProcedure]` are deleted. Both compared only the
+  `GovAction` constructor ordinal, so two distinct proposals compared equal and a `SortedSet`
+  silently dropped one. That violates the `Ordering` contract rather than merely being a coarse
+  order. Neither had a use: `proposalProcedures` is a `TaggedOrderedSet`, which preserves
+  submitter order and never sorts
 
 ### Deprecated
 
@@ -57,9 +71,35 @@
   suffix as a terminal Unique-id token, so a name carrying both a `-<id>` suffix and a
   `'<counter>` disambiguation suffix (e.g. `a-91533'653`) produced unparseable UPLC. Every `-`
   now maps to `_`
+- Script-context collections were ordered by an `Ord` that disagreed with the order the Cardano
+  ledger delivers, and `SortedMap.get` short-circuits, so a lookup could walk past a key that was
+  present and report `None`. `Ord[Credential]` (Plutus V1) now sorts script credentials before
+  key credentials, matching the ledger's derived `Ord (Credential kr)` over
+  `ScriptHashObj | KeyHashObj`; `Ordering[RewardAccount]` compares network, credential kind and
+  hash rather than the hash alone; V1/V2 withdrawals keep Plutus order while V3 withdrawals and
+  the container a `Withdrawing` redeemer index resolves against keep ledger order, which are
+  deliberately opposite constructor orders and are now separate helpers; and
+  `getVotingProcedures` no longer re-sorts by `toString`, which named the wrong voter for a
+  `Voting` redeemer index
+- Pointer addresses lost their staking credential in translation. The ledger translates them in
+  every Plutus version, so the delegation part is now a `StakingPtr`
+- The ledger decoders rejected transactions the node accepts: chain codes were length-checked
+  although the CDDL leaves them unconstrained, and urls and DNS names were bounded by characters
+  where `text .size (0..128)` counts UTF-8 bytes
+- `ChangedParameters.toData` did not match the ledger's encoding of a parameter-change
+  governance action
+- `scalus-bloxbean-cardano-client-lib`: `Ordering[Voter]` sorted by CCL's `VoterType` ordinal,
+  which declares key before script and so is the opposite of the ledger's order, resolving a
+  `Voting` redeemer index to the wrong voter. A `Proposing` redeemer index was collected from the
+  certificate list, which can never hold a `ProposalProcedure`, so every `Proposing` redeemer
+  threw
 
 ### Added
 
+- A translation oracle for the script context: cardano-ledger's own golden `TxInfo` corpus is
+  vendored as a test resource, pinned by sha256, and compared field by field against the Scalus
+  translation for V1, V2 and V3 withdrawals, votes and datums. Each cell asserts a minimum number
+  of transactions compared, so the oracle cannot silently lose coverage and still report green
 - On-chain safe API, nineteen operations the research corpus showed contract authors
   re-implement by hand with a measurable rate of security-relevant divergence. Prelude:
   `List.findUniqueOrFail(p, msg)` (one pass, fails on zero or two matches, where `find` accepts a
