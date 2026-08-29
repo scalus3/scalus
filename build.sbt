@@ -267,6 +267,7 @@ lazy val root: Project = project
       scalusUtxoCell.jvm,
       scalusDesignPatterns,
       bench,
+      scalusLeanProofs,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
       scalusSbtPlugin,
@@ -293,6 +294,7 @@ lazy val jvm: Project = project
       scalusDesignPatterns,
       bench,
       llmApiGen,
+      scalusLeanProofs,
       `scalus-bloxbean-cardano-client-lib`,
       scalusEthereumKzgCeremony,
     )
@@ -1095,6 +1097,28 @@ generateLlmsApi := Def.taskDyn {
         ((ThisBuild / baseDirectory).value / "scalus-site" / "public" / "llms-api.txt").getAbsolutePath
     val argLine = (Seq(outFile, version.value) ++ dirs).mkString(" ")
     (llmApiGen / Compile / runMain).toTask(s" scalus.llmapi.LlmApiGen $argLine")
+}.value
+
+// Compiles selected prelude functions to UPLC and exports them for the Lean/Blaster
+// proof suite in scalus-lean-proofs/lean. See
+// docs/superpowers/specs/2026-08-27-lean-blaster-uplc-proofs-design.md
+lazy val scalusLeanProofs = project
+    .in(file("scalus-lean-proofs"))
+    .dependsOn(scalus.jvm)
+    .disablePlugins(MimaPlugin)
+    .settings(
+      name := "scalus-lean-proofs",
+      publish / skip := true,
+      run / fork := true,
+      libraryDependencies += "org.scalatest" %% "scalatest" % scalatestVersion % "test",
+      PluginDependency
+    )
+
+lazy val exportLeanUplc = taskKey[Unit]("Regenerate scalus-lean-proofs/lean/ScalusProofs/Generated")
+exportLeanUplc := Def.taskDyn {
+    val outDir = ((ThisBuild / baseDirectory).value / "scalus-lean-proofs" / "lean" /
+        "ScalusProofs" / "Generated").getAbsolutePath
+    (scalusLeanProofs / Compile / runMain).toTask(s" scalus.lean.ExportUplc $outDir")
 }.value
 
 // Cardano Ledger domain model and CBOR serialization
