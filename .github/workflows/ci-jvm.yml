@@ -42,6 +42,15 @@ jobs:
           WARNINGS=$(grep -ci "warning:" build.log) || WARNINGS=0
           echo "warnings=$WARNINGS" >> $GITHUB_OUTPUT
           exit $BUILD_EXIT_CODE
+      - name: Verify exported Lean UPLC is fresh
+        if: matrix.name == 'lts'
+        run: |
+          nix develop .#ci --accept-flake-config --command bash -c "sbt --batch exportLeanUplc"
+          git diff --exit-code scalus-lean-proofs/lean/ScalusProofs/Generated \
+            || (echo "Exported UPLC is stale - run 'sbt exportLeanUplc' and commit" && exit 1)
+          UNTRACKED=$(git status --porcelain scalus-lean-proofs/lean/ScalusProofs/Generated)
+          test -z "$UNTRACKED" \
+            || (echo "Exported UPLC has untracked files - run 'git add' and commit:" && echo "$UNTRACKED" && exit 1)
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: always()
