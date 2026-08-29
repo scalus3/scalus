@@ -1,7 +1,7 @@
 # Proving Scalus stdlib properties in Lean with Blaster
 
 Date: 2026-08-27
-Status: design approved, implementation not started
+Status: implemented (Tasks 1-6, 8); Task 7 (codegen equivalence) deferred
 
 ## Goal
 
@@ -72,8 +72,8 @@ for a symbolic tag, which is what every ADT match lowers to.
 Fixed in https://github.com/input-output-hk/PlutusCoreBlaster/pull/40. The restructuring is
 proved semantics-preserving in `PlutusCore/UPLC/CekMachine/Lemmas.lean`, with each arm stated
 equal to the formulation it replaces; an axiom audit shows the lemmas depend only on
-`propext`, `Classical.choice`, and `Quot.sound`. The conformance suite is unchanged (one
-pre-existing failure, `Term.Var`, fails identically on `main`).
+`propext`, `Classical.choice`, and `Quot.sound`. The conformance suite passes in full,
+1110 of 1110 generated modules.
 
 After the fix, the same PV11 property set proves in 3.1 s.
 
@@ -96,9 +96,14 @@ measured step counts ──► budget ────────► #prep_uplc tar
                                           by blaster ──► Z3
 ```
 
-The exporter also evaluates each target on the JVM and emits `#guard` lines asserting the Lean
-CEK produces the same value. That is free differential testing of the two CEK implementations,
-and it makes an under-sized budget fail loudly instead of silently making theorems vacuous.
+The exporter also evaluates each target on the JVM and emits `example ... := by native_decide`
+checks asserting the Lean CEK produces the same value. That is differential testing of the two
+CEK implementations, free of charge on every build. It does **not** protect against an
+under-sized proof budget: those checks run at a fixed budget of 20000, unrelated to any
+`#prep_uplc` budget. Protection against an under-sized proof budget comes separately, from the
+anti-vacuity guards in the proof files (a `native_decide` check per target, at the proof's own
+budget, on its longest measured branch path) plus the negative control each proof file already
+carries.
 
 Two halves, one generated interface between them. The Scala half owns *what* gets compiled
 and *with which options*; the Lean half owns *what is claimed about it*. The generated
@@ -227,7 +232,46 @@ same source compiled two ways must compute the same function:
 - PV10 versus PV11 lowering
 - `SirToUplcV3Lowering` versus `SimpleSirToUplcLowering`
 
-Proven in the spike for `gcd` with the optimizer on and off.
+Proven in the spike for `gcd` with the optimizer on and off, at PV10, in 53 seconds.
+
+**Deferred in the first implementation.** At PV11 this group did not land. It needs three
+prover invocations across two programs, and the viable budget window is narrow: measured on
+this hardware for a single `gcd` theorem, budget 250 proved in 2 seconds, 350 took 52 seconds,
+and 500 did not finish in 500 seconds. Repeated attempts at 350 never completed.
+
+A property of `gcd` makes this worse than it looks. Unlike `abs`, `min`, `max` and `clamp`,
+whose step counts are magnitude-independent, `gcd` is Euclid's algorithm, so its step count
+grows with the size of its inputs. No finite budget covers all inputs, and the budget instead
+defines the verified input range. That is consistent with the bounded guarantee this document
+already states, but it means an equivalence proof has to be scoped to a stated input range
+rather than claimed universally.
+
+Picking this up again should start from a target whose step count does not grow with input
+magnitude, where a single budget genuinely covers the whole domain.
+
+## What is not proved, and why
+
+The catalogue above states an intent. This is what actually landed.
+
+**Implemented.** `abs`, `min`, `max`, `clamp`: fully, as catalogued. `exp2`: only on its
+`exp < 0` branch. Prelude `Option` and `List`: fold and match properties as catalogued.
+
+**Not implemented.** `gcd` properties, `sqrt`/`isSqrt` bounds, `log2`, `pow`, `Data`
+`fromData(toData(x)) = x` round-trips, and codegen equivalence.
+
+Three of the twelve exported targets carry no properties at all: `math_gcd`, `math_sqrt`,
+`math_gcd_unopt`. They are still exported, so their generated differential checks in
+`Generated/Targets.lean` still guard codegen even without a hand-written property.
+
+The reasons are already recorded elsewhere in this document:
+
+- `sqrt` sits at 405 steps, in the region where proof cost explodes (see Budget discipline
+  above).
+- `log2` and `pow` reach the CIP-121/122 bitwise builtins that Blaster cannot translate (see
+  the `exp2_nonneg` omission above, and Limitation 5 below).
+- `Data` round-trips need Data-typed arguments, which the `ints` helper does not provide; no
+  helper for Data-typed sample arguments has been built yet.
+- Codegen equivalence is deferred for the reasons given in its own paragraph above (Task 7).
 
 ## CI
 
@@ -248,11 +292,19 @@ the committed artifacts is caught at PR time even though the proofs are not re-r
    translation and Z3.
 2. **Proofs are bounded** by the CEK step budget.
 3. **We prove against the Lean model of UPLC**, not the Plutus reference implementation. The
-   evidence for that model being faithful is that it passes the plutus-conformance corpus:
-   1109 of 1110 generated modules, the single failure being a pre-existing textual-parser
-   mismatch on `var.uplc` that is unrelated to evaluation.
+   evidence for that model being faithful is that it passes the plutus-conformance corpus in
+   full: 1110 of 1110 generated modules, measured against the corpus from plutus 1.63.0.0.
 4. **`Value` and array builtins are out of scope** until the model gains them.
-5. **We depend on a fork** until PR #40 merges.
+5. **Functions reaching the CIP-121/122 bitwise builtins cannot be proved generically.** Blaster
+   cannot translate `BitVec`, whose width is a value index rather than a type parameter, and
+   `ByteString` is built on it. Any property quantifying over a symbolic input whose CEK trace
+   reaches `shiftByteString`, `integerToByteString` or `byteStringToInteger` fails to translate,
+   at every budget and however the domain is narrowed; only fully concrete inputs prove. This
+   was found while proving `Math.exp2`, whose non-negative branch is
+   `byteStringToInteger(shiftByteString(hex"01", exp % 8) ++ integerToByteString(true, exp / 8, 0))`,
+   so `exp2` is covered only on its `exp < 0` early return. `log2` and `pow` are likely in the
+   same position.
+6. **We depend on a fork** until PR #40 merges.
 
 ## Out of scope for this design
 
