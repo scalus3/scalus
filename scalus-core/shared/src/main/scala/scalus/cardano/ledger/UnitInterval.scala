@@ -27,6 +27,14 @@ case class UnitInterval(numerator: Long, denominator: Long) {
       *   The double value representation
       */
     def toDouble: Double = numerator.toDouble / denominator.toDouble
+
+    /** Reduces to lowest terms. Mirrors `NonNegativeInterval.reduce`, so the two sibling types
+      * share one notion of reduction instead of each carrying its own gcd.
+      */
+    def reduce: UnitInterval = {
+        val g = NonNegativeInterval.gcdOf(numerator, denominator)
+        UnitInterval(numerator / g, denominator / g)
+    }
 }
 
 object UnitInterval {
@@ -98,21 +106,16 @@ object UnitInterval {
         // pair. Emitting the numerator and denominator verbatim meant a proposal carrying,
         // say, 6/10 gave a Scalus-evaluated script different Data than the chain.
         // Only the Plutus encoding normalises; the CBOR codec still round-trips byte for byte.
-        val g = gcd(interval.numerator, interval.denominator)
+        val reduced = interval.reduce
         listData(
           BuiltinList.from(
             List(
-              iData(interval.numerator / g),
-              iData(interval.denominator / g)
+              iData(reduced.numerator),
+              iData(reduced.denominator)
             )
           )
         )
     }
-
-    /** Greatest common divisor, for reducing before Plutus Data encoding. `denominator > 0` is a
-      * class invariant and `numerator >= 0`, so no sign handling is needed.
-      */
-    private def gcd(a: Long, b: Long): Long = if b == 0 then math.max(a, 1) else gcd(b, a % b)
 
     /** FromData instance for UnitInterval. Decodes from array [numerator, denominator] in Plutus
       * Data. Note: The tag (30) is NOT included in the Plutus Data representation, only the array

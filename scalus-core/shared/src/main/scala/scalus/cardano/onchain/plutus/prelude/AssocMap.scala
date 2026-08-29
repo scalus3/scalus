@@ -20,11 +20,18 @@ object AssocMap {
     def singleton[A, B](key: A, value: B): AssocMap[A, B] = AssocMap(List.singleton((key, value)))
     inline def unsafeFromList[A, B](lst: List[(A, B)]): AssocMap[A, B] = AssocMap(lst)
 
+    /** Builds a map from a list, keeping the FIRST entry for a repeated key and preserving the
+      * input order.
+      *
+      * Order is part of this type's meaning - `AssocMap` is used for fields whose order the ledger
+      * fixes, such as `TxInfo.redeemers` - so the accumulator, which is built by prepending, must
+      * be reversed before it is returned.
+      */
     def fromList[A: Eq, B](lst: List[(A, B)]): AssocMap[A, B] = AssocMap(
-      lst.foldLeft(List.empty) { (acc, elem) =>
+      lst.foldLeft(List.empty[(A, B)]) { (acc, elem) =>
           if acc.exists(_._1 === elem._1) then acc
           else Cons(elem, acc)
-      }
+      }.reverse
     )
 
     given AssocMapFromData[A: FromData: Eq, B: FromData]: FromData[AssocMap[A, B]] =

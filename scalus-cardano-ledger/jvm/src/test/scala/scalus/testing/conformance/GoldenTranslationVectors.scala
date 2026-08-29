@@ -251,8 +251,26 @@ object GoldenTranslationVectors {
                         (Bytes(out.result()), i + 1)
                     } else (Bytes(b.slice(i, i + arg.toInt)), i + arg.toInt)
                 case 3 =>
-                    val end = i + arg.toInt
-                    (Text(new String(b.slice(i, end), "UTF-8")), end)
+                    // Indefinite-length text is a chunk sequence terminated by 0xff, exactly like
+                    // indefinite bytes above. Without this branch the reader would return an
+                    // empty Text and leave the offset before the first chunk, desynchronising
+                    // every following item instead of failing - and `skip` already handles it,
+                    // so the two would disagree on the same input.
+                    if indef then {
+                        val out = new StringBuilder
+                        while (b(i) & 0xff) != 0xff do {
+                            val (chunk, next) = read(b, i)
+                            out ++= (chunk match
+                                case Text(t) => t
+                                case other =>
+                                    throw new IllegalStateException(s"bad text chunk: $other"))
+                            i = next
+                        }
+                        (Text(out.result()), i + 1)
+                    } else {
+                        val end = i + arg.toInt
+                        (Text(new String(b.slice(i, end), "UTF-8")), end)
+                    }
                 case 4 =>
                     val out = IndexedSeq.newBuilder[V]
                     if indef then {

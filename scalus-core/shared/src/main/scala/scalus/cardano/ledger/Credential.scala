@@ -40,6 +40,29 @@ object Credential:
     import Doc.*
     import Pretty.inParens
 
+    /** Ordering matches the ledger's derived `Ord (Credential kr)`, which is derived on
+      * `ScriptHashObj | KeyHashObj` (`libs/cardano-ledger-core/.../Credential.hs:98-101`), so
+      * **script credentials sort before key credentials**, then by hash.
+      *
+      * This is the order the ledger's `Set (Credential ColdCommitteeRole)` iterates in, and hence
+      * the order a governance action's removed-committee-member list is serialised in.
+      */
+    given Ordering[Credential] with
+        private def tag(c: Credential): Int = c match
+            case Credential.ScriptHash(_) => 0
+            case Credential.KeyHash(_)    => 1
+
+        def compare(x: Credential, y: Credential): Int =
+            tag(x).compare(tag(y)) match
+                case 0 =>
+                    (x, y) match
+                        case (Credential.ScriptHash(a), Credential.ScriptHash(b)) =>
+                            Ordering[scalus.cardano.ledger.ScriptHash].compare(a, b)
+                        case (Credential.KeyHash(a), Credential.KeyHash(b)) =>
+                            Ordering[AddrKeyHash].compare(a, b)
+                        case _ => 0 // unreachable: equal tags imply the same constructor
+                case c => c
+
     /** Pretty prints Credential as `KeyHash(hash)` or `ScriptHash(hash)` */
     given Pretty[Credential] with
         def pretty(a: Credential, style: Style): Doc = a match

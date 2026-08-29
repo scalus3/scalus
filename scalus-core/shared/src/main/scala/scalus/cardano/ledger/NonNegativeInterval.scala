@@ -277,6 +277,13 @@ object NonNegativeInterval {
         if b == 0 then a else gcd(b, a % b)
     }
 
+    /** Greatest common divisor of a non-negative numerator and positive denominator, shared with
+      * [[UnitInterval.reduce]] so the two sibling types do not each carry their own. Returns at
+      * least 1, so `0/1` and `n/n` reduce correctly.
+      */
+    private[ledger] def gcdOf(numerator: Long, denominator: Long): Long =
+        math.max(gcd(math.abs(numerator), math.abs(denominator)), 1L)
+
     given UpickleReadWriter[NonNegativeInterval] =
         upickleReadwriter[Double].bimap[NonNegativeInterval](
           interval => interval.toDouble,

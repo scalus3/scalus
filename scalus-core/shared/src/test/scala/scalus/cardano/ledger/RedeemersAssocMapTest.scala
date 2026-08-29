@@ -80,3 +80,37 @@ class RedeemersAssocMapTest extends AnyFunSuite with EvalTestKit {
         assert(reversed.get(minting) == POption.Some(BigInt(2).toData))
     }
 }
+
+/** `AssocMap` is used for fields whose order the ledger fixes, so its constructors must not
+  * reorder. `fromList` builds its accumulator by prepending and so has to reverse at the end.
+  */
+class AssocMapOrderTest extends AnyFunSuite {
+    import scalus.cardano.onchain.plutus.prelude.List.toScalaList
+
+    test("fromList preserves input order") {
+        val built = AssocMap.fromList(
+          PList.Cons(
+            (BigInt(1), "a"),
+            PList.Cons((BigInt(2), "b"), PList.Cons((BigInt(3), "c"), PList.Nil))
+          )
+        )
+        assert(built.toList.toScalaList.map(_._1) == List(BigInt(1), BigInt(2), BigInt(3)))
+    }
+
+    test("fromList keeps the first entry for a repeated key") {
+        val built = AssocMap.fromList(
+          PList.Cons((BigInt(1), "first"), PList.Cons((BigInt(1), "second"), PList.Nil))
+        )
+        assert(built.toList.toScalaList == List((BigInt(1), "first")))
+    }
+
+    test("fromList agrees with unsafeFromList on already-unique input") {
+        val pairs = PList.Cons((BigInt(9), "x"), PList.Cons((BigInt(4), "y"), PList.Nil))
+        assert(
+          AssocMap.fromList(pairs).toList.toScalaList == AssocMap
+              .unsafeFromList(pairs)
+              .toList
+              .toScalaList
+        )
+    }
+}

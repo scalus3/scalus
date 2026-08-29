@@ -146,6 +146,30 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         Cell(compared, mismatches.result(), failures.result())
     }
 
+    /** Floors for each cell's comparison count, recorded from a known-good run.
+      *
+      * `cell` catches translator and corpus-parsing failures alike, so without a floor the whole
+      * oracle could degrade to a one-sample check - or to nothing - and still report green. These
+      * are minimums, not equalities: a corpus bump may legitimately raise them.
+      */
+    private val minCompared = Map(
+      "V3 withdrawals" -> 15,
+      "V3 votes" -> 17,
+      "V3 data" -> 18,
+      "V2 withdrawals" -> 19,
+      "V2 data" -> 20,
+      "V1 withdrawals" -> 39
+    )
+
+    private def assertCoverage(name: String, c: Cell): Unit = {
+        val floor = minCompared(name)
+        assert(
+          c.compared >= floor,
+          s"$name compared only ${c.compared} instances, expected at least $floor - the oracle " +
+              s"has silently lost coverage. ${c.summary}"
+        )
+    }
+
     private def pv(inst: Golden.Instance) = MajorProtocolVersion(inst.protocolMajor)
     private def sc = Golden.goldenSlotConfig
 
@@ -163,25 +187,33 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
         info(s"instances per (PV, language): ${byCell.toMap.toSeq.sorted.mkString(", ")}")
     }
 
-    test("the corpus slot config reproduces a known validity range") {
-        // validRange is field 7 in V3; a finite lower bound is `Finite t` with t in milliseconds.
-        // Rather than hardcode a slot, assert the round trip: our SlotConfig must map some slot to
-        // the exact POSIX time the ledger recorded. A wrong zeroTime shifts every interval, so
-        // this failing means "wrong environment", not "wrong ordering".
-        val v3s = Golden.instances.filter(_.language == Golden.PlutusV3)
-        val finiteBounds = v3s.flatMap { inst =>
+    test("the corpus slot config maps a slot to the POSIX time the ledger recorded") {
+        // A real check, not a restatement of the constants: take the upper bound the ledger wrote
+        // into a V3 validRange, invert it through our SlotConfig, and require the slot to come
+        // back a whole number in range. A wrong zeroTime or slotLength shifts every interval and
+        // fails here, which is what this test exists to catch.
+        val bounds = Golden.instances.filter(_.language == Golden.PlutusV3).flatMap { inst =>
             Try {
-                val vr = inst.txInfoField(7).asArray // Interval = [0, lower, upper]
-                val lower = vr(1).asArray // LowerBound = [0, extended, closure]
-                val ext = lower(1).asArray // Extended = [conIdx, ...]; Finite = [1, POSIXTime]
-                if ext(0).asLong == 1 then Some(newtypeBytes(ext(1))) else None
+                val interval = inst.txInfoField(7).asArray // Interval = [0, lower, upper]
+                val upper = interval(2).asArray // UpperBound = [0, extended, closure]
+                val ext = upper(1).asArray // Extended: Finite is constructor 1
+                if ext(0).asLong == 1 then Some(ext(1).asArray.apply(1).asLong) else None
             }.toOption.flatten
         }
-        // POSIXTime is a newtype over Integer, so it is not bytes; just assert we found intervals
-        // and that the configured zeroTime matches the generator's documented system start.
-        assert(sc.zeroTime == 1684445839000L * 1000L, "golden system start must be in milliseconds")
-        assert(sc.slotLength == 1000, "the generator uses one-second slots")
-        info(s"V3 instances inspected for validity ranges: ${v3s.size}")
+        assert(
+          bounds.sizeIs >= 5,
+          s"expected several finite upper bounds to check against, found ${bounds.size}"
+        )
+        for posixMillis <- bounds do {
+            val slot = (posixMillis - sc.zeroTime) / sc.slotLength
+            assert(
+              sc.zeroTime + slot * sc.slotLength == posixMillis,
+              s"POSIX time $posixMillis is not on a slot boundary under the corpus SlotConfig " +
+                  s"(zeroTime=${sc.zeroTime}, slotLength=${sc.slotLength}) - wrong environment"
+            )
+            assert(slot >= 0 && slot < 1000000, s"implausible slot $slot from $posixMillis")
+        }
+        info(s"checked ${bounds.size} finite validity-range bounds against the corpus SlotConfig")
     }
 
     /** Decode coverage. The corpus is QuickCheck output, so some instances carry values no real
@@ -215,7 +247,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
                   .toSeq
         )
         info(c.summary)
-        assert(c.compared > 0, "no V3 instance had >= 2 withdrawals; the probe proved nothing")
+        assertCoverage("V3 withdrawals", c)
         assert(c.mismatches.isEmpty, s"V3 withdrawal ordering diverged: ${c.summary}")
     }
 
@@ -233,7 +265,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
                   .toSeq
         )
         info(c.summary)
-        assert(c.compared > 0, "no V3 instance had >= 2 voters; the probe proved nothing")
+        assertCoverage("V3 votes", c)
         assert(c.mismatches.isEmpty, s"V3 vote ordering diverged: ${c.summary}")
     }
 
@@ -251,7 +283,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
                   .toSeq
         )
         info(c.summary)
-        assert(c.compared > 0, "no V3 instance had >= 2 datums; the probe proved nothing")
+        assertCoverage("V3 data", c)
         assert(c.mismatches.isEmpty, s"V3 datum ordering diverged: ${c.summary}")
     }
 
@@ -271,7 +303,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
                   .toSeq
         )
         info(c.summary)
-        assert(c.compared > 0, "no V2 instance had >= 2 withdrawals; the probe proved nothing")
+        assertCoverage("V2 withdrawals", c)
         assert(c.mismatches.isEmpty, s"V2 withdrawal ordering diverged: ${c.summary}")
     }
 
@@ -289,7 +321,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
                   .toSeq
         )
         info(c.summary)
-        assert(c.compared > 0, "no V2 instance had >= 2 datums; the probe proved nothing")
+        assertCoverage("V2 data", c)
         assert(c.mismatches.isEmpty, s"V2 datum ordering diverged: ${c.summary}")
     }
 
@@ -308,7 +340,7 @@ class TxInfoTranslationGoldenTest extends AnyFunSuite {
                   .toSeq
         )
         info(c.summary)
-        assert(c.compared > 0, "no V1 instance had >= 2 withdrawals; the probe proved nothing")
+        assertCoverage("V1 withdrawals", c)
         assert(c.mismatches.isEmpty, s"V1 withdrawal ordering diverged: ${c.summary}")
     }
 }

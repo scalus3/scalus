@@ -49,10 +49,23 @@ class ChangedParametersEncodingTest extends AnyFunSuite {
     }
 
     test("CBOR round-trips are unaffected by the Plutus-side reduction") {
-        // Only the Plutus encoding normalises; the ledger's CBOR codec must still be exact, or
-        // re-serialising a transaction would change its hash.
+        // Only the Plutus encoding normalises. The CBOR codec must stay exact, or re-serialising
+        // a transaction carrying a ParameterChange would change its hash - so this has to go
+        // through encode/decode, not just read the constructor back.
+        import io.bullet.borer.Cbor
         val raw = UnitInterval(6, 10)
-        assert(raw.numerator == 6 && raw.denominator == 10)
+        val bytes = Cbor.encode(raw).toByteArray
+        val back = Cbor.decode(bytes).to[UnitInterval].value
+        assert(back == raw, s"CBOR round-trip changed the value: $raw -> $back")
+        assert(
+          back.numerator == 6 && back.denominator == 10,
+          "the CBOR codec must not reduce; only ToData does"
+        )
+        // and the bytes themselves must carry 6/10, not 3/5
+        assert(
+          Cbor.encode(UnitInterval(3, 5)).toByteArray.toSeq != bytes.toSeq,
+          "6/10 and 3/5 must not encode identically, or the codec is reducing"
+        )
     }
 }
 

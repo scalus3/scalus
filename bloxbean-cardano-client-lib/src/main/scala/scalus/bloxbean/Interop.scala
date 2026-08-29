@@ -45,9 +45,28 @@ given Ordering[Redeemer] with
 
 /** Interoperability between Cardano Client Lib and Scalus */
 object Interop {
+
+    /** Ordering matches the ledger's derived `Ord Voter`: constructors
+      * `CommitteeVoter < DRepVoter < StakePoolVoter` (`Conway/Governance/Procedures.hs:338-342`)
+      * and, within each, `Ord (Credential kr)` derived on `ScriptHashObj | KeyHashObj`
+      * (`Credential.hs:98-101`), so **script credentials sort before key credentials**.
+      *
+      * CCL's `VoterType` ordinal cannot be used: it declares `..._KEY_HASH` before
+      * `..._SCRIPT_HASH` in both the committee and DRep pairs, i.e. key before script, which is the
+      * opposite. Sorting by it produced a `votes` map that violated the on-chain `Ord[v3.Voter]`,
+      * so `votes.get` short-circuited past a voter that was present, and it resolved Voting
+      * redeemer indices to the wrong voter.
+      */
     given Ordering[Voter] with {
+        private def rank(v: Voter): (Int, Int) = v.getType match
+            case VoterType.CONSTITUTIONAL_COMMITTEE_HOT_SCRIPT_HASH => (0, 0)
+            case VoterType.CONSTITUTIONAL_COMMITTEE_HOT_KEY_HASH    => (0, 1)
+            case VoterType.DREP_SCRIPT_HASH                         => (1, 0)
+            case VoterType.DREP_KEY_HASH                            => (1, 1)
+            case VoterType.STAKING_POOL_KEY_HASH                    => (2, 1)
+
         def compare(x: Voter, y: Voter): Int =
-            x.getType.compareTo(y.getType) match
+            summon[Ordering[(Int, Int)]].compare(rank(x), rank(y)) match
                 case 0 =>
                     util.Arrays.compareUnsigned(
                       x.getCredential.getBytes,
@@ -467,15 +486,14 @@ object Interop {
     def getInterval(tx: Transaction, slotConfig: SlotConfig, protocolVersion: Int): v1.Interval = {
         val validFrom = tx.getBody.getValidityStartInterval
         (validFrom, tx.getBody.getTtl) match
-            case (0, 0) => v1.Interval.always
+            case (0, 0)       => v1.Interval.always
             case (0, validTo) =>
-                val closure =
-                    if protocolVersion > 8 then false
-                    else true // don't ask me why, I know it's stupid
-                val upper = v1.IntervalBound(
-                  v1.IntervalBoundType.Finite(BigInt(slotConfig.slotToTime(validTo))),
-                  closure
-                )
+                // Always exclusive, matching LedgerToPlutusTranslation.getInterval and Conway's
+                // transValidityInterval, which uses strictUpperBound for every shape and is not
+                // gated on the protocol version (Conway/TxInfo.hs:798-810). The two translators
+                // must agree; a divergence here is invisible to any test that uses only one.
+                val upper =
+                    v1.IntervalBound.finiteExclusive(BigInt(slotConfig.slotToTime(validTo)))
                 v1.Interval(v1.IntervalBound.negInf, upper)
             case (validFrom, 0) =>
                 v1.Interval(
@@ -504,29 +522,35 @@ object Interop {
       * This is the order V3 delivers `txInfoWdrl` in, and the order a Rewarding redeemer index is
       * resolved against (`Map.elemAt` on `Map AccountAddress Coin`, Conway/TxBody.hs:672).
       */
+    /** Parses each withdrawal once into its ledger sort key and its Plutus credential, so the two
+      * orderings below can each sort a single time rather than one re-sorting the other's output.
+      *
+      * A reward address is a header byte then the 28-byte credential hash; the header carries the
+      * network in the low nibble and sets bit 4 for a script credential (CIP-19).
+      */
+    private def parseWithdrawals(
+        withdrawals: util.List[Withdrawal]
+    ): IndexedSeq[((Int, Int, ByteString), (v1.Credential, BigInt))] =
+        withdrawals.asScala.toIndexedSeq.map { w =>
+            val bytes = Address(w.getRewardAddress).getBytes
+            val header = bytes(0) & 0xff
+            require(
+              (header & 0xe0) == 0xe0,
+              s"Not a reward address in withdrawals: ${w.getRewardAddress}"
+            )
+            val network = header & 0x0f
+            val isScript = (header & 0x10) != 0
+            val hash = ByteString.fromArray(bytes.drop(1))
+            val cred =
+                if isScript then v1.Credential.ScriptCredential(hash)
+                else v1.Credential.PubKeyCredential(v1.PubKeyHash(hash))
+            ((network, if isScript then 0 else 1, hash), cred -> BigInt(w.getCoin))
+        }
+
     private def ledgerOrderedWithdrawals(
         withdrawals: util.List[Withdrawal]
-    ): IndexedSeq[(v1.Credential, BigInt)] = {
-        withdrawals.asScala.toIndexedSeq
-            .map { w =>
-                val bytes = Address(w.getRewardAddress).getBytes
-                val header = bytes(0) & 0xff
-                // Reward addresses have 111 in the top three bits (CIP-19).
-                require(
-                  (header & 0xe0) == 0xe0,
-                  s"Not a reward address in withdrawals: ${w.getRewardAddress}"
-                )
-                val network = header & 0x0f
-                val isScript = (header & 0x10) != 0
-                val hash = ByteString.fromArray(bytes.drop(1))
-                val cred =
-                    if isScript then v1.Credential.ScriptCredential(hash)
-                    else v1.Credential.PubKeyCredential(v1.PubKeyHash(hash))
-                ((network, if isScript then 0 else 1, hash), cred -> BigInt(w.getCoin))
-            }
-            .sortBy(_._1)
-            .map(_._2)
-    }
+    ): IndexedSeq[(v1.Credential, BigInt)] =
+        parseWithdrawals(withdrawals).sortBy(_._1).map(_._2)
 
     /** Withdrawals in **Plutus** order, which is what the V1/V2 withdrawals field receives: the
       * ledger keys that map by the Plutus type and `Map.toList`s it
@@ -536,13 +560,16 @@ object Interop {
     def getWithdrawals(
         withdrawals: util.List[Withdrawal]
     ): scalus.cardano.onchain.plutus.prelude.List[(v1.StakingCredential, BigInt)] = {
-        val plutusOrder: Ordering[(v1.Credential, BigInt)] = Ordering.by {
-            case (v1.Credential.PubKeyCredential(pkh), _)  => (0, pkh.hash)
-            case (v1.Credential.ScriptCredential(hash), _) => (1, hash)
-        }
+        // Plutus order: PubKeyCredential (constructor 0) before ScriptCredential (1), then hash.
+        // Sorted straight from the parsed pairs, not from the ledger-ordered list, so this is one
+        // sort rather than a re-sort of another.
         scalus.cardano.onchain.plutus.prelude.List.from(
-          ledgerOrderedWithdrawals(withdrawals)
-              .sorted(plutusOrder)
+          parseWithdrawals(withdrawals)
+              .map(_._2)
+              .sortBy {
+                  case (v1.Credential.PubKeyCredential(pkh), _)  => (0, pkh.hash)
+                  case (v1.Credential.ScriptCredential(hash), _) => (1, hash)
+              }
               .map((cred, coin) => v1.StakingCredential.StakingHash(cred) -> coin)
         )
     }
@@ -909,20 +936,27 @@ object Interop {
                 else throw new IllegalStateException(s"Wrong reward index: $index in $withdrawals")
 
             case RedeemerTag.Proposing =>
-                val proposals = certificates.asScala.collect { case p: ProposalProcedure => p }
+                // Index source is `proposalProceduresTxBodyL`, an OSet in submitter order
+                // (Conway/TxBody.hs:678-679). Collecting from the certificate list can never
+                // match: ProposalProcedure is unrelated to Certificate, so that was always empty
+                // and every Proposing redeemer threw.
+                val proposals = (tx.getBody.getProposalProcedures ?? util.List.of()).asScala.toSeq
                 if proposals.isDefinedAt(index) then
                     v3.ScriptPurpose.Proposing(index, getProposalProcedureV3(proposals(index)))
                 else
                     throw new IllegalStateException(
-                      s"Wrong proposal index: $index in $certificates"
+                      s"Wrong proposal index: $index in $proposals"
                     )
             case RedeemerTag.Voting =>
-                val voting = tx.getBody.getVotingProcedures.getVoting.asScala.toSeq.sortBy(_._1)
+                // Index source is `Map.elemAt` on `Map Voter _` (Conway/TxBody.hs:676-677), so
+                // the ledger's Ord Voter, which the Ordering above now mirrors.
+                val voting = tx.getBody.getVotingProcedures.getVoting.asScala.toSeq
+                    .sortBy(_._1)(using summon[Ordering[Voter]])
                 if voting.isDefinedAt(index) then
                     v3.ScriptPurpose.Voting(getVoterV3(voting(index)._1))
                 else
                     throw new IllegalStateException(
-                      s"Wrong voter index: $index in $certificates"
+                      s"Wrong voter index: $index in $voting"
                     )
     }
 

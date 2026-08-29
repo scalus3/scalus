@@ -150,7 +150,11 @@ object GovAction {
                 w.writeArrayOpen(5)
                     .writeInt(4) // Tag for UpdateCommittee
                     .write(prevActionId)
-                    .write(TaggedOrderedSet.from(removedMembers))
+                    // Sorted by the ledger's Ord Credential, because the ledger holds this as a
+                    // `Set (Credential ColdCommitteeRole)` (Procedures.hs:844) and so serialises
+                    // it ascending. Writing Scala Set iteration order instead produced bytes the
+                    // node would never emit, changing the transaction body and its GovActionId.
+                    .write(TaggedOrderedSet.from(removedMembers.toSeq.sorted))
                     .write(addedMembers)
                     .write(threshold)
                     .writeArrayClose()

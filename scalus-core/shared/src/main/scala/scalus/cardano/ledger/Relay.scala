@@ -46,14 +46,7 @@ object Relay {
     /** Validates that a DNS name is at most 128 characters.
       */
     private def validateDnsName(name: String): Unit = {
-        // The ledger bounds these by UTF-8 BYTE length, not character count: `textSizeN` uses
-        // `lengthWord8` and the CDDL says `text .size (0 .. 128)`
-        // (BaseTypes.hs:643-657, conway.cddl:489/496). Scala's String.length counts UTF-16 units,
-        // which is <= the UTF-8 byte length for any non-ASCII text, so it must not be used here.
-        require(
-          name.getBytes(java.nio.charset.StandardCharsets.UTF_8).length <= 128,
-          s"DNS name must be at most 128 UTF-8 bytes, got ${name.getBytes(java.nio.charset.StandardCharsets.UTF_8).length}"
-        )
+        LedgerBounds.requireTextBytes("DNS name", name, 128)
     }
 
     /** CBOR Encoder for Relay. Encodes as a tagged array based on the relay type.
