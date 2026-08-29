@@ -145,12 +145,12 @@ object ListAction
 @Compile
 object MyListValidator extends DataParameterizedValidator {
 
-    inline override def mint(cfgData: Data, redeemer: Data, tx: TxInfo): Unit = {
+    // policyId is the minting script's own hash, handed in by the Validator trait
+    inline override def mint(cfgData: Data, redeemer: Data, policyId: PolicyId, tx: TxInfo): Unit = {
         // Extract configuration (rootKey, prefix, etc.)
         val rootKey: RootKey = ??? // from cfgData
         val prefix: NodeKeyPrefix = ???
         val prefixLen: BigInt = ???
-        val policyId = tx.findOwnMintingPolicyHash
 
         redeemer.to[ListAction] match
             case ListAction.Init =>

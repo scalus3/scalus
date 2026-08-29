@@ -65,10 +65,10 @@ The blockchain enforces these bounds, and our validator checks they're set corre
 Now let's implement. In Scalus, we define types with automatic serialization:
 
 ```scala
-import scalus.*
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.sha3_256
-import scalus.uplc.builtin.{ByteString, Data}
 import scalus.uplc.builtin.Data.{FromData, ToData}
+import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
 import scalus.cardano.onchain.plutus.v3.*
 import scalus.cardano.onchain.plutus.prelude.*
 
@@ -123,13 +123,15 @@ object HtlcValidator {
         redeemer.to[Action] match
             case Action.Timeout =>
                 // COMMITTER RECLAIMS: must be after timeout, signed by committer
-                val validFrom = tx.validRange.from.finite(0)
+                val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
+                // validFrom is inclusive, hence 10 <= 10 is correct
                 require(config.timeout <= validFrom, InvalidCommitterTimePoint)
                 require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
 
             case Action.Reveal(preimage) =>
                 // RECEIVER CLAIMS: must be before timeout, correct secret, signed
-                val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+                val validTo = tx.validToOrFail(ValidRangeMustBeBound)
+                // validTo is exclusive, hence 10 <= 10 is correct
                 require(validTo <= config.timeout, InvalidReceiverTimePoint)
                 require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
                 require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
@@ -139,10 +141,10 @@ object HtlcValidator {
     inline val MustBeSpending = "Must be a spending script"
     inline val InvalidDatum = "Invalid Datum"
     inline val ValidRangeMustBeBound = "ValidTo must be set"
-    inline val UnsignedCommitterTransaction = "Must be signed by committer"
-    inline val UnsignedReceiverTransaction = "Must be signed by receiver"
-    inline val InvalidCommitterTimePoint = "Must be after timeout"
-    inline val InvalidReceiverTimePoint = "Must be before timeout"
+    inline val UnsignedCommitterTransaction = "Must be signed by a committer"
+    inline val UnsignedReceiverTransaction = "Must be signed by a receiver"
+    inline val InvalidCommitterTimePoint = "Must be exclusively after timeout"
+    inline val InvalidReceiverTimePoint = "Must be inclusively before timeout"
     inline val InvalidReceiverPreimage = "Invalid preimage"
 }
 ```
@@ -155,12 +157,22 @@ object HtlcValidator {
 
 | Check | Prevents |
 |-------|----------|
+| `tx.validFromOrFail(...)` / `tx.validToOrFail(...)` | A transaction with no validity bound on the side the branch depends on |
 | `config.timeout <= validFrom` | Committer reclaiming before timeout |
 | `validTo <= config.timeout` | Receiver claiming after timeout |
 | `sha3_256(preimage) == config.image` | Receiver claiming with wrong secret |
 | `tx.isSignedBy(...)` | Anyone else stealing funds |
 
-The validator is 84 lines total. It compiles to **569 bytes** of Plutus Core.
+<Callout type="warning">
+**Never substitute a default for a missing bound.** `validFromOrFail` fails when the transaction
+has no lower bound. An earlier version of this validator read the lower bound with a default of
+`0` instead, which treats an unbounded transaction as happening at the Unix epoch and lets the
+committer reclaim before the timeout. `validFrom` is inclusive (the earliest slot the transaction
+can land in) and `validTo` is exclusive, so both comparisons use `<=`.
+</Callout>
+
+The validator is under 80 lines and compiles to 318 bytes of Plutus Core (pinned in `HtlcTest`);
+the `HtlcContract` main below prints the size.
 
 ## The Scalus Advantage: Debugging
 
@@ -579,7 +591,7 @@ Run to see the script size and blueprint:
 
 ```sh
 scala-cli run HtlcContract.scala
-# Script size: 569 bytes
+# Script size: 318 bytes
 # { "preamble": { "title": "Hash Time-Locked Contract", ... }, "validators": [...] }
 ```
 
@@ -596,8 +608,8 @@ scala-cli run HtlcContract.scala
 
 ## Full Source Code
 
-- [HtlcValidator.scala](https://github.com/nau/scalus/blob/master/scalus-examples/shared/src/main/scala/scalus/examples/htlc/HtlcValidator.scala) — Smart contract
-- [HtlcTransactions.scala](https://github.com/nau/scalus/blob/master/scalus-examples/shared/src/main/scala/scalus/examples/htlc/HtlcTransactions.scala) — Transaction building
+- [HtlcValidator.scala](https://github.com/nau/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcValidator.scala) – Smart contract
+- [HtlcTransactions.scala](https://github.com/nau/scalus/blob/master/scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcTransactions.scala) – Transaction building
 - [HtlcTest.scala](https://github.com/nau/scalus/blob/master/scalus-examples/jvm/src/test/scala/scalus/examples/htlc/HtlcTest.scala) — Unit tests
 - [HtlcIntegrationTest.scala](https://github.com/nau/scalus/blob/master/scalus-cardano-ledger-it/src/test/scala/scalus/testing/integration/HtlcIntegrationTest.scala) — Integration tests
 

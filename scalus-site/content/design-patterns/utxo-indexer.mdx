@@ -80,14 +80,21 @@ object MyValidator extends Validator {
           inputIdx,
           outputIdx,
           tx,
+          // Each check is a require with its own message
           validator = (input, output) => {
-              // Your validation logic: check values, datums, addresses, etc.
-              input.resolved.value.getLovelace === output.value.getLovelace
+              require(output.value.hasSameTokensAndAtLeastAda(input.resolved.value), "value")
+              require(output.hasInlineDatum(expectedDatum), "datum") // your continuing datum
+              require(output.address === input.resolved.address, "address")
           }
         )
     }
 }
 ```
+
+Every `UtxoIndexer` callback returns `Unit` and does its own `require`. A `Boolean` lambda compiles
+against that parameter and checks nothing; see the
+[migration hazard](/docs/design-patterns/withdraw-zero#callbacks-return-unit) before upgrading
+existing validators.
 
 ### One-to-Many Indexer
 
@@ -101,11 +108,12 @@ UtxoIndexer.oneToMany(
   tx,
   perOutputValidator = (input, idx, output) => {
       // Validate each output individually
-      output.value.getLovelace >= minAmount
+      require(output.value.getLovelace >= minAmount, "Output below minimum")
   },
   collectiveValidator = (input, outputs) => {
       // Validate all outputs together
-      outputs.foldLeft(BigInt(0))(_ + _.value.getLovelace) === input.resolved.value.getLovelace
+      val paid = outputs.foldLeft(BigInt(0))(_ + _.value.getLovelace)
+      require(paid === input.resolved.value.getLovelace, "Outputs do not sum to the input")
   }
 )
 ```
@@ -121,7 +129,7 @@ UtxoIndexer.multiOneToOneNoRedeemer(
   tx = txInfo,
   validator = (inIdx, input, outIdx, output) => {
       // Validate each input-output pair
-      input.resolved.value.getLovelace === output.value.getLovelace
+      require(input.resolved.value.getLovelace === output.value.getLovelace, "Lovelace mismatch")
   }
 )
 ```
@@ -142,7 +150,7 @@ UtxoIndexer.multiOneToOneWithRedeemer[MyRedeemer](
   },
   validator = (inIdx, input, redeemer, outIdx, output) => {
       // Validate with per-input redeemer data
-      true
+      require(output.value.getLovelace >= redeemer.minPayout, "Payout below the redeemer minimum")
   }
 )
 ```

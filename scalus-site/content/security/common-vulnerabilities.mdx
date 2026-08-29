@@ -8,151 +8,491 @@ import { Callout } from 'nextra/components'
 
 # Common Plutus Vulnerabilities
 
-This guide summarizes known Plutus vulnerabilities and mitigation strategies. Understanding these patterns helps you write more secure validators.
+This guide lists the known vulnerability classes of Cardano validators, grouped by family and
+ordered by how often they appear in real audits. Every entry ends with the Scalus operation or
+idiom that closes it, with a snippet from one of the example validators in `scalus-examples`.
+The short labels (`DS-1`, `VP-2`, ...) are the vocabulary the `/security-review` skill uses, so a
+finding in a review report maps to a section here.
 
----
+<Callout type="info">
+A Cardano validator only **validates**; it never acts. Every script input in a transaction runs
+its own validator, and every run sees the same `TxInfo`. Most classes below are one mistake in
+different clothes: a check phrased as "some output satisfies X" instead of "this exact output
+satisfies exactly X".
+</Callout>
 
-## 1. UTxO Value Size Spam (Token Dust Attack)
+## Double Satisfaction (DS)
 
-**Problem:** An attacker creates a UTxO containing thousands of different token types, approaching the 16KB maximum size limit. When sent to a script address, this oversized UTxO becomes expensive or impossible to spend, effectively locking the protocol.
+### DS-1: One output satisfies two script inputs
 
-**Mitigation:**
-- Don't allow arbitrary values in trusted places
-- Implement minimum ADA requirements that scale with UTxO size
-- Whitelist acceptable tokens
-- Validate value composition before accepting UTxOs
+**Problem:** Two UTxOs locked by the same script are spent in one transaction. Each validator run
+looks for "an output paying the beneficiary", and both find the same output.
 
----
+**Mitigation:** Allow only one own-script input per transaction, or tag every payout with the
+spent input's `TxOutRef`, or fold over all own inputs and outputs and compare the sums.
 
-## 2. Large Datum Size
+**Scalus:** the single-input guard is `findUniqueOrFail` on the inputs. It fails unless exactly one
+input sits at the script's payment credential. `.filter(...).head` is the anti-idiom.
 
-**Problem:** Oversized datums on UTxOs that must be consumed for critical operations create performance bottlenecks and can exceed transaction size limits.
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala
+txInfo.inputs.findUniqueOrFail(
+  _.resolved.address.credential === ownCredential,
+  MultipleVestingInputs
+)
+```
 
-**Mitigation:**
-- Avoid infinitely-sized data types
-- Implement size limits on all data structures
-- Use bounded collections (lists with maximum length)
-- Consider using Merkle trees or cryptographic hashes for large datasets
-- Store large data off-chain with on-chain hash references
+The tagged-output defence is `hasPaidTagged`. All three comparisons are exact: whole address,
+whole value with `===` (never `>=`), and the datum tag. A `TxOutRef`-derived tag is unique across
+every script and every instance:
 
----
+```scala
+val tag = OutputDatum.OutputDatum(ownRef.deriveTokenName.toData)
+require(tx.hasPaidTagged(beneficiary, Value.lovelace(price), tag), "must pay the beneficiary")
+```
 
-## 3. Double Satisfaction
+### DS-2: Cross-instance double satisfaction
 
-**Problem:** A spending validator that only checks transaction outputs can allow multiple UTxOs to be spent in one transaction while satisfying conditions only once. Example: Multiple NFTs sold while the seller receives payment for just one.
+**Problem:** The single-input guard is scoped to one script hash. Two parameterized instances of
+the same validator have different hashes, so each sees one own input, and both share one payout.
 
-**Mitigation:**
-- Validate single UTxO consumption by filtering inputs by script address and counting them
-- Tag outputs with corresponding input transaction IDs in datums
-- Explicitly require the redeemer to reference the specific input being spent
-- Verify exactly which UTxO is being consumed
+**Mitigation:** Tag the payout with something unique to *this instance*: the input's `TxOutRef`
+(`hasPaidTagged` above) or the instance's own script hash.
 
----
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala
+require(sellerOutput.hasInlineDatum(scriptHash), "Seller output must be tagged with this auction's id")
+```
 
-## 4. Lack of Staking Control
+## Value Preservation (VP)
 
-**Problem:** Protocols must control staking for protocol-held funds. Without proper checks, users could arbitrarily change staking pool addresses, redirecting rewards or manipulating protocol-controlled stake.
+### VP-1: Value not preserved on the continuing output
 
-**Mitigation:**
-- Use script-controlled staking credentials
-- Verify staking credentials remain unchanged in continuation outputs
-- Implement explicit staking withdrawal validators
-- Ensure all outputs to the script maintain the same staking credential
+**Problem:** The validator checks the datum transition but never the value of the continuing
+output, or the datum records a balance never tied to the actual `Value`. The attacker keeps the
+difference. This is the most frequent bug in reviewed validators.
 
----
+**Mitigation:** Compare the whole continuing value with `===` against a value computed from the
+input. If the datum carries a balance, tie it to the real token quantity with `quantityOf` (as
+`AmmValidator` does for its reserves). When the output may gain ADA but must keep every token, use
+`hasSameTokensAndAtLeastAda(expected)`.
 
-## 5. EUTxO Concurrency Denial of Service
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/simpletransfer/SimpleTransferValidator.scala
+require(contractOutput.value === balance + amount, "Contract has received incorrect amount")
+```
 
-**Problem:** An attacker repeatedly spends and recreates the same UTxO with trivial transactions, blocking legitimate users from interacting with the protocol. In the EUTxO model, only one transaction can spend a specific UTxO per block.
+### VP-2: Lovelace-only comparison
 
-**Mitigation:**
-- Implement cancellation fees or economic disincentives
-- Add freezing periods allowing only keeper functions
-- Use time-range validators to create protocol "cold periods"
-- Require minimum time locks before allowing certain operations
-- Design protocols to minimize shared state
+**Problem:** `value.getLovelace` is the easy accessor, so the check is written in lovelace. It
+passes while every native token in the UTxO goes to the attacker.
 
----
+**Mitigation:** Compare the whole `Value`. If the protocol is ADA-only by design, prove it once at
+the boundary with `withoutLovelace.isZero` instead of assuming it in every comparison.
 
-## 6. Unauthorized State Transitions
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala
+require(
+  contractOutput.value === ownInput.value - Value.lovelace(requestedAmount),
+  ContinuingValueMismatch
+)
 
-**Problem:** Missing signature checks or insufficient validation of transaction signatories allows unauthorized parties to perform state transitions.
+// scalus-examples/jvm/src/main/scala/scalus/examples/paymentsplitter/PaymentSplitterValidator.scala
+require(input.resolved.value.withoutLovelace.isZero, "Contract input must contain only ADA")
+```
 
-**Mitigation:**
-- Always verify required signatures in `tx.signatories`
-- Implement multi-signature requirements where appropriate
-- Maintain comprehensive test suites where each unauthorized actor fails validation
-- Never assume a transaction is valid without explicit authorization checks
+### VP-3: Continuing output redirected
 
----
+**Problem:** The validator reads "the output at index `i`" from the redeemer and checks its value
+and datum but never its address, so the attacker points `i` at an output they control.
 
-## 7. Oracle Attacks
+**Mitigation:** Locate the continuing output by the **whole** input address with
+`findContinuingOutputOrFail(ownInput, msg)`, which fails unless exactly one output matches (see
+AU-4 for the staking part).
 
-### Price Manipulation
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/escrow/EscrowValidator.scala
+val contractOutput =
+    txInfo.findContinuingOutputOrFail(ownInput, "Expected exactly one contract output")
+```
 
-**Problem:** Attackers manipulate oracle price feeds to cause incorrect liquidations or unfavorable trades. Example: Using flash loans to temporarily manipulate DEX spot prices.
+### VP-4: `>=` where an exact payout was meant
 
-**Mitigation:**
-- Use Time-Weighted Average Price (TWAP) instead of spot prices
-- Implement maximum/minimum reportable price changes
-- Aggregate multiple oracle sources (Chainlink, DEXes, Charli3)
-- Verify price consistency across sources
+**Problem:** "At least the required amount" looks conservative. It lets one over-sized output
+satisfy two obligations at once, which is what enables DS-1.
 
-### Oracle Key Compromise
+**Mitigation:** Payouts and refunds compare with `===`. Reserve `>=` for cases where an excess is
+genuinely allowed, and say so in the message.
 
-**Problem:** Oracle cryptographic keys are valuable attack targets. If compromised, attackers can submit fraudulent data.
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala
+require(refundOutput.value.getLovelace === currentHighestBid, "Previous bidder must receive exactly their bid amount")
+```
 
-**Mitigation:**
-- Implement on-chain key revoking, expiry, and updating systems
-- Require multi-signature oracles
-- Build robust oracle ecosystems with redundancy
-- Verify oracle signatures on-chain
+## Authentication (AU)
 
-### Oracle Data Freshness
+### AU-1: Unauthenticated UTxO or reference input
 
-**Problem:** Stale oracle data can lead to incorrect protocol decisions.
+**Problem:** Anyone can create a UTxO at any address with any datum. A validator that locates
+protocol state by address alone ("the input from the oracle script") reads attacker-supplied data.
+Reference inputs feel read-only and safe; they are not.
 
-**Mitigation:**
-- Verify timestamp freshness on oracle data
-- Reject oracle data older than acceptable threshold
-- Include timestamp validation in validators
+**Mitigation:** Authenticate protocol UTxOs by a beacon NFT whose minting policy guarantees
+uniqueness (MI-2). Check the beacon with `hasNft`, not the address.
 
----
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetValidator.scala
+require(
+  oracleInput.resolved.value.hasNft(config.oracleScriptHash, OracleBeaconName),
+  OracleInputMustHaveBeacon
+)
+```
 
-## 8. Infinite Mint
+### AU-2: Missing signature on a state transition
 
-**Problem:** Unintended token minting via unexpected authorization pathways. Example: A forwarding minting policy that lacks proper mint-action checks in witness redeemers.
+**Problem:** One branch of the redeemer enum forgets its authorization check. Nothing is
+structurally wrong; a required predicate is absent, and anyone can submit that transition.
 
-**Mitigation:**
-- Always explicitly validate the mint amount in minting policies
-- Check the exact quantity being minted matches expectations
-- Don't rely solely on spending validators to constrain minting
-- For NFTs, verify exactly one token is minted
-- Implement time windows or other constraints for token creation
+**Mitigation:** Every branch that is not deliberately permissionless checks `tx.isSignedBy(key)`;
+a set of allowed signers uses `tx.isSignedByAny(keys)`. Keep a test per branch that submits it
+from an unrelated key and expects a failure.
 
----
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcValidator.scala
+require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
+```
 
-## 9. Parameterized Validator Verification
+### AU-4: Staking credential swapped on the continuing output
 
-**Problem:** Difficulty verifying on-chain that scripts are proper parameterized instantiations. Users risk interacting with malicious contracts that appear legitimate but have attacker-controlled parameters.
+**Problem:** An address is a pair: a payment credential and an optional staking credential. A
+check on the payment credential alone accepts an output at `(scriptHash, attackerStakeKey)`. The
+attacker cannot spend the funds, but collects every staking reward on the protocol's TVL, and the
+DS-1 single-input guard breaks because the funds now sit at many distinct addresses.
 
-**Mitigation:**
-- Store parameters in authenticated, unique UTxOs instead of baking into scripts
-- Use protocol NFTs to authenticate configuration UTxOs
-- Manually construct terms using UPLC Apply constructor for off-chain verification
-- Provide tools for users to verify script parameterization
-- Consider avoiding parameterization for critical protocols
+**Mitigation:** Compare the whole `Address`. `findContinuingOutputOrFail` matches the full input
+address; the credential-only finders (`findOutputsByCredential`, `findOutputsByScriptHash`) are
+wrong for the continuing output. Never rebuild the expected address with `Address.fromScriptHash`,
+which has no staking part.
 
----
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala
+// The unique continuing output to the vault's WHOLE address (staking part included), so a
+// spender cannot redirect the vault's delegation rewards by changing the staking credential.
+private def getVaultOutput(tx: TxInfo, ownInput: TxInInfo): TxOut =
+    tx.findContinuingOutputOrFail(ownInput, NotExactlyOneVaultOutput)
+```
 
-## 10. Missing Transaction Validation
+### AU-6: Parameterized validator substitution
 
-**Problem:** Validators fail to check critical transaction properties such as time ranges, required reference inputs, proper continuation outputs, or expected mints/burns.
+**Problem:** A script cannot verify on-chain that a counterpart script is the correct
+instantiation of a known template, so a user may interact with an attacker's identically-shaped
+instance whose `owner` parameter is the attacker.
 
-**Mitigation:**
-- Always validate transaction time ranges when time-dependent
-- Verify required reference inputs are present and authentic
-- Check continuation outputs maintain correct state and value
-- Validate all state transitions are consistent
-- Ensure staking credentials remain unchanged where required
-- Verify expected mints/burns occur as intended
+**Mitigation:** Store parameters in a beacon-authenticated UTxO instead of baking them into the
+script. Where a dependent script must know an instance, compute the expected hash off-chain and
+bake it in (the `ParameterValidation` pattern in `scalus-design-patterns`). Publish the instance
+hash in the blueprint so users can verify it.
+
+## Minting (MI)
+
+### MI-1: Other token name
+
+**Problem:** A policy asserts "one unit of my expected token is minted" and says nothing about
+other token names under the same policy, so the attacker mints a counterfeit alongside it. This is
+the Minswap incident class: summing across token names conflates mints and burns, so "total under
+my policy is 1" also passes for `+2` of A and `-1` of B.
+
+**Mitigation:** Compare the whole sub-map under the policy. `tx.mint.hasOnly(policy, name, qty)`
+is the mint idiom; `qty` is signed, so the same call pins a burn. When the name is not known in
+advance, `tx.mint.tokens(policy).singleOrFail(msg)` yields the only entry and fails on zero or
+several.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala
+require(tx.mint.hasOnly(policyId, poolNftName, 1), "Init: must mint exactly one pool NFT")
+// ...and on Close:
+require(tx.mint.hasOnly(policyId, poolNftName, -1), "Close: must burn exactly the pool NFT")
+```
+
+### MI-2: One-shot seed not bound
+
+**Problem:** A one-shot policy is parameterized by a seed `TxOutRef` and must require that exact
+ref to be spent. A check weakened to "some input exists at index `i`" never compares against the
+seed, so the "unique" NFT is mintable forever, and every beacon built on it (AU-1) is forgeable.
+
+**Mitigation:** Bind the seed explicitly, and derive the token name from it with `deriveTokenName`
+so the on-chain and off-chain sides cannot disagree.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/editablenft/EditableNftValidator.scala
+require(tx.inputs.at(seedIndex).outRef === seed, MustSpendSeed)
+
+// scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/Crowdfunding.scala
+val campaignId = consumedUtxo.deriveTokenName
+require(txInfo.mint.hasOnly(policyId, campaignId, 1), "Exactly one campaign NFT must be minted")
+```
+
+### MI-3: Burn checks that pass without a burn
+
+**Problem:** `tokens(policy).forall(_._2 < 0)` is vacuously true on an empty map, so a "burn only"
+branch passes a transaction that burns nothing. A `<=` on the quantity accepts a partial burn; a
+sign error lets a mint pass a burn check.
+
+**Mitigation:** `onlyBurnsUnder(policy)` requires at least one entry under the policy and every
+quantity negative. When the name is known, `mint.hasOnly(policy, name, -qty)` is stronger.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/auction/Auction.scala
+require(txInfo.onlyBurnsUnder(policyId), "Only burning is allowed (all amounts must be negative)")
+```
+
+## Time (TI)
+
+### TI-1: Unbounded validity range used as "now"
+
+**Problem:** A validity bound may be infinite, and any helper that turns it into a number must
+invent a value for that case. The deprecated `getValidityStartTime` returned `0`, so a transaction
+with **no** lower bound was treated as happening at the Unix epoch and every deadline comparison
+flipped. The transaction author picks the validity range, so a missing bound is an attacker
+capability, not an accident.
+
+**Mitigation:** Never project the interval to a scalar without proving the bound is finite.
+`validFromOrFail(msg)` and `validToOrFail(msg)` fail closed on an unbounded range; the interval
+predicates `validRange.isEntirelyAfter(t)` and `isEntirelyBefore(t)` return `false` on one. Pick
+the bound the attacker cannot move in their favour: a lower bound can be backdated freely, while
+the upper bound cannot be earlier than the real posting time (`VaultValidator` derives its
+finalization deadline from `validToOrFail` for this reason).
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcValidator.scala
+case Action.Timeout =>
+    val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
+    // validFrom is inclusive, hence 10 <= 10 is correct
+    require(config.timeout <= validFrom, InvalidCommitterTimePoint)
+```
+
+### TI-2: Bound inclusivity
+
+**Problem:** An off-by-one at a deadline gives both the claimant and the refunder a valid path in
+the same slot.
+
+**Mitigation:** The ledger builds the lower bound closed and the upper bound open. `validFromOrFail`
+is inclusive; `validToOrFail` is exclusive, so a timestamp written from it can be late but never
+early. State which one you use in the message, as the HTLC snippet above does.
+
+## Datum (DT)
+
+### DT-1: Datum hijacking
+
+**Problem:** A transition validates the field that changed and forgets the rest. The attacker
+rewrites `owner` while keeping `amount`, and the field-wise check passes. Extra trailing fields
+are smuggled through the same way.
+
+**Mitigation:** Build the complete expected datum and compare the whole thing; `copy` on the old
+datum pins every field you do not name. `hasInlineDatum(expected)` is one data equality with no
+decoding, measured at 286 lovelace against 461 for decode-then-compare. Use `inlineOrFail[T]`
+when you need the fields, not equality.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/amm/AmmValidator.scala
+val expectedDatum = AmmMath.depositDatum(datum, x0, x1)
+require(poolOutput.hasInlineDatum(expectedDatum), "Deposit: output datum mismatch")
+```
+
+### DT-3: Datum-hash bricking and missing datums
+
+**Problem:** An output at a script address may carry only a datum hash. If the preimage is never
+published, the UTxO is unspendable forever, and it costs the attacker one min-ADA to plant. On
+Plutus V3 the spending datum is `Option[Data]` and may be absent entirely.
+
+**Mitigation:** Require an **inline** datum on every output the protocol creates and never accept
+a datum-hash output as protocol state. Handle the no-datum branch with `datum.getOrFail(msg)`.
+Locate protocol UTxOs by beacon (AU-1), so planted junk is invisible. See
+[Datum Validation](/security/datum-validation) for the lazy-decoding model.
+
+## Indices and Ordering (IX)
+
+### IX-1 and IX-2: Index lists and missed inputs
+
+**Problem:** Batch validators take index lists in the redeemer. Three bugs live there: the same
+index twice (one payout counted for two obligations), a list shorter than the item list with `zip`
+silently truncating, and an extra script input that no index names and that is therefore spent
+with no validation at all.
+
+**Mitigation:** Check the index list length against the item list and reject duplicates. Verify
+coverage in both directions: every named index is an own input, and every own input is named.
+`List.at` fails on an out-of-range index. Inputs are sorted by the ledger; outputs keep the
+author's order. `UtxoIndexer.multiOneToOneNoRedeemer` in `scalus-design-patterns` walks every
+input at the script credential and fails when one has no index pair; the singular indexer
+patterns solve missed inputs, not double satisfaction.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/crowdfunding/Crowdfunding.scala
+val isInDonationList = donationInputIndices.exists { idx =>
+    txInfo.inputs.at(idx).outRef === txOutRef
+}
+require(isInDonationList, "Donation UTxO must be in donationInputIndices")
+```
+
+## Script Purposes (PU)
+
+### PU-1: Other redeemer and unimplemented purposes
+
+**Problem:** A script that runs under several purposes or redeemer branches is only as strong as
+its weakest branch. A second script that relies on "the global validator ran" is bypassed when the
+global validator ran under a different, weaker redeemer.
+
+**Mitigation:** The Scalus compiler plugin generates a `fail` for every purpose a validator does
+not implement, so a single-purpose validator rejects minting, rewarding and certifying by default.
+When a counterpart script must run, assert *which* redeemer it ran with:
+`tx.redeemers.getOrFail(purpose, msg)` and compare the decoded value.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/htlc/HtlcValidator.scala
+ctx.scriptInfo match
+    case ScriptInfo.SpendingScript(txOutRef, datum) =>
+        spend(datum, ctx.redeemer, ctx.txInfo, txOutRef)
+    case _ => fail(MustBeSpending)
+```
+
+### PU-2: Withdraw-zero forwarding proves it ran, not how
+
+**Problem:** The withdraw-zero trick runs a stake validator once per transaction instead of once
+per input. A spending validator that only checks "a withdrawal for my stake script exists" does
+not know which branch of the stake script accepted it.
+
+**Mitigation:** `StakeValidator.spendMinimal` in `scalus-design-patterns` proves the withdrawal
+script ran and nothing more. Use `StakeValidator.spend` with a redeemer validator to pin the
+endpoint when the stake script has more than one branch.
+
+## Evaluation Order (EV)
+
+### EV-1: A required check short-circuited away
+
+**Problem:** UPLC control flow is lazy. `&&` and `||` short-circuit, and only the taken branch of
+an `if` runs. With `isEmergency || (signed && valuePreserved)`, nothing else is checked when
+`isEmergency` is true.
+
+**Mitigation:** Every obligation is its own `require` with its own message. Validation callbacks
+return `Unit` and fail inside; a `Boolean` callback throws the message away.
+
+```scala
+require(isEmergency || tx.isSignedBy(owner), "authorized")
+require(out.value === expected, "value preserved") // unconditional
+```
+
+<Callout type="warning">
+The validator callbacks of `UtxoIndexer`, `StakeValidator` and `TransactionLevelMinterValidator`
+in `scalus-design-patterns` take `=> Unit`. An older `Boolean` lambda still compiles against a
+`Unit` parameter (value discard) and then checks nothing. After upgrading, grep every callback
+passed to these patterns and wrap its condition in `require(..., message)`.
+</Callout>
+
+## Arithmetic (AR)
+
+### AR-1: Rounding direction
+
+**Problem:** On-chain integers do not overflow, but they round. In any `amount * rate /
+denominator`, the rounding direction decides who absorbs the remainder, and an attacker who splits
+one large action into many small ones harvests one rounding unit each time. Plain `/` on `BigInt`
+compiles to `divideInteger`, which floors; Scala's `/` truncates toward zero, so the two disagree
+on negative operands.
+
+**Mitigation:** Name the direction: `a divFloor b` or `a divCeil b`. Round the protocol's share
+down and the user's obligation up. An alphanumeric infix operator has the lowest precedence, so
+parenthesize operand expressions.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/cape/linearvesting/LinearVestingValidator.scala
+// The remaining locked quantity rounds UP at every step: nothing vests early.
+val expectedRemaining = (futureInstallments * d.totalVestingQty) divCeil d.totalInstallments
+
+// scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala
+// The released amount rounds DOWN: the beneficiary never gets a fraction early.
+vestingDatum.initialAmount * elapsed divFloor vestingDatum.duration
+```
+
+### AR-2: Negative quantities
+
+**Problem:** Datum and redeemer fields are attacker-supplied. A negative "withdrawal" is a deposit
+the validator did not intend to allow, and a negative fee is a payout.
+
+**Mitigation:** Check the sign of every quantity that enters from the redeemer or datum before
+using it in arithmetic: `require(requestedAmount > 0, NonPositiveAmount)` in `VestingValidator`.
+
+## Resources and Denial of Service (RS)
+
+### RS-1: Token dust on a protocol UTxO
+
+**Problem:** Anyone can add native tokens to any output they create. A protocol UTxO that
+accumulates hundreds of asset classes approaches the maximum value size, blows the execution
+budget of any validator that iterates its value, and pushes the min-ADA above what the UTxO holds.
+
+**Mitigation:** Constrain the token set on every output the protocol creates. `hasOnly` pins a
+single-asset value; `withoutLovelace.isZero` pins an ADA-only one.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/vault/VaultValidator.scala
+require(value.withoutLovelace.isZero, CannotAddTokens)
+```
+
+### RS-2: Large datum
+
+**Problem:** Oversized datums on UTxOs that must be consumed for critical operations exhaust the
+budget of every later spend and can exceed the transaction size limit.
+
+**Mitigation:** Bound every collection a validator iterates, and keep large data off-chain behind
+a hash. Compare continuing datums with whole-datum `hasInlineDatum`, which is constant-cost.
+
+### RS-4: Quadratic scans
+
+**Problem:** Every spent script input runs the validator, and each run that iterates all inputs is
+linear, so the transaction is quadratic. A protocol that works with three inputs fails at fifteen.
+
+**Mitigation:** Move batch validation to a stake validator that runs once per transaction
+(`StakeValidator` in `scalus-design-patterns`, as in `OptimizedPaymentSplitterValidator`), and
+pin the budget at several input counts in tests.
+
+### RS-5: UTxO contention
+
+**Problem:** A single global-state UTxO must be consumed by every operation, so concurrent users
+race and all but one fail. An attacker who spends and recreates that UTxO on every block halts the
+protocol.
+
+**Mitigation:** Design for per-user UTxOs, sharded state, or batching through a stake validator.
+Add cancellation fees, freezing periods, or minimum time locks as economic disincentives. Submit
+competing transactions in an Emulator test so contention shows up before deployment.
+
+## Design-Level (DE)
+
+### DE-1: Locked value
+
+**Problem:** A state with no outgoing transition, or a branch whose precondition can never hold,
+locks the UTxO forever. The classic case is a bet with no timeout path when the oracle goes silent.
+
+**Mitigation:** Every state has an exit. Give time-gated flows a reclaim branch, gated by
+`validRange.isEntirelyAfter(expiration)` and a participant's signature (the `Timeout` action in
+`BettingValidator`), and test that it is reachable.
+
+### DE-2: Oracle attacks
+
+**Authenticity.** An oracle datum located by address alone is AU-1. Authenticate the oracle UTxO
+by its beacon NFT (`hasNft`) before reading its datum.
+
+**Freshness.** Stale data leads to wrong decisions. Compare the oracle timestamp against the
+transaction's validity range and reject data older than the protocol's threshold.
+
+```scala
+// scalus-examples/jvm/src/main/scala/scalus/examples/pricebet/PricebetValidator.scala
+require(
+  validRange.isEntirelyAfter(oracleState.timestamp),
+  "Oracle timestamp must be within transaction validity range"
+)
+```
+
+**Manipulation.** Spot prices can be moved within one block. Prefer time-weighted averages, cap
+the reportable change per update, and aggregate several sources.
+
+**Key compromise.** Oracle keys are high-value targets. Support on-chain key rotation and expiry,
+require multi-signature oracles, and verify oracle signatures on-chain with a domain-separated
+payload so a signature cannot be replayed across instances.

@@ -88,6 +88,19 @@ class ApiInspector(sb: StringBuilder, packages: Set[String]) extends Inspector {
 
         def show(tree: Tree): String = tree.show(using Printer.TreeShortCode)
 
+        // `@deprecated("msg", "since")` -> `@deprecated("msg") ` prefix; a message that is not a
+        // string literal (e.g. concatenation) still yields a bare `@deprecated ` marker.
+        def deprecation(sym: Symbol): String =
+            sym.getAnnotation(Symbol.requiredClass("scala.deprecated")) match
+                case Some(Apply(_, args)) =>
+                    val msg = args.headOption.collect {
+                        case Literal(StringConstant(m))                      => m
+                        case NamedArg("message", Literal(StringConstant(m))) => m
+                    }
+                    msg.fold("@deprecated ")(m => s"@deprecated(\"$m\") ")
+                case Some(_) => "@deprecated "
+                case None    => ""
+
         def sig(dd: DefDef): String = {
             val kw = if dd.symbol.flags.is(Flags.Given) then "given" else "def"
             val parts = dd.paramss.map {
@@ -125,9 +138,9 @@ class ApiInspector(sb: StringBuilder, packages: Set[String]) extends Inspector {
                     case dd: DefDef
                         if isPublicApi(dd.symbol) && !dd.symbol.isClassConstructor
                             && !dd.name.endsWith("_=") =>
-                        sb ++= s"  ${sig(dd)}\n"
+                        sb ++= s"  ${deprecation(dd.symbol)}${sig(dd)}\n"
                     case vd: ValDef if isPublicApi(vd.symbol) =>
-                        sb ++= s"  ${valSig(vd)}\n"
+                        sb ++= s"  ${deprecation(vd.symbol)}${valSig(vd)}\n"
                     case nested: ClassDef if isPublicApi(nested.symbol) =>
                         emitClass(nested, s"$name.")
                     case _ => ()

@@ -62,8 +62,8 @@ object MyValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-            .scriptOption.getOrFail("Own address must be Script")
+        val ownCredential = tx.findInputOrFail(ownRef).resolved.address.credential
+        val ownScriptHash = ownCredential.scriptHashOrFail("Own address must be Script")
 
         // Option 1: Just check stake validator ran (withdraw zero trick)
         StakeValidator.spendMinimal(ownScriptHash, tx)
@@ -71,12 +71,17 @@ object MyValidator extends Validator {
         // Option 2: Also validate redeemer and withdrawal amount
         StakeValidator.spend(
           withdrawalScriptHash = ownScriptHash,
-          withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0),
+          withdrawalRedeemerValidator =
+              (redeemer, lovelace) => require(lovelace === BigInt(0), "Withdrawal must be zero"),
           txInfo = tx
         )
     }
 }
 ```
+
+`tx.findInputOrFail(ownRef)` scans the inputs once and fails with a message when the own input is
+missing; `credential.scriptHashOrFail(msg)` projects the script hash out of the credential or fails.
+Neither builds an intermediate `Option`.
 
 ### Reward Endpoint (Stake Validator)
 
@@ -94,7 +99,7 @@ inline override def reward(
               acc + input.resolved.value.getLovelace
           }
           // Verify outputs match expected distribution
-          true
+          require(totalInputValue === expectedTotal, "Input total mismatch")
       },
       redeemer = redeemer,
       credential = stakingKey,
@@ -102,6 +107,30 @@ inline override def reward(
     )
 }
 ```
+
+### Callbacks return `Unit`
+
+Every validator callback in `StakeValidator`, `TransactionLevelMinterValidator` and
+`UtxoIndexer` has the type `... => Unit`. The callback performs its own `require(cond, message)`
+or `fail(message)` calls; the library does not inspect a return value. A `Boolean` callback could
+only ever fail with one generic message, and a `false` from a missed branch was silent.
+
+<Callout type="error">
+**Migration hazard.** A lambda that returns `Boolean` still compiles against a `Unit` parameter
+(Scala discards the value) and then checks nothing:
+
+```scala
+// Compiles. Checks nothing. The withdrawal amount is never verified.
+withdrawalRedeemerValidator = (redeemer, lovelace) => lovelace === BigInt(0)
+
+// Correct: the condition is inside require
+withdrawalRedeemerValidator =
+    (redeemer, lovelace) => require(lovelace === BigInt(0), "Withdrawal must be zero")
+```
+
+After upgrading, grep every callback passed to these patterns and wrap each condition in
+`require(..., message)`.
+</Callout>
 
 <Callout type="warning">
 **Script Configuration:** The spending script address must have a staking credential that points to your withdrawal validator. This is configured when deploying scripts.
@@ -134,8 +163,8 @@ inline override def spend(...): Unit = {
     val ownInput = tx.inputs.at(spendRedeemer.ownInputIndex)
     require(ownInput.outRef === ownRef, "Own input index mismatch")
 
-    val ownScriptHash = ownInput.resolved.address.credential
-        .scriptOption.getOrFail("Own address must be Script")
+    val ownScriptHash =
+        ownInput.resolved.address.credential.scriptHashOrFail("Own address must be Script")
 
     // Just check stake validator ran (withdraw zero trick)
     StakeValidator.spendMinimal(ownScriptHash, tx)

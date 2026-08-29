@@ -103,13 +103,17 @@ object NFTMintingPolicy {
         val sc = scData.to[ScriptContext]
         sc.scriptInfo match
             case ScriptInfo.MintingScript(policyId) =>
-                val mintedAmount = sc.txInfo.mint.quantityOf(policyId, params.tokenName)
-                require(mintedAmount === BigInt(1), "Must mint exactly 1 NFT")
+                // Mint exactly 1 of our token and nothing else under this policy
+                require(
+                  sc.txInfo.mint.hasOnly(policyId, params.tokenName, 1),
+                  "Must mint exactly 1 NFT and no other token under this policy"
+                )
 
-                // Find output containing our NFT
-                val nftOutput = sc.txInfo.outputs.find { output =>
-                    output.value.quantityOf(policyId, params.tokenName) > 0
-                }.getOrFail("NFT output not found")
+                // Find the single output holding units of this token
+                val nftOutput = sc.txInfo.outputs.findUniqueOrFail(
+                  _.value.quantityOf(policyId, params.tokenName) > 0,
+                  "NFT must go to exactly one output"
+                )
 
                 // Verify output goes to the expected marketplace script
                 ParameterValidationOnChain.verifyAddressScript(
@@ -124,6 +128,11 @@ object NFTMintingPolicy {
 <Callout type="info">
 **Key insight:** The expected hash is computed off-chain and passed as a parameter to the minting policy. The on-chain code only needs to compare hashes, not recompute them.
 </Callout>
+
+Two details of the snippet carry security weight. `mint.hasOnly(policyId, name, 1)` rejects any
+other token name under the same policy in the same transaction, which a bare
+`quantityOf(...) === 1` does not. `outputs.findUniqueOrFail(p, msg)` fails when the token lands in
+zero or several outputs, where `find(p).getOrFail(msg)` would silently pick the first.
 
 ### Example: NFT with Verified Marketplace
 

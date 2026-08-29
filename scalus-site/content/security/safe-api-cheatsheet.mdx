@@ -1,0 +1,215 @@
+---
+title: Safe API Cheatsheet
+sidebarTitle: Safe API Cheatsheet
+description: One-page index of the on-chain operations whose semantics close a vulnerability class, the idioms that already existed, the fail-fast form of every lookup, and the deprecated members they replace.
+---
+
+import { Callout } from 'nextra/components'
+
+# Safe API Cheatsheet
+
+The safe API is a small set of on-chain operations whose *semantics* close a vulnerability
+class: the obvious hand-written expansion is wrong in a way real contracts have paid for, and the
+named operation removes the mistake. Three conventions hold throughout:
+
+- **Fail-fast is primary.** A lookup that must succeed is `xOrFail(message)`; the `Option` form
+  exists only where the caller branches.
+- **Predicates plus `require`.** Checks return `Boolean` and you write
+  `require(check, message)`. There are no `requireX` wrappers.
+- **Safety in semantics, not naming.** `findContinuingOutputOrFail` compares the whole address;
+  `onlyBurnsUnder` refuses an empty mint. The name says what is checked, and the body checks it.
+
+<Callout type="info">
+  Most of what a validator needs was already in the library. The first table lists those idioms;
+  the nineteen operations that follow are the additions. Do not rewrite an idiom into a helper of
+  your own.
+</Callout>
+
+## Already in the library
+
+| Check | Idiom | Anti-idiom it replaces |
+|---|---|---|
+| Exact mint **or burn**, nothing else under the policy | `tx.mint.hasOnly(policy, name, qty)` (`qty` is signed) | `quantityOf(policy, name) === qty` alone (MI-1: other names slip through) |
+| Multi-asset exact mint | `tx.mint.tokens(policy) === expected` | per-name `quantityOf` checks |
+| Nothing / anything minted under a policy | `tx.mint.tokens(policy).isEmpty` / `.nonEmpty` | `size == 0`; hand-written `mintsNothing` helpers |
+| ADA only | `value.withoutLovelace.isZero` | `value.toSortedMap.size === BigInt(1)` |
+| Deadline passed / not yet | `tx.validRange.isEntirelyAfter(t)` / `isEntirelyBefore(t)` | raw bound reads with a default of `0` |
+| Signed by one; by all; how many | `tx.isSignedBy(pkh)`; `keys.forall(tx.isSignedBy)`; `keys.count(tx.isSignedBy)` | `tx.signatories.filter(...).length` |
+| Inline datum decode (fields needed) | `out.datum.inlineOrFail[T](msg)` | `datum match { case OutputDatum(d) => d.to[T] }` with `@unchecked` |
+| Map lookup that must succeed | `map.getOrFail(key, msg)` | `map.get(key).get` |
+| Finite interval bound | `bound.finiteOrFail(msg)` | `bound.finite(0)` (invents a time) |
+| Enterprise address for a script | `Address.fromScriptHash(h)` | building `Address(cred, None)` and comparing it to a real output |
+| Credential projection, branching | `cred.scriptOption` / `cred.pubKeyOption` | destructuring with `: @unchecked` |
+| Any / every element; count; index | `list.contains(x)`, `forall`, `count(p)`, `at(i)` | `exists` (allocates an `Option`), `filter(p).length` |
+| Structural equality | `a === b` | `a.toData == b.toData` (identical UPLC, so never write it) |
+
+## The nineteen operations
+
+Grouped by receiver. The last column is the hand-written line the operation replaces.
+
+### List, SortedMap, AssocMap
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `List.findUniqueOrFail(predicate: A => Boolean, inline message: String): A` | DS-1 double satisfaction: `find` stops at the first match and accepts a second | `filter(p).length === BigInt(1)` then `.head`; two traversals |
+| `List.singleOrFail(inline message: String): A` | IX-1 "first of many": `head` accepts the first of five | `list.head` after an unchecked size assumption |
+| `SortedMap.singleOrFail(inline message: String): (A, B)` (and `AssocMap.singleOrFail`, same body) | MI-1 / MI-3 partial mint or burn: extracts the one entry and fails on two or more | `match` on `tokens(p).toList` with a `PairCons(kv, PairNil)` arm |
+
+### Credential
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `Credential.scriptHashOrFail(inline message: String): ValidatorHash` | AU-3 own-hash confusion; no `Option` allocation | `cred.scriptOption.getOrFail(msg)`; `case ScriptCredential(h) => h` with `@unchecked` |
+| `Credential.pubKeyHashOrFail(inline message: String): PubKeyHash` | same, for keys | `cred.pubKeyOption.getOrFail(msg)` |
+
+### Value
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `Value.hasNft(cs: PolicyId, tn: TokenName): Boolean` | AU-1 planted UTxO: "exactly one" is the NFT invariant; `> 0` is a different predicate | `quantityOf(p, n) === BigInt(1)` (and the drift to `> 0`) |
+| `Value.hasSameTokensAndAtLeastAda(expected: Value): Boolean` | VP-1 `>=` on the whole value; VP-6 min-ADA griefing with `===` | `out.value === expected` or `out.value.containsAtLeast(expected)` |
+
+### TxOut
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `TxOut.hasInlineDatum[A: ToData](a: A): Boolean` | DT-1 datum continuity, field-wise checks that let trailing fields through; measured 286 lovelace against 461 for the decode form | `out.datum.inlineOrFail[T](msg) === expected`; `out.datum === OutputDatum(x.toData)` |
+
+### TxInfo
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `TxInfo.findContinuingOutputOrFail(ownInput: TxInInfo, inline message: String): TxOut` | AU-4 staking swap: compares the **whole** address, the credential-only finders do not; DS-1 via uniqueness | `findOutputsByCredential(cred)` then `.length === BigInt(1)` then `.head` |
+| `TxInfo.valuePaidTo(addr: Address): Value` | VP-2 lovelace-only sums that let native tokens be stripped | `Utils.getAdaFromOutputs(outs)`; `outputs.filter(_.address === a).map(_.value.getLovelace).sum` |
+| `TxInfo.valueSpentFrom(addr: Address): Value` | same, over inputs | `Utils.getAdaFromInputs(ins)` |
+| `TxInfo.isSignedByAny(keys: List[PubKeyHash]): Boolean` | AU-2 multi-owner authorization without the `Option` tax of `exists` | `keys.exists(tx.isSignedBy)` |
+| `TxInfo.validFromOrFail(inline message: String): PosixTime` | TI-1 unbounded range used as "now": fails instead of returning `0`; the bound is **inclusive** | `tx.getValidityStartTime`; `validRange.from.finite(0)` |
+| `TxInfo.validToOrFail(inline message: String): PosixTime` | TI-2 inclusivity: the bound is **exclusive**, a datum timestamp taken from it can be late, never early | `validRange.to.boundType match { case Finite(t) => t }` |
+| `TxInfo.onlyBurnsUnder(policy: PolicyId): Boolean` | MI-3 vacuous truth: `forall` on an empty mint map is `true`, so a `Close` that mints nothing passes | `tx.mint.tokens(policy).forall(_._2 < 0)` |
+| `TxInfo.hasPaidTagged(addr: Address, value: Value, tag: OutputDatum): Boolean` | DS-1 / DS-2 across instances: exact address, exact value, unique tag | a fold over outputs with `>=` on the value |
+
+### TxOutRef
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `TxOutRef.deriveTokenName: TokenName` | MI-2 one-shot seed: one definition the off-chain side can mirror byte for byte | `blake2b_256(serialiseData(ref.toData))` copied into every validator |
+
+### Math
+
+| Signature | Prevents | Replaces |
+|---|---|---|
+| `a divFloor b` (`Math.divFloor(a: BigInt, b: BigInt): BigInt`) | AR-1 rounding direction: the protocol's share rounds down, explicitly | `a / b` (truncates toward zero, rounds **up** for negatives) |
+| `a divCeil b` (`Math.divCeil(a: BigInt, b: BigInt): BigInt`) | AR-1: the user's obligation rounds up, so no fraction leaks per transaction | `(a + b - 1) / b` and other hand-rolled ceilings |
+
+<Callout type="warning">
+  An alphanumeric infix operator has the lowest precedence: `total divCeil n * fee` parses as
+  `total divCeil (n * fee)`. Parenthesize operands that are expressions.
+</Callout>
+
+## The fail-fast form of every lookup
+
+Reach for the `OrFail` form whenever the validator cannot continue without the value. Each one
+takes a message, so the failure names the check.
+
+| Lookup | Fail-fast form | Fails when |
+|---|---|---|
+| Map entry | `map.getOrFail(key, msg)` | key absent |
+| Inline datum, typed | `out.datum.inlineOrFail[T](msg)` | datum is a hash or missing |
+| Interval bound | `bound.finiteOrFail(msg)` | bound is infinite |
+| Only element | `list.singleOrFail(msg)`, `map.singleOrFail(msg)` | size is not one |
+| Unique match | `list.findUniqueOrFail(p, msg)` | zero or two or more matches |
+| Input by reference | `tx.findInputOrFail(ref, msg)` | no input spends `ref` |
+| Continuing output | `tx.findContinuingOutputOrFail(ownInput, msg)` | zero or several outputs at the exact address |
+| Credential hash | `cred.scriptHashOrFail(msg)` / `cred.pubKeyHashOrFail(msg)` | wrong credential kind |
+| Validity bounds | `tx.validFromOrFail(msg)` / `tx.validToOrFail(msg)` | the range is unbounded on that side |
+
+**Vocabulary.** `singleton` *builds* a one-element collection (`List.singleton(a)`,
+`SortedMap.singleton(k, v)`). `singleOrFail` *extracts* the only element of a size-one collection.
+`findUniqueOrFail` finds the one element that satisfies a predicate among many, and keeps scanning
+to prove there is no second. `.head` after `filter` is the anti-idiom for both.
+
+## Deprecated members
+
+Deprecated members still compile and delegate to their replacement. The design-pattern callback
+change in the last row is different: it is in place, with no deprecated overload.
+
+| Deprecated | Replacement | Note |
+|---|---|---|
+| `findOwnInput(ref)` | `findInput(ref)` | "Own" was a Plutus inheritance; these find *any* input |
+| `findOwnInputOrFail(ref, msg)` | `findInputOrFail(ref, msg)` | direct scan, no `Option` |
+| `findOwnDatum(hash)` | `findDatum(hash)` | |
+| `findOwnScriptOutputs(hash)` | `findOutputsByScriptHash(hash)` | payment credential only; not for the continuing output (AU-4) |
+| `findOwnInputsByCredential(cred)` | `findInputsByCredential(cred)` | payment credential only |
+| `findOwnOutputsByCredential(cred)` | `findOutputsByCredential(cred)` | payment credential only; not for the continuing output (AU-4) |
+| `findOwnInputs(pred)` | `tx.inputs.filter(pred)` | one-liner |
+| `findOwnOutputs(pred)` | `tx.outputs.filter(pred)` | one-liner |
+| `getValidityStartTime` | `validFromOrFail(msg)` | returned `0` for an unbounded range (TI-1) |
+| `Utils.getAdaFromOutputs(outs)` | `valuePaidTo(addr).getLovelace` | summed lovelace only (VP-2); the replacement sums the whole `Value` |
+| `Utils.getAdaFromInputs(ins)` | `valueSpentFrom(addr).getLovelace` | same |
+| `List.single(a)` | `List.singleton(a)` | one constructor name across all four collections |
+| `PairList.single(a, b)` | `PairList.singleton(a, b)` | same |
+| Design-pattern `Boolean` callbacks (`UtxoIndexer`, `StakeValidator`, `TransactionLevelMinterValidator`) | `=> Unit` callbacks that `require` / `fail` with their own message | changed in place, no overload. **Hazard:** a `Boolean` lambda still compiles against the `Unit` parameter (value discard) and then checks nothing. Grep every callback and wrap its condition in `require(..., message)` |
+
+## Worked example: the vesting validator
+
+`scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala`, the spend
+branch before and after migration. Five operations do the work of nine lines of scaffolding, and
+every check that used to be implicit now fails with its own message.
+
+**Before**
+
+```scala
+val ownInput = txInfo.findOwnInputOrFail(txOutRef).resolved
+val contractAddress = ownInput.address
+
+require(
+  txInfo.findOwnInputsByCredential(contractAddress.credential).length === BigInt(1),
+  MultipleVestingInputs
+)
+
+val contractOutputs = txInfo.findOwnOutputsByCredential(contractAddress.credential)
+val txEarliestTime = txInfo.getValidityStartTime   // 0 when the range has no lower bound
+// ...
+require(contractOutputs.length === BigInt(1), NotExactlyOneContractOutput)
+val contractOutput = contractOutputs.head
+require(contractOutput.address === ownInput.address, ContinuingAddressMismatch)
+require(
+  contractOutput.value === ownInput.value - Value.lovelace(requestedAmount),
+  ContinuingValueMismatch
+)
+require(contractOutput.datum === OutputDatum.OutputDatum(vestingDatum), InvalidDatum)
+```
+
+**After**
+
+```scala
+val ownInputInfo = txInfo.findInputOrFail(txOutRef)
+val ownInput = ownInputInfo.resolved
+val ownCredential = ownInput.address.credential
+
+// One own input per transaction: one pass, fails on a second match (DS-1).
+txInfo.inputs.findUniqueOrFail(
+  _.resolved.address.credential === ownCredential,
+  MultipleVestingInputs
+)
+
+val txEarliestTime = txInfo.validFromOrFail(NoValidityLowerBound)   // fails, never 0 (TI-1)
+// ...
+// The unique output at the exact own input address, staking credential included (AU-4).
+val contractOutput =
+    txInfo.findContinuingOutputOrFail(ownInputInfo, NotExactlyOneContractOutput)
+require(
+  contractOutput.value === ownInput.value - Value.lovelace(requestedAmount),
+  ContinuingValueMismatch
+)
+require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
+```
+
+The vesting formula in the same file uses the rounding operation:
+`vestingDatum.initialAmount * elapsed divFloor vestingDatum.duration`.
+
+## See Also
+
+- **[Common Vulnerabilities](/docs/security/common-vulnerabilities)** – The classes these operations close
+- **[Datum Validation](/docs/security/datum-validation)** – Whole-datum equality and lazy decoding
+- **[Design Patterns](/docs/design-patterns)** – State-thread NFTs, indexers and other structural defences

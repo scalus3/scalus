@@ -87,8 +87,8 @@ object BatchAuctionValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-            .scriptOption.getOrFail("Own address must be Script")
+        val ownCredential = tx.findInputOrFail(ownRef).resolved.address.credential
+        val ownScriptHash = ownCredential.scriptHashOrFail("Must be script address")
 
         // Read verified settlement data from stake validator
         val stakeRedeemer = MerkelizedValidator.verifyAndGetRedeemer(ownScriptHash, tx)

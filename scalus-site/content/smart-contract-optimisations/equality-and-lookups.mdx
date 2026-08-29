@@ -1,0 +1,230 @@
+---
+title: Equality and Lookups - Measured Costs of Common Validator Idioms
+sidebarTitle: Equality and Lookups
+description: Measured UPLC costs of datum equality, ===, contains vs exists, count vs filter, findUniqueOrFail, and SortedMap vs AssocMap in Scalus validators, with the UPLC reason behind each number.
+---
+
+import { Callout } from 'nextra/components'
+
+# Equality and Lookups
+
+Most validator budget goes to a handful of idioms: comparing a datum, finding one input or
+output, checking a signature, looking up a token. Several of those idioms have two spellings that
+read the same and cost differently. This page lists the measured pairs and explains, once per
+pair, what the generated UPLC does.
+
+All fees are in lovelace at mainnet prices (0.0577 per memory unit, 0.0000721 per CPU step, the
+same convention as [Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)).
+Budgets were measured with `Options.release` on the Plutus V3 backend.
+
+<Callout type="info">
+The rules on this page are collected, without the numbers, in the
+[Safe API Cheatsheet](/docs/security/safe-api-cheatsheet).
+</Callout>
+
+## Datum equality: `hasInlineDatum` vs `inlineOrFail`
+
+Two spellings compare a continuing output's datum with an expected value:
+
+```scala
+// wrap form: build the expected OutputDatum and compare once
+require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
+
+// decode form: take the datum apart, decode it, compare the decoded value
+require(contractOutput.datum.inlineOrFail[Config](NotInline) === vestingConfig, InvalidDatum)
+```
+
+Measured on a three-field case-class datum:
+
+| Form | mem | cpu | ex-unit fee | script | fee as reference script |
+|---|---:|---:|---:|---:|---:|
+| `out.hasInlineDatum(x)` | 2 465 | 1 988 178 | **286** | 28 B | **706** |
+| `out.datum.inlineOrFail[T](msg) === x` | 4 625 | 2 684 905 | 461 | 45 B | 1 136 |
+
+The intuition runs the other way, so the UPLC is worth reading. `hasInlineDatum` is three
+builtins around one `equalsData`: it wraps `x` as `constrData(2, [x])` and compares that with the
+output's `OutputDatum` field. The decode form must first take the `OutputDatum` apart
+(`unConstrData`, `fstPair`, a three-way `case` on the tag, `sndPair`, `headList`), and then
+`=== x` on the decoded `T` does **not** compare the original `Data`: the lowering holds the decoded
+value as its field list and rewraps it, `equalsData(constrData(0, sndPair(unConstrData(inner))), x)`.
+Nine builtins against three, on the same `equalsData`, and a fresh constr allocation on every
+comparison. Memory moves more than CPU (+88% against +19%) for that reason.
+
+**Rule:** equality on a datum is `out.hasInlineDatum(x)`. Reading the datum's fields is
+`out.datum.inlineOrFail[T](msg)`. Do not decode and then compare.
+
+The decode form has one more property that matters for security: the rewrap hard-codes the
+constructor tag as `0`, so a datum with a wrong constructor tag and matching fields compares
+**equal** under `inlineOrFail[T] === x` and **unequal** under `hasInlineDatum`. See
+[Datum Validation](/docs/security/datum-validation#equality-vs-field-reads).
+
+The migrated example: `scalus-examples/jvm/src/main/scala/scalus/examples/vesting/VestingValidator.scala`.
+
+## `===` vs `toData ==`
+
+```scala
+// canonical
+require(contractOutput.value === expectedValue, ContinuingValueMismatch)
+
+// hand-written, believing === is field-by-field
+require(contractOutput.value.toData == expectedValue.toData, ContinuingValueMismatch)
+```
+
+Both spellings compile to the same UPLC. Measured on `Value.lovelace`: **901 mem / 1 653 665 cpu**
+for each. For any Data-backed type, `a === b` already lowers to `equalsData(toData a, toData b)`;
+only primitives (`BigInt`, `ByteString`, `Boolean`, `String`) and `@UplcRepr(UplcConstr)` types get
+a different comparison. Writing `toData ==` by hand buys nothing and hides the type.
+
+**Rule:** write `===`. If `===` does not compile, the type is missing an `Eq` instance; derive one.
+The one exception is a type with value-versus-structure semantics such as `Rational`, where the
+explicit comparator is the point.
+
+One related trap: a generic `===` on a `BigInt` or `ByteString` behind a type variable also lowers
+to `equalsData`, not to `equalsInteger` / `equalsByteString`. Measured on a singleton map lookup,
+the generic form costs 1 761 779 cpu against 832 313 for a concrete-typed clone. Keep key types
+concrete at the comparison site.
+
+## `contains` vs `exists`: the `Option` tax
+
+```scala
+// intrinsic: a Boolean scan, no Option, no Eq closure
+require(tx.signatories.contains(owner), NotSigned)
+
+// prelude: find(p).isDefined, allocates one Option per call
+require(tx.signatories.exists(_ === owner), NotSigned)
+```
+
+`Option` has no native representation on-chain: `Some(x)` is `constrData(0, [x])` and reading it
+back is `unConstrData` plus a `case`. No optimizer pass folds a `Case` over an `Option` built from
+a runtime value. `List.contains` is intrinsic and compiles to the direct recursion; `List.exists`
+is `find(p).isDefined` and pays the allocation on every call.
+
+Measured per call, V3 backend, `contains` (direct recursion) against `find(...).isDefined`:
+
+| Outcome | cpu saved | mem saved | lovelace saved |
+|---|---:|---:|---:|
+| miss | 326 483 | 1 064 | 84.93 |
+| hit | 564 996 | 2 028 | 157.75 |
+
+`exists` measures exactly equal to the `find` form in every configuration, so every `exists` call
+pays that 326 K (miss) / 565 K (hit) cpu. The tax is a fixed per-call cost, not per element: on a
+`List[Data]` it is 32% of the total at length 1 and 2% at length 20. The same shape appears in
+`List.isDefinedAt`, `SortedMap.contains` and `AssocMap.contains`.
+
+**Rule:** for an equality test use `contains`. For any other predicate prefer `forall` on the
+negated predicate, or a fold, over `exists`. Any helper that returns `Option[A]` in a hot path pays
+the same tax; a `…OrFail(msg)` helper that returns `A` does not.
+
+## `count` vs `filter(...).length`
+
+```scala
+// one traversal, tail-recursive, no allocation
+require(tx.outputs.count(_.address.credential === buyerCredential) === BigInt(1), OneBuyerOutput)
+
+// two traversals; filter allocates one cons cell per survivor
+require(tx.outputs.filter(_.address.credential === buyerCredential).length === BigInt(1), OneBuyerOutput)
+```
+
+There is no fusion in the Scalus pipeline: `filter` is a non-tail `foldRight` that builds a new
+list, and `length` walks it again. `count` is one tail-recursive pass with an integer accumulator.
+On the `BuiltinList` representation neither `filter` nor `length` has an intrinsic. This pair has
+not been pinned with a budget; the difference is structural (two traversals plus k `mkCons`
+against one traversal and zero allocations).
+
+**Rule:** `count(p)` when a number is needed; `isEmpty` / `nonEmpty` when only emptiness is, never
+`length === 0` (`length` is O(n), `isEmpty` is one `nullList`).
+
+## `findUniqueOrFail` vs `filter(...).length === 1` plus `.head`
+
+When exactly one element must match and the validator then uses it, the anti-idiom is:
+
+```scala
+val own = tx.inputs.filter(_.resolved.address.credential === ownCred)
+require(own.length === BigInt(1), MultipleScriptInputs)
+val ownInput = own.head
+```
+
+That is two traversals, k cons cells, a `length` walk and a `head` that fails with a generic
+message. The migrated examples write:
+
+```scala
+tx.inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, MultipleScriptInputs)
+```
+
+`findUniqueOrFail` is one pass: it fails as soon as a second match is seen, fails with `message` if
+none is, and returns the element. This pair has not been pinned against each other; the
+`findUniqueOrFail` call alone pins at 25 694 mem / 4 809 547 cpu (1 830 lovelace) in its test.
+
+### The single-own-input guard
+
+The double-satisfaction guard "exactly one input from my own script" has a cheaper and a dearer
+spelling, and this pair was measured:
+
+```scala
+// measured cheaper
+tx.inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, MultipleScriptInputs)
+
+// measured dearer
+require(tx.inputs.count(_.resolved.address.credential === ownCred) === BigInt(1), MultipleScriptInputs)
+```
+
+| Inputs in the transaction | `findUniqueOrFail` fee | `count(...) === 1` fee |
+|---:|---:|---:|
+| 3 | **3 175** | 3 307 |
+| 10 | **6 289** | 6 804 |
+
+`count` must visit every input and then compare the accumulator; `findUniqueOrFail` stops at the
+second match, carries no accumulator, and returns the input for free when the caller needs it.
+The migrated example: `scalus-examples/jvm/src/main/scala/scalus/examples/cape/htlc/HtlcValidator.scala`.
+
+## `SortedMap` vs `AssocMap`
+
+Both are a `Data` map (a list of pairs) at runtime; the difference is what the operations do with
+the ordering.
+
+| Operation | `SortedMap` | `AssocMap` |
+|---|---|---|
+| `get` | loop over the pair list; **stops early** when the key sorts before the current entry | always scans to hit or end |
+| `union` | **one linear merge** | O(n·m): `get` per left key plus `exists` per right key |
+| `size` / `length` | O(n), even though it is `inline` | O(n) |
+| `isEmpty` | O(1), one `nullList` | O(1) |
+| `insert` / `delete` | rebuilds the spine up to the key | rebuilds the prefix |
+| `Eq` | derived, one `equalsData` | none on purpose; the explicit comparator is itself O(n·m) |
+
+Measured `SortedMap[BigInt, BigInt]` pins, one entry: `get` hit 5 994 mem / 1 309 043 cpu, `get`
+miss 4 429 / 929 240, `insert` on an empty map 2 464 / 460 969, `filter` 7 225 / 1 563 239,
+`foldLeft` 14 476 / 3 527 562. A whole-expression `union` of two three-entry maps pins at
+54 386 / 14 318 018.
+
+The early exit on `get` does not help on a present key (the key has to be reached either way); it
+pays on misses that sort early. Two consequences:
+
+- Use `SortedMap` for anything with more than a few entries or any `union`. The ledger already
+  hands you `Value`, `mint` and `withdrawals` as sorted maps.
+- `SortedMap.contains(k)` is `get(k).isDefined` and pays the `Option` tax above. When the token
+  name is known, `value.hasOnly(policy, name, qty)` or `value.hasNft(policy, name)` are the
+  cheaper and stronger checks; both are builtin-backed at PV11.
+
+## Phase 2: the migrated examples
+
+The example validators in `scalus-examples` were rewritten to the operations above
+(`findInputOrFail`, `findContinuingOutputOrFail`, `hasInlineDatum`, `hasNft`, `validFromOrFail` /
+`validToOrFail`, `valuePaidTo` / `valueSpentFrom`, `findUniqueOrFail`, `onlyBurnsUnder`). Every
+pinned budget in the example test suites moved down. Highlights:
+
+| Validator | Change |
+|---|---|
+| Vault, withdrawal | budget **-25%** |
+| Auction, end with winner | budget **-15%** |
+| HTLC (CAPE variant) | script 582 B to **548 B** |
+| TwoPartyEscrow (CAPE) | script 1 174 B to **1 079 B** |
+
+None of these validators changed what it checks. The savings come from the idioms on this page:
+one traversal instead of two, one `equalsData` instead of a decode-and-rewrap, no `Option` on the
+hot path.
+
+## What's Next?
+
+- **[Safe API Cheatsheet](/docs/security/safe-api-cheatsheet)** – the same rules as a one-line-per-operation reference.
+- **[Measuring Performance](/docs/smart-contract-optimisations/measuring-performance)** – how to reproduce these numbers on your own validator.
+- **[Value Builtins](/docs/smart-contract-optimisations/value-builtins)** – the `Value` operations that lower to single CIP-153 builtins at PV11.

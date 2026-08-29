@@ -285,49 +285,49 @@ taxonomy; `llms.txt` regenerated from content.
 Today: ten numbered sections (dust, datum size, double satisfaction, staking, concurrency,
 unauthorized transitions, oracles, infinite mint, parameterization, missing validation).
 
-- [ ] Reorganize by family – DS, VP, AU, MI, TI, DT, IX, PU, AR, RS, DE – using `06 §2`'s ranked
+- [x] Reorganize by family – DS, VP, AU, MI, TI, DT, IX, PU, AR, RS, DE – using `06 §2`'s ranked
       order and `06 §7`'s fifteen mitigations as the outline. Every entry ends with the Scalus
       operation or idiom that closes it, with a code snippet from a migrated example.
-- [ ] Add the classes the page lacks today, in this priority: VP-1/VP-2 (`>=` and lovelace-only
+- [x] Add the classes the page lacks today, in this priority: VP-1/VP-2 (`>=` and lovelace-only
       value checks – the two most frequent in-house bugs), MI-2 (one-shot seed not bound), TI-1
       (`getValidityStartTime` returns 0), DS-1 tagged-output defence, AU-4 staking on continuing
       outputs, EV-1 evaluation order, AR-1 rounding direction.
-- [ ] Keep the existing oracle and concurrency material; they map to DE-2 and RS-5.
+- [x] Keep the existing oracle and concurrency material; they map to DE-2 and RS-5.
 
 ### Task 3.2: New `security/safe-api-cheatsheet.mdx`
 
-- [ ] The spec §4.1 idioms table (already exists in the library) followed by the nineteen
+- [x] The spec §4.1 idioms table (already exists in the library) followed by the nineteen
       operations, one line each: signature, what it prevents, the one-liner it replaces.
-- [ ] The "fail-fast form of every lookup" index from spec §8.3: `getOrFail`, `inlineOrFail`,
+- [x] The "fail-fast form of every lookup" index from spec §8.3: `getOrFail`, `inlineOrFail`,
       `finiteOrFail`, `singleOrFail`, `findUniqueOrFail`, `findInputOrFail`,
       `findContinuingOutputOrFail`, `scriptHashOrFail`, `validFromOrFail`.
-- [ ] Add to `security/_meta.js`.
+- [x] Add to `security/_meta.js`.
 
 ### Task 3.3: Optimisation pages – the measured tables
 
-- [ ] `smart-contract-optimisations/measuring-performance.mdx` or a new
+- [x] `smart-contract-optimisations/measuring-performance.mdx` or a new
       `equality-and-lookups.mdx`: datum equality (286 vs 461 lovelace, with the UPLC explanation),
       `===` vs `toData ==` (identical, 901 mem / 1 653 665 cpu), `contains` vs `exists`
       (326 K / 565 K cpu `Option` tax), `count` vs `filter().length`, `SortedMap` vs `AssocMap`.
-- [ ] Cite the Phase 2 before/after table for the migrated validators.
+- [x] Cite the Phase 2 before/after table for the migrated validators.
 
 ### Task 3.4: Tutorial and reference pages
 
-- [ ] `smart-contracts/validators.mdx`, `in-depth-validator-look.mdx`, `htlc-tutorial.mdx`: use
+- [x] `smart-contracts/validators.mdx`, `in-depth-validator-look.mdx`, `htlc-tutorial.mdx`: use
       the new operations where the migrated example does.
-- [ ] `design-patterns/merkelized-validator.mdx:90`, `transaction-level-minting.mdx:62`,
+- [x] `design-patterns/merkelized-validator.mdx:90`, `transaction-level-minting.mdx:62`,
       `withdraw-zero.mdx:65`: `findOwnInputOrFail` → `findInputOrFail`; the other four
       design-pattern pages follow their Phase 2 sources.
-- [ ] `security/datum-validation.mdx`: add the `hasInlineDatum` vs `inlineOrFail` rule and the
+- [x] `security/datum-validation.mdx`: add the `hasInlineDatum` vs `inlineOrFail` rule and the
       wrong-tag note from spec §8.4.
 
 ### Task 3.5: LLM artifacts
 
-- [ ] `llms.txt` regenerates from content via `scalus-site/scripts/generate-llms.mjs` – run it and
+- [x] `llms.txt` regenerates from content via `scalus-site/scripts/generate-llms.mjs` – run it and
       commit; check the new cheatsheet page is included.
-- [ ] `llms-api.txt` was regenerated in Task 1.10; confirm it lists the nineteen operations and
+- [x] `llms-api.txt` was regenerated in Task 1.10; confirm it lists the nineteen operations and
       marks the deprecated members.
-- [ ] `generate-llms-examples.mjs`: confirm the migrated examples are what it emits.
+- [x] `generate-llms-examples.mjs`: confirm the migrated examples are what it emits.
 
 ---
 
@@ -339,48 +339,50 @@ misses today.
 
 ### Task 4.1: `contract/SKILL.md` (90 lines)
 
-- [ ] **Line 47 recommends the anti-idiom**: "compare enums and case classes with
+- [x] **Line 47 recommends the anti-idiom**: "compare enums and case classes with
       `a.toData == b.toData`". Replace with: derive `Eq` and use `===` (identical UPLC, spec §8.3).
-- [ ] Add a "Safe API" rules block, one line each: `tx.mint.hasOnly(p, n, signedQty)` is the mint
+- [x] Add a "Safe API" rules block, one line each: `tx.mint.hasOnly(p, n, signedQty)` is the mint
       check; `out.hasInlineDatum(x)` for datum equality, `inlineOrFail` for fields;
       `findContinuingOutputOrFail` never a credential-only finder for the continuing output;
       `validFromOrFail` never `getValidityStartTime`; `singleOrFail` /
       `findUniqueOrFail` never `.head` after `filter`; `valuePaidTo` never `getAdaFromOutputs`.
-- [ ] Point at the cheatsheet page URL once Task 3.2 is live.
+- [x] Point at the cheatsheet page URL once Task 3.2 is live.
 
 ### Task 4.2: `smart-contract-security-review/SKILL.md` (259 lines) and `references/vulnerabilities.md` (1 578 lines)
 
-- [ ] Add the `06 §9` taxonomy ID to every V001–V025 row and the operation that fixes it.
-- [ ] Re-title V004 "Integer Overflow": on-chain `Integer` is unbounded; the real class is
+- [x] Add the `06 §9` taxonomy ID to every V001–V025 row and the operation that fixes it.
+- [x] Re-title V004 "Integer Overflow": on-chain `Integer` is unbounded; the real class is
       rounding direction (AR-1) → `divCeil` / `divFloor`.
-- [ ] Add the twelve missing classes: VP-1, VP-2, VP-5, VP-6, MI-2, IX-2, EV-1, AU-7, PU-3, PU-4,
+- [x] Add the twelve missing classes: VP-1, VP-2, VP-5, VP-6, MI-2, IX-2, EV-1, AU-7, PU-3, PU-4,
       DE-4, RS-7. Four are Critical and two have occurred in-house.
-- [ ] V010: state the plugin's default-`fail` for unimplemented purposes as the *reason* it is a
+- [x] V010: state the plugin's default-`fail` for unimplemented purposes as the *reason* it is a
       false positive, not as an unexplained rule.
-- [ ] V013: add the `getValidityStartTime`-returns-0 case with the two in-corpus bugs.
-- [ ] V014: signature ≠ authorization when the authority is a script.
-- [ ] The skill's own worked example (`SKILL.md:108`, `:127`; `vulnerabilities.md:686`, `:718`,
+- [x] V013: add the `getValidityStartTime`-returns-0 case with the two in-corpus bugs.
+- [x] V014: signature ≠ authorization when the authority is a script.
+- [x] The skill's own worked example (`SKILL.md:108`, `:127`; `vulnerabilities.md:686`, `:718`,
       `:728`) uses `getAdaFromInputs` / `getAdaFromOutputs`. Rewrite it on `valueSpentFrom` /
       `valuePaidTo`, and make the ADA-only sum the *finding* rather than the fix.
 
 ### Task 4.3: `optimize-contract/SKILL.md` (298 lines) and `references/patterns.md` (523 lines)
 
-- [ ] **O016 and O020 are stale**: they advise `equalsData` over typed `===`. `===` already lowers
+- [x] **O016 and O020 are stale**: they advise `equalsData` over typed `===`. `===` already lowers
       to `equalsData`. Replace with the `07 I9` advice: make key types concrete to get
       `equalsInteger` (1 761 779 vs 832 313 cpu behind a type variable).
-- [ ] New rules with numbers: datum equality (`hasInlineDatum` 286 vs 461), `contains` over
+- [x] New rules with numbers: datum equality (`hasInlineDatum` 286 vs 461), `contains` over
       `exists`, `count` over `filter().length`, `isEmpty` over `size == 0`, `SortedMap` over
       `AssocMap`, `findUniqueOrFail` over `filter` + `length`.
 
 ### Task 4.4: `contract-test/SKILL.md` (76 lines)
 
-- [ ] Add the negative-test convention Phase 2 introduces: every safety operation gets a test
+- [x] Add the negative-test convention Phase 2 introduces: every safety operation gets a test
       that the *unsafe* input fails (unbounded validity, `>=` value, wrong staking credential,
       second matching output).
 
 ### Task 4.5: Verify
 
-- [ ] Re-run the local smoke eval used for the LLM DX work (3 prompts) against the updated skills;
+- [ ] **Deferred to the next release.** The eval scaffolds from `validator.g8`, which pins the released
+      Scalus (1.1.1); the operations the updated skills recommend do not exist there, so the generated
+      validator cannot compile until a release ships them. Re-run the local smoke eval used for the LLM DX work (3 prompts) against the updated skills;
       expect the generated validator to use `hasOnly`, `hasInlineDatum` and
       `findContinuingOutputOrFail` unprompted.
 

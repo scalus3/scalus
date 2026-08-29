@@ -54,16 +54,56 @@ they become protocol state, every later spend that traverses the datum pays more
 UTxO can eventually exceed the execution budget. Byte-different datums that decode to the same
 typed value also silently fork anything keyed on datum bytes or hashes.
 
-Whole-datum equality already closes this hole: `===` on datums compiles to a byte-exact
-`equalsData`, and it is cheap.
+Whole-datum equality already closes this hole: comparing the output's datum as `Data` is a
+byte-exact `equalsData`, and it is cheap.
 
 ```scala
 // Field-wise check: extra trailing fields are smuggled through
+val newDatum = contractOutput.datum.inlineOrFail[VestingDatum]("not inline")
 require(newDatum.owner === datum.owner && newDatum.deadline === datum.deadline)
 
 // Whole-datum check: byte-exact, no smuggling possible
-require(newDatum === expectedDatum, "unexpected continuing datum")
+require(contractOutput.hasInlineDatum(expectedDatum), "unexpected continuing datum")
 ```
+
+## Equality vs Field Reads
+
+There are two ways to look at a continuing output's inline datum, and they are not
+interchangeable:
+
+- **`out.hasInlineDatum(x)`** when the datum must **equal** a known value. It wraps `x` as an
+  `OutputDatum` and compares the whole `Data` with one `equalsData`. Measured at 286 lovelace
+  per comparison.
+- **`out.datum.inlineOrFail[T](msg)`** when the datum's **fields** are needed. It unwraps the
+  `OutputDatum`, fails if the datum is a hash or absent, and hands back a lazily decoded `T`.
+  Decoding and then comparing with `=== x` costs 461 lovelace for the same check, because the
+  decoded value is held as a field list and rewrapped before the comparison.
+
+```scala
+// Equality: compare the Data once
+require(contractOutput.hasInlineDatum(vestingDatum), InvalidDatum)
+
+// Field reads: decode, then use the fields
+val next = contractOutput.datum.inlineOrFail[Config](NotInlineDatum)
+require(next.beneficiary === config.beneficiary, BeneficiaryChanged)
+require(next.startTimestamp === config.startTimestamp, StartChanged)
+```
+
+The two forms also differ on a malformed datum. `inlineOrFail[T]` does **not** validate the
+shape: a datum with the wrong constructor tag decodes lazily and no error is raised until a field
+is read, if ever. When such a value is compared with `=== x`, the rewrap hard-codes the
+constructor tag as `0`, so a datum with a wrong tag and matching fields compares **equal**.
+`hasInlineDatum` compares the original `Data`, tag included, so a wrong tag simply fails the
+equality. For a continuing-output check that is the behaviour you want: the attacker's datum is
+rejected without the validator having to know what was wrong with it.
+
+<Callout type="warning">
+Never write `out.datum.inlineOrFail[T](msg) === x` for a pure equality check. It is the dearer
+form and the weaker one. The migrated examples use `hasInlineDatum` for every continuing datum
+comparison (`VestingValidator`, `EscrowValidator`, `AmmValidator`, `Auction`); see
+[Equality and Lookups](/docs/smart-contract-optimisations/equality-and-lookups#datum-equality-hasinlinedatum-vs-inlineorfail)
+for the measured table.
+</Callout>
 
 ## Guidance
 
@@ -71,7 +111,8 @@ In priority order:
 
 1. **Authenticate protocol UTxOs with a state-thread or one-shot NFT.** Shape validation cannot
    detect a well-formed fake; this is the defence that matters most.
-2. **Check continuing-output datums with whole-datum `===`**, not field by field.
+2. **Check continuing-output datums with `out.hasInlineDatum(expected)`**, not field by field.
+   Use `inlineOrFail[T]` only when the fields are needed.
 3. **Require inline datums on protocol outputs.** Never accept a datum-hash output as protocol
    state.
 4. **Handle the PlutusV3 no-datum branch explicitly** (on V3 the script runs with `None`; on
@@ -96,11 +137,13 @@ point of use:
 <Callout type="info">
   A general opt-in deep validator with Aiken-equivalent semantics (an `expect`-style combinator
   that checks constructor tags, exact field counts and nested shapes) is planned. Until then,
-  whole-datum `===` plus the guidance above covers the known attack surface.
+  `hasInlineDatum` plus the guidance above covers the known attack surface.
 </Callout>
 
 ## See Also
 
 - **[Common Vulnerabilities](/docs/security/common-vulnerabilities)** – Known vulnerability patterns and mitigations
+- **[Safe API Cheatsheet](/docs/security/safe-api-cheatsheet)** – The fail-fast form of every lookup, one line per operation
+- **[Equality and Lookups](/docs/smart-contract-optimisations/equality-and-lookups)** – Measured costs behind the rules on this page
 - **[Plutus Data](/docs/smart-contracts/plutus-data)** – How `toData`/`fromData` work
 - **[Design Patterns](/docs/design-patterns)** – State-thread NFTs and other structural defences

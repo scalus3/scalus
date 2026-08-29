@@ -26,7 +26,7 @@ A typical contract defines these functions, often just one. A successful contrac
 Let's take a look at an example contract, `HTLCValidator`, to illustrate the concepts above.
 
 ```scala
-import scalus.Compile
+import scalus.compiler.Compile
 import scalus.uplc.builtin.Builtins.sha3_256
 import scalus.uplc.builtin.Data.{FromData, ToData}
 import scalus.uplc.builtin.{ByteString, Data, FromData, ToData}
@@ -65,12 +65,14 @@ object HtlcValidator {
     val config = datum.getOrFail(InvalidDatum).to[Config]
     redeemer.to[Action] match
       case Action.Timeout =>
-        val validFrom = tx.validRange.from.finite(0)
+        val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
+        // validFrom is inclusive, hence 10 <= 10 is correct
         require(config.timeout <= validFrom, InvalidCommitterTimePoint)
         require(tx.isSignedBy(config.committer), UnsignedCommitterTransaction)
 
       case Action.Reveal(preimage) =>
-        val validTo = tx.validRange.to.finiteOrFail(ValidRangeMustBeBound)
+        val validTo = tx.validToOrFail(ValidRangeMustBeBound)
+        // validTo is exclusive, hence 10 <= 10 is correct
         require(validTo <= config.timeout, InvalidReceiverTimePoint)
         require(tx.isSignedBy(config.receiver), UnsignedReceiverTransaction)
         require(sha3_256(preimage) == config.image, InvalidReceiverPreimage)
@@ -124,6 +126,15 @@ is enumerated at the bottom of the contract, each containing a message describin
 >
 > `require` is an inline function, meaning that the compiler will not generate a method call and instead insert
 > the body of `require` directly into validator body.
+
+###### Validity bounds
+
+Both branches read the transaction's validity range through `tx.validFromOrFail(msg)` and
+`tx.validToOrFail(msg)`. Each returns the finite bound, or fails with the message when the range is
+unbounded on that side. This matters for the `Timeout` branch: a transaction with no lower bound
+has no earliest time, and a validator that substituted `0` for it would let the committer reclaim
+before the timeout. The lower bound is inclusive and the upper bound is exclusive, which is why
+both comparisons use `<=`.
 
 #### Summary
 

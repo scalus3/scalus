@@ -1,5 +1,6 @@
 export default {
   'measuring-performance': 'Measuring Performance',
+  'equality-and-lookups': 'Equality and Lookups',
   profiling: 'Profiling',
   'vscode-extension': 'VS Code Extension',
   'algorithmic-optimisations': 'Algorithmic Optimisations',

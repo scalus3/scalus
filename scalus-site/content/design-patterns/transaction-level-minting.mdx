@@ -59,8 +59,8 @@ object MyValidator extends Validator {
         tx: TxInfo,
         ownRef: TxOutRef
     ): Unit = {
-        val ownScriptHash = tx.findOwnInputOrFail(ownRef).resolved.address.credential
-            .scriptOption.getOrFail("Own address must be Script")
+        val ownCredential = tx.findInputOrFail(ownRef).resolved.address.credential
+        val ownScriptHash = ownCredential.scriptHashOrFail("Own address must be Script")
 
         // Option 1: Just check minting policy ran
         TransactionLevelMinterValidator.spendMinimal(ownScriptHash, tx)
@@ -68,16 +68,24 @@ object MyValidator extends Validator {
         // Option 2: Also validate redeemer and minted tokens
         TransactionLevelMinterValidator.spend(
           minterScriptHash = ownScriptHash,
-          minterRedeemerValidator = _.to[MintRedeemer].isValid,
+          minterRedeemerValidator = redeemer =>
+              require(redeemer.to[MintRedeemer].maxUtxosToSpend > 0, "maxUtxosToSpend must be positive"),
           minterTokensValidator = tokens => {
-              val (tokenName, qty) = tokens.toList.head
-              tokenName === utf8"BEACON" && (qty === BigInt(1) || qty === BigInt(-1))
+              val (tokenName, qty) = tokens.singleOrFail("Exactly one BEACON entry")
+              require(tokenName === utf8"BEACON", "Unexpected token name")
+              require(qty === BigInt(1) || qty === BigInt(-1), "BEACON quantity must be 1 or -1")
           },
           txInfo = tx
         )
     }
 }
 ```
+
+Both callbacks return `Unit`: each check is a `require` with its own message, so a failure names
+the check that tripped. `tokens.singleOrFail(msg)` returns the only entry of the map and fails when
+there are zero or several, which is what `tokens.toList.head` could not express. See the
+[Stake Validator](/docs/design-patterns/withdraw-zero#callbacks-return-unit) page for the
+migration hazard that applies to every callback in this module.
 
 ### Minting Endpoint
 
@@ -90,11 +98,8 @@ inline override def mint(
     val mintRedeemer = redeemer.to[MintRedeemer]
 
     // Your heavy validation logic here - runs ONCE
-    val scriptInputsCount = tx.inputs.foldRight(BigInt(0)) { (input, acc) =>
-        input.resolved.address.credential match
-            case Credential.ScriptCredential(hash) if hash === policyId => acc + 1
-            case _ => acc
-    }
+    val ownCredential = Credential.ScriptCredential(policyId)
+    val scriptInputsCount = tx.inputs.count(_.resolved.address.credential === ownCredential)
 
     require(scriptInputsCount === mintRedeemer.expectedInputCount, "Input count mismatch")
 
@@ -114,18 +119,21 @@ case class MintRedeemer(maxUtxosToSpend: BigInt) derives FromData
 // Spending endpoint - checks beacon is minted/burnt
 inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, ownRef: TxOutRef): Unit = {
     val spendRedeemer = redeemer.to[SpendRedeemer]
-    val ownHash = tx.inputs.get(spendRedeemer.ownIndex)
-        .getOrFail("Invalid index").resolved.address.credential
-        .scriptOption.getOrFail("Must be script")
+    val input = tx.inputs.get(spendRedeemer.ownIndex).getOrFail("Undefined ownIndex")
+    require(ownRef === input.outRef, "ownIndex does not point at the spending UTxO")
+    val ownHash = input.resolved.address.credential.scriptHashOrFail("Own address must be Script")
 
     TransactionLevelMinterValidator.spend(
       minterScriptHash = ownHash,
-      minterRedeemerValidator = _.to[MintRedeemer].maxUtxosToSpend > 0,
+      minterRedeemerValidator = redeemer =>
+          require(redeemer.to[MintRedeemer].maxUtxosToSpend > 0, "maxUtxosToSpend must be positive"),
       minterTokensValidator = tokens => {
-          val (tokenName, qty) = tokens.toList.head
+          val (tokenName, qty) = tokens.singleOrFail("Exactly one BEACON entry")
           require(tokenName === utf8"BEACON")
-          if spendRedeemer.burn then qty === BigInt(-1)
-          else qty === BigInt(1)
+          require(
+            if spendRedeemer.burn then qty === BigInt(-1) else qty === BigInt(1),
+            "BEACON quantity must be -1 on burn and 1 on mint"
+          )
       },
       txInfo = tx
     )
@@ -134,7 +142,8 @@ inline override def spend(datum: Option[Data], redeemer: Redeemer, tx: TxInfo, o
 // Minting endpoint - heavy logic runs once
 inline override def mint(redeemer: Redeemer, policyId: PolicyId, tx: TxInfo): Unit = {
     val mintRedeemer = redeemer.to[MintRedeemer]
-    val scriptInputsCount = countScriptInputs(tx, policyId)
+    val ownCredential = Credential.ScriptCredential(policyId)
+    val scriptInputsCount = tx.inputs.count(_.resolved.address.credential === ownCredential)
     require(scriptInputsCount === mintRedeemer.maxUtxosToSpend)
 }
 ```
