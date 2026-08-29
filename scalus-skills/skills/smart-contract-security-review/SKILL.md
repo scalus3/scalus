@@ -1,6 +1,6 @@
 ---
 name: smart-contract-security-review
-description: Security review for Scalus/Cardano smart contracts. Analyzes @Compile annotated validators for vulnerabilities like redirect attacks, inexact value validation, missing token verification, integer overflow, and self-dealing. Use when reviewing on-chain code, before deploying validators, or when /security-review is invoked. Requires explicit path argument.
+description: Security review for Scalus/Cardano smart contracts. Analyzes @Compile annotated validators for vulnerabilities like redirect attacks, inexact value validation, missing token verification, ADA-only comparisons, rounding direction, and self-dealing. Use when reviewing on-chain code, before deploying validators, or when /security-review is invoked. Requires explicit path argument.
 ---
 
 # Smart Contract Security Review
@@ -34,51 +34,77 @@ grep -rn "extends DataParameterizedValidator" --include="*.scala" <path>
 
 Based on Cardano Developer Portal security guidelines and Scalus-specific patterns.
 For detailed patterns and code examples, see `references/vulnerabilities.md`.
+Taxonomy IDs are family-number (DS double satisfaction, VP value preservation, AU
+authentication, MI minting, TI time, DT datum, IX index, PU purpose, EV evaluation, AR
+arithmetic, RS resources, DE design). "Fixed by" names the Scalus operation or idiom that
+closes the class; "design" means no operation can, review the design.
 
 ### Critical Severity
 
-| ID | Name | Risk | Detection |
-|----|------|------|-----------|
-| V001 | Redirect Attack | Funds stolen via output redirection | `outputs.at(idx)` without address validation |
-| V002 | Token/NFT Not Verified | State token excluded | Missing `quantityOf` on outputs |
-| V003 | Inexact Burn/Mint | Extra tokens minted | `>=` instead of `===` for quantities |
-| V004 | Integer Overflow | Arithmetic overflow | Custom encoding without bounds |
-| V005 | Double Satisfaction | Pay once, satisfy many | `outputs.exists` without unique linking |
+| ID | Taxonomy | Name | Risk | Detection | Fixed by |
+|----|----------|------|------|-----------|----------|
+| V001 | VP-3 | Redirect Attack | Funds stolen via output redirection | `outputs.at(idx)` without a whole-address check | `findContinuingOutputOrFail(ownInput, msg)` |
+| V002 | AU-1 | Token/NFT Not Verified | State token excluded | No `hasNft` / `hasOnly` on the continuing output | `out.value.hasNft(policy, name)` |
+| V003 | MI-1 / MI-3 | Inexact Burn/Mint | Extra tokens minted, partial burn | `>=` instead of `===`; `quantityOf` alone; `forall(_._2 < 0)` on a possibly empty map | `tx.mint.hasOnly(policy, name, signedQty)`; `tx.onlyBurnsUnder(policy)` |
+| V004 | AR-1 | Rounding Direction (on-chain `Integer` is unbounded; there is no overflow) | Remainder harvested per split action; negative amounts | `/` on fees or shares without a stated direction; redeemer amounts without `> 0` | `a divCeil b` / `a divFloor b` (round against the party that benefits: contract payouts down, amounts owed to the contract up) |
+| V005 | DS-1 / DS-2 | Double Satisfaction | Pay once, satisfy many | `outputs.exists` without unique linking; `>=` payouts | `inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, msg)` or `hasPaidTagged(addr, value, tag)` |
+| V026 | VP-1 | Value Not Preserved on Continuing Output | Continuing UTxO drained while the datum looks right | Datum transition checked, `.value` never read; datum balance not tied to `quantityOf` | `out.value.hasSameTokensAndAtLeastAda(expected)` or `out.value === expected`; bind datum balances with `quantityOf` |
+| V027 | VP-2 | ADA-Only Value Comparison | Native tokens stripped while lovelace matches | `getLovelace` compared on a script UTxO; `getAdaFromOutputs` / `getAdaFromInputs` | whole `Value`: `valuePaidTo(addr)`, `valueSpentFrom(addr)`, `===`; or `withoutLovelace.isZero` at the boundary |
+| V028 | MI-2 | One-Shot Seed Not Bound | "Unique" NFT mintable forever | `TxOutRef` parameter never compared with an input's `outRef` | `findInputOrFail(seed, msg)` or `inputs.at(i).outRef === seed`; `seed.deriveTokenName`; `mint.hasOnly` |
+| V029 | IX-2 | Missed Input | A script input no index names is spent unchecked | Loop over redeemer indices, no walk over `tx.inputs` | walk `tx.inputs`; `UtxoIndexer.multiOneToOneNoRedeemer` |
 
 ### High Severity
 
-| ID | Name | Risk | Detection |
-|----|------|------|-----------|
-| V006 | Index Validation Missing | Invalid index access | `.at(idx)` without bounds check |
-| V007 | Self-Dealing/Shill Bidding | Price manipulation | No seller/bidder separation |
-| V008 | Double Spend via Index | Same UTxO processed twice | Index lists without uniqueness |
-| V009 | Inexact Refund Amount | Fund manipulation | `>=` for refunds instead of `===` |
-| V010 | Other Redeemer Attack | Bypass via different redeemer | Multiple script purposes (always false positive for single-purpose Scalus validators — compiler plugin adds default fail for unimplemented purposes) |
-| V011 | Other Token Name Attack | Unauthorized token minting | Policy doesn't check all tokens |
-| V012 | Missing UTxO Authentication | Fake UTxO injection | No auth token verification |
-| V025 | Oracle Data Validation | Price manipulation, stale data | Oracle data without signature/freshness |
+| ID | Taxonomy | Name | Risk | Detection | Fixed by |
+|----|----------|------|------|-----------|----------|
+| V006 | IX-1 | Index Validation Missing | Wrong element behind an index | `.at(idx)` from the redeemer with no check on the element | `findInputOrFail`, `findUniqueOrFail`, `singleOrFail` |
+| V007 | DE-3 | Self-Dealing/Shill Bidding | Price manipulation | No seller/bidder separation | design: `require(!(bidder === seller))` |
+| V008 | IX-1 | Double Spend via Index | Same UTxO processed twice | Index lists without uniqueness; `zip` truncation | strictly ascending indices; `UtxoIndexer` |
+| V009 | VP-4 | Inexact Refund Amount | Fund manipulation, enables V005 | `>=` for refunds instead of `===` | `out.value === Value.lovelace(n)` (whole value); `hasPaidTagged` |
+| V010 | PU-1 | Other Redeemer Attack | Bypass via different redeemer or purpose | Several purposes/branches with weaker checks; `StakeValidator.spendMinimal` alone | plugin default `fail` for unimplemented purposes (false positive for single-purpose objects, see below); `StakeValidator.spend` with a redeemer validator |
+| V011 | MI-1 | Other Token Name Attack | Unauthorized token minting | `quantityOf` on one name, rest of the policy unchecked | `tx.mint.hasOnly(policy, name, qty)`; `mint.tokens(policy) === expected.tokens(policy)` |
+| V012 | AU-1 / AU-5 | Missing UTxO Authentication | Fake UTxO or planted reference-input datum | No auth token on own input or reference input | `ownInput.resolved.value.hasNft(authPolicy, name)`; one-shot policy (V028) |
+| V025 | DE-2 | Oracle Data Validation | Price manipulation, stale data | Oracle data without signature/freshness | design: `verifyEd25519Signature` + domain separation (V031), freshness vs `validToOrFail` |
+| V030 | EV-1 | Evaluation-Order Trap | Security check never evaluated | Check on the right of `\|\|` or in an untaken branch; pattern callback ending in a `Boolean` | one obligation per `require`; callbacks return `Unit` |
+| V031 | AU-7 | Signature Domain Separation | Off-chain signature replayed across instances | `verifyEd25519Signature` over a payload without script hash and nonce | design: payload commits to domain tag, own script hash, spent `TxOutRef` |
+| V032 | PU-3 | Certificate Purposes Unguarded | Deregistration griefing, deposit theft | `certify` body `()` or permissive `case _ => ()` | plugin default `fail`; explicit `TxCert` match with failing default |
 
 ### Medium Severity
 
-| ID | Name | Risk | Detection |
-|----|------|------|-----------|
-| V013 | Time Handling | Time manipulation | Incorrect interval bounds |
-| V014 | Missing Signature | Unauthorized actions | No `isSignedBy` checks |
-| V015 | Datum Mutation | Unauthorized state change | No field comparison |
-| V016 | Insufficient Staking Control | Reward redirection | No staking credential check |
-| V017 | Arbitrary Datum | Unspendable UTxOs | No datum validation |
-| V024 | Parameterization Verification | Script substitution (varies) | ParameterizedValidator with auth params, no token |
+| ID | Taxonomy | Name | Risk | Detection | Fixed by |
+|----|----------|------|------|-----------|----------|
+| V013 | TI-1 / TI-2 | Time Handling | Unbounded range read as time 0; wrong inclusivity | `getValidityStartTime` (deprecated, returns 0 when unbounded); raw bound compared | `validFromOrFail(msg)` (inclusive) / `validToOrFail(msg)` (exclusive); `isEntirelyAfter/Before` |
+| V014 | AU-2 | Missing Signature | Unauthorized actions; script owner cannot sign | No `isSignedBy` on a branch; `isSignedBy` on a script hash | `isSignedBy` / `isSignedByAny` for keys; for a script authority prove it ran (withdrawal or spent input) |
+| V015 | DT-1 | Datum Mutation | Unauthorized state change | Field-by-field comparison with a field missing | `out.hasInlineDatum(old.copy(...))` |
+| V016 | AU-4 | Insufficient Staking Control | Reward redirection (franken address) | `address.credential ===`, `=== Address.fromScriptHash(h)`, credential-only finders on the continuing output | `findContinuingOutputOrFail`; or `require(out.address === ownInput.resolved.address)` |
+| V017 | DT-3 | Arbitrary Datum | Unspendable UTxOs, datum-hash bricking | No datum validation; hash-only datum accepted | `out.datum.inlineOrFail[T](msg)`; `out.hasInlineDatum(x)` |
+| V024 | AU-6 | Parameterization Verification | Script substitution (varies) | ParameterizedValidator with auth params, no token | auth NFT via `hasNft` + one-shot policy; design |
+| V033 | PU-4 | Voting / Proposing Purposes Unguarded | Governance actions approved silently | Hand-written `ScriptInfo` dispatcher with `case _ => ()` | plugin default `fail`; explicit `vote` / `propose` with authorization |
+| V034 | VP-5 | Value-Map Normalisation | Locked UTxO or false equality on a non-canonical `Value` | `Value` field in datum/redeemer compared with `===` | `Value.valueFromDataWithValidation` at the boundary; ledger values are canonical |
+| V035 | VP-6 | Min-ADA Griefing | Forced output pushed below min-ADA, UTxO stuck | Whole-value preservation on a UTxO anyone can pay into | bound the token set at deposit: `withoutLovelace.isZero`, `hasSameTokensAndAtLeastAda` |
+| V036 | DE-4 | Hash Grinding | Attacker grinds a hash-derived outcome | `tx.id` / out-ref hash used as randomness | design: commit-reveal |
 
 ### Low Severity / Design Issues
 
-| ID | Name | Risk | Detection |
-|----|------|------|-----------|
-| V018 | Unbounded Value | UTxO size limit | Unlimited tokens in output |
-| V019 | Unbounded Datum | Resource exhaustion | Growing datum size |
-| V020 | Unbounded Inputs | TX limit exceeded | Many required UTxOs |
-| V021 | UTxO Contention / Concurrency DoS | Bottleneck, DoS | Shared global state, no rate limit |
-| V022 | Cheap Spam/Dust | Operation obstruction | No minimum amounts |
-| V023 | Locked Value | Permanent lock | Missing exit paths |
+| ID | Taxonomy | Name | Risk | Detection | Fixed by |
+|----|----------|------|------|-----------|----------|
+| V018 | RS-1 | Unbounded Value | UTxO size limit, min-ADA lever | Unlimited tokens in output | `withoutLovelace.isZero`; `hasSameTokensAndAtLeastAda` pins the token set |
+| V019 | RS-2 | Unbounded Datum | Resource exhaustion | Growing datum size | design: bound every list |
+| V020 | RS-3 | Unbounded Inputs | TX limit exceeded | Many required UTxOs | design: batching |
+| V021 | RS-5 | UTxO Contention / Concurrency DoS | Bottleneck, DoS | Shared global state, no rate limit | design: per-user UTxOs |
+| V022 | RS-6 | Cheap Spam/Dust | Operation obstruction | No minimum amounts | design: minimum `require` |
+| V023 | DE-1 | Locked Value | Permanent lock | Missing exit paths | design: exit path per state |
+| V037 | RS-7 | Reference-Script Size | Fee blow-up, size cap exceeded | Large compiled scripts, many per transaction | design: report script size, split logic |
+
+Checklist rules:
+1. V010, V032, V033: a purpose the validator `object` does not define is completed by the compiler
+   plugin with a body that fails, so an undefined purpose is never an entry point. Report only
+   purposes the object defines.
+2. V001 and V016 together: a credential-only finder or `Address.fromScriptHash` never proves the
+   continuing output; only the whole address does.
+3. V027 before V005: when a value check reads `.getLovelace`, ask whether tokens can be in the
+   UTxO before asking whether one output can serve two inputs.
+4. V013: any `getValidityStartTime` is a finding; a `validFromOrFail` / `validToOrFail` is not.
 
 ## False Positive Verification
 
@@ -105,7 +131,7 @@ For each potential vulnerability:
 
 ### Example: V005 Double Satisfaction Verification
 
-**Potential vulnerability detected**: `handlePay` uses `getAdaFromOutputs(sellerOutputs)` without unique linking.
+**Potential vulnerability detected**: `handlePay` sums the seller's outputs by credential without unique linking.
 
 **Construct attack transaction**:
 ```
@@ -120,21 +146,25 @@ Signatories: [B]
 
 **Trace execution for EscrowA**:
 ```scala
-// Line 57-58:
-val contractInputs = txInfo.findOwnInputsByCredential(contractAddress.credential)
-// → Returns [EscrowA, EscrowB] (both have same script credential)
+// Line 58-61, before any handler:
+txInfo.inputs.findUniqueOrFail(
+  _.resolved.address.credential === contractAddress.credential,
+  "Exactly one escrow input may be spent"
+)
+// → inputs at the script credential: [EscrowA, EscrowB] → two matches → FAILS ❌
 
-val contractBalance = Utils.getAdaFromInputs(contractInputs)
-// → 12 + 12 = 24 ADA
-
-// Line 118-120 in handlePay:
-require(contractBalance === escrowDatum.escrowAmount + escrowDatum.initializationAmount)
-// → require(24 === 10 + 2)
-// → require(24 === 12)
-// → FAILS! ❌
+// Line 63: never reached
+val contractBalance = txInfo.valueSpentFrom(contractAddress).getLovelace
 ```
 
-**Result**: Attack transaction fails at line 118-120. This is a **FALSE POSITIVE**.
+**Result**: Attack transaction fails at line 58-61. V005 is a **FALSE POSITIVE**.
+
+**Second look at the same lines (V027)**: `contractBalance` and the seller sum are compared on
+`.getLovelace` only. Attack transaction 2: EscrowA holds 12 ADA + 500 USDM; outputs 12 ADA to S
+and 500 USDM to B. Both lovelace checks pass, the tokens leave. This is a **V027 finding** unless
+the contract proves the UTxO is ADA-only at the boundary; EscrowValidator does
+(`handleDeposit`: `txInfo.valuePaidTo(contractAddress) === Value.lovelace(escrowAmount + initializationAmount)`),
+so here it is not reported. Without that proof, report it.
 
 ### When to Write a Test
 

@@ -5,44 +5,62 @@ Based on Cardano Developer Portal security guidelines and Scalus-specific patter
 
 ## Table of Contents
 
+Every entry carries a taxonomy ID in parentheses (family-number, e.g. `VP-2`: DS double
+satisfaction, VP value preservation, AU authentication, MI minting, TI time, DT datum, IX
+index/ordering, PU script purpose, EV evaluation, AR arithmetic, RS resources, DE design) and a
+**Fixed by** line naming the Scalus operation or idiom that closes it.
+
 ### Critical
-1. [V001: Redirect Attack](#v001-redirect-attack)
-2. [V002: Token/NFT Not Verified](#v002-tokennft-not-verified)
-3. [V003: Inexact Burn/Mint Validation](#v003-inexact-burnmint-validation)
-4. [V004: Integer Overflow](#v004-integer-overflow)
-5. [V005: Double Satisfaction](#v005-double-satisfaction)
+1. [V001: Redirect Attack (VP-3)](#v001-redirect-attack-vp-3)
+2. [V002: Token/NFT Not Verified (AU-1)](#v002-tokennft-not-verified-au-1)
+3. [V003: Inexact Burn/Mint Validation (MI-1 / MI-3)](#v003-inexact-burnmint-validation-mi-1--mi-3)
+4. [V004: Rounding Direction (AR-1)](#v004-rounding-direction-ar-1)
+5. [V005: Double Satisfaction (DS-1 / DS-2)](#v005-double-satisfaction-ds-1--ds-2)
+6. [V026: Value Not Preserved on Continuing Output (VP-1)](#v026-value-not-preserved-on-continuing-output-vp-1)
+7. [V027: ADA-Only Value Comparison (VP-2)](#v027-ada-only-value-comparison-vp-2)
+8. [V028: One-Shot Seed Not Bound (MI-2)](#v028-one-shot-seed-not-bound-mi-2)
+9. [V029: Missed Input (IX-2)](#v029-missed-input-ix-2)
 
 ### High
-6. [V006: Index Validation Missing](#v006-index-validation-missing)
-7. [V007: Self-Dealing / Shill Bidding](#v007-self-dealing--shill-bidding)
-8. [V008: Double Spend via Index Reuse](#v008-double-spend-via-index-reuse)
-9. [V009: Inexact Refund Amount](#v009-inexact-refund-amount)
-10. [V010: Other Redeemer Attack](#v010-other-redeemer-attack)
-11. [V011: Other Token Name Attack](#v011-other-token-name-attack)
-12. [V012: Missing UTxO Authentication](#v012-missing-utxo-authentication)
-13. [V025: Oracle Data Validation](#v025-oracle-data-validation)
+10. [V006: Index Validation Missing (IX-1)](#v006-index-validation-missing-ix-1)
+11. [V007: Self-Dealing / Shill Bidding (DE-3)](#v007-self-dealing--shill-bidding-de-3)
+12. [V008: Double Spend via Index Reuse (IX-1)](#v008-double-spend-via-index-reuse-ix-1)
+13. [V009: Inexact Refund Amount (VP-4)](#v009-inexact-refund-amount-vp-4)
+14. [V010: Other Redeemer Attack (PU-1)](#v010-other-redeemer-attack-pu-1)
+15. [V011: Other Token Name Attack (MI-1)](#v011-other-token-name-attack-mi-1)
+16. [V012: Missing UTxO Authentication (AU-1 / AU-5)](#v012-missing-utxo-authentication-au-1--au-5)
+17. [V025: Oracle Data Validation (DE-2)](#v025-oracle-data-validation-de-2)
+18. [V030: Evaluation-Order Trap (EV-1)](#v030-evaluation-order-trap-ev-1)
+19. [V031: Signature Domain Separation (AU-7)](#v031-signature-domain-separation-au-7)
+20. [V032: Certificate Purposes Unguarded (PU-3)](#v032-certificate-purposes-unguarded-pu-3)
 
 ### Medium
-14. [V013: Time Handling](#v013-time-handling)
-15. [V014: Missing Signature Validation](#v014-missing-signature-validation)
-16. [V015: Datum Mutation Not Validated](#v015-datum-mutation-not-validated)
-17. [V016: Insufficient Staking Control](#v016-insufficient-staking-control)
-18. [V017: Arbitrary Datum](#v017-arbitrary-datum)
-19. [V024: Parameterization Verification](#v024-parameterization-verification)
+21. [V013: Time Handling (TI-1 / TI-2)](#v013-time-handling-ti-1--ti-2)
+22. [V014: Missing Signature Validation (AU-2)](#v014-missing-signature-validation-au-2)
+23. [V015: Datum Mutation Not Validated (DT-1)](#v015-datum-mutation-not-validated-dt-1)
+24. [V016: Insufficient Staking Control (AU-4)](#v016-insufficient-staking-control-au-4)
+25. [V017: Arbitrary Datum (DT-3)](#v017-arbitrary-datum-dt-3)
+26. [V024: Parameterization Verification (AU-6)](#v024-parameterization-verification-au-6)
+27. [V033: Voting / Proposing Purposes Unguarded (PU-4)](#v033-voting--proposing-purposes-unguarded-pu-4)
+28. [V034: Value-Map Normalisation (VP-5)](#v034-value-map-normalisation-vp-5)
+29. [V035: Min-ADA Griefing on Forced Outputs (VP-6)](#v035-min-ada-griefing-on-forced-outputs-vp-6)
+30. [V036: Hash Grinding (DE-4)](#v036-hash-grinding-de-4)
 
 ### Low / Design Issues
-20. [V018: Unbounded Value](#v018-unbounded-value)
-21. [V019: Unbounded Datum](#v019-unbounded-datum)
-22. [V020: Unbounded Inputs](#v020-unbounded-inputs)
-23. [V021: UTxO Contention / EUTXO Concurrency DoS](#v021-utxo-contention--eutxo-concurrency-dos)
-24. [V022: Cheap Spam / Dust Attack](#v022-cheap-spam--dust-attack)
-25. [V023: Locked Value](#v023-locked-value)
+31. [V018: Unbounded Value (RS-1)](#v018-unbounded-value-rs-1)
+32. [V019: Unbounded Datum (RS-2)](#v019-unbounded-datum-rs-2)
+33. [V020: Unbounded Inputs (RS-3)](#v020-unbounded-inputs-rs-3)
+34. [V021: UTxO Contention / EUTXO Concurrency DoS (RS-5)](#v021-utxo-contention--eutxo-concurrency-dos-rs-5)
+35. [V022: Cheap Spam / Dust Attack (RS-6)](#v022-cheap-spam--dust-attack-rs-6)
+36. [V023: Locked Value (DE-1)](#v023-locked-value-de-1)
+37. [V037: Reference-Script Size (RS-7)](#v037-reference-script-size-rs-7)
 
 ---
 
-## V001: Redirect Attack
+## V001: Redirect Attack (VP-3)
 
 **Severity**: Critical
+**Fixed by**: `tx.findContinuingOutputOrFail(ownInput, msg)` (exactly one output to the whole own address)
 
 ### Description
 On Cardano, UTxOs are location-agnostic - they can be sent to any address. If a validator doesn't explicitly verify that continuing outputs go to its own script address, an attacker can redirect funds to a malicious contract.
@@ -62,37 +80,39 @@ def handleBid(/* ... */) = {
     continuingOutput.value.getLovelace >= newBidAmount,
     "Insufficient bid"
   )
-  require(
-    continuingOutput.datum.to[AuctionDatum] === expectedDatum,
-    "Invalid datum"
-  )
+  require(continuingOutput.hasInlineDatum(expectedDatum), "Invalid datum")
 }
 ```
 
-### Secure Pattern (from AuctionValidator)
+### Secure Pattern
 ```scala
-def handleBid(/* ... */) = {
-  val continuingOutput = txInfo.outputs.at(outputIdx)
+def handleBid(ownInput: TxInInfo, /* ... */) = {
+  // Exactly one output to the WHOLE own address (payment AND staking credential).
+  // Fails when there is none or more than one.
+  val continuingOutput =
+    txInfo.findContinuingOutputOrFail(ownInput, "Expected exactly one continuing output")
 
-  // CRITICAL: Verify address first
+  // Tokens exact, ADA at least: the state NFT cannot leave, min-ADA top-ups are allowed.
   require(
-    continuingOutput.address === Address.fromScriptHash(scriptHash),
-    "Continuing output must go to auction script address"
+    continuingOutput.value.hasSameTokensAndAtLeastAda(expectedValue),
+    "Continuing output value"
   )
-
-  // Then check value and datum
-  require(
-    continuingOutput.value.getLovelace >= newBidAmount,
-    "Insufficient bid"
-  )
+  require(continuingOutput.hasInlineDatum(expectedDatum), "Invalid datum")
 }
 ```
+
+Not a fix (see V016 / AU-4):
+- `out.address === Address.fromScriptHash(ownHash)`: the constructed address has no staking
+  credential, so it never equals a real output address that carries one, and it accepts a
+  franken address if the script address itself has none.
+- `findOutputsByScriptHash(h)` / `findOutputsByCredential(c)` for the continuing output: they
+  match the payment credential only; the attacker keeps the payment part and swaps the staking part.
 
 ### Detection Patterns
 Search for:
-- `outputs.at(` without nearby `address ===`
-- `txInfo.outputs` filtering without address validation
-- Continuing output handling in spend validators
+- `outputs.at(` for a continuing output without a whole-address check
+- `address.credential ===` or `Address.fromScriptHash` on a continuing output
+- `findOutputsByScriptHash` / `findOutputsByCredential` used to locate the continuing output
 
 ### Verification: Attack Transaction Tracing (REQUIRED)
 
@@ -121,10 +141,12 @@ Signatories: [attacker]
 val continuingOutput = txInfo.outputs.at(outputIdx)  // → attacker's output
 
 // Is there an address check? Trace to find out:
-// LOOK FOR: require(continuingOutput.address === ???)
+// LOOK FOR: findContinuingOutputOrFail(ownInput, ...) or
+//           require(continuingOutput.address === ownInput.resolved.address)
 
 // If NO address check exists → VULNERABLE
-// If address check uses script's own hash → SAFE
+// If the check compares the WHOLE address of the own input → SAFE
+// If the check compares only the payment credential → V016 (AU-4), not SAFE
 // If address uses datum field (user-specified) → Intentional, SAFE
 ```
 
@@ -132,17 +154,20 @@ val continuingOutput = txInfo.outputs.at(outputIdx)  // → attacker's output
 
 | Question | If Yes |
 |----------|--------|
-| Does code check `output.address === Address.fromScriptHash(ownHash)`? | SAFE |
-| Does code use `findOwnOutputsByCredential(scriptCredential)`? | SAFE (filters by address) |
+| Does code obtain the continuing output with `findContinuingOutputOrFail(ownInput, msg)`? | SAFE |
+| Does code check `output.address === ownInput.resolved.address` (whole address)? | SAFE |
+| Does code check `output.address === Address.fromScriptHash(ownHash)`? | NOT SAFE: no staking credential in the constructed address (AU-4, V016) |
+| Does code use `findOutputsByScriptHash` / `findOutputsByCredential` or `address.credential ===`? | NOT SAFE for the continuing output: payment credential only; staking part can be swapped (AU-4). Acceptable only with a following `require(out.address === ownInput.resolved.address)` |
 | Does output go to datum-specified address (e.g., `datum.beneficiary`)? | Intentional design, SAFE |
 | Is this a close/burn action with no continuing output? | V001 N/A |
 | Can attacker control the address through redeemer? | VULNERABLE |
 
 ---
 
-## V002: Token/NFT Not Verified
+## V002: Token/NFT Not Verified (AU-1)
 
 **Severity**: Critical
+**Fixed by**: `out.value.hasNft(policy, name)` on the continuing output (`hasOnly(policy, name, 1)` when nothing else may ride along under the policy)
 
 ### Description
 Contracts using NFTs or state tokens to identify instances must verify the token is present in outputs. Missing verification allows attackers to remove the token and break contract invariants.
@@ -165,25 +190,23 @@ def handleWithdraw(/* ... */) = {
 }
 ```
 
-### Secure Pattern (from CrowdfundingValidator)
+### Secure Pattern (from Auction)
 ```scala
-def verifyCampaignNftPresent(output: TxOut, campaignPolicyId: PolicyId): Unit = {
+def handleWithdraw(ownInput: TxInInfo, /* ... */) = {
+  val continuingOutput =
+    txInfo.findContinuingOutputOrFail(ownInput, "Expected exactly one continuing output")
+  // Exactly one unit of the state NFT; `> 0` is a different predicate for a non-NFT asset.
   require(
-    output.value.quantityOf(campaignPolicyId, campaignTokenName) === BigInt(1),
+    continuingOutput.value.hasNft(campaignPolicyId, campaignTokenName),
     "Campaign NFT must be present in output"
   )
-}
-
-def handleWithdraw(/* ... */) = {
-  val continuingOutput = txInfo.outputs.at(outputIdx)
-  verifyCampaignNftPresent(continuingOutput, campaignPolicyId)
   // ... rest of validation
 }
 ```
 
 ### Detection Patterns
 Search for:
-- Contracts using `policyId` or `tokenName` without `quantityOf` checks
+- Contracts using `policyId` or `tokenName` without `hasNft` / `hasOnly` / `quantityOf` checks
 - State machine patterns without token verification on transitions
 - NFT-based contracts without presence checks in continuing outputs
 
@@ -213,7 +236,7 @@ Redeemers:
 val continuingOutput = txInfo.outputs.at(outputIdx)
 
 // Is there a token check? Look for:
-// require(continuingOutput.value.quantityOf(policyId, tokenName) === 1)
+// require(continuingOutput.value.hasNft(policyId, tokenName))
 
 // If NO token check → VULNERABLE (attacker keeps NFT)
 // If token check exists → SAFE
@@ -223,19 +246,20 @@ val continuingOutput = txInfo.outputs.at(outputIdx)
 
 | Question | If Yes |
 |----------|--------|
-| Does code check `output.value.quantityOf(policyId, tokenName) === 1`? | SAFE |
+| Does code check `output.value.hasNft(policyId, tokenName)` (or `quantityOf(...) === BigInt(1)`)? | SAFE |
 | Is this a close/burn action that burns the token? | V002 N/A |
 | Does contract use address-based ID instead of tokens? | Different design, not V002 |
 | Is token verification in a helper function that gets called? | SAFE |
 
 ---
 
-## V003: Inexact Burn/Mint Validation
+## V003: Inexact Burn/Mint Validation (MI-1 / MI-3)
 
 **Severity**: Critical
+**Fixed by**: `tx.mint.hasOnly(policy, name, signedQty)` (whole policy sub-map, quantity signed); `tx.onlyBurnsUnder(policy)` for "burn only, mint nothing"
 
 ### Description
-Using `>=` instead of `===` for token mint/burn quantities allows attackers to mint extra tokens or bypass burn validation.
+Using `>=` instead of `===` for token mint/burn quantities allows attackers to mint extra tokens or bypass burn validation. The sharper form of the same class: checking one `quantityOf` under the policy says nothing about the other token names minted under it (V011, MI-1). `hasOnly` compares the whole sub-map of the policy in one `equalsData`.
 
 ### Attack Scenario (Minting)
 1. Contract allows minting with `>= 1` check
@@ -266,28 +290,37 @@ def burn(/* ... */) = {
 }
 ```
 
-### Secure Pattern (from CrowdfundingValidator)
+### Secure Pattern (from Auction)
 ```scala
 def mint(/* ... */) = {
-  // GOOD: Exact minting validation
+  // GOOD: exactly one token under this policy, and nothing else under it.
   require(
-    txInfo.mint.quantityOf(policyId, tokenName) === BigInt(1),
+    txInfo.mint.hasOnly(policyId, tokenName, 1),
     "Must mint exactly one token"
   )
 }
 
 def burn(/* ... */) = {
-  // GOOD: Exact burn validation
+  // GOOD: the quantity is signed; -tokenCount pins an exact burn.
   require(
-    txInfo.mint.quantityOf(policyId, donationTokenName) === -tokenCount,
+    txInfo.mint.hasOnly(policyId, donationTokenName, -tokenCount),
     "Must burn exactly the specified token count"
   )
+}
+
+def close(/* ... */) = {
+  // GOOD when the name is not known: at least one entry under the policy and every quantity
+  // negative. `tokens(policyId).forall(_._2 < 0)` alone is vacuously true on an empty map and
+  // passes a transaction that burns nothing (the NFT survives for replay).
+  require(txInfo.onlyBurnsUnder(policyId), "Only burning is allowed")
 }
 ```
 
 ### Detection Patterns
 Search for:
 - `mint.quantityOf` with `>=` or `<=` instead of `===`
+- `mint.quantityOf(...) === ...` without a check on the rest of the policy sub-map (`hasOnly` covers both)
+- `tokens(policy).forall(_._2 < 0)` without a `nonEmpty` guard (vacuous truth)
 - Flexible burn validation allowing partial burns
 - Token minting without upper bound
 
@@ -299,91 +332,126 @@ Search for:
 
 ---
 
-## V004: Integer Overflow
+## V004: Rounding Direction (AR-1)
 
-**Severity**: Critical
+**Severity**: Critical (scales with how finely the attacker can split one action into many)
+**Fixed by**: `a divCeil b` / `a divFloor b` (infix on `BigInt`); `require(amount > 0)` at the decoding boundary (AR-2)
 
 ### Description
-Custom encoding schemes or arithmetic operations without bounds checking can overflow, leading to fund loss or validation bypass.
+On-chain `Integer` is unbounded: there is no integer overflow in Plutus arithmetic, and this
+entry was previously mis-framed as one. The real arithmetic class is **rounding direction**. Every
+fee or share computed as `amount * rate / denominator` leaves a remainder, and the direction of
+rounding decides who keeps it. An attacker who can split one large action into many small ones
+harvests one rounding unit per action.
+
+Two refinements belong to the same family:
+- **AR-2, sign**: datum and redeemer amounts are attacker-supplied. A `BigInt` the code assumes
+  positive can be negative and inverts every comparison built on it (`balance - amount >= 0` passes
+  when `amount` is negative). Refine at the boundary: `require(amount > 0, msg)`.
+- **AR-3, ledger bound**: the ledger stores an output's token quantity as a bounded integer
+  (int64) although the script's arithmetic is unbounded. A check can pass on-chain for an amount no
+  valid transaction can carry, which is a liveness failure, not theft.
+
+### Direction rule
+Round **against** the party that benefits from the remainder:
+- Fees and payouts **owed by the contract** round **down** (`divFloor`).
+- Amounts **owed to the contract** (fees it collects, installments it withholds) round **up** (`divCeil`).
 
 ### Vulnerable Pattern
 ```scala
-// Custom encoding without bounds checking
-def encodeAmount(amount: BigInt, multiplier: BigInt): BigInt = {
-  amount * multiplier  // Can overflow!
-}
-
-def decodeAmount(encoded: BigInt, multiplier: BigInt): BigInt = {
-  encoded / multiplier  // May lose precision
-}
+// `/` on BigInt lowers to divideInteger, which floors. For a fee the protocol collects, flooring
+// hands the remainder to the user on every swap; 1 000 swaps of 1 000 lovelace each pay zero fee.
+val fee = amountIn * feeNumerator / feeDenominator
 ```
 
-### Secure Pattern
-Remove custom encoding; store values directly in datum:
+### Secure Pattern (from LinearVestingValidator)
 ```scala
-case class DonationDatum(
-  donor: PubKeyHash,
-  amount: BigInt,  // Store directly, no encoding
-  campaignId: ByteString
-)
+// The quantity the contract KEEPS rounds up at every step, so the beneficiary can never withdraw
+// a rounding unit early:
+val timeBetween = (d.vestingPeriodEnd - d.vestingPeriodStart) divCeil d.totalInstallments
+val futureInstallments = (d.vestingPeriodEnd - currentTime) divCeil timeBetween
+val expectedRemaining = (futureInstallments * d.totalVestingQty) divCeil d.totalInstallments
+```
+```scala
+// The amount the contract PAYS OUT rounds down (from VestingValidator):
+vestingDatum.initialAmount * elapsed divFloor vestingDatum.duration
+```
+Alphanumeric infix operators have the lowest precedence: `a divCeil n * fee` parses as
+`a divCeil (n * fee)`. Parenthesize operand expressions.
+
+Sign refinement at the boundary (from VestingValidator):
+```scala
+val Action(requestedAmount) = redeemer.to[Action]
+require(requestedAmount > 0, NonPositiveAmount)
 ```
 
-If encoding is necessary, add bounds checking:
-```scala
-def encodeAmount(amount: BigInt): BigInt = {
-  require(amount >= BigInt(0), "Amount must be non-negative")
-  require(amount < BigInt(2).pow(64), "Amount too large")
-  amount
-}
-```
+### Detection Patterns
+Search for:
+- `/` on protocol quantities (fees, shares, installments) without a stated rounding direction
+- `divFloor` on an amount the contract collects, `divCeil` on an amount it pays out
+- Redeemer or datum `BigInt` amounts used in comparisons without a `> 0` / `>= 0` boundary check
+- A minimum fee missing where the per-action fee can round to zero
+
+### False Positive Indicators
+- The rounded quantity is bounded by a whole-value equality elsewhere (`out.value === ...`)
+- The operation cannot be split (one-shot, fixed-size)
+- A `require(fee >= minFee)` or equivalent floor exists
 
 ---
 
-## V005: Index Validation Missing
+## V006: Index Validation Missing (IX-1)
 
 **Severity**: High
+**Fixed by**: `tx.findInputOrFail(ref, msg)`, `list.findUniqueOrFail(p, msg)`, `list.singleOrFail(msg)` instead of index plumbing
 
 ### Description
-Using `indexOf` without checking for -1 or `at()` without bounds validation can lead to unexpected behavior.
+`indexOf` returns -1 when nothing matches, and a redeemer-supplied index is attacker-chosen.
+`List.at` fails on any out-of-range index, -1 included, so a bad index is a liveness failure
+rather than theft; the real hazard is that an index says nothing about WHAT it points at. An
+index that resolves to the wrong element passes every check written against "the element at idx".
+The index plumbing itself is the smell: prefer the lookup that states the property.
 
 ### Vulnerable Pattern
 ```scala
 def findDonation(donations: List[Donation], donor: PubKeyHash): Donation = {
   val idx = donations.indexOf(d => d.donor === donor)
-  donations.at(idx)  // BAD: idx might be -1
+  donations.at(idx)  // BAD: fails on -1; and nothing pins WHICH element idx names
 }
+
+// BAD: the redeemer picks the input; nothing checks it is the seed / own input
+val seedInput = tx.inputs.at(redeemer.seedIndex)
 ```
 
-### Secure Pattern (from CrowdfundingValidator)
+### Secure Pattern
 ```scala
-def requireFound(idx: BigInt, message: String): Unit = {
-  require(idx >= BigInt(0), message)
-}
+// Exactly one donation for this donor; zero or two is a failure.
+def findDonation(donations: List[Donation], donor: PubKeyHash): Donation =
+  donations.findUniqueOrFail(_.donor === donor, "Expected exactly one donation for donor")
 
-def findDonation(donations: List[Donation], donor: PubKeyHash): Donation = {
-  val idx = donations.indexOf(d => d.donor === donor)
-  requireFound(idx, s"Donation not found for donor")
-  donations.at(idx)
-}
+// Locate by the property, not by position.
+val ownInput = tx.findInputOrFail(ownRef, "Own input not found")
+
+// When an index is kept for cost reasons, pin what it points at (from EditableNftValidator):
+require(tx.inputs.at(seedIndex).outRef === seed, MustSpendSeed)
 ```
 
 ### Detection Patterns
 Search for:
 - `.indexOf(` without subsequent `>= 0` check
-- `.at(idx)` where `idx` comes from user input or `indexOf`
-- List operations without bounds validation
+- `.at(idx)` where `idx` comes from the redeemer, without a check on the element it returns
+- `filter(...).head` or `find(...).get` where "exactly one" is the intent (`findUniqueOrFail`)
 
 ### False Positive Indicators
-- Index bounds check in a helper function (e.g., `requireFound`, `requireValidIndex`)
+- The element returned by `at(idx)` is immediately pinned (`outRef === ownRef`, address check, token check)
 - Index is guaranteed valid by construction (e.g., always 0 for single-element list)
-- Index comes from validated redeemer structure that enforces bounds
 - The `at()` call is on `txInfo.inputs` or `txInfo.outputs` where index is from script's own UTxO lookup
 
 ---
 
-## V006: Self-Dealing / Shill Bidding
+## V007: Self-Dealing / Shill Bidding (DE-3)
 
 **Severity**: High
+**Fixed by**: no operation; a role-separation `require` on every branch (design-level, DETECT)
 
 ### Description
 In auction or betting contracts, if sellers can bid on their own items, they can manipulate prices or win their own auctions risk-free.
@@ -421,12 +489,13 @@ Search for:
 
 ---
 
-## V007: Double Spend via Index Reuse
+## V008: Double Spend via Index Reuse (IX-1)
 
 **Severity**: High
+**Fixed by**: strictly ascending index lists; `UtxoIndexer.multiOneToOneNoRedeemer` (walks the inputs, not the indices; see V029)
 
 ### Description
-When processing multiple inputs/outputs via index arrays, lack of uniqueness validation allows double-spending.
+When processing multiple inputs/outputs via index arrays, lack of uniqueness validation allows double-spending. The same family covers length mismatch between two index lists and `zip` truncation (the shorter list silently drops the tail of the longer one).
 
 ### Vulnerable Pattern
 ```scala
@@ -460,15 +529,19 @@ Search for:
 - `List[BigInt]` indices in redeemers
 - Batch processing without uniqueness checks
 - Multiple UTxO consumption without ascending order validation
+- `zip` of two redeemer lists without a length check
 
 ---
 
-## V008: Inexact Refund Amount
+## V009: Inexact Refund Amount (VP-4)
 
 **Severity**: High
+**Fixed by**: `===` on the whole `Value` (`refundOutput.value === Value.lovelace(amount)`); `tx.hasPaidTagged(addr, value, tag)` under batching
 
 ### Description
-Using `>=` for refund validation allows manipulation - excess funds can be redirected.
+Using `>=` for refund validation allows manipulation - excess funds can be redirected. `>=` on a
+payout is also the enabling condition for V005: an output that satisfies "at least X" can
+satisfy two "at least X" obligations at once.
 
 ### Vulnerable Pattern
 ```scala
@@ -482,105 +555,115 @@ def handleBid(currentHighestBid: BigInt, /* ... */) = {
 }
 ```
 
-### Secure Pattern (from AuctionValidator)
+### Secure Pattern
 ```scala
 def handleBid(currentHighestBid: BigInt, /* ... */) = {
   val refundOutput = txInfo.outputs.at(refundIdx)
-  // GOOD: Exact refund prevents manipulation
+  // GOOD: exact, and on the whole Value (lovelace-only `===` still lets tokens ride along)
   require(
-    refundOutput.value.getLovelace === currentHighestBid,
+    refundOutput.value === Value.lovelace(currentHighestBid),
     "Refund must be exact amount"
   )
 }
 ```
-
----
-
-## V009: Time Boundary Edge Cases
-
-**Severity**: Medium
-
-### Description
-Incorrect time boundary semantics (inclusive vs exclusive) can cause transactions at exact deadlines to fail unexpectedly.
-
-### Best Practice
+For a payee that is a key and is paid in lovelace by design, summing the whole value and
+projecting afterwards is the accepted form (from EscrowValidator):
 ```scala
-// Use clear boundary methods
 require(
-  validRange.isEntirelyBefore(deadline),  // Clear: tx must complete before deadline
-  "Transaction must be before deadline"
-)
-
-require(
-  validRange.isEntirelyAfter(startTime),  // Clear: tx must start after startTime
-  "Transaction must be after start time"
+  sellerOutputs.foldLeft(Value.zero)(_ + _.value).getLovelace ===
+      escrowDatum.escrowAmount + escrowDatum.initializationAmount,
+  "Seller must receive exactly escrow amount plus initialization amount"
 )
 ```
 
 ### Detection Patterns
 Search for:
-- Time comparisons with `<` vs `<=`
-- Deadline checks without clear inclusive/exclusive semantics
-- POSIXTime comparisons without using built-in methods
+- `>=` on a refund or payout amount
+- `getLovelace >=` / `getLovelace ===` on an output that may carry tokens (see V027)
 
 ---
 
-## V010: Missing Signature Validation
+## V014: Missing Signature Validation (AU-2)
 
 **Severity**: Medium
+**Fixed by**: `tx.isSignedBy(pkh)` / `tx.isSignedByAny(keys)` for key authorities; for a script authority, prove the script ran (see below). Design-level (DETECT): no operation can add an absent check
 
 ### Description
-Actions that should require authorization may be missing signature checks.
+Actions that should require authorization may be missing signature checks. A branch of the
+redeemer enum simply forgets its check; there is nothing structurally wrong with the code.
+
+**Signature is not authorization when the authority is a script.** A script-credential owner
+(a multisig script, a DAO, a stake validator) cannot sign a transaction. `isSignedBy` on a
+script hash is always false, and a check that skips it "because the owner is a script" is an
+open door. For a script authority, check that the script actually ran in this transaction:
+- an input at that credential is being spent (`tx.inputs.exists(_.resolved.address.credential === cred)`), or
+- a withdrawal keyed by that credential exists (`tx.withdrawals.getOrFail(cred, msg)`, the
+  withdraw-zero forwarding idiom; pin the redeemer with `StakeValidator.spend`, never `spendMinimal` alone, see V010).
+
+### Vulnerable Pattern
+```scala
+redeemer.to[Action] match
+  case Action.Cancel => require(txInfo.isSignedBy(datum.seller), "Seller must sign")
+  case Action.Finalize => payout(datum)   // BAD: nobody has to sign
+```
 
 ### Secure Pattern
 ```scala
 def handleCancel(seller: PubKeyHash, /* ... */) = {
-  require(
-    txInfo.isSignedBy(seller),
-    "Seller must sign cancellation"
-  )
+  require(txInfo.isSignedBy(seller), "Seller must sign cancellation")
 }
 
 def handleClaim(beneficiary: PubKeyHash, /* ... */) = {
-  require(
-    txInfo.isSignedBy(beneficiary),
-    "Beneficiary must sign claim"
-  )
+  require(txInfo.isSignedBy(beneficiary), "Beneficiary must sign claim")
 }
+
+// Any of several keys:
+require(txInfo.isSignedByAny(datum.admins), "An admin must sign")
+
+// A script authority: prove the authority script ran in this transaction.
+def requireOwnerAuthorized(owner: Credential, txInfo: TxInfo): Unit = owner match
+  case Credential.PubKeyCredential(pkh) => require(txInfo.isSignedBy(pkh), "Owner must sign")
+  case Credential.ScriptCredential(_) =>
+    txInfo.withdrawals.getOrFail(owner, "Owner script must run (withdrawal)")
 ```
 
 ### Detection Patterns
 Search for:
-- Action handlers without `isSignedBy` checks
+- Action handlers without `isSignedBy` / `isSignedByAny` checks
 - State transitions without authorization
 - Withdrawal/cancel operations without signature validation
+- An owner or admin typed as `Credential` or `Address` whose script case is not handled
+- `isSignedBy` applied to a hash that can be a script hash
 
 ### False Positive Indicators
 - Authorization done via NFT/token ownership instead of signature
 - The action is public by design (e.g., anyone can trigger liquidation if conditions met)
 - Signature check exists in a helper function or parent method
 - Authorization comes from spending a specific UTxO (implicit signature via spending)
-- Multi-sig or DAO-based authorization via separate validator
+- Multi-sig or DAO-based authorization via separate validator, AND the code proves that validator ran
 
 ---
 
-## V011: Datum Mutation Not Validated
+## V015: Datum Mutation Not Validated (DT-1)
 
 **Severity**: Medium
+**Fixed by**: build the expected datum from the old one and compare the whole thing: `out.hasInlineDatum(oldDatum.copy(currentAmount = newAmount))`
 
 ### Description
-State transitions should verify that immutable fields remain unchanged.
+State transitions should verify that immutable fields remain unchanged. Comparing field by field
+invites the omission of one; comparing the whole expected datum cannot omit a field.
 
 ### Secure Pattern
 ```scala
-def validateDatumTransition(oldDatum: CampaignDatum, newDatum: CampaignDatum) = {
-  // Immutable fields must not change
-  require(oldDatum.owner === newDatum.owner, "Owner cannot change")
-  require(oldDatum.targetAmount === newDatum.targetAmount, "Target cannot change")
-  require(oldDatum.deadline === newDatum.deadline, "Deadline cannot change")
-
-  // Only mutable fields can differ (e.g., currentAmount)
-}
+// Whole-datum comparison: one `equalsData`, no decoding, no field can be forgotten.
+val expectedDatum = oldDatum.copy(currentAmount = oldDatum.currentAmount + contribution)
+require(continuingOutput.hasInlineDatum(expectedDatum), "Datum transition")
+```
+Use `inlineOrFail[T]` only when the new datum's fields are needed, then pin the immutable ones:
+```scala
+val newDatum = continuingOutput.datum.inlineOrFail[CampaignDatum]("Inline datum required")
+require(newDatum.owner === oldDatum.owner, "Owner cannot change")
+require(newDatum.deadline === oldDatum.deadline, "Deadline cannot change")
 ```
 
 ### Detection Patterns
@@ -588,15 +671,21 @@ Search for:
 - Datum updates without field comparison
 - State machines without transition validation
 - Contracts accepting any datum without checking consistency
+- `inlineOrFail` followed by checks on a subset of the fields
 
 ---
 
-## V005: Double Satisfaction
+## V005: Double Satisfaction (DS-1 / DS-2)
 
 **Severity**: Critical
+**Fixed by**: `tx.inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, msg)` (single own input per transaction) or `tx.hasPaidTagged(addr, value, tag)` with a `TxOutRef`-derived tag (also closes the cross-script variant DS-2)
 
 ### Description
 When multiple UTxOs are consumed in a single transaction, each validator sees the same transaction outputs. A single output can satisfy validation requirements for multiple inputs, allowing attackers to pay once for multiple claims.
+
+DS-2 is the cross-instance / cross-script variant: two different scripts (distinct hashes) that
+both require "an output of V to address A" are satisfied by the same output. A single-own-input
+guard does not see the other script's input; only a tagged output does.
 
 ### Attack Scenario
 1. Contract A requires output to address X with value V
@@ -617,28 +706,26 @@ def spend(/* ... */) = {
 ```
 
 ### Secure Pattern
-Use a unique identifier (e.g., own UTxO reference) to link inputs to specific outputs:
+Option 1, the single-own-input guard (from VestingValidator). Exactly one input at the own
+credential per transaction, so no output can serve two instances. Measured cheaper than
+`inputs.count(p) === BigInt(1)`:
 ```scala
-def spend(/* ... */, ownRef: TxOutRef) = {
-  // Use output index from redeemer or derive from input
-  val outputIdx = redeemer.to[BigInt]
-  val output = txInfo.outputs.at(outputIdx)
-
-  // Verify this output is specifically for this input (e.g., via datum)
-  require(
-    output.datum.to[PaymentDatum].sourceUtxo === ownRef,
-    "Output must reference this specific UTxO"
-  )
-}
+val ownInputInfo = txInfo.findInputOrFail(txOutRef)
+val ownCredential = ownInputInfo.resolved.address.credential
+txInfo.inputs.findUniqueOrFail(
+  _.resolved.address.credential === ownCredential,
+  MultipleVestingInputs
+)
 ```
 
-Alternatively, use NFT-based linking:
+Option 2, the tagged output. The payout carries a tag derived from the spent `TxOutRef`, which is
+globally unique, so one output cannot satisfy two instances of this script or of any other
+script (DS-2). All three comparisons are exact; a `>=` on the value reopens the hole:
 ```scala
-// Mint a unique token for this input, require it in the output
-val uniqueToken = deriveTokenName(ownRef)
+val tag = OutputDatum.OutputDatum(ownRef.deriveTokenName.toData)
 require(
-  output.value.quantityOf(policyId, uniqueToken) === BigInt(1),
-  "Output must contain unique linking token"
+  txInfo.hasPaidTagged(datum.beneficiary, Value.lovelace(datum.amount), tag),
+  "Payout must be tagged with this UTxO's reference"
 )
 ```
 
@@ -647,6 +734,7 @@ Search for:
 - `outputs.exists` or `outputs.find` without unique linking
 - Multiple inputs expecting payment to same address
 - Missing correlation between inputs and outputs
+- Payout checks with `>=` (V009): the enabling condition for one output satisfying two obligations
 
 ### Verification: Attack Transaction Tracing (REQUIRED)
 
@@ -678,18 +766,16 @@ Execute the validator code line-by-line with your attack transaction.
 Track what each variable evaluates to. Check if each `require()` passes.
 
 ```scala
-// For UTxO_A, trace through handlePay:
+// For UTxO_A, trace through spend:
 
-// What does contractBalance evaluate to?
-val contractInputs = txInfo.findOwnInputsByCredential(credential)
-// → If this returns [UTxO_A, UTxO_B], then:
-val contractBalance = getAdaFromInputs(contractInputs)  // → 24 ADA
+// Line 58-61: the single-own-input guard runs before any handler
+txInfo.inputs.findUniqueOrFail(
+  _.resolved.address.credential === contractAddress.credential,
+  "Exactly one escrow input may be spent"
+)
+// → inputs at the script credential: [UTxO_A, UTxO_B] → two matches → FAILS ❌
 
-// Does this require pass?
-require(contractBalance === escrowAmount + initAmount)
-// → require(24 === 12) → FAILS ❌
-
-// Attack blocked! This is a FALSE POSITIVE.
+// Attack blocked before handlePay is reached. V005 is a FALSE POSITIVE.
 ```
 
 #### Step 3: Write Test if Uncertain
@@ -710,36 +796,55 @@ test("V005: Double satisfaction attack") {
 }
 ```
 
-### Example Trace: EscrowValidator (FALSE POSITIVE)
+### Example Trace: EscrowValidator (V005 FALSE POSITIVE, V027 FINDING)
 
-**Suspicious code**:
+**Suspicious code** (`handlePay`):
 ```scala
-val sellerOutputs = txInfo.findOwnOutputsByCredential(PubKeyCredential(seller))
-require(Utils.getAdaFromOutputs(sellerOutputs) === escrowAmount + initAmount)
+val contractBalance = txInfo.valueSpentFrom(contractAddress).getLovelace
+// ...
+val sellerOutputs =
+    txInfo.findOutputsByCredential(Credential.PubKeyCredential(escrowDatum.seller))
+require(
+  sellerOutputs.foldLeft(Value.zero)(_ + _.value).getLovelace ===
+      escrowDatum.escrowAmount + escrowDatum.initializationAmount,
+  "Seller must receive exactly escrow amount plus initialization amount"
+)
 ```
 
-**Attack transaction**: Spend UTxO_A and UTxO_B (both 12 ADA), create single 12 ADA output to seller.
+**Attack transaction 1 (V005)**: Spend UTxO_A and UTxO_B (both 12 ADA), create single 12 ADA output to seller.
 
 **Trace execution**:
 ```
-Line 57: contractInputs = findOwnInputsByCredential(scriptCredential)
-         → [UTxO_A, UTxO_B]
-
-Line 58: contractBalance = getAdaFromInputs(contractInputs)
-         → 12 + 12 = 24 ADA
-
-Line 118-120: require(contractBalance === 10 + 2)
-              → require(24 === 12)
-              → FAILS ❌
+Line 58-61: inputs.findUniqueOrFail(_.resolved.address.credential === contractAddress.credential)
+            → [UTxO_A, UTxO_B] both match → FAILS ❌
 ```
 
-**Conclusion**: Attack fails at line 118. The `contractBalance` check implicitly prevents spending multiple UTxOs. **FALSE POSITIVE**.
+**Conclusion 1**: the attack fails at the single-own-input guard. V005 is a **FALSE POSITIVE**.
+
+**Attack transaction 2 (V027, ADA-only comparison)**: the seller payout and `contractBalance`
+are compared on `.getLovelace` only. Suppose the escrow UTxO holds 12 ADA + 500 USDM:
+```
+Inputs:   UTxO_A: 12 ADA + 500 USDM at script, datum={seller=S, amount=10, init=2}
+Outputs:  12 ADA to seller S           ← getLovelace sum === 12, passes
+          500 USDM to buyer B          ← tokens stripped, nothing checks them
+Signatories: [B]
+```
+```
+contractBalance = valueSpentFrom(contractAddress).getLovelace → 12 → passes
+seller sum .getLovelace === 12 → passes
+```
+**Conclusion 2**: the lovelace-only comparisons pass while native tokens leave. This is a
+**V027 finding** UNLESS the contract proves the UTxO is ADA-only at the boundary. EscrowValidator
+does: `handleDeposit` requires `txInfo.valuePaidTo(contractAddress) === Value.lovelace(escrowAmount + initializationAmount)`
+(whole value, exact), so no token can enter the escrow through `Deposit`. Trace the boundary
+before reporting; report when no such proof exists.
 
 ---
 
-## V010: Other Redeemer Attack
+## V010: Other Redeemer Attack (PU-1)
 
 **Severity**: High
+**Fixed by**: the compiler plugin's default `fail` for every unimplemented purpose (see below); for cross-script dependencies, `StakeValidator.spend` with a redeemer validator (pins WHICH redeemer ran), never `spendMinimal` alone
 
 ### Description
 When a script can be invoked multiple ways in the same transaction (e.g., as spend and mint), attackers may bypass validation by using a different redeemer on another invocation.
@@ -787,18 +892,28 @@ def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo) = {
 ```
 
 ### False Positive: Scalus Validator Framework
-In Scalus, the compiler plugin automatically generates default `fail` implementations for all
-script purposes (spend, mint, reward, certify, vote, propose) that the validator does not
-explicitly override. This means a validator that only implements `spend` will automatically
-reject all other invocations. **V010 is always a false positive for Scalus validators** that
-extend `Validator`, `ParameterizedValidator`, or `DataParameterizedValidator` — unless the
-validator explicitly implements multiple purposes with inconsistent authorization checks.
+The purpose methods of `Validator`, `ParameterizedValidator` and `DataParameterizedValidator`
+(`spend`, `mint`, `reward`, `certify`, `vote`, `propose`) are declared `inline` and abstract,
+with no body in the trait. The Scalus compiler plugin (`SIRPreprocessor`) completes every
+`object` that extends one of these traits: for each purpose method the object does not define, it
+synthesizes an inline override whose body throws (`"abstract method in Validator"`), which
+compiles to a UPLC `error`. The dispatcher in `validate` therefore reaches a failing body for
+every purpose the author did not write.
+
+This is the reason V010 is a false positive, not a convention: a validator that only implements
+`spend` cannot be invoked as a minting, rewarding, certifying, voting or proposing script, so
+there is no weaker entry point to reach. The same property closes V032 (PU-3) and V033 (PU-4)
+by default. **V010 is a false positive for a single-purpose Scalus validator object**; report it
+only when the validator implements several purposes (or several redeemer branches) with
+inconsistent authorization, or when a cross-script dependency checks that another script RAN
+without checking WHICH redeemer it ran with (`StakeValidator.spendMinimal`).
 
 ---
 
-## V011: Other Token Name Attack
+## V011: Other Token Name Attack (MI-1)
 
 **Severity**: High
+**Fixed by**: `tx.mint.hasOnly(policy, name, qty)`; for a fixed set of names, `tx.mint.tokens(policyId) === expected.tokens(policyId)`
 
 ### Description
 Minting policies that only check for specific token names allow attackers to mint arbitrary additional tokens under the same policy ID.
@@ -822,39 +937,37 @@ def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo) = {
 ```
 
 ### Secure Pattern
-Validate ALL tokens minted under this policy:
+Validate the WHOLE sub-map of this policy:
 ```scala
 def mint(redeemer: Data, policyId: PolicyId, tx: TxInfo) = {
-  // Get all tokens minted under this policy
-  val mintedTokens = tx.mint.filter(_.policyId === policyId)
-
-  // Ensure only expected tokens are minted
-  require(mintedTokens.size === 1, "Only one token type allowed")
-  require(
-    mintedTokens.head.tokenName === expectedTokenName,
-    "Unexpected token name"
-  )
-  require(
-    mintedTokens.head.quantity === BigInt(1),
-    "Must mint exactly one"
-  )
+  // Exactly {expectedTokenName -> 1} under policyId, nothing else under it.
+  require(tx.mint.hasOnly(policyId, expectedTokenName, 1), "Must mint exactly one token")
 }
+```
+For a fixed set of names (from EditableNftValidator, the CIP-68 reference/user pair):
+```scala
+val expectedMint =
+    Value(policyId, refTokenName, 1) + Value(policyId, userTokenName, 1)
+require(
+  tx.mint.tokens(policyId) === expectedMint.tokens(policyId),
+  MustMintExactlyNftPair
+)
 ```
 
 ### False Positive Indicators
-- Policy uses `mint.filter(_.policyId === policyId)` and validates all returned tokens
-- Token name is derived deterministically from transaction data (e.g., hash of input ref)
-- Separate redeemer cases each validate their tokens AND check total mint count
-- Policy explicitly validates mint map size for this policy ID
+- Policy uses `mint.hasOnly(...)` or compares `mint.tokens(policyId)` against a whole expected map
+- Token name is derived deterministically from transaction data (`ownRef.deriveTokenName`) AND the sub-map is pinned
+- Separate redeemer cases each validate their tokens AND check the whole sub-map
 
 ---
 
-## V012: Missing UTxO Authentication
+## V012: Missing UTxO Authentication (AU-1 / AU-5)
 
 **Severity**: High
+**Fixed by**: `ownInput.resolved.value.hasNft(authPolicy, authName)` on the own input and on every reference input read; the NFT itself comes from a one-shot policy (V028)
 
 ### Description
-Without proper authentication, anyone can create UTxOs at a script address with arbitrary datums, potentially corrupting contract state.
+Without proper authentication, anyone can create UTxOs at a script address with arbitrary datums, potentially corrupting contract state. The same applies to **reference inputs**: a datum read from a reference input is attacker-planted unless the input carries the protocol's NFT. AU-5 is the state-machine form: a step that accepts a UTxO with no valid ancestry ("trust no UTxO").
 
 ### Attack Scenario
 1. Contract expects UTxOs to be created through proper minting
@@ -867,91 +980,146 @@ Use authenticating tokens:
 ```scala
 // Only process UTxOs containing the auth token
 def spend(datum: Data, redeemer: Data, tx: TxInfo, ownRef: TxOutRef) = {
-  val ownInput = tx.inputs.find(_.outRef === ownRef).get.resolved
+  val ownInput = tx.findInputOrFail(ownRef, "Own input not found").resolved
 
-  // Verify this UTxO has the authentication token
+  // Exactly one unit of the authentication NFT
   require(
-    ownInput.value.quantityOf(authPolicyId, authTokenName) >= BigInt(1),
+    ownInput.value.hasNft(authPolicyId, authTokenName),
     "UTxO must contain authentication token"
   )
 
+  // A datum read from a reference input needs the same proof
+  val oracleInput = tx.referenceInputs.findUniqueOrFail(
+    _.resolved.value.hasNft(oraclePolicyId, oracleTokenName),
+    "Expected exactly one oracle reference input"
+  )
   // Now safe to process
 }
 ```
 
+### Detection Patterns
+Search for:
+- `referenceInputs` read by address or datum shape without a token check
+- Own input processed without `hasNft` / `hasOnly` when the protocol has a state token
+- Minting policies for the auth token that are not one-shot (V028)
+
 ---
 
-## V013: Time Handling
+## V013: Time Handling (TI-1 / TI-2)
 
-**Severity**: Medium
+**Severity**: Medium (Critical when a time lock is the only guard)
+**Fixed by**: `tx.validFromOrFail(msg)` / `tx.validToOrFail(msg)` (fail on an unbounded bound); `tx.validRange.isEntirelyAfter(t)` / `isEntirelyBefore(t)` (closure-aware, fail closed on an infinite bound)
 
 ### Description
-Validators only see time intervals (validity ranges), not exact timestamps. Incorrect handling of interval bounds can enable time manipulation attacks.
+Validators only see time intervals (validity ranges), not exact timestamps, and the
+**transaction author chooses the interval**. Two classes:
+
+- **TI-1, unbounded range read as "now"**. A bound may be infinite. Any helper that projects the
+  lower bound to a number must invent a value for the infinite case. The deprecated
+  `TxInfo.getValidityStartTime` returned `0` for an unbounded range, so a transaction with NO
+  lower bound was treated as happening at the Unix epoch and every "has the deadline passed?"
+  comparison flipped. In the Scalus examples, Vesting and DecentralizedIdentity both read the
+  lower bound through it; the migration replaced both with `validFromOrFail`, which fails the
+  script when the bound is not finite. There is no defaulting variant.
+- **TI-2, inclusivity**. The ledger builds the lower bound closed and the upper bound open:
+  `validFromOrFail` is the earliest inclusion time (inclusive), `validToOrFail` is exclusive.
+  `IntervalBound.finite(default)` and `finiteOrFail` drop the closure flag; the two `TxInfo`
+  accessors state it in their scaladoc.
 
 ### Vulnerable Pattern
 ```scala
 def spend(/* ... */) = {
-  // BAD: Only checks lower bound
-  require(
-    tx.validRange.from >= deadline,
-    "Must be after deadline"
-  )
+  // BAD (TI-1): 0 when the range has no lower bound; a backdated or absent validFrom passes
+  val now = tx.getValidityStartTime
+  require(now >= datum.unlockAt, "Too early")
+
+  // BAD (TI-2): the raw bound is an IntervalBound, its closure flag is ignored
+  val to = tx.validRange.to.finiteOrFail("no upper bound")
+  require(to <= deadline, "Too late")
 }
 ```
 
-### Secure Pattern
+### Secure Pattern (from HtlcValidator)
 ```scala
-def spend(/* ... */) = {
-  // GOOD: Entire validity range must be after deadline
-  require(
-    tx.validRange.isEntirelyAfter(deadline),
-    "Transaction must be entirely after deadline"
-  )
-
-  // Or for before deadline:
-  require(
-    tx.validRange.isEntirelyBefore(deadline),
-    "Transaction must be entirely before deadline"
-  )
-}
+redeemer.to[Action] match
+  case Action.Timeout =>
+    val validFrom = tx.validFromOrFail(ValidRangeMustBeBound)
+    // validFrom is inclusive, hence 10 <= 10 is correct
+    require(config.timeout <= validFrom, InvalidCommitterTimePoint)
+  case Action.Reveal(preimage) =>
+    val validTo = tx.validToOrFail(ValidRangeMustBeBound)
+    // validTo is exclusive, hence 10 <= 10 is correct
+    require(validTo <= config.timeout, InvalidReceiverTimePoint)
 ```
+Interval predicates when no number is needed (from Auction); both return `false` on an infinite bound:
+```scala
+require(txInfo.validRange.isEntirelyBefore(auctionEndTime), "Auction has ended")
+require(txInfo.validRange.isEntirelyAfter(auctionEndTime), "Auction still running")
+```
+Bounding the attacker's window: `validToOrFail(m) - validFromOrFail(m) <= maxWidth` fails closed for free.
+
+### Detection Patterns
+Search for:
+- `getValidityStartTime` (deprecated; returns 0 on an unbounded range)
+- `IntervalBound.finite(` with a default value
+- `validRange.from` / `validRange.to` compared as raw bounds
+- A datum timestamp written from `validToOrFail` and later treated as an exact posting time (it can be late, never early)
 
 ---
 
-## V016: Insufficient Staking Control
+## V016: Insufficient Staking Control (AU-4)
 
 **Severity**: Medium
+**Fixed by**: `tx.findContinuingOutputOrFail(ownInput, msg)` (whole address); or `findUniqueOrFail` by credential followed by `require(out.address === ownInput.resolved.address)`
 
 ### Description
-Contracts that don't verify staking credentials allow attackers to redirect staking rewards.
+An address is a pair: payment credential and optional staking credential. A validator that
+compares only the payment credential accepts an output at `(myScriptHash, ATTACKER_stake_key)`
+("franken" / "mangled" address). The attacker cannot spend the funds but collects all staking
+rewards on the protocol's TVL and can delegate the stake. A second consequence: a "only one input
+at this credential" guard keeps working, but the protocol's funds now sit at many distinct
+addresses. In the Scalus examples, PaymentSplitter carried the payout-side variant (payee
+outputs matched on the payment credential only).
 
 ### Attack Scenario
-1. Contract locks funds without specifying staking credential
-2. Attacker registers their staking key to the script address
+1. Contract checks `out.address.credential === own.address.credential`
+2. Attacker builds the continuing output at the same payment credential and their own staking key
 3. All staking rewards go to attacker
 
-### Secure Pattern
+### Vulnerable Pattern
 ```scala
-// Verify staking credential in output address
-def spend(/* ... */) = {
-  val continuingOutput = tx.outputs.at(outputIdx)
-
-  // Check both payment and staking credentials
-  require(
-    continuingOutput.address.stakingCredential === expectedStakingCred,
-    "Invalid staking credential"
-  )
-}
+require(out.address.credential === ownInput.resolved.address.credential, "must return to script")
+require(out.address === Address.fromScriptHash(ownHash), "...")   // no staking credential at all
+val outs = tx.findOutputsByScriptHash(ownHash)                     // payment credential only
 ```
+
+### Secure Pattern (from EscrowValidator)
+```scala
+// Unique output to the WHOLE own address, staking part included.
+val contractOutput =
+    txInfo.findContinuingOutputOrFail(ownInput, "Expected exactly one contract output")
+```
+When a credential-only finder is kept for another reason, pin the whole address afterwards:
+```scala
+val out = tx.outputs.findUniqueOrFail(_.address.credential === ownCred, "one own output")
+require(out.address === ownInput.resolved.address, "Must return to the same full address")
+```
+
+### Detection Patterns
+Search for:
+- `address.credential ===` on a continuing output or a payout
+- `Address.fromScriptHash` / `Address.fromPubKeyHash` compared against an output address
+- `findOutputsByScriptHash` / `findOutputsByCredential` used for the continuing output
 
 ---
 
-## V017: Arbitrary Datum
+## V017: Arbitrary Datum (DT-3)
 
 **Severity**: Medium
+**Fixed by**: `out.datum.inlineOrFail[T](msg)` when fields are needed; `out.hasInlineDatum(expected)` when equality is the check. Both reject a missing datum and a datum hash
 
 ### Description
-Insufficient datum validation when locking funds can cause UTxOs to become unspendable if the datum doesn't match expected format.
+Insufficient datum validation when locking funds can cause UTxOs to become unspendable if the datum doesn't match expected format. The datum-hash form of the same class: a continuing output that carries only a datum HASH whose preimage is never published bricks the UTxO (the next spend cannot supply the datum).
 
 ### Secure Pattern
 ```scala
@@ -959,41 +1127,48 @@ Insufficient datum validation when locking funds can cause UTxOs to become unspe
 def mint(/* ... */) = {
   val output = tx.outputs.at(outputIdx)
 
-  // Ensure datum is present and valid
-  val datum = output.datum match {
-    case OutputDatum.InlineDatum(d) => d.to[ExpectedDatum]
-    case _ => fail("Inline datum required")
-  }
+  // Inline datum required; a hash or no datum fails here
+  val datum = output.datum.inlineOrFail[ExpectedDatum]("Inline datum required")
 
   // Validate datum fields
-  require(datum.owner.length === 28, "Invalid owner hash")
-  require(datum.amount > BigInt(0), "Amount must be positive")
+  require(datum.owner.length === BigInt(28), "Invalid owner hash")
+  require(datum.amount > 0, "Amount must be positive")
 }
 ```
 
+### Detection Patterns
+Search for:
+- `datum.to[T]` on an `OutputDatum` match arm that accepts `OutputDatumHash` or `NoOutputDatum`
+- Continuing outputs whose datum is never inspected
+
 ---
 
-## V018: Unbounded Value
+## V018: Unbounded Value (RS-1)
 
 **Severity**: Low (Design Issue)
+**Fixed by**: `value.withoutLovelace.isZero` for an ADA-only protocol; `out.value.hasSameTokensAndAtLeastAda(expected)` pins the token set of a continuing output (dust cannot be added)
 
 ### Description
-UTxOs with unlimited tokens can exceed size/execution limits, making funds unspendable.
+UTxOs with unlimited tokens can exceed size/execution limits, making funds unspendable. Token dust deposited into a protocol UTxO is also the lever for V035 (min-ADA griefing).
 
 ### Mitigation
-Set maximum token limits:
+Declare the token set at the boundary (from PaymentSplitterValidator):
 ```scala
+// Only ADA is split. A contract UTxO holding native tokens would let the fee payer pocket
+// those tokens for free, so reject non-ADA contract inputs outright.
 require(
-  output.value.size <= maxTokenTypes,
-  "Too many token types in output"
+  input.resolved.value.withoutLovelace.isZero,
+  "Contract input must contain only ADA"
 )
 ```
+On a continuing output, `hasSameTokensAndAtLeastAda(expected)` makes the non-ADA part exactly `expected`'s, so no new token type can enter.
 
 ---
 
-## V019: Unbounded Datum
+## V019: Unbounded Datum (RS-2)
 
 **Severity**: Low (Design Issue)
+**Fixed by**: no operation; bound every list in the datum (DETECT)
 
 ### Description
 Unbounded datum growth can exceed resource constraints, locking funds.
@@ -1009,9 +1184,10 @@ require(
 
 ---
 
-## V020: Unbounded Inputs
+## V020: Unbounded Inputs (RS-3)
 
 **Severity**: Low (Design Issue)
+**Fixed by**: no operation; design for bounded inputs (DOCUMENT)
 
 ### Description
 Operations requiring many UTxOs may exceed transaction limits.
@@ -1021,9 +1197,10 @@ Design for bounded input requirements; use batching patterns.
 
 ---
 
-## V021: UTxO Contention / EUTXO Concurrency DoS
+## V021: UTxO Contention / EUTXO Concurrency DoS (RS-5)
 
 **Severity**: Low-Medium (Design Issue)
+**Fixed by**: no operation; per-user UTxOs, batching, rate limits (DOCUMENT)
 
 ### Description
 Shared global state (single UTxO) creates bottlenecks when multiple users access simultaneously. In the worst case, attackers can intentionally block protocol operations by repeatedly spending critical UTxOs with trivial transactions.
@@ -1078,7 +1255,7 @@ def spend(datum: Data, redeemer: Data, ctx: TxInfo) = {
   val minInterval = POSIXTime(60000)  // 1 minute
 
   require(
-    ctx.validRange.from > state.lastUpdate + minInterval,
+    ctx.validFromOrFail("Lower bound required") > state.lastUpdate + minInterval,
     "Must wait between updates"
   )
 }
@@ -1111,9 +1288,10 @@ Search for:
 
 ---
 
-## V022: Cheap Spam / Dust Attack
+## V022: Cheap Spam / Dust Attack (RS-6)
 
 **Severity**: Low
+**Fixed by**: no operation; a minimum-amount `require` at the entry point (DOCUMENT)
 
 ### Description
 Low-cost malicious transactions can obstruct legitimate operations.
@@ -1128,9 +1306,10 @@ require(
 
 ---
 
-## V023: Locked Value
+## V023: Locked Value (DE-1)
 
-**Severity**: Low (Design Issue)
+**Severity**: Low (Design Issue; Critical when it is reachable)
+**Fixed by**: no operation; every state needs an exit path (DETECT). Related: V017 datum-hash bricking, V035 min-ADA griefing
 
 ### Description
 Design flaws can make funds permanently inaccessible.
@@ -1142,9 +1321,10 @@ Design flaws can make funds permanently inaccessible.
 
 ---
 
-## V024: Parameterization Verification
+## V024: Parameterization Verification (AU-6)
 
 **Severity**: Varies (assess per case)
+**Fixed by**: an authentication NFT checked with `hasNft` (V012), minted by a one-shot policy (V028); otherwise a published script hash (DOCUMENT + pattern)
 
 ### Description
 Parameterized validators (using `ParameterizedValidator` or `DataParameterizedValidator`) include parameters that affect the script hash. On-chain code cannot cryptographically verify that parameters were correctly applied. Depending on what parameters control and what verification mechanisms exist, this may or may not be a security concern.
@@ -1198,11 +1378,11 @@ case class ProtocolParams(owner: PubKeyHash, authPolicyId: PolicyId)
 @Compile
 object ProtocolValidator extends ParameterizedValidator[ProtocolParams] {
   def spend(params: ProtocolParams)(datum: Data, redeemer: Data, ctx: TxInfo, ownRef: TxOutRef) = {
-    val ownInput = ctx.inputs.find(_.outRef === ownRef).get.resolved
+    val ownInput = ctx.findInputOrFail(ownRef, "Own input not found").resolved
 
     // Auth token verifies this is a legitimate instance
     require(
-      ownInput.value.quantityOf(params.authPolicyId, authTokenName) === BigInt(1),
+      ownInput.value.hasNft(params.authPolicyId, authTokenName),
       "Authentication NFT required"
     )
     // Now safe to use params.owner
@@ -1253,9 +1433,10 @@ Search for:
 
 ---
 
-## V025: Oracle Data Validation
+## V025: Oracle Data Validation (DE-2)
 
 **Severity**: High (when applicable)
+**Fixed by**: no operation; `verifyEd25519Signature` over a domain-separated payload (V031), freshness against `validToOrFail`, an NFT-authenticated reference input (V012) (DOCUMENT)
 
 ### Description
 Contracts relying on external oracle data (prices, exchange rates, external state) must properly validate authenticity and freshness. Without proper validation, attackers can provide manipulated or stale data.
@@ -1308,16 +1489,18 @@ def spend(datum: Data, redeemer: Data, ctx: TxInfo) = {
   val oracleData = redeemer.to[OracleData]
   val maxOracleAge = POSIXTime(300000)  // 5 minutes
 
-  // 1. Verify oracle signature
+  // 1. Verify oracle signature over a DOMAIN-SEPARATED payload (see V031): the payload must
+  //    commit to this script instance and to a nonce, or the signature is replayable.
   val message = serializeForSigning(oracleData.price, oracleData.timestamp)
   require(
     verifyEd25519Signature(trustedOraclePubKey, message, oracleData.signature),
     "Invalid oracle signature"
   )
 
-  // 2. Check data freshness - oracle timestamp must be recent
+  // 2. Check data freshness. The transaction runs before its upper bound, so the data's age at
+  //    execution is at most validTo - timestamp. Fails when the range is unbounded.
   require(
-    ctx.validRange.from - oracleData.timestamp < maxOracleAge,
+    ctx.validToOrFail("Upper bound required") - oracleData.timestamp <= maxOracleAge,
     "Oracle data too stale"
   )
 
@@ -1377,6 +1560,533 @@ Search for:
 
 ---
 
+## V026: Value Not Preserved on Continuing Output (VP-1)
+
+**Severity**: Critical
+**Fixed by**: `out.value.hasSameTokensAndAtLeastAda(expected)` (tokens exact, ADA open above) or `out.value === expected` (exact); tie every datum balance to `out.value.quantityOf(asset)`
+**In the Scalus examples**: AMM (datum reserves never tied to the pool output value; pool fully drainable), Lottery, Vesting, PaymentSplitter
+
+### Description
+A spending validator that checks the DATUM transition but not the VALUE lets the attacker keep
+the difference. Three variants: (a) no value check at all; (b) `>=` where `===` was meant; (c) the
+datum records a balance that is never tied to the actual `Value` of the output. Variant (c) is the
+worst because the code looks thorough.
+
+### Attack Scenario
+```
+Input:   pool @ script, value = 1_000_000 tokenX + 1_000_000 tokenY, datum = Reserves(1e6, 1e6)
+Outputs: pool @ script, value = 1 tokenX + 1 tokenY, datum = Reserves(1e6, 1e6)   <- datum lies
+         999_999 tokenX + 999_999 tokenY -> attacker
+```
+
+### Vulnerable Pattern
+```scala
+// Only the datum transition is checked; value never mentioned
+val out = tx.findContinuingOutputOrFail(ownInput, "one pool output")
+require(out.hasInlineDatum(expectedReserves), "reserves")
+```
+
+### Secure Pattern (from AmmValidator)
+```scala
+// Bind the datum reserves to the tokens actually held by the continuing pool output.
+require(
+  poolOutput.value.quantityOf(params.t0._1, params.t0._2) === newDatum.r0,
+  ReserveT0Mismatch
+)
+require(
+  poolOutput.value.quantityOf(params.t1._1, params.t1._2) === newDatum.r1,
+  ReserveT1Mismatch
+)
+require(poolOutput.value.hasNft(poolPolicyId, poolNftName), "Pool output must retain the pool NFT")
+```
+Whole-value preservation minus an authorized withdrawal (from VestingValidator):
+```scala
+require(
+  contractOutput.value === ownInput.value - Value.lovelace(requestedAmount),
+  ContinuingValueMismatch
+)
+```
+When the builder may add lovelace for min-ADA, use `hasSameTokensAndAtLeastAda(expected)`:
+`===` rejects a valid top-up, and a whole-value `>=` lets one output satisfy two "at least"
+obligations (V005).
+
+### Detection Patterns
+Search for:
+- A continuing output whose `.value` is never read
+- A datum field named like a balance (`reserves`, `amount`, `balance`) with no `quantityOf` binding it to the output
+- `getLovelace >=` on a continuing output (V027 and V009 at once)
+
+### False Positive Indicators
+- The ledger's own balance rule is enough because the script holds nothing but the state NFT (verify with `hasOnly`)
+- Value is pinned by a whole-`Value` equality elsewhere on the same output
+
+---
+
+## V027: ADA-Only Value Comparison (VP-2)
+
+**Severity**: Critical
+**Fixed by**: compare the whole `Value` (`out.value === expected`, `hasSameTokensAndAtLeastAda`, `tx.valuePaidTo(addr) === v`); or prove the UTxO is ADA-only at the boundary: `value.withoutLovelace.isZero`
+**In the Scalus examples**: Vesting (continuing-output check was lovelace-only; native tokens could be stripped), PaymentSplitter (both validators reconciled `getLovelace` only; tokens in a contract UTxO could be skimmed by the fee payer)
+
+### Description
+`Value` is a two-level map, but the ergonomic accessor is `getLovelace`. A check written in
+lovelace passes while every native token in the UTxO is redirected to the attacker. The
+deprecated `Utils.getAdaFromOutputs` / `getAdaFromInputs` were lovelace-only by construction;
+`valuePaidTo` / `valueSpentFrom` sum the whole `Value` so a caller who wants only ADA projects it
+afterwards, and a caller who forgets gets the safe answer.
+
+### Attack Scenario
+```
+Input:   vault @ script, value = 10 ADA + 500 USDM
+Outputs: vault @ script, value = 10 ADA          <- passes the getLovelace check
+         500 USDM -> attacker
+```
+
+### Vulnerable Pattern
+```scala
+require(out.value.getLovelace === own.value.getLovelace, "value preserved")   // WRONG
+require(tx.valuePaidTo(contractAddress).getLovelace === expected, "...")      // still lovelace-only
+```
+
+### Secure Pattern (from EscrowValidator)
+```scala
+// Whole-value check: the continuing output carries exactly the escrow amount plus the
+// initialization amount, and nothing else.
+require(
+  txInfo.valuePaidTo(contractAddress) ===
+      Value.lovelace(escrowDatum.escrowAmount + escrowDatum.initializationAmount),
+  "Contract output must contain exactly escrow amount plus initialization amount"
+)
+```
+If the protocol is genuinely ADA-only, prove it at the boundary (from PaymentSplitterValidator):
+```scala
+require(input.resolved.value.withoutLovelace.isZero, "Contract input must contain only ADA")
+```
+A `.getLovelace` projection is acceptable ONLY for a key payee paid in ADA by design (the
+seller of an escrow, the beneficiary of a vesting), never for a script UTxO.
+
+### Detection Patterns
+Search for:
+- `getLovelace` compared on a script's continuing output or on a value sum of script inputs/outputs
+- `getAdaFromOutputs` / `getAdaFromInputs` (deprecated, lovelace-only)
+- `valuePaidTo(...).getLovelace` / `valueSpentFrom(...).getLovelace` on a script address
+
+### False Positive Indicators
+- The UTxO is proven ADA-only at deposit (`withoutLovelace.isZero`, or `valuePaidTo(addr) === Value.lovelace(n)`)
+- The payee is a key, and the tokens have no owner other than the payer
+
+---
+
+## V028: One-Shot Seed Not Bound (MI-2)
+
+**Severity**: Critical
+**Fixed by**: `tx.findInputOrFail(seed, "seed must be spent")` as a statement, or `require(tx.inputs.at(seedIndex).outRef === seed, msg)`; derive the name with `seed.deriveTokenName`; pin the mint with `tx.mint.hasOnly(policyId, name, 1)`
+**In the Scalus examples**: EditableNft (checked that SOME input existed at the seed index, never compared it to the parameter; one-shot mint defeated, NFT uniqueness broken; fixed)
+
+### Description
+A one-shot policy is parameterized by a `TxOutRef` and must require that THAT exact reference is
+consumed in the minting transaction. A UTxO can be spent once, so the policy can fire once. If the
+check weakens to "some input exists at index i" or "an input with the right index number",
+uniqueness collapses and the NFT is mintable forever. Every authentication built on that NFT
+(V012, V024) collapses with it.
+
+### Vulnerable Pattern
+```scala
+require(tx.inputs.get(seedIndex).isDefined, "seed present")   // never compares to the seed
+```
+
+### Secure Pattern (from EditableNftValidator)
+```scala
+val seed = param.to[TxOutRef]
+// Bind the seed: the input at seedIndex must be the exact parameterized seed UTxO, not merely
+// some input that exists. A wrong index simply fails the check (fails closed).
+require(tx.inputs.at(seedIndex).outRef === seed, MustSpendSeed)
+// Pin the whole mint under this policy
+require(tx.mint.hasOnly(policyId, seed.deriveTokenName, 1), "Must mint exactly one")
+```
+Without an index (one scan, no `Option`):
+```scala
+tx.findInputOrFail(seed, "Seed UTxO must be consumed")
+```
+The off-chain builder must pick the seed and the policy parameter from the same value.
+
+### Detection Patterns
+Search for:
+- A `TxOutRef` parameter that is never compared with `===` against an input's `outRef`
+- `inputs.get(idx).isDefined` / `inputs.at(idx)` in a minting policy with no `outRef ===`
+- A token name that is not derived from the seed (`deriveTokenName`) in a policy that claims uniqueness
+
+---
+
+## V029: Missed Input (IX-2)
+
+**Severity**: Critical
+**Fixed by**: iterate the INPUT list and require every input at the protocol credential to be covered; `UtxoIndexer.multiOneToOneNoRedeemer` does this in both directions
+
+### Description
+The UTxO-indexer pattern (and the withdraw-zero "global validator" pattern) delegates per-input
+validation to a single pass driven by redeemer-supplied indices. If the global validator checks
+only the inputs the indices NAME, an attacker adds one more script input that no index names, and
+that input is spent with no validation at all. Note that the singular indexer patterns
+(`oneToOne`, `oneToMany`) solve missed-input, NOT double satisfaction (V005).
+
+### Attack Scenario
+```
+Inputs:  scriptUtxo0 (indexed), scriptUtxo1 (indexed), scriptUtxo2 (NOT indexed)
+Redeemer (global): pairs = [(0,0), (1,1)]
+Outputs: correct continuations for 0 and 1; utxo2's value -> attacker
+```
+
+### Vulnerable Pattern
+```scala
+// Iterates the index list; a script input that no pair names is never looked at
+indexPairs.foreach { case (inIdx, outIdx) =>
+  validate(tx.inputs.at(inIdx), tx.outputs.at(outIdx))
+}
+```
+
+### Secure Pattern (from UtxoIndexer.multiOneToOneNoRedeemer)
+The walk is over `tx.inputs`: when it meets a script-credential input with no pair left it fails
+with `MoreScriptUtxosSpentThanSpecified`; at the end it requires `remainingPairs.isEmpty`
+(`UnprocessedIndexPairs`). Both directions are covered.
+```scala
+UtxoIndexer.multiOneToOneNoRedeemer(
+  indexPairs,
+  scriptHash,
+  tx,
+  (inIdx, input, outIdx, output) => {
+    require(output.address === input.resolved.address, "Must return to the same address")
+    require(output.value.hasSameTokensAndAtLeastAda(input.resolved.value), "Value preserved")
+  }
+)
+```
+Every pattern callback returns `Unit`; put each obligation in its own `require` (V030).
+
+### Detection Patterns
+Search for:
+- A loop over redeemer indices in a global / stake validator without a walk over `tx.inputs`
+- No `count` / `findUniqueOrFail` / walk that bounds how many script inputs the transaction has
+- `oneToOne` / `oneToMany` used as the only defence against V005
+
+---
+
+## V030: Evaluation-Order Trap (EV-1)
+
+**Severity**: High
+**Fixed by**: one obligation per `require`; pattern callbacks return `Unit` (a `Boolean` result is discarded silently; wrap it in `require`)
+
+### Description
+UPLC control flow is lazy. `&&` and `||` short-circuit, `if` / `match` evaluate only the taken
+branch, and `fail` only fires when forced. A security-relevant predicate placed on the right of
+`||`, or inside an untaken branch, silently never runs.
+
+Migration hazard: the validator callbacks of `UtxoIndexer`, `StakeValidator` and
+`TransactionLevelMinterValidator` take `=> Unit`. A lambda that still ends in a `Boolean`
+expression compiles (the value is discarded) and validates nothing.
+
+### Attack Scenario
+A transaction that satisfies the cheap left-hand disjunct, so the expensive right-hand check (the
+one that protects the funds) never evaluates.
+
+### Vulnerable Pattern
+```scala
+require(isEmergency || (tx.isSignedBy(owner) && valuePreserved(out)), "...")
+// when isEmergency is true, NOTHING else is checked
+
+UtxoIndexer.oneToOne(ownRef, inIdx, outIdx, tx, (input, output) =>
+  output.address === input.resolved.address   // Boolean, discarded: a silent no-op
+)
+```
+
+### Secure Pattern
+```scala
+require(isEmergency || tx.isSignedBy(owner), "authorized")
+require(valuePreserved(out), "value preserved")     // unconditional
+
+UtxoIndexer.oneToOne(ownRef, inIdx, outIdx, tx, (input, output) =>
+  require(output.address === input.resolved.address, "Must return to the same address")
+)
+```
+
+### Detection Patterns
+Search for:
+- `||` whose right operand contains a `require`-worthy check
+- A `&&` chain inside one `require` where a later conjunct is the security check
+- A pattern callback (`validator = ...`, `perOutputValidator = ...`) whose last expression is a `Boolean`
+- Checks placed only in one arm of an `if` / `match` that the redeemer selects
+
+---
+
+## V031: Signature Domain Separation (AU-7)
+
+**Severity**: High (when applicable: any `verifyEd25519Signature` over an application payload)
+**Fixed by**: no operation; the signed payload must commit to a protocol tag, this script hash / policy id, a nonce (a `TxOutRef` spent in this transaction), and every security-relevant field
+
+### Description
+A signature verified on-chain over an application-defined payload is replayable across script
+instances, across protocols, across networks, and repeatedly within one protocol, unless the
+payload carries a domain separator.
+
+### Attack Scenario
+Attacker takes a valid oracle signature over `(price, timestamp)` published for protocol A and
+replays it into protocol B, or into instance 2 of protocol A, or twice into the same instance.
+
+### Vulnerable Pattern
+```scala
+val msg = serialiseData(OracleData(price, timestamp).toData)
+require(verifyEd25519Signature(oracleKey, msg, sig), "bad signature")
+```
+
+### Secure Pattern
+```scala
+case class SignedPayload(
+    domain: ByteString,      // protocol tag, e.g. "myprotocol.oracle.v1"
+    instance: ScriptHash,    // THIS script instance
+    nonce: TxOutRef,         // spent in this transaction, so the payload is single-use
+    price: BigInt,
+    timestamp: PosixTime
+) derives ToData
+
+val payload = SignedPayload(domainTag, ownScriptHash, ownRef, price, timestamp)
+tx.findInputOrFail(payload.nonce, "Nonce must be spent")
+require(verifyEd25519Signature(oracleKey, serialiseData(payload.toData), sig), "bad signature")
+```
+
+### Detection Patterns
+Search for:
+- `verifyEd25519Signature` / `verifyEcdsaSecp256k1Signature` / `verifySchnorrSecp256k1Signature`
+  whose message omits the script hash or a spent `TxOutRef`
+- Signed payloads that are pure application data (`price`, `amount`, `recipient`)
+
+---
+
+## V032: Certificate Purposes Unguarded (PU-3)
+
+**Severity**: High
+**Fixed by**: the plugin's default `fail` for an unimplemented `certify` (V010); when `certify` is implemented, an explicit `TxCert` match with a failing default arm
+
+### Description
+A stake credential controlled by a script is gated by that script for EVERY certificate action,
+not just withdrawals. A `certify` that approves anything lets an unrelated party submit a
+deregistration certificate: the credential is deregistered (every withdraw-zero forwarding spend
+now fails until re-registration) and the key deposit is refunded to the attacker's chosen account.
+The mirror attack is an unsolicited registration or delegation.
+
+### Attack Scenario
+```
+Certificates: [ UnRegStaking(scriptCredential, refund) ]
+Redeemer:     Certifying(0, ...) -> whatever the script accepts
+Outputs:      deposit refund -> attacker
+```
+
+### Vulnerable Pattern
+```scala
+inline override def certify(redeemer: Data, cert: TxCert, tx: TxInfo): Unit = ()   // permissive
+```
+
+### Secure Pattern (from OptimizedPaymentSplitterValidator)
+```scala
+inline override def certify(payeesData: Data, redeemer: Data, cert: TxCert, tx: TxInfo): Unit = {
+  cert match
+    case TxCert.RegStaking(_, _)   => () // Allow registration
+    case TxCert.UnRegStaking(_, _) => () // Allow de-registration
+    case _ => fail("Only stake registration/de-registration allowed")
+}
+```
+Decide deliberately whether third parties may deregister; deny it unless the protocol intends it.
+Not implementing `certify` at all is safe: the plugin's default body fails.
+
+### Detection Patterns
+Search for:
+- `override def certify` with a body of `()` or a match with a permissive `case _ => ()`
+- A hand-written dispatcher on `ScriptInfo` with a `case _ => ()` fallthrough
+- `reward`-only validators whose `certify` allows `UnRegStaking` without authorization
+
+---
+
+## V033: Voting / Proposing Purposes Unguarded (PU-4)
+
+**Severity**: Medium
+**Fixed by**: the plugin's default `fail` for unimplemented `vote` / `propose` (V010); when implemented, an explicit match with a failing default arm, and the index-checked certificate / procedure
+
+### Description
+Plutus V3 added `VotingScript(Voter)` and `ProposingScript(index, ProposalProcedure)`. A DRep or
+constitution script that dispatches on `ScriptInfo` without handling these silently approves
+governance actions. The `ProposingScript` / `CertifyingScript` purposes also carry a 0-based
+index into `tx.proposalProcedures` / `tx.certificates`, so index confusion (V006) applies here.
+
+### Vulnerable Pattern
+```scala
+// Hand-written dispatcher
+sc.scriptInfo match
+  case ScriptInfo.SpendingScript(ref, datum) => spend(...)
+  case _ => ()   // approves every vote and proposal
+```
+
+### Secure Pattern
+Extend `Validator` and implement only the purposes the script has; leave `vote` / `propose`
+unimplemented so the plugin's default body fails. When a governance purpose is intended:
+```scala
+inline override def vote(redeemer: Data, voter: Voter, tx: TxInfo): Unit = {
+  require(tx.isSignedByAny(drepCommittee), "Committee must sign the vote")
+}
+```
+
+### Detection Patterns
+Search for:
+- Hand-written `ScriptInfo` dispatchers with a permissive default arm
+- `override def vote` / `override def propose` with no authorization
+
+References: CIP-69 (script purposes in Plutus V3): https://cips.cardano.org/cip/CIP-0069
+
+---
+
+## V034: Value-Map Normalisation (VP-5)
+
+**Severity**: Medium
+**Fixed by**: decode attacker-supplied `Value`s with `Value.valueFromDataWithValidation` (rejects zero amounts and non-ascending keys); compare ledger-provided values freely, they are canonical
+
+### Description
+A `Value` is a nested map serialised as `Data`. Two representations can denote the same value:
+one with a zero-quantity entry and one without, or with keys in a different order. `Value`'s
+`===` compares the sorted maps structurally, and `hasOnly` compares the policy sub-map with one
+`equalsData`; both assume canonical form. Every ledger-provided value (`out.value`,
+`input.resolved.value`, `tx.mint`) IS canonical (strictly ascending keys, no zero amounts, no
+empty inner maps), so comparisons among them are safe. A `Value` decoded from a redeemer or datum
+with a plain `to[Value]` is not validated: an attacker-supplied zero entry makes a legitimate
+comparison fail (locking the UTxO), or a non-canonical value compares unequal to an equal one.
+
+### Attack Scenario
+Attacker stores `(policyX, nameY, 0)` in a datum field of type `Value`. The validator compares it
+against the ledger value with `===`; the comparison fails on every legitimate spend; protocol halted.
+
+### Vulnerable Pattern
+```scala
+val expected = datum.lockedValue                 // decoded with the plain FromData[Value]
+require(out.value === expected, "value preserved")
+```
+
+### Secure Pattern
+```scala
+// At the decoding boundary, once. The given must be in scope where LockDatum's FromData is
+// derived (its companion), not at the `.to[LockDatum]` call site.
+@Compile
+object LockDatum {
+  given FromData[Value] = Value.valueFromDataWithValidation
+  given FromData[LockDatum] = FromData.derived
+}
+
+val expected = datum.to[LockDatum].lockedValue    // canonical or the script fails
+require(out.value === expected, "value preserved")
+```
+Or avoid the attacker-supplied `Value` altogether: check named quantities with `quantityOf` /
+`hasNft` / `hasOnly` against ledger values.
+
+### Detection Patterns
+Search for:
+- A `Value` field in a datum or redeemer type
+- `===` between a ledger value and a decoded `Value` without `valueFromDataWithValidation`
+
+### False Positive Indicators
+- Both operands are ledger-provided or built from ledger values with `+` / `-` / `Value.lovelace`
+
+---
+
+## V035: Min-ADA Griefing on Forced Outputs (VP-6)
+
+**Severity**: Medium
+**Fixed by**: bound the token set at the DEPOSIT boundary (`withoutLovelace.isZero`, or `hasSameTokensAndAtLeastAda` against a fixed expected value); keep an ADA headroom invariant
+
+### Description
+Every output must carry a minimum ADA proportional to its size. A validator that forces an output
+of a fixed non-ADA value, or forces a datum, can be pushed below min-ADA by an attacker who
+inflates the output's size (more token types, a bigger datum). The transaction then cannot be
+built at all and the UTxO is stuck (V023).
+
+### Attack Scenario
+Attacker deposits 40 distinct dust tokens into the vault UTxO. The "return the same value to the
+script" rule now forces an output whose min-ADA exceeds the ADA actually in the UTxO. No valid
+spending transaction exists.
+
+### Vulnerable Pattern
+```scala
+// Any "preserve the value" rule on a UTxO whose token set is attacker-controlled
+require(out.value === ownInput.resolved.value, "value preserved")
+```
+
+### Secure Pattern
+```scala
+// Deposit boundary: only the protocol's own assets may enter
+require(
+  depositOutput.value.hasSameTokensAndAtLeastAda(Value.lovelace(minDeposit) + stateNft),
+  "Deposit may carry only ADA and the state NFT"
+)
+```
+`hasSameTokensAndAtLeastAda` leaves ADA open above, so a min-ADA top-up is never rejected.
+
+### Detection Patterns
+Search for:
+- A whole-value preservation rule on a UTxO that anyone can pay into
+- Datum lists that grow with user input on a UTxO with fixed ADA (V019)
+
+---
+
+## V036: Hash Grinding (DE-4)
+
+**Severity**: Medium
+**Fixed by**: no operation; commit-reveal (hash a secret in one transaction, reveal it in a later one), never a hash of transaction data as randomness (DOCUMENT)
+
+### Description
+Validation is deterministic and the transaction author controls the transaction's contents, so
+any outcome derived from a hash of transaction data can be ground: the author retries until the
+hash is favourable. "Which bucket does this land in", "who wins the raffle", "which input comes
+first" (the ledger sorts inputs by `(txId, idx)`, so grinding a `txId` also grinds input
+position) are all grindable.
+
+### Vulnerable Pattern
+```scala
+// The author retries the transaction until the hash picks the winner they want
+val roll = byteStringToInteger(true, blake2b_256(serialiseData(tx.id.toData)))
+val winner = players.at(roll % players.length)
+```
+
+### Secure Pattern (from LotteryValidator)
+Each player commits `sha2_256(preimage)` in an earlier transaction; the outcome is a function of
+both revealed preimages, so neither player can grind alone:
+```scala
+case Action.RevealPlayerOne(preimage) =>
+  require(sha2_256(preimage) === state.playerOneSecret, "Fraudulent attempt")
+```
+
+### Detection Patterns
+Search for:
+- `tx.id`, an output reference, or a hash of them used to select a winner, a slot, or an index
+- Randomness derived from anything the transaction author controls
+
+---
+
+## V037: Reference-Script Size (RS-7)
+
+**Severity**: Low (Design Issue)
+**Fixed by**: no operation; keep the compiled script small and report its size in review (DOCUMENT)
+
+### Description
+Reference scripts let a transaction point at an on-chain script instead of embedding it. Their
+size is fee-priced under Conway (a tiered per-byte fee with a per-transaction cap) after a 2024
+mainnet incident in which many reward-purpose reference scripts were run per transaction for a
+negligible fee, degrading node performance. Large scripts also raise every user's fees and can
+exceed the per-transaction reference-script size cap, which makes a design that needs several
+large reference scripts in one transaction unbuildable.
+
+### Mitigation
+- Report the compiled script size (bytes) in the review; treat growth as a regression
+- Split rarely-used logic into a separate script rather than one large validator
+- Note the `MerkelizedValidator` pattern's size warning when many scripts run per transaction
+
+References: https://github.com/IntersectMBO/cardano-ledger/issues/3952
+
+---
+
 ## Scalus-Specific Notes
 
 ### Validator Trait Methods
@@ -1388,21 +2098,33 @@ All validators implement these methods (check each for vulnerabilities):
 - `vote(redeemer, voter, tx)` - Voting validator
 - `propose(procedure, tx)` - Proposal validator
 
-### Common Scalus Patterns
-- Use `Address.fromScriptHash(scriptHash)` for address construction
-- Use `txInfo.outputs.at(idx)` for indexed access
-- Use `value.quantityOf(policyId, tokenName)` for token amounts
-- Use `txInfo.isSignedBy(pubKeyHash)` for signature checks
-- Use `validRange.isEntirelyBefore/After` for time validation
+Any of these that a validator `object` does not define is completed by the compiler plugin with a
+body that fails (see V010). Check only the ones the object defines.
+
+### Safe API (prefer these; the deprecated spelling is in brackets)
+- Own input: `tx.findInputOrFail(ownRef, msg)` [`findOwnInputOrFail`]
+- Continuing output: `tx.findContinuingOutputOrFail(ownInput, msg)` (whole address); never a
+  credential-only finder or `=== Address.fromScriptHash(h)` for it
+- Exactly one: `list.findUniqueOrFail(p, msg)`, `list.singleOrFail(msg)`; never `filter(...).head`
+- Value sums: `tx.valuePaidTo(addr)`, `tx.valueSpentFrom(addr)` (whole `Value`; project with
+  `.getLovelace` only for a key payee paid in ADA by design) [`getAdaFromOutputs` / `getAdaFromInputs`]
+- Continuing value: `out.value.hasSameTokensAndAtLeastAda(expected)`; state token: `out.value.hasNft(p, n)`
+- Mint: `tx.mint.hasOnly(policy, name, signedQty)`; burn-only: `tx.onlyBurnsUnder(policy)`
+- Datum: `out.hasInlineDatum(expected)` for equality, `out.datum.inlineOrFail[T](msg)` for fields
+- Time: `tx.validFromOrFail(msg)` (inclusive), `tx.validToOrFail(msg)` (exclusive) [`getValidityStartTime`];
+  `validRange.isEntirelyBefore/After` when no number is needed
+- Signatures: `tx.isSignedBy(pkh)`, `tx.isSignedByAny(keys)`; a script authority cannot sign (V014)
+- Credentials: `cred.scriptHashOrFail(msg)`, `cred.pubKeyHashOrFail(msg)`
+- Division: `a divCeil b`, `a divFloor b` (state the rounding direction)
+- Double satisfaction: single-own-input `findUniqueOrFail`, or `tx.hasPaidTagged(addr, value, tag)`
+  with `ownRef.deriveTokenName`
+- Equality: derive `Eq` and use `===`; it lowers to the same `equalsData` as `a.toData == b.toData`
 
 ### Finding Script Hash
 ```scala
 // In spend validator, get own script hash from ownRef
-val ownInput = txInfo.inputs.find(_.outRef === ownRef).get
-val scriptHash = ownInput.resolved.address.credential match {
-  case Credential.ScriptCredential(hash) => hash
-  case _ => fail("Not a script")
-}
+val ownInput = txInfo.findInputOrFail(ownRef, "Own input not found")
+val scriptHash = ownInput.resolved.address.credential.scriptHashOrFail("Not a script")
 ```
 
 ---

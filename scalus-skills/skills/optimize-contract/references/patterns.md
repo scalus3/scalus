@@ -125,14 +125,17 @@ require(txOut.value.quantityOf(policyId, tokenName) >= BigInt(1))
 
 ---
 
-### O007: AssocMap → SortedMap for Larger Maps
+### O007: AssocMap → SortedMap
 
-**Problem:** `AssocMap.get` always scans the entire list (no ordering to exploit).
-`SortedMap.get` terminates early when it passes the target key.
+**Problem:** `AssocMap.get` always scans to a hit or to the end (no ordering to exploit).
+`SortedMap.get` terminates early when it passes the target key. `AssocMap.union` is O(n*m):
+it calls `rhs.get(k)` per left key and `lhs.toList.exists` per right key; `SortedMap.union`
+is one linear merge. `AssocMap` also has no `Eq` instance.
 
-**When to switch:** If the map has > ~5 entries and you do multiple lookups.
+**When to switch:** Always. Default to `SortedMap`; reach for `AssocMap` only when the source
+order must be preserved.
 
-**Budget impact:** Average case ~50% fewer comparisons for lookups.
+**Budget impact:** Lookups stop early on a miss; `union` drops from O(n*m) to O(n+m).
 
 ---
 
@@ -232,30 +235,30 @@ else
 
 ## Medium Impact — Data Representation
 
-### O016: equalsData for Whole-Structure Comparison
+### O016: Keep Key Types Concrete at Comparison Sites
 
-**Problem:** Typed `===` on complex structures (e.g., `TxOut`, `Datum` with many fields)
-recursively compares each field using type-specific `Eq` instances.
+**Problem:** `===` on a `BigInt` or `ByteString` that sits behind a type variable lowers to
+`equalsData`, not to `equalsInteger` / `equalsByteString`. A generic `K: Eq` lookup pays this
+on every element. Measured: 1 761 779 cpu for the generic form against 832 313 cpu for the
+concrete-typed clone, a 2.1x gap that no optimizer pass closes.
 
-**Before:**
+**Before (generic key, `equalsData` per element):**
 ```scala
-// Compares address field-by-field, then value field-by-field, then datum...
-require(outputTxOut === expectedTxOut)
+def lookup[K: Eq](key: K, entries: List[(K, BigInt)]): Option[BigInt] =
+    entries.find(_._1 === key).map(_._2)
 ```
 
-**After:**
+**After (concrete key, `equalsInteger` per element):**
 ```scala
-import scalus.uplc.builtin.Builtins.equalsData
-import scalus.uplc.builtin.ToData
-
-// Single builtin — compares serialized CBOR representations
-require(equalsData(toData(outputTxOut), toData(expectedTxOut)))
+def lookup(key: BigInt, entries: List[(BigInt, BigInt)]): Option[BigInt] =
+    entries.find(_._1 === key).map(_._2)
 ```
 
-**When to use:** When both sides are already available as the same type and you
-just need equality. NOT when you need to compare individual fields.
+**When to use:** Any lookup, dedup or membership test keyed by `BigInt`, `ByteString`,
+`PolicyId`, `TokenName` or `PubKeyHash` that is written as a generic helper. Specialise the
+helper, or inline the comparison at the call site where the key type is known.
 
-**Budget impact:** ~10-40% reduction depending on structure complexity.
+**Budget impact:** 2.1x on the comparison (measured).
 
 ---
 
@@ -316,23 +319,32 @@ val doubled = tokens.toPairList.mapValues(_ * 2)
 
 ---
 
-### O020: Data Equality for Unchanged Value Checks
+### O020: Hand-Written equalsData Buys Nothing
 
-**Problem:** A common pattern is checking that a continuing output preserves the same
-value as the input. Typed `Value` equality compares the nested map-of-maps structure.
+**Problem:** Older advice said to replace typed `===` with `equalsData(a.toData, b.toData)` or
+`a.toData == b.toData`. For every Data-backed type (case classes, enums, `Value`, `TxOut`,
+`Address`) `===` with a derived `Eq` already lowers to that one `equalsData` builtin. The two
+spellings produce identical UPLC; both pin to 901 mem / 1 653 665 cpu on a `Value` (measured).
 
-**Before:**
+**Before (redundant, harder to read):**
 ```scala
-require(continuingOutput.value === ownInput.value)
+require(equalsData(continuingOutput.value.toData, ownInput.resolved.value.toData))
 ```
 
 **After:**
 ```scala
-// If you have the raw Data available:
-require(equalsData(continuingOutput.value.toData, ownInput.value.toData))
+require(continuingOutput.value === ownInput.resolved.value)
 ```
 
-**Budget impact:** Significant for `Value` which is `SortedMap[BS, SortedMap[BS, BigInt]]`.
+**Two things that do cost:**
+- `equalsData` is whole-tree: budget about 1 034 543 cpu per compared list element. `Value`
+  equality is 1.65 M cpu for lovelace-only and 47.3 M cpu for three policies (measured). Never
+  compare `TxInfo`-scale structures whole; compare the field you mean.
+- For the continuing output, `===` on the value is usually the wrong check anyway: it rejects a
+  builder that must add lovelace for min-ADA. Use
+  `continuingOutput.value.hasSameTokensAndAtLeastAda(ownInput.resolved.value)`.
+
+**Budget impact:** None from the spelling. The saving comes from comparing less.
 
 ---
 
@@ -426,6 +438,108 @@ require(verifyMerkleProof(element, redeemer.proof, knownRoot), "not in set")
 
 **Budget impact:** Potentially orders of magnitude. Verification is almost always
 cheaper than computation.
+
+---
+
+## Medium Impact – Stdlib Idioms
+
+The fused primitive already exists in the prelude for each of these. No optimizer pass fuses
+two traversals or removes an `Option` allocation, so the choice of method is the optimization.
+
+### O031: hasInlineDatum for Datum Equality
+
+**Problem:** Decoding the datum and comparing the typed value pays for the decode and then for
+a field-wise compare. When the check is "the datum equals this value", wrap instead of decode.
+
+**Before (461 lovelace, measured):**
+```scala
+require(out.datum.inlineOrFail[VestingDatum](NoDatum) === expected, DatumChanged)
+```
+
+**After (286 lovelace, measured):**
+```scala
+require(out.hasInlineDatum(expected), DatumChanged)
+```
+
+**When to use:** Equality only. Use `inlineOrFail[T](msg)` when the validator reads fields.
+
+**Budget impact:** 286 vs 461 lovelace per comparison; 706 vs 1 136 with the reference-script fee.
+
+---
+
+### O032: contains over exists for Equality Tests
+
+**Problem:** `xs.exists(p)` is `find(p).isDefined`: it allocates an `Option` to produce a
+`Boolean`, and nothing folds that allocation away. On V3 the tax is a fixed per-call
+326 483 cpu (miss) / 564 996 cpu (hit), measured; it is 32% of the call at length 1 and
+2% at length 20.
+
+**Before:**
+```scala
+require(tx.signatories.exists(_ === owner), NotSigned)
+```
+
+**After:**
+```scala
+require(tx.signatories.contains(owner), NotSigned)
+```
+
+`contains` is an intrinsic: a plain `equalsData` scan with no `Option` and no `Eq` closure.
+For `PubKeyHash` specifically, `tx.isSignedBy(owner)` is the named form.
+
+**When it does not apply:** a predicate that is not an equality has no `contains` form. Use
+`forall` with the negated predicate, or a hand fold; do not keep `exists` on a hot path.
+
+**Budget impact:** 326 483 / 564 996 cpu per call (measured).
+
+---
+
+### O033: count over filter().length
+
+**Problem:** `xs.filter(p).length` walks all n elements, allocates k `mkCons` cells for the
+survivors, then walks the k survivors again. `filter` is a non-tail `foldRight`. No pass fuses
+the two.
+
+**Before:**
+```scala
+require(tx.inputs.filter(_.resolved.address.credential === own).length === BigInt(1), Many)
+```
+
+**After:**
+```scala
+require(tx.inputs.count(_.resolved.address.credential === own) === BigInt(1), Many)
+```
+
+`count` is one tail-recursive `foldLeft` with no allocation. When the element is needed too,
+go one step further: O034.
+
+**Budget impact:** one traversal instead of two, zero allocation (structural; no pin).
+
+---
+
+### O034: findUniqueOrFail over a Count Guard plus a Lookup
+
+**Problem:** "Exactly one input/output matches, and I need it" is usually written as a count
+guard and a separate `find`/`.head`, or as `filter(p)` and `.head`. That is two passes, and
+the `.head` form fails with the wrong message (or silently takes the first of several).
+
+**Before:**
+```scala
+require(tx.inputs.count(_.resolved.address.credential === own) === BigInt(1), Many)
+val ownInput = tx.inputs.find(_.resolved.address.credential === own).getOrFail(NoInput)
+```
+
+**After:**
+```scala
+val ownInput = tx.inputs.findUniqueOrFail(_.resolved.address.credential === own, NotSingle)
+```
+
+One pass, returns the element, fails on zero or on two-plus matches. The same shape gives
+`tx.findContinuingOutputOrFail(ownInput, msg)` (whole-address match) and, for a size-one
+list with no predicate, `list.singleOrFail(msg)`.
+
+**Budget impact:** measured against `count(p) === BigInt(1)` as the single-own-input guard:
+fee 3 175 vs 3 307 lovelace on 3 inputs, 6 289 vs 6 804 on 10 inputs.
 
 ---
 

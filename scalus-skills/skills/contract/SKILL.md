@@ -44,18 +44,42 @@ Study existing validators before creating new ones:
 - Use `derives FromData, ToData` for case classes
 - Use enums for redeemer actions
 - Use sealed traits for ADTs
-- On-chain, compare enums and case classes with `a.toData == b.toData`
+- Add `Eq` to `derives` and compare enums and case classes with `===`.
+  `a.toData == b.toData` compiles to the same UPLC (measured); do not write it.
 
 **Validation:**
 - `require(condition, message)` - assertion with error message
 - `fail(message)` - explicit failure
 - `getOrFail(option, message)` - safe Option extraction
-- `output.datum.inlineOrFail[MyDatum](message)` - extract and decode an inline datum,
-  fail the script otherwise. Use it instead of matching on `OutputDatum.OutputDatum` with
-  a `fail` fallback; the no-message overload fails with "Expected inline datum".
-- `tx.mint.hasOnly(policyId, tokenName, 1)` - exact single-token mint check: exactly
-  `{tokenName -> amount}` under the policy, nothing else, other policies unconstrained.
-  Use it instead of `quantityOf(...) === BigInt(1)` plus a separate only-token check.
+
+**Safe API** (one rule per check; full table with rationale and costs:
+`https://scalus.org/docs/security/safe-api-cheatsheet`). Check the project's Scalus version first:
+everything below except `hasOnly`, `inlineOrFail` and `getOrFail` needs a release newer than
+1.1.1; on 1.1.1 or older, write the expansion the cheatsheet lists in its "Replaces" column.
+- Mint: `tx.mint.hasOnly(policyId, tokenName, signedQty)` is the mint check (`1` mints, `-1` burns;
+  exactly that token under the policy, nothing else). Not `quantityOf(...) === BigInt(1)` alone.
+- Datum equality: `out.hasInlineDatum(expected)`. Use `out.datum.inlineOrFail[T](msg)` only to
+  read fields; `inlineOrFail[T](msg) === expected` costs 461 lovelace against 286 (measured).
+- Continuing output: `tx.findContinuingOutputOrFail(ownInput, msg)` compares the whole address.
+  Never a credential-only finder (`findOutputsByCredential`, `findOutputsByScriptHash`): the
+  staking part can be swapped and the rewards redirected.
+- Validity bounds: `tx.validFromOrFail(msg)` (inclusive) and `tx.validToOrFail(msg)` (exclusive).
+  Never `getValidityStartTime`: it returns `0` on an unbounded range and every deadline passes.
+- One element: `list.singleOrFail(msg)` for a size-one list, `list.findUniqueOrFail(p, msg)` for
+  exactly one match. Never `.head` after `filter`, never `filter(p).length === BigInt(1)`.
+- Single own input: `tx.inputs.findUniqueOrFail(_.resolved.address.credential === ownCred, msg)`.
+  It returns the input and is cheaper than `inputs.count(p) === BigInt(1)` (measured).
+- Value sums: `tx.valuePaidTo(addr)` / `tx.valueSpentFrom(addr)` (whole address, whole `Value`;
+  add `.getLovelace` for ADA). Never `getAdaFromOutputs` / `getAdaFromInputs`.
+- Token presence: `value.hasNft(policyId, tokenName)` (quantity exactly 1). Continuing value:
+  `out.value.hasSameTokensAndAtLeastAda(ownInput.resolved.value)`, not `===` and not `>=`.
+- Burn: `tx.onlyBurnsUnder(policyId)` (non-empty and every quantity negative).
+  `tokens(policy).forall(_._2 < 0)` is vacuously true on an empty map.
+- Credentials: `address.credential.scriptHashOrFail(msg)` / `pubKeyHashOrFail(msg)`, never a
+  match with a `fail` fallback.
+- Division: `a divCeil b` for what the user owes, `a divFloor b` for what the contract pays out.
+  State the rounding direction; bare `/` hides it.
+- BigInt literals in `===` and generic positions: `=== BigInt(1)` (see "BigInt literals" below).
 
 **BigInt literals:**
 - Write a plain integer literal where the expected type is already `BigInt`; the implicit

@@ -52,9 +52,9 @@ For detailed patterns with Scalus code examples, see `references/patterns.md`.
 | O004 | `list.distinct` | O(n^2) — `foldLeft` with `exists` | Use `SortedMap` or deduplicate at source |
 | O005 | `list :+ elem` (append) | O(n) per append | Use `elem +: list` (prepend) and reverse once |
 | O006 | Reconstructing `Value` | Full `Value` maintains invariants expensively | Use `SortedMap` or `PairList` directly when possible |
-| O007 | `AssocMap` for large maps | O(n) lookup without early termination | Use `SortedMap` (early termination via `Ord`) |
+| O007 | `AssocMap` anywhere | `get` scans to hit-or-end; `union` is O(n*m) (`get` per left key, `exists` per right key) | Use `SortedMap`: `get` stops early via `Ord`, `union` is one linear merge |
 | O008 | `list.map(f).filter(p)` | Two traversals, intermediate list | Single `foldLeft` combining map + filter |
-| O009 | `list.length` to check emptiness | O(n) traversal | Use `list.isEmpty` — O(1) |
+| O009 | `list.length == 0` / `map.size == 0` | O(n) traversal; `SortedMap.size` is O(n) although `inline` | Use `isEmpty` on `List`, `SortedMap`, `AssocMap`: one `nullList`, O(1) |
 | O010 | `AssocMap.fromList` on large input | O(n^2) dedup | Pre-sort and use `SortedMap.fromStrictlyAscendingList` |
 
 ### High Impact — Short-Circuiting & Ordering
@@ -71,11 +71,11 @@ For detailed patterns with Scalus code examples, see `references/patterns.md`.
 
 | ID | Pattern | Problem | Fix |
 |----|---------|---------|-----|
-| O016 | Typed equality on complex structures | Field-by-field comparison | Use `equalsData` for whole-structure comparison when types match |
+| O016 | `===` on a `BigInt`/`ByteString` behind a type variable | Lowers to `equalsData`, not `equalsInteger`/`equalsByteString`: 1 761 779 vs 832 313 cpu, 2.1x (measured) | Make the key type concrete at the comparison site (a `BigInt`-keyed or `ByteString`-keyed helper, not a generic `K`) |
 | O017 | Constructing tuples/records to return | Allocation + destructuring overhead | Use continuation-passing or accumulator parameters |
 | O018 | `List[(A, B)]` map operations | ~12 builtins per element | Use `PairList` — ~4 builtins per element via `fstPair`/`sndPair` |
 | O019 | Pattern matching for Data access | Constructs intermediate Scala objects | Use `Data` builtins directly when structure is known |
-| O020 | `Value` equality via `===` | Recursive map-of-maps comparison | Compare as `Data` with `equalsData` when checking unchanged values |
+| O020 | Hand-written `equalsData(a.toData, b.toData)` or `a.toData == b.toData` | Buys nothing: for every Data-backed type `===` already lowers to `equalsData`; both spellings pin to 901 mem / 1 653 665 cpu on a `Value` (measured) | Derive `Eq` and write `a === b`; never compare `TxInfo`-scale structures whole |
 
 ### Medium Impact — Computation
 
@@ -86,6 +86,15 @@ For detailed patterns with Scalus code examples, see `references/patterns.md`.
 | O023 | Recomputing same expression | Duplicated subexpressions | Use `let` bindings; V3 optimizer has CSE but don't rely on it |
 | O024 | `generateErrorTraces = true` in prod | Trace strings bloat script and budget | Set `generateErrorTraces = false` for production builds |
 | O025 | Complex pure computations on-chain | Expensive on-chain work | Move computation off-chain, pass result as redeemer, verify on-chain |
+
+### Medium Impact – Stdlib idioms (measured where a number is given)
+
+| ID | Pattern | Problem | Fix |
+|----|---------|---------|-----|
+| O031 | `out.datum.inlineOrFail[T](msg) === expected` | Decodes, then compares field-wise: 461 lovelace | `out.hasInlineDatum(expected)`: one `equalsData` on the wrapped datum, 286 lovelace. Use `inlineOrFail` only to read fields |
+| O032 | `xs.exists(_ === x)` | `exists` is `find(p).isDefined`: allocates an `Option` for a `Boolean`; a fixed per-call tax of 326 483 cpu (miss) / 564 996 cpu (hit) on V3 | `xs.contains(x)`: an intrinsic, no `Option`, no `Eq` closure. For a non-equality predicate use `forall` or a hand fold, not `exists` |
+| O033 | `xs.filter(p).length` | 2 traversals plus k `mkCons`; `filter` is a non-tail `foldRight`; no pass fuses them | `xs.count(p)`: one tail-recursive `foldLeft`, no allocation |
+| O034 | `filter(p).length === BigInt(1)` then `.head`, or `count(p) === BigInt(1)` | 2 passes (or 1 pass plus a second scan for the element); the guard and the lookup are separate | `xs.findUniqueOrFail(p, msg)`: one pass, returns the element, fails on 0 or 2+. Against `count(p) === BigInt(1)` on inputs: fee 3 175 vs 3 307 (3 inputs), 6 289 vs 6 804 (10 inputs) |
 
 ### Low Impact — Micro-Optimizations
 
@@ -156,17 +165,31 @@ map.toList.map { case (k, v) => (k, f(v)) }
 map.toPairList.mapValues(f)
 ```
 
-### 5. Prefer Data Equality for Whole-Structure Comparison
-When checking that a structure hasn't changed, `equalsData` is a single builtin call
-vs recursive field-by-field comparison.
+### 5. Write `===`, and Keep Key Types Concrete
+For every Data-backed type `a === b` already lowers to one `equalsData` builtin. Hand-written
+`equalsData(a.toData, b.toData)` or `a.toData == b.toData` produces identical UPLC (measured:
+both pin to 901 mem / 1 653 665 cpu on a `Value`). The cost that is real: `===` on a `BigInt`
+or `ByteString` behind a type variable emits `equalsData` instead of `equalsInteger` /
+`equalsByteString`, 1 761 779 vs 832 313 cpu (2.1x, measured).
 
 ```scala
-// Expensive: typed comparison traverses all fields
+// Same UPLC, worse to read: do not write this
+require(equalsData(toData(outputDatum), toData(inputDatum)))
+
+// Write this (derive Eq on the datum type)
 require(outputDatum === inputDatum)
 
-// Cheap: single builtin comparing serialized form
-require(equalsData(toData(outputDatum), toData(inputDatum)))
+// Generic key: equalsData on every step, 2.1x slower
+def lookup[K: Eq](key: K, entries: List[(K, BigInt)]): Option[BigInt] =
+    entries.find(_._1 === key).map(_._2)
+
+// Concrete key: equalsInteger
+def lookup(key: BigInt, entries: List[(BigInt, BigInt)]): Option[BigInt] =
+    entries.find(_._1 === key).map(_._2)
 ```
+
+For a continuing datum, compare without decoding: `out.hasInlineDatum(expected)` costs 286
+lovelace against 461 for `out.datum.inlineOrFail[T](msg) === expected` (measured, O031).
 
 ### 6. Leverage Ledger Invariants
 The ledger guarantees: inputs are sorted by `TxOutRef`, values are ordered by policy ID,
@@ -273,7 +296,7 @@ Use clickable `file_path:line_number` format for all code locations.
 | ID | Impact | Location | Pattern | Est. Savings |
 |----|--------|----------|---------|-------------|
 | O-01 | High | `path/File.scala:123` | Multiple traversals → single fold | ~30% steps |
-| O-02 | Medium | `path/File.scala:87` | equalsData vs typed === | ~10% steps |
+| O-02 | Medium | `path/File.scala:87` | inlineOrFail === x → hasInlineDatum(x) | 286 vs 461 lovelace |
 | O-03 | Low | `path/File.scala:200` | Unroll small recursion | ~2% steps |
 
 **Current budget:** ExUnits(memory = X, steps = Y)
