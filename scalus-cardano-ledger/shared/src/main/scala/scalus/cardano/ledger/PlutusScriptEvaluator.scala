@@ -12,7 +12,7 @@ import scalus.uplc.eval.*
 import scalus.uplc.internal.ProfileReportWriter
 import scalus.uplc.{DeBruijnedProgram, DebugScript, Term}
 import scalus.utils.ScalusSourcePos
-import scribe.Logger
+import scalus.cardano.ledger.internal.Logger
 
 import scala.util.control.NonFatal
 
@@ -395,7 +395,7 @@ object PlutusScriptEvaluator {
             )
         }
 
-        private val log = Logger()
+        private val log = Logger("scalus.cardano.ledger.PlutusScriptEvaluator")
         //        .withHandler(minimumLevel = Some(Level.Debug))
 
         // Lazy-initialized Plutus VMs for different versions
