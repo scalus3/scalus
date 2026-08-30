@@ -261,9 +261,11 @@ object MachineParams {
                 params.`dropList-cpu-arguments-intercept` == 300_000_000L
         val builtinCostModel =
             if needsReferenceNewBuiltins then
-                val ref =
-                    if semvar == BuiltinSemanticsVariant.D then BuiltinCostModel.vanRossemReferenceD
-                    else BuiltinCostModel.vanRossemReferenceE
+                // Variants D and E carry identical costs for all fourteen of these builtins, so
+                // one literal set covers both. Literals rather than the JSON-backed
+                // BuiltinCostModel.vanRossemReferenceD/E, which are upickle readers and would
+                // pull all of upickle into scalus.js; see docs/internal/JS_BUNDLE_SIZE.md.
+                val ref = VanRossemNewBuiltinCosts
                 base.copy(
                   expModInteger = ref.expModInteger,
                   dropList = ref.dropList,

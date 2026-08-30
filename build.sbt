@@ -505,6 +505,13 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ),
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.ledger.SlotConfig.instantToSlot"
+        ),
+        // The upickle ReadWriter vals no longer run in their enclosing object's constructor, so
+        // touching a domain companion no longer builds a JSON codec, which is what kept upickle
+        // in scalus.js. No API member changed; this package object simply no longer needs a
+        // static initializer. See docs/internal/JS_BUNDLE_SIZE.md.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.uplc.eval.CostModel#package.<clinit>"
         )
       ),
 

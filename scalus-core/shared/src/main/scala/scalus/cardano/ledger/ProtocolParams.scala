@@ -94,7 +94,16 @@ object ProtocolParams {
         read[ProtocolParams](json)(using cardanoCliParamsReadWriter)
     }
 
-    val blockfrostParamsReadWriter: ReadWriter[ProtocolParams] =
+    /** Reads and writes the Blockfrost JSON shape.
+      *
+      * `lazy` on purpose, and the same goes for [[cardanoCliParamsReadWriter]]. A plain `val` here
+      * runs in this object's constructor, so merely touching `ProtocolParams` builds both codecs,
+      * and building them reaches upickle's whole derivation machinery. That made
+      * `CardanoInfo.mainnet` alone pull about 740 KB of upickle, ujson and upack into the Scala.js
+      * bundle. Deferring construction lets the linker drop them when nothing parses JSON, which is
+      * the case for everything `scalus.js` exports. See `docs/internal/JS_BUNDLE_SIZE.md`.
+      */
+    lazy val blockfrostParamsReadWriter: ReadWriter[ProtocolParams] =
         readwriter[ujson.Value].bimap[ProtocolParams](
           params =>
               ujson.Obj(
@@ -267,7 +276,13 @@ object ProtocolParams {
               )
         )
 
-    val cardanoCliParamsReadWriter: ReadWriter[ProtocolParams] = {
+    /** Reads and writes the Cardano CLI JSON shape.
+      *
+      * `lazy` for the reason given on [[blockfrostParamsReadWriter]]. This one matters most: it
+      * ends in `macroRW`, whose 30-field derivation is what drags `CostModels`, `ExUnits`,
+      * `ProtocolVersion`, `UnitInterval`, `ExUnitPrices` and the voting thresholds along with it.
+      */
+    lazy val cardanoCliParamsReadWriter: ReadWriter[ProtocolParams] = {
         // Provide implicit ReadWriter for CostModels in Cardano CLI format
         given ReadWriter[CostModels] = CostModels.cardanoCliReadWriter
         // NonNegativeInterval's default upickle codec rebuilds from Double at precision 6, which

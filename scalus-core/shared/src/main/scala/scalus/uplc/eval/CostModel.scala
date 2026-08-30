@@ -6,8 +6,15 @@ import upickle.default.*
 
 import scala.compiletime.erasedValue
 
-// Capture the Long ReadWriter before the opaque type is defined
-private[eval] val longReadWriter: ReadWriter[Long] = summon[ReadWriter[Long]]
+// Capture the Long ReadWriter before CostingInteger is declared below. Inside that opaque type's
+// own companion the alias is transparent, so a `summon[ReadWriter[Long]]` written there would
+// resolve to the `given ReadWriter[CostingInteger]` being defined, which is cyclic.
+//
+// A def, not a val: a val runs in this file's synthetic package object constructor, so anything
+// touching `scalus.uplc.eval` at all would build a upickle ReadWriter and keep upickle in the
+// Scala.js bundle. See `docs/internal/JS_BUNDLE_SIZE.md`. A def needs no lazy-initialisation
+// guard either, and the single caller is a `given` that is itself initialised once.
+private def longReadWriter: ReadWriter[Long] = summon[ReadWriter[Long]]
 
 /** Saturating integer type for cost calculations.
   *

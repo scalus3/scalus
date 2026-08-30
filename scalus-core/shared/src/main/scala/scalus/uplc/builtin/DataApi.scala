@@ -13,6 +13,8 @@ import scalus.serialization.flat.{DecoderState, EncoderState, Flat, given}
 import scalus.utils.Pretty.{lit, rainbowBracket}
 import scalus.utils.{Pretty, Style}
 import upickle.default.*
+import com.github.plokhotnyuk.jsoniter_scala.core.{readFromString, writeToString, JsonReader, JsonValueCodec, JsonWriter, WriterConfig}
+import com.github.plokhotnyuk.jsoniter_scala.macros.{CodecMakerConfig, JsonCodecMaker}
 
 import java.io.InputStream
 import java.math.BigInteger
@@ -26,7 +28,35 @@ private trait DataApi {
         inline def dataHash: ByteString =
             Builtins.blake2b_256(Builtins.serialiseData(self))
 
+    /** JSON codec for [[Data]]'s standard encoding, the one Cardano tooling uses: `{"int":42}`,
+      * `{"bytes":"deadbeef"}`, `{"list":[..]}`, `{"map":[{"k":..,"v":..}]}` and
+      * `{"constructor":0,"fields":[..]}`.
+      *
+      * On jsoniter rather than upickle so that `scalus.js` does not have to carry upickle's
+      * derivation machinery: `Data.fromJson` backs the exported `applyDataArgToScript`, so every
+      * path through it kept upickle, ujson and upack in the bundle. See
+      * `docs/internal/JS_BUNDLE_SIZE.md`.
+      *
+      * The encoding cannot be derived from [[Data]] directly. jsoniter writes an ADT either with a
+      * discriminator field or, without one, as a single-key wrapper object, and this format is
+      * neither: `int`, `bytes`, `list` and `map` are single-key wrappers, but `constructor` is a
+      * flat two-key object. So [[DataJson]] mirrors the format as something the macro can derive,
+      * and this codec maps between the two. Keys are accepted in any order.
+      */
+    given dataJsonCodec: JsonValueCodec[Data] = new JsonValueCodec[Data] {
+        override def nullValue: Data = null
+
+        override def decodeValue(in: JsonReader, default: Data): Data =
+            DataJson.toData(DataJson.codec.decodeValue(in, null), in)
+
+        override def encodeValue(data: Data, out: JsonWriter): Unit =
+            DataJson.codec.encodeValue(DataJson.fromData(data), out)
+    }
+
     /** JSON ReadWriter for the [[Data]] type.
+      *
+      * Retained for source compatibility only. `toJson` and `fromJson` go through
+      * [[dataJsonCodec]], which keeps upickle out of the Scala.js bundle.
       */
     given DataReadWriter: ReadWriter[Data] = {
         given ReadWriter[Data] = DataReadWriter
@@ -228,12 +258,13 @@ private trait DataApi {
             }
     end dataCborDecoder
 
-    extension [A <: Data: Writer](a: A)
+    extension [A <: Data](a: A)
         /** Encode a [[Data]] value to JSON */
-        inline def toJson: String = write(a)
+        def toJson: String = writeToString[Data](a)(using dataJsonCodec)
 
         /** Encode a [[Data]] value to indented JSON */
-        inline def toJsonIndented(indent: Int): String = write(a, indent)
+        def toJsonIndented(indent: Int): String =
+            writeToString[Data](a, WriterConfig.withIndentionStep(indent))(using dataJsonCodec)
 
     extension [A <: Data](a: A)
         /** Encode a [[Data]] value to CBOR.
@@ -256,10 +287,12 @@ private trait DataApi {
         inline def toByteString: ByteString = Builtins.unBData(data)
 
     /** Decode a [[Data]] value from JSON */
-    def fromJson(json: String): Data = read[Data](json)
+    def fromJson(json: String): Data = readFromString[Data](json)(using dataJsonCodec)
 
     /** Encode a [[Data]] value to JSON */
-    def toJson(data: Data, indent: Int = -1): String = write(data, indent)
+    def toJson(data: Data, indent: Int = -1): String =
+        if indent < 0 then writeToString[Data](data)(using dataJsonCodec)
+        else writeToString[Data](data, WriterConfig.withIndentionStep(indent))(using dataJsonCodec)
 
     /** Decode a [[Data]] value from CBOR */
     def fromCbor(bytes: Array[Byte]): Data = Cbor.decode(bytes).to[Data].value
@@ -322,4 +355,68 @@ private trait DataApi {
                 lit(str(value), style)
             case B(value) =>
                 lit(char('"') + text(value.toHex) + char('"'), style)
+}
+
+/** The shape of [[Data]]'s standard JSON encoding, as something `JsonCodecMaker` can derive.
+  *
+  * Exactly one group of fields is set for any given value: `constructor` with `fields`, or one of
+  * `map`, `list`, `int`, `bytes`. `transientNone` is on by default, so the unset ones are simply
+  * not written, which is what produces the single-key objects the format calls for. Field order
+  * here is the order they are written in, so `constructor` must precede `fields`.
+  */
+private case class DataJson(
+    constructor: Option[BigInt] = None,
+    fields: Option[List[DataJson]] = None,
+    map: Option[List[DataJsonMapEntry]] = None,
+    list: Option[List[DataJson]] = None,
+    int: Option[BigInt] = None,
+    bytes: Option[String] = None
+)
+
+private case class DataJsonMapEntry(k: DataJson, v: DataJson)
+
+private object DataJson {
+
+    /** `transientEmpty` is off because an empty `fields`, `list` or `map` must still be written:
+      * `{"constructor":1,"fields":[]}`, not `{"constructor":1}`.
+      *
+      * The digit limit replaces jsoniter's default of 308, which is too small for this domain and
+      * would reject values this codec's own writer emits: `expModInteger` exists to work on
+      * RSA-sized moduli, and a 2048-bit one already has 617 digits. A bound is kept rather than
+      * removed because `fromJson` parses input the caller does not control; 65536 digits is far
+      * more than any integer that could reach a script inside a transaction, itself limited to
+      * about 16 KB.
+      */
+    val codec: JsonValueCodec[DataJson] = JsonCodecMaker.make(
+      CodecMakerConfig
+          .withAllowRecursiveTypes(true)
+          .withTransientEmpty(false)
+          .withBigIntDigitsLimit(65536)
+    )
+
+    def fromData(data: Data): DataJson = data match
+        case Data.Constr(constructor, args) =>
+            DataJson(
+              constructor = Some(constructor),
+              fields = Some(args.toScalaList.map(fromData))
+            )
+        case Data.Map(entries) =>
+            DataJson(map = Some(entries.toScalaList.map { entry =>
+                DataJsonMapEntry(fromData(entry._1), fromData(entry._2))
+            }))
+        case Data.List(values) => DataJson(list = Some(values.toScalaList.map(fromData)))
+        case Data.I(value)     => DataJson(int = Some(value))
+        case Data.B(value)     => DataJson(bytes = Some(value.toHex))
+
+    def toData(json: DataJson, in: JsonReader): Data =
+        if json.constructor.isDefined then
+            val fields = json.fields.getOrElse(Nil).map(toData(_, in))
+            Data.Constr(json.constructor.get, PList.from(fields))
+        else if json.map.isDefined then
+            val entries = json.map.get.map(entry => toData(entry.k, in) -> toData(entry.v, in))
+            Data.Map(PList.from(entries))
+        else if json.list.isDefined then Data.List(PList.from(json.list.get.map(toData(_, in))))
+        else if json.int.isDefined then Data.I(json.int.get)
+        else if json.bytes.isDefined then Data.B(ByteString.fromHex(json.bytes.get))
+        else in.decodeError("not a Data value: no constructor, map, list, int or bytes key")
 }

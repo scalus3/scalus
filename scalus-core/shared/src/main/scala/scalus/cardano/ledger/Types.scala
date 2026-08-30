@@ -728,8 +728,12 @@ object CostModels {
 
     /** ReadWriter for Cardano CLI JSON format that uses string keys like "PlutusV1", "PlutusV2",
       * "PlutusV3"
+      *
+      * `lazy` on purpose: as a plain `val` it runs in this object's constructor, so any use of
+      * `CostModels` at all would build the codec and reach upickle's derivation machinery, which
+      * keeps upickle in the Scala.js bundle. See `docs/internal/JS_BUNDLE_SIZE.md`.
       */
-    val cardanoCliReadWriter: ReadWriter[CostModels] =
+    lazy val cardanoCliReadWriter: ReadWriter[CostModels] =
         readwriter[ujson.Value].bimap[CostModels](
           costModels =>
               ujson.Obj.from(
