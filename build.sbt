@@ -85,7 +85,7 @@ ThisBuild / run / javaOptions ++= (if (javaVersion >= 23)
                                    else Nil)
 
 // Pin published Java bytecode to JDK 11 so artifacts stay loadable on JDK 11 regardless of the
-// (newer) JDK used to build/publish — cardano-client-lib and the downstream consumers that bridge
+// (newer) JDK used to build/publish – cardano-client-lib and the downstream consumers that bridge
 // through scalus-bloxbean-cardano-client-lib target JDK 11. Only the Java sources need this; Scala
 // already defaults to -Xtarget:8. Without it, building on JDK 21 emitted v65 Java classes.
 ThisBuild / javacOptions ++= Seq("--release", "11")
@@ -133,15 +133,15 @@ lazy val commonScalacOptions = Seq(
 
 // Published JVM artifacts pin the emitted bytecode so the (newer) build JDK doesn't raise the
 // runtime floor, and so shared source can't reference an API newer than that floor. The 3.3 LTS
-// line targets JDK 11 (cardano-client-lib's floor — the LTS artifacts are what JDK 11 consumers
+// line targets JDK 11 (cardano-client-lib's floor – the LTS artifacts are what JDK 11 consumers
 // use); Scala 3.8.x cannot emit below JDK 17 (its compiler requires 17), so those variants target
-// 17. Compile-scoped (test code may still use newer APIs); JVM only — -release is rejected on JS/Native.
+// 17. Compile-scoped (test code may still use newer APIs); JVM only – -release is rejected on JS/Native.
 val jvmReleaseTarget = Compile / scalacOptions ++= {
     if (scalaVersion.value.startsWith("3.3.")) Seq("-release", "11") else Seq("-release", "17")
 }
 
 // Library artifacts use the binary `_3` (and `_sjs1_3` / `_native0.5_3`) suffix, so the 3.3 LTS
-// and 3.8.x cross-builds publish to the SAME coordinates and overwrite each other — the 3.8.x
+// and 3.8.x cross-builds publish to the SAME coordinates and overwrite each other – the 3.8.x
 // build (JDK 17) would clobber the JDK 11 LTS one. Publish only the LTS build (it is Scala-3
 // binary-compatible, so 3.8.x consumers can use it); 3.8.x stays cross-built for CI but unpublished.
 // The compiler plugin is exempt: it uses CrossVersion.full, so its 3.8.x variants are distinct artifacts.
@@ -172,7 +172,7 @@ lazy val installNpmTestDeps =
 // Scoped to ThisBuild so it is evaluated exactly once per sbt run, even though every JS
 // project's tests depend on it. Defining it per-project would let sbt run several `npm
 // install` processes concurrently in the same directory, which corrupts the esbuild binary
-// install (ETXTBSY) — the marker check below is not enough because all of them race past it
+// install (ETXTBSY) – the marker check below is not enough because all of them race past it
 // before any writes the marker.
 ThisBuild / installNpmTestDeps := {
     val base = (LocalRootProject / baseDirectory).value
@@ -494,6 +494,17 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ),
         ProblemFilters.exclude[DirectMissingMethodProblem](
           "scalus.cardano.ledger.ProposalProcedure.given_Ordering_ProposalProcedure"
+        ),
+        // Scala.js only: the JS SlotConfig no longer has these members. Every public member of
+        // a @JSExportTopLevel js.Object is a linker export root, so one mentioning
+        // java.time.Instant kept the ~800 KB IANA timezone database in scalus.js, for an API
+        // JavaScript callers cannot use anyway. The JVM and Native SlotConfig still have them;
+        // shared code converts through POSIX milliseconds. See docs/internal/JS_BUNDLE_SIZE.md.
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.SlotConfig.slotToInstant"
+        ),
+        ProblemFilters.exclude[DirectMissingMethodProblem](
+          "scalus.cardano.ledger.SlotConfig.instantToSlot"
         )
       ),
 
@@ -750,7 +761,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
     )
 
 // fs2 adapter for the streaming facade: a ScalusAsyncStream instance and nothing else.
-// Deliberately tiny — the buffering and fan-out semantics live in scalus-cardano-ledger so that
+// Deliberately tiny – the buffering and fan-out semantics live in scalus-cardano-ledger so that
 // every adapter shares one implementation of them rather than one interpretation each.
 lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
     .in(file("scalus-streaming-fs2"))
@@ -960,7 +971,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ProblemFilters.exclude[IncompatibleMethTypeProblem](
           "scalus.cardano.ledger.PlutusScriptEvaluator#DefaultImpl.evalScript"
         ),
-        // The streaming hub's internals churn while the provider implementations are built —
+        // The streaming hub's internals churn while the provider implementations are built –
         // `AppliedBlock` has already gained a field. Scoped to `.internal` on purpose: CLAUDE.md
         // reserves wildcards for wholly-internal packages, and a wildcard over the whole
         // `...node.stream` package would also silence a genuine break in the public facade
@@ -1016,7 +1027,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
       // The Scala.js linker emits standard ES modules; we run esbuild over the linker
       // output to collapse any internal chunks into one file and minify. @noble/* are
-      // inlined into the bundle so scalus.js is fully self-contained — it can be loaded
+      // inlined into the bundle so scalus.js is fully self-contained – it can be loaded
       // directly in a browser `<script type="module">` with no import map or npm install.
       prepareNpmPackage := {
           (Compile / fullLinkJS).value
@@ -1274,12 +1285,12 @@ addCommandAlias(
   "ci-jvm-lts-prev",
   // Previous-LTS (3.3.7) canary: prove the plugin builds against the 3.3.7 compiler and still emits
   // correct contracts, via the scalus.compiler.* compile-and-evaluate suite. Cheaper than a full
-  // re-test — 3.3.7 and 3.3.8 share the `pre38` desugaring generation (verified byte-identical).
+  // re-test – 3.3.7 and 3.3.8 share the `pre38` desugaring generation (verified byte-identical).
   "++3.3.7;clean;scalusPlugin/Test/compile;scalusJVM/testOnly scalus.compiler.*"
 )
 addCommandAlias(
   "ci-jvm-next",
-  // Cross-build/test on Scala 3.8.4 (scala3NextVersion). Requires JDK 17+ — the `ci` nix devshell
+  // Cross-build/test on Scala 3.8.4 (scala3NextVersion). Requires JDK 17+ – the `ci` nix devshell
   // pins JDK 21. We must NOT use the `jvm` aggregate here: modules that don't list 3.8.4
   // (scalusUplcJitCompiler, scalusUtxoCell, bench) fall back to the LTS and then fail to read the
   // 3.8.4 TASTy of scalus-core they depend on. So target only the modules that list 3.8.4 and whose

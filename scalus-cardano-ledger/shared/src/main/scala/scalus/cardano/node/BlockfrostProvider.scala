@@ -563,7 +563,7 @@ class BlockfrostProvider(
 
     def currentSlot: Future[SlotNo] =
         Future.successful(
-          cardanoInfo.slotConfig.instantToSlot(java.time.Instant.now()).toLong
+          cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()).toLong
         )
 
     override def getDatum(datumHash: DataHash): Future[Option[Data]] =

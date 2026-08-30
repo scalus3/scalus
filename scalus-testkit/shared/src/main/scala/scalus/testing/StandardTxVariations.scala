@@ -311,7 +311,7 @@ object StandardTxVariations {
             txTemplate: TxTemplate
         )(using ExecutionContext): Future[Seq[Transaction]] = {
             val env = reader.cardanoInfo
-            val currentSlot = env.slotConfig.instantToSlot(java.time.Instant.now()).toLong
+            val currentSlot = env.slotConfig.timeToSlot(System.currentTimeMillis()).toLong
             val oneYearInSlots = 31536000L
 
             txTemplate.builder

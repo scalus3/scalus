@@ -1,8 +1,5 @@
 package scalus.cardano.ledger
 
-import scalus.interop.TsIgnore
-
-import java.time.Instant
 import scala.scalajs.js
 import scala.scalajs.js.annotation.{JSExportStatic, JSExportTopLevel}
 
@@ -37,10 +34,6 @@ class SlotConfig(
       * fractional value rather than rejecting it.
       */
     def timeToSlot(time: Double): Double = zeroSlot + ((time - zeroTime) / slotLength)
-    @TsIgnore
-    def slotToInstant(slot: Double): Instant = Instant.ofEpochMilli(slotToTime(slot).toLong)
-    @TsIgnore
-    def instantToSlot(instant: Instant): Double = timeToSlot(instant.toEpochMilli.toDouble)
 
     /** Epoch containing the given slot. Slots before `zeroSlot` are clamped to `zeroEpoch`. */
     def epochOf(slot: Double): Double =
@@ -52,6 +45,7 @@ class SlotConfig(
 }
 
 object SlotConfig {
+
     // taken from https://github.com/spacebudz/lucid/blob/main/src/plutus/time.ts
 
     /** Mainnet slot configuration starting at Shelley era (slot 4492800 = start of epoch 208) */

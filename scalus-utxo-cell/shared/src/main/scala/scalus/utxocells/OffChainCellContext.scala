@@ -7,8 +7,6 @@ import scalus.cardano.ledger.{AddrKeyHash, AssetName, CardanoInfo, Output, Utxo,
 import scalus.cardano.txbuilder.{ScriptSource, TransactionBuilderStep, TwoArgumentPlutusScriptWitness}
 import scalus.cardano.onchain.plutus.v1 as onchain
 
-import java.time.Instant
-
 /** Off-chain implementation of [[CellContext]] for use in transaction building.
   *
   * Accumulates `TransactionBuilderStep` items as the transition function calls context methods.
@@ -110,12 +108,12 @@ class OffChainCellTxInfo(
     }
 
     override def requireValidAfter(time: onchain.PosixTime): Unit = {
-        val slot = env.slotConfig.instantToSlot(Instant.ofEpochMilli(time.toLong)).toLong
+        val slot = env.slotConfig.timeToSlot(time.toLong).toLong
         steps += TransactionBuilderStep.ValidityStartSlot(slot)
     }
 
     override def requireValidBefore(time: onchain.PosixTime): Unit = {
-        val slot = env.slotConfig.instantToSlot(Instant.ofEpochMilli(time.toLong)).toLong
+        val slot = env.slotConfig.timeToSlot(time.toLong).toLong
         steps += TransactionBuilderStep.ValidityEndSlot(slot)
     }
 }
