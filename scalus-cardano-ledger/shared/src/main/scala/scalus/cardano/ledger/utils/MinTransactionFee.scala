@@ -61,30 +61,6 @@ object MinTransactionFee {
 
     private object RefScriptsFeeCalculator {
         def apply(scripts: Seq[Script], protocolParams: ProtocolParams): Coin = {
-            def tierRefScriptFee(
-                multiplier: NonNegativeInterval,
-                sizeIncrement: Int,
-                curTierPrice: NonNegativeInterval,
-                n: Int
-            ): Coin = {
-                @tailrec
-                def go(
-                    acc: NonNegativeInterval,
-                    curTierPrice: NonNegativeInterval,
-                    n: Int
-                ): Coin = {
-                    if n < sizeIncrement then Coin((acc + curTierPrice * n).floor)
-                    else
-                        go(
-                          acc + curTierPrice * sizeIncrement,
-                          multiplier * curTierPrice,
-                          n - sizeIncrement
-                        )
-                }
-
-                go(NonNegativeInterval.zero, curTierPrice, n)
-            }
-
             val refScriptsSize = scripts.foldLeft(0) { case (length, script) =>
                 val scripLength = script match
                     case s: Script.Native => s.script.toCbor.length
@@ -92,21 +68,8 @@ object MinTransactionFee {
 
                 length + scripLength
             }
-
-            val minFeeRefScriptCostPerByte = NonNegativeInterval(
-              protocolParams.minFeeRefScriptCostPerByte
-            )
-
-            tierRefScriptFee(
-              refScriptCostMultiplier,
-              refScriptCostStride,
-              minFeeRefScriptCostPerByte,
-              refScriptsSize
-            )
+            RefScriptFee.fee(refScriptsSize, protocolParams)
         }
-
-        private val refScriptCostMultiplier = NonNegativeInterval(1.2)
-        private val refScriptCostStride = 25600
     }
 
     private def calculateTransactionSizeFee(

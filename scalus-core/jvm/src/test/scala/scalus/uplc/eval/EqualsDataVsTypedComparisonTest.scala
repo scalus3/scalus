@@ -4,7 +4,7 @@ import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
-import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits, NonNegativeInterval}
+import scalus.cardano.ledger.{CardanoInfo, Coin, ExUnits, RefScriptFee}
 import scalus.cardano.onchain.plutus
 import scalus.cardano.onchain.plutus.prelude.===
 import scalus.cardano.onchain.plutus.v1.{Address, Credential, PubKeyHash, Value}
@@ -17,8 +17,6 @@ import scalus.uplc.builtin.ByteString.hex
 import scalus.uplc.builtin.Data.toData
 import scalus.uplc.builtin.{ByteString, Data}
 
-import scala.annotation.tailrec
-
 class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     private given PlutusVM = PlutusVM.makePlutusV3VM()
     // The `===` calls go through prelude `Eq` extension methods whose macro-spliced
@@ -27,24 +25,9 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
     private val params = CardanoInfo.mainnet.protocolParams
     private val prices = params.executionUnitPrices
 
-    /** Reference script fee using tiered pricing (1.2x multiplier per 25,600 byte tier) */
-    private def refScriptFee(sizeBytes: Int): Coin = {
-        val basePricePerByte = NonNegativeInterval(params.minFeeRefScriptCostPerByte)
-        val multiplier = NonNegativeInterval(12, 10)
-        val stride = 25600
-
-        @tailrec
-        def go(acc: NonNegativeInterval, curTierPrice: NonNegativeInterval, n: Int): Coin = {
-            if n < stride then Coin((acc + curTierPrice * n).floor)
-            else go(acc + curTierPrice * stride, multiplier * curTierPrice, n - stride)
-        }
-
-        go(NonNegativeInterval.zero, basePricePerByte, sizeBytes)
-    }
-
     /** Total tx fee contribution = exUnits fee + reference script fee */
     private def totalFee(budget: ExUnits, scriptSizeBytes: Int): Coin =
-        Coin(budget.fee(prices).value + refScriptFee(scriptSizeBytes).value)
+        Coin(budget.fee(prices).value + RefScriptFee.fee(scriptSizeBytes, params).value)
 
     /** Print a comparison line with all metrics */
     private def formatLine(
@@ -53,7 +36,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         scriptSizeBytes: Int
     ): String = {
         val exFee = budget.fee(prices)
-        val rsFee = refScriptFee(scriptSizeBytes)
+        val rsFee = RefScriptFee.fee(scriptSizeBytes, params)
         val total = Coin(exFee.value + rsFee.value)
         f"$label%-18s mem=${budget.memory}%6d  cpu=${budget.steps}%9d  exFee=${exFee.value}%4d  script=${scriptSizeBytes}%4dB  refScriptFee=${rsFee.value}%5d  txFee=${total.value}%5d"
     }
