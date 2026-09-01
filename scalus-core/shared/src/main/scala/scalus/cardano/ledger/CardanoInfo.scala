@@ -26,12 +26,13 @@ object CardanoInfo {
           SlotConfig.mainnet
         )
 
-    /** Cardano info for Preprod testnet, epoch 303, major protocol version 11 (van Rossem hard
-      * fork)
+    /** Cardano info for Preprod testnet, epoch 310, major protocol version 11 (van Rossem hard
+      * fork), including the parameter update enacted at epoch 305 that raised the Plutus memory
+      * limits (tx 17,500,000, block 77,500,000) and lowered minPoolCost to 75 ada
       */
     lazy val preprod: CardanoInfo =
         CardanoInfo(
-          inlineProtocolParams("blockfrost-params-preprod-303.json"),
+          inlineProtocolParams("blockfrost-params-preprod-310.json"),
           Network.Testnet,
           SlotConfig.preprod
         )

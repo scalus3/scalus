@@ -1,5 +1,5 @@
 {
-  "epoch": 303,
+  "epoch": 310,
   "min_fee_a": 44,
   "min_fee_b": 155381,
   "max_block_size": 90112,
@@ -17,8 +17,8 @@
   "protocol_major_ver": 11,
   "protocol_minor_ver": 0,
   "min_utxo": "4310",
-  "min_pool_cost": "170000000",
-  "nonce": "598efe050021a26ebc693c9a8d99d5647d2dcacffee6a35049c92b6fcebc7ad0",
+  "min_pool_cost": "75000000",
+  "nonce": "7c00177d24bfbdb3e908f7a792758fe54ccfa634ccf719d81a95b89655dadd35",
   "cost_models": {
     "PlutusV1": {
       "addInteger-cpu-arguments-intercept": 100788,
@@ -1042,10 +1042,10 @@
     }
   },
   "price_mem": 0.0577,
-  "price_step": 0.0000721,
-  "max_tx_ex_mem": "16500000",
+  "price_step": 7.21e-05,
+  "max_tx_ex_mem": "17500000",
   "max_tx_ex_steps": "10000000000",
-  "max_block_ex_mem": "72000000",
+  "max_block_ex_mem": "77500000",
   "max_block_ex_steps": "20000000000",
   "max_val_size": "5000",
   "collateral_percent": 150,

@@ -43,6 +43,12 @@
   silently dropped one. That violates the `Ordering` contract rather than merely being a coarse
   order. Neither had a use: `proposalProcedures` is a `TaggedOrderedSet`, which preserves
   submitter order and never sorts
+- `CardanoInfo.preprod` is pinned to preprod epoch 310 instead of 303, picking up the parameter
+  update enacted at preprod epoch 305: `maxTxExecutionUnits.memory` 16,500,000 -> 17,500,000,
+  `maxBlockExecutionUnits.memory` 72,000,000 -> 77,500,000 and `minPoolCost` 170 -> 75 ada. Cost
+  models and every other parameter are unchanged. Mainnet (epoch 645) and preview (epoch 1370)
+  pins already match their networks; the equivalent mainnet parameter change is still an open
+  governance action
 
 ### Deprecated
 
