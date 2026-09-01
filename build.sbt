@@ -999,7 +999,25 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // The proposal does declare the public facade unfrozen for a release or two as well; when
         // a break there is actually needed, it gets its own filter naming the symbol, so the thing
         // being broken is visible in review rather than pre-authorised in bulk.
-        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*")
+        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*"),
+        // `EmulatorBase` gained the seam a streaming view attaches to
+        // (`onTransactionApplied`), and its listener registry is a `private var` in a trait —
+        // which Scala renders as a pair of abstract accessors on the interface, so MiMa sees
+        // package-private state as a missing method. There is no way to hold per-instance state
+        // in a trait without this; the alternative is an identity map keyed by emulator, which
+        // trades an ABI entry for a leak.
+        //
+        // Named rather than wildcarded because it *is* a real break for anyone implementing
+        // `EmulatorBase` outside the library: such a class compiled against 1.1.0 lacks the
+        // accessors. That is judged acceptable — the trait exists for the two in-repo platform
+        // Emulators, and the seam fixes a silent defect (a transaction submitted straight to an
+        // emulator produced no events on a streaming view that wrapped it).
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.EmulatorBase.scalus$cardano$node$EmulatorBase$$appliedListeners"
+        ),
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.EmulatorBase.scalus$cardano$node$EmulatorBase$$appliedListeners_="
+        )
       ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,

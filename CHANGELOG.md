@@ -12,6 +12,37 @@
 
 ### Changed
 
+- **Streaming is a capability of a provider, not a kind of provider.** `BlockchainStreamProvider`
+  is renamed `BlockchainStreaming` and no longer extends `BlockchainProvider`; a streaming view is
+  obtained from the provider it observes, `provider.streaming()`, which is cached and performs no
+  I/O. Reads and submission stay on the provider the caller already holds. Whether a backend
+  streams was already answered by `StreamCapabilities`, per-request and honestly, and the type
+  system answered it worse — a static `BlockchainStreamProvider` never told a caller that any
+  particular subscription would work, since `StreamingBlockfrostProvider.subscribeBlockQuery`
+  throws unconditionally. `BlockchainStreamProviderTF`, `BlockchainStreamReader` and
+  `BlockchainStreamReaderTF` are deprecated aliases; the read/write split had nothing to
+  distinguish on the streaming side, which has no `submit`. **Migration:** replace
+  `new StreamingEmulator(emulator)` with `emulator.streaming()` and
+  `StreamingBlockfrostProvider(client)` with `client.streaming()`, and call one-shot reads and
+  `submit` on the provider rather than the view
+- Subscriptions return `ScalusAsyncSource` instead of a `C[_]` inferred from the expected type.
+  The stream-type parameter made a call's return type depend on which adapter its file imported,
+  made two imported adapters an ambiguity, and put a higher-kinded `using` parameter on six public
+  entry points that Java could not call. fs2 users add `.toStream`, the extension method the
+  adapter already shipped; its `Resource` helper never used the type parameter to begin with
+- `EmulatorBase.onTransactionApplied` observes every applied transaction. It replaces
+  `StreamingEmulator.submit` as the emulator's event source, which fixes a silent defect:
+  submitting straight to an emulator that had a streaming wrapper produced no events at all.
+  Notifications carry the resolved `spent` set, so block synthesis no longer looks up
+  `getAppliedTx` and no longer fails after `clearAppliedTxs()`
+- The Blockfrost streaming feed follows demand rather than construction. It previously began
+  polling in `StreamingBlockfrostProvider.apply`, costing one request per interval — about 8,640 a
+  day against a 50,000/day tier — with nothing subscribed. The first `pull` on any subscription
+  starts it, so a set of subscriptions registered together shares one starting position, and the
+  last cancellation suspends it. Suspending clears the cursor, so a resumed follower re-reads the
+  tip rather than delivering a backlog of the quiet interval to a subscription that asked for
+  events from now
+
 - `scalus-design-patterns`: the validator callbacks of `UtxoIndexer`, `StakeValidator` and
   `TransactionLevelMinterValidator` now return `Unit` and are expected to `require` / `fail` with
   their own message, instead of returning `Boolean` and failing with a generic library message. A
