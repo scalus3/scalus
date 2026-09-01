@@ -62,6 +62,9 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         }
         def close(): Unit = { closed = true; mailbox.close() }
 
+        @volatile var observing: Option[Boolean] = None
+        override def setObserving(active: Boolean): Unit = observing = Some(active)
+
         def watchCalls: Vector[Set[UtxoSource]] = synchronized(calls)
         def watching: Set[Address] = watchCalls.lastOption.getOrElse(Set.empty).collect {
             case UtxoSource.FromAddress(a) => a
@@ -468,5 +471,88 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         p.close()
         assertThrows[IllegalStateException](p.subscribeTip())
         assertThrows[IllegalStateException](p.subscribeProtocolParams())
+    }
+
+    // ── the feed follows demand ─────────────────────────────────────────────
+
+    test("registering a subscription does not start the feed; consuming it does") {
+        val follower = new FakeFollower
+        val p =
+            new StreamingBlockfrostProvider(stubbedClient(), follower, 1.hour, _ => Future.never)
+
+        val events = p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
+        assert(
+          !follower.started,
+          "a registered subscription nobody reads must cost nothing: on a metered backend the " +
+              "poll is a request per interval whether or not the chain moved"
+        )
+
+        events.pull()
+        assert(follower.started, "the first pull is what starts the feed")
+    }
+
+    test("a set of subscriptions registered before the first pull shares one starting position") {
+        val follower = new FakeFollower
+        val p =
+            new StreamingBlockfrostProvider(stubbedClient(), follower, 1.hour, _ => Future.never)
+
+        val a = p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
+        val b = p.subscribeUtxoQuery(utxoQuery(bob), liveOnly)
+        assert(!follower.started, "registration alone starts nothing")
+
+        // Whichever is read first starts the feed, and by then both are registered — which is the
+        // whole reason the trigger is the pull and not the subscribe.
+        a.pull()
+        assert(follower.started)
+        assert(
+          follower.watching == Set(alice, bob),
+          s"both were watched before anything was observed; got ${follower.watching}"
+        )
+        b.pull()
+    }
+
+    test("the last subscription going away idles the feed, and a later read resumes it") {
+        val follower = new FakeFollower
+        val p =
+            new StreamingBlockfrostProvider(stubbedClient(), follower, 1.hour, _ => Future.never)
+
+        val events = p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
+        events.pull()
+        assert(follower.observing.contains(true))
+
+        events.cancel()
+        assert(
+          follower.observing.contains(false),
+          "a cached view whose readers have all gone must stop spending the quota"
+        )
+
+        val again = p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
+        again.pull()
+        assert(
+          follower.observing.contains(true),
+          "idling is not closing: the view is cached on the provider and must serve a later " +
+              "subscription, which a closed follower could never do"
+        )
+    }
+
+    test("cancelling twice does not idle a feed another subscription is still reading") {
+        val follower = new FakeFollower
+        val p =
+            new StreamingBlockfrostProvider(stubbedClient(), follower, 1.hour, _ => Future.never)
+
+        val first = p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
+        val second = p.subscribeUtxoQuery(utxoQuery(bob), liveOnly)
+        first.pull()
+
+        first.cancel()
+        first.cancel() // idempotent by ScalusAsyncSource's contract
+        assert(
+          follower.observing.contains(true),
+          "a double cancel must not drive the live count negative and idle a feed `second` is " +
+              "still reading"
+        )
+
+        second.cancel()
+        assert(follower.observing.contains(false))
     }
 }
