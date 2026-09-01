@@ -2,6 +2,7 @@ package scalus.cardano.node
 
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.*
+import scalus.cardano.node.stream.{BlockchainStreamingTF, StreamCapabilities}
 import scalus.uplc.builtin.Data
 
 import scala.concurrent.Future
@@ -146,6 +147,28 @@ case class UtxoQueryWithReaderTF[F[_]](reader: BlockchainReaderTF[F], query: Utx
   * Extends [[BlockchainReaderTF]] with transaction submission capability.
   */
 trait BlockchainProviderTF[F[_]] extends BlockchainReaderTF[F] {
+
+    /** What [[streaming]] would declare, under this provider's default arguments. Constructs
+      * nothing, so it is safe to consult before deciding whether to ask for a streaming view at
+      * all.
+      *
+      * "Under default arguments" is not pedantry: a view's capabilities can depend on how it is
+      * built — an emulator's `rollbackHorizon` follows the `securityParam` it is given — so the
+      * authoritative answer is `streaming(...).streamCapabilities`, which is equally cheap.
+      */
+    def streamCapabilities: StreamCapabilities = StreamCapabilities.none
+
+    /** A streaming view of this blockchain: rollback-aware event subscriptions over the same state
+      * these one-shot reads see.
+      *
+      * Free — it performs no I/O and starts no polling; a backend that has to go and look begins at
+      * the first `pull`. Cached, so repeated calls hand back the same view rather than a second
+      * feed. Throws for a provider that declares [[StreamCapabilities.none]].
+      */
+    def streaming(): BlockchainStreamingTF[F] =
+        throw new UnsupportedOperationException(
+          s"${getClass.getSimpleName} has no streaming view; it declares StreamCapabilities.none"
+        )
 
     /** Submits a transaction to the network.
       */

@@ -29,7 +29,7 @@ import scala.concurrent.{ExecutionContext, Future}
   *   confirmation gating.
   */
 class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
-    extends BlockchainStreamProvider {
+    extends BlockchainStreaming {
 
     private val capabilities: StreamCapabilities =
         StreamingEmulator.capabilities(securityParam)
@@ -39,58 +39,32 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
     private var blockNo: BlockNo = 0L
     @volatile private var closed: Boolean = false
 
-    def executionContext: ExecutionContext = emulator.executionContext
+    private given ExecutionContext = emulator.executionContext
 
     def streamCapabilities: StreamCapabilities = capabilities
-
-    // ── one-shot reads: straight through to the emulator ────────────────────
-
-    override def cardanoInfo: CardanoInfo = emulator.cardanoInfo
-    def fetchLatestParams: Future[ProtocolParams] = emulator.fetchLatestParams
-    def currentSlot: Future[SlotNo] = emulator.currentSlot
-    def getDatum(datumHash: DataHash): Future[Option[Data]] = emulator.getDatum(datumHash)
-    def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
-        emulator.findUtxos(query)
-
-    /** The same cell `subscribeTransactionStatus` reads, falling back to the emulator for
-      * transactions this provider never observed.
-      *
-      * The duality between a one-shot read and its subscription is only worth anything if the two
-      * cannot disagree, and they can only be guaranteed not to by reading the same state. A
-      * transaction submitted here is `Pending` then `Confirmed` in the hub; one that predates this
-      * wrapper is answered by the ledger.
-      */
-    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
-        hub.statusOf(txHash) match
-            case Some(status) => Future.successful(status)
-            case None         => emulator.checkTransaction(txHash)
 
     /** The tip as the stream sees it — synthetic block height, and the emulator's own slot. */
     def currentTip: ChainTip = hub.currentTip
 
-    // ── submission ──────────────────────────────────────────────────────────
+    // ── the ledger drives the stream ────────────────────────────────────────
 
-    def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]] =
-        if closed then
-            Future.successful(
-              Left(NetworkSubmitError.ConnectionError("provider is closed", None))
-            )
-        else
-            // Ledger commit and block production are one step. The wrapped emulator serialises its
-            // own state, but block numbering lives here: two concurrent submits that interleaved
-            // between the two would mint two blocks with the same height and hash, and the hub
-            // would silently drop the second one's events as already-delivered.
-            val applied = synchronized {
-                emulator.submitSync(transaction) match
-                    case Left(error) => Left(error)
-                    case Right(hash) => Right(hash -> buildBlock(Seq(transaction -> hash)))
-            }
-            applied match
-                case Left(error) => Future.successful(Left(error))
-                case Right((hash, block)) =>
-                    hub.notifySubmit(hash)
-                    hub.applyBlock(block)
-                    Future.successful(Right(hash))
+    /** Attached to the emulator rather than wrapping its `submit`.
+      *
+      * A wrapper would observe only what was submitted through it, so a transaction submitted
+      * straight to the emulator — now the only way to submit, since this view is not a provider —
+      * would be missing from the stream with no error. Attaching to the ledger means every applied
+      * transaction is observed however it arrived.
+      *
+      * One transaction, one block: the emulator has no notion of a block, so this synthesises one
+      * per applied transaction and one per [[newEmptyBlock]]. Block *identity* is synthetic too,
+      * derived from the block number, which is why block subscriptions are declared unsupported
+      * rather than served with a fabricated header.
+      */
+    private val detach: AutoCloseable = emulator.onTransactionApplied { applied =>
+        val block = synchronized(buildBlock(Seq(applied)))
+        hub.notifySubmit(applied.txHash)
+        hub.applyBlock(block)
+    }
 
     /** Advance the tip without a transaction. */
     def newEmptyBlock(): Unit = {
@@ -103,63 +77,63 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
 
     // ── subscriptions ───────────────────────────────────────────────────────
 
-    def subscribeUtxoQuery[C[_]: ScalusAsyncStreamAdapter](
+    def subscribeUtxoQuery(
         query: UtxoEventQuery,
         opts: SubscriptionOptions
-    ): C[UtxoEvent] = {
+    ): ScalusAsyncSource[UtxoEvent] = {
         hub.require(SubscriptionRequest.Utxo(query, opts))
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.deltaFor[UtxoEvent](opts, () => hub.unregisterUtxo(id))
         hub.registerUtxo(id, query, opts, mailbox, emulator.utxos)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeTransactionQuery[C[_]: ScalusAsyncStreamAdapter](
+    def subscribeTransactionQuery(
         query: TransactionQuery,
         opts: SubscriptionOptions
-    ): C[TransactionEvent] = {
+    ): ScalusAsyncSource[TransactionEvent] = {
         hub.require(SubscriptionRequest.Transaction(query, opts))
         val id = hub.nextSubscriptionId()
         val mailbox =
             Mailbox.deltaFor[TransactionEvent](opts, () => hub.unregisterTransaction(id))
         hub.registerTransaction(id, query, opts, mailbox)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeBlockQuery[C[_]: ScalusAsyncStreamAdapter](
+    def subscribeBlockQuery(
         query: BlockQuery,
         opts: SubscriptionOptions
-    ): C[BlockEvent] = {
+    ): ScalusAsyncSource[BlockEvent] = {
         hub.require(SubscriptionRequest.Block(query, opts))
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.deltaFor[BlockEvent](opts, () => hub.unregisterBlock(id))
         hub.registerBlock(id, query, opts, mailbox)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeTip[C[_]: ScalusAsyncStreamAdapter](): C[ChainTip] = {
+    def subscribeTip(): ScalusAsyncSource[ChainTip] = {
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ChainTip](() => hub.unregisterTip(id))
         hub.registerTip(id, mailbox)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeProtocolParams[C[_]: ScalusAsyncStreamAdapter](): C[ProtocolParams] = {
+    def subscribeProtocolParams(): ScalusAsyncSource[ProtocolParams] = {
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ProtocolParams](() => hub.unregisterParams(id))
         hub.registerParams(id, mailbox)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeTransactionStatus[C[_]: ScalusAsyncStreamAdapter](
+    def subscribeTransactionStatus(
         txHash: TransactionHash
-    ): C[TransactionStatus] = {
+    ): ScalusAsyncSource[TransactionStatus] = {
         hub.require(SubscriptionRequest.TransactionStatus(txHash))
         val id = hub.nextSubscriptionId()
         val mailbox =
             Mailbox.latestValue[TransactionStatus](() => hub.unregisterTxStatus(txHash, id))
         hub.registerTxStatus(id, txHash, mailbox)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
     /** Terminal: subscriptions end, and the provider serves no new ones and submits nothing
@@ -168,34 +142,26 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
       */
     def close(): Future[Unit] = {
         closed = true
+        // Detach first: a block arriving between closing the hub and detaching would be offered to
+        // mailboxes that are already terminated.
+        detach.close()
         hub.closeAll()
         Future.unit
     }
 
     // ── internals ───────────────────────────────────────────────────────────
 
-    private def buildBlock(txs: Seq[(Transaction, TransactionHash)]): AppliedBlock = {
+    private def buildBlock(txs: Seq[AppliedTx]): AppliedBlock = {
         blockNo += 1
-        val applied = txs.map { case (tx, hash) =>
-            val created: Utxos = tx.body.value.outputs.zipWithIndex.map { case (out, index) =>
-                TransactionInput(hash, index) -> out.value
+        val applied = txs.map { a =>
+            val created: Utxos = a.tx.body.value.outputs.zipWithIndex.map { case (out, index) =>
+                TransactionInput(a.txHash, index) -> out.value
             }.toMap
-            // The emulator resolved the consumed outputs while validating; reuse that rather than
-            // re-resolving against a UTxO set the transaction has already mutated. Absence is not
-            // "nothing was spent" — it means the applied-tx index has been cleared or is not
-            // maintained, and defaulting to empty would silently stop emitting Spent events while
-            // subscribers went on believing their UTxO set was complete.
-            val spent: Utxos = emulator
-                .getAppliedTx(hash)
-                .map(_.spent)
-                .getOrElse(
-                  throw new IllegalStateException(
-                    s"emulator has no applied-transaction record for ${hash.toHex}; streaming " +
-                        "cannot report what it spent. Do not call clearAppliedTxs() on an emulator " +
-                        "wrapped by StreamingEmulator."
-                  )
-                )
-            AppliedTransaction(tx, created, spent)
+            // `spent` arrives with the notification: the emulator resolved the consumed outputs
+            // while validating, so there is nothing to re-resolve against a UTxO set the
+            // transaction has already mutated — and nothing to fail on if `clearAppliedTxs()` was
+            // called, which the previous index lookup could not survive.
+            AppliedTransaction(a.tx, created, a.spent)
         }
         AppliedBlock(
           ChainPoint(emulator.currentSlotSync, StreamingEmulator.syntheticBlockHash(blockNo)),
@@ -203,6 +169,7 @@ class StreamingEmulator(val emulator: EmulatorBase, val securityParam: Int = 0)
           applied
         )
     }
+
 }
 
 object StreamingEmulator {

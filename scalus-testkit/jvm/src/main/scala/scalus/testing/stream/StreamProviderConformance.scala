@@ -5,13 +5,13 @@ import scalus.cardano.address.Address
 import scalus.cardano.infra.UnsupportedSubscriptionException
 import scalus.cardano.ledger.{TransactionHash, Value}
 import scalus.cardano.node.stream.*
-import scalus.cardano.node.{UtxoQuery, UtxoSource}
+import scalus.cardano.node.{BlockchainReader, UtxoQuery, UtxoSource}
 
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
 import scala.concurrent.{Await, Future}
 import scala.util.{Failure, Success}
 
-/** What a [[BlockchainStreamProvider]] must do, whatever it is backed by.
+/** What a [[BlockchainStreaming]] must do, whatever it is backed by.
   *
   * The point of the facade is that application code moves between an emulator, a REST-backed
   * provider and a full indexer by changing construction and nothing else. That promise needs a
@@ -212,7 +212,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
 
     test("tip is delivered on subscribe and advances with the chain") {
         withFixture { f =>
-            val tips = Reader(f.provider.subscribeTip[ScalusAsyncSource]())
+            val tips = Reader(f.provider.subscribeTip())
             val first = tips.next()
             f.payTo(f.freshAddress(), Value.ada(10))
             val second = tips.next()
@@ -228,7 +228,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
             val target = f.freshAddress()
             val hash = f.payTo(target, Value.ada(10))
             val statuses =
-                Reader(f.provider.subscribeTransactionStatus[ScalusAsyncSource](hash))
+                Reader(f.provider.subscribeTransactionStatus(hash))
             assert(
               statuses.next() == scalus.cardano.node.TransactionStatus.Confirmed,
               "a transaction already in a block should read as Confirmed"
@@ -241,7 +241,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
             val unknown = TransactionHash.fromByteString(
               scalus.uplc.builtin.ByteString.fromArray(Array.fill[Byte](32)(0x7f))
             )
-            val status = Await.result(f.provider.checkTransaction(unknown), patience)
+            val status = Await.result(f.reader.checkTransaction(unknown), patience)
             assert(
               status != scalus.cardano.node.TransactionStatus.Confirmed,
               "reporting an unsubmitted transaction as Confirmed makes submitAndPoll report " +
@@ -254,8 +254,8 @@ abstract class StreamProviderConformance extends AnyFunSuite {
         withFixture { f =>
             val hash = f.payTo(f.freshAddress(), Value.ada(10))
             val subscribed =
-                Reader(f.provider.subscribeTransactionStatus[ScalusAsyncSource](hash)).next()
-            val oneShot = Await.result(f.provider.checkTransaction(hash), patience)
+                Reader(f.provider.subscribeTransactionStatus(hash)).next()
+            val oneShot = Await.result(f.reader.checkTransaction(hash), patience)
             assert(
               oneShot == subscribed,
               s"a one-shot read is the head of its own subscription; got $oneShot vs $subscribed"
@@ -336,7 +336,7 @@ abstract class StreamProviderConformance extends AnyFunSuite {
     ): Reader[UtxoEvent] =
         // The expected type is what picks `C`; the suite deliberately works at the
         // ScalusAsyncSource level so it needs no stream library to test one.
-        Reader(f.provider.subscribeUtxoQuery[ScalusAsyncSource](addressQuery(address), opts))
+        Reader(f.provider.subscribeUtxoQuery(addressQuery(address), opts))
 
     private def requestOfKind(
         kind: SubscriptionKind,
@@ -396,7 +396,15 @@ abstract class StreamProviderConformance extends AnyFunSuite {
   */
 trait StreamConformanceFixture {
 
-    def provider: BlockchainStreamProvider
+    def provider: BlockchainStreaming
+
+    /** The provider the streaming view came from.
+      *
+      * Streaming no longer serves one-shot reads — they stay on the provider a caller already holds
+      * — so the two suites below that compare a read against its subscription need both halves.
+      * Supplying it is a fixture's job, not a widening of the streaming API.
+      */
+    def reader: BlockchainReader
 
     /** An address the fixture can spend from. */
     def payer: Address
