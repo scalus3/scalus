@@ -24,12 +24,21 @@ class V1V2Optimizer extends Optimizer {
     def logs: Seq[String] = logger.getLogs.toVector
 }
 
-class V3Optimizer(cseIterations: Int = 2, cceEnabled: Boolean = false) extends Optimizer {
+class V3Optimizer(
+    cseIterations: Int = 2,
+    cceEnabled: Boolean = false,
+    letChainRegroup: Boolean = false
+) extends Optimizer {
+
+    /** Kept so the pre-`letChainRegroup` two-argument signature stays binary-compatible. */
+    def this(cseIterations: Int, cceEnabled: Boolean) = this(cseIterations, cceEnabled, false)
+
     private val logger = Log()
     def apply(term: Term): Term = {
         logger.clear()
 
         val caseConstr = new CaseConstrApply(logger)
+        val regrouper = new LetChainRegroup(logger)
         val builtinsExtractor = new ForcedBuiltinsExtractor(logger)
         val inliner = new Inliner(logger)
         val etaReduce = new EtaReduce(logger)
@@ -54,8 +63,16 @@ class V3Optimizer(cseIterations: Int = 2, cceEnabled: Boolean = false) extends O
             if cceEnabled then withCse |> cce.apply |> inliner.apply
             else withCse
 
-        // Phase 4: Final passes
-        withCce |> caseConstr.apply // optimize multiple applys to more optimal case/constr nodes
+        // Phase 4: regroup independent let chains into multi-argument applications, so the
+        // case/constr encoding below can cover a whole run of bindings with one Case + Constr
+        // instead of one Apply + LamAbs each. Must stay immediately before CaseConstrApply:
+        // re-association on its own can cost extra steps when a bound expression fails.
+        val regrouped =
+            if letChainRegroup then withCce |> regrouper.apply
+            else withCce
+
+        // Phase 5: Final passes
+        regrouped |> caseConstr.apply // optimize multiple applys to more optimal case/constr nodes
     }
     def logs: Seq[String] = logger.getLogs.toVector
 }

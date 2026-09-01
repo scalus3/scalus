@@ -44,7 +44,16 @@ case class Options(
       * portable lowering, which tolerates malformed values. Set to false to keep the portable
       * lowering at any PV.
       */
-    valueBuiltins: Boolean = true
+    valueBuiltins: Boolean = true,
+    /** When true, [[scalus.uplc.transform.LetChainRegroup]] re-associates chains of independent
+      * lets into multi-argument applications, which `CaseConstrApply` then encodes as one
+      * `case (constr 0 [...])` per run instead of one `Apply` + `LamAbs` per binding. Saves `N - 2`
+      * machine steps per run of `N` at the cost of about one script byte, so only runs of 5+ are
+      * grouped. Plutus V3 only; off by default.
+      *
+      * Declared last so adding it does not shift the positional accessors of the fields above.
+      */
+    letChainRegroup: Boolean = false
 ) {
 
     /** Returns a copy with `addScalusTag` set to `enable`. */

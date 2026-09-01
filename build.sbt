@@ -523,6 +523,13 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[MissingClassProblem](
           "scalus.compiler.sir.StaticArgumentTransformation$Rewriter"
         ),
+        // Options gained the `letChainRegroup` flag (T5 let-chain regrouping), which changes the
+        // arity of the generated apply/copy/constructor. It is declared LAST in the case class so
+        // no positional accessor (_N, copy$default$N) shifts - these four are the whole cost.
+        // Source-compatible: the field has a default, and callers use named arguments or copy().
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.this"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.copy"),
+        ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.apply"),
         // Deleted: both compared only the GovAction constructor ordinal, so distinct proposals
         // compared equal and a SortedSet would have silently dropped one - a violation of the
         // Ordering contract, not merely a weak order. Neither was used: proposalProcedures is a

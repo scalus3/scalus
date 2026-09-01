@@ -104,5 +104,10 @@ object UplcPipeline {
     def defaultOptimizer(language: Language, options: Options): Optimizer =
         language match
             case Language.PlutusV1 | Language.PlutusV2 => new V1V2Optimizer()
-            case _ => new V3Optimizer(options.cseIterations, options.cceEnabled)
+            case _ =>
+                new V3Optimizer(
+                  options.cseIterations,
+                  options.cceEnabled,
+                  options.letChainRegroup
+                )
 }

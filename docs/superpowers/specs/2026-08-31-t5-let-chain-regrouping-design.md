@@ -57,10 +57,18 @@ the plan under T5):
 | N nested lets | 2N — N `Apply` + N `LamAbs` |
 | flattened + case-constr | N + 2 — `Case` + `Constr` + N `LamAbs` |
 
-So a group of N saves **N − 2 steps per execution of that chain**: nothing at
-N ≤ 2, and it can never lose. Script size is unchanged by the re-association
-itself; the case-constr encoding costs about 1 byte per group (measured on
-`ecd`, recorded in the plan).
+So a group of N saves **N − 2 steps per execution of that chain**.
+
+**Steps are not the whole fee, and this sets the threshold.** On mainnet a
+machine step costs 6.92 lovelace (`100 × 0.0577 + 16,000 × 0.0000721`) while a
+script byte costs 15 lovelace of reference-script fee in every transaction that
+uses the script. Grouping therefore pays only when `(N − 2) × 6.92 > 15`, i.e.
+**N ≥ 5**. At N = 3 it saves 6.92 lovelace of execution and costs 15 lovelace of
+size — a net loss.
+
+`LetChainRegroup.MinRunSize` is 5 for that reason. Section 3.1 shows what the
+threshold is worth: it is not a rounding detail, it is the difference between the
+pass paying for itself and not.
 
 ## 3. Measured evidence
 
@@ -106,6 +114,39 @@ model's basis (case+constr = 2 steps regardless of arity) is the same one
 confirmed, but the pass must still be validated by a real before/after run. And
 the totals are upper bounds: only chains on the executed path pay off.
 
+### 3.1 Post-implementation measurement (2026-09-01)
+
+The implemented pass reproduces the probe's prediction exactly — 151 steps across
+the ten examples at a threshold of 3 — which cross-validates the model. Real
+ExUnits agree too: with the flag on, `linear_vesting`'s CAPE scenarios move
+63,888 → 63,588 mem and 31,013,223 → 30,965,223 steps (exactly the 3 predicted
+steps), and `full_unlock` moves 23,422 → 23,322 mem (1 step).
+
+Measuring script size then showed the model was **incomplete**, and the fix is
+the N ≥ 5 threshold:
+
+| threshold | steps saved | bytes added | net fee | validators made worse |
+|---|---:|---:|---:|---:|
+| 3 | 151 | +65 | +68 lovelace | **6 of 10** |
+| **5** | **77** | **+5** | **+458 lovelace** | **0 of 10** |
+
+At a threshold of 3 the pass is a net loss on `htlc`, `two_party_escrow`,
+`escrow`, `editable_nft`, `upgradeable_proxy` and `payment_splitter`: each pays
+more in reference-script bytes than it saves in execution. Raising the threshold
+keeps half the steps and drops 92% of the bytes, because the long runs turn out
+to be nearly byte-free (`betting`: 5 groups, 23 steps, **+0 bytes**).
+
+Per-validator at threshold 5 — only four validators have any run long enough to
+qualify, and none regress:
+
+| validator | groups | steps | bytes | net lovelace/tx |
+|---|---:|---:|---:|---:|
+| linked_list | 10 | 38 | +3 | +218 |
+| betting | 5 | 23 | +0 | +159 |
+| auction | 3 | 12 | +2 | +53 |
+| escrow | 1 | 4 | +0 | +28 |
+| the other six | 0 | 0 | 0 | 0 |
+
 ## 4. Algorithm
 
 A single top-down traversal. At any node matching `Apply(LamAbs(x, body), rhs)`:
@@ -122,8 +163,9 @@ A single top-down traversal. At any node matching `Apply(LamAbs(x, body), rhs)`:
    Aiken moves bindings between groups to grow them, which changes evaluation
    order; the plan's research item 5 explicitly warns against copying that.
 3. **Rebuild**, outermost run first:
-   - run of 1 or 2: emit the original nested shape (no gain, so no churn);
-   - run of N ≥ 3: emit `[[[…[(lam x1 (lam x2 … (lam xN inner))) e1] e2] … eN]`.
+   - run below `MinRunSize` (5): emit the original nested shape, so the pass adds
+     no churn where it would not pay;
+   - run of N ≥ 5: emit `[[[…[(lam x1 (lam x2 … (lam xN inner))) e1] e2] … eN]`.
 4. Recurse into every `ei` and into the final body.
 
 Annotations on reused `Apply`/`LamAbs` nodes are preserved; new nodes are left
@@ -152,8 +194,16 @@ that case. If `ei` does not mention any run binder, moving it out of their scope
 cannot change what any name resolves to. The repeated-name test removes the
 remaining subtlety where two binders in one run share a name.
 
-**Idempotent.** A run of 1 rebuilds to the identical term, so re-running the pass
-is a no-op, and a chain that is already flat is left alone.
+**Idempotent.** A short run rebuilds to the identical term, so re-running the
+pass is a no-op, and a chain that is already flat is left alone.
+
+**The budget guarantee holds on the pair of passes, not on this one alone.**
+Re-association by itself can cost extra steps when a bound expression fails:
+`[[[F e1] e2] e3]` enters all three `Apply` nodes before evaluating `e1`, where
+the nested form enters one. The `case (constr 0 [...])` encoding removes that,
+being two steps at any arity. So `LetChainRegroup` must never ship without
+`CaseConstrApply` after it — which the pipeline placement guarantees, and the
+conformance test asserts on the composed pair.
 
 ## 5. Pipeline and flag
 
@@ -190,6 +240,21 @@ Phase 4:  withCce |> letChainRegroup.apply |> caseConstr.apply
 - Corpus measurement, flag on vs off: the 10 scalus example/CAPE validators above
   plus `binocular/oracle`. Record ExUnits and script bytes. This is the number
   that decides whether the default flips.
+
+**What was actually built** (all green, 418 tests in `scalus.uplc.transform.*`):
+
+- `LetChainRegroupTest` (shared, 12 cases) — the shape rules, plus two cases
+  pinning the `MinRunSize` threshold and two pinning the `V3Optimizer` wiring in
+  both flag states.
+- `LetChainRegroupCekConformanceTest` (jvm, 3 cases) — the two properties, plus a
+  **vacuity guard** asserting that the generator actually produces terms the pass
+  regroups (≥20 of 200) and terms that get cheaper (≥5 of 200). Without it both
+  properties could pass on a generator the pass never touches.
+- Corpus measurement: reproduce by compiling each validator twice under
+  `Options.release` and `Options.release.copy(letChainRegroup = true)`, comparing
+  `program.cborByteString.size` and summing the pass's own log lines. Real ExUnits
+  come from flipping the `Options.letChainRegroup` default to `true` and reading
+  the pinned-budget failures in `scalusExamplesJVM/testOnly scalus.examples.cape.*`.
 
 ## 7. Out of scope
 
