@@ -6,6 +6,8 @@ import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.{Context, STS, State}
 import scalus.cardano.ledger.*
 
+import scalus.cardano.node.stream.{BlockchainStreaming, StreamCapabilities, StreamingEmulator}
+
 import scala.concurrent.{ExecutionContext, Future}
 
 /** Base trait for Emulator implementations containing shared logic.
@@ -63,6 +65,67 @@ trait EmulatorBase extends BlockchainProvider {
       * preserve it rather than silently reverting to the `Context` default.
       */
     def evaluatorMode: EvaluatorMode = currentContext.evaluatorMode
+
+    // ── applied-transaction observers ───────────────────────────────────────
+
+    /** Observers of every transaction this ledger applies.
+      *
+      * The seam a streaming view attaches to, and it lives here rather than in the view because
+      * *the emulator* is what applies transactions. A view that wrapped `submit` would observe only
+      * the transactions submitted through the view; one submitted straight to the emulator would be
+      * missing from the stream, silently and with no error.
+      *
+      * Guarded by `this`. On Scala.js `synchronized` compiles to a no-op, which here is correct
+      * rather than merely tolerated: the runtime is single-threaded and there is no suspension
+      * point between committing and notifying, so nothing can interleave.
+      */
+    private var appliedListeners: Vector[AppliedTx => Unit] = Vector.empty
+
+    /** Observe every transaction this emulator applies, until the returned handle is closed.
+      *
+      * The listener runs on the submitting thread, after the ledger commit it describes has
+      * succeeded, so it observes a transaction that is already applied — `hasTx` is true and
+      * `utxos` already reflects it.
+      *
+      * **Ordering under concurrent submits.** Commits are serialised by the platform state, but the
+      * notifications that follow them are not: two transactions committed in one order may be
+      * announced in the other. A listener that assigns positions (a streaming view numbering
+      * blocks) must therefore do so itself, under its own lock, and gets monotonic unique positions
+      * that may not match commit order. Single-threaded use — which is every emulator test — never
+      * observes this.
+      */
+    def onTransactionApplied(listener: AppliedTx => Unit): AutoCloseable = {
+        synchronized { appliedListeners = appliedListeners :+ listener }
+        () => synchronized { appliedListeners = appliedListeners.filterNot(_ eq listener) }
+    }
+
+    /** Announce a transaction this ledger has just applied.
+      *
+      * Called by the platform `submitSync` implementations from the point the commit succeeds.
+      * Listeners run outside the lock: one is arbitrary user code, and holding the registry lock
+      * across it would let a listener that submits deadlock the emulator.
+      */
+    protected final def notifyApplied(applied: AppliedTx): Unit = {
+        val listeners = synchronized(appliedListeners)
+        listeners.foreach(_(applied))
+    }
+
+    // ── streaming ───────────────────────────────────────────────────────────
+
+    override def streamCapabilities: StreamCapabilities =
+        StreamingEmulator.capabilities(0)
+
+    /** The streaming view of this ledger, cached: one view, one block numbering. */
+    private lazy val defaultStreaming: BlockchainStreaming = new StreamingEmulator(this, 0)
+
+    override def streaming(): BlockchainStreaming = defaultStreaming
+
+    /** A streaming view claiming `securityParam` settlement depth, for exercising a subscriber's
+      * confirmation gating. Distinct from [[streaming]] — it numbers its own blocks, so hold one or
+      * the other rather than both.
+      */
+    def streaming(securityParam: Int): BlockchainStreaming =
+        new StreamingEmulator(this, securityParam)
 
     def tick(n: Long): Unit = setSlot(currentContext.env.slot + n)
 

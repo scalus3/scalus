@@ -76,7 +76,7 @@ class StreamingBlockfrostProvider private[stream] (
     follower: ChainFollower,
     paramsRefreshInterval: FiniteDuration,
     delay: FiniteDuration => Future[Unit]
-) extends BlockchainStreamProvider {
+) extends BlockchainStreaming {
 
     private given ExecutionContext = provider.executionContext
 
@@ -113,14 +113,18 @@ class StreamingBlockfrostProvider private[stream] (
 
     def streamCapabilities: StreamCapabilities = capabilities
 
-    /** Begin following the chain. Idempotent.
+    /** Begin following the chain, once, on demand.
       *
-      * Explicit rather than done in the constructor: this starts spending a metered quota, and a
-      * caller is entitled to build the provider, inspect it, and decide.
-      * [[StreamingBlockfrostProvider.apply]] returns one already started, which is what almost
-      * every caller wants.
+      * Not done at construction and not exposed: this starts spending a metered quota, and a caller
+      * is entitled to obtain a streaming view, inspect its capabilities, and decide. Every
+      * `subscribe` calls it, so the feed exists exactly when something is registered to consume it
+      * and an unused view costs nothing.
+      *
+      * (Interim: the design calls for triggering at the first `pull` rather than the first
+      * `subscribe`, so that a set of subscriptions registered together shares one starting
+      * position. Triggering here already gets the cost property; the coverage refinement follows.)
       */
-    def start(): Unit = {
+    private[stream] def ensureStarted(): Unit = {
         val begin = synchronized {
             if started then false
             else { started = true; true }
@@ -131,55 +135,18 @@ class StreamingBlockfrostProvider private[stream] (
         }
     }
 
-    // ── one-shot reads: straight through to the Blockfrost client ───────────
-
-    override def cardanoInfo: CardanoInfo = provider.cardanoInfo
-    def fetchLatestParams: Future[ProtocolParams] = provider.fetchLatestParams
-    def currentSlot: Future[SlotNo] = provider.currentSlot
-    def getDatum(datumHash: DataHash): Future[Option[Data]] = provider.getDatum(datumHash)
-    def findUtxos(query: UtxoQuery): Future[Either[UtxoQueryError, Utxos]] =
-        provider.findUtxos(query)
-
-    /** Straight to Blockfrost, deliberately not through the hub.
-      *
-      * The emulator answers this from the same cell `subscribeTransactionStatus` reads, so the two
-      * cannot disagree. Here there is nothing to agree with: this provider does not serve status
-      * subscriptions at all, and the hub only ever hears about transactions that touched a watched
-      * address — so consulting it would answer some hashes from a partial view and others from the
-      * network, which is worse than answering all of them from the network.
-      */
-    override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
-        provider.checkTransaction(txHash)
-
-    override def pollForConfirmation(
-        txHash: TransactionHash,
-        maxAttempts: Int,
-        delayMs: Long
-    ): Future[TransactionStatus] = provider.pollForConfirmation(txHash, maxAttempts, delayMs)
-
-    /** The tip as this provider's stream has observed it — `ChainTip.origin` until the first block
-      * arrives, which is up to one `pollInterval` after [[start]].
+    /** The tip as this view has observed it — `ChainTip.origin` until the first block arrives,
+      * which is up to one `pollInterval` after the feed starts.
       */
     def currentTip: ChainTip = hub.currentTip
 
-    // ── submission ──────────────────────────────────────────────────────────
-
-    /** Submit through the Blockfrost client.
-      *
-      * The hub is not told, unlike in the emulator. `notifySubmit` exists to move a transaction's
-      * status to `Pending` for `subscribeTransactionStatus`, which this provider does not serve —
-      * so the only effect would be an entry in the hub's status table that nothing ever reads and
-      * nothing ever removes.
-      */
-    def submit(transaction: Transaction): Future[Either[SubmitError, TransactionHash]] =
-        provider.submit(transaction)
-
     // ── subscriptions ───────────────────────────────────────────────────────
 
-    def subscribeUtxoQuery[C[_]: ScalusAsyncStreamAdapter](
+    def subscribeUtxoQuery(
         query: UtxoEventQuery,
         opts: SubscriptionOptions
-    ): C[UtxoEvent] = {
+    ): ScalusAsyncSource[UtxoEvent] = {
+        ensureStarted()
         val request = SubscriptionRequest.Utxo(query, opts)
         hub.require(request)
         val sources = requireWatchable(SubscriptionSupport.sourcesFor(request, capabilities))
@@ -205,13 +172,14 @@ class StreamingBlockfrostProvider private[stream] (
                 case Failure(t) => hub.failUtxo(id, t)
             }
         } else hub.registerUtxo(id, query, opts, mailbox, Map.empty)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeTransactionQuery[C[_]: ScalusAsyncStreamAdapter](
+    def subscribeTransactionQuery(
         query: TransactionQuery,
         opts: SubscriptionOptions
-    ): C[TransactionEvent] = {
+    ): ScalusAsyncSource[TransactionEvent] = {
+        ensureStarted()
         val request = SubscriptionRequest.Transaction(query, opts)
         hub.require(request)
         val sources = requireWatchable(SubscriptionSupport.sourcesFor(request, capabilities))
@@ -221,13 +189,14 @@ class StreamingBlockfrostProvider private[stream] (
         // describe, so this one keeps the residual the class doc names.
         watch(id, sources)
         hub.registerTransaction(id, query, opts, mailbox)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeBlockQuery[C[_]: ScalusAsyncStreamAdapter](
+    def subscribeBlockQuery(
         query: BlockQuery,
         opts: SubscriptionOptions
-    ): C[BlockEvent] = {
+    ): ScalusAsyncSource[BlockEvent] = {
+        ensureStarted()
         // Always refuses: `capabilities.kinds` omits Block, because a follower assembled from
         // per-address transaction lists never holds a block to hand over. Routed through `require`
         // rather than thrown here so the refusal and its wording come from the same place a caller
@@ -238,14 +207,16 @@ class StreamingBlockfrostProvider private[stream] (
         )
     }
 
-    def subscribeTip[C[_]: ScalusAsyncStreamAdapter](): C[ChainTip] = {
+    def subscribeTip(): ScalusAsyncSource[ChainTip] = {
+        ensureStarted()
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ChainTip](() => hub.unregisterTip(id))
         hub.registerTip(id, mailbox)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeProtocolParams[C[_]: ScalusAsyncStreamAdapter](): C[ProtocolParams] = {
+    def subscribeProtocolParams(): ScalusAsyncSource[ProtocolParams] = {
+        ensureStarted()
         // A stream that silently never updates is indistinguishable from parameters that have not
         // changed, which is the whole reason the refresh loop reports rather than retries forever.
         if synchronized(paramsAbandoned) then
@@ -256,12 +227,13 @@ class StreamingBlockfrostProvider private[stream] (
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ProtocolParams](() => hub.unregisterParams(id))
         hub.registerParams(id, mailbox)
-        summon[ScalusAsyncStreamAdapter[C]].fromSource(mailbox)
+        mailbox
     }
 
-    def subscribeTransactionStatus[C[_]: ScalusAsyncStreamAdapter](
+    def subscribeTransactionStatus(
         txHash: TransactionHash
-    ): C[TransactionStatus] = {
+    ): ScalusAsyncSource[TransactionStatus] = {
+        ensureStarted()
         // Always refuses, for the reason `SubscriptionKind.TransactionStatus` exists to let a
         // provider state: this one observes only what it was asked to watch, so a hash it was never
         // asked about would sit at `Pending` forever — indistinguishable, to the subscriber, from a
@@ -443,7 +415,6 @@ object StreamingBlockfrostProvider {
           defaultParamsRefreshInterval,
           delay
         )
-        streaming.start()
         streaming
     }
 }

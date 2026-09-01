@@ -3,8 +3,8 @@ package scalus.testing.stream
 import scalus.cardano.address.Address
 import scalus.cardano.ledger.rules.STS
 import scalus.cardano.ledger.{CardanoInfo, TransactionHash, Value}
-import scalus.cardano.node.{Emulator, EmulatorBase}
-import scalus.cardano.node.stream.{BlockchainStreamProvider, StreamingEmulator}
+import scalus.cardano.node.{BlockchainReader, Emulator, EmulatorBase}
+import scalus.cardano.node.stream.{BlockchainStreaming, StreamingEmulator}
 import scalus.cardano.txbuilder.TxBuilder
 import scalus.testing.kit.Party
 import scalus.utils.await
@@ -31,7 +31,11 @@ class StreamingEmulatorConformanceTest extends StreamProviderConformance {
           validators = Set.empty[STS.Validator]
         )
 
-        val provider: BlockchainStreamProvider = new StreamingEmulator(emulator)
+        // Reads and submission stay on the emulator; the streaming view only subscribes. The
+        // view observes every applied transaction through the ledger's own hook, so submitting
+        // straight to the emulator — as `submit` below does — still reaches every subscription.
+        val reader: BlockchainReader = emulator
+        val provider: BlockchainStreaming = emulator.streaming()
 
         def payer: Address = parties(0).address
 
@@ -49,10 +53,10 @@ class StreamingEmulatorConformanceTest extends StreamProviderConformance {
         private def submit(from: Address, to: Address, amount: Value): TransactionHash = {
             val tx = TxBuilder(CardanoInfo.mainnet)
                 .payTo(to, amount)
-                .complete(provider, from)
+                .complete(emulator, from)
                 .await()
                 .transaction
-            provider.submit(tx).await() match
+            emulator.submit(tx).await() match
                 case Right(hash) => hash
                 case Left(error) => throw new AssertionError(s"fixture submit failed: $error")
         }

@@ -117,7 +117,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         client: BlockfrostProvider = stubbedClient()
     ): StreamingBlockfrostProvider = {
         val p = new StreamingBlockfrostProvider(client, follower, 1.hour, _ => Future.never)
-        p.start()
+        p.ensureStarted()
         p
     }
 
@@ -143,14 +143,14 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
     test("a block subscription is refused rather than accepted and never served") {
         val p = providerWith(new FakeFollower)
         assertThrows[UnsupportedSubscriptionException](
-          p.subscribeBlockQuery[ScalusAsyncSource](BlockQuery.All, liveOnly)
+          p.subscribeBlockQuery(BlockQuery.All, liveOnly)
         )
     }
 
     test("a transaction-status subscription is refused rather than left Pending forever") {
         val p = providerWith(new FakeFollower)
         assertThrows[UnsupportedSubscriptionException](
-          p.subscribeTransactionStatus[ScalusAsyncSource](txHash("ab"))
+          p.subscribeTransactionStatus(txHash("ab"))
         )
     }
 
@@ -163,14 +163,14 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
           allowUnindexedScan = true
         )
         assertThrows[UnsupportedSubscriptionException](
-          p.subscribeTransactionQuery[ScalusAsyncSource](TransactionQuery.All, consenting)
+          p.subscribeTransactionQuery(TransactionQuery.All, consenting)
         )
         val byAsset = UtxoEventQuery(
           UtxoQuery(UtxoSource.FromAsset(ScriptHash.fromHex("00" * 28), AssetName.fromHex("cafe"))),
           UtxoEventType.all
         )
         assertThrows[UnsupportedSubscriptionException](
-          p.subscribeUtxoQuery[ScalusAsyncSource](byAsset, consenting)
+          p.subscribeUtxoQuery(byAsset, consenting)
         )
     }
 
@@ -180,7 +180,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         val follower = new FakeFollower
         val p = providerWith(follower)
         assertThrows[UnsupportedSubscriptionException](
-          p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(byron), liveOnly)
+          p.subscribeUtxoQuery(utxoQuery(byron), liveOnly)
         )
         assert(
           follower.watchCalls.isEmpty,
@@ -199,8 +199,8 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
             () => watchedWhenRead = Some(follower.watchCalls.size)
         )
         val p = new StreamingBlockfrostProvider(client, follower, 1.hour, _ => Future.never)
-        p.start()
-        p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(alice), SubscriptionOptions())
+        p.ensureStarted()
+        p.subscribeUtxoQuery(utxoQuery(alice), SubscriptionOptions())
         eventually(
           watchedWhenRead.exists(_ > 0),
           s"the snapshot was read before any watch landed: $watchedWhenRead"
@@ -210,8 +210,8 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
     test("the follower is always given the union, never one subscription's own sources") {
         val follower = new FakeFollower
         val p = providerWith(follower)
-        p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(alice), liveOnly)
-        p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(bob), liveOnly)
+        p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
+        p.subscribeUtxoQuery(utxoQuery(bob), liveOnly)
         assert(
           follower.watching == Set(alice, bob),
           s"watch replaces rather than adds, so a caller passing only its own sources would " +
@@ -224,8 +224,8 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         // in the watched set would cost one request per block for the life of the provider.
         val follower = new FakeFollower
         val p = providerWith(follower)
-        val aliceSub = p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(alice), liveOnly)
-        p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(bob), liveOnly)
+        val aliceSub = p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
+        p.subscribeUtxoQuery(utxoQuery(bob), liveOnly)
         aliceSub.cancel()
         assert(follower.watching == Set(bob), s"got ${follower.watching}")
     }
@@ -233,7 +233,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
     test("a transaction subscription watches the addresses its query names") {
         val follower = new FakeFollower
         val p = providerWith(follower)
-        p.subscribeTransactionQuery[ScalusAsyncSource](
+        p.subscribeTransactionQuery(
           TransactionQuery.InvolvesAddress(alice),
           liveOnly
         )
@@ -246,7 +246,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         val follower = new FakeFollower
         val p = providerWith(follower)
         val src: ScalusAsyncSource[UtxoEvent] =
-            p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(alice), liveOnly)
+            p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
         // Pulled before the block is offered, and held: a fresh `pull` each time round the spin
         // would start a new wait once the first one completed, and never look at what it delivered.
         val pulled = src.pull()
@@ -280,7 +280,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         val follower = new FakeFollower
         val p = providerWith(follower)
         val src: ScalusAsyncSource[UtxoEvent] =
-            p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(alice), liveOnly)
+            p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
         p.close()
         assert(follower.closed, "a metered follower left running keeps spending quota")
         assert(
@@ -293,7 +293,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         val follower = new FakeFollower
         val p = providerWith(follower)
         val src: ScalusAsyncSource[UtxoEvent] =
-            p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(alice), liveOnly)
+            p.subscribeUtxoQuery(utxoQuery(alice), liveOnly)
         p.close()
         src.cancel()
         assert(follower.closed)
@@ -327,7 +327,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
                 val follower = new FakeFollower
                 val p = providerWith(follower)
                 val src: ScalusAsyncSource[UtxoEvent] =
-                    p.subscribeUtxoQuery[ScalusAsyncSource](UtxoEventQuery(q), opts)
+                    p.subscribeUtxoQuery(UtxoEventQuery(q), opts)
                 val pulled = src.pull()
                 follower.mailbox.offer(
                   ChainEvent.RollForward(
@@ -370,7 +370,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         val query = UtxoEventQuery(
           UtxoQuery(UtxoSource.FromAddress(alice) && UtxoSource.FromAddress(bob))
         )
-        p.subscribeUtxoQuery[ScalusAsyncSource](query, liveOnly)
+        p.subscribeUtxoQuery(query, liveOnly)
         assert(
           follower.watching.size == 1,
           s"one address is enough to cover an intersection — got ${follower.watching}"
@@ -400,9 +400,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         // parked on a promise with the feed already dead.
         val follower = new FakeFollower
         val p = providerWith(follower)
-        val sources = Seq(alice, bob, alice).map(a =>
-            p.subscribeUtxoQuery[ScalusAsyncSource](utxoQuery(a), liveOnly)
-        )
+        val sources = Seq(alice, bob, alice).map(a => p.subscribeUtxoQuery(utxoQuery(a), liveOnly))
         val pulls = sources.map(_.pull())
         follower.mailbox.fail(
           new RuntimeException("the chain forked below the last reported block")
@@ -413,12 +411,12 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         )
     }
 
-    test("start is idempotent, so a second call does not run a second parameter loop") {
+    test("starting is idempotent, so a second subscription does not run a second parameter loop") {
         val follower = new FakeFollower
         val delay = new SteppableDelay
         val p = new StreamingBlockfrostProvider(stubbedClient(), follower, 1.hour, delay)
-        p.start()
-        p.start()
+        p.ensureStarted()
+        p.ensureStarted()
         assert(
           delay.pending == 1,
           s"two parameter loops would double the refresh rate against a metered quota, and race " +
@@ -433,9 +431,9 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         val delay = new SteppableDelay
         val client = failingParamsClient()
         val p = new StreamingBlockfrostProvider(client, follower, 1.hour, delay)
-        p.start()
+        p.ensureStarted()
         val params: ScalusAsyncSource[ProtocolParams] =
-            p.subscribeProtocolParams[ScalusAsyncSource]()
+            p.subscribeProtocolParams()
         assert(params.pull().value.isDefined, "the current value is delivered on subscribe")
         delay.step()
         eventually(delay.pending == 1, "the loop should have scheduled its next attempt")
@@ -449,9 +447,9 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         val follower = new FakeFollower
         val delay = new SteppableDelay
         val p = new StreamingBlockfrostProvider(failingParamsClient(), follower, 1.hour, delay)
-        p.start()
+        p.ensureStarted()
         val params: ScalusAsyncSource[ProtocolParams] =
-            p.subscribeProtocolParams[ScalusAsyncSource]()
+            p.subscribeProtocolParams()
         params.pull()
         for _ <- 1 to StreamingBlockfrostProvider.maxParamFailures do
             eventually(delay.pending == 1, "the loop should still be scheduling attempts")
@@ -460,7 +458,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
           params.pull().value.exists(_.isFailure),
           "by now the held value may genuinely be stale, and the subscriber must be told"
         )
-        assertThrows[IllegalStateException](p.subscribeProtocolParams[ScalusAsyncSource]())
+        assertThrows[IllegalStateException](p.subscribeProtocolParams())
     }
 
     test("a closed provider serves no new tip or parameter subscriptions") {
@@ -468,7 +466,7 @@ class StreamingBlockfrostProviderTest extends AnyFunSuite {
         // through it, and would hand back a stream holding one stale value and then park forever.
         val p = providerWith(new FakeFollower)
         p.close()
-        assertThrows[IllegalStateException](p.subscribeTip[ScalusAsyncSource]())
-        assertThrows[IllegalStateException](p.subscribeProtocolParams[ScalusAsyncSource]())
+        assertThrows[IllegalStateException](p.subscribeTip())
+        assertThrows[IllegalStateException](p.subscribeProtocolParams())
     }
 }

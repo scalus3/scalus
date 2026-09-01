@@ -59,11 +59,10 @@ trait ScalusAsyncStreamAdapter[S[_]] {
 
 object ScalusAsyncStreamAdapter {
 
-    /** A [[ScalusAsyncSource]] is already a stream, so
-      * `BlockchainStreamProvider[ScalusAsyncSource]` is a complete streaming API with nothing
-      * beyond the standard library — consume it with a `pull()` loop, or bridge it wherever. This
-      * is the form to reach for in examples, so the first thing a reader meets does not force a
-      * choice of stream library.
+    /** A [[ScalusAsyncSource]] is already a stream, so `BlockchainStreaming[ScalusAsyncSource]` is
+      * a complete streaming API with nothing beyond the standard library — consume it with a
+      * `pull()` loop, or bridge it wherever. This is the form to reach for in examples, so the
+      * first thing a reader meets does not force a choice of stream library.
       */
     given identity: ScalusAsyncStreamAdapter[ScalusAsyncSource] with {
         def fromSource[A](src: ScalusAsyncSource[A]): ScalusAsyncSource[A] = src

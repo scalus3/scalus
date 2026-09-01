@@ -15,6 +15,7 @@ import io.bullet.borer.Cbor
 import scala.annotation.nowarn
 import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.SortedMap
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -673,6 +674,28 @@ class BlockfrostProvider(
             Left(SubmitError.ConnectionError(s"Blockfrost submit exception", Some(exception)))
         }
     }
+
+    // ── streaming ───────────────────────────────────────────────────────────
+
+    override def streamCapabilities: stream.StreamCapabilities =
+        stream.StreamingBlockfrostProvider.capabilities
+
+    /** The streaming view of this backend, cached and polling at the default interval.
+      *
+      * Free to obtain: no request is made and no polling begins until something subscribes, so a
+      * caller may take this view, read its capabilities, and walk away having spent nothing.
+      */
+    private lazy val defaultStreaming: stream.BlockchainStreaming =
+        stream.StreamingBlockfrostProvider(this)
+
+    override def streaming(): stream.BlockchainStreaming = defaultStreaming
+
+    /** A streaming view polling at `pollInterval` — the quota dial, since every poll is at least
+      * one request whether or not the chain moved. Distinct from [[streaming]]: it runs its own
+      * feed, so two views cost two feeds once both are subscribed to.
+      */
+    def streaming(pollInterval: FiniteDuration): stream.BlockchainStreaming =
+        stream.StreamingBlockfrostProvider(this, pollInterval)
 
     override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
         checkTransactionHex(txHash.toHex)

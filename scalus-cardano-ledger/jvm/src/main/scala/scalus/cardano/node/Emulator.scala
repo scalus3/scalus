@@ -65,6 +65,8 @@ class Emulator(
             var d = datumsRef.get()
             while !datumsRef.compareAndSet(d, d ++ extracted) do d = datumsRef.get()
         }
+        // Last, so a listener observes a ledger that already holds the transaction.
+        notifyApplied(applied)
     }
 
     @tailrec

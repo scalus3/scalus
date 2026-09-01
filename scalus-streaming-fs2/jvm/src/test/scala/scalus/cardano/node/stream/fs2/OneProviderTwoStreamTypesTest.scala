@@ -5,28 +5,33 @@ import cats.effect.unsafe.implicits.global
 import fs2.Stream
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.cardano.node.Emulator
-import scalus.cardano.node.stream.fs2.Fs2StreamAdapter.fs2Adapter
-import scalus.cardano.node.stream.{BlockchainStreamProvider, ChainTip, ScalusAsyncSource, StreamingEmulator}
+import scalus.cardano.node.stream.fs2.Fs2StreamAdapter.toStream
+import scalus.cardano.node.stream.{BlockchainStreaming, ChainTip, ScalusAsyncSource, StreamingEmulator}
 
 import scala.concurrent.duration.DurationInt
 
-/** The reason the stream type is a per-call choice rather than part of the provider's type.
+/** The reason the stream type is not part of the streaming view's type.
   *
-  * A single provider value serves both at once: application code takes fs2 streams from it while a
-  * test — or a library that has no business depending on cats-effect — pulls raw sources from the
-  * very same instance. With the stream type baked into the provider, these would have to be two
-  * differently-typed providers over the same emulator, and the two views could drift.
+  * A single view serves both at once: application code takes fs2 streams from it while a test — or
+  * a library that has no business depending on cats-effect — pulls raw sources from the very same
+  * instance. With the stream type baked into the view, these would have to be two differently-typed
+  * views over the same emulator, and the two could drift.
+  *
+  * Subscriptions are always [[ScalusAsyncSource]] and a library is one `.toStream` away, rather
+  * than the view being generic in the stream type. The property this test names survives that; what
+  * goes is a higher-kinded parameter on six signatures, return types that depended on which adapter
+  * a file happened to import, and an API Java could not call.
   */
 // JVM-only: see Fs2StreamAdapterTest.
 class OneProviderTwoStreamTypesTest extends AnyFunSuite {
 
     test("the same provider yields both a raw source and an fs2 stream") {
         val emulator = new Emulator()
-        val provider: BlockchainStreamProvider = new StreamingEmulator(emulator)
+        val provider: BlockchainStreaming = emulator.streaming()
 
-        // C is inferred from the expected type on each line — same instance, different views.
+        // Same instance, different views.
         val raw: ScalusAsyncSource[ChainTip] = provider.subscribeTip()
-        val streamed: Stream[IO, ChainTip] = provider.subscribeTip()
+        val streamed: Stream[IO, ChainTip] = provider.subscribeTip().toStream
 
         val fromRaw = raw.pull().value.flatMap(_.toOption).flatten
         val fromStream = streamed.head.compile.last.unsafeRunTimed(5.seconds).flatten
