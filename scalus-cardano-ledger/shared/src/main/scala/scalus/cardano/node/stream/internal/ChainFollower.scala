@@ -99,5 +99,18 @@ private[stream] trait ChainFollower {
       */
     def stopWatching(sources: Set[scalus.cardano.node.UtxoSource]): Unit
 
+    /** Suspend or resume observation.
+      *
+      * A follower that costs nothing to run — one fed by an in-process ledger, or a fake — has
+      * nothing to suspend, so this defaults to doing nothing. A follower that spends a metered
+      * quota per poll implements it, and the provider drives it from demand: the feed runs while at
+      * least one subscription is being consumed and idles when none is.
+      *
+      * Resuming does **not** replay the interval that was skipped. A subscription registered now
+      * asked for events from now, so a follower resumes at the chain's current tip rather than
+      * delivering a backlog nobody subscribed for.
+      */
+    def setObserving(active: Boolean): Unit = ()
+
     def close(): Unit
 }

@@ -108,6 +108,11 @@ private[stream] final class BlockfrostChainFollower(
     private var watched: Set[UtxoSource] = Set.empty
     private var last: Option[BlockRef] = None
     private var stopped = false
+
+    /** Whether the poll loop is spending anything. Starts true so a follower nobody suspends
+      * behaves exactly as before; the provider sets it from live demand.
+      */
+    private var observing = true
     private var started = false
 
     /** The block whose set of probed sources was most recently decided.
@@ -152,6 +157,19 @@ private[stream] final class BlockfrostChainFollower(
         if !stopped then watched = sources
     }
 
+    /** Suspending clears the cursor as well as stopping the poll: on resume the next poll re-reads
+      * the tip and continues from there. Keeping the old cursor would make a resumed follower walk
+      * every block of the quiet interval and hand them to a subscription that asked for events from
+      * *now* — a backlog nobody subscribed for, paid for one request at a time.
+      */
+    override def setObserving(active: Boolean): Unit = synchronized {
+        if active then observing = true
+        else if observing then {
+            observing = false
+            last = None
+        }
+    }
+
     override def close(): Unit = {
         synchronized { stopped = true }
         mailbox.close()
@@ -194,21 +212,32 @@ private[stream] final class BlockfrostChainFollower(
     else close()
 
     private def poll(): Future[Unit] = {
-        val from = synchronized(last)
-        from match
-            case None => Future.unit
-            case Some(ref) =>
-                api.blocksAfter(ref).flatMap {
-                    case None =>
-                        Future.failed(
-                          ResyncRequiredException(
-                            s"block ${ref.blockNo} is no longer on chain, so the chain forked below " +
-                                "the last reported block; this provider detects reorgs but does " +
-                                "not reconcile them, and the subscriber's view cannot be trusted"
-                          )
-                        )
-                    case Some(blocks) => sequentially(blocks)(emitBlock)
-                }
+        val (active, from) = synchronized((observing, last))
+        if !active then Future.unit
+        else
+            from match
+                // No cursor: either the follower was suspended, or its initial read failed. Either
+                // way the tip is where a subscription that exists now wants to start.
+                case None =>
+                    api.latestBlock().map { tip =>
+                        synchronized {
+                            last = Some(tip)
+                            if committed.forall(_.blockNo <= tip.blockNo) then committed = Some(tip)
+                        }
+                    }
+                case Some(ref) =>
+                    api.blocksAfter(ref).flatMap {
+                        case None =>
+                            Future.failed(
+                              ResyncRequiredException(
+                                s"block ${ref.blockNo} is no longer on chain, so the chain forked " +
+                                    "below the last reported block; this provider detects reorgs " +
+                                    "but does not reconcile them, and the subscriber's view " +
+                                    "cannot be trusted"
+                              )
+                            )
+                        case Some(blocks) => sequentially(blocks)(emitBlock)
+                    }
     }
 
     /** Blocks must be observed in order — the hub takes each applied block's height as the new tip

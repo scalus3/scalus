@@ -1,6 +1,6 @@
 package scalus.cardano.node.stream
 
-import scalus.cardano.infra.UnsupportedSubscriptionException
+import scalus.cardano.infra.{CancelToken, UnsupportedSubscriptionException}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.*
 import scalus.cardano.node.stream.internal.*
@@ -124,6 +124,66 @@ class StreamingBlockfrostProvider private[stream] (
       * `subscribe`, so that a set of subscriptions registered together shares one starting
       * position. Triggering here already gets the cost property; the coverage refinement follows.)
       */
+    /** Subscriptions handed out and not yet cancelled, and whether the feed is spending.
+      *
+      * Guarded by `this`. The feed runs while at least one subscription is being consumed: the
+      * first `pull` starts it and the last `cancel` idles it, so a view nobody reads costs nothing
+      * and a view whose readers have all gone stops costing.
+      */
+    private var liveSubscriptions: Int = 0
+    private var polling: Boolean = false
+
+    /** Wrap a subscription so the feed follows demand rather than registration.
+      *
+      * Triggering on the first `pull` rather than on `subscribe` is what lets a caller register a
+      * set of subscriptions that all begin from one position: registering is free and synchronous,
+      * so the whole set exists before anything is observed. A subscription registered after the
+      * feed is running is a latecomer and goes through the usual seeding path.
+      */
+    private def demandDriven[A](source: ScalusAsyncSource[A]): ScalusAsyncSource[A] = {
+        synchronized { liveSubscriptions += 1 }
+        new ScalusAsyncSource[A] {
+            // `cancel` is idempotent by contract, so the release must be too — otherwise a
+            // double cancel would drive the count negative and idle a feed others are reading.
+            private var released = false
+
+            def pull(cancelToken: CancelToken): Future[Option[A]] = {
+                beginObserving()
+                source.pull(cancelToken)
+            }
+
+            def cancel(): Unit = {
+                source.cancel()
+                val release = synchronized { if released then false else { released = true; true } }
+                if release then endObserving()
+            }
+        }
+    }
+
+    /** First consumption starts the feed; later ones cost nothing. */
+    private def beginObserving(): Unit = {
+        val resume = synchronized {
+            if polling || closed then false else { polling = true; true }
+        }
+        if resume then {
+            ensureStarted()
+            follower.setObserving(true)
+        }
+    }
+
+    /** The last subscription going away idles the feed rather than closing it: the view is cached
+      * on the provider and may be subscribed to again, and a closed follower could never serve
+      * that.
+      */
+    private def endObserving(): Unit = {
+        val idle = synchronized {
+            liveSubscriptions -= 1
+            if liveSubscriptions <= 0 && polling then { polling = false; true }
+            else false
+        }
+        if idle then follower.setObserving(false)
+    }
+
     private[stream] def ensureStarted(): Unit = {
         val begin = synchronized {
             if started then false
@@ -146,7 +206,6 @@ class StreamingBlockfrostProvider private[stream] (
         query: UtxoEventQuery,
         opts: SubscriptionOptions
     ): ScalusAsyncSource[UtxoEvent] = {
-        ensureStarted()
         val request = SubscriptionRequest.Utxo(query, opts)
         hub.require(request)
         val sources = requireWatchable(SubscriptionSupport.sourcesFor(request, capabilities))
@@ -172,14 +231,13 @@ class StreamingBlockfrostProvider private[stream] (
                 case Failure(t) => hub.failUtxo(id, t)
             }
         } else hub.registerUtxo(id, query, opts, mailbox, Map.empty)
-        mailbox
+        demandDriven(mailbox)
     }
 
     def subscribeTransactionQuery(
         query: TransactionQuery,
         opts: SubscriptionOptions
     ): ScalusAsyncSource[TransactionEvent] = {
-        ensureStarted()
         val request = SubscriptionRequest.Transaction(query, opts)
         hub.require(request)
         val sources = requireWatchable(SubscriptionSupport.sourcesFor(request, capabilities))
@@ -189,14 +247,13 @@ class StreamingBlockfrostProvider private[stream] (
         // describe, so this one keeps the residual the class doc names.
         watch(id, sources)
         hub.registerTransaction(id, query, opts, mailbox)
-        mailbox
+        demandDriven(mailbox)
     }
 
     def subscribeBlockQuery(
         query: BlockQuery,
         opts: SubscriptionOptions
     ): ScalusAsyncSource[BlockEvent] = {
-        ensureStarted()
         // Always refuses: `capabilities.kinds` omits Block, because a follower assembled from
         // per-address transaction lists never holds a block to hand over. Routed through `require`
         // rather than thrown here so the refusal and its wording come from the same place a caller
@@ -208,15 +265,13 @@ class StreamingBlockfrostProvider private[stream] (
     }
 
     def subscribeTip(): ScalusAsyncSource[ChainTip] = {
-        ensureStarted()
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ChainTip](() => hub.unregisterTip(id))
         hub.registerTip(id, mailbox)
-        mailbox
+        demandDriven(mailbox)
     }
 
     def subscribeProtocolParams(): ScalusAsyncSource[ProtocolParams] = {
-        ensureStarted()
         // A stream that silently never updates is indistinguishable from parameters that have not
         // changed, which is the whole reason the refresh loop reports rather than retries forever.
         if synchronized(paramsAbandoned) then
@@ -227,13 +282,12 @@ class StreamingBlockfrostProvider private[stream] (
         val id = hub.nextSubscriptionId()
         val mailbox = Mailbox.latestValue[ProtocolParams](() => hub.unregisterParams(id))
         hub.registerParams(id, mailbox)
-        mailbox
+        demandDriven(mailbox)
     }
 
     def subscribeTransactionStatus(
         txHash: TransactionHash
     ): ScalusAsyncSource[TransactionStatus] = {
-        ensureStarted()
         // Always refuses, for the reason `SubscriptionKind.TransactionStatus` exists to let a
         // provider state: this one observes only what it was asked to watch, so a hash it was never
         // asked about would sit at `Pending` forever — indistinguishable, to the subscriber, from a
