@@ -16,13 +16,21 @@ package scalus.testing.yaci
   * @param startupTimeoutSeconds
   *   How long to wait for the devnet API to come up. Companion node mode boots the chain via the
   *   Yano bootstrap before the Haskell node takes over, which takes a few minutes.
+  * @param extraEnv
+  *   Additional environment variables for the container, appended to the final container command.
+  *   Appended there rather than through `withEnv` because `YaciCardanoContainer.init()` runs at
+  *   `start()` and overwrites the environment set that way. Yaci Store is a Spring Boot
+  *   application, so its settings arrive as relaxed-binding environment variables — for example
+  *   `STORE_TRANSACTION_SAVE_CBOR=true` for `store.transaction.save-cbor`, which is what makes
+  *   `/txs/{hash}/cbor` return anything.
   */
 case class YaciConfig(
     enableLogs: Boolean = false,
     containerName: String = "scalus-yaci-devkit",
     reuseContainer: Boolean = false,
     imageTag: String = YaciConfig.DefaultImageTag,
-    startupTimeoutSeconds: Long = 300
+    startupTimeoutSeconds: Long = 300,
+    extraEnv: Map[String, String] = Map.empty
 )
 
 object YaciConfig {
