@@ -486,6 +486,18 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.onchain.plutus.v3.TxInfo.redeemers"
         ),
+        // StaticArgumentTransformation moved to scalus.compiler.sir.transform. Its public surface
+        // (`apply`, `SatSuffix`) is preserved by a @deprecated forwarder at the old location, so
+        // no filter is needed for it. These four are its Scala-*private* nested helper classes.
+        // `private` on a nested class does not survive to the JVM: the class becomes its own
+        // class file, whose access_flags cannot express ACC_PRIVATE, and scalac marks it public
+        // in the InnerClasses attribute too - Scala enforces template-privacy from TASTy at
+        // compile time, not via JVM flags. MiMa reads bytecode, so it sees a public class
+        // disappear. No Scala caller could ever have referenced them.
+        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.StaticArgumentTransformation$Analysis"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.StaticArgumentTransformation$Lam"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.StaticArgumentTransformation$Lam$"),
+        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.StaticArgumentTransformation$Rewriter"),
         // Deleted: both compared only the GovAction constructor ordinal, so distinct proposals
         // compared equal and a SortedSet would have silently dropped one - a violation of the
         // Ordering contract, not merely a weak order. Neither was used: proposalProcedures is a

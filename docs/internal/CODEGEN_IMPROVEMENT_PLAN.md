@@ -246,7 +246,7 @@ measurement + auto-selection, not plumbing.
 - ~~Static-argument transformation; self-application recursion encoding (all
   recursion goes through the shared Z combinator).~~ Both landed: T2
   (self-application, incl. mutual recursion) and T1
-  (`compiler/sir/StaticArgumentTransformation.scala`, gated on
+  (`compiler/sir/transform/StaticArgumentTransformation.scala`, gated on
   `optimizeUplc`).
 - `FloatDelay`, `ForceCaseDelay`, `CaseOfCase`, `CaseReduce`/`KnownCon`
   passes - zero hits in any `.scala` file; only the adjacent
@@ -276,7 +276,7 @@ tracks T10, T12, T16.
   4461-4494) and this shows up as ~15% machine-step advantage on parsing
   paths with identical builtin work.
 - **What landed:** a SIR-to-SIR pass
-  `compiler/sir/StaticArgumentTransformation.scala` (sibling of
+  `compiler/sir/transform/StaticArgumentTransformation.scala` (sibling of
   `MutualRecursionElimination` / `RemoveRecursivity`). For a single-binding
   `let rec f = λp1..pn. body` it marks position `i` static when *every*
   self-call passes exactly `Var(pi)` there, then rewrites to
@@ -327,7 +327,7 @@ tracks T10, T12, T16.
   invariant `arr` and `n`) are out of scope - they are constructed at the
   lowered-value level, after SIR passes have run; `genMapList` is already
   hand-SAT'd and is the model for the shape this pass produces.
-- **Tests:** `compiler/sir/StaticArgumentTransformationTest.scala` (17 cases:
+- **Tests:** `compiler/sir/transform/StaticArgumentTransformationTest.scala` (17 cases:
   both shapes, edge cases, `ExternalVar`, polymorphism, optimizeUplc gating),
   plus the existing T2 guard
   `SelfApplicationRecursionTest."optimizer can still constant-fold closed

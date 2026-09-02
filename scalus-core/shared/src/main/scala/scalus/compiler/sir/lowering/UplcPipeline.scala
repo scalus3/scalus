@@ -3,8 +3,8 @@ package scalus.compiler.sir.lowering
 import scalus.cardano.ledger.Language
 import scalus.compiler.Options
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
-import scalus.compiler.sir.transform.BooleanOptimizer
-import scalus.compiler.sir.{MutualRecursionElimination, RemoveTraces, SIR, StaticArgumentTransformation, TargetLoweringBackend}
+import scalus.compiler.sir.transform.{BooleanOptimizer, StaticArgumentTransformation}
+import scalus.compiler.sir.{MutualRecursionElimination, RemoveTraces, SIR, TargetLoweringBackend}
 import scalus.uplc.Term
 import scalus.uplc.transform.{Optimizer, V1V2Optimizer, V3Optimizer}
 
