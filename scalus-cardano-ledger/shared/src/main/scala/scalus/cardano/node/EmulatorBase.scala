@@ -112,20 +112,28 @@ trait EmulatorBase extends BlockchainProvider {
 
     // ── streaming ───────────────────────────────────────────────────────────
 
-    override def streamCapabilities: StreamCapabilities =
-        StreamingEmulator.capabilities(0)
-
-    /** The streaming view of this ledger, cached: one view, one block numbering. */
-    private lazy val defaultStreaming: BlockchainStreaming = new StreamingEmulator(this, 0)
-
-    override def streaming(): BlockchainStreaming = defaultStreaming
-
-    /** A streaming view claiming `securityParam` settlement depth, for exercising a subscriber's
-      * confirmation gating. Distinct from [[streaming]] — it numbers its own blocks, so hold one or
-      * the other rather than both.
+    /** Settlement depth this emulator claims, which its streaming view declares as its
+      * `rollbackHorizon`. `0` — the default — matches a linear emulator's behaviour: it never
+      * forks, so nothing ever needs to settle. Raise it to exercise a subscriber's confirmation
+      * gating.
+      *
+      * Here rather than on `streaming(...)` because there is exactly one view per emulator. A
+      * second view would number its own blocks, so the same transaction would appear at different
+      * heights to two sets of subscribers over one ledger, and `newEmptyBlock()` on one would not
+      * advance the other.
       */
-    def streaming(securityParam: Int): BlockchainStreaming =
+    def securityParam: Int = 0
+
+    override def streamCapabilities: StreamCapabilities =
+        StreamingEmulator.capabilities(securityParam)
+
+    /** The streaming view of this ledger: one view, one block numbering, created on first use and
+      * cached thereafter.
+      */
+    private lazy val cachedStreaming: BlockchainStreaming =
         new StreamingEmulator(this, securityParam)
+
+    override def streaming(): BlockchainStreaming = cachedStreaming
 
     def tick(n: Long): Unit = setSlot(currentContext.env.slot + n)
 

@@ -38,11 +38,34 @@ class BlockfrostProvider(
     apiKey: String,
     baseUrl: String,
     maxConcurrentRequests: Int,
-    initialCardanoInfo: CardanoInfo
+    initialCardanoInfo: CardanoInfo,
+    /** How often [[streaming]] polls the chain — the quota dial, since every poll is at least one
+      * request whether or not the chain moved.
+      *
+      * Here rather than on `streaming(...)` because there is exactly one streaming view per
+      * provider: a second view would run a second poll loop against the same quota. A caller who
+      * wants a different rate builds a provider with a different interval.
+      */
+    val pollInterval: FiniteDuration
 )(using
     backend: Backend[Future],
     ec: ExecutionContext
 ) extends BlockchainProvider {
+
+    /** Polling at [[BlockfrostProvider.defaultPollInterval]]. */
+    def this(
+        apiKey: String,
+        baseUrl: String,
+        maxConcurrentRequests: Int,
+        initialCardanoInfo: CardanoInfo
+    )(using Backend[Future], ExecutionContext) =
+        this(
+          apiKey,
+          baseUrl,
+          maxConcurrentRequests,
+          initialCardanoInfo,
+          BlockfrostProvider.defaultPollInterval
+        )
 
     private val log = scribe.Logger[BlockfrostProvider]
 
@@ -680,22 +703,21 @@ class BlockfrostProvider(
     override def streamCapabilities: stream.StreamCapabilities =
         stream.StreamingBlockfrostProvider.capabilities
 
-    /** The streaming view of this backend, cached and polling at the default interval.
+    /** The streaming view of this backend, created on first use and cached thereafter.
       *
-      * Free to obtain: no request is made and no polling begins until something subscribes, so a
-      * caller may take this view, read its capabilities, and walk away having spent nothing.
+      * Free to obtain: no request is made and no polling begins until something consumes a
+      * subscription, so a caller may take this view, read its capabilities, and walk away having
+      * spent nothing.
+      *
+      * One view per provider, deliberately. A second would run a second poll loop against the same
+      * quota — one request per interval each, whether or not the chain moved — which is exactly the
+      * cost this provider's whole shape exists to control. A caller who genuinely wants a different
+      * rate builds a provider with `pollInterval` set to it.
       */
-    private lazy val defaultStreaming: stream.BlockchainStreaming =
-        stream.StreamingBlockfrostProvider(this)
-
-    override def streaming(): stream.BlockchainStreaming = defaultStreaming
-
-    /** A streaming view polling at `pollInterval` — the quota dial, since every poll is at least
-      * one request whether or not the chain moved. Distinct from [[streaming]]: it runs its own
-      * feed, so two views cost two feeds once both are subscribed to.
-      */
-    def streaming(pollInterval: FiniteDuration): stream.BlockchainStreaming =
+    private lazy val cachedStreaming: stream.BlockchainStreaming =
         stream.StreamingBlockfrostProvider(this, pollInterval)
+
+    override def streaming(): stream.BlockchainStreaming = cachedStreaming
 
     override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
         checkTransactionHex(txHash.toHex)
@@ -1158,6 +1180,13 @@ private[node] case class ParsedTxEffects(created: Seq[ParsedUtxo], spent: Seq[Pa
 /** Companion object for BlockfrostProvider with factory methods and utilities. */
 object BlockfrostProvider {
 
+    /** Default streaming poll interval: below Cardano's ~20s block time, so a block is normally
+      * reported within one interval of appearing, and about 8,600 requests a day — well inside a
+      * 50,000/day free tier, leaving the bulk of the budget for the reads that carry events.
+      */
+    val defaultPollInterval: FiniteDuration =
+        stream.StreamingBlockfrostProvider.defaultPollInterval
+
     /** Blockfrost API URL for Cardano mainnet */
     val mainnetUrl = "https://cardano-mainnet.blockfrost.io/api/v0"
 
@@ -1436,7 +1465,33 @@ object BlockfrostProvider {
     def mainnet(apiKey: String, maxConcurrentRequests: Int = 5)(using
         ec: ExecutionContext
     ): Future[BlockfrostProvider] =
-        create(apiKey, mainnetUrl, Network.Mainnet, SlotConfig.mainnet, maxConcurrentRequests)
+        create(
+          apiKey,
+          mainnetUrl,
+          Network.Mainnet,
+          SlotConfig.mainnet,
+          maxConcurrentRequests,
+          defaultPollInterval
+        )
+
+    /** With an explicit streaming poll interval — the quota dial, since every poll is at least one
+      * request whether or not the chain moved.
+      *
+      * An overload rather than a defaulted parameter on the signature above: only one alternative
+      * may carry defaults, and adding one there would change that method's arity and break every
+      * already-compiled caller of the most common entry point in this API.
+      */
+    def mainnet(apiKey: String, maxConcurrentRequests: Int, pollInterval: FiniteDuration)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(
+          apiKey,
+          mainnetUrl,
+          Network.Mainnet,
+          SlotConfig.mainnet,
+          maxConcurrentRequests,
+          pollInterval
+        )
 
     /** Create a BlockfrostProvider for Cardano preview testnet.
       *
@@ -1452,7 +1507,33 @@ object BlockfrostProvider {
     def preview(apiKey: String, maxConcurrentRequests: Int = 5)(using
         ec: ExecutionContext
     ): Future[BlockfrostProvider] =
-        create(apiKey, previewUrl, Network.Testnet, SlotConfig.preview, maxConcurrentRequests)
+        create(
+          apiKey,
+          previewUrl,
+          Network.Testnet,
+          SlotConfig.preview,
+          maxConcurrentRequests,
+          defaultPollInterval
+        )
+
+    /** With an explicit streaming poll interval — the quota dial, since every poll is at least one
+      * request whether or not the chain moved.
+      *
+      * An overload rather than a defaulted parameter on the signature above: only one alternative
+      * may carry defaults, and adding one there would change that method's arity and break every
+      * already-compiled caller of the most common entry point in this API.
+      */
+    def preview(apiKey: String, maxConcurrentRequests: Int, pollInterval: FiniteDuration)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(
+          apiKey,
+          previewUrl,
+          Network.Testnet,
+          SlotConfig.preview,
+          maxConcurrentRequests,
+          pollInterval
+        )
 
     /** Create a BlockfrostProvider for Cardano preprod testnet.
       *
@@ -1468,7 +1549,33 @@ object BlockfrostProvider {
     def preprod(apiKey: String, maxConcurrentRequests: Int = 5)(using
         ec: ExecutionContext
     ): Future[BlockfrostProvider] =
-        create(apiKey, preprodUrl, Network.Testnet, SlotConfig.preprod, maxConcurrentRequests)
+        create(
+          apiKey,
+          preprodUrl,
+          Network.Testnet,
+          SlotConfig.preprod,
+          maxConcurrentRequests,
+          defaultPollInterval
+        )
+
+    /** With an explicit streaming poll interval — the quota dial, since every poll is at least one
+      * request whether or not the chain moved.
+      *
+      * An overload rather than a defaulted parameter on the signature above: only one alternative
+      * may carry defaults, and adding one there would change that method's arity and break every
+      * already-compiled caller of the most common entry point in this API.
+      */
+    def preprod(apiKey: String, maxConcurrentRequests: Int, pollInterval: FiniteDuration)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(
+          apiKey,
+          preprodUrl,
+          Network.Testnet,
+          SlotConfig.preprod,
+          maxConcurrentRequests,
+          pollInterval
+        )
 
     /** Create a BlockfrostProvider for local Yaci DevKit.
       *
@@ -1599,6 +1706,19 @@ object BlockfrostProvider {
         network: Network,
         slotConfig: SlotConfig,
         maxConcurrentRequests: Int = 5
+    )(using ec: ExecutionContext): Future[BlockfrostProvider] =
+        create(apiKey, baseUrl, network, slotConfig, maxConcurrentRequests, defaultPollInterval)
+
+    /** With an explicit streaming poll interval. An overload for the same reason the network
+      * factories have one: a default here would change this method's arity.
+      */
+    def create(
+        apiKey: String,
+        baseUrl: String,
+        network: Network,
+        slotConfig: SlotConfig,
+        maxConcurrentRequests: Int,
+        pollInterval: FiniteDuration
     )(using ec: ExecutionContext): Future[BlockfrostProvider] = {
         given backend: Backend[Future] = BlockfrostProviderPlatform.defaultBackend
         fetchProtocolParams(apiKey, baseUrl).map { params =>
@@ -1606,7 +1726,8 @@ object BlockfrostProvider {
               apiKey,
               baseUrl,
               maxConcurrentRequests,
-              CardanoInfo(params, network, slotConfig)
+              CardanoInfo(params, network, slotConfig),
+              pollInterval
             )
         }
     }
