@@ -23,10 +23,17 @@ step, which is the pass that actually needs it. T5 is spine-local.
 
 ## 2. What T5 does
 
-Aiken's `split_body_lambda`
-(`aiken/crates/uplc/src/optimize/shrinker.rs:1520`, v1.1.23) — "the ultimate
-function when used in conjunction with case_constr_apply". There is no Plutus
-counterpart; the `case (constr 0 [...])` application encoding is a V3 trick, not
+T5 is the *regrouping* that feeds an encoding Scalus already has. Keeping the two
+apart matters, because they have different origins — see section 9.
+
+- The **`case (constr 0 [...])` application encoding** (`CaseConstrApply`) is
+  Alexander Nemish's, published 2025-01-02.
+- The **let-chain regrouping that feeds it** is Aiken's `split_body_lambda`
+  (`aiken/crates/uplc/src/optimize/shrinker.rs:1520`, v1.1.23), added 2025-01-11
+  — "the ultimate function when used in conjunction with case_constr_apply".
+  That is what T5 implements.
+
+There is no Plutus counterpart to either: the encoding is a Plutus V3 trick, not
 a PIR pass. T5 is **not** let-floating in either direction.
 
 A chain of nested lets is re-associated into one multi-argument application:
@@ -286,3 +293,39 @@ Phase 4:  withCce |> letChainRegroup.apply |> caseConstr.apply
 - Flipping the default later churns every pinned ExUnits baseline. The
   `update-budgets` script cannot rewrite `Coin` fees, `assertResult`, or size
   pins, so that change needs a manual pass.
+
+## 9. Provenance of the case-constr application encoding
+
+Recorded here because the record otherwise lives only in a tweet, and because
+section 2 would otherwise credit the wrong project.
+
+The technique — applying an N-argument function as `(case (constr 0 [a1..aN]) f)`
+instead of `(apply .. (apply f a1) .. aN)`, cheaper for N >= 3 because `Case` and
+`Constr` cost two machine steps at any arity — was published by Alexander Nemish
+on 2025-01-02 at 20:01 UTC ([@atlanter](https://x.com/atlanter)):
+
+> I've discovered an interesting optimization in Plutus V3 using Sums Of
+> Products. In UPLC you call a function with 2 arguments like this:
+> `(apply (apply f a1) a2)`. But with Sums of Products in Plutus V3 you can also
+> call it like this: `(case (constr 0 [a1, a2]) f)`
+
+Sums-of-products had been available since the Chang hard fork in September 2024.
+The three implementations, normalized to UTC:
+
+| when (UTC) | what |
+|---|---|
+| 2025-01-02 20:01 | the disclosure above |
+| 2025-01-02 22:15 | Scalus `48b81870b` "test: Plutus V3 SoP optimization evaluation" — both encodings benchmarked for flat size and CEK budget, with the threshold recorded in comments: "apply is more efficient for n=1", "same efficiency for n=2", "sop is more efficient for n=3 and more" |
+| 2025-01-03 03:21 | Plutarch `ba8dc235` (Seungheon Oh) "Optimize applications with SOP, expand application inlining rule"; PR [#795](https://github.com/Plutonomicon/plutarch-plutus/pull/795) opened 03:28. `Plutarch/Internal/Term.hs`: `length args <= 2` -> applies, `otherwise` -> `UPLC.Case () (UPLC.Constr () 0 args)` |
+| 2025-01-09 10:45 | Aiken `33392f15` (microproofs) "Add case constr for applies greater than 2 optimization", shipped in v1.1.10 on 2025-01-21 |
+| 2025-01-11 | Aiken `09ddec6b` `split_body_lambda` — the regrouping T5 implements, built on top of the encoding |
+
+All three use the same `N > 2` threshold, which is not a fingerprint: it falls
+directly out of the cost model, so anyone doing the arithmetic arrives at it.
+Neither the Plutarch nor the Aiken repository carries any attribution — checked
+by grepping commit messages, changelogs, code comments and PR bodies for
+"scalus", "nemish", "atlanter".
+
+The dates establish sequence and opportunity, not derivation; what each author
+had read is not something the artifacts can settle. The purpose of this section
+is only to put the primary sources somewhere durable and greppable.

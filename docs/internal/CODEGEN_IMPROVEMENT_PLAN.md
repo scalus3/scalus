@@ -385,7 +385,32 @@ tracks T10, T12, T16.
 - **Validate:** term-size drop on validators using repeated
   `equalsInteger(tag, _)` dispatch and repeated `quantityOf`-style lookups.
 
-### T5. Let-chain regrouping into case-constr headers (MEDIUM)
+### T5. Let-chain regrouping into case-constr headers (MEDIUM, DONE flag-gated)
+
+- **What landed (2026-09-01):** `uplc/transform/LetChainRegroup.scala`, behind
+  `Options.letChainRegroup` (default off, V3 only), running immediately before
+  `CaseConstrApply`. Groups maximal contiguous runs of scope-independent
+  bindings; no reordering, no purity guard needed (the CEK evaluates `[f a]`
+  function-first and `Constr` fields left to right, so effect order is
+  preserved). Threshold `MinRunSize = 5`, set by measurement: a run of N saves
+  N-2 steps (6.92 lovelace each) but costs ~1 script byte (15 lovelace/tx), so
+  N=3 loses money. At N>=3 the pass saves 151 steps for +65 bytes over the ten
+  example validators and is fee-negative on six of them; at N>=5 it saves 77
+  steps for +5 bytes, +458 lovelace, and none regress. Design and full numbers:
+  `docs/superpowers/specs/2026-08-31-t5-let-chain-regrouping-design.md`.
+  Still open: flipping the default (needs the ExUnits repin on both compiler
+  generations), and the topological-levelling extension (group by dependency
+  level rather than contiguous run, reordering only value-form right-hand
+  sides — worth ~2 extra steps per group merged).
+
+- **Attribution note.** T5 is the *regrouping*; the `case (constr 0 [...])`
+  application encoding it feeds is separate and older. That encoding is
+  Alexander Nemish's, published 2025-01-02 20:01 UTC, with the analysis
+  committed to this repo the same day (`48b81870b`, "sop is more efficient for
+  n=3 and more"). Plutarch implemented it 7h20m later (`ba8dc235`, PR #795) and
+  Aiken 6 days later (`33392f15`), neither with attribution; Aiken's
+  `split_body_lambda` (`09ddec6b`, 2025-01-11) is the regrouping idea and came
+  after. Full timeline in section 9 of the design doc.
 
 - **Evidence:** Aiken's `split_body_lambda` (`shrinker.rs:1520, 2773`)
   merges nested single-argument let-applications into one multi-parameter
