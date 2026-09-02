@@ -99,6 +99,20 @@ private[stream] trait ChainFollower {
       */
     def stopWatching(sources: Set[scalus.cardano.node.UtxoSource]): Unit
 
+    /** Record where a subscription registering *now* must later be observed from.
+      *
+      * Registration is synchronous and observation waits for demand, which leaves a window: on a
+      * backend that has to go and look, a transaction submitted between `subscribe` and the first
+      * `pull` lands in a block the feed would otherwise never reach, because it would start at
+      * whatever the tip was when demand arrived. Anchoring closes it — the position is fixed when
+      * the subscription registers, and the feed resumes from there rather than from the tip.
+      *
+      * Costs at most one request, once per idle-to-anchored transition, rather than the poll loop a
+      * subscription used to start. A follower whose events are pushed to it has nothing to anchor,
+      * so this defaults to doing nothing.
+      */
+    def anchor(): Unit = ()
+
     /** Suspend or resume observation.
       *
       * A follower that costs nothing to run — one fed by an in-process ledger, or a fake — has

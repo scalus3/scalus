@@ -3,7 +3,7 @@ package scalus.cardano.node.stream
 import scalus.cardano.ledger.*
 import scalus.cardano.node.*
 import scalus.cardano.node.stream.internal.{AppliedBlock, AppliedTransaction, Mailbox, SubscriptionHub}
-import scalus.uplc.builtin.{ByteString, Data}
+import scalus.uplc.builtin.ByteString
 
 import scala.concurrent.{ExecutionContext, Future}
 

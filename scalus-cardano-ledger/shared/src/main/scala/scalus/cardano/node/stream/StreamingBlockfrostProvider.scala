@@ -4,7 +4,6 @@ import scalus.cardano.infra.{CancelToken, UnsupportedSubscriptionException}
 import scalus.cardano.ledger.*
 import scalus.cardano.node.*
 import scalus.cardano.node.stream.internal.*
-import scalus.uplc.builtin.Data
 
 import scala.collection.mutable
 import scala.concurrent.duration.{DurationInt, FiniteDuration}
@@ -142,6 +141,10 @@ class StreamingBlockfrostProvider private[stream] (
       */
     private def demandDriven[A](source: ScalusAsyncSource[A]): ScalusAsyncSource[A] = {
         synchronized { liveSubscriptions += 1 }
+        // Registration fixes where this subscription will be observed from, so a submit between
+        // here and the first pull is not lost to a feed that would otherwise start at the tip it
+        // found when demand arrived.
+        follower.anchor()
         new ScalusAsyncSource[A] {
             // `cancel` is idempotent by contract, so the release must be too — otherwise a
             // double cancel would drive the count negative and idle a feed others are reading.

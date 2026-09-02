@@ -225,6 +225,10 @@ abstract class StreamProviderConformance extends AnyFunSuite {
 
     test("transaction status follows the transaction on chain") {
         withFixture { f =>
+            assume(
+              f.provider.streamCapabilities.kinds.contains(SubscriptionKind.TransactionStatus),
+              "provider does not declare TransactionStatus"
+            )
             val target = f.freshAddress()
             val hash = f.payTo(target, Value.ada(10))
             val statuses =
@@ -263,6 +267,10 @@ abstract class StreamProviderConformance extends AnyFunSuite {
       */
     ignore("the one-shot status and its subscription agree for an earlier transaction") {
         withFixture { f =>
+            assume(
+              f.provider.streamCapabilities.kinds.contains(SubscriptionKind.TransactionStatus),
+              "provider does not declare TransactionStatus"
+            )
             // Applied before anything subscribes to it.
             val hash = f.payTo(f.freshAddress(), Value.ada(10))
             val oneShot = Await.result(f.reader.checkTransaction(hash), patience)
@@ -276,6 +284,10 @@ abstract class StreamProviderConformance extends AnyFunSuite {
 
     test("the one-shot status and its subscription agree") {
         withFixture { f =>
+            assume(
+              f.provider.streamCapabilities.kinds.contains(SubscriptionKind.TransactionStatus),
+              "provider does not declare TransactionStatus"
+            )
             val hash = f.payTo(f.freshAddress(), Value.ada(10))
             val subscribed =
                 Reader(f.provider.subscribeTransactionStatus(hash)).next()

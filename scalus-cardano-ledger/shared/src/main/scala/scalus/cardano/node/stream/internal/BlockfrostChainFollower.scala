@@ -115,6 +115,9 @@ private[stream] final class BlockfrostChainFollower(
     private var observing = true
     private var started = false
 
+    /** An anchor read is outstanding, so a second `subscribe` must not issue another. */
+    private var anchoring = false
+
     /** The block whose set of probed sources was most recently decided.
       *
       * Two assignment sites, with different arguments for why each is safe:
@@ -162,10 +165,36 @@ private[stream] final class BlockfrostChainFollower(
       * every block of the quiet interval and hand them to a subscription that asked for events from
       * *now* — a backlog nobody subscribed for, paid for one request at a time.
       */
+    /** Fix the resume position, if there is not one already. See [[ChainFollower.anchor]]. */
+    override def anchor(): Unit = {
+        val needed = synchronized(!stopped && last.isEmpty && !anchoring)
+        if needed then {
+            synchronized { anchoring = true }
+            api.latestBlock().onComplete {
+                case Success(tip) =>
+                    synchronized {
+                        anchoring = false
+                        // `start` may have won the race and set a cursor of its own; a later
+                        // anchor must not drag the feed backwards over blocks already delivered.
+                        if last.isEmpty then last = Some(tip)
+                        if committed.forall(_.blockNo <= tip.blockNo) then committed = Some(tip)
+                    }
+                case Failure(_) =>
+                    // Leave the cursor empty: the next poll re-reads the tip, which is the same
+                    // answer one interval later. An anchor is an optimisation of position, not a
+                    // liveness requirement, so it must not fail the feed.
+                    synchronized { anchoring = false }
+            }
+        }
+    }
+
     override def setObserving(active: Boolean): Unit = synchronized {
         if active then observing = true
         else if observing then {
             observing = false
+            // Drop the cursor so a resumed follower re-reads the tip rather than replaying the
+            // quiet interval. `anchor` runs on the *next* subscription and puts a position back,
+            // so this discards a stale cursor without discarding a fresh commitment.
             last = None
         }
     }
@@ -194,10 +223,17 @@ private[stream] final class BlockfrostChainFollower(
             api.latestBlock().onComplete {
                 case Success(tip) =>
                     synchronized {
-                        last = Some(tip)
-                        // Nothing below the tip is ever emitted, so this is the first position a
-                        // subscription could be observed from.
-                        committed = Some(tip)
+                        // An anchor set when a subscription registered already names where that
+                        // subscription must be observed from, and demand can arrive minutes later
+                        // — long enough for several blocks, including the one carrying a
+                        // transaction submitted in between. Seeding unconditionally here would
+                        // drag the cursor forward over exactly those blocks and lose them.
+                        if last.isEmpty then {
+                            last = Some(tip)
+                            // Nothing below the tip is ever emitted, so this is the first position
+                            // a subscription could be observed from.
+                            committed = Some(tip)
+                        }
                     }
                     loop()
                 case Failure(t) => mailbox.fail(t)
