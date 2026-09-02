@@ -494,10 +494,18 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         // in the InnerClasses attribute too - Scala enforces template-privacy from TASTy at
         // compile time, not via JVM flags. MiMa reads bytecode, so it sees a public class
         // disappear. No Scala caller could ever have referenced them.
-        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.StaticArgumentTransformation$Analysis"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.StaticArgumentTransformation$Lam"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.StaticArgumentTransformation$Lam$"),
-        ProblemFilters.exclude[MissingClassProblem]("scalus.compiler.sir.StaticArgumentTransformation$Rewriter"),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.compiler.sir.StaticArgumentTransformation$Analysis"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.compiler.sir.StaticArgumentTransformation$Lam"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.compiler.sir.StaticArgumentTransformation$Lam$"
+        ),
+        ProblemFilters.exclude[MissingClassProblem](
+          "scalus.compiler.sir.StaticArgumentTransformation$Rewriter"
+        ),
         // Deleted: both compared only the GovAction constructor ordinal, so distinct proposals
         // compared equal and a SortedSet would have silently dropped one - a violation of the
         // Ordering contract, not merely a weak order. Neither was used: proposalProcedures is a
