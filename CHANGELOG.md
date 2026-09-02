@@ -42,7 +42,15 @@
   last cancellation suspends it. Suspending clears the cursor, so a resumed follower re-reads the
   tip rather than delivering a backlog of the quiet interval to a subscription that asked for
   events from now
-
+- **One streaming view per provider**, so the tuning it used to take moved to where that view is
+  configured from: `EmulatorBase.securityParam` and `BlockfrostProvider.pollInterval`, the latter
+  reachable through new overloads of `preprod` / `preview` / `mainnet` / `create` and a fifth
+  constructor parameter. A second view was never merely redundant — on the emulator two views
+  number their own blocks, so one transaction appears at different heights to two sets of
+  subscribers over a single ledger and `newEmptyBlock()` on one does not advance the other; on
+  Blockfrost it is two poll loops against one quota. Both settings arrived as overloads and a
+  secondary constructor rather than defaulted parameters, so every existing arity is preserved and
+  the change costs no binary compatibility
 - `scalus-design-patterns`: the validator callbacks of `UtxoIndexer`, `StakeValidator` and
   `TransactionLevelMinterValidator` now return `Unit` and are expected to `require` / `fail` with
   their own message, instead of returning `Boolean` and failing with a generic library message. A
