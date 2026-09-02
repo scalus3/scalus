@@ -550,8 +550,8 @@ class TxInfoTest extends AnyFunSuite with EvalTestKit with ArbitraryInstances {
               ),
           budgetTx,
           true,
-          ExUnits(memory = 28859, steps = 16_086351),
-          Coin(2825)
+          ExUnits(memory = 28459, steps = 16_022351),
+          Coin(2798)
         )
     }
 

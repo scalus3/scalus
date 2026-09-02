@@ -530,7 +530,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(Cons(3, Cons(1, Cons(2, Nil)))),
           Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))),
           Seq(
-            compilerOptions -> ExUnits(memory = 7392, steps = 1_348117)
+            compilerOptions -> ExUnits(memory = 7192, steps = 1_316117)
           )
         )
 
@@ -539,7 +539,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons[List[BigInt]](Cons(1, Cons(2, Nil)), List.singleton(List.singleton(3))),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
-            compilerOptions -> ExUnits(memory = 15484, steps = 2_916992)
+            compilerOptions -> ExUnits(memory = 15084, steps = 2_852992)
           )
         )
     }
@@ -1068,7 +1068,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 2232, steps = 362033)
+            compilerOptions -> ExUnits(memory = 2032, steps = 330033)
           )
         )
     }
@@ -1079,7 +1079,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 2232, steps = 362033)
+            compilerOptions -> ExUnits(memory = 2032, steps = 330033)
           )
         )
     }
@@ -1090,7 +1090,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 3164, steps = 531966)
+            compilerOptions -> ExUnits(memory = 2964, steps = 499966)
           )
         )
     }
@@ -1101,7 +1101,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(2),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
-            compilerOptions -> ExUnits(memory = 5160, steps = 968113)
+            compilerOptions -> ExUnits(memory = 4960, steps = 936113)
           )
         )
     }
@@ -1112,7 +1112,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(2, Cons(3, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
-            compilerOptions -> ExUnits(memory = 5160, steps = 968113)
+            compilerOptions -> ExUnits(memory = 4960, steps = 936113)
           )
         )
     }
@@ -1132,7 +1132,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 2232, steps = 362033)
+            compilerOptions -> ExUnits(memory = 2032, steps = 330033)
           )
         )
     }
@@ -1143,7 +1143,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 3164, steps = 531966)
+            compilerOptions -> ExUnits(memory = 2964, steps = 499966)
           )
         )
     }
@@ -1268,7 +1268,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
+            compilerOptions -> ExUnits(memory = 2764, steps = 516466)
           )
         )
     }
@@ -1279,7 +1279,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 3464, steps = 628466)
+            compilerOptions -> ExUnits(memory = 3264, steps = 596466)
           )
         )
     }
@@ -1290,7 +1290,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
+            compilerOptions -> ExUnits(memory = 2764, steps = 516466)
           )
         )
     }
@@ -1301,7 +1301,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
-            compilerOptions -> ExUnits(memory = 4996, steps = 940828)
+            compilerOptions -> ExUnits(memory = 4796, steps = 908828)
           )
         )
     }
@@ -1312,7 +1312,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
-            compilerOptions -> ExUnits(memory = 6528, steps = 1_253190)
+            compilerOptions -> ExUnits(memory = 6328, steps = 1_221190)
           )
         )
     }
@@ -1332,7 +1332,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
+            compilerOptions -> ExUnits(memory = 2764, steps = 516466)
           )
         )
     }
@@ -1343,7 +1343,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 3164, steps = 580466)
+            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
           )
         )
     }
@@ -1354,7 +1354,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
+            compilerOptions -> ExUnits(memory = 2764, steps = 516466)
           )
         )
     }
@@ -1365,7 +1365,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
-            compilerOptions -> ExUnits(memory = 4996, steps = 940828)
+            compilerOptions -> ExUnits(memory = 4796, steps = 908828)
           )
         )
     }
@@ -1376,7 +1376,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
-            compilerOptions -> ExUnits(memory = 6528, steps = 1_253190)
+            compilerOptions -> ExUnits(memory = 6328, steps = 1_221190)
           )
         )
     }
@@ -1396,7 +1396,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
+            compilerOptions -> ExUnits(memory = 2764, steps = 516466)
           )
         )
     }
@@ -1407,7 +1407,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 3464, steps = 628466)
+            compilerOptions -> ExUnits(memory = 3264, steps = 596466)
           )
         )
     }
@@ -1418,7 +1418,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
+            compilerOptions -> ExUnits(memory = 2764, steps = 516466)
           )
         )
     }
@@ -1429,7 +1429,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
-            compilerOptions -> ExUnits(memory = 4996, steps = 940828)
+            compilerOptions -> ExUnits(memory = 4796, steps = 908828)
           )
         )
     }
@@ -1440,7 +1440,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
-            compilerOptions -> ExUnits(memory = 6528, steps = 1_253190)
+            compilerOptions -> ExUnits(memory = 6328, steps = 1_221190)
           )
         )
     }
@@ -1460,7 +1460,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
+            compilerOptions -> ExUnits(memory = 2764, steps = 516466)
           )
         )
     }
@@ -1471,7 +1471,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 3164, steps = 580466)
+            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
           )
         )
     }
@@ -1482,7 +1482,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 2964, steps = 548466)
+            compilerOptions -> ExUnits(memory = 2764, steps = 516466)
           )
         )
     }
@@ -1493,7 +1493,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           Cons(BigInt(1), Cons(BigInt(2), Nil)),
           Seq(
-            compilerOptions -> ExUnits(memory = 4996, steps = 940828)
+            compilerOptions -> ExUnits(memory = 4796, steps = 908828)
           )
         )
     }
@@ -1504,7 +1504,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
-            compilerOptions -> ExUnits(memory = 6528, steps = 1_253190)
+            compilerOptions -> ExUnits(memory = 6328, steps = 1_221190)
           )
         )
     }
@@ -1571,7 +1571,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(2)),
           Seq(
-            compilerOptions -> ExUnits(memory = 8658, steps = 1_723797)
+            compilerOptions -> ExUnits(memory = 8458, steps = 1_691797)
           )
         )
     }
@@ -1582,7 +1582,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(2), Cons(BigInt(3), Nil)),
           Seq(
-            compilerOptions -> ExUnits(memory = 15784, steps = 3_243990)
+            compilerOptions -> ExUnits(memory = 15384, steps = 3_179990)
           )
         )
     }
@@ -1593,7 +1593,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 11720, steps = 2_169890)
+            compilerOptions -> ExUnits(memory = 11320, steps = 2_105890)
           )
         )
     }
@@ -1604,7 +1604,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Cons(BigInt(11), Cons(BigInt(101), Cons(BigInt(12), Cons(BigInt(102), Nil)))),
           Seq(
-            compilerOptions -> ExUnits(memory = 19948, steps = 4_334090)
+            compilerOptions -> ExUnits(memory = 19548, steps = 4_270090)
           )
         )
     }
@@ -1778,7 +1778,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           None,
           Seq(
-            compilerOptions -> ExUnits(memory = 6429, steps = 1_250550)
+            compilerOptions -> ExUnits(memory = 6229, steps = 1_218550)
           )
         )
 
@@ -1787,7 +1787,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(1, Cons(2, Nil)),
           Some(BigInt(3)),
           Seq(
-            compilerOptions -> ExUnits(memory = 11224, steps = 2_430087)
+            compilerOptions -> ExUnits(memory = 10824, steps = 2_366087)
           )
         )
     }

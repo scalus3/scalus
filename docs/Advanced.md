@@ -84,12 +84,16 @@ Scalus Intermediate Representation (SIR) can be optimized. Currently,
 the only optimization is the `RemoveRecursivity` optimization that inlines `let` expressions.
 
 ```scala mdoc:compile-only
-import scalus.*, scalus.compiler.sir.*
+import scalus.*, scalus.compiler.sir.*, scalus.compiler.sir.transform.BooleanOptimizer
 val sir: SIR = ??? // from the previous example
 val optimized = BooleanOptimizer.optimize(sir)
 // or using the `|>` operator
 val optimized2 = sir |> BooleanOptimizer.optimize
 ```
+
+`BooleanOptimizer` also runs as part of the standard pipeline whenever
+`Options.optimizeUplc` is set, so calling it by hand is only needed when you
+lower the SIR yourself.
 
 ## UPLC optimizations
 

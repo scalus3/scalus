@@ -3,6 +3,7 @@ package scalus.compiler.sir.lowering
 import scalus.cardano.ledger.Language
 import scalus.compiler.Options
 import scalus.compiler.sir.lowering.simple.{ScottEncodingLowering, SumOfProductsLowering}
+import scalus.compiler.sir.transform.BooleanOptimizer
 import scalus.compiler.sir.{MutualRecursionElimination, RemoveTraces, SIR, StaticArgumentTransformation, TargetLoweringBackend}
 import scalus.uplc.Term
 import scalus.uplc.transform.{Optimizer, V1V2Optimizer, V3Optimizer}
@@ -10,9 +11,10 @@ import scalus.uplc.transform.{Optimizer, V1V2Optimizer, V3Optimizer}
 /** The single SIR -> UPLC pipeline, shared by [[scalus.uplc.CompiledPlutus]] and the `sir.toUplc`
   * extensions:
   *
-  * removeTraces? -> MutualRecursionElimination -> StaticArgumentTransformation? -> lower(backend)
-  * -> optimize? -> fill positions
+  * removeTraces? -> BooleanOptimizer? -> MutualRecursionElimination ->
+  * StaticArgumentTransformation? -> lower(backend) -> optimize? -> fill positions
   *
+  * BooleanOptimizer and StaticArgumentTransformation both run when `options.optimizeUplc` is set.
   * MutualRecursionElimination is unconditional (backends reject multi-binding recursive lets);
   * running StaticArgumentTransformation after it lifts the peers-as-params static arguments MRE
   * introduces. The backends keep their own MRE calls as safety nets for direct construction - MRE
@@ -35,8 +37,22 @@ object UplcPipeline {
       *   what runs when `options.optimizeUplc` is set and `options.uplcOptimizers` is empty
       *   (`uplcOptimizers`, when non-empty, replaces it)
       */
-    def run(sir: SIR, options: Options, language: Language, optimizer: Optimizer): Term = {
-        val sir1 = if options.removeTraces then RemoveTraces.transform(sir) else sir
+    def run(sir: SIR, options: Options, language: Language, optimizer: Optimizer): Term =
+        run(sir, options, language, optimizer, optimizeBooleans = options.optimizeUplc)
+
+    /** [[run]] with the boolean pass forced on or off, so a measurement can compare the two
+      * pipelines exactly. Production callers use the four-argument overload, where the pass follows
+      * `options.optimizeUplc`.
+      */
+    private[scalus] def run(
+        sir: SIR,
+        options: Options,
+        language: Language,
+        optimizer: Optimizer,
+        optimizeBooleans: Boolean
+    ): Term = {
+        val sir0 = if options.removeTraces then RemoveTraces.transform(sir) else sir
+        val sir1 = if optimizeBooleans then BooleanOptimizer.optimize(sir0) else sir0
         val sir2 = MutualRecursionElimination(sir1)
         val sirToLower =
             if options.optimizeUplc then StaticArgumentTransformation(sir2) else sir2

@@ -182,8 +182,9 @@ additions into `*.internal` subpackages. (`InteropSurfaceTest` is planned for M2
 to mechanically enforce the rules; today the gate is MiMa.) Compiler-internal
 and tooling-internal packages are exempt from the MiMa check via wildcard
 filters in build.sbt: `scalus.compiler.sir.lowering`,
-`scalus.compiler.sir.linking`, `scalus.compiler.intrinsics`,
-`scalus.uplc.builtin.internal`, `scalus.uplc.internal`. MIXED packages
+`scalus.compiler.sir.linking`, `scalus.compiler.sir.transform`,
+`scalus.compiler.intrinsics`, `scalus.uplc.builtin.internal`,
+`scalus.uplc.internal`. MIXED packages
 (`scalus.uplc`, `scalus.uplc.eval`, `scalus.compiler.sir`,
 `scalus.serialization.flat`, `scalus.utils`, `scalus.cardano.ledger.rules`)
 take per-symbol filters only, never wildcards. Internal/compiler/prelude code

@@ -434,6 +434,7 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         // get per-symbol filters only, never wildcards. Known caveat: the wildcard also hides
         // deletion of the `lowering.simple` backend objects referenced by `sir.toUplc`.
         ProblemFilters.exclude[Problem]("scalus.compiler.sir.lowering.*"),
+        ProblemFilters.exclude[Problem]("scalus.compiler.sir.transform.*"),
         ProblemFilters.exclude[Problem]("scalus.compiler.sir.linking.*"),
         ProblemFilters.exclude[Problem]("scalus.compiler.intrinsics.*"),
         ProblemFilters.exclude[Problem]("scalus.uplc.builtin.internal.*"),
