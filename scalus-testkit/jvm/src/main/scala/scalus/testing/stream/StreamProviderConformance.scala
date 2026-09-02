@@ -250,6 +250,30 @@ abstract class StreamProviderConformance extends AnyFunSuite {
         }
     }
 
+    /** The same claim, for a transaction that predates the subscription.
+      *
+      * `ignore`d because it fails: the hub seeds a new status subscription from its own table and
+      * defaults to `NotFound`, and a transaction applied before the hub was following it is absent
+      * from that table — permanently, since nothing later revises a block already in the past. The
+      * subscriber cannot tell that from a transaction which genuinely never reached the chain.
+      *
+      * Kept rather than deleted because the test above cannot catch it: that one pays *after*
+      * building the view, and the ordering is the whole bug. See scalus3/scalus#358; un-ignore with
+      * the fix.
+      */
+    ignore("the one-shot status and its subscription agree for an earlier transaction") {
+        withFixture { f =>
+            // Applied before anything subscribes to it.
+            val hash = f.payTo(f.freshAddress(), Value.ada(10))
+            val oneShot = Await.result(f.reader.checkTransaction(hash), patience)
+            val subscribed = Reader(f.provider.subscribeTransactionStatus(hash)).next()
+            assert(
+              oneShot == subscribed,
+              s"a one-shot read is the head of its own subscription; got $oneShot vs $subscribed"
+            )
+        }
+    }
+
     test("the one-shot status and its subscription agree") {
         withFixture { f =>
             val hash = f.payTo(f.freshAddress(), Value.ada(10))
