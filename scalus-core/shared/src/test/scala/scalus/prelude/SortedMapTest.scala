@@ -139,6 +139,37 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
         }
     }
 
+    test("fromLargeList agrees with fromList on every input") {
+        check { (list: List[(BigInt, BigInt)]) =>
+            SortedMap.fromLargeList(list).toList === SortedMap.fromList(list).toList
+        }
+        assertEvalEq(
+          SortedMap
+              .fromLargeList(
+                List.Cons((BigInt(2), BigInt(2)), List.Cons((BigInt(1), BigInt(1)), List.Nil))
+              )
+              .toList,
+          List.Cons((BigInt(1), BigInt(1)), List.Cons((BigInt(2), BigInt(2)), List.Nil))
+        )
+    }
+
+    /** Both constructors document that the FIRST occurrence of a duplicate key prevails. They reach
+      * that by opposite routes — `fromList` inserts later-elements-first and lets the incoming pair
+      * replace an equal key, `fromLargeList` relies on the sort being stable and keeps the head of
+      * each run — so the property is worth checking on both rather than assumed.
+      */
+    test("first occurrence of a duplicate key wins, in both constructors") {
+        check { (list: List[(BigInt, BigInt)]) =>
+            val firstWins = list.asScala
+                .foldLeft(Vector.empty[(BigInt, BigInt)]) { (acc, p) =>
+                    if acc.exists(_._1 == p._1) then acc else acc :+ p
+                }
+                .sortBy(_._1)
+            SortedMap.fromList(list).toList.asScala == firstWins
+            && SortedMap.fromLargeList(list).toList.asScala == firstWins
+        }
+    }
+
     test("fromList") {
         check { (list: List[(BigInt, BigInt)]) =>
             val strictlyAscendingList =
@@ -159,7 +190,7 @@ class SortedMapTest extends AnyFunSuite with EvalTestKit {
             applied.evaluateDebug match
                 case Result.Success(_, exunits, _, _) =>
                     val expected =
-                        ExUnits(memory = 42023, steps = 10_328376)
+                        ExUnits(memory = 43538, steps = 10_170953)
                     assert(
                       exunits == expected,
                       s"Budget mismatch: got $exunits, expected $expected"

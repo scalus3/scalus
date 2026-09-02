@@ -465,6 +465,84 @@ class ListTest extends AnyFunSuite with EvalTestKit {
         )
     }
 
+    test("insertionSort agrees with sort and with Scala's sorted") {
+        check { (list: List[BigInt]) =>
+            val byInsertion = list.insertionSort
+            val byMerge = list.sort
+            byInsertion === byMerge && byInsertion.asScala == list.asScala.sorted
+        }
+    }
+
+    test("sortWith agrees with sort when given the matching comparator") {
+        check { (list: List[BigInt]) =>
+            list.sortWith((a, b) => a < b) === list.sort
+        }
+    }
+
+    /** Stability is not decorative: `SortedMap.fromList` resolves a duplicate key to its FIRST
+      * occurrence, which is only well defined on top of a stable sort. Pairs are compared on the
+      * first component only, so a reordering of equal keys is visible in the second.
+      */
+    test("sort, sortWith and insertionSort are all stable") {
+        given Ord[(BigInt, BigInt)] = (a, b) => a._1 <=> b._1
+        check { (keys: List[BigInt]) =>
+            val tagged = List.from(keys.asScala.zipWithIndex.map((k, i) => (k, BigInt(i))))
+            val expected =
+                List.from(keys.asScala.zipWithIndex.map((k, i) => (k, BigInt(i))).sortBy(_._1))
+            tagged.sort === expected
+            && tagged.insertionSort === expected
+            && tagged.sortWith((a, b) => a._1 < b._1) === expected
+        }
+    }
+
+    test("isSorted and isStrictlyAscending") {
+        check { (list: List[BigInt]) =>
+            val xs = list.asScala
+            val sortedOk = list.isSorted == xs.zip(xs.drop(1)).forall((a, b) => a <= b)
+            val strictOk = list.isStrictlyAscending == xs.zip(xs.drop(1)).forall((a, b) => a < b)
+            sortedOk && strictOk
+        }
+        assertEval(List.empty[BigInt].isSorted)
+        assertEval(List.empty[BigInt].isStrictlyAscending)
+        assertEval(List.singleton(BigInt(1)).isSorted)
+        assertEval(Cons(BigInt(1), Cons(BigInt(1), Nil)).isSorted)
+        assertEval(!Cons(BigInt(1), Cons(BigInt(1), Nil)).isStrictlyAscending)
+        assertEval(!Cons(BigInt(2), Cons(BigInt(1), Nil)).isSorted)
+    }
+
+    /** The `check` blocks above run on the JVM and prove the Scala semantics. These compile to UPLC
+      * and evaluate on the Plutus VM, which is the part that can fail independently — a method can
+      * be correct in Scala and still fail to lower.
+      */
+    test("insertionSort, sortWith, isSorted and isStrictlyAscending lower and run on-chain") {
+        assertEvalEq(
+          Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))).insertionSort,
+          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+        )
+        assertEvalEq(List.empty[BigInt].insertionSort, List.empty[BigInt])
+        assertEvalEq(
+          Cons(BigInt(3), Cons(BigInt(1), Cons(BigInt(2), Nil))).sortWith((a, b) => a < b),
+          Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil)))
+        )
+        assertEvalEq(
+          List.empty[BigInt].sortWith((a, b) => a < b),
+          List.empty[BigInt]
+        )
+        assertEval(Cons(BigInt(1), Cons(BigInt(2), Nil)).isSorted)
+        assertEval(!Cons(BigInt(2), Cons(BigInt(1), Nil)).isSorted)
+        assertEval(Cons(BigInt(1), Cons(BigInt(2), Nil)).isStrictlyAscending)
+        assertEval(!Cons(BigInt(1), Cons(BigInt(1), Nil)).isStrictlyAscending)
+        assertEval(Cons(BigInt(1), Cons(BigInt(2), Nil)).isSortedWith((a, b) => a < b))
+        assertEval(!Cons(BigInt(2), Cons(BigInt(1), Nil)).isSortedWith((a, b) => a < b))
+    }
+
+    test("sorting anything already sorted is a no-op, and isSorted confirms it") {
+        check { (list: List[BigInt]) =>
+            val s = list.sort
+            s.isSorted && s.sort === s && s.insertionSort === s
+        }
+    }
+
     test("quicksort") {
         check { (list: List[BigInt]) =>
             val scalusResult = list.quicksort
@@ -478,7 +556,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.empty[BigInt],
           List.empty[BigInt],
           Seq(
-            compilerOptions -> ExUnits(memory = 3732, steps = 602033)
+            compilerOptions -> ExUnits(memory = 6432, steps = 1_034033)
           )
         )
 
@@ -487,7 +565,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           List.singleton(1),
           List.singleton(BigInt(1)),
           Seq(
-            compilerOptions -> ExUnits(memory = 10952, steps = 2_290652)
+            compilerOptions -> ExUnits(memory = 12592, steps = 2_270904)
           )
         )
 
@@ -496,7 +574,7 @@ class ListTest extends AnyFunSuite with EvalTestKit {
           Cons(3, Cons(1, Cons(2, Nil))),
           Cons(BigInt(1), Cons(BigInt(2), Cons(BigInt(3), Nil))),
           Seq(
-            compilerOptions -> ExUnits(memory = 41379, steps = 8_742866)
+            compilerOptions -> ExUnits(memory = 43001, steps = 8_173557)
           )
         )
     }

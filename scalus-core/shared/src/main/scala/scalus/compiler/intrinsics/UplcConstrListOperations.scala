@@ -114,52 +114,6 @@ object UplcConstrListOperations {
         go(self)
     }
 
-    def sort[@UplcRepr(TypeVar(Unwrapped)) A](
-        self: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
-        ord: (A, A) => scalus.cardano.onchain.plutus.prelude.Order
-    ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = {
-        // Self-contained sort — no calls to other support bindings (append/prepended/
-        // filter) or external prelude methods (`Order.isLess`). All external references
-        // avoided so this can be lowered in isolation during eager support-binding init.
-        //
-        // Shape:
-        //   - `partition` walks once, returns (before, after) via local `Partition` type.
-        //   - `qsAux lst acc` computes `sorted(lst) ++ acc` — accumulator style eliminates
-        //     the need for `append` at the combine step.
-        //   - Pattern-match `ord(h, p)` on `Order.Less` directly (no `.isLess` call).
-        def partition(
-            lst: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
-            pivot: A
-        ): Partition[A] = lst match
-            case List.Nil => Partition(List.Nil, List.Nil)
-            case List.Cons(h, t) =>
-                val rest = partition(t, pivot)
-                ord(h, pivot) match
-                    case scalus.cardano.onchain.plutus.prelude.Order.Less =>
-                        Partition(List.Cons(h, rest.before), rest.after)
-                    case _ =>
-                        Partition(rest.before, List.Cons(h, rest.after))
-        def qsAux(
-            lst: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
-            acc: List[A] @UplcRepr(UplcRepresentation.UplcConstr)
-        ): List[A] @UplcRepr(UplcRepresentation.UplcConstr) = lst match
-            case List.Nil => acc
-            case List.Cons(pivot, rest) =>
-                val parts = partition(rest, pivot)
-                qsAux(parts.before, List.Cons(pivot, qsAux(parts.after, acc)))
-        qsAux(self, List.Nil)
-    }
-
-    /** Local pair type for `sort`'s one-pass partition result. Annotated `@UplcRepr(UplcConstr)` so
-      * construction uses native-Constr emission — avoids Data-encoding the `List[A]` fields for
-      * abstract element type `A`.
-      */
-    @UplcRepr(UplcRepresentation.UplcConstr)
-    case class Partition[@UplcRepr(TypeVar(Unwrapped)) A_Partition](
-        before: List[A_Partition] @UplcRepr(UplcRepresentation.UplcConstr),
-        after: List[A_Partition] @UplcRepr(UplcRepresentation.UplcConstr)
-    )
-
     def contains[@UplcRepr(TypeVar(Unwrapped)) A](
         self: List[A] @UplcRepr(UplcRepresentation.UplcConstr),
         elem: A,

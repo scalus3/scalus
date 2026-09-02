@@ -326,19 +326,101 @@ object List {
         inline def +:[B >: A](list: List[B]): List[B] = list.prepended(elem)
     }
 
+    /** The merge sort behind both `sort` and `sortWith`, with the comparison left open.
+      *
+      * `inline`, and `lt` is an `inline` parameter, so a lambda literal passed here is beta-reduced
+      * into the body rather than called through a closure. `sort` therefore gets its `Order` match
+      * inlined exactly as if written by hand, while `sortWith` passes its runtime function and gets
+      * an ordinary call. One definition, two expansions, neither paying for the other.
+      *
+      * Stable natural merge sort over maximal ascending runs; see `sort` for the algorithm notes
+      * and the measurements.
+      */
+    private inline def mergeSortWith[A](
+        inline self: List[A],
+        inline lt: (A, A) => Boolean
+    ): List[A] = {
+        def merge(a: List[A], b: List[A]): List[A] = a match
+            case List.Nil => b
+            case List.Cons(x, xs) =>
+                b match
+                    case List.Nil         => a
+                    case List.Cons(y, ys) =>
+                        // strictly-less keeps `a` ahead of `b` on ties, i.e. keeps it stable
+                        if lt(y, x) then List.Cons(y, merge(a, ys))
+                        else List.Cons(x, merge(xs, b))
+
+        def revOnto(l: List[A], acc: List[A]): List[A] = l match
+            case List.Nil         => acc
+            case List.Cons(x, xs) => revOnto(xs, List.Cons(x, acc))
+
+        def runs(lst: List[A], cur: A, acc: List[A]): List[List[A]] = lst match
+            case List.Nil => List.Cons(revOnto(List.Cons(cur, acc), List.Nil), List.Nil)
+            case List.Cons(x, xs) =>
+                if lt(x, cur) then
+                    List.Cons(revOnto(List.Cons(cur, acc), List.Nil), runs(xs, x, List.Nil))
+                else runs(xs, x, List.Cons(cur, acc))
+
+        def mergePairs(ls: List[List[A]]): List[List[A]] = ls match
+            case List.Nil => List.Nil
+            case List.Cons(a, rest) =>
+                rest match
+                    case List.Nil         => ls
+                    case List.Cons(b, tl) => List.Cons(merge(a, b), mergePairs(tl))
+
+        def mergeAll(ls: List[List[A]]): List[A] = ls match
+            case List.Nil => List.Nil
+            case List.Cons(a, rest) =>
+                rest match
+                    case List.Nil        => a
+                    case List.Cons(_, _) => mergeAll(mergePairs(ls))
+
+        self match
+            case List.Nil         => List.Nil
+            case List.Cons(x, xs) => mergeAll(runs(xs, x, List.Nil))
+    }
+
     extension [A: Ord](self: List[A]) {
 
         /** Sorts the list in ascending order using the provided `Ord[A]` instance.
           *
-          * Uses a quicksort variant with single-pass partition and accumulator-style concatenation:
-          * `sortAcc(lst, acc)` computes `sorted(lst) ++ acc` in one recursive descent, so the
-          * combine step is just `Cons` rather than `++`. Compared to the naive double-`filter`
-          * quicksort this halves the per-recursion traversal and avoids the `O(n)` `++` at every
-          * join.
+          * Stable natural merge sort, close to `PlutusTx.List.sortBy` and GHC's `Data.List.sortBy`.
+          * `runs` splits the input into maximal ASCENDING runs and `mergeAll` merges them in a
+          * binary tree of pairwise merges. `Theta(n log n)` on every input and `O(n)` when the list
+          * is already sorted.
           *
-          * The UplcConstr representation has its own optimized intrinsic provider at
-          * `scalus.compiler.intrinsics.UplcConstrListOperations.sort` (the same single-pass
-          * accumulator shape). A Data-path intrinsic is a follow-up.
+          * Unlike GHC's version this does NOT detect descending runs, so an exactly-reversed list
+          * costs `Theta(n log n)` rather than `O(n)` — it simply becomes n singleton runs, which is
+          * ordinary bottom-up merge sort. Detecting them was tried and reverted: it needs a mutual
+          * recursion between local defs that the lowering cannot express, cost 384 extra bytes of
+          * script, and measured no better from n=16 up.
+          *
+          * This replaced a head-pivot quicksort, which was `Theta(n^2)` on already-sorted,
+          * reverse-sorted and all-equal input. On Cardano those are ordinary inputs rather than
+          * corner cases: the ledger guarantees `tx.inputs` arrives ordered by `TxOutRef`, and
+          * `SortedMap` contents are key-ordered. A validator must be provisioned for the worst
+          * input an adversary can supply, so a sort whose worst case coincides with its most common
+          * input is a budget hazard. Measurements: `docs/internal/SORT_ALGORITHM_FINDINGS.md`.
+          *
+          * '''This is not cheaper at every size.''' Merge sort has a larger body than the quicksort
+          * it replaced, and that is fixed overhead a script pays even when the list is tiny.
+          * Measured worst-case fee against the old head-pivot quicksort, in lovelace:
+          *
+          * {{{
+          * n:          0     1     2     4     5      8      16      32       64
+          * old:      277   816  1780  4988  7232  16519   60041  228924   894051
+          * new:      464   909  2248  5096  6490  12471   24865   65812   141105
+          *           \_ worse below n=5 _/       \_ 1.3x at n=8, 6.3x at n=64 _/
+          * }}}
+          *
+          * So sorting four or fewer elements now costs up to ~1.3x more, and the compiled body grew
+          * from 169 to 277 bytes. That is the price of removing a quadratic worst case that an
+          * adversary could trigger with ordinary ledger-shaped input. If a call site provably sorts
+          * a tiny fixed-size list of values nobody else controls, the old shape was cheaper.
+          *
+          * Note that sorting is often avoidable. If the caller can supply the list already ordered,
+          * checking that order costs one pass instead of `n log n` — see [[isSorted]] and
+          * [[isStrictlyAscending]].
           *
           * @return
           *   A new list containing the elements of the original list sorted in ascending order.
@@ -348,33 +430,119 @@ object List {
           *   List.empty[BigInt].sort === Nil
           *   }}}
           */
-        def sort: List[A] = {
-            // INVESTIGATION body — Tuple2-returning partition currently triggers a runtime
-            // `Case index 2 out of bounds for 1 branches` under cross-test orderings with
-            // `optimizeUplc=false`. Keep this shape until the underlying lowering bug is found.
-            def partition(
-                lst: List[A],
-                pivot: A,
-                before: List[A],
-                after: List[A]
-            ): (List[A], List[A]) = lst match
-                case List.Nil => (before, after)
-                case List.Cons(h, t) =>
-                    if (h <=> pivot).isLess then partition(t, pivot, List.Cons(h, before), after)
-                    else partition(t, pivot, before, List.Cons(h, after))
-
-            def sortAcc(lst: List[A], acc: List[A]): List[A] = lst match
-                case List.Nil => acc
-                case List.Cons(pivot, rest) =>
-                    val parts = partition(rest, pivot, List.Nil, List.Nil)
-                    sortAcc(parts._1, List.Cons(pivot, sortAcc(parts._2, acc)))
-
-            sortAcc(self, List.Nil)
-        }
+        def sort: List[A] = List.mergeSortWith(
+          self,
+          (l, r) =>
+              l <=> r match
+                  case Order.Less => true
+                  case _          => false
+        )
 
         /** Alias for [[sort]]. Retained for backward compatibility — new code should prefer `sort`.
+          *
+          * The name no longer describes the implementation: `sort` has been a merge sort since the
+          * head-pivot quicksort was removed for being quadratic on ledger-shaped input.
           */
         inline def quicksort: List[A] = sort
+
+        /** Sorts by insertion. Cheaper than [[sort]] for very short lists, `O(n^2)` for everything
+          * else.
+          *
+          * '''Use this only when the length is bounded by construction and at most 8.''' Bounded by
+          * construction means a fixed-size window — say the last 11 block timestamps — not "usually
+          * short". If an adversary chooses the length, they choose your execution cost, and this is
+          * the sort that lets them: at n=64 it costs 5.3x what [[sort]] does.
+          *
+          * Measured worst-case fee against [[sort]], in lovelace:
+          *
+          * {{{
+          * n:            0     1     2     4     6      8      9     16      64
+          * insertionSort 229   444  1032  3329  7120  12405  15608  48485  766945
+          * sort          464   909  2255  5137  8047  12575  13429  25322  143847
+          *               \_ up to 2.1x cheaper _/  tie ^      \_ rapidly worse _/
+          * }}}
+          *
+          * It is also markedly smaller: 106 bytes against 290 for [[sort]], and script size is paid
+          * on every transaction carrying the script. For a contract sorting three elements that is
+          * a saving on both axes.
+          *
+          * Stable, like [[sort]]: an element is inserted after any it compares equal to.
+          *
+          * @example
+          *   {{{
+          *   List(BigInt(3), BigInt(1), BigInt(2)).insertionSort === List(BigInt(1), BigInt(2), BigInt(3))
+          *   }}}
+          */
+        def insertionSort: List[A] = {
+            def insert(sorted: List[A], e: A): List[A] = sorted match
+                case List.Nil => List.Cons(e, List.Nil)
+                case List.Cons(x, xs) =>
+                    e <=> x match
+                        case Order.Less => List.Cons(e, sorted)
+                        case _          => List.Cons(x, insert(xs, e))
+
+            def go(rest: List[A], acc: List[A]): List[A] = rest match
+                case List.Nil         => acc
+                case List.Cons(x, xs) => go(xs, insert(acc, x))
+
+            go(self, List.Nil)
+        }
+
+        /** True when every element is less than or equal to its successor.
+          *
+          * One pass and `n - 1` comparisons, with no allocation — far cheaper than sorting. If the
+          * caller can supply the list already ordered (from a redeemer, say) then verifying that
+          * claim is usually the right move: at n=64 this costs about a seventh of what [[sort]]
+          * does, and about a fortieth of the quicksort it replaced.
+          *
+          * This is what the ecosystem does instead of sorting. Plutarch ships no sort at all, only
+          * its equivalent `pcheckSorted`; of eight production Cardano codebases surveyed, six
+          * verify an off-chain-supplied order and exactly one sorts on-chain.
+          *
+          * There is deliberately no `isSortedOrFail`: `require(xs.isSorted, "not sorted")` says the
+          * same thing at the same cost.
+          *
+          * @example
+          *   {{{
+          *   List(BigInt(1), BigInt(2), BigInt(2)).isSorted === true
+          *   List(BigInt(2), BigInt(1)).isSorted === false
+          *   List.empty[BigInt].isSorted === true
+          *   }}}
+          */
+        def isSorted: Boolean = self match
+            case List.Nil => true
+            case List.Cons(x, xs) =>
+                def go(prev: A, rest: List[A]): Boolean = rest match
+                    case List.Nil => true
+                    case List.Cons(y, ys) =>
+                        y <=> prev match
+                            case Order.Less => false
+                            case _          => go(y, ys)
+                go(x, xs)
+
+        /** True when every element is '''strictly''' less than its successor, i.e. the list is
+          * sorted and free of duplicates.
+          *
+          * The strict form is usually the one you want for keys and indices, where a duplicate is a
+          * defect rather than a tie: it is the cheap way to reject a redeemer that repeats an index
+          * to process the same input twice.
+          *
+          * @example
+          *   {{{
+          *   List(BigInt(1), BigInt(2)).isStrictlyAscending === true
+          *   List(BigInt(1), BigInt(1)).isStrictlyAscending === false
+          *   }}}
+          */
+        def isStrictlyAscending: Boolean = self match
+            case List.Nil => true
+            case List.Cons(x, xs) =>
+                def go(prev: A, rest: List[A]): Boolean = rest match
+                    case List.Nil => true
+                    case List.Cons(y, ys) =>
+                        prev <=> y match
+                            case Order.Less => go(y, ys)
+                            case _          => false
+                go(x, xs)
     }
 
     extension [A](self: List[List[A]]) {
@@ -398,6 +566,50 @@ object List {
     }
 
     extension [A](self: List[A]) {
+
+        /** Sorts using an explicit "strictly less than" test instead of an `Ord` instance.
+          *
+          * Same stable natural merge sort as `sort`, but around '''20% cheaper''' whenever the
+          * caller has a direct boolean comparison. `Ord[A]` is `(A, A) => Order`, so every single
+          * comparison through `sort` allocates an `Order` constructor and immediately matches it
+          * back down to a boolean. Passing the boolean test skips both, and at concrete types like
+          * `BigInt` it also takes the monomorphic fast path straight to `lessThanInteger`:
+          *
+          * {{{
+          * xs.sortWith((a, b) => a < b)     // BigInt: lowers to lessThanInteger
+          * }}}
+          *
+          * The compiled body is smaller too — 252 bytes against 290 for `sort`.
+          *
+          * `lt` must be a strict order: irreflexive (`lt(a, a)` false) and transitive. Supplying
+          * `<=` instead of `<` breaks stability, because ties then look like inversions. Nothing
+          * checks this on-chain, so a wrong comparator yields a wrongly ordered list rather than an
+          * error.
+          *
+          * @param lt
+          *   true when the first argument sorts strictly before the second
+          * @example
+          *   {{{
+          *   List(BigInt(3), BigInt(1)).sortWith((a, b) => a < b) === List(BigInt(1), BigInt(3))
+          *   }}}
+          */
+        def sortWith(lt: (A, A) => Boolean): List[A] = List.mergeSortWith(self, lt)
+
+        /** True when every element is less than or equal to its successor under `lt`.
+          *
+          * The explicit-comparator twin of `isSorted`, for the same reason `sortWith` exists: it
+          * skips the `Order` allocation `Ord` forces on every comparison.
+          *
+          * @param lt
+          *   true when the first argument sorts strictly before the second
+          */
+        def isSortedWith(lt: (A, A) => Boolean): Boolean = self match
+            case List.Nil => true
+            case List.Cons(x, xs) =>
+                def go(prev: A, rest: List[A]): Boolean = rest match
+                    case List.Nil         => true
+                    case List.Cons(y, ys) => if lt(y, prev) then false else go(y, ys)
+                go(x, xs)
 
         /** Alias for at */
         inline def !!(idx: BigInt): A = at(idx)
