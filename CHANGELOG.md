@@ -4,6 +4,32 @@
 
 ### Performance
 
+- `List.sort` is a stable natural merge sort instead of a head-pivot quicksort. Quicksort is
+  `Theta(n^2)` on already-sorted, reverse-sorted and all-equal input, and on Cardano those are
+  ordinary inputs rather than corner cases: the ledger guarantees `tx.inputs` arrives ordered by
+  `TxOutRef`, and `SortedMap` contents are key-ordered. The sort was therefore worst-cased by its
+  most common input, which a validator has to be provisioned for. Worst-case fee, in lovelace:
+
+  | n | 2 | 4 | 8 | 16 | 32 | 64 |
+  |---|---:|---:|---:|---:|---:|---:|
+  | before | 1,780 | 4,988 | 16,519 | 60,041 | 228,924 | 894,051 |
+  | after | 2,248 | 5,096 | 12,471 | 24,865 | 65,812 | 141,105 |
+
+  **This is a regression below n≈5**, up to 1.26x at n=2, because merge sort has a larger body and
+  that is fixed overhead a script pays even on a short list. The compiled body grows from 169 to
+  277 bytes. Use the new `insertionSort` where the length is bounded by construction and small.
+
+- `SortedMap.fromList` folds from the right instead of the left. Folding left made
+  already-ascending keys its worst case, since each insert then walked the whole accumulator;
+  ascending is how ledger data arrives. Folding right makes that the best case instead: about 28x
+  cheaper at n=64 on ascending keys, cheaper than before at every size measured, and 30 bytes
+  smaller. `Value` construction, which calls it once per policy, got 11-13% cheaper as a result.
+
+- The `UplcConstr` sort intrinsic is removed. Measured against the new `List.sort`, every input
+  shape was cheaper without it – from 2.5% to 2.9x – because the prelude sort exploits ascending
+  runs and the intrinsic's counted merge structurally could not.
+
+
 - `EtaReduce` removes multi-argument wrappers (`\a.\b. f a b` → `f`), not only single-argument
   ones, and now traverses into `Constr` arguments and `Case` scrutinee/branches so wrappers
   nested there reduce like any other subterm. A value-arity analysis guards the rewrite:
@@ -102,6 +128,25 @@
 
 ### Added
 
+- `List.insertionSort` – cheaper than `sort` for very short lists and about a third the script
+  size (106 bytes against 277). Up to 2.1x cheaper at n≤2, a tie at n=8, then rapidly worse: 1.9x
+  at n=16 and 5.3x at n=64. Use it only when the length is bounded by construction and at most 8;
+  it is `O(n^2)`, so an attacker-chosen length is an attacker-chosen cost.
+
+- `List.isSorted` and `List.isStrictlyAscending` – one pass, no allocation. Verifying an
+  off-chain-supplied order costs about a seventh of sorting at n=64. This is what most of the
+  ecosystem does instead of sorting: Plutarch ships no sort at all, only its equivalent of these.
+  There are no `OrFail` twins; `require(xs.isSorted, "...")` says the same thing at the same cost.
+
+- `List.sortWith(lt)` and `List.isSortedWith(lt)` – take an explicit boolean comparator instead of
+  an `Ord`. About 20% cheaper and smaller when the caller has a direct comparison, because `Ord[A]`
+  is `(A, A) => Order` and so allocates an `Order` per comparison only to match it back down to a
+  boolean.
+
+- `SortedMap.fromLargeList` – the `Theta(n log n)` constructor, for when a key list may be long or
+  its length is not under your control. Crossover against `fromList` is around n=10.
+
+
 - A translation oracle for the script context: cardano-ledger's own golden `TxInfo` corpus is
   vendored as a test resource, pinned by sha256, and compared field by field against the Scalus
   translation for V1, V2 and V3 withdrawals, votes and datums. Each cell asserts a minimum number
@@ -130,7 +175,7 @@
   `subscribeTransactionStatus` with no sleep loop and no missed-update window.
 
   A provider declares only `StreamCapabilities`; whether a given request is served, and whether
-  it is cheap, is derived from that by `SubscriptionSupport.of` — so a provider can neither
+  it is cheap, is derived from that by `SubscriptionSupport.of` – so a provider can neither
   refuse what it advertised nor accept what it did not. Subscriptions are registered
   synchronously, which makes `subscribe` followed by `submit` race-free.
 
@@ -300,7 +345,7 @@ Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 
 ### Added
 
-- `ScalusTest.runWithProfileReport` — profiling reports for direct UPLC evaluation, not just
+- `ScalusTest.runWithProfileReport` – profiling reports for direct UPLC evaluation, not just
   ledger-driven runs
 - `YaciConfig.imageTag` and `YaciConfig.startupTimeoutSeconds`
 
@@ -308,7 +353,7 @@ Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 
 - **BREAKING**: profile rendering moved from `PlutusScriptEvaluator` internals into
   `scalus.uplc.eval.ProfileReportWriter` (removed classes were implementation-private)
-- Yaci DevKit devnet defaults to `bloxbean/yaci-cli:0.12.0-beta5` in companion node mode — a
+- Yaci DevKit devnet defaults to `bloxbean/yaci-cli:0.12.0-beta5` in companion node mode – a
   protocol version 11 (van Rossem) node that runs PV11-compiled scripts
   (bloxbean/yaci-devkit#184, #185)
 - dependency updates: yaci 0.4.5
@@ -389,7 +434,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 
 ### Fixed
 
-- security-hardening sweep across the example validators (Cardano Blueprint rosetta set) — amm drain,
+- security-hardening sweep across the example validators (Cardano Blueprint rosetta set) – amm drain,
   auction/lottery/vault/editablenft/crowdfunding/escrow and others
 - `Eq` no longer warns on `===` for an `Eq` received as a using parameter, and JVM-module compiler warnings
   are cleared
@@ -400,9 +445,9 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 
 - Protocol Version 11 (van Rossem) evaluator support, matching `cardano-node` 11.0.1 / Plutus
   1.63.0.0. Adds builtin semantics variants `D` (PlutusV1/V2) and `E` (PlutusV3/V4) for PV11, plus
-  cost models for the new builtins — `expModInteger`, `dropList`, the array operations,
+  cost models for the new builtins – `expModInteger`, `dropList`, the array operations,
   `bls12_381_G1/G2_multiScalarMul`, and the `Value` builtins (`insertCoin`, `lookupCoin`,
-  `unionValue`, `valueContains`, `valueData`, `unValueData`, `scaleValue`) — wired to protocol
+  `unionValue`, `valueContains`, `valueData`, `unValueData`, `scaleValue`) – wired to protocol
   parameters. PV11 semantics: UTF-8-byte-length text costing for `appendString`/`equalsString`/
   `encodeUtf8`, the `consByteString` `[0,255]` range check, `Int64`-bounded `shiftByteString`/
   `rotateByteString`, and `above_and_below_diagonal` CPU costing for `divideInteger`/`modInteger`.
@@ -419,7 +464,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
   conformance suite is the 1.63 corpus, evaluated under semantics variant E
 - the Plutus conformance test discovers every evaluation case in the corpus at compile time and runs
   them all by default, skipping only an explicit, documented ignore list (so new corpus cases are
-  picked up automatically). Only 3 cases remain skipped — the `bls12_381_*_hashToGroup` DST-length
+  picked up automatically). Only 3 cases remain skipped – the `bls12_381_*_hashToGroup` DST-length
   cases blocked by a blst Java-binding bug (supranational/blst#232)
 - MiMa compatibility baseline (`scalusStableVersion`) bumped to 0.18.0, and the now-obsolete MiMa
   problem filters removed
@@ -430,7 +475,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 - `bls12_381_G1/G2_multiScalarMul` rejects scalars outside the signed 4096-bit (512-byte) range, as
   Plutus does, instead of silently reducing them modulo the group order
 - `unValueData` is costed by the input `Data`'s node count (matching Plutus `DataNodeCount`) rather
-  than its full memory usage — it was over-charging by roughly 3× — and now rejects non-canonical
+  than its full memory usage – it was over-charging by roughly 3× – and now rejects non-canonical
   `Value` encodings (currency symbols and token names must be strictly ascending, inner maps
   non-empty, no zero quantities) instead of silently normalizing them
 - corrected a swapped `intercept`/`slope` in the `unValueData` memory cost in `builtinCostModelC.json`
@@ -451,12 +496,12 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
   (`contains`, `indexOf`, `deleteFirst`, `distinct`, `diff`, `Option.contains`) drop their dead
   `Eq` argument and compare via `equalsRepr`
 - Conway certificate mutators in `scalus-cardano-ledger`: `StakePoolCertificatesMutator`
-  (Shelley/Conway POOL transitions — registration, re-registration into `futureStakePoolParams`,
+  (Shelley/Conway POOL transitions – registration, re-registration into `futureStakePoolParams`,
   retirement) and `VotingCertificatesMutator` (Conway GOVCERT DRep register/unregister/update with
   deposit validation). `SlotConfig` gains `epochLength`/`zeroEpoch` plus `epochOf`/`firstSlotOfEpoch`
   so the current epoch is derived from the slot (mainnet `zeroEpoch=208`, preprod `4`, preview
   1-day epochs) instead of treating the slot number as an epoch
-- `EvaluatorReportConfig` — typed configuration for `PlutusScriptEvaluator` diagnostic output
+- `EvaluatorReportConfig` – typed configuration for `PlutusScriptEvaluator` diagnostic output
   (output directory, artifact selection, profile level/outputs), overridable via the `SCALUS_DUMP`,
   `SCALUS_DUMP_DIR`, and `SCALUS_PROFILE*` environment variables; new `PlutusScriptEvaluator.apply`
   overload accepting it. The legacy `debugDumpFilesForTesting: Boolean` constructors are retained
@@ -464,7 +509,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 - profiling integrated into `PlutusScriptEvaluator`: when enabled (`SCALUS_PROFILE=summary|full`,
   `SCALUS_PROFILE_OUT=…`, or `EvaluatorReportConfig.profile`), each script's profile is rendered to
   the console or to per-script files. Output formats: a compact text summary, CSV, JSON, and a
-  **self-contained interactive HTML report** — a tabbed UI with sortable/filterable tables and
+  **self-contained interactive HTML report** – a tabbed UI with sortable/filterable tables and
   %-of-CPU bars, a "By Source Location" view with full source-position attribution and a recursive
   incoming-call tree, a call graph with inclusive (call-stack) cost and a Hot Paths tree showing
   where the budget flows from the entry point, a per-line cost-annotated source view (cross-linked
@@ -488,7 +533,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 ### Fixed
 
 - `EtaReduce` free-variable check had no cases for `Case`/`Constr` terms, so `λx.(f x)` was
-  eta-reduced even when `f` referenced `x` inside a `Case`/`Constr` — dropping the binder and
+  eta-reduced even when `f` referenced `x` inside a `Case`/`Constr` – dropping the binder and
   leaving `x` unbound; it now uses the canonical `TermAnalysis.freeVars`. Surfaced on Scala 3.8.x
   (Knights `depthSearch` lowering); latent on 3.3.x where the shape did not arise
 - `TxBuilder` now accepts permissionless script stake-credential registration (registration is
@@ -508,9 +553,9 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
   (`isDefined`, `isEmpty`, `get`, `getOrElse`, `map`, `flatMap`, `filter`, `exists`, `forall`),
   list `appendedAll` (eliminates per-element re-encoding when concatenating
   `@UplcRepr(UplcConstr)` lists, used by `Queue` in the Knights benchmark)
-- Common Subexpression Elimination (CSE) UPLC optimizer pass — extracts repeated subterms into
+- Common Subexpression Elimination (CSE) UPLC optimizer pass – extracts repeated subterms into
   shared lets with descriptive names (also extracts `Force(Builtin)` and `Force(Force(Builtin))`)
-- Common Context Extraction (CCE) UPLC optimizer pass — generalized to any single-hole position;
+- Common Context Extraction (CCE) UPLC optimizer pass – generalized to any single-hole position;
   extracts shared lambdas with descriptive names
 - `Options.uplcOptimizers` for custom optimizer chain configuration
 - CEK machine profiler: per-source-location and per-builtin-function breakdowns plus a state
@@ -522,9 +567,9 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 - `CellValidator` with full `UtxoCell` lifecycle: `CellContext`, `TxBuilder` integration,
   `transitionSpend`/`transitionMint` helpers, hardened against V011/V005/V016/V024 vulnerability
   patterns; `AuctionCell` reference example; `Factory` pattern for the Cardano UTxO model
-- `scalus-blueprint-plugin` v0.1 — sbt plugin for CIP-57 blueprint generation, with `sbtn deploy`
+- `scalus-blueprint-plugin` v0.1 – sbt plugin for CIP-57 blueprint generation, with `sbtn deploy`
   and `sbtn blueprint` commands
-- Scalus plugin and example ejector (`#252`) — eject contract examples into standalone projects
+- Scalus plugin and example ejector (`#252`) – eject contract examples into standalone projects
   with cross-version sbt plugin support
 - recursive auction contract example with `Bind` pattern handling fix
 - agent-based testing model in `scalus-testkit` (`ContractTestActor`)
@@ -567,7 +612,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 - `stableKey` includes structural repr info to reduce `SumReprProxy` identity leaks across
   `cachedTopLevelHelpers` lookups
 - `ProductCaseUplcConstrSirTypeGenerator.upcastOne` dispatches on `input.representation` rather
-  than relabeling unconditionally — closes the unsafe-Data-as-UC relabel surface that produced
+  than relabeling unconditionally – closes the unsafe-Data-as-UC relabel surface that produced
   4-arg native selectors against Data scrutinees
 - `genConstrLowered` is the canonical Constr-dispatch API; `precomputedValues` removed and the
   dispatch chain pushed down into generators
@@ -587,7 +632,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
   native Constr, a Data → `TypeVarRepresentation(Unwrapped)` "compat" returned true, producing a
   pure relabel and leaving Data bytes labeled as Unwrapped. Downstream `genSelect` then emitted a
   4-arg native-UC selector against a 2-arg `Data.Constr` scrutinee, leaving a 2-arg residual
-  lambda and a `MultiplyInteger Apply LamAbs` runtime crash. Fix: discriminate `TypeVarKind` —
+  lambda and a `MultiplyInteger Apply LamAbs` runtime crash. Fix: discriminate `TypeVarKind` –
   `Transparent`/`Fixed` stay compatible; `Unwrapped` only when
   `lctx.typeGenerator(tp).defaultRepresentation(tp) == this`
 - KnightsTest:475 heisenbug: output `TypeVar` leak via wrong `eqClass` inheritance and
@@ -617,7 +662,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 
 - compile-time partial evaluation in UPLC optimizer with occurrence analysis for smarter inlining
 - source positions in UPLC Term and CEK error reporting for precise error diagnostics
-- diagnostic replay for release scripts — `DebugScript` API re-evaluates stripped scripts with full
+- diagnostic replay for release scripts – `DebugScript` API re-evaluates stripped scripts with full
   traces for debugging
 - `strip trace/log` statements for release builds
 - `PairList` type to avoid `SumDataList`/`SumDataPairList` per-element conversions, used internally
@@ -649,7 +694,7 @@ surface. Migration guide: https://scalus.org/docs/get-started/migrating-to-1.0
 
 ### Changed
 
-- reorganized crypto packages — `crypto/trie`, `crypto/tree`, `crypto/accumulator`; flattened
+- reorganized crypto packages – `crypto/trie`, `crypto/tree`, `crypto/accumulator`; flattened
   `bls12_381`
 - moved off-chain crypto from `cardano.offchain.crypto` to `scalus.crypto`
 - renamed `MerklePatriciaTrie` to `MerklePatriciaForestry`, `BinaryMerklePatriciaTrie` to
