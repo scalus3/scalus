@@ -1,123 +1,185 @@
 package scalus.uplc
 
 import org.scalatest.funsuite.AnyFunSuite
-import scalus.compiler.Options
+import scalus.*
+import scalus.cardano.onchain.plutus.prelude.*
+import scalus.compiler.{Compile, Options}
 import scalus.uplc.Term.asTerm
 import scalus.uplc.builtin.Data
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.transform.Inliner
 
+/** A validator that can fail, so its compiled term has `(error)` nodes to carry the tag. */
+@Compile
+object ScalusTagFixture {
+    def check(d: Data): Unit = require(d.to[BigInt] >= 0, "negative")
+}
+
 class ScalusTagTest extends AnyFunSuite {
 
     private given PlutusVM = PlutusVM.makePlutusV3VM()
 
+    /** An argument the fixture accepts, so evaluation takes the success path. */
+    private val okArg: Term = Data.I(1).asTerm
+
     test("Options.default does not tag V3 programs") {
         given Options = Options.default
-        val compiled = PlutusV3.compile((_: Data) => ())
+        val compiled = PlutusV3.compile(ScalusTagFixture.check)
         assert(!ScalusTag.isTagged(compiled.program.term))
     }
 
     test("Options.default does not tag V1 programs") {
         given Options = Options.default
-        val compiled = PlutusV1.compile((_: Data) => (_: Data) => (_: Data) => ())
+        val compiled =
+            PlutusV1.compile((d: Data) => (_: Data) => (_: Data) => ScalusTagFixture.check(d))
         assert(!ScalusTag.isTagged(compiled.program.term))
     }
 
     test("Options.default does not tag V2 programs") {
         given Options = Options.default
-        val compiled = PlutusV2.compile((_: Data) => (_: Data) => (_: Data) => ())
+        val compiled =
+            PlutusV2.compile((d: Data) => (_: Data) => (_: Data) => ScalusTagFixture.check(d))
         assert(!ScalusTag.isTagged(compiled.program.term))
     }
 
     test("Options.debug does not tag programs") {
         given Options = Options.debug
-        val compiled = PlutusV3.compile((_: Data) => ())
+        val compiled = PlutusV3.compile(ScalusTagFixture.check)
         assert(!ScalusTag.isTagged(compiled.program.term))
     }
 
     test("Options.release tags V3 programs") {
         given Options = Options.release
-        val compiled = PlutusV3.compile((_: Data) => ())
+        val compiled = PlutusV3.compile(ScalusTagFixture.check)
         assert(ScalusTag.isTagged(compiled.program.term))
     }
 
     test("Options.release tags V1 programs") {
         given Options = Options.release
-        val compiled = PlutusV1.compile((_: Data) => (_: Data) => (_: Data) => ())
+        val compiled =
+            PlutusV1.compile((d: Data) => (_: Data) => (_: Data) => ScalusTagFixture.check(d))
         assert(ScalusTag.isTagged(compiled.program.term))
     }
 
     test("Options.release tags V2 programs") {
         given Options = Options.release
-        val compiled = PlutusV2.compile((_: Data) => (_: Data) => (_: Data) => ())
+        val compiled =
+            PlutusV2.compile((d: Data) => (_: Data) => (_: Data) => ScalusTagFixture.check(d))
         assert(ScalusTag.isTagged(compiled.program.term))
     }
 
     test("Options.releaseUntagged produces no tag") {
         given Options = Options.releaseUntagged
-        val compiled = PlutusV3.compile((_: Data) => ())
+        val compiled = PlutusV3.compile(ScalusTagFixture.check)
         assert(!ScalusTag.isTagged(compiled.program.term))
     }
 
     test("withScalusTag(true) enables tagging on a custom Options") {
         given Options = Options.default.withScalusTag(true)
-        val compiled = PlutusV3.compile((_: Data) => ())
+        val compiled = PlutusV3.compile(ScalusTagFixture.check)
         assert(ScalusTag.isTagged(compiled.program.term))
     }
 
     test("withScalusTag(false) disables tagging on release") {
         given Options = Options.release.withScalusTag(false)
-        val compiled = PlutusV3.compile((_: Data) => ())
+        val compiled = PlutusV3.compile(ScalusTagFixture.check)
         assert(!ScalusTag.isTagged(compiled.program.term))
     }
 
     test("Tagged program evaluates to the same result as untagged") {
-        val untagged = PlutusV3.compile((_: Data) => ())(using Options.release.withScalusTag(false))
-        val tagged = PlutusV3.compile((_: Data) => ())(using Options.release)
-        // Both validators, applied to a dummy Data argument, should succeed.
-        val arg = Data.unit.asTerm
-        val u = (untagged.program.term $ arg).evaluate
-        val t = (tagged.program.term $ arg).evaluate
+        val untagged =
+            PlutusV3.compile(ScalusTagFixture.check)(using Options.releaseUntagged)
+        val tagged = PlutusV3.compile(ScalusTagFixture.check)(using Options.release)
+        val u = (untagged.program.term $ okArg).evaluate
+        val t = (tagged.program.term $ okArg).evaluate
         assert(u == t)
     }
 
-    test("Tagging adds at most 8 bytes to the flat-encoded program") {
-        val untagged = PlutusV3.compile((_: Data) => ())(using Options.release.withScalusTag(false))
-        val tagged = PlutusV3.compile((_: Data) => ())(using Options.release)
+    test("Tagging costs ZERO execution budget on the success path") {
+        val untagged =
+            PlutusV3.compile(ScalusTagFixture.check)(using Options.releaseUntagged)
+        val tagged = PlutusV3.compile(ScalusTagFixture.check)(using Options.release)
+
+        val u = (untagged.program.term $ okArg).evaluateDebug
+        val t = (tagged.program.term $ okArg).evaluateDebug
+        assert(u.isSuccess && t.isSuccess, "both programs must take the success path")
+        assert(
+          u.budget == t.budget,
+          s"the tag must not cost any budget: untagged=${u.budget}, tagged=${t.budget}"
+        )
+    }
+
+    test("Tagging adds 2 or 3 bytes to the flat-encoded program") {
+        // The marker is ~20 bits (Apply tag + Const tag + type list + zigzag integer), so the
+        // byte delta depends on where the untagged program ends within its final byte.
+        val untagged =
+            PlutusV3.compile(ScalusTagFixture.check)(using Options.releaseUntagged)
+        val tagged = PlutusV3.compile(ScalusTagFixture.check)(using Options.release)
         val overhead = tagged.program.flatEncoded.length - untagged.program.flatEncoded.length
-        assert(overhead > 0, s"tagged program should be larger than untagged, got $overhead")
-        assert(overhead <= 8, s"tag overhead should be <= 8 bytes, got $overhead")
+        assert(overhead >= 2 && overhead <= 3, s"tag overhead should be 2-3 bytes, got $overhead")
     }
 
-    test("Tagging adds exactly 300 memory and 48000 steps to the evaluation budget") {
-        val untagged = PlutusV3.compile((_: Data) => ())(using Options.release.withScalusTag(false))
-        val tagged = PlutusV3.compile((_: Data) => ())(using Options.release)
-        val arg = Data.unit.asTerm
-
-        val u = (untagged.program.term $ arg).evaluateDebug.budget
-        val t = (tagged.program.term $ arg).evaluateDebug.budget
-
-        val memDelta = t.memory - u.memory
-        val stepsDelta = t.steps - u.steps
+    test("A validator with no (error) node is left untagged") {
+        given Options = Options.release
+        val compiled = PlutusV3.compile((_: Data) => ())
         assert(
-          memDelta == 300L,
-          s"expected tag to add exactly 300 memory, but got +$memDelta (untagged=$u, tagged=$t)"
+          !hasErrorNode(compiled.program.term),
+          "fixture precondition: this validator must have no (error) node"
         )
-        assert(
-          stepsDelta == 48000L,
-          s"expected tag to add exactly 48000 steps, but got +$stepsDelta (untagged=$u, tagged=$t)"
-        )
+        assert(!ScalusTag.isTagged(compiled.program.term))
     }
 
-    test("Inliner deletes the Scalus tag when run directly") {
-        // Guards the invariant that tag injection must happen POST-optimization.
-        val body = BigInt(42).asTerm
+    test("The Inliner preserves the tag") {
+        // Unlike the pre-1.1 root wrapper, `[(error) x]` is not reducible, so the optimizer
+        // cannot eliminate it. Injection still happens post-optimization so the set of
+        // (error) nodes is final.
+        val tagged = PlutusV3.compile(ScalusTagFixture.check)(using Options.release).program.term
+        assert(ScalusTag.isTagged(tagged))
+        assert(ScalusTag.isTagged(Inliner(tagged)), "Inliner unexpectedly dropped the tag")
+    }
+
+    test("wrap marks the first (error) node and only that one") {
+        val body = Term.LamAbs(
+          "x",
+          Term.Apply(Term.Force(Term.Error()), Term.Delay(Term.Error()))
+        )
         val wrapped = ScalusTag.wrap(body)
         assert(ScalusTag.isTagged(wrapped))
-        val optimized = Inliner(wrapped)
-        assert(
-          !ScalusTag.isTagged(optimized),
-          s"Inliner unexpectedly preserved the tag: $optimized"
-        )
+        assert(countMarkers(wrapped) == 1, s"expected exactly one marker, got: ${wrapped.show}")
     }
+
+    test("wrap is the identity on a term with no (error) node") {
+        val body = BigInt(42).asTerm
+        assert(ScalusTag.wrap(body) == body)
+        assert(!ScalusTag.isTagged(body))
+    }
+
+    test("the legacy root-wrapper tag is still recognised") {
+        val legacy = Term.Apply(
+          Term.LamAbs("_scalusTag", BigInt(42).asTerm),
+          Term.Const(ScalusTag.legacyMarker)
+        )
+        assert(ScalusTag.isLegacyTagged(legacy))
+        assert(ScalusTag.isTagged(legacy))
+    }
+
+    private def hasErrorNode(t: Term): Boolean = t match
+        case _: Term.Error           => true
+        case Term.LamAbs(_, b, _)    => hasErrorNode(b)
+        case Term.Apply(f, a, _)     => hasErrorNode(f) || hasErrorNode(a)
+        case Term.Force(b, _)        => hasErrorNode(b)
+        case Term.Delay(b, _)        => hasErrorNode(b)
+        case Term.Constr(_, args, _) => args.exists(hasErrorNode)
+        case Term.Case(s, cs, _)     => hasErrorNode(s) || cs.exists(hasErrorNode)
+        case _                       => false
+
+    private def countMarkers(t: Term): Int = t match
+        case Term.Apply(_: Term.Error, Term.Const(ScalusTag.marker, _), _) => 1
+        case Term.LamAbs(_, b, _)                                          => countMarkers(b)
+        case Term.Apply(f, a, _)     => countMarkers(f) + countMarkers(a)
+        case Term.Force(b, _)        => countMarkers(b)
+        case Term.Delay(b, _)        => countMarkers(b)
+        case Term.Constr(_, args, _) => args.map(countMarkers).sum
+        case Term.Case(s, cs, _)     => countMarkers(s) + cs.map(countMarkers).sum
+        case _                       => 0
 }

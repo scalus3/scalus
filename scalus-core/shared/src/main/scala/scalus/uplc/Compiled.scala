@@ -41,8 +41,8 @@ sealed abstract class CompiledPlutus[A](
 
     /** The compiled UPLC program. Lazily computed on first access.
       *
-      * If `options.addScalusTag` is set, the term is wrapped in the [[ScalusTag]] marker after
-      * optimization (so the UPLC optimizer cannot eliminate the tag as dead code).
+      * If `options.addScalusTag` is set, the [[ScalusTag]] marker is injected after optimization
+      * (so the set of `(error)` nodes it attaches to is final).
       */
     lazy val program: Program = {
         val term = toUplc

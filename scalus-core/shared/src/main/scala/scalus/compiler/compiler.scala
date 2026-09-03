@@ -17,10 +17,12 @@ case class Options(
     cceEnabled: Boolean = false,
     debugLevel: Int = SIRDefaultOptions.debugLevel,
     debug: Boolean = false,
-    /** When true, wraps the compiled UPLC program in `[(lam _ body) (con string "S")]` so offchain
-      * tooling can identify the script as Scalus-generated. Adds ~6 bytes to the serialized script.
-      * Enabling or disabling this changes the script hash, so do not toggle for an already-deployed
-      * contract.
+    /** When true, marks the first `(error)` node of the compiled UPLC program as
+      * `[(error) (con integer 3)]` so offchain tooling can identify the script as Scalus-generated.
+      * The marker sits on an unreachable branch, so it costs no execution budget - only 3 bytes of
+      * script size. A program with no `(error)` node is left untagged. Enabling or disabling this
+      * changes the script hash, so do not toggle for an already-deployed contract. See
+      * [[scalus.uplc.ScalusTag]].
       */
     addScalusTag: Boolean = false,
     /** When true, prints a warning (with source position) each time a whole-list representation

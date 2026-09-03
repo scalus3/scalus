@@ -38,6 +38,17 @@
 
 ### Changed
 
+- The Scalus identification tag no longer costs execution budget. `Options.release` used to wrap
+  the whole program in `[(lam _scalusTag body) (con string "S")]`, which the CEK machine
+  evaluated on every run for 300 memory and 48000 CPU. It now marks the first `(error)` node of
+  the optimized term as `[(error) (con integer 3)]` instead. An `(error)` node reached during a
+  successful run would make the script fail, so every `(error)` node in a script that succeeds is
+  unreachable by construction, and the marker is never evaluated: **0 memory, 0 CPU, 2-3 bytes**.
+  `3` is Scalus's compiler id in CIP-171. This is the mechanism Aiken uses for its own marker.
+  A validator with no `(error)` node - a pure computation that cannot fail - is left untagged;
+  there is no fallback shape. `ScalusTag.isTagged` still recognises the old wrapper, so scripts
+  deployed from 1.0.0 and 1.1.x keep registering. **The script hash of every `Options.release`
+  contract changes**, and pinned `ExUnits` drop by 300 memory / 48000 CPU per execution.
 - `scalus-design-patterns`: the validator callbacks of `UtxoIndexer`, `StakeValidator` and
   `TransactionLevelMinterValidator` now return `Unit` and are expected to `require` / `fail` with
   their own message, instead of returning `Boolean` and failing with a generic library message. A
