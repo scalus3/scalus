@@ -9,7 +9,8 @@ import scalus.uplc.*
   *   - Term is a representation of a UPLC term.
   *   - Term can be named, debruijned, or both.
   *   - Term can be evaluated by [[CekMachine]]
-  *   - Program is a versioned UPLC term. 1.0.0 for Plutus V1 and V2, 1.1.0 for Plutus V3.
+  *   - Program is a versioned UPLC term. 1.1.0 (with `constr`/`case`) for Plutus V3, and for Plutus
+  *     V1 and V2 from the van Rossem hard fork on; 1.0.0 for V1 and V2 before it.
   *   - Plutus Script is a UPLC Program that should be evaluated according to the Plutus
   *     specification. This includes CIP-117.
   *

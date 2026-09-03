@@ -187,8 +187,32 @@ object Program:
     def fromFlatEncoded(flatEncoded: Array[Byte]): Program =
         DeBruijnedProgram.fromFlatEncoded(flatEncoded).toProgram
 
-    def plutusV1(term: Term): Program = Program((1, 0, 0), term)
-    def plutusV2(term: Term): Program = Program((1, 0, 0), term)
+    /** The lowest UPLC version that can carry `term`: 1.1.0 if it uses `constr`/`case`, else 1.0.0.
+      *
+      * The UPLC version field gates exactly one thing: whether `constr`/`case` are legal syntax.
+      * Builtins are gated by the ledger language and protocol version, never by the program
+      * version. So the version a PlutusV1/V2 program should declare is a property of its term, not
+      * of the target it was compiled for: a `constr`-free term is valid as 1.0.0 at every protocol
+      * version, and a term with `constr`/`case` needs 1.1.0 - which PlutusV1/V2 only carry from the
+      * van Rossem hard fork on (`plcVersionsIntroducedIn` in plutus-ledger-api). Declaring 1.1.0 on
+      * a `constr`-free term would only make it unusable below protocol version 11 and change its
+      * hash for nothing; declaring 1.0.0 on a term with `constr`/`case` is rejected by the Plutus
+      * decoder, and by [[ProgramFlatCodec.encodeFlat]].
+      *
+      * PlutusV3 always declares 1.1.0: it had it from the day it was introduced.
+      */
+    def minVersionFor(term: Term): (Int, Int, Int) =
+        if term.usesConstrOrCase then (1, 1, 0) else (1, 0, 0)
+
+    /** Wraps `term` in a PlutusV1 program at the lowest version that can carry it, see
+      * [[minVersionFor]].
+      */
+    def plutusV1(term: Term): Program = Program(minVersionFor(term), term)
+
+    /** Wraps `term` in a PlutusV2 program at the lowest version that can carry it, see
+      * [[minVersionFor]].
+      */
+    def plutusV2(term: Term): Program = Program(minVersionFor(term), term)
     def plutusV3(term: Term): Program = Program((1, 1, 0), term)
 
     /** Parse UPLC program from string using the default version (1, 1, 0) */

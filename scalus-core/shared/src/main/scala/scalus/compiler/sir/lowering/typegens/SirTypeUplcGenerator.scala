@@ -235,6 +235,10 @@ object SirTypeUplcGenerator {
         reprSir match
             case SIR.Const(scalus.uplc.Constant.String(name), _, _) =>
                 name match
+                    // Use-site annotations are honoured regardless of the target: the runtime
+                    // support ops for UplcConstr values are written against them and are lowered
+                    // eagerly for every compile. If such a term reaches the output of a target
+                    // without UPLC 1.1.0, ProgramFlatCodec refuses to encode it.
                     case "UplcConstr" =>
                         if SIRType.isSum(tp) then SumCaseUplcConstrEmitter
                         else ProductCaseUplcConstrEmitter
@@ -251,7 +255,8 @@ object SirTypeUplcGenerator {
     ): LoweredValueRepresentation = {
         name match
             case "UplcConstr" =>
-                // Use UplcConstr generator's defaultRepresentation for this type
+                // Use UplcConstr generator's defaultRepresentation for this type. Honoured
+                // regardless of the target - see resolveGeneratorFromAnnotation.
                 if SIRType.isSum(fieldType) then
                     SumCaseUplcConstrEmitter.defaultRepresentation(fieldType)
                 else ProductCaseUplcConstrEmitter.defaultRepresentation(fieldType)
@@ -274,6 +279,7 @@ object SirTypeUplcGenerator {
       */
     private def resolveUplcRepresentation(
         encoded: String,
+        tp: SIRType,
         constrDecl: ConstrDecl,
         typeArgs: List[SIRType],
         debug: Boolean,
@@ -304,11 +310,40 @@ object SirTypeUplcGenerator {
                 val innerGenerator = SirTypeUplcGenerator(paramType, debug)
                 OneElementWrapperEmitter(innerGenerator)
             case "UplcConstr" =>
-                if isSum then SumCaseUplcConstrEmitter
-                else ProductCaseUplcConstrEmitter
+                if lctx.uplc110Available then
+                    if isSum then SumCaseUplcConstrEmitter
+                    else ProductCaseUplcConstrEmitter
+                else uplcConstrFallback(tp, constrDecl, isSum)
             case other =>
                 throw IllegalArgumentException(s"Unknown UplcRepresentation: $other")
         }
+
+    /** The generator for a `@UplcRepr(UplcConstr)` type on a target without UPLC 1.1.0.
+      *
+      * The annotation is an optimisation hint, so a type that can also be Data-encoded falls back
+      * to the structural default (the representation it had before the annotation) with a warning.
+      * A type holding a function cannot be Data-encoded at all: `constr`/`case` is its only
+      * encoding, and on this target there is none, so lowering fails with the type name rather than
+      * emitting a program the ledger will reject.
+      */
+    private def uplcConstrFallback(
+        tp: SIRType,
+        constrDecl: ConstrDecl,
+        isSum: Boolean
+    )(using lctx: LoweringContext): SirTypeUplcGenerator = {
+        if containsFun(tp, new IdentityHashMap[SIRType, SIRType]()) then
+            lctx.requireUplc110(tp, "holds a function")
+        val typeName = tp match
+            case SIRType.SumCaseClass(decl, _) => decl.name
+            case _                             => constrDecl.name
+        lctx.warn(
+          s"@UplcRepr(UplcConstr) on $typeName ignored: ${lctx.targetLanguage} at protocol " +
+              s"version ${lctx.targetProtocolVersion} has no UPLC 1.1.0; using the Data " +
+              "representation",
+          SIRPosition.empty
+        )
+        if isSum then DataConstrEmitter else ProductCaseEmitter
+    }
 
     def apply(tp: SIRType, debug: Boolean = false)(using
         lctx: LoweringContext
@@ -334,6 +369,7 @@ object SirTypeUplcGenerator {
                             case Some(constr) =>
                                 resolveUplcRepresentation(
                                   encoded,
+                                  tp,
                                   constr,
                                   typeArgs,
                                   debug,
@@ -351,7 +387,7 @@ object SirTypeUplcGenerator {
                         if decl.name == SIRType.Data.name then DataSirTypeGenerator
                         else if decl.name == SumListEmitterCommon.PairListDataDeclName then
                             if !containsFun(tp, trace) then SumPairBuiltinListEmitter
-                            else SumCaseUplcConstrOnlyEmitter
+                            else sumUplcConstrOnly(tp)
                         else if decl.name == "scalus.cardano.onchain.plutus.prelude.List" then
                             if !containsFun(tp, trace) then {
                                 val elemRepr = elementReprFor(typeArgs.head)
@@ -362,12 +398,12 @@ object SirTypeUplcGenerator {
                                     case _ if isPair(typeArgs.head) =>
                                         SumPairBuiltinListEmitter
                                     case _ => new SumBuiltinListEmitter(elemRepr)
-                            } else SumCaseUplcConstrOnlyEmitter
+                            } else sumUplcConstrOnly(tp)
                         else if decl.name == SIRType.BuiltinList.name then
                             if isPair(typeArgs.head) then SumPairBuiltinListEmitter
                             else new SumBuiltinListEmitter(elementReprFor(typeArgs.head))
                         else if !containsFun(tp, trace) then DataConstrEmitter
-                        else SumCaseUplcConstrOnlyEmitter
+                        else sumUplcConstrOnly(tp)
                     }
             case SIRType.CaseClass(constrDecl, typeArgs, optParent) =>
                 // Data constructors are handled by DataSirTypeGenerator
@@ -387,13 +423,19 @@ object SirTypeUplcGenerator {
                         .orElse(
                           getUplcReprAnnotation(constrDecl.annotations)
                               .map(encoded =>
-                                  resolveUplcRepresentation(encoded, constrDecl, typeArgs, debug)
+                                  resolveUplcRepresentation(
+                                    encoded,
+                                    tp,
+                                    constrDecl,
+                                    typeArgs,
+                                    debug
+                                  )
                               )
                         )
                         // 3. Basic structural inference with diagnostic check
                         .getOrElse {
                             warnIfExpectedAnnotation(constrDecl)
-                            resolveBasicStructural(constrDecl)
+                            resolveBasicStructural(tp, constrDecl)
                         }
             case SIRType.TypeLambda(_, body) =>
                 SirTypeUplcGenerator(body, debug)
@@ -459,7 +501,7 @@ object SirTypeUplcGenerator {
             || constrDecl.name == SumListEmitterCommon.PairNilName || constrDecl.name == SumListEmitterCommon.PairConsName
         then
             val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
-            if hasFun then Some(SumCaseUplcConstrOnlyEmitter)
+            if hasFun then Some(sumUplcConstrOnly(SIRType.CaseClass(constrDecl, typeArgs, None)))
             else if constrDecl.name == SumListEmitterCommon.PairNilName
                 || constrDecl.name == SumListEmitterCommon.PairConsName
             then Some(SumPairBuiltinListEmitter)
@@ -489,11 +531,27 @@ object SirTypeUplcGenerator {
     /** Basic structural inference: ProductCase or ProductCaseUplcConstrOnly based on containsFun.
       */
     private def resolveBasicStructural(
+        tp: SIRType,
         constrDecl: ConstrDecl
-    ): SirTypeUplcGenerator =
+    )(using LoweringContext): SirTypeUplcGenerator =
         val hasFun = containsFun(constrDecl, new IdentityHashMap[SIRType, SIRType]())
-        if hasFun then ProductCaseUplcConstrOnlyEmitter
+        if hasFun then prodUplcConstrOnly(tp)
         else ProductCaseEmitter
+
+    /** The `*Only` emitters are the ones with no Data form to fall back to, so selecting one on a
+      * target without UPLC 1.1.0 is a hard error - see [[LoweringContext.requireUplc110]]. The
+      * runtime support bindings never reach here: they are polymorphic, and a type variable does
+      * not count as a function.
+      */
+    private def sumUplcConstrOnly(tp: SIRType)(using lctx: LoweringContext): SirTypeUplcGenerator =
+        lctx.requireUplc110(tp, "holds a function")
+        SumCaseUplcConstrOnlyEmitter
+
+    private def prodUplcConstrOnly(tp: SIRType)(using
+        lctx: LoweringContext
+    ): SirTypeUplcGenerator =
+        lctx.requireUplc110(tp, "holds a function")
+        ProductCaseUplcConstrOnlyEmitter
 
     def isPairOrTuple2(tp: SIRType): Boolean =
         ProductCaseClassRepresentation.ProdBuiltinPair.isPairOrTuple2(tp)

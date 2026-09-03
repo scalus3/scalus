@@ -274,6 +274,32 @@ class LoweringContext(
         }
     }
 
+    /** Whether the target can carry UPLC 1.1.0 terms (`constr`/`case` over Constr values).
+      *
+      * Always on PlutusV3 and later; on PlutusV1/V2 only from the van Rossem hard fork, which
+      * introduced UPLC 1.1.0 for those languages (`plcVersionsIntroducedIn` in plutus-ledger-api).
+      * Plutus rejects `constr`/`case` in a 1.0.0 program at deserialization, so below this bound a
+      * V1/V2 target must not emit them. This is distinct from case-on-builtins, which is a
+      * protocol-version-11 feature for every language and is gated separately.
+      */
+    def uplc110Available: Boolean = targetLanguage match
+        case Language.PlutusV1 | Language.PlutusV2 =>
+            targetProtocolVersion >= MajorProtocolVersion.vanRossemPV
+        case _ => true
+
+    /** Fails lowering when `tp` can only be encoded with `constr`/`case` and the target has no UPLC
+      * 1.1.0. Used where a type has no Data form, so there is nothing to fall back to.
+      */
+    def requireUplc110(tp: SIRType, why: String): Unit =
+        if !uplc110Available then
+            throw LoweringException(
+              s"${tp.show} $why and needs UPLC 1.1.0 (constr/case), which $targetLanguage at " +
+                  s"protocol version $targetProtocolVersion does not support: PlutusV1/V2 only " +
+                  "carry it from protocol version 11 (van Rossem). Target protocol version 11 " +
+                  "or PlutusV3.",
+              SIRPosition.empty
+            )
+
     def warn(msg: String, pos: SIRPosition): Unit = {
         if !noWarn then println(s"warning: ${msg} at ${pos.show}")
     }

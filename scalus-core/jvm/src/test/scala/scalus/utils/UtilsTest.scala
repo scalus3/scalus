@@ -46,10 +46,18 @@ class UtilsTest
         assertThrows[IllegalArgumentException](Utils.readPlutusFileContent(content))
     }
 
-    test("readPlutusFileContent rejects a Plutus Core version unsupported by the envelope type") {
-        // A Plutus Core 1.1.0 program is only valid in PlutusScriptV3 envelopes
+    test("readPlutusFileContent accepts a 1.1.0 program in a PlutusScriptV1 envelope") {
+        // Plutus Core 1.1.0 was PlutusV3-only until the van Rossem hard fork, which introduced it
+        // for PlutusV1 and PlutusV2 as well. Such a script runs only at protocol version 11 and
+        // later, but it is valid and must be readable.
         val program = Program((1, 1, 0), λ("i0")(Term.Error())).deBruijnedProgram
         val content = Utils.programToPlutusFileContent(program, Language.PlutusV1)
+        assert(Utils.readPlutusFileContent(content).version == (1, 1, 0))
+    }
+
+    test("readPlutusFileContent rejects an unknown Plutus Core version") {
+        val program = Program((2, 0, 0), λ("i0")(Term.Error())).deBruijnedProgram
+        val content = Utils.programToPlutusFileContent(program, Language.PlutusV3)
         assertThrows[IllegalArgumentException](Utils.readPlutusFileContent(content))
     }
 }

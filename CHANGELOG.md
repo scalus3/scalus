@@ -38,6 +38,36 @@
 
 ### Changed
 
+- PlutusV1/V2 programs declare the UPLC version their term needs. Since van Rossem became the
+  default target, the lowering emits `case` for PlutusV1/V2 validators that pattern-match on `Data`
+  (it gates `constr`/`case` on the protocol version, not the ledger language), but the program was
+  still stamped UPLC `(1, 0, 0)`, which Plutus does not accept for `constr`/`case` at
+  deserialization. Scalus's own flat codec did not check this, so it went unnoticed.
+  PlutusV1/V2 programs now declare the lowest UPLC version their term needs
+  (`Program.minVersionFor`: 1.1.0 if it uses `constr`/`case`, else 1.0.0), on every path -
+  `PlutusV1.compile`, `Program.plutusV1(term)` and `Term.plutusV1` alike. The version field gates
+  only `constr`/`case` syntax (builtins are gated by ledger language and protocol version), so this
+  is the honest stamp: a `constr`-free term is valid as 1.0.0 at every protocol version and keeps
+  its hash and its reach; a term with `constr`/`case` needs 1.1.0, which PlutusV1/V2 only carry from
+  the van Rossem hard fork on (`plcVersionsIntroducedIn` in plutus-ledger-api). Only the hashes of
+  scripts that were not accepted before change; `sir.toUplc().plutusV2` on a `Data`-matching
+  validator now produces a 1.1.0 program.
+- Below van Rossem, PlutusV1/V2 no longer emit `constr`/`case` at all. The stamp alone is not
+  enough: `@UplcRepr(UplcConstr)` on a type declaration (`Order`, hence `Ord`, `SortedMap`
+  and `List.sort`) was honoured regardless of the target, so `Options.plomin` - the documented way to
+  reproduce pre-van-Rossem output - still put `case` into a PlutusV1/V2 program, and no 1.0.0 stamp
+  can carry it. `LoweringContext.uplc110Available` now names the capability (always on PlutusV3+,
+  from protocol version 11 on V1/V2), and on a target without it a declaration-level
+  `@UplcRepr(UplcConstr)` falls back to the Data representation the type had before the annotation,
+  with a warning. A type that holds a function has no Data form, so lowering it on such a target
+  fails with the type name instead. Use-site annotations (`List[A] @UplcRepr(UplcConstr)`) are left
+  alone: the runtime support ops are written against them. As a backstop,
+  `ProgramFlatCodec.encodeFlat` refuses a program that declares a version below 1.1.0 but contains
+  `constr`/`case` - the same check the Plutus decoder makes - so no path can produce bytes the
+  ledger rejects. New `Term.usesConstrOrCase`.
+- `Utils.readPlutusFileContent` accepts a `(1, 1, 0)` program in a `PlutusScriptV1`/`V2` envelope.
+  It used to reject it as "only valid in PlutusScriptV3", which van Rossem made wrong - and which
+  would now reject Scalus's own output.
 - The Scalus identification tag no longer costs execution budget. `Options.release` used to wrap
   the whole program in `[(lam _scalusTag body) (con string "S")]`, which the CEK machine
   evaluated on every run for 300 memory and 48000 CPU. It now marks the first `(error)` node of

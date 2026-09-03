@@ -276,6 +276,16 @@ enum Term:
                 (f1, args :+ arg)
             case f => (f, Nil)
 
+    /** True if this term contains a `constr` or `case` node anywhere, i.e. it needs UPLC 1.1.0. */
+    def usesConstrOrCase: Boolean = this match
+        case _: Term.Constr | _: Term.Case                     => true
+        case Term.Var(_, _) | Term.Const(_, _) | _: Term.Error => false
+        case Term.Builtin(_, _)                                => false
+        case Term.LamAbs(_, body, _)                           => body.usesConstrOrCase
+        case Term.Force(body, _)                               => body.usesConstrOrCase
+        case Term.Delay(body, _)                               => body.usesConstrOrCase
+        case Term.Apply(f, arg, _) => f.usesConstrOrCase || arg.usesConstrOrCase
+
     def collectBuiltins: Set[DefaultFun] = {
         this match
             case Term.Builtin(bn, _)                               => Set(bn)
@@ -429,10 +439,14 @@ enum Term:
     def evaluateProfile(using vm: PlutusVM): Result =
         vm.evaluateDeBruijnedTermProfile(DeBruijn.deBruijnTerm(this))
 
-    /** Wrap the term in a Plutus V1 program. */
+    /** Wrap the term in a Plutus V1 program at the lowest UPLC version that can carry it (1.1.0 if
+      * it uses `constr`/`case`, else 1.0.0). See [[Program.minVersionFor]].
+      */
     def plutusV1: Program = Program.plutusV1(this)
 
-    /** Wrap the term in a Plutus V2 program. */
+    /** Wrap the term in a Plutus V2 program at the lowest UPLC version that can carry it (1.1.0 if
+      * it uses `constr`/`case`, else 1.0.0). See [[Program.minVersionFor]].
+      */
     def plutusV2: Program = Program.plutusV2(this)
 
     /** Wrap the term in a Plutus V3 program. */

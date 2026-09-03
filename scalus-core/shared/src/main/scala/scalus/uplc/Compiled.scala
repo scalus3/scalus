@@ -118,7 +118,9 @@ final case class PlutusV1[A](
     /** Returns [[scalus.cardano.ledger.Language.PlutusV1]]. */
     def language: Language = Language.PlutusV1
 
-    /** Creates a Plutus V1 program with version (1, 0, 0). */
+    /** Creates a Plutus V1 program at the lowest UPLC version its term needs: 1.1.0 if it uses
+      * `constr`/`case`, else 1.0.0. See [[Program.minVersionFor]].
+      */
     protected def makeProgram(term: Term): Program = Program.plutusV1(term)
 
     /** Creates a Plutus V1 script. */
@@ -240,7 +242,9 @@ final case class PlutusV2[A](
     /** Returns [[scalus.cardano.ledger.Language.PlutusV2]]. */
     def language: Language = Language.PlutusV2
 
-    /** Creates a Plutus V2 program with version (1, 0, 0). */
+    /** Creates a Plutus V2 program at the lowest UPLC version its term needs: 1.1.0 if it uses
+      * `constr`/`case`, else 1.0.0. See [[Program.minVersionFor]].
+      */
     protected def makeProgram(term: Term): Program = Program.plutusV2(term)
 
     /** Creates a Plutus V2 script. */

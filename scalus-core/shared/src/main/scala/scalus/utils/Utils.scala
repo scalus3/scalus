@@ -48,30 +48,25 @@ object Utils:
             case PlutusV4 => "PlutusScriptV3"
         write(PlutusTextEnvelope(`type`, "", program.doubleCborHex))
 
-    private val supportedEnvelopeTypes: Map[String, Language] =
-        Map(
-          "PlutusScriptV1" -> PlutusV1,
-          "PlutusScriptV2" -> PlutusV2,
-          "PlutusScriptV3" -> PlutusV3
-        )
+    private val supportedEnvelopeTypes: Set[String] =
+        Set("PlutusScriptV1", "PlutusScriptV2", "PlutusScriptV3")
 
     def readPlutusFileContent(content: String): Program =
         val envelope = read[PlutusTextEnvelope](content)
-        val language = supportedEnvelopeTypes.getOrElse(
-          envelope.`type`,
-          throw new IllegalArgumentException(
-            s"Unsupported Plutus text envelope type '${envelope.`type`}', " +
-                s"expected one of ${supportedEnvelopeTypes.keys.mkString(", ")}"
-          )
-        )
+        if !supportedEnvelopeTypes.contains(envelope.`type`) then
+            throw new IllegalArgumentException(
+              s"Unsupported Plutus text envelope type '${envelope.`type`}', " +
+                  s"expected one of ${supportedEnvelopeTypes.mkString(", ")}"
+            )
         val program = Program.fromDoubleCborHex(envelope.cborHex)
-        // Plutus Core 1.1.0 (constr/case) is only available in Plutus V3
-        val supportedVersions: Set[(Int, Int, Int)] = language match
-            case PlutusV1 | PlutusV2 => Set((1, 0, 0))
-            case _                   => Set((1, 0, 0), (1, 1, 0))
+        // Plutus Core 1.1.0 (constr/case) was PlutusV3-only until the van Rossem hard fork, which
+        // introduced it for PlutusV1 and PlutusV2 too. A 1.1.0 V1/V2 script only runs at protocol
+        // version 11 and later, but it is a valid script and must be readable here, so the
+        // accepted versions no longer depend on the envelope type.
+        val supportedVersions: Set[(Int, Int, Int)] = Set((1, 0, 0), (1, 1, 0))
         if !supportedVersions.contains(program.version) then
             throw new IllegalArgumentException(
-              s"Unsupported Plutus Core version ${program.version} for ${envelope.`type`}, " +
+              s"Unsupported Plutus Core version ${program.version}, " +
                   s"expected one of ${supportedVersions.mkString(", ")}"
             )
         program
