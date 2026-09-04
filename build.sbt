@@ -37,7 +37,7 @@ val jsoniterScalaVersion = "2.40.1"
 //ThisBuild / scalaVersion := "3.7.3-RC1-bin-SNAPSHOT"
 // LTS is the default build version; the next series is used to cross-build the
 // compiler plugin (which depends on the unstable scala3-compiler internal API).
-val scala3LtsVersion = "3.3.8"
+val scala3LtsVersion = "3.9.0"
 // Previous LTS patch. The compiler plugin (and scalus-core, to test it) still cross-build here so
 // downstream projects pinned to 3.3.7 keep a published scalus-plugin_3.3.7. `publishOnlyLts` keeps
 // the (compiler-version-independent) `_3` library artifacts published from the current LTS only.
