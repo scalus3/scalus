@@ -114,17 +114,19 @@ const submittedWithDebug: SubmitResult = seeded.submitTx(bytes, {scriptHashHex: 
 const txHash: string | undefined = submitted.txHash;
 const submitLogs: string[] | undefined = submittedWithDebug.logs;
 
-const delegation: DelegationInfo = fromState.getDelegation(bytes);
-const poolId: Uint8Array | null = delegation.poolId;
+// getDelegation and getStakeReward take a bech32 reward address, not raw/CBOR bytes, and poolId
+// and getStakeReward's result are `| undefined`, not `| null`.
+const delegation: DelegationInfo = fromState.getDelegation("stake_test1...");
+const poolId: string | undefined = delegation.poolId;
 const rewards: bigint = delegation.rewards;
 
-const reward: bigint | null = funded.getStakeReward("aa");
-const datum: Uint8Array | null = richlyFunded.getDatum(bytes);
+const reward: bigint | undefined = funded.getStakeReward("stake_test1...");
+const datum: Uint8Array | undefined = richlyFunded.getDatum("bb");
 const utxos: Uint8Array[] = emulator.getAllUtxos();
 const addressUtxos: Uint8Array[] = emulator.getUtxosForAddress("addr_test1...");
 const allUtxosCbor: Uint8Array = emulator.getUtxosCbor();
 const snapshot: Emulator = emulator.snapshot();
-const seen: boolean = snapshot.hasTx(bytes);
+const seen: boolean = snapshot.hasTx("aa");
 emulator.setSlot(42);
 emulator.tick(1);
 const currentSlot: number = emulator.getSlot();
