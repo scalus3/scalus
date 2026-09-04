@@ -131,6 +131,22 @@ case class StreamCapabilities(
 
 object StreamCapabilities {
 
+    /** Declares no streaming at all: every request is refused, and a caller consulting
+      * [[SubscriptionSupport.of]] first is told so before asking.
+      *
+      * The default for a provider that has no streaming view, so "cannot stream" is a value the
+      * capability system carries like any other rather than a hole in the type system.
+      */
+    val none: StreamCapabilities = StreamCapabilities(
+      kinds = Set.empty,
+      pushdown = Set.empty,
+      scanning = ScanSupport.Unsupported,
+      replay = ReplaySupport.NoReplay,
+      rollbackHorizon = None,
+      maxConfirmations = None,
+      idleSignals = false
+    )
+
     /** An in-process provider holding the whole ledger: everything is indexed, nothing is remote.
       * `rollbackHorizon` is still explicit, because a linear emulator that never forks and one that
       * can be rewound on demand are different things to a subscriber.

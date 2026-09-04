@@ -160,6 +160,83 @@ object SubscriptionSupport {
             // serves it without scanning.
             case _: SubscriptionRequest.TransactionStatus => true
 
+    /** The sources a provider must observe in order to serve this request.
+      *
+      * Beside [[of]] deliberately, and taking the same `pushdown` set it classifies against. The
+      * two walk the same trees under the same rules — a union needs every arm, an intersection is
+      * answered from any one — and a provider that classified a query with one and then observed it
+      * with the other would accept subscriptions no block it fetches could ever cover: no events,
+      * no `Idle`, no error. Deriving both from the same recursion is what stops a new
+      * [[scalus.cardano.node.UtxoSource]] or [[TransactionQuery]] case being handled in one and
+      * forgotten in the other.
+      *
+      * `pushdown` is not decoration. An intersection is answered from *either* arm, so which arm to
+      * observe depends on which one this provider can look up: `FromAsset && FromAddress` must
+      * yield the address for an address-only provider and the asset for an asset-only one, and a
+      * version that just picked the left arm would hand back something the caller cannot watch —
+      * leaving the subscription accepted, uncovered and silent.
+      *
+      * Flat leaves, not the composite the caller wrote, because that is the shape both consumers
+      * want: a metered provider probes one source endpoint at a time, and
+      * [[scalus.cardano.node.stream.internal.BlockCoverage]] tests membership of exactly these.
+      *
+      * An empty result means "this cannot be served by observing sources" — a block or status
+      * subscription, or a query with nothing pushdownable in it. For a provider that serves only
+      * what it can look up, that is a request [[of]] will already have refused; getting one here
+      * anyway is a disagreement between the two worth raising rather than watching nothing.
+      */
+    def sourcesFor(request: SubscriptionRequest, caps: StreamCapabilities): Set[UtxoSource] =
+        request match
+            case SubscriptionRequest.Utxo(q, _) => utxoQuerySources(q.query, caps.pushdown)
+            case SubscriptionRequest.Transaction(q, _) =>
+                transactionQuerySources(q, caps.pushdown)
+            case _: SubscriptionRequest.Block             => Set.empty
+            case _: SubscriptionRequest.TransactionStatus => Set.empty
+
+    private def utxoQuerySources(query: UtxoQuery, pushdown: Set[PushdownKind]): Set[UtxoSource] =
+        query match
+            case q: UtxoQuery.Simple => leafSources(q.source, pushdown)
+            case UtxoQuery.Or(l, r, _, _, _) =>
+                utxoQuerySources(l, pushdown) ++ utxoQuerySources(r, pushdown)
+
+    private def leafSources(source: UtxoSource, pushdown: Set[PushdownKind]): Set[UtxoSource] =
+        source match
+            // A union is only as covered as its worst arm, so every arm must be observed.
+            case UtxoSource.Or(l, r) => leafSources(l, pushdown) ++ leafSources(r, pushdown)
+            // One covered arm answers an intersection and the other post-filters data already in
+            // hand, so observing both would double a metered provider's per-block cost for nothing.
+            // Mirrors `indexedSource`, which accepts an `And` on either arm for the same reason.
+            case UtxoSource.And(l, r) =>
+                val left = leafSources(l, pushdown)
+                if left.nonEmpty then left else leafSources(r, pushdown)
+            case leaf => if indexedSource(leaf, pushdown) then Set(leaf) else Set.empty
+
+    private def transactionQuerySources(
+        query: TransactionQuery,
+        pushdown: Set[PushdownKind]
+    ): Set[UtxoSource] = {
+        def pushed(kind: PushdownKind, source: => UtxoSource): Set[UtxoSource] =
+            if pushdown.contains(kind) then Set(source) else Set.empty
+        query match
+            case TransactionQuery.InvolvesAddress(a) =>
+                pushed(PushdownKind.Address, UtxoSource.FromAddress(a))
+            case TransactionQuery.MintsAsset(p, n) =>
+                pushed(PushdownKind.Asset, UtxoSource.FromAsset(p, n))
+            case TransactionQuery.SpendsInput(i) =>
+                pushed(PushdownKind.Inputs, UtxoSource.FromInputs(Set(i)))
+            // An intersection is answered from any one arm; a union needs all of them.
+            case TransactionQuery.AllOf(qs) =>
+                qs.map(transactionQuerySources(_, pushdown)).find(_.nonEmpty).getOrElse(Set.empty)
+            case TransactionQuery.AnyOf(qs) =>
+                qs.flatMap(transactionQuerySources(_, pushdown)).toSet
+            // No source to observe: `MintsPolicy` has no per-asset endpoint, and `All`,
+            // `InvolvesScript` and `Not` have no index at all — matching how `SubscriptionHub`
+            // answers coverage for exactly these.
+            case TransactionQuery.All | _: TransactionQuery.MintsPolicy |
+                _: TransactionQuery.InvolvesScript | _: TransactionQuery.Not =>
+                Set.empty
+    }
+
     private def indexedUtxoQuery(query: UtxoQuery, pushdown: Set[PushdownKind]): Boolean =
         query match
             case q: UtxoQuery.Simple => indexedSource(q.source, pushdown)

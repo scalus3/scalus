@@ -34,6 +34,15 @@ private[stream] enum ChainEvent {
   */
 private[stream] trait ChainFollower {
 
+    /** Begin producing events.
+      *
+      * Separate from construction so that a follower is not off polling a chain — spending a
+      * metered quota — before whoever built it has finished wiring up a consumer. [[HubDriver]]
+      * calls this as it starts pumping, so the two halves of the lifecycle cannot be started out of
+      * order. Idempotent, and a closed follower stays closed.
+      */
+    def start(): Unit
+
     /** The follower's event stream. Single-consumer — [[HubDriver]] is the consumer.
       *
       * A failed pull ends the follower: the driver propagates the cause to every subscription
@@ -77,6 +86,45 @@ private[stream] trait ChainFollower {
       * `watch` can have accounted for.
       */
     def watch(sources: Set[scalus.cardano.node.UtxoSource]): scalus.cardano.node.stream.ChainPoint
+
+    /** Replace the watched set without asking for a position, and without failing on a stopped
+      * follower.
+      *
+      * For shrinking, when a subscription ends. [[watch]] refuses a stopped follower because the
+      * position it would return could not be honoured — but shrinking asks for no position, and the
+      * path that shrinks is exactly the path a *failed feed* takes: every subscription is being
+      * terminated, each termination fires its release hook, and a throw from one of those aborts
+      * the fan-out and strands every subscription after it. So this one is quiet by contract, not
+      * by a liveness check the caller could lose a race against.
+      */
+    def stopWatching(sources: Set[scalus.cardano.node.UtxoSource]): Unit
+
+    /** Record where a subscription registering *now* must later be observed from.
+      *
+      * Registration is synchronous and observation waits for demand, which leaves a window: on a
+      * backend that has to go and look, a transaction submitted between `subscribe` and the first
+      * `pull` lands in a block the feed would otherwise never reach, because it would start at
+      * whatever the tip was when demand arrived. Anchoring closes it — the position is fixed when
+      * the subscription registers, and the feed resumes from there rather than from the tip.
+      *
+      * Costs at most one request, once per idle-to-anchored transition, rather than the poll loop a
+      * subscription used to start. A follower whose events are pushed to it has nothing to anchor,
+      * so this defaults to doing nothing.
+      */
+    def anchor(): Unit = ()
+
+    /** Suspend or resume observation.
+      *
+      * A follower that costs nothing to run — one fed by an in-process ledger, or a fake — has
+      * nothing to suspend, so this defaults to doing nothing. A follower that spends a metered
+      * quota per poll implements it, and the provider drives it from demand: the feed runs while at
+      * least one subscription is being consumed and idles when none is.
+      *
+      * Resuming does **not** replay the interval that was skipped. A subscription registered now
+      * asked for events from now, so a follower resumes at the chain's current tip rather than
+      * delivering a backlog nobody subscribed for.
+      */
+    def setObserving(active: Boolean): Unit = ()
 
     def close(): Unit
 }

@@ -15,6 +15,7 @@ import io.bullet.borer.Cbor
 import scala.annotation.nowarn
 import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.SortedMap
+import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContext, Future}
 import scala.util.Try
 
@@ -37,11 +38,34 @@ class BlockfrostProvider(
     apiKey: String,
     baseUrl: String,
     maxConcurrentRequests: Int,
-    initialCardanoInfo: CardanoInfo
+    initialCardanoInfo: CardanoInfo,
+    /** How often [[streaming]] polls the chain — the quota dial, since every poll is at least one
+      * request whether or not the chain moved.
+      *
+      * Here rather than on `streaming(...)` because there is exactly one streaming view per
+      * provider: a second view would run a second poll loop against the same quota. A caller who
+      * wants a different rate builds a provider with a different interval.
+      */
+    val pollInterval: FiniteDuration
 )(using
     backend: Backend[Future],
     ec: ExecutionContext
 ) extends BlockchainProvider {
+
+    /** Polling at [[BlockfrostProvider.defaultPollInterval]]. */
+    def this(
+        apiKey: String,
+        baseUrl: String,
+        maxConcurrentRequests: Int,
+        initialCardanoInfo: CardanoInfo
+    )(using Backend[Future], ExecutionContext) =
+        this(
+          apiKey,
+          baseUrl,
+          maxConcurrentRequests,
+          initialCardanoInfo,
+          BlockfrostProvider.defaultPollInterval
+        )
 
     private val log = scribe.Logger[BlockfrostProvider]
 
@@ -113,15 +137,32 @@ class BlockfrostProvider(
         page: Int = 1,
         count: Int = 100,
         order: String = "asc"
-    ): Future[Seq[ujson.Value]] = {
+    ): Future[Seq[ujson.Value]] =
+        fetchPageOpt(path, page, count, order).map(_.getOrElse(Seq.empty))
+
+    /** Fetch a single page, distinguishing "no such resource" from "no results".
+      *
+      * [[fetchPage]] reads a 404 as an empty page, which is right when the subject may simply have
+      * no history — an address nobody has ever paid. It is wrong when the subject is a block this
+      * client itself reported: there a 404 means the block is no longer on the chain, and reading
+      * it as "nothing new yet" would leave a follower waiting quietly at a position that has been
+      * orphaned, reporting no events and no error while the chain moved on without it.
+      */
+    private def fetchPageOpt(
+        path: String,
+        page: Int = 1,
+        count: Int = 100,
+        order: String = "asc"
+    ): Future[Option[Seq[ujson.Value]]] = {
         val separator = if path.contains('?') then '&' else '?'
         val url = s"$baseUrl$path${separator}page=$page&count=$count&order=$order"
         rateLimited(basicRequest.get(uri"$url").headers(headers).send(backend)).map { response =>
             if response.code.isSuccess then
                 response.body match
-                    case Right(body) => ujson.read(body, trace = false).arr.toSeq
-                    case Left(_)     => Seq.empty
-            else if response.code == StatusCode.NotFound then Seq.empty
+                    case Right(body) => Some(ujson.read(body, trace = false).arr.toSeq)
+                    case Left(error) =>
+                        throw RuntimeException(s"Failed to fetch $path (page=$page): $error")
+            else if response.code == StatusCode.NotFound then None
             else
                 throw RuntimeException(
                   s"HTTP ${response.code} for $path (page=$page): ${response.body}"
@@ -218,6 +259,24 @@ class BlockfrostProvider(
     ): Future[Seq[String]] =
         fetchPaginated(s"/addresses/$address/txs", page, count, order).map(_.map(_.str))
 
+    /** Fetch an address's transactions within an inclusive block-height range.
+      * `GET /addresses/{address}/transactions?from={from}&to={to}`
+      *
+      * This is what makes watching an address cost one request per block rather than a scan: the
+      * range is applied server-side, so a block in which the address did nothing comes back as an
+      * empty array instead of as a block that has to be fetched and searched.
+      *
+      * Blockfrost also accepts `height:txIndex` for finer bounds; whole heights are what a
+      * block-at-a-time watcher needs, and `from == to` asks about exactly one block.
+      */
+    def fetchAddressTransactionsInRange(
+        address: String,
+        from: Long,
+        to: Long
+    ): Future[Seq[AddressTransaction]] =
+        fetchAllPages(s"/addresses/$address/transactions?from=$from&to=$to")
+            .map(_.map(read[AddressTransaction](_)))
+
     // ── Blocks ──────────────────────────────────────────────────────────────
 
     /** Fetch the latest block. `GET /blocks/latest` */
@@ -251,6 +310,25 @@ class BlockfrostProvider(
         count: Int = 100
     ): Future[Seq[BlockInfo]] =
         fetchPaginated(s"/blocks/$hashOrNumber/next", page, count).map(_.map(read[BlockInfo](_)))
+
+    /** Fetch subsequent blocks, or `None` if Blockfrost no longer has this block.
+      * `GET /blocks/{hash_or_number}/next`
+      *
+      * The `None` is the point. Asking "what came after the block I last saw" and being told the
+      * block does not exist is how a reorg reaches a client that is following the chain forward: it
+      * costs no extra request, because it is the request the follower was making anyway.
+      *
+      * One page, deliberately. A client that has fallen further behind than `count` picks the rest
+      * up on its next poll, continuing from the block it actually applied — and the cap bounds the
+      * burst of per-block requests a single poll can set off, which on a metered plan is the
+      * difference between catching up and exhausting the day's quota.
+      */
+    def fetchBlockNextOrGone(
+        hashOrNumber: String,
+        count: Int = 100
+    ): Future[Option[Seq[BlockInfo]]] =
+        fetchPageOpt(s"/blocks/$hashOrNumber/next", count = count)
+            .map(_.map(_.map(read[BlockInfo](_))))
 
     /** Fetch preceding blocks. `GET /blocks/{hash_or_number}/previous` */
     def fetchBlockPrevious(
@@ -620,6 +698,27 @@ class BlockfrostProvider(
         }
     }
 
+    // ── streaming ───────────────────────────────────────────────────────────
+
+    override def streamCapabilities: stream.StreamCapabilities =
+        stream.StreamingBlockfrostProvider.capabilities
+
+    /** The streaming view of this backend, created on first use and cached thereafter.
+      *
+      * Free to obtain: no request is made and no polling begins until something consumes a
+      * subscription, so a caller may take this view, read its capabilities, and walk away having
+      * spent nothing.
+      *
+      * One view per provider, deliberately. A second would run a second poll loop against the same
+      * quota — one request per interval each, whether or not the chain moved — which is exactly the
+      * cost this provider's whole shape exists to control. A caller who genuinely wants a different
+      * rate builds a provider with `pollInterval` set to it.
+      */
+    private lazy val cachedStreaming: stream.BlockchainStreaming =
+        stream.StreamingBlockfrostProvider(this, pollInterval)
+
+    override def streaming(): stream.BlockchainStreaming = cachedStreaming
+
     override def checkTransaction(txHash: TransactionHash): Future[TransactionStatus] =
         checkTransactionHex(txHash.toHex)
 
@@ -964,6 +1063,44 @@ class BlockfrostProvider(
             }
     }
 
+    /** Resolve what one transaction created and consumed. `GET /txs/{hash}/utxos`
+      *
+      * `spent` is the *resolved* consumed outputs, not bare inputs: a subscriber watching an
+      * address needs to know which of its UTxOs disappeared, and an input reference does not say.
+      * Blockfrost returns the address and value of each input, so resolving it here costs nothing
+      * beyond the request already being made.
+      *
+      * Which inputs count as consumed is decided by [[BlockfrostProvider.parseTransactionEffects]],
+      * where the collateral rules live.
+      */
+    private[node] def fetchTransactionEffects(
+        txHash: TransactionHash
+    ): Future[BlockfrostTxEffects] =
+        fetchJson(s"/txs/${txHash.toHex}/utxos").flatMap { json =>
+            val failed = BlockfrostProvider.scriptPhaseFailed(json) match
+                case Some(known) => Future.successful(known)
+                // The one shape the response cannot settle: no outputs at all is either a
+                // transaction that produced none, or one whose collateral was consumed in full and
+                // so left no return. `valid_contract` is the only thing separating them, and
+                // guessing inverts `spent` in both directions — the subscriber is told its inputs
+                // are gone while they are still on chain, and never told its collateral was taken.
+                // Paid for only in this shape, which the common case is not.
+                case None => fetchTransactionInfo(txHash.toHex).map(!_.validContract)
+            failed.flatMap { invalid =>
+                val parsed = BlockfrostProvider.parseTransactionEffects(txHash, json, invalid)
+                for
+                    created <- resolveRefs(parsed.created)
+                    spent <- resolveRefs(parsed.spent)
+                yield BlockfrostTxEffects(created, spent)
+            }
+        }
+
+    private def resolveRefs(parsed: Seq[ParsedUtxo]): Future[Utxos] =
+        enrichWithScriptRefs(
+          parsed.map(p => p.input -> p.output).toMap,
+          parsed.collect { case ParsedUtxo(input, _, Some(hash)) => input -> hash }.toMap
+        )
+
     /** Fetch UTxOs from a transaction using Blockfrost API */
     private def fetchUtxosFromTransaction(
         txId: TransactionHash
@@ -1023,8 +1160,32 @@ class BlockfrostProvider(
     }
 }
 
+/** What a transaction did to the UTxO set, as [[BlockfrostProvider.fetchTransactionEffects]]
+  * resolves it: the outputs it produced and the outputs it consumed.
+  */
+private[node] case class BlockfrostTxEffects(created: Utxos, spent: Utxos)
+
+/** A UTxO as Blockfrost describes it, before any reference script it declares has been fetched. */
+private[node] case class ParsedUtxo(
+    input: TransactionInput,
+    output: TransactionOutput,
+    referenceScript: Option[ScriptHash]
+)
+
+/** The same split as [[BlockfrostTxEffects]], at the stage where it is decided rather than resolved
+  * — which is where the collateral rules live, and so where they are worth testing.
+  */
+private[node] case class ParsedTxEffects(created: Seq[ParsedUtxo], spent: Seq[ParsedUtxo])
+
 /** Companion object for BlockfrostProvider with factory methods and utilities. */
 object BlockfrostProvider {
+
+    /** Default streaming poll interval: below Cardano's ~20s block time, so a block is normally
+      * reported within one interval of appearing, and about 8,600 requests a day — well inside a
+      * 50,000/day free tier, leaving the bulk of the budget for the reads that carry events.
+      */
+    val defaultPollInterval: FiniteDuration =
+        stream.StreamingBlockfrostProvider.defaultPollInterval
 
     /** Blockfrost API URL for Cardano mainnet */
     val mainnetUrl = "https://cardano-mainnet.blockfrost.io/api/v0"
@@ -1165,10 +1326,72 @@ object BlockfrostProvider {
             ScriptHash.fromHex(hex)
         }
 
+    /** Decide what a transaction created and consumed, from `/txs/{hash}/utxos`.
+      *
+      * Collateral is why this is not a straight read of the two arrays. A phase-2 script failure
+      * consumes the transaction's *collateral* rather than its inputs, and the only output it
+      * leaves on chain is the collateral return; Blockfrost reports both outcomes through the same
+      * `inputs`/`outputs` arrays and distinguishes them with a `collateral` flag. So the flag
+      * decides which inputs were really spent. Reading collateral as never-spent would leave a
+      * subscriber holding a UTxO the chain has consumed — permanently, and with nothing to tell it
+      * otherwise. Reference inputs are never consumed and are excluded either way.
+      */
+    private def flag(v: ujson.Value, name: String): Boolean =
+        v.obj.get(name).collect { case ujson.Bool(b) => b }.getOrElse(false)
+
+    /** Whether `/txs/{hash}/utxos` alone settles that the script phase failed.
+      *
+      * `Some(true)` when an output is flagged as collateral: only a collateral *return* is, and
+      * only a failed transaction produces one. `Some(false)` when there are outputs and none is — a
+      * successful transaction's. `None` when there are no outputs at all, which this response
+      * cannot tell apart from a failure whose collateral was consumed in full, leaving no return.
+      */
+    private[node] def scriptPhaseFailed(json: ujson.Value): Option[Boolean] = {
+        val outputs = json("outputs").arr.toSeq
+        if outputs.exists(flag(_, "collateral")) then Some(true)
+        else if outputs.nonEmpty then Some(false)
+        else None
+    }
+
+    private[node] def parseTransactionEffects(
+        txHash: TransactionHash,
+        json: ujson.Value,
+        invalid: Boolean
+    ): ParsedTxEffects = {
+        val inputs = json("inputs").arr.toSeq
+        val outputs = json("outputs").arr.toSeq
+
+        val created = outputs.zipWithIndex.map { case (out, position) =>
+            // `output_index` is authoritative where the API supplies it: a failed transaction's
+            // collateral return sits at the end of the body's output list, not at position 0 of
+            // this array.
+            // `collect` rather than `map`, for the reason `flag` uses it too: a field that is
+            // present but null makes `.num` throw instead of reaching this fallback.
+            val index = out.obj
+                .get("output_index")
+                .collect { case ujson.Num(n) => n.toInt }
+                .getOrElse(position)
+            val (input, output) = parseUtxoOutput(TransactionInput(txHash, index), out)
+            ParsedUtxo(input, output, referenceScriptHash(out))
+        }
+        val spent = inputs
+            .filterNot(flag(_, "reference"))
+            .filter(in => flag(in, "collateral") == invalid)
+            .map { in =>
+                val ref = TransactionInput(
+                  TransactionHash.fromHex(in("tx_hash").str),
+                  in("output_index").num.toInt
+                )
+                val (input, output) = parseUtxoOutput(ref, in)
+                ParsedUtxo(input, output, referenceScriptHash(in))
+            }
+        ParsedTxEffects(created, spent)
+    }
+
     /** Parse a single UTxO JSON into a (TransactionInput, TransactionOutput) pair. The output's
       * `scriptRef` is left empty; see [[referenceScriptHash]] and `resolveScriptRef`.
       */
-    private def parseUtxoOutput(
+    private[node] def parseUtxoOutput(
         input: TransactionInput,
         json: ujson.Value
     ): (TransactionInput, TransactionOutput) = {
@@ -1242,7 +1465,33 @@ object BlockfrostProvider {
     def mainnet(apiKey: String, maxConcurrentRequests: Int = 5)(using
         ec: ExecutionContext
     ): Future[BlockfrostProvider] =
-        create(apiKey, mainnetUrl, Network.Mainnet, SlotConfig.mainnet, maxConcurrentRequests)
+        create(
+          apiKey,
+          mainnetUrl,
+          Network.Mainnet,
+          SlotConfig.mainnet,
+          maxConcurrentRequests,
+          defaultPollInterval
+        )
+
+    /** With an explicit streaming poll interval — the quota dial, since every poll is at least one
+      * request whether or not the chain moved.
+      *
+      * An overload rather than a defaulted parameter on the signature above: only one alternative
+      * may carry defaults, and adding one there would change that method's arity and break every
+      * already-compiled caller of the most common entry point in this API.
+      */
+    def mainnet(apiKey: String, maxConcurrentRequests: Int, pollInterval: FiniteDuration)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(
+          apiKey,
+          mainnetUrl,
+          Network.Mainnet,
+          SlotConfig.mainnet,
+          maxConcurrentRequests,
+          pollInterval
+        )
 
     /** Create a BlockfrostProvider for Cardano preview testnet.
       *
@@ -1258,7 +1507,33 @@ object BlockfrostProvider {
     def preview(apiKey: String, maxConcurrentRequests: Int = 5)(using
         ec: ExecutionContext
     ): Future[BlockfrostProvider] =
-        create(apiKey, previewUrl, Network.Testnet, SlotConfig.preview, maxConcurrentRequests)
+        create(
+          apiKey,
+          previewUrl,
+          Network.Testnet,
+          SlotConfig.preview,
+          maxConcurrentRequests,
+          defaultPollInterval
+        )
+
+    /** With an explicit streaming poll interval — the quota dial, since every poll is at least one
+      * request whether or not the chain moved.
+      *
+      * An overload rather than a defaulted parameter on the signature above: only one alternative
+      * may carry defaults, and adding one there would change that method's arity and break every
+      * already-compiled caller of the most common entry point in this API.
+      */
+    def preview(apiKey: String, maxConcurrentRequests: Int, pollInterval: FiniteDuration)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(
+          apiKey,
+          previewUrl,
+          Network.Testnet,
+          SlotConfig.preview,
+          maxConcurrentRequests,
+          pollInterval
+        )
 
     /** Create a BlockfrostProvider for Cardano preprod testnet.
       *
@@ -1274,7 +1549,33 @@ object BlockfrostProvider {
     def preprod(apiKey: String, maxConcurrentRequests: Int = 5)(using
         ec: ExecutionContext
     ): Future[BlockfrostProvider] =
-        create(apiKey, preprodUrl, Network.Testnet, SlotConfig.preprod, maxConcurrentRequests)
+        create(
+          apiKey,
+          preprodUrl,
+          Network.Testnet,
+          SlotConfig.preprod,
+          maxConcurrentRequests,
+          defaultPollInterval
+        )
+
+    /** With an explicit streaming poll interval — the quota dial, since every poll is at least one
+      * request whether or not the chain moved.
+      *
+      * An overload rather than a defaulted parameter on the signature above: only one alternative
+      * may carry defaults, and adding one there would change that method's arity and break every
+      * already-compiled caller of the most common entry point in this API.
+      */
+    def preprod(apiKey: String, maxConcurrentRequests: Int, pollInterval: FiniteDuration)(using
+        ec: ExecutionContext
+    ): Future[BlockfrostProvider] =
+        create(
+          apiKey,
+          preprodUrl,
+          Network.Testnet,
+          SlotConfig.preprod,
+          maxConcurrentRequests,
+          pollInterval
+        )
 
     /** Create a BlockfrostProvider for local Yaci DevKit.
       *
@@ -1405,6 +1706,19 @@ object BlockfrostProvider {
         network: Network,
         slotConfig: SlotConfig,
         maxConcurrentRequests: Int = 5
+    )(using ec: ExecutionContext): Future[BlockfrostProvider] =
+        create(apiKey, baseUrl, network, slotConfig, maxConcurrentRequests, defaultPollInterval)
+
+    /** With an explicit streaming poll interval. An overload for the same reason the network
+      * factories have one: a default here would change this method's arity.
+      */
+    def create(
+        apiKey: String,
+        baseUrl: String,
+        network: Network,
+        slotConfig: SlotConfig,
+        maxConcurrentRequests: Int,
+        pollInterval: FiniteDuration
     )(using ec: ExecutionContext): Future[BlockfrostProvider] = {
         given backend: Backend[Future] = BlockfrostProviderPlatform.defaultBackend
         fetchProtocolParams(apiKey, baseUrl).map { params =>
@@ -1412,7 +1726,8 @@ object BlockfrostProvider {
               apiKey,
               baseUrl,
               maxConcurrentRequests,
-              CardanoInfo(params, network, slotConfig)
+              CardanoInfo(params, network, slotConfig),
+              pollInterval
             )
         }
     }

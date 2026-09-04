@@ -40,9 +40,14 @@ class HubDriverTest extends AnyFunSuite {
     private class ManualFollower extends ChainFollower {
         val mailbox: Mailbox[ChainEvent] = Mailbox.delta[ChainEvent]()
         var closed = false
+        var started = false
+
+        override def start(): Unit = started = true
+
         override def events: ScalusAsyncSource[ChainEvent] = mailbox
         // Complete coverage: everything after the origin covers any subscription.
         override def watch(sources: Set[UtxoSource]): ChainPoint = ChainPoint.origin
+        override def stopWatching(sources: Set[UtxoSource]): Unit = ()
         override def close(): Unit = { closed = true; mailbox.close() }
     }
 
@@ -142,4 +147,18 @@ class HubDriverTest extends AnyFunSuite {
     // argued in `pump`'s comment and enforced by re-dispatching rather than recursing; a test that
     // reliably demonstrated the overflow would have to be tuned to a particular stack size and
     // would be flaky across JVMs and Scala.js.
+
+    test("starting the driver starts the follower") {
+        // The two halves of the lifecycle, in the one order that is safe: a follower that produced
+        // before the pump existed would be filling a source nobody was reading, and a metered one
+        // would be spending quota for it.
+        val follower = new ManualFollower
+        val h = new SubscriptionHub(CardanoInfo.mainnet, caps)
+        assert(!follower.started)
+        new HubDriver(h, follower).start()
+        assert(
+          follower.started,
+          "a driver that never starts its follower pulls forever from a source that produces nothing"
+        )
+    }
 }

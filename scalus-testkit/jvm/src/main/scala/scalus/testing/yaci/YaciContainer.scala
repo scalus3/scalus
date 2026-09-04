@@ -62,7 +62,7 @@ object YaciContainer:
             val filtered = env.filterNot { e =>
                 e.startsWith("conwayHardForkAtEpoch=") || e.startsWith("shiftStartTimeBehind=")
             }
-            cmd.withEnv(filtered*)
+            cmd.withEnv((filtered ++ config.extraEnv.map((k, v) => s"$k=$v"))*)
         }
         // Don't set container name when not reusing - allows fresh containers each run
         if config.reuseContainer then

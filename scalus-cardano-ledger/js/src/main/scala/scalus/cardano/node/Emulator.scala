@@ -49,6 +49,8 @@ class Emulator(
         _appliedTxIndex = _appliedTxIndex + (applied.txHash -> applied)
         _appliedTxs = _appliedTxs + applied.txHash
         _datums = _datums ++ EmulatorBase.extractDatums(applied.tx)
+        // Last, so a listener observes a ledger that already holds the transaction.
+        notifyApplied(applied)
     }
 
     def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
