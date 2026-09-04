@@ -46,10 +46,17 @@ enum TsMember {
 
 enum TsDecl {
 
-    /** deprecatedAliases: extra top-level export names, emitted as deprecated alias exports. */
+    /** @param superClass
+      *   a JavaScript-native base TypeScript already declares, rendered as `extends Error`. Only
+      *   those: a user base class contributes its members to `members` instead, so naming it here
+      *   would declare them twice.
+      * @param deprecatedAliases
+      *   extra top-level export names, emitted as deprecated alias exports.
+      */
     case Cls(
         name: String,
         typeParams: List[TsTypeParam],
+        superClass: Option[String],
         members: List[TsMember],
         doc: Option[TsDoc],
         deprecatedAliases: List[String]

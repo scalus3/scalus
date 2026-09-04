@@ -42,6 +42,7 @@ class EmitterTest extends AnyFunSuite {
         val cls = TsDecl.Cls(
           "C",
           Nil,
+          None,
           List(
             TsMember.Ctor(List(List(TsParam("cfg", Arr(Named("X")), false))), None),
             TsMember.Method(
@@ -87,6 +88,7 @@ class EmitterTest extends AnyFunSuite {
         val cls = TsDecl.Cls(
           "Emu",
           Nil,
+          None,
           List(
             TsMember.Ctor(List(List(TsParam("a", num, false), TsParam("b", str, true))), None),
             TsMember.Method(
@@ -159,7 +161,7 @@ class EmitterTest extends AnyFunSuite {
             List(TsMember.Method("run", List(TsOverload(Nil, Nil, num, None)), static = false)),
             Some(TsDoc(List("@deprecated Use top-level functions.")))
           ),
-          TsDecl.Cls("Beta", Nil, Nil, None, deprecatedAliases = List("OldBeta"))
+          TsDecl.Cls("Beta", Nil, None, Nil, None, deprecatedAliases = List("OldBeta"))
         )
         val out = Emitter.emit(TsModule(decls))
         // header
@@ -182,8 +184,16 @@ class EmitterTest extends AnyFunSuite {
         assert(out.contains("/** @deprecated Use zeta instead. */"))
         assert(out.contains("export { zeta as oldZeta };"))
         // generic class type params
-        val gen = TsDecl.Cls("Box", List(TsTypeParam("A", None)), Nil, None, Nil)
+        val gen = TsDecl.Cls("Box", List(TsTypeParam("A", None)), None, Nil, None, Nil)
         assert(Emitter.emit(TsModule(List(gen))).contains("export class Box<A> {"))
+        // a native JavaScript base is named, so the consumer sees what it inherits
+        val err = TsDecl.Cls("Boom", Nil, Some("Error"), Nil, None, Nil)
+        assert(Emitter.emit(TsModule(List(err))).contains("export class Boom extends Error {"))
+        val genErr =
+            TsDecl.Cls("BoxErr", List(TsTypeParam("A", None)), Some("Error"), Nil, None, Nil)
+        assert(
+          Emitter.emit(TsModule(List(genErr))).contains("export class BoxErr<A> extends Error {")
+        )
         // generic interface, generic method, bounded type parameter
         val iface = TsDecl.Iface(
           "Pair",
