@@ -6,6 +6,25 @@ tooling to JavaScript and TypeScript. It is compiled from the JVM Scalus codebas
 The core features include a **Node Emulator** -- a local, in-process implementation of a Cardano node, complete with
 most of the ledger rules to validate incoming transactions, as well ledger state transitions.
 
+## Conformance
+
+The JavaScript build is checked against the
+[Plutus conformance test suite](https://github.com/IntersectMBO/plutus/tree/master/plutus-conformance)
+on every CI run, not only the JVM build. It passes **999 of 999** UPLC evaluation cases with none
+skipped.
+
+724 of those cases are programs the reference evaluates successfully, and each of the 724 asserts
+two things: that the resulting term is α-equivalent to the expected one, and that the **execution
+budget matches the reference exactly** – the same CPU and memory numbers a Cardano node would
+charge, under Plutus's reference variant-E builtin cost model and CEK machine costs.
+
+The other 275 are programs the reference rejects: 220 it fails to evaluate, and 55 it fails to
+parse. The corpus records no expected term or budget for those, so what is asserted is that Scalus
+rejects them the same way.
+
+Budget equality is the part that matters for a transaction builder. An evaluator that agrees on
+success but disagrees on cost still produces transactions a node rejects.
+
 ## Installation
 
 ```bash
@@ -22,8 +41,10 @@ followed by 1.1.1. Six changes affect existing code:
   (Plomin). Execution budgets therefore differ. Pass `protocolMajorVersion` to
   `evalPlutusScripts` to select another version.
 - **`scalus.js` is an ES module.** Import it with `import` or with
-  `<script type="module">`. `require("scalus")` now fails with
-  `ERR_PACKAGE_PATH_NOT_EXPORTED`; from CommonJS use `const scalus = await import("scalus")`.
+  `<script type="module">`. `require("scalus")` still works from CommonJS on Node 22.12+ and
+  20.19+, which load an ES module from `require()` natively — there is no separate CommonJS
+  build, so you get one module instance either way. On older Node it fails with
+  `ERR_REQUIRE_ESM`; use `const scalus = await import("scalus")` there.
   The old CommonJS shim for browsers no longer works. See [Browser Usage](#browser-usage).
 - **`ExUnits`, `Result` and `Redeemer` are top-level exports**, not members of `Scalus`. The
   runtime behaviour did not change, but the type declarations were wrong before. Import them
@@ -42,7 +63,8 @@ followed by 1.1.1. Six changes affect existing code:
   instead: `import { EvaluationResult, ExUnits, RedeemerBudget } from "scalus"`.
 - **`Emulator.withAddresses` funds 10 000 ada per address** when you omit
   `lovelacePerAddress`, that is `10_000_000_000n` lovelace. It funded 10 000 lovelace before,
-  which is below min-ada, so seeded outputs were unusable.
+  which is below min-ada, so seeded outputs were unusable. (`withAddresses` is deprecated
+  since; see [Emulator](#emulator) for `Emulator.create`.)
 
 ## Emulator
 
@@ -53,104 +75,194 @@ for automated tests, local development, and any application that needs a self-co
 ### Quick Start
 
 ```typescript
-import { Emulator, SlotConfig } from "scalus";
+import { CardanoInfo, Emulator, Utxo, Value } from "scalus";
 
-// Fund two addresses with 10 000 ADA each
-const emulator = Emulator.withAddresses(
-  [aliceAddress, bobAddress],
-  SlotConfig.preview,
-  10_000_000_000n   // lovelace (optional, defaults to 10 000 ADA)
-);
+const alice = "addr_test1vzpwq95z3xyum8vqndgdd9mdnmafh3djcxnc6jemlgdmswcve6tkw";
 
-// Query UTxOs
-const aliceUtxos = emulator.getUtxosForAddress(aliceAddress); // Uint8Array[]
-const allUtxos   = emulator.getAllUtxos();                     // Uint8Array[]
-const utxoMap    = emulator.getUtxosCbor();                    // single CBOR map
+// A network is a slot configuration and a set of protocol parameters together, so the
+// emulator cannot validate against one network's parameters while doing slot arithmetic
+// for another.
+const emulator = Emulator.create(CardanoInfo.preview(), {
+  utxos: [new Utxo("00".repeat(32), 0, alice, Value.ada(1000n))],
+});
 
-// Build & sign a transaction with your favourite CBOR library, then submit:
+// Build and sign a transaction with your favourite builder, then submit the bytes:
 const result = emulator.submitTx(txCborBytes);
-// { isSuccess: true, txHash: "ab12…" }
-// or { isSuccess: false, error: "…", logs: ["…"] }
+if (result.isSuccess) {
+  console.log(result.txHash);
+} else {
+  console.log(`rejected by ${result.errorRule}: ${result.error}`);
+  console.log(result.logs.join("\n")); // empty unless a Plutus script traced
+}
 ```
 
-`getAllUtxos` and `getUtxosForAddress` return one CBOR map per UTxO, each holding a single
-entry; `getUtxosCbor` returns the whole set in one map. In both cases the map keys are
-transaction inputs (a `[transactionHash, outputIndex]` pair) and the values are transaction
-outputs, exactly as in the Cardano ledger CDDL. Decode them with your favourite CBOR codec
-library.
+`CardanoInfo.mainnet()`, `.preprod()`, `.preview()` and `.custom(network, slotConfig, params)`
+cover the networks. Every field of the options object is optional: `utxos`, `slot`,
+`stakeRegistrations`, `poolRegistrations`, `drepRegistrations` and `datums`.
+
+> `new Emulator(utxosCbor, slotConfig)`, `Emulator.withState` and `Emulator.withAddresses` are
+> deprecated. They take protocol parameters from the slot configuration alone, so a
+> `SlotConfig.preview` emulator validated transactions against mainnet's parameters.
+
+### Querying UTxOs
+
+Queries return objects, not CBOR. `getUtxos()` returns everything; `getUtxos(filter)` narrows
+it, and the filtering happens inside the ledger, so no object is built for a row the filter
+drops.
+
+```typescript
+emulator.getUtxos();                                  // everything
+emulator.getUtxos({ address: alice });                // one address
+emulator.getUtxos({ paymentCredential: keyHashHex }); // any address with this payment part
+emulator.getUtxos({ unit: policyId + assetNameHex }); // holders of one asset
+emulator.getUtxos({ minLovelace: 5_000_000n, limit: 10 });
+emulator.getUtxos({ outRefs: [{ txHash, outputIndex: 0 }] });
+
+const [utxo] = emulator.getUtxos({ address: alice });
+utxo.txHash;        // hex
+utxo.outputIndex;   // number
+utxo.address;       // bech32
+utxo.value.coin;    // bigint lovelace
+utxo.value.assets;  // Asset[], each with policyId, assetName, quantity and unit
+utxo.datumHash;     // string | undefined
+utxo.inlineDatum;   // Uint8Array | undefined
+utxo.scriptRef;     // Uint8Array | undefined
+```
+
+Fields given are ANDed together. `outRefs` is the exception: it matches any of the references
+given, which is what a "resolve these inputs" query needs.
+
+A `Utxo` holds the ledger's own input and output, so one a query hands you can be handed
+straight back to `evaluateTx` or `addUtxo` with no encoding step in between.
+
+`Utxo`, `Value`, `Asset`, `ProtocolParams` and `CardanoInfo` expose their fields through
+accessors on the prototype, so `JSON.stringify`, object spread and a test framework's `toEqual`
+all see an empty object. Call `toObject()` and assert on that.
+
+`getUtxosCbor()` still returns the whole set as one CBOR map, for a consumer that wants the
+raw ledger encoding.
+
+### Protocol Parameters
+
+```typescript
+const params = emulator.getProtocolParameters();
+params.txFeePerByte;         // number
+params.utxoCostPerByte;      // bigint
+params.maxTxExecutionSteps;  // bigint
+params.costModels.PlutusV3;  // number[], keyed by language rather than by position
+
+// For an adapter that already parses Blockfrost's shape:
+ProtocolParams.fromBlockfrostJson(params.toBlockfrostJson());
+```
+
+Quantities that can exceed `Number.MAX_SAFE_INTEGER` are `bigint`; fee rates, sizes,
+percentages, counts and slots are `number`.
+
+### Evaluating Scripts Against the Ledger
+
+`evaluateTx` runs every Plutus script a transaction triggers, resolving its inputs against this
+emulator's UTxO set, slot config, cost models and protocol version. Nothing has to be passed
+in, so nothing can be passed in wrongly.
+
+```typescript
+for (const r of emulator.evaluateTx(txCborBytes)) {
+  console.log(`${r.tag}[${r.index}]: ${r.budget.memory} mem, ${r.budget.steps} steps`);
+}
+
+// Inputs the emulator does not hold yet go in the second argument.
+emulator.evaluateTx(txCborBytes, [new Utxo(txHash, 0, scriptAddress, Value.ada(5n))]);
+```
+
+A failing script throws `PlutusScriptEvaluationError`, which extends `Error` and carries the
+script's trace logs in `.logs`.
 
 ### Time Control
 
 ```typescript
-emulator.setSlot(500);   // jump to an absolute slot
-emulator.tick(10);       // advance by 10 slots
+emulator.getSlot();           // current slot
+emulator.setSlot(500);        // jump to an absolute slot, forwards or backwards
+emulator.tick(10);            // advance by 10 slots
+emulator.getTime();           // POSIX ms at which the current slot starts
+emulator.setTime(Date.now());
 ```
 
-Use this to test validity-interval logic, time-locked scripts, and epoch transitions.
+Use this to test validity-interval logic, time-locked scripts, and epoch transitions. No blocks
+are produced in between and no rewards are paid out.
 
 ### Transaction Lookup
 
 ```typescript
-emulator.hasTx(txHashBytes);  // true if the tx was accepted
+emulator.hasTx(txHashHex);                // boolean
+emulator.getTransactionStatus(txHashHex); // "Confirmed" | "NotFound"
+emulator.getTransaction(txHashHex);       // Uint8Array | undefined
+emulator.getAppliedTxs();                 // [{ txHash, slot }, ...], oldest first
 ```
 
 ### Staking and Delegation
 
-Query delegation state and reward balances:
+Stake queries take a bech32 reward address, so a key credential and a script credential are
+told apart by the address itself:
 
 ```typescript
-emulator.getDelegation(stakeCredentialCbor);
-// { poolId: Uint8Array | null, rewards: bigint }
-
-emulator.getStakeReward(scriptHashHex);
-// bigint | null
+emulator.getStakeReward("stake_test1...");   // bigint | undefined
+emulator.getDelegation("stake_test1...");    // { poolId?: string, rewards: bigint }
+emulator.getStakeDistribution();             // live stake per registered credential
 ```
 
 ### Datum Store
 
 ```typescript
-emulator.getDatum(datumHashBytes);  // Uint8Array | null
+emulator.getDatum(datumHashHex);  // Uint8Array | undefined
 ```
 
-Datums observed in submitted transactions are indexed automatically. You can also pre-seed
-them via `withState` (see below).
+Datums witnessed by accepted transactions are indexed automatically. Pre-seed others with the
+`datums` option of `Emulator.create`.
 
-### Snapshots
+### Editing the Ledger Directly
 
 ```typescript
-const snap = emulator.snapshot();  // independent copy of the current state
+emulator.addUtxo(utxo);                          // seed a UTxO, skipping validation
+emulator.removeUtxo({ txHash, outputIndex: 0 }); // take one away
+const snap = emulator.snapshot();                // independent copy of the current state
 ```
 
-Useful for branching test scenarios from a shared setup without re-submitting transactions.
+`snapshot` copies the UTxOs, registrations and rewards, the datum store, the accepted
+transactions and the current slot, so one expensive setup can branch into several test
+scenarios without being rebuilt.
 
-### Full Initial State
+### Seeding Stake, Pools, DReps and Datums
 
-`Emulator.withState` lets you seed not just UTxOs but also stake credentials, pool
-registrations, DRep registrations, and a datum store:
+Every field of `Emulator.create`'s options object beyond `utxos` seeds ledger state that a
+transaction would otherwise have to establish first:
 
 ```typescript
-const emulator = Emulator.withState(
-  {
-    utxos: utxoMapCbor,           // Uint8Array: CBOR map, input -> output
-    stakeRegistrations: [
-      { credentialType: "key", credentialHash: "abcd…", rewards: 42_000_000n },
-      { credentialType: "key", credentialHash: "1234…", rewards: 0n, delegatedTo: poolIdHex },
-    ],
-    poolRegistrations: [
-      { params: poolRegCertCbor },
-    ],
-    drepRegistrations: [
-      { credentialType: "key", credentialHash: "ef01…", deposit: 500_000_000n },
-    ],
-    datums: [
-      { hash: datumHashHex, datum: datumCborHex },
-    ],
-  },
-  SlotConfig.preview
-);
+const emulator = Emulator.create(CardanoInfo.preview(), {
+  utxos: [new Utxo(txHash, 0, alice, Value.ada(1000n))],
+  slot: 1_000_000,   // defaults to the slot containing Date.now()
+  stakeRegistrations: [
+    { credentialType: "key", credentialHash: "abcd…", rewards: 42_000_000n },
+    { credentialType: "key", credentialHash: "1234…", rewards: 0n, delegatedTo: poolIdHex },
+  ],
+  poolRegistrations: [{ params: poolRegCertCbor }],
+  drepRegistrations: [
+    { credentialType: "key", credentialHash: "ef01…", deposit: 500_000_000n },
+  ],
+  datums: [{ hash: datumHashHex, datum: datumCborHex }],
+});
 ```
 
-All fields except `utxos` are optional.
+### As a Transaction-Builder Backend
+
+Both MeshJS and lucid-evolution take a provider object, and the emulator answers what either of
+them asks: `getProtocolParameters`, `getUtxos(filter)`, `submitTx` and `evaluateTx` cover
+lucid's `Provider` and mesh's `IFetcher`/`ISubmitter`/`IEvaluator` between them, so an adapter
+is field renaming with no CBOR codec, no protocol-parameter table and no cost model of its own.
+`Asset.unit` is the concatenated policy id and asset name both SDKs call a unit, and
+`UtxoFilter.paymentCredential` is the query a wallet makes.
+
+Complete, runnable adapters for both are in this package's test suite, at
+`__tests__/provider-lucid.test.ts` and `__tests__/provider-mesh.test.ts`. See
+[the emulator guide](https://scalus.org/docs/testing/js-emulator) for the walkthrough.
 
 ## Plutus Script Evaluation
 

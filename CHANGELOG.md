@@ -76,6 +76,20 @@
   pins already match their networks; the equivalent mainnet parameter change is still an open
   governance action
 
+- The JVM and JavaScript `Emulator`s share one state machine in `EmulatorBase`, so the claim that
+  both run the same ledger rules is enforced by a parity test rather than by hand. The JVM
+  emulator holds its state in a single `AtomicReference` instead of six independently
+  compare-and-set cells, closing a window in which a reader could observe the ledger advanced
+  while the applied-transaction log still lagged behind it
+
+- `ProtocolParams.toBlockfrostJson` writes ten fields as JSON numbers rather than strings:
+  `min_fee_a`, `min_fee_b`, `max_tx_size`, `max_block_size`, `max_block_header_size`,
+  `max_collateral_inputs`, `collateral_percent`, `min_fee_ref_script_cost_per_byte`, `e_max` and
+  `n_opt`. ujson defines an implicit `Long => Str`, because `ujson.Num` is a `Double` and would
+  lose precision, so a bare `Long` was being quoted invisibly at the call site. Blockfrost's own
+  responses carry these as numbers. The reader accepts both forms, so nothing that round-trips
+  through Scalus is affected
+
 ### Deprecated
 
 - `TxInfo.findOwnInput`, `findOwnInputOrFail`, `findOwnDatum`, `findOwnScriptOutputs`,
@@ -89,6 +103,11 @@
 - `List.single` / `PairList.single`; use `singleton`
 - Scaladoc warnings on `IntervalBound.finite(default)`, `Address.fromScriptHash` /
   `fromPubKeyHash` (no staking part) and the payment-credential-only output finders
+- On the JavaScript surface, superseded by `Emulator.create(cardanoInfo, options)`, which takes the
+  protocol parameters and slot configuration as one object so they cannot disagree: the `Emulator`
+  constructor, `Emulator.withState` and `Emulator.withAddresses`. Also `getUtxosForAddress(addr)`,
+  superseded by `getUtxos({ address })`, and `getAllUtxos()`, superseded by `getUtxos()`, which
+  returns decoded `Utxo` handles rather than CBOR
 
 ### Fixed
 
@@ -190,6 +209,52 @@
   benchmark scenarios in `scalus-examples`, each with a test pinning its script size and
   per-case execution budget, plus `scripts/cape-submit.sh` to generate, verify, measure and
   rank submissions against the published leaderboard in one command
+
+- The in-memory `Emulator` answers everything a blockchain provider must, so driving it from
+  TypeScript no longer needs a second provider standing behind it. It evaluates transactions
+  against its own state and returns per-redeemer budgets, serves UTxO queries filtered by address,
+  payment credential, asset or datum, reports its stake distribution, and exposes slot and time
+  control plus direct ledger edits for seeding a fixture without a genesis transaction
+
+- `SubmitError.rule`: a short, stable name for the condition that rejected a transaction, safe to
+  assert on in a test unlike the prose `message`. The emulator and the network providers share one
+  vocabulary, so `err.rule` means the same thing whichever produced it. Unclassified rejections
+  report `TransactionException.ruleName`, an exhaustive table beside the exception hierarchy, so 23
+  conditions that previously arrived as a bare `"ValidationError"` – fee too small, missing
+  signatures, min-ada, ex-units exceeded – now name themselves
+
+### JavaScript (npm `scalus` 1.2.0)
+
+The emulator becomes a self-sufficient provider backend, so a MeshJS or lucid-evolution adapter can
+be written against it alone. Both are exercised end to end in the test suite: each builds, signs and
+submits a transaction the emulator accepts, and one spends a Plutus script.
+
+Breaking, all in service of one rule – **identifiers are hex strings, absence is `undefined`**:
+
+| Before | Now |
+|---|---|
+| `hasTx(txHashBytes: Uint8Array)` | `hasTx(txHashHex: string)` |
+| `getDatum(datumHashBytes: Uint8Array): Uint8Array \| null` | `getDatum(datumHashHex: string)` |
+| `getDelegation(stakeCredentialCbor: Uint8Array)` | `getDelegation(rewardAddressBech32: string)` |
+| `getStakeReward(...): bigint \| null` | `bigint \| undefined` |
+| `DelegationInfo.poolId: Uint8Array \| null` | `poolId?: string`, hex-encoded |
+
+`JEmulator` is reachable only through this npm package, which is built and published from this
+repository, so no caller can hold the previous signatures while running the new bundle.
+
+Also:
+
+- **`require("scalus")` works again.** The package stays ESM-only; one `"default"` condition in the
+  exports map restores CommonJS resolution, and both conditions resolve to the same file, so mixing
+  `require()` and `import()` still yields a single module instance
+- **`PlutusScriptEvaluationError extends Error`**, so a caught failure answers `instanceof Error`
+  and carries `.stack`. It keeps `.message` and `.logs`
+- **Handles instead of CBOR.** `Value`, `Asset`, `Utxo`, `ProtocolParams` and `CardanoInfo` wrap the
+  ledger's own types. Their fields are accessors on the prototype, so `JSON.stringify`, object
+  spread and a test framework's `toEqual` all see an empty object – call `toObject()` and assert on
+  that
+- **`scalus.d.ts` is generated from the compiler's own TASTy** rather than hand-written, and
+  `checkDtsUpToDate` fails the build when it drifts
 
 ## 1.1.1 (2026-08-25)
 
