@@ -90,6 +90,30 @@
   responses carry these as numbers. The reader accepts both forms, so nothing that round-trips
   through Scalus is affected
 
+- `SlotConfig` has one definition again. It was forked per platform: a `Long` case class in `jvm/`
+  and an identical one in `native/`, and a separate `Double`, `js.Object`-extending class in `js/`.
+  Shared code compiled against whichever its platform supplied and absorbed the difference with
+  `.toLong` in fifteen places, including `LedgerToPlutusTranslation`, which computes the validity
+  bounds a Plutus script sees. There is now one shared `Long` case class, with `slotToInstant` and
+  `instantToSlot` moved to a per-platform `SlotConfigPlatform` trait because `java.time.Instant` is
+  not available everywhere.
+
+  **For JavaScript, nothing changes**: the exported `SlotConfig` is now a handle that keeps the same
+  constructor, the same `number` members and the same `Double` arithmetic, so `timeToSlot` still
+  returns a fractional slot and `scalus.d.ts` is byte-identical.
+
+  **For Scala.js consumers of the `scalus_sjs1` artifact, this is a source and binary break**:
+  `scalus.cardano.ledger.SlotConfig` no longer extends `js.Object`, and its fields and methods take
+  and return `Long` rather than `Double`. Code that held a `Double` from it needs `.toLong`, or
+  should simply drop the conversion it was already making. `SlotConfigParityTest` pins the
+  arithmetic to the same answers on all three platforms.
+
+  Two behaviour notes. `Emulator`'s internal `slotConfig == SlotConfig.mainnet` check is now
+  structural rather than reference equality, so an emulator built from a hand-constructed config
+  with mainnet's values now picks up mainnet protocol parameters where it previously fell through to
+  the defaults. And `CardanoInfo.slotConfig` returns a fresh handle per call in JavaScript, so
+  `info.slotConfig === SlotConfig.mainnet` is no longer true; the field values are unchanged.
+
 ### Deprecated
 
 - `TxInfo.findOwnInput`, `findOwnInputOrFail`, `findOwnDatum`, `findOwnScriptOutputs`,
