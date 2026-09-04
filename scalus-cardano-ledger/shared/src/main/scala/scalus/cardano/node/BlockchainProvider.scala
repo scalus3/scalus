@@ -338,6 +338,30 @@ trait BlockchainProvider extends BlockchainProviderTF[Future] with BlockchainRea
   */
 sealed trait SubmitError {
     def message: String
+
+    /** Short, stable name for the condition that produced this error, e.g. `"ValueNotConserved"`.
+      * Stable enough to assert on in a test, unlike [[message]].
+      *
+      * The name is the case's own name for every case but one, whichever provider produced the
+      * error, so `err.rule == "UtxoNotAvailable"` means the same thing against the emulator and
+      * against a network provider. The exception is [[NodeSubmitError.ValidationError]], the
+      * catch-all: it reports its [[NodeSubmitError.ValidationError.errorCode]] when the producer
+      * supplied one, which is how the specific condition behind an otherwise unclassified rejection
+      * reaches a caller. Those codes are producer-specific — the emulator names the ledger rule
+      * that rejected the transaction (`"FeesOk"`, `"MissingKeyHashes"`, … — see
+      * [[scalus.cardano.ledger.TransactionException.ruleName]]), while an HTTP provider names
+      * whatever its error body mentioned.
+      *
+      * A ledger rule that maps onto one of the classified cases is therefore *not* visible here.
+      * Only rules that really are the same condition are folded together: `BadInputsUTxO` and
+      * `BadAllInputsUTxO` both report `"UtxoNotAvailable"`, `NativeScripts` and
+      * `PlutusScriptValidation` both report `"ScriptFailure"`, and only [[message]] says which.
+      * `BadCollateralInputsUTxO` and `BadReferenceInputsUTxO` are different conditions and reach
+      * callers under their own names. This is deliberate: the classified cases are part of the
+      * published 1.x API, and refining their rule name per instance would mean a constructor
+      * parameter and a binary break for every caller that pattern-matches them.
+      */
+    def rule: String
 }
 
 /** Network-level errors that occur during communication with the node/provider.
@@ -350,23 +374,35 @@ object NetworkSubmitError {
 
     /** Network-level errors (connection failures, timeouts) */
     case class ConnectionError(message: String, cause: Option[Throwable] = None)
-        extends NetworkSubmitError
+        extends NetworkSubmitError {
+        def rule: String = productPrefix
+    }
 
     /** Authentication/authorization errors (HTTP 403) */
-    case class AuthenticationError(message: String) extends NetworkSubmitError
+    case class AuthenticationError(message: String) extends NetworkSubmitError {
+        def rule: String = productPrefix
+    }
 
     /** Rate limiting errors (HTTP 402, 429) */
-    case class RateLimited(message: String) extends NetworkSubmitError
+    case class RateLimited(message: String) extends NetworkSubmitError {
+        def rule: String = productPrefix
+    }
 
     /** Auto-banned for flooding (HTTP 418) */
-    case class Banned(message: String) extends NetworkSubmitError
+    case class Banned(message: String) extends NetworkSubmitError {
+        def rule: String = productPrefix
+    }
 
     /** Mempool full (HTTP 425) */
-    case class MempoolFull(message: String) extends NetworkSubmitError
+    case class MempoolFull(message: String) extends NetworkSubmitError {
+        def rule: String = productPrefix
+    }
 
     /** Internal provider errors (HTTP 500+) */
     case class InternalError(message: String, cause: Option[Throwable] = None)
-        extends NetworkSubmitError
+        extends NetworkSubmitError {
+        def rule: String = productPrefix
+    }
 }
 
 /** Node validation errors that occur when the transaction is rejected by the ledger.
@@ -390,13 +426,19 @@ object NodeSubmitError {
     case class UtxoNotAvailable(
         message: String,
         unavailableInputs: Set[TransactionInput] = Set.empty
-    ) extends NodeSubmitError
+    ) extends NodeSubmitError {
+        def rule: String = productPrefix
+    }
 
     /** Transaction expired - validity window passed (maps to OutsideValidityInterval) */
-    case class TransactionExpired(message: String) extends NodeSubmitError
+    case class TransactionExpired(message: String) extends NodeSubmitError {
+        def rule: String = productPrefix
+    }
 
     /** Value/balance errors - input/output value mismatch (maps to ValueNotConserved) */
-    case class ValueNotConserved(message: String) extends NodeSubmitError
+    case class ValueNotConserved(message: String) extends NodeSubmitError {
+        def rule: String = productPrefix
+    }
 
     /** Script execution failures */
     case class ScriptFailure(
@@ -404,11 +446,25 @@ object NodeSubmitError {
         logs: Seq[String] = Seq.empty,
         scriptHash: Option[ScriptHash] = None,
         spentBudget: ExUnits = ExUnits.zero
-    ) extends NodeSubmitError
+    ) extends NodeSubmitError {
+        def rule: String = productPrefix
+    }
 
-    /** Other node validation errors (catch-all for unrecognized validation errors) */
-    case class ValidationError(message: String, errorCode: Option[String] = None)
-        extends NodeSubmitError
+    /** Other node validation errors (catch-all for unrecognized validation errors).
+      *
+      * @param errorCode
+      *   the producer's own name for the condition, when it has one — the emulator puts the ledger
+      *   rule that rejected the transaction here (see
+      *   [[scalus.cardano.ledger.TransactionException.ruleName]]), an HTTP provider whatever it
+      *   could extract from the error body. [[rule]] reports it, so an unclassified rejection is
+      *   still assertable by name.
+      */
+    case class ValidationError(
+        message: String,
+        errorCode: Option[String] = None
+    ) extends NodeSubmitError {
+        def rule: String = errorCode.getOrElse(productPrefix)
+    }
 }
 
 object SubmitError {
@@ -465,6 +521,12 @@ object SubmitError {
     /** Parse a validation error message to classify it into a specific SubmitError type.
       *
       * This attempts to match known Cardano ledger error patterns.
+      *
+      * The classification it produces is the same vocabulary the emulator's [[fromException]]
+      * produces, so [[SubmitError.rule]] means the same thing whichever provider a caller is
+      * pointed at. Only the [[NodeSubmitError.ValidationError]] fallback differs: its `errorCode`
+      * is whatever [[extractErrorCode]] could find in the provider's own prose, which is not the
+      * emulator's ledger-rule vocabulary.
       */
     def parseValidationError(message: String): SubmitError = {
         val lowerMessage = message.toLowerCase
@@ -506,11 +568,22 @@ object SubmitError {
             .toSet
     }
 
-    /** Try to extract an error code from the message (e.g., "BadInputsUTxO"). */
+    /** Try to extract an error code from the message (e.g., "BadCollateralInputsUTxO"). */
     private def extractErrorCode(message: String): Option[String] = {
-        // Look for common patterns like "BadInputsUTxO" or error codes in parentheses
+        // Look for a known rule name, or an error code in parentheses.
+        //
+        // Only [[parseValidationError]]'s fallback calls this, so the names it classifies before
+        // reaching that fallback cannot appear here and are deliberately absent: a message holding
+        // `BadInputsUTxO`, `ValueNotConserved`, `OutsideValidityInterval` or `ScriptFailure` is
+        // already `UtxoNotAvailable`, `ValueNotConserved`, `TransactionExpired` or `ScriptFailure`
+        // by the time this runs - each of those lowercases into a substring that branch tests for.
+        // The four below survive that filter: `badcollateralinputsutxo` and
+        // `badreferenceinputsutxo` contain neither `badinputsutxo` nor `bad inputs`, and
+        // `feetoosmall` and `exunitstoobig` match no branch at all. The first two are here so a
+        // provider naming them reports the same [[SubmitError.rule]] the emulator does for the
+        // same condition.
         val patterns = Seq(
-          "(BadInputsUTxO|ValueNotConserved|OutsideValidityInterval|FeeTooSmall|ScriptFailure|ExUnitsTooBig)".r,
+          "(BadCollateralInputsUTxO|BadReferenceInputsUTxO|FeeTooSmall|ExUnitsTooBig)".r,
           "\\(([A-Z][a-zA-Z]+)\\)".r
         )
         patterns.view
@@ -521,6 +594,24 @@ object SubmitError {
     /** Create a SubmitError from a TransactionException.
       *
       * This is used by the Emulator to map internal validation exceptions to SubmitError.
+      *
+      * Two exceptions are folded into [[NodeSubmitError.UtxoNotAvailable]]: `BadInputsUTxO` and the
+      * union case `BadAllInputsUTxO`, which is the one that populates `unavailableInputs`. Those
+      * two really are one condition – an input this transaction spends is gone, the race a caller
+      * retries on. `BadCollateralInputsUTxO` (a wallet problem) and `BadReferenceInputsUTxO` (a
+      * script the transaction points at is not there) are not that condition, so they keep their
+      * own rule names through [[NodeSubmitError.ValidationError.errorCode]] like every other
+      * unclassified rejection.
+      *
+      * Both script exceptions do stay one case, [[NodeSubmitError.ScriptFailure]]: "a script this
+      * transaction carries did not validate" is a single thing to branch on, `logs`, `scriptHash`
+      * and `spentBudget` are declared optional precisely because a native script produces none of
+      * them, and [[parseValidationError]] cannot tell native from Plutus in a provider's error body
+      * either – splitting here would put the two paths back on different vocabularies.
+      *
+      * Everything else keeps its rule name through [[NodeSubmitError.ValidationError.errorCode]],
+      * so an unclassified rejection is `"FeesOk"` or `"MissingKeyHashes"` rather than an anonymous
+      * `"ValidationError"`.
       */
     def fromException(ex: TransactionException): SubmitError = ex match
         case e: TransactionException.BadAllInputsUTxOException =>
@@ -529,10 +620,6 @@ object SubmitError {
             UtxoNotAvailable(e.explain, inputs)
         case e: TransactionException.BadInputsUTxOException =>
             UtxoNotAvailable(e.explain)
-        case e: TransactionException.BadCollateralInputsUTxOException =>
-            UtxoNotAvailable(e.explain)
-        case e: TransactionException.BadReferenceInputsUTxOException =>
-            UtxoNotAvailable(e.explain)
         case e: TransactionException.OutsideValidityIntervalException =>
             TransactionExpired(e.explain)
         case e: TransactionException.ValueNotConservedUTxOException =>
@@ -540,12 +627,7 @@ object SubmitError {
         case e: TransactionException.NativeScriptsException =>
             ScriptFailure(e.explain)
         case e: TransactionException.PlutusScriptValidationException =>
-            ScriptFailure(
-              e.explain,
-              logs = e.logs,
-              scriptHash = e.scriptHash,
-              spentBudget = e.spentBudget
-            )
+            ScriptFailure(e.explain, e.logs, e.scriptHash, e.spentBudget)
         case e =>
-            ValidationError(e.explain)
+            ValidationError(e.explain, Some(TransactionException.ruleName(e)))
 }
