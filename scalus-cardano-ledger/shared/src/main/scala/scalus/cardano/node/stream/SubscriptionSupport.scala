@@ -172,6 +172,9 @@ object SubscriptionSupport {
             case _: UtxoSource.FromAsset       => pushdown.contains(PushdownKind.Asset)
             case _: UtxoSource.FromInputs      => pushdown.contains(PushdownKind.Inputs)
             case _: UtxoSource.FromTransaction => pushdown.contains(PushdownKind.Transaction)
+            // No PushdownKind exists yet for a payment-credential query, so no provider can claim
+            // to serve it from an index — it is always a full scan until one does.
+            case _: UtxoSource.FromPaymentCredential => false
             // A union is only as indexed as its worst arm — the events we would miss are the ones
             // the unindexed arm would have found.
             case UtxoSource.Or(l, r) => indexedSource(l, pushdown) && indexedSource(r, pushdown)

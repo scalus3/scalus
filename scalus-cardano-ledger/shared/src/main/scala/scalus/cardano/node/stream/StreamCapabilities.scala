@@ -4,7 +4,8 @@ package scalus.cardano.node.stream
   *
   * Mirrors the cases of [[scalus.cardano.node.UtxoSource]]: a query whose source reduces to kinds
   * the provider declares here can be served from an index or a server-side filter; anything else
-  * needs a scan.
+  * needs a scan. `UtxoSource.FromPaymentCredential` deliberately has no matching case yet, so it is
+  * always treated as unindexed — see `SubscriptionSupport.indexedSource`.
   */
 enum PushdownKind {
     case Address

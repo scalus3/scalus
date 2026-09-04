@@ -101,6 +101,13 @@ describe("Emulator", () => {
 
     it("should expose pre-registered stake reward via getStakeReward", () => {
         const scriptHashHex = "186e32faa80a26810392fda6d559c7ed4721a65ce1c9d4ef3e1c87b4";
+        // getStakeReward now takes a bech32 reward address, not a raw script hash - these are the
+        // mainnet reward addresses for the script credential above and for an all-zero script
+        // hash that is never registered, both bech32-encoded by hand (header 0xf1 = script
+        // credential + mainnet, per CIP-19).
+        const stakeAddressBech32 = "stake17yvxuvh64q9zdqgrjt76d42eclk5wgdxtnsun4808cwg0dqpx7ppc";
+        const unregisteredStakeAddressBech32 =
+            "stake17yqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqr0rjsu";
         const preRegInitialUtxosCborHex =
             "a182582000000000000000000000000000000000000000000000000000000000000000000082581d61c8c47610a36034aac6fc58848bdae5c278d994ff502c05455e3b3ee81b000000012a05f200";
 
@@ -110,8 +117,8 @@ describe("Emulator", () => {
             { [scriptHashHex]: "42000000" }
         );
 
-        expect(emulator.getStakeReward(scriptHashHex)).toBe(BigInt(42_000_000));
-        expect(emulator.getStakeReward("0".repeat(56))).toBeNull();
+        expect(emulator.getStakeReward(stakeAddressBech32)).toBe(BigInt(42_000_000));
+        expect(emulator.getStakeReward(unregisteredStakeAddressBech32)).toBeUndefined();
     });
 
     it("should execute withdraw zero trick with pre-registered stake credential", () => {
