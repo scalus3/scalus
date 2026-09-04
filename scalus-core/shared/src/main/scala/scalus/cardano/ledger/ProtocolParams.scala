@@ -74,24 +74,105 @@ object ProtocolParams {
         private def asLongOr(default: Long): Long =
             v.strOpt.map(_.toLong).orElse(v.numOpt.map(_.toLong)).getOrElse(default)
 
-    /** Reads ProtocolParams from JSON string in Blockfrost format */
+    /** Render as Blockfrost's `/epochs/{n}/parameters` JSON.
+      *
+      * The inverse of [[fromBlockfrostJson]], and tested as such. This shape exists because it is
+      * what the JavaScript SDKs already know how to consume: both MeshJS and the Evolution SDK ship
+      * a Blockfrost parameter mapping, so handing them this costs them no new code.
+      *
+      * Delegates to [[blockfrostParamsReadWriter]] rather than re-listing the fields here, so the
+      * field mapping (including which values Blockfrost renders as decimal strings) has one source
+      * of truth shared with [[fromBlockfrostJson]].
+      */
+    def toBlockfrostJson(params: ProtocolParams): String = {
+        write(params)(using blockfrostParamsReadWriter)
+    }
+
+    /** Reads ProtocolParams from JSON string in Blockfrost format.
+      *
+      * @throws IllegalArgumentException
+      *   if the JSON is not a complete Blockfrost parameter set. The message names the field that
+      *   was missing or ill-typed, and the shape that was expected.
+      */
     def fromBlockfrostJson(json: String): ProtocolParams = {
-        read[ProtocolParams](json)(using blockfrostParamsReadWriter)
+        explainParseFailure(blockfrostShape) {
+            read[ProtocolParams](json)(using blockfrostParamsReadWriter)
+        }
     }
 
-    /** Reads ProtocolParams from JSON string in Blockfrost format */
+    /** Reads ProtocolParams from JSON string in Blockfrost format.
+      *
+      * @throws IllegalArgumentException
+      *   if the JSON is not a complete Blockfrost parameter set.
+      */
     def fromBlockfrostJson(json: InputStream): ProtocolParams = {
-        read[ProtocolParams](json)(using blockfrostParamsReadWriter)
+        explainParseFailure(blockfrostShape) {
+            read[ProtocolParams](json)(using blockfrostParamsReadWriter)
+        }
     }
 
-    /** Reads ProtocolParams from JSON string in Cardano CLI format */
+    /** Reads ProtocolParams from JSON string in Cardano CLI format.
+      *
+      * @throws IllegalArgumentException
+      *   if the JSON is not a complete `cardano-cli query protocol-parameters` output.
+      */
     def fromCardanoCliJson(json: String): ProtocolParams = {
-        read[ProtocolParams](json)(using cardanoCliParamsReadWriter)
+        explainParseFailure(cardanoCliShape) {
+            read[ProtocolParams](json)(using cardanoCliParamsReadWriter)
+        }
     }
 
-    /** Reads ProtocolParams from JSON string in Cardano CLI format */
+    /** Reads ProtocolParams from JSON string in Cardano CLI format.
+      *
+      * @throws IllegalArgumentException
+      *   if the JSON is not a complete `cardano-cli query protocol-parameters` output.
+      */
     def fromCardanoCliJson(json: InputStream): ProtocolParams = {
-        read[ProtocolParams](json)(using cardanoCliParamsReadWriter)
+        explainParseFailure(cardanoCliShape) {
+            read[ProtocolParams](json)(using cardanoCliParamsReadWriter)
+        }
+    }
+
+    private val blockfrostShape =
+        "the JSON body of Blockfrost's GET /epochs/{n}/parameters, with cost models under " +
+            "cost_models_raw or cost_models"
+
+    private val cardanoCliShape = "the output of `cardano-cli query protocol-parameters`"
+
+    /** Run a parse, and rewrite whatever it throws into something a caller can act on.
+      *
+      * Both codecs read fields straight off a `ujson.Value`, so a parameter set from an older era
+      *   - or from an endpoint that renders one field differently - fails deep inside upickle's
+      *     visitor. What surfaces is the exception upickle wraps that in, whose message is the JSON
+      *     path alone: a user who pasted a response missing `min_fee_ref_script_cost_per_byte` gets
+      *     `Error: $` and nothing to go on. The cause chain still holds the real complaint ("key
+      *     not found: min_fee_ref_script_cost_per_byte"), so lift it back out and say which format
+      *     was expected.
+      */
+    private def explainParseFailure[A](expectedShape: String)(parse: => A): A =
+        try parse
+        catch
+            case e: Exception =>
+                throw new IllegalArgumentException(
+                  s"Could not read protocol parameters: ${rootCauseMessage(e)}. " +
+                      s"Expected $expectedShape.",
+                  e
+                )
+
+    /** The deepest non-empty message in `e`'s cause chain, falling back to `e`'s own class name. */
+    private def rootCauseMessage(e: Throwable): String = {
+        var current: Throwable = e
+        var best: String = ""
+        var depth = 0
+        // Bounded: a malformed cause chain must not turn a parse error into a hang.
+        while current != null && depth < 16 do
+            val message = Option(current.getMessage).map(_.trim).getOrElse("")
+            // upickle reports the JSON path ("$") as the message of the exception it wraps the
+            // real failure in, which says nothing on its own.
+            if message.nonEmpty && message != "$" then best = message
+            current = current.getCause
+            depth += 1
+        if best.nonEmpty then best else e.getClass.getSimpleName
     }
 
     /** Reads and writes the Blockfrost JSON shape.
@@ -106,13 +187,34 @@ object ProtocolParams {
     lazy val blockfrostParamsReadWriter: ReadWriter[ProtocolParams] =
         readwriter[ujson.Value].bimap[ProtocolParams](
           params =>
+              // '''Every numeric field below must say `ujson.Num(...)` or `.toString` out loud.'''
+              // ujson defines `implicit def JsonableLong(i: Long): Str = Str(i.toString)`, because
+              // `ujson.Num` wraps a `Double` and would lose precision past 2^53. So a bare `Long`
+              // here silently becomes a JSON *string*, at the call site, with nothing in the field
+              // list to show for it. Ten fields that Blockfrost's schema types as `integer` -
+              // `min_fee_a`, `min_fee_b`, `max_tx_size`, `max_block_size`, `max_block_header_size`,
+              // `max_collateral_inputs`, `collateral_percent`, `min_fee_ref_script_cost_per_byte`,
+              // `e_max` and `n_opt` - shipped as strings that way, and neither a field-by-field
+              // review nor the round-trip test caught it: the reader below accepts both forms.
+              // `ProtocolParamsTest` now asserts the JSON *type* of every field, which is the only
+              // check that can see an implicit conversion.
+              //
+              // `Int` fields are safe (`JsonableInt` gives a `Num`), which is why
+              // `protocol_major_ver`/`protocol_minor_ver` were always right. The lovelace-scale
+              // fields stay `.toString` on purpose: Blockfrost types those as strings, and they can
+              // exceed 2^53.
               ujson.Obj(
-                "collateral_percent" -> params.collateralPercentage,
+                "collateral_percent" -> ujson.Num(params.collateralPercentage.toDouble),
                 "committee_max_term_length" -> params.committeeMaxTermLength.toString,
                 "committee_min_size" -> params.committeeMinSize.toString,
-                "cost_models" -> params.costModels.models.map { (k, v) =>
+                // Real Blockfrost keys the deprecated, object-shaped (opName -> cost) form as
+                // `cost_models`, and the array-shaped form this codec produces as `cost_models_raw`.
+                // Emit only the latter: building the former needs the per-language Plutus
+                // operation-name tables, which we don't have and MeshJS/Evolution SDK don't need
+                // (they read `cost_models_raw`).
+                "cost_models_raw" -> params.costModels.models.map { (k, v) =>
                     // Use the canonical language name ("PlutusV1", ...) so the value round-trips
-                    // through this reader and matches Blockfrost's own `cost_models` key naming.
+                    // through this reader and matches Blockfrost's own key naming.
                     Language.fromId(k).toString -> v.map(v => ujson.Num(v.toDouble))
                 },
                 "drep_activity" -> params.dRepActivity.toString,
@@ -131,33 +233,38 @@ object ProtocolParams {
                 "price_step" -> params.executionUnitPrices.priceSteps.toDouble,
                 "gov_action_deposit" -> params.govActionDeposit.toString,
                 "gov_action_lifetime" -> params.govActionLifetime.toString,
-                "max_block_size" -> params.maxBlockBodySize,
+                "max_block_size" -> ujson.Num(params.maxBlockBodySize.toDouble),
                 "max_block_ex_mem" -> params.maxBlockExecutionUnits.memory.toString,
                 "max_block_ex_steps" -> params.maxBlockExecutionUnits.steps.toString,
-                "max_block_header_size" -> params.maxBlockHeaderSize,
-                "max_collateral_inputs" -> params.maxCollateralInputs,
+                "max_block_header_size" -> ujson.Num(params.maxBlockHeaderSize.toDouble),
+                "max_collateral_inputs" -> ujson.Num(params.maxCollateralInputs.toDouble),
                 "max_tx_ex_mem" -> params.maxTxExecutionUnits.memory.toString,
                 "max_tx_ex_steps" -> params.maxTxExecutionUnits.steps.toString,
-                "max_tx_size" -> params.maxTxSize,
+                "max_tx_size" -> ujson.Num(params.maxTxSize.toDouble),
                 "max_val_size" -> params.maxValueSize.toString,
-                "min_fee_ref_script_cost_per_byte" -> params.minFeeRefScriptCostPerByte,
+                "min_fee_ref_script_cost_per_byte" -> ujson.Num(
+                  params.minFeeRefScriptCostPerByte.toDouble
+                ),
                 "min_pool_cost" -> params.minPoolCost.toString,
                 "rho" -> params.monetaryExpansion,
                 "a0" -> params.poolPledgeInfluence,
-                "e_max" -> params.poolRetireMaxEpoch,
+                "e_max" -> ujson.Num(params.poolRetireMaxEpoch.toDouble),
                 "pvt_motion_no_confidence" -> params.poolVotingThresholds.motionNoConfidence.toDouble,
                 "pvt_committee_normal" -> params.poolVotingThresholds.committeeNormal.toDouble,
                 "pvt_committee_no_confidence" -> params.poolVotingThresholds.committeeNoConfidence.toDouble,
                 "pvt_hard_fork_initiation" -> params.poolVotingThresholds.hardForkInitiation.toDouble,
+                // Blockfrost's schema requires both the deprecated `pvtpp_security_group` and its
+                // replacement `pvt_p_p_security_group`; emit both.
                 "pvtpp_security_group" -> params.poolVotingThresholds.ppSecurityGroup.toDouble,
+                "pvt_p_p_security_group" -> params.poolVotingThresholds.ppSecurityGroup.toDouble,
                 "protocol_major_ver" -> params.protocolVersion.major,
                 "protocol_minor_ver" -> params.protocolVersion.minor,
                 "key_deposit" -> params.stakeAddressDeposit.toString,
                 "pool_deposit" -> params.stakePoolDeposit.toString,
-                "n_opt" -> params.stakePoolTargetNum,
+                "n_opt" -> ujson.Num(params.stakePoolTargetNum.toDouble),
                 "tau" -> params.treasuryCut,
-                "min_fee_b" -> params.txFeeFixed,
-                "min_fee_a" -> params.txFeePerByte,
+                "min_fee_b" -> ujson.Num(params.txFeeFixed.toDouble),
+                "min_fee_a" -> ujson.Num(params.txFeePerByte.toDouble),
                 "coins_per_utxo_size" -> params.utxoCostPerByte.toString
               ),
           json =>
@@ -166,9 +273,13 @@ object ProtocolParams {
                 committeeMaxTermLength = json("committee_max_term_length").asLongOr(0L),
                 committeeMinSize = json("committee_min_size").asLongOr(0L),
                 costModels = CostModels(
-                  json("cost_models").obj.map { case (k, v) =>
-                      // Blockfrost's `cost_models` values are objects (opName -> cost), while its
-                      // `cost_models_raw` and this codec's own writer emit plain arrays. Accept both.
+                  // Prefer `cost_models_raw` (the array-shaped field real Blockfrost, and this
+                  // codec's own writer, emit) and fall back to the deprecated, object-shaped
+                  // `cost_models` for sources (Yaci DevKit, older fixtures) that only send that key.
+                  (if json.obj.contains("cost_models_raw") then json("cost_models_raw")
+                   else json("cost_models")).obj.map { case (k, v) =>
+                      // Values are objects (opName -> cost) under `cost_models`, but plain arrays
+                      // under `cost_models_raw`. Accept both.
                       val costs = v.arrOpt
                           .map(_.iterator.map(_.num.toLong).toIndexedSeq)
                           .getOrElse(v.obj.values.map(_.num.toLong).toIndexedSeq)
