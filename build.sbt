@@ -1007,7 +1007,18 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         // The proposal does declare the public facade unfrozen for a release or two as well; when
         // a break there is actually needed, it gets its own filter naming the symbol, so the thing
         // being broken is visible in review rather than pre-authorised in bulk.
-        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*")
+        ProblemFilters.exclude[Problem]("scalus.cardano.node.stream.internal.*"),
+        // Task 1 (ts-emulator-provider-parity): SubmitError gained a `rule: String` member so a
+        // rejection can name the condition that produced it, not just carry a prose message.
+        // Safe without breaking anyone: `SubmitError` is `sealed`, so every implementor is in
+        // this repo and gained the member in the same commit. The concrete cases deliberately
+        // implement it from data they already carry rather than taking a new constructor
+        // parameter — a trailing parameter would change `apply`/`copy`/`unapply` on case classes
+        // that ship in the 1.1.0 JVM artifact and are the return type of every
+        // `BlockchainProvider.submit`, breaking every downstream `case ValueNotConserved(msg)`.
+        ProblemFilters.exclude[ReversedMissingMethodProblem](
+          "scalus.cardano.node.SubmitError.rule"
+        )
       ),
       crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
       scalacOptions ++= commonScalacOptions,
@@ -1050,6 +1061,28 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ),
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.node.JEmulator.getDelegation"
+        ),
+        // Task 12 (ts-emulator-provider-parity): identifiers moved from raw bytes to hex
+        // everywhere, and absence moved from `null` to `js.UndefOr`/`undefined`. `hasTx` and
+        // `getDatum` took a `Uint8Array`, now a hex `String`; `getDelegation` took a CBOR-encoded
+        // credential, now a bech32 reward address (also a `String`, but a different one - not the
+        // same intended contract, hence a fresh filter alongside the pre-existing one above);
+        // `getStakeReward`'s parameter stayed a `String` but its result moved from
+        // `js.BigInt | Null` to `js.UndefOr[js.BigInt]`. The break is intended, and nothing
+        // published pins the old shapes: these members exist to be called from JavaScript, and the
+        // only way to call them is the `scalus` npm bundle, which is linked from this repo and
+        // re-published with it, so a consumer cannot be holding the previous signatures.
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.node.JEmulator.hasTx"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.node.JEmulator.getDatum"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.node.JEmulator.getDelegation"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.node.JEmulator.getStakeReward"
         )
       ),
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).
@@ -1086,9 +1119,16 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
           val npmDir = (Compile / sourceDirectory).value / "npm"
           val log = streams.value.log
           log.info("Installing npm dependencies...")
-          val installExitCode = Process("npm" :: "install" :: Nil, npmDir).!
+          // `ci`, not `install`: install the tree package-lock.json pins instead of re-resolving
+          // against the registry on every run. See the note beside the lockfile's .gitignore
+          // exception - re-resolving let an unrelated upstream publish break every branch at once.
+          // This fails if package.json and the lockfile disagree; regenerate the lockfile then.
+          val installExitCode = Process("npm" :: "ci" :: Nil, npmDir).!
           if (installExitCode != 0) {
-              throw new RuntimeException("npm install failed")
+              throw new RuntimeException(
+                "npm ci failed - if package.json changed, regenerate package-lock.json with " +
+                    s"`npm install` in $npmDir and commit it"
+              )
           }
           log.info("Running TypeScript tests...")
           val testExitCode = Process("npm" :: "test" :: Nil, npmDir).!
