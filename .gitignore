@@ -28,6 +28,14 @@ bloxbean-cardano-client-lib/blocks
 utxos/
 !bloxbean-cardano-client-lib/src/test/resources/utxos/
 package-lock.json
+# ...except the published npm package's, which is committed on purpose: `runNpmTests` installs with
+# `npm ci` so a CI run resolves the tree this file pins rather than whatever the registry serves
+# that day. Without it, a package we do not use can break the build - `vitest` declares `happy-dom`,
+# `jsdom` and `@edge-runtime/vm` as wildcard optional peers, npm walks them anyway, and a publish
+# into that closure on 2026-09-03 crashed the resolver for every branch at once.
+# Regenerate it (`npm install` in that directory) whenever its package.json changes; `npm ci` fails
+# loudly if the two disagree, which is the point.
+!scalus-cardano-ledger/js/src/main/npm/package-lock.json
 website/static/api
 node_modules
 .scala-build
