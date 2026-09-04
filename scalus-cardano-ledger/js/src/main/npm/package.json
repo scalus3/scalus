@@ -22,17 +22,21 @@
   "exports": {
     ".": {
       "types": "./scalus.d.ts",
-      "import": "./scalus.js"
+      "import": "./scalus.js",
+      "default": "./scalus.js"
     },
     "./package.json": "./package.json"
   },
   "scripts": {
-    "test": "npm run typecheck && vitest run",
+    "test": "npm run typecheck && npm run typecheck:providers && vitest run",
     "typecheck": "tsc --noEmit --strict --target es2020 --moduleResolution bundler --module esnext scalus.d.ts __tests__/scalus-dts.consumer.ts",
+    "typecheck:providers": "tsc --noEmit --strict --skipLibCheck --target es2020 --moduleResolution bundler --module esnext scalus.d.ts __tests__/provider-mesh.test.ts __tests__/provider-lucid.test.ts __tests__/collision.test.ts __tests__/object-api-guards.test.ts",
     "test:watch": "vitest",
     "build:browser-tests": "esbuild __tests__/shared-tests.ts --bundle --outfile=shared-tests-bundle.js --format=iife --global-name=SharedTests"
   },
   "devDependencies": {
+    "@lucid-evolution/lucid": "^0.6.2",
+    "@lucid-evolution/uplc": "^0.2.22",
     "@meshsdk/core": "^1.9.0-beta.98",
     "@types/node": "^22.0.0",
     "cbor-x": "^1.6.0",
