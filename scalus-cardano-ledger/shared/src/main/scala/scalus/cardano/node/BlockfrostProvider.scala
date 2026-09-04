@@ -748,11 +748,7 @@ class BlockfrostProvider(
                 val leftFuture = evalSource(left)
                 val rightFuture = evalSource(right)
                 leftFuture.zip(rightFuture).map { case (leftResult, rightResult) =>
-                    (leftResult, rightResult) match
-                        case (Right(l), Right(r)) => Right(l ++ r)
-                        case (Right(l), _)        => Right(l)
-                        case (_, Right(r))        => Right(r)
-                        case (Left(e), _)         => Left(e)
+                    BlockfrostProvider.combineOr(leftResult, rightResult)
                 }
             case UtxoSource.And(left, right) =>
                 // Execute both sources in parallel (both must be fetched for intersection)
@@ -830,14 +826,9 @@ class BlockfrostProvider(
                 val leftFuture = evalQuery(UtxoQuery.propagate(left, limit, minTotal))
                 val rightFuture = evalQuery(UtxoQuery.propagate(right, limit, minTotal))
                 leftFuture.zip(rightFuture).map { case (leftResult, rightResult) =>
-                    (leftResult, rightResult) match
-                        case (Right(l), Right(r)) =>
-                            Right(UtxoQuery.applyPagination(l ++ r, limit, offset, minTotal))
-                        case (Right(l), _) =>
-                            Right(UtxoQuery.applyPagination(l, limit, offset, minTotal))
-                        case (_, Right(r)) =>
-                            Right(UtxoQuery.applyPagination(r, limit, offset, minTotal))
-                        case (Left(e), _) => Left(e)
+                    BlockfrostProvider
+                        .combineOr(leftResult, rightResult)
+                        .map(UtxoQuery.applyPagination(_, limit, offset, minTotal))
                 }
 
         evalQuery(query)
@@ -1171,6 +1162,30 @@ object BlockfrostProvider {
         val refHashes = parsed.collect { case ((input, _), Some(hash)) => input -> hash }.toMap
         (utxos, refHashes)
     }
+
+    /** Combine the two halves of an `Or`, which is a union and therefore needs both.
+      *
+      * A failure means "this side could not be evaluated", not "this side is empty", and the two
+      * are not interchangeable: `UtxoSource.FromPaymentCredential` always fails against Blockfrost,
+      * which has no reverse index for it, so `credential || address` used to answer with the
+      * address's UTxOs alone and report success. The caller could not tell that half its query had
+      * never run.
+      *
+      * So any failure propagates, matching `And` in the same evaluator and the union `Or` is
+      * documented to compute. When both sides fail the left error is reported, again as `And` does.
+      *
+      * Note this makes an `Or` no more available than its least available side: `FromInputs`
+      * reports `NotFound` when an input is missing rather than returning an empty set, so
+      * `inputs || address` now fails where it used to fall back. That is the honest answer to a
+      * union whose operand could not be computed; a caller wanting a fallback wants two queries.
+      */
+    private[node] def combineOr(
+        left: Either[UtxoQueryError, Utxos],
+        right: Either[UtxoQueryError, Utxos]
+    ): Either[UtxoQueryError, Utxos] = (left, right) match
+        case (Right(l), Right(r)) => Right(l ++ r)
+        case (Left(e), _)         => Left(e)
+        case (_, Left(e))         => Left(e)
 
     /** Extract the optional `reference_script_hash` field from a UTxO/output JSON object. */
     private[node] def referenceScriptHash(json: ujson.Value): Option[ScriptHash] =
