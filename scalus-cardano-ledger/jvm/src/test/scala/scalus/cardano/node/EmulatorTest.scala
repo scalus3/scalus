@@ -4,7 +4,7 @@ import org.scalacheck.Gen
 import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.uplc.builtin.{ByteString, Data}
-import scalus.cardano.address.{Network, StakeAddress, StakePayload}
+import scalus.cardano.address.{Network, ShelleyAddress, ShelleyDelegationPart, ShelleyPaymentPart, StakeAddress, StakePayload}
 import scalus.cardano.ledger.*
 import scalus.cardano.ledger.rules.Context
 import scalus.cardano.txbuilder.{ScriptSource, TwoArgumentPlutusScriptWitness, TxBuilder}
@@ -17,6 +17,64 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
     given testEnv: CardanoInfo = CardanoInfo.mainnet
     val genesisHash: TransactionHash =
         TransactionHash.fromByteString(ByteString.fromHex("0" * 64))
+
+    test("findUtxosSync filters by payment credential") {
+        val alice = Alice.address(Network.Mainnet)
+        val emulator = Emulator.withAddresses(Seq(alice))
+        val credential = alice.keyHashOption
+            .map(hash => Credential.KeyHash(hash.asInstanceOf[AddrKeyHash]))
+            .getOrElse(fail("test address has no payment key hash"))
+        val found = emulator.findUtxosSync(UtxoQuery(UtxoSource.FromPaymentCredential(credential)))
+        assert(found.size == 1)
+        assert(found.values.forall(_.address == alice))
+    }
+
+    test(
+      "findUtxosSync by payment credential matches every address carrying it, never the stake part"
+    ) {
+        // Alice's payment key hash appears at two addresses (enterprise, and staked to Bob) -
+        // both must match. Bob's address delegates to Alice's key hash, so it must NOT match:
+        // that hash sits in the stake part, not the payment part.
+        val aliceEnterprise = Alice.address(Network.Mainnet)
+        val aliceStaked = ShelleyAddress(
+          Network.Mainnet,
+          ShelleyPaymentPart.Key(Alice.addrKeyHash),
+          ShelleyDelegationPart.Key(StakeKeyHash.fromByteString(Bob.addrKeyHash))
+        )
+        val bobStakedToAlice = ShelleyAddress(
+          Network.Mainnet,
+          ShelleyPaymentPart.Key(Bob.addrKeyHash),
+          ShelleyDelegationPart.Key(StakeKeyHash.fromByteString(Alice.addrKeyHash))
+        )
+        val scriptAddress = ShelleyAddress(
+          Network.Mainnet,
+          ShelleyPaymentPart.Script(ScriptHash.fromHex("a" * 56)),
+          ShelleyDelegationPart.Null
+        )
+        val emulator = Emulator.withAddresses(
+          Seq(aliceEnterprise, aliceStaked, bobStakedToAlice, scriptAddress)
+        )
+
+        val byAliceCredential = emulator.findUtxosSync(
+          UtxoQuery(UtxoSource.FromPaymentCredential(Credential.KeyHash(Alice.addrKeyHash)))
+        )
+        assert(byAliceCredential.size == 2, "should match both of Alice's payment addresses")
+        assert(
+          byAliceCredential.values
+              .forall(out => out.address == aliceEnterprise || out.address == aliceStaked),
+          "must not match Bob's address, whose stake part merely reuses Alice's key hash"
+        )
+
+        val byScriptCredential = emulator.findUtxosSync(
+          UtxoQuery(
+            UtxoSource.FromPaymentCredential(
+              Credential.ScriptHash(scriptAddress.scriptHashOption.get)
+            )
+          )
+        )
+        assert(byScriptCredential.size == 1)
+        assert(byScriptCredential.values.forall(_.address == scriptAddress))
+    }
 
     test("Emulator.utxos returns all UTXOs") {
         val initialUtxos = Map(
@@ -180,6 +238,62 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
           cs.dstate.deposits.get(stakeCred).contains(expectedDeposit),
           s"deposits should contain stake credential with protocol deposit: ${cs.dstate.deposits}"
         )
+    }
+
+    test("stakeDistribution sums UTxO value and rewards per stake credential") {
+        val stakeKeyHash = StakeKeyHash.fromHex("c" * 56)
+        val stakeCredential = Credential.KeyHash(AddrKeyHash.fromByteString(stakeKeyHash))
+        // A base address: Alice's payment part, the stake part above.
+        val delegated = ShelleyAddress(
+          network = Network.Mainnet,
+          payment = Alice.address.payment,
+          delegation = ShelleyDelegationPart.Key(stakeKeyHash)
+        )
+        // Registered but never funded: must still show up, with its reward balance, and no stake.
+        val unfundedStakeKeyHash = StakeKeyHash.fromHex("d" * 56)
+        val unfundedCredential =
+            Credential.KeyHash(AddrKeyHash.fromByteString(unfundedStakeKeyHash))
+        // Funded but never registered: must still show up, with its UTxO stake, and no reward balance.
+        val utxoOnlyStakeKeyHash = StakeKeyHash.fromHex("e" * 56)
+        val utxoOnlyCredential =
+            Credential.KeyHash(AddrKeyHash.fromByteString(utxoOnlyStakeKeyHash))
+        val utxoOnlyDelegated = ShelleyAddress(
+          network = Network.Mainnet,
+          payment = Bob.address.payment,
+          delegation = ShelleyDelegationPart.Key(utxoOnlyStakeKeyHash)
+        )
+        val emulator = Emulator.withRegisteredStakeCredentials(
+          initialUtxos = Map(
+            Input(genesisHash, 0) -> Output(delegated, Value.ada(500)),
+            Input(genesisHash, 1) -> Output(utxoOnlyDelegated, Value.ada(200))
+          ),
+          initialStakeRewards = Map(
+            stakeCredential -> Coin(1_000_000L),
+            unfundedCredential -> Coin(2_000_000L)
+          )
+        )
+
+        val entry = emulator.stakeDistribution
+            .find(_.credential == stakeCredential)
+            .getOrElse(fail("credential missing from the distribution"))
+        assert(entry.rewards == Coin(1_000_000L))
+        assert(entry.stake == Coin.ada(500), "UTxO value at the delegated address counts as stake")
+        assert(entry.pool.isEmpty, "registered but delegating to no pool")
+
+        val unfundedEntry = emulator.stakeDistribution
+            .find(_.credential == unfundedCredential)
+            .getOrElse(fail("registered credential with no UTxOs missing from the distribution"))
+        assert(unfundedEntry.stake == Coin.zero, "no UTxO delegates to this credential")
+        assert(unfundedEntry.rewards == Coin(2_000_000L))
+
+        val utxoOnlyEntry = emulator.stakeDistribution
+            .find(_.credential == utxoOnlyCredential)
+            .getOrElse(
+              fail("credential holding UTxOs but never registered missing from the distribution")
+            )
+        assert(utxoOnlyEntry.stake == Coin.ada(200))
+        assert(utxoOnlyEntry.rewards == Coin.zero, "never registered, so no reward balance")
+        assert(utxoOnlyEntry.pool.isEmpty)
     }
 
     test("Emulator doesn't allow stake registration and withdrawal in the same tx") {
@@ -467,5 +581,28 @@ class EmulatorTest extends AnyFunSuite with ScalaCheckPropertyChecks {
         val ok = emulator.submitSync(certTx(Certificate.PoolRetirement(poolId, epoch + 1)))
         assert(ok.isRight, s"Retirement within bounds should succeed: $ok")
         assert(emulator.certState.pstate.retiring.get(poolId).contains(epoch + 1))
+    }
+
+    test("a rejected transaction names the rule that rejected it") {
+        val initialUtxos = Map(
+          Input(genesisHash, 0) -> Output(Alice.address, Value.ada(1000))
+        )
+        val emulator = Emulator(initialUtxos = initialUtxos)
+
+        val tx = TxBuilder(testEnv)
+            .payTo(Bob.address, Value.ada(10))
+            .complete(emulator, Alice.address)
+            .await()
+            .sign(Alice.signer)
+            .transaction
+
+        assert(emulator.submitSync(tx).isRight, "the first submission should succeed")
+
+        // The same transaction again: its input is gone from the UTxO set.
+        emulator.submitSync(tx) match
+            case Left(error) =>
+                assert(error.rule.nonEmpty, "a rejection must name the rule that produced it")
+                assert(error.rule == "UtxoNotAvailable", error.rule)
+            case Right(_) => fail("expected the double spend to be rejected")
     }
 }

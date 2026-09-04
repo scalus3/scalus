@@ -1,9 +1,8 @@
 package scalus.cardano.node
 
-import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS, State}
+import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS}
 import scalus.cardano.ledger.*
 
 /** An in-memory bare-bones node implementation (JS version with single-threaded state).
@@ -11,6 +10,10 @@ import scalus.cardano.ledger.*
   * Allows submitting transaction and querying UTxO state. Runs [[validators]] and [[mutators]]
   * against all submitted transactions. The default validator and mutator lists reflect the Cardano
   * Node UTxO related ledger rules.
+  *
+  * The rules themselves live in [[EmulatorBase]], shared with the JVM emulator, so the two cannot
+  * drift apart; all this class adds is the state cell — a plain `var`, since JavaScript is
+  * single-threaded.
   *
   * @see
   *   [[scalus.cardano.ledger.rules]] for the ledger rules
@@ -24,81 +27,30 @@ class Emulator(
     initialDatums: Map[DataHash, Data] = Map.empty,
     initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
 ) extends EmulatorBase {
-    // JavaScript is single-threaded, so simple vars are safe
-    private var state: State = State(initialUtxos, certState = initialCertState)
-    private var context: Context = initialContext
-    private var _datums: Map[DataHash, Data] =
-        initialAppliedTxLog.foldLeft(initialDatums)((acc, a) =>
-            acc ++ EmulatorBase.extractDatums(a.tx)
-        )
-    private var _appliedTxLog: Vector[AppliedTx] = initialAppliedTxLog
-    private var _appliedTxIndex: Map[TransactionHash, AppliedTx] =
-        EmulatorBase.indexAppliedTxs(initialAppliedTxLog)
-    private var _appliedTxs: Set[TransactionHash] = initialAppliedTxLog.map(_.tx.id).toSet
-
-    def utxos: Utxos = state.utxos
-    def certState: CertState = state.certState
-    def currentContext: Context = context
-    def datums: Map[DataHash, Data] = _datums
-    def appliedTxLog: Vector[AppliedTx] = _appliedTxLog
-    def appliedTxIndex: Map[TransactionHash, AppliedTx] = _appliedTxIndex
-    def appliedTxs: Set[TransactionHash] = _appliedTxs
-
-    private def recordApplied(applied: AppliedTx): Unit = {
-        _appliedTxLog = _appliedTxLog :+ applied
-        _appliedTxIndex = _appliedTxIndex + (applied.txHash -> applied)
-        _appliedTxs = _appliedTxs + applied.txHash
-        _datums = _datums ++ EmulatorBase.extractDatums(applied.tx)
-    }
-
-    def submitSync(transaction: Transaction): Either[SubmitError, TransactionHash] = {
-        processTransaction(context, state, transaction) match {
-            case Right(newState) =>
-                val spent = EmulatorBase.resolveSpent(state.utxos, transaction)
-                state = newState
-                recordApplied(AppliedTx(transaction, context.env.slot, spent))
-                Right(transaction.id)
-            case Left(t: TransactionException) =>
-                Left(SubmitError.fromException(t))
-        }
-    }
-
-    def submitSync(
-        transaction: Transaction,
-        debugScripts: Map[ScriptHash, DebugScript]
-    ): Either[SubmitError, TransactionHash] = {
-        val ctxWithDebug = context.copy(debugScripts = debugScripts)
-        processTransaction(ctxWithDebug, state, transaction) match {
-            case Right(newState) =>
-                val spent = EmulatorBase.resolveSpent(state.utxos, transaction)
-                state = newState
-                recordApplied(AppliedTx(transaction, context.env.slot, spent))
-                Right(transaction.id)
-            case Left(t: TransactionException) =>
-                Left(SubmitError.fromException(t))
-        }
-    }
-
-    def setSlot(slot: SlotNo): Unit = {
-        // copy preserves evaluatorMode and debugScripts, which a fresh Context(...) would drop
-        context = context.copy(env = context.env.copy(slot = slot))
-    }
-
-    def clearAppliedTxs(): Unit = {
-        _appliedTxLog = Vector.empty
-        _appliedTxIndex = Map.empty
-        _appliedTxs = Set.empty
-    }
-
-    def snapshot(): Emulator = Emulator(
-      initialUtxos = this.utxos,
-      initialContext = this.context,
-      validators = this.validators,
-      mutators = this.mutators,
-      initialCertState = this.state.certState,
-      initialDatums = this._datums,
-      initialAppliedTxLog = this._appliedTxLog
+    // JavaScript is single-threaded, so a simple var is safe
+    private var state: EmulatorState = EmulatorState.initial(
+      utxos = initialUtxos,
+      certState = initialCertState,
+      context = initialContext,
+      datums = initialDatums,
+      appliedTxLog = initialAppliedTxLog
     )
+
+    override protected def readState: EmulatorState = state
+
+    override protected def modifyState[A](f: EmulatorState => (EmulatorState, A)): A = {
+        val (next, result) = f(state)
+        state = next
+        result
+    }
+
+    /** Narrowed to `Vector` — the type this class has always returned. */
+    override def appliedTxLog: Vector[AppliedTx] = state.appliedTxLog
+
+    /** Public here, unlike the `protected` declaration in [[EmulatorBase]]: [[JEmulator]] reads the
+      * slot config and the env off it while translating between the ledger types and JavaScript.
+      */
+    override def currentContext: Context = state.context
 }
 
 object Emulator {
