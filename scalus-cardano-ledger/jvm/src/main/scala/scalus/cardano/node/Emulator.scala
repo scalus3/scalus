@@ -1,9 +1,8 @@
 package scalus.cardano.node
 
-import scalus.uplc.DebugScript
 import scalus.uplc.builtin.Data
 import scalus.cardano.address.Address
-import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS, State}
+import scalus.cardano.ledger.rules.{Context, DefaultMutators, DefaultValidators, STS}
 import scalus.cardano.ledger.*
 
 import java.util.concurrent.atomic.AtomicReference
@@ -14,6 +13,10 @@ import scala.annotation.tailrec
   * Allows submitting transaction and querying UTxO state. Runs [[validators]] and [[mutators]]
   * against all submitted transactions. The default validator and mutator lists reflect the Cardano
   * Node UTxO related ledger rules.
+  *
+  * The rules themselves live in [[EmulatorBase]], shared with the JavaScript emulator; all this
+  * class adds is the state cell and the compare-and-set retry that makes concurrent submission
+  * safe.
   *
   * @see
   *   [[scalus.cardano.ledger.rules]] for the ledger rules
@@ -28,118 +31,38 @@ class Emulator(
     initialAppliedTxLog: Vector[AppliedTx] = Vector.empty
 ) extends EmulatorBase
     with EmulatorJavaApi {
-    private val stateRef =
-        new AtomicReference[State](State(initialUtxos, certState = initialCertState))
-    private val contextRef = new AtomicReference[Context](initialContext)
-    private val datumsRef = new AtomicReference[Map[DataHash, Data]](
-      initialAppliedTxLog.foldLeft(initialDatums)((acc, a) =>
-          acc ++ EmulatorBase.extractDatums(a.tx)
+
+    /** The whole emulator state in one atomically swapped cell, so a transaction and the log entry
+      * describing it become visible together.
+      */
+    private val stateRef = new AtomicReference[EmulatorState](
+      EmulatorState.initial(
+        utxos = initialUtxos,
+        certState = initialCertState,
+        context = initialContext,
+        datums = initialDatums,
+        appliedTxLog = initialAppliedTxLog
       )
     )
-    private val appliedTxLogRef = new AtomicReference[Vector[AppliedTx]](initialAppliedTxLog)
-    private val appliedTxIndexRef =
-        new AtomicReference[Map[TransactionHash, AppliedTx]](
-          EmulatorBase.indexAppliedTxs(initialAppliedTxLog)
-        )
-    private val appliedTxsRef =
-        new AtomicReference[Set[TransactionHash]](initialAppliedTxLog.map(_.tx.id).toSet)
 
-    def utxos: Utxos = stateRef.get().utxos
-    def certState: CertState = stateRef.get().certState
-    protected def currentContext: Context = contextRef.get()
-    def datums: Map[DataHash, Data] = datumsRef.get()
-    def appliedTxLog: Vector[AppliedTx] = appliedTxLogRef.get()
-    def appliedTxIndex: Map[TransactionHash, AppliedTx] = appliedTxIndexRef.get()
-    def appliedTxs: Set[TransactionHash] = appliedTxsRef.get()
+    override protected def readState: EmulatorState = stateRef.get()
 
-    private def recordApplied(applied: AppliedTx): Unit = {
-        var log = appliedTxLogRef.get()
-        while !appliedTxLogRef.compareAndSet(log, log :+ applied) do log = appliedTxLogRef.get()
-        var idx = appliedTxIndexRef.get()
-        while !appliedTxIndexRef.compareAndSet(idx, idx + (applied.txHash -> applied)) do
-            idx = appliedTxIndexRef.get()
-        var txs = appliedTxsRef.get()
-        while !appliedTxsRef.compareAndSet(txs, txs + applied.txHash) do txs = appliedTxsRef.get()
-        val extracted = EmulatorBase.extractDatums(applied.tx)
-        if extracted.nonEmpty then {
-            var d = datumsRef.get()
-            while !datumsRef.compareAndSet(d, d ++ extracted) do d = datumsRef.get()
+    override protected def modifyState[A](f: EmulatorState => (EmulatorState, A)): A = {
+        @tailrec def attempt(): A = {
+            val current = stateRef.get()
+            val (next, result) = f(current)
+            // A rejected submission returns the state it was handed and writes nothing, so it never
+            // contends. A losing compare-and-set re-runs `f` against the state that won, which for
+            // a submission means re-validating the transaction rather than applying it over a
+            // ledger it was never checked against.
+            if (next eq current) || stateRef.compareAndSet(current, next) then result
+            else attempt()
         }
+        attempt()
     }
 
-    @tailrec
-    final def submitSync(
-        transaction: Transaction
-    ): Either[SubmitError, TransactionHash] = {
-        val currentState = stateRef.get()
-        val ctx = contextRef.get()
-
-        processTransaction(ctx, currentState, transaction) match {
-            case Right(newState) =>
-                if stateRef.compareAndSet(currentState, newState) then
-                    recordApplied(
-                      AppliedTx(
-                        transaction,
-                        ctx.env.slot,
-                        EmulatorBase.resolveSpent(currentState.utxos, transaction)
-                      )
-                    )
-                    Right(transaction.id)
-                else submitSync(transaction)
-            case Left(t: TransactionException) =>
-                Left(SubmitError.fromException(t))
-        }
-    }
-
-    @tailrec
-    final def submitSync(
-        transaction: Transaction,
-        debugScripts: Map[ScriptHash, DebugScript]
-    ): Either[SubmitError, TransactionHash] = {
-        val currentState = stateRef.get()
-        val ctx = contextRef.get()
-        val ctxWithDebug = ctx.copy(debugScripts = debugScripts)
-
-        processTransaction(ctxWithDebug, currentState, transaction) match {
-            case Right(newState) =>
-                if stateRef.compareAndSet(currentState, newState) then
-                    recordApplied(
-                      AppliedTx(
-                        transaction,
-                        ctx.env.slot,
-                        EmulatorBase.resolveSpent(currentState.utxos, transaction)
-                      )
-                    )
-                    Right(transaction.id)
-                else submitSync(transaction, debugScripts)
-            case Left(t: TransactionException) =>
-                Left(SubmitError.fromException(t))
-        }
-    }
-
-    @tailrec
-    final def setSlot(slot: SlotNo): Unit = {
-        val ctx = contextRef.get()
-        // copy preserves evaluatorMode and debugScripts, which a fresh Context(...) would drop
-        val newContext = ctx.copy(env = ctx.env.copy(slot = slot))
-        if !contextRef.compareAndSet(ctx, newContext) then setSlot(slot)
-    }
-
-    def clearAppliedTxs(): Unit = {
-        appliedTxLogRef.set(Vector.empty)
-        appliedTxIndexRef.set(Map.empty)
-        appliedTxsRef.set(Set.empty)
-    }
-
-    def snapshot(): Emulator = Emulator(
-      initialUtxos = this.utxos,
-      initialContext = this.contextRef.get(),
-      validators = this.validators,
-      mutators = this.mutators,
-      initialCertState = this.stateRef.get().certState,
-      initialDatums = this.datumsRef.get(),
-      initialAppliedTxLog = this.appliedTxLogRef.get()
-    )
+    /** Narrowed to `Vector` — the type this class has always returned. */
+    override def appliedTxLog: Vector[AppliedTx] = readState.appliedTxLog
 }
 
 object Emulator {
