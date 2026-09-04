@@ -592,7 +592,63 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       // Add JS-specific settings here
       // Disable doc due to scaladoc NPE bug on JS platform
       Compile / doc / sources := Seq.empty,
-      Test / doc / sources := Seq.empty
+      Test / doc / sources := Seq.empty,
+      // `SlotConfig` used to be forked per platform: a `Long` case class in jvm/ and native/, and
+      // a separate `Double`, `js.Object`-extending, `@JSExportTopLevel("SlotConfig")` class in
+      // js/. Shared code - `CardanoInfo`, `LedgerToPlutusTranslation`'s validity bounds - compiled
+      // against whichever its platform supplied, and papered over the difference with `.toLong`.
+      // There is now one shared `Long` case class, and the exported JavaScript class is the
+      // separate `JsSlotConfig` handle, whose members keep the `number` signatures and the `Double`
+      // arithmetic the npm package published. So the only artifact that changes is this one, and
+      // only in its *Scala* signatures: the `_sjs1_3` `SlotConfig` loses `js.Object` and moves from
+      // `Double` to `Long`.
+      //
+      // Filters, not a source change: the replacement is the task. Safe for the same reason as the
+      // `JEmulator` filters below - these members exist to be called from JavaScript, and the only
+      // way to call them is the `scalus` npm bundle, which is linked from this repo and
+      // re-published with it, so no consumer can be holding the previous signatures. Per symbol
+      // rather than a wildcard: `scalus.cardano.ledger` is a MIXED package (CLAUDE.md), so a
+      // wildcard there would also pre-authorise breaks in the ledger domain types.
+      mimaBinaryIssueFilters ++= Seq(
+        ProblemFilters.exclude[MissingTypesProblem]("scalus.cardano.ledger.SlotConfig"),
+        ProblemFilters
+            .exclude[IncompatibleMethTypeProblem]("scalus.cardano.ledger.SlotConfig.this"),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.zeroTime"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.zeroSlot"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.slotLength"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.epochLength"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.zeroEpoch"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.slotToTime"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.timeToSlot"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.epochOf"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.firstSlotOfEpoch"
+        ),
+        // The `epochLength`/`zeroEpoch` constructor defaults, which MiMa sees twice: once as the
+        // class's static forwarder and once as the companion's method.
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.<init>$default$4"
+        ),
+        ProblemFilters.exclude[IncompatibleResultTypeProblem](
+          "scalus.cardano.ledger.SlotConfig.<init>$default$5"
+        )
+      )
     )
     .nativeSettings(
       // Scala Native 0.5.12 supports 3.8.4, so Native tracks the same versions as JVM/JS.
@@ -1083,6 +1139,26 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
         ),
         ProblemFilters.exclude[IncompatibleResultTypeProblem](
           "scalus.cardano.node.JEmulator.getStakeReward"
+        ),
+        // `SlotConfig` is now one shared `Long` case class, and the class JavaScript sees is the
+        // `JsSlotConfig` handle - see the matching block in the `scalus` project for the full
+        // reasoning. These four members take a slot config from JavaScript, so their Scala
+        // parameter type moved from `SlotConfig` to `JsSlotConfig`. Their *JavaScript* signature
+        // is unchanged: the handle keeps the `number` members and the `Double` arithmetic the npm
+        // package published, and `scalus.d.ts` is unchanged for `SlotConfig` too. Safe for the
+        // same reason as the filters above - the only way to call these is the `scalus` npm
+        // bundle, relinked and republished from this repo.
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.node.JEmulator.this"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.node.JEmulator.withState"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.cardano.node.JEmulator.withAddresses"
+        ),
+        ProblemFilters.exclude[IncompatibleMethTypeProblem](
+          "scalus.uplc.eval.JScalus.evalPlutusScripts"
         )
       ),
       // Publish the Scala.js ESModule output as a single-file ESM bundle (scalus.js).

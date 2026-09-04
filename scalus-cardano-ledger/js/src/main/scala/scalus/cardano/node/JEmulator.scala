@@ -47,16 +47,16 @@ import scala.scalajs.js.typedarray.{byteArray2Int8Array, Uint8Array}
 @JSExportTopLevel("Emulator")
 class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     initialUtxosCbor: Uint8Array,
-    slotConfig: SlotConfig,
+    slotConfig: JsSlotConfig,
     initialStakeRewards: js.Dictionary[String] = js.Dictionary()
 ) extends js.Object {
 
     private var emulator: Emulator = {
         val utxos: Utxos = Cbor.decode(initialUtxosCbor.toArray.map(_.toByte)).to[Utxos].value
         val env =
-            if slotConfig == SlotConfig.mainnet then UtxoEnv.testMainnet()
+            if slotConfig.underlying == SlotConfig.mainnet then UtxoEnv.testMainnet()
             else UtxoEnv.default
-        val context = new Context(env = env, slotConfig = slotConfig)
+        val context = new Context(env = env, slotConfig = slotConfig.underlying)
         val rewardsMap: Map[Credential, Coin] = initialStakeRewards.toMap.map {
             case (hashHex, lovelace) =>
                 Credential.ScriptHash(ScriptHash.fromHex(hashHex)) -> Coin(lovelace.toLong)
@@ -433,13 +433,14 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
     /** POSIX time in milliseconds at which the emulator's current slot starts. Equivalent to
       * `getCardanoInfo().slotConfig.slotToTime(getSlot())`.
       */
-    def getTime(): Double = emulator.currentContext.slotConfig.slotToTime(getSlot())
+    def getTime(): Double =
+        emulator.currentContext.slotConfig.slotToTime(emulator.currentContext.env.slot).toDouble
 
     /** Moves the clock to the slot containing this POSIX time - the inverse of `getTime`. A
       * fractional slot is truncated, the same as `setSlot`.
       */
     def setTime(posixMillis: Double): Unit =
-        setSlot(emulator.currentContext.slotConfig.timeToSlot(posixMillis))
+        setSlot(emulator.currentContext.slotConfig.timeToSlot(posixMillis.toLong).toDouble)
 
     /** Whether a transaction with this hash was accepted by this emulator.
       *
@@ -613,7 +614,7 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
         val emptyUtxosCbor = Cbor.encode(Map.empty: Utxos).toByteArray
         val wrapper = new JEmulator(
           new Uint8Array(byteArray2Int8Array(emptyUtxosCbor).buffer),
-          emulator.currentContext.slotConfig,
+          JsSlotConfig.wrap(emulator.currentContext.slotConfig),
           initialStakeRewards
         )
         JEmulator.replaceEmulator(wrapper, snapshotEmulator)
@@ -929,7 +930,7 @@ object JEmulator {
     // the real, already-built `Emulator` into - see `JsUtxo.wrap`'s doc for the same placeholder
     // pattern. Internal use is intentional, hence the suppression.
     @nowarn("cat=deprecation")
-    private def wrapScalaEmulator(scalaEmulator: Emulator, slotConfig: SlotConfig): JEmulator = {
+    private def wrapScalaEmulator(scalaEmulator: Emulator, slotConfig: JsSlotConfig): JEmulator = {
         val emptyUtxosCbor = Cbor.encode(Map.empty: Utxos).toByteArray
         val wrapper = new JEmulator(
           new Uint8Array(byteArray2Int8Array(emptyUtxosCbor).buffer),
@@ -968,10 +969,7 @@ object JEmulator {
         }.toMap
         val slot: SlotNo = options.slot.toOption
             .map(_.toLong)
-            .getOrElse {
-                val nowMillis: Double = System.currentTimeMillis().toDouble
-                math.floor(cardanoInfo.slotConfig.timeToSlot(nowMillis)).toLong
-            }
+            .getOrElse(cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()))
         val initState = EmulatorInitialState(
           utxos = utxos,
           stakeRegistrations = parseStakeRegistrations(options.stakeRegistrations),
@@ -983,7 +981,10 @@ object JEmulator {
           env = UtxoEnv(slot, cardanoInfo.protocolParams, CertState.empty, cardanoInfo.network),
           slotConfig = cardanoInfo.slotConfig
         )
-        wrapScalaEmulator(Emulator.withState(initState, context), cardanoInfo.slotConfig)
+        wrapScalaEmulator(
+          Emulator.withState(initState, context),
+          JsSlotConfig.wrap(cardanoInfo.slotConfig)
+        )
     }
 
     /** Creates an emulator seeded with a full starting ledger state: UTxOs, and optionally stake
@@ -997,7 +998,7 @@ object JEmulator {
       */
     @deprecated("use Emulator.create", "1.2.0")
     @JSExportStatic
-    def withState(state: JEmulatorInitialState, slotConfig: SlotConfig): JEmulator = {
+    def withState(state: JEmulatorInitialState, slotConfig: JsSlotConfig): JEmulator = {
         val utxos = decodeCbor[Utxos](state.utxos)
         val initState = EmulatorInitialState(
           utxos = utxos,
@@ -1007,9 +1008,9 @@ object JEmulator {
           datums = parseDatums(state.datums)
         )
         val env =
-            if slotConfig == SlotConfig.mainnet then UtxoEnv.testMainnet()
+            if slotConfig.underlying == SlotConfig.mainnet then UtxoEnv.testMainnet()
             else UtxoEnv.default
-        val context = new Context(env = env, slotConfig = slotConfig)
+        val context = new Context(env = env, slotConfig = slotConfig.underlying)
         wrapScalaEmulator(Emulator.withState(initState, context), slotConfig)
     }
 
@@ -1028,7 +1029,7 @@ object JEmulator {
     @nowarn("cat=deprecation") // constructing the deprecated constructor's own JEmulator handle
     def withAddresses(
         addressesBech32: js.Array[String],
-        slotConfig: SlotConfig,
+        slotConfig: JsSlotConfig,
         lovelacePerAddress: js.BigInt = js.BigInt(10_000_000_000L)
     ): JEmulator = {
         val addresses = addressesBech32.toSeq.map(Address.fromString)

@@ -22,7 +22,7 @@ class JsProtocolParamsTest extends AnyFunSuite {
     }
 
     test("custom info accepts a Yaci-style slot config") {
-        val slotConfig = new SlotConfig(1_700_000_000_000d, 0d, 1000d, 500d, 0d)
+        val slotConfig = new JsSlotConfig(1_700_000_000_000d, 0d, 1000d, 500d, 0d)
         val info = JsCardanoInfo.custom(
           "testnet",
           slotConfig,
@@ -46,7 +46,7 @@ class JsProtocolParamsTest extends AnyFunSuite {
         assertThrows[IllegalArgumentException] {
             JsCardanoInfo.custom(
               "devnet",
-              SlotConfig.preview,
+              JsSlotConfig.preview,
               JsCardanoInfo.preview().protocolParams
             )
         }

@@ -12,7 +12,6 @@ import upickle.default.read
 
 import io.bullet.borer.Cbor
 
-import scala.annotation.nowarn
 import scala.collection.concurrent.TrieMap
 import scala.collection.immutable.SortedMap
 import scala.concurrent.{ExecutionContext, Future}
@@ -563,7 +562,7 @@ class BlockfrostProvider(
 
     def currentSlot: Future[SlotNo] =
         Future.successful(
-          cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis()).toLong
+          cardanoInfo.slotConfig.timeToSlot(System.currentTimeMillis())
         )
 
     override def getDatum(datumHash: DataHash): Future[Option[Data]] =
@@ -1334,7 +1333,6 @@ object BlockfrostProvider {
       * `time` (epoch seconds) and `slot` fields, so slot/time conversions match the ledger
       * regardless of how the devnet's start time was shifted at bootstrap.
       */
-    @nowarn("msg=long2double")
     private def anchorSlotZeroOnLatestBlock(baseUrl: String, base: SlotConfig)(using
         backend: Backend[Future],
         ec: ExecutionContext
@@ -1370,7 +1368,6 @@ object BlockfrostProvider {
       * @return
       *   Future containing the SlotConfig
       */
-    @nowarn("msg=long2double")
     def fetchYaciSlotConfig(adminUrl: String)(using
         backend: Backend[Future],
         ec: ExecutionContext

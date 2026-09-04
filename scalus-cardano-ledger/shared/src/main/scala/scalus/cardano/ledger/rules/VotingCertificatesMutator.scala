@@ -1,26 +1,19 @@
 package scalus.cardano.ledger
 package rules
 
-import scala.annotation.nowarn
-
 // It's the Conway GOVCERT state transition in cardano-ledger (DRep certificates).
 // Committee certificates are accepted but not tracked: the emulator does not
 // model committee state yet.
 object VotingCertificatesMutator extends STS.Mutator {
     override final type Error = TransactionException.DRepException
 
-    // @nowarn: Suppress Long→Double implicit conversion warning. This is intentional for
-    // cross-platform compatibility: JS SlotConfig uses Double (JavaScript's number type),
-    // while JVM uses Long. The conversion is safe because slot values are well within
-    // Double's safe integer range (2^53).
-    @nowarn("msg=long2double")
     override def transit(context: Context, state: State, event: Event): Result = {
         val certificates = event.body.value.certificates.toSeq
         if certificates.isEmpty then success(state)
         else {
             val params = context.env.params
             val expectedDeposit = Coin(params.dRepDeposit)
-            val currentEpoch = context.slotConfig.epochOf(context.env.slot).toLong
+            val currentEpoch = context.slotConfig.epochOf(context.env.slot)
             val expiry = currentEpoch + params.dRepActivity
 
             def fail(

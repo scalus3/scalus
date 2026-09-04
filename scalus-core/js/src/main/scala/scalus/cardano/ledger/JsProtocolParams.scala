@@ -44,7 +44,7 @@ trait JsPlainProtocolParams extends js.Object {
 @TsName("PlainCardanoInfo")
 trait JsPlainCardanoInfo extends js.Object {
     val network: String
-    val slotConfig: SlotConfig
+    val slotConfig: JsSlotConfig
     val protocolParams: JsPlainProtocolParams
 }
 
@@ -282,7 +282,7 @@ class JsCardanoInfo() extends js.Object {
               s"network id $v has no \"mainnet\"/\"testnet\" representation"
             )
 
-    def slotConfig: SlotConfig = info.slotConfig
+    def slotConfig: JsSlotConfig = JsSlotConfig.wrap(info.slotConfig)
 
     def protocolParams: JsProtocolParams = JsProtocolParams.wrap(info.protocolParams)
 
@@ -316,7 +316,7 @@ object JsCardanoInfo {
       * values.
       */
     private[scalus] val zero: CardanoInfo =
-        CardanoInfo(JsProtocolParams.zero, Network.Testnet, new SlotConfig(0, 0, 1000))
+        CardanoInfo(JsProtocolParams.zero, Network.Testnet, SlotConfig(0L, 0L, 1000L))
 
     /** Internal bridge: wrap a ledger value without copying. Not exported. */
     private[scalus] def wrap(info: CardanoInfo): JsCardanoInfo = {
@@ -345,8 +345,8 @@ object JsCardanoInfo {
       * two values `network` can ever read back (see the accessor's doc).
       */
     @JSExportStatic
-    def custom(network: String, slotConfig: SlotConfig, params: JsProtocolParams): JsCardanoInfo =
-        wrap(CardanoInfo(params.underlying, parseNetwork(network), slotConfig))
+    def custom(network: String, slotConfig: JsSlotConfig, params: JsProtocolParams): JsCardanoInfo =
+        wrap(CardanoInfo(params.underlying, parseNetwork(network), slotConfig.underlying))
 
     private def parseNetwork(network: String): Network = network match
         case "mainnet" => Network.Mainnet

@@ -235,7 +235,7 @@ object JScalus {
     def evalPlutusScripts(
         txCborBytes: Uint8Array,
         utxoCborBytes: Uint8Array,
-        slotConfig: SlotConfig,
+        slotConfig: JsSlotConfig,
         costModels: js.Array[js.Array[Double]],
         protocolMajorVersion: Int = CardanoInfo.mainnet.majorProtocolVersion.version
     ): js.Array[Redeemer] = {
@@ -249,7 +249,7 @@ object JScalus {
                 lang -> cm.toIndexedSeq.map(_.toLong)
             }.toMap)
             val evaluator = PlutusScriptEvaluator(
-              slotConfig = slotConfig,
+              slotConfig = slotConfig.underlying,
               initialBudget = ExUnits(Long.MaxValue, Long.MaxValue),
               protocolMajorVersion = MajorProtocolVersion(protocolMajorVersion),
               costModels = cms,
