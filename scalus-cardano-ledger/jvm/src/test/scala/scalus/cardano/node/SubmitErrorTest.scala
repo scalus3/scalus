@@ -165,16 +165,23 @@ class SubmitErrorTest extends AnyFunSuite {
         assert(error.isInstanceOf[SubmitError.UtxoNotAvailable])
     }
 
-    test("fromException maps BadCollateralInputsUTxOException to UtxoNotAvailable") {
+    test("fromException keeps BadCollateralInputsUTxOException under its own rule name") {
+        // Not `UtxoNotAvailable`: that case is the race where an input a transaction spends has
+        // been spent by someone else, and a caller retries it. Missing collateral is a wallet
+        // problem, and retrying the same transaction does not fix it.
         val ex = TransactionException.BadCollateralInputsUTxOException(sampleTxHash)
         val error = SubmitError.fromException(ex)
-        assert(error.isInstanceOf[SubmitError.UtxoNotAvailable])
+        assert(error.isInstanceOf[SubmitError.ValidationError], error.toString)
+        assert(error.rule == "BadCollateralInputsUTxO", error.rule)
     }
 
-    test("fromException maps BadReferenceInputsUTxOException to UtxoNotAvailable") {
+    test("fromException keeps BadReferenceInputsUTxOException under its own rule name") {
+        // Likewise: a reference input that is not there is a script the transaction points at
+        // being absent, not a UTxO of the caller's that someone else spent.
         val ex = TransactionException.BadReferenceInputsUTxOException(sampleTxHash)
         val error = SubmitError.fromException(ex)
-        assert(error.isInstanceOf[SubmitError.UtxoNotAvailable])
+        assert(error.isInstanceOf[SubmitError.ValidationError], error.toString)
+        assert(error.rule == "BadReferenceInputsUTxO", error.rule)
     }
 
     test("fromException maps OutsideValidityIntervalException to TransactionExpired") {
@@ -211,6 +218,136 @@ class SubmitErrorTest extends AnyFunSuite {
         val ex = TransactionException.EmptyInputsException(sampleTxHash)
         val error = SubmitError.fromException(ex)
         assert(error.isInstanceOf[SubmitError.ValidationError])
+    }
+
+    // Rule naming. The classified cases report their own case name, whichever ledger rule produced
+    // them; everything else keeps the rule name through ValidationError's errorCode.
+
+    test("fromException names the rule behind every unclassified rejection") {
+        val cases: Seq[(TransactionException, String)] = Seq(
+          TransactionException.EmptyInputsException(sampleTxHash) -> "EmptyInputs",
+          TransactionException.FeesOkException(
+            sampleTxHash,
+            transactionFee = Coin(100),
+            minRequiredFee = Coin(200),
+            collateralPercentage = 150,
+            areTotalExUnitsZero = true
+          ) -> "FeesOk",
+          TransactionException.MissingKeyHashesException(
+            sampleTxHash,
+            Set.empty,
+            Set.empty,
+            Set.empty,
+            Set.empty,
+            Set.empty,
+            Set.empty
+          ) -> "MissingKeyHashes",
+          TransactionException.InvalidSignaturesInWitnessesException(
+            sampleTxHash,
+            Set.empty,
+            Set.empty
+          ) -> "InvalidSignaturesInWitnesses",
+          TransactionException.OutputsHaveNotEnoughCoinsException(sampleTxHash, Seq.empty, None)
+              -> "OutputsHaveNotEnoughCoins",
+          TransactionException.ExUnitsExceedMaxException(sampleTxHash, ExUnits.zero, ExUnits.zero)
+              -> "ExUnitsExceedMax",
+          TransactionException.InvalidScriptDataHashException(sampleTxHash, None, None)
+              -> "InvalidScriptDataHash",
+          TransactionException.ExactSetOfRedeemersException(sampleTxHash, Set.empty, Set.empty)
+              -> "ExactSetOfRedeemers",
+          TransactionException.DatumsException(sampleTxHash, Set.empty, Set.empty, Set.empty)
+              -> "Datums",
+          TransactionException.WithdrawalsNotInRewardsException(sampleTxHash, Map.empty, Map.empty)
+              -> "WithdrawalsNotInRewards",
+          TransactionException.StakeCertificatesException(
+            sampleTxHash,
+            Set.empty,
+            Set.empty,
+            Map.empty,
+            Map.empty,
+            Map.empty
+          ) -> "StakeCertificates",
+          TransactionException.TooManyCollateralInputsException(sampleTxHash, 5, 3)
+              -> "TooManyCollateralInputs",
+          TransactionException.BadCollateralInputsUTxOException(sampleTxHash)
+              -> "BadCollateralInputsUTxO",
+          TransactionException.BadReferenceInputsUTxOException(sampleTxHash)
+              -> "BadReferenceInputsUTxO"
+        )
+
+        for (ex, expectedRule) <- cases do
+            val error = SubmitError.fromException(ex)
+            assert(
+              error.isInstanceOf[SubmitError.ValidationError],
+              s"$expectedRule should stay unclassified, got $error"
+            )
+            assert(error.rule == expectedRule, s"expected rule $expectedRule, got ${error.rule}")
+            assert(
+              error.asInstanceOf[SubmitError.ValidationError].errorCode.contains(expectedRule),
+              s"errorCode should carry the rule name for $expectedRule"
+            )
+    }
+
+    test("fromException reports the case name for the rejections it does classify") {
+        val cases: Seq[(TransactionException, String)] = Seq(
+          TransactionException.BadInputsUTxOException(sampleTxHash) -> "UtxoNotAvailable",
+          TransactionException.BadAllInputsUTxOException(
+            sampleTxHash,
+            Set.empty,
+            Set.empty,
+            Set.empty
+          ) -> "UtxoNotAvailable",
+          TransactionException.OutsideValidityIntervalException(
+            sampleTxHash,
+            ValidityInterval(Some(0), Some(100)),
+            slot = 200
+          ) -> "TransactionExpired",
+          TransactionException.ValueNotConservedUTxOException(
+            sampleTxHash,
+            consumed = Value.ada(100),
+            produced = Value.ada(150)
+          ) -> "ValueNotConserved",
+          TransactionException.NativeScriptsException(sampleTxHash, Set.empty, Set.empty)
+              -> "ScriptFailure"
+        )
+
+        for (ex, expectedRule) <- cases do
+            assert(SubmitError.fromException(ex).rule == expectedRule)
+    }
+
+    test("a rejection with no recognizable code keeps the generic ValidationError rule") {
+        val error = SubmitError.parseValidationError("something went sideways")
+        assert(error.isInstanceOf[SubmitError.ValidationError])
+        assert(error.rule == "ValidationError", error.rule)
+    }
+
+    test("the network and emulator paths agree on the rule name for the same condition") {
+        val fromNetwork = SubmitError.parseValidationError("ValueNotConserved (Coin 1) (Coin 2)")
+        val fromEmulator = SubmitError.fromException(
+          TransactionException.ValueNotConservedUTxOException(
+            sampleTxHash,
+            consumed = Value.ada(1),
+            produced = Value.ada(2)
+          )
+        )
+        assert(
+          fromNetwork.rule == fromEmulator.rule,
+          s"${fromNetwork.rule} vs ${fromEmulator.rule}"
+        )
+    }
+
+    test("the two paths also agree on the rules that are no longer folded into UtxoNotAvailable") {
+        val cases = Seq(
+          "BadCollateralInputsUTxO" -> TransactionException
+              .BadCollateralInputsUTxOException(sampleTxHash),
+          "BadReferenceInputsUTxO" -> TransactionException
+              .BadReferenceInputsUTxOException(sampleTxHash)
+        )
+        for (rule, ex) <- cases do
+            val fromNetwork = SubmitError.parseValidationError(s"transaction rejected: $rule")
+            val fromEmulator = SubmitError.fromException(ex)
+            assert(fromNetwork.rule == rule, fromNetwork.rule)
+            assert(fromEmulator.rule == rule, fromEmulator.rule)
     }
 
     // Integration with Emulator

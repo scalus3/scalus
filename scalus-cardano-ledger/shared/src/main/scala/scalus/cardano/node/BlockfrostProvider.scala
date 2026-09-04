@@ -730,6 +730,19 @@ class BlockfrostProvider(
                 }
             case UtxoSource.FromTransaction(txId) =>
                 fetchUtxosFromTransaction(txId)
+            case UtxoSource.FromPaymentCredential(_) =>
+                // Blockfrost has no endpoint that maps a payment credential to the addresses that
+                // carry it (unlike `/accounts/{stake_address}/addresses`, which does the equivalent
+                // lookup for a *stake* credential). Answering this would mean enumerating every
+                // address in the UTxO set, which is not a query Blockfrost's API supports.
+                Future.successful(
+                  Left(
+                    UtxoQueryError.NotSupported(
+                      UtxoQuery(source),
+                      "Blockfrost has no reverse index from a payment credential to its addresses"
+                    )
+                  )
+                )
             case UtxoSource.Or(left, right) =>
                 // Execute both sources in parallel
                 val leftFuture = evalSource(left)

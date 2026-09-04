@@ -423,6 +423,60 @@ object TransactionException {
         )
 
     final case class IllegalArgumentException(message: String) extends TransactionException(message)
+
+    /** Short, stable name for the rule that raised `ex` — the exception's own name without the
+      * `Exception` suffix, e.g. `"ValueNotConservedUTxO"`.
+      *
+      * Written out as literals rather than derived from `getClass.getSimpleName`, which Scala.js
+      * minification turns into a meaningless short name, or from `productPrefix`, which
+      * [[MetadataException]] does not have. The match has no wildcard on purpose: adding a
+      * `TransactionException` without naming it here makes this match non-exhaustive, and the
+      * compiler says so, which is what stops the next rule from silently arriving as an anonymous
+      * rejection. (A warning, not an error - this build does not turn warnings into errors.)
+      *
+      * Used by [[scalus.cardano.node.SubmitError.fromException]] to name rejections that do not map
+      * onto one of its classified cases.
+      */
+    def ruleName(ex: TransactionException): String = ex match
+        case _: EmptyInputsException => "EmptyInputs"
+        case _: NonDisjointInputsAndReferenceInputsException =>
+            "NonDisjointInputsAndReferenceInputs"
+        case _: BadAllInputsUTxOException                  => "BadAllInputsUTxO"
+        case _: BadInputsUTxOException                     => "BadInputsUTxO"
+        case _: BadCollateralInputsUTxOException           => "BadCollateralInputsUTxO"
+        case _: BadReferenceInputsUTxOException            => "BadReferenceInputsUTxO"
+        case _: InvalidSignaturesInWitnessesException      => "InvalidSignaturesInWitnesses"
+        case _: MissingKeyHashesException                  => "MissingKeyHashes"
+        case _: MissingOrExtraScriptHashesException        => "MissingOrExtraScriptHashes"
+        case _: NativeScriptsException                     => "NativeScripts"
+        case _: InvalidTransactionSizeException            => "InvalidTransactionSize"
+        case _: OutputsHaveNotEnoughCoinsException         => "OutputsHaveNotEnoughCoins"
+        case _: OutputsHaveTooBigValueStorageSizeException => "OutputsHaveTooBigValueStorageSize"
+        case _: OutsideValidityIntervalException           => "OutsideValidityInterval"
+        case _: ValueNotConservedUTxOException             => "ValueNotConservedUTxO"
+        case _: FeesOkException                            => "FeesOk"
+        case _: StakeCertificatesException                 => "StakeCertificates"
+        case _: StakePoolException                         => "StakePool"
+        case _: DRepException                              => "DRep"
+        case _: WithdrawalsNotInRewardsException           => "WithdrawalsNotInRewards"
+        case _: ExUnitsExceedMaxException                  => "ExUnitsExceedMax"
+        case _: TooManyCollateralInputsException           => "TooManyCollateralInputs"
+        case _: InvalidScriptDataHashException             => "InvalidScriptDataHash"
+        case _: IllFormedScriptsException                  => "IllFormedScripts"
+        case _: WrongNetworkAddress                        => "WrongNetworkAddress"
+        case _: WrongNetworkWithdrawal                     => "WrongNetworkWithdrawal"
+        case _: WrongNetworkInTxBody                       => "WrongNetworkInTxBody"
+        case _: MetadataException.MissingAuxiliaryDataException     => "MissingAuxiliaryData"
+        case _: MetadataException.MissingAuxiliaryDataHashException => "MissingAuxiliaryDataHash"
+        case _: MetadataException.InvalidAuxiliaryDataHashException => "InvalidAuxiliaryDataHash"
+        case _: MetadataException.InvalidAuxiliaryDataException     => "InvalidAuxiliaryData"
+        // `MetadataException` is a `sealed class`, not a trait, so it can be raised on its own.
+        case _: MetadataException                  => "Metadata"
+        case _: ExactSetOfRedeemersException       => "ExactSetOfRedeemers"
+        case _: DatumsException                    => "Datums"
+        case _: OutputBootAddrAttrsTooBigException => "OutputBootAddrAttrsTooBig"
+        case _: PlutusScriptValidationException    => "PlutusScriptValidation"
+        case _: IllegalArgumentException           => "IllegalArgument"
 }
 
 type GovState = Array[Element]
