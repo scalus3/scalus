@@ -107,14 +107,14 @@ object JScalus {
     ) extends js.Object
 
     /** Thrown by `evalPlutusScripts` when a Plutus script fails to evaluate. Carries the failure
-      * message and the script's trace logs. Note: this is a plain object (not a subclass of
-      * `Error`), so check it by shape or name rather than `instanceof Error`.
+      * message and the script's trace logs. Extends `Error`, so `instanceof Error`, `.stack` and
+      * unhandled-rejection output all behave normally.
       */
     @JSExportTopLevel("PlutusScriptEvaluationError")
     class JSPlutusScriptEvaluationError(
-        val message: String,
+        message: String,
         val logs: js.Array[String]
-    ) extends js.Object
+    ) extends js.Error(message)
 
     /** Applies one argument to a Plutus script and returns the applied script. Use it to bake a
       * parameter into a parameterized validator before you compute its script hash.

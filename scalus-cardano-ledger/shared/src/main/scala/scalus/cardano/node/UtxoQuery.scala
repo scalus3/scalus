@@ -36,6 +36,13 @@ object UtxoSource {
     /** Find UTxOs from outputs of a specific transaction */
     case class FromTransaction(transactionId: TransactionHash) extends UtxoSource
 
+    /** Every UTxO whose address carries this payment credential, whatever its stake part.
+      *
+      * Providers index by address; this is the query a wallet actually wants, because one payment
+      * credential appears at many addresses once staking is involved.
+      */
+    case class FromPaymentCredential(credential: Credential) extends UtxoSource
+
     /** Combine two sources - returns union of UTxOs from both */
     case class Or(left: UtxoSource, right: UtxoSource) extends UtxoSource
 

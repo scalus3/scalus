@@ -49,9 +49,11 @@ object StakeDistribution:
 
     /** Aggregate stake from UTxOs by credential
       *
-      * Extracts stake credentials from UTxO addresses and sums up the coins.
+      * Extracts each UTxO's delegation-part stake credential and sums the coin value of every UTxO
+      * that names it. Enterprise addresses (no delegation part) and pointer addresses (deprecated)
+      * contribute nothing.
       */
-    private def aggregateUtxoStake(utxos: Utxos): Map[Credential, Coin] =
+    def aggregateUtxoStake(utxos: Utxos): Map[Credential, Coin] =
         utxos.values
             .flatMap { output =>
                 extractStakeCredential(output.address).map(cred => cred -> output.value.coin)

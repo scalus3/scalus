@@ -1,6 +1,6 @@
 package scalus.cardano.node.stream.internal
 
-import scalus.cardano.ledger.{MultiAsset, Utxo, Utxos}
+import scalus.cardano.ledger.{AddrKeyHash, Credential, MultiAsset, Utxo, Utxos}
 import scalus.cardano.node.stream.TransactionQuery
 import scalus.cardano.node.{UtxoQuery, UtxoSource}
 
@@ -25,6 +25,11 @@ private[stream] object QueryMatching {
             utxo.output.value.assets.assets.get(policyId).exists(_.contains(assetName))
         case UtxoSource.FromInputs(inputs)    => inputs.contains(utxo.input)
         case UtxoSource.FromTransaction(txId) => utxo.input.transactionId == txId
+        case UtxoSource.FromPaymentCredential(credential) =>
+            utxo.output.address.keyHashOption
+                .map(hash => Credential.KeyHash(hash.asInstanceOf[AddrKeyHash]))
+                .contains(credential) ||
+            utxo.output.address.scriptHashOption.map(Credential.ScriptHash(_)).contains(credential)
         case UtxoSource.Or(left, right)  => matchesSource(left, utxo) || matchesSource(right, utxo)
         case UtxoSource.And(left, right) => matchesSource(left, utxo) && matchesSource(right, utxo)
 
