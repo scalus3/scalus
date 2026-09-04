@@ -23,3 +23,13 @@ class Circle(val radius: Double) extends Shape("circle") {
 /** Extends a generic base: its members cannot be re-emitted without their type arguments. */
 @JSExportTopLevel("StringBox")
 class StringBox extends Box[String]("x")
+
+/** Extends the JavaScript `Error`, so the declaration must say so: `message`, `name` and `stack`
+  * come from the platform, not from this class, and are invisible without an `extends` clause.
+  */
+@JSExportTopLevel("Boom")
+class Boom(message: String, val detail: String) extends js.Error(message)
+
+/** The most derived native base wins: `TypeError` is itself an `Error` in TypeScript. */
+@JSExportTopLevel("BoomType")
+class BoomType(message: String) extends js.TypeError(message)

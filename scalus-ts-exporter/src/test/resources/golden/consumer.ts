@@ -23,6 +23,8 @@ import {
   StringBox,
   Documented,
   Intersections,
+  Boom,
+  BoomType,
 } from "./fixtures";
 
 const p: Point = new Point(1, 2);
@@ -84,10 +86,19 @@ const sb: StringBox = new StringBox();
 const dp: string = new Documented().pick("a");
 const both: Config & Inner = new Intersections().both({ flag: true, id: "a" });
 
+// a js.Error subclass inherits the platform's members through `extends Error`
+const boom = new Boom("boom", "why");
+const boomMessage: string = boom.message;
+const boomDetail: string = boom.detail;
+const boomIsError: boolean = boom instanceof Error;
+const boomStack: string | undefined = boom.stack;
+const boomType: TypeError = new BoomType("nope");
+
 // keep the values "used" for --noUnusedLocals-style strictness
 export {
   p, d, n, o, s, s2, m, b, u, u2, big, un, ct, over1, over2, cfg, cfg2, t, c, c2,
   g, gb, gbs, gp, gpick, gwiden, bb, bbBad,
   r, rev, rev2, rrn, rrs, rb, ra, rv, rall, sof,
   rect, rw, ol, tv, ca, cn, dbl, circle, ck, cd, cs, sb, dp, both,
+  boom, boomMessage, boomDetail, boomIsError, boomStack, boomType,
 };

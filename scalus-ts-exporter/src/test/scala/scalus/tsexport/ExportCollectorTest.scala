@@ -14,6 +14,15 @@ class ExportCollectorTest extends AnyFunSuite {
             .find(_.name == name)
             .getOrElse(fail(s"no declaration named $name; have ${result.module.decls.map(_.name)}"))
 
+    test("public secondary constructors are emitted as overloads of one Ctor member") {
+        val c = decl("Ctors").asInstanceOf[TsDecl.Cls]
+        val ctors = c.members.collect { case ctor: TsMember.Ctor => ctor }
+        assert(ctors.sizeIs == 1, "all constructors belong to one Ctor member")
+        val paramLists = ctors.head.overloads
+        assert(paramLists.sizeIs == 2, s"expected two overloads, got ${paramLists.size}")
+        assert(paramLists.map(_.map(_.name)) == List(List("head"), List("head", "tail")))
+    }
+
     test("js.Object class exports all public members; ctor from primary constructor") {
         val p = decl("Point").asInstanceOf[TsDecl.Cls]
         assert(p.members.exists {
@@ -272,6 +281,46 @@ class ExportCollectorTest extends AnyFunSuite {
         )
         // an override is not emitted twice
         assert(names.count(_ == "sides") == 1)
+    }
+
+    test("a deprecated constructor carries the tag, like every other member") {
+        val ctor = decl("RetiredCtor")
+            .asInstanceOf[TsDecl.Cls]
+            .members
+            .collectFirst { case c: TsMember.Ctor => c }
+            .get
+        assert(ctor.doc.map(_.lines) == Some(List("@deprecated use RetiredCtor.of (since 1.2.0)")))
+        // the replacement is not deprecated, so nothing over-applies the tag
+        val of = decl("RetiredCtor")
+            .asInstanceOf[TsDecl.Cls]
+            .members
+            .collectFirst {
+                case m: TsMember.Method if m.name == "of" => m
+            }
+            .get
+        assert(of.overloads.head.doc.map(_.lines) == Some(List("The replacement.")))
+        // and a constructor with no annotation still has no tag
+        val plain = decl("Ctors")
+            .asInstanceOf[TsDecl.Cls]
+            .members
+            .collectFirst { case c: TsMember.Ctor =>
+                c
+            }
+            .get
+        assert(!plain.doc.exists(_.lines.exists(_.startsWith("@deprecated"))))
+    }
+
+    test("a js.Error subclass names the base TypeScript already declares") {
+        // without `extends Error` the class has no `message`, `name` or `stack` in the .d.ts,
+        // although it carries all three at runtime
+        val boom = decl("Boom").asInstanceOf[TsDecl.Cls]
+        assert(boom.superClass == Some("Error"))
+        // the platform's members stay the platform's: only what the class itself declares
+        assert(boom.members.collect { case p: TsMember.Property => p.name } == List("detail"))
+        // the most derived native base wins, not the first one reached
+        assert(decl("BoomType").asInstanceOf[TsDecl.Cls].superClass == Some("TypeError"))
+        // a user base is flattened into the subclass body instead, so it names no super class
+        assert(decl("Circle").asInstanceOf[TsDecl.Cls].superClass.isEmpty)
     }
 
     test("a generic base contributes no members rather than unbound type names") {

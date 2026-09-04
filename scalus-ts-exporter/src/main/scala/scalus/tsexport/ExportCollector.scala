@@ -20,6 +20,21 @@ object ExportCollector {
     private val TsIgnoreAnnot = "scalus.interop.TsIgnore"
     private val DeprecatedAnnot = "scala.deprecated"
 
+    /** Scala.js facades for JavaScript classes TypeScript already declares globally, mapped to the
+      * TypeScript name. A class extending one of these gets an `extends` clause in the .d.ts so
+      * that the members the platform gives it - `message`, `name` and `stack` on an `Error` - are
+      * visible to a consumer. Every entry is a global in TypeScript's `lib.es5.d.ts`.
+      */
+    private val nativeJsBases: Map[String, String] = List(
+      "Error",
+      "EvalError",
+      "RangeError",
+      "ReferenceError",
+      "SyntaxError",
+      "TypeError",
+      "URIError"
+    ).map(name => s"scala.scalajs.js.$name" -> name).toMap
+
     /** @param tastyRoots
       *   directories containing .tasty files of the modules to export
       * @param classpath
@@ -449,6 +464,28 @@ object ExportCollector {
                             !b.fullName.startsWith("java.") && classTypeParams(b).isEmpty
                     )
 
+                /** The JavaScript-native base a class extends, as TypeScript names it.
+                  *
+                  * `contributingBases` deliberately skips everything in `scala.*`, which is right
+                  * for `js.Object` but wrong for `js.Error`: TypeScript's own `Error` declares
+                  * `message`, `name` and `stack`, and a subclass emitted without `extends Error`
+                  * has none of them, so `err.message` fails to compile against a class that carries
+                  * it at runtime. Re-declaring `message` in Scala is not the fix - a `val message`
+                  * clashes with the inherited native member.
+                  *
+                  * Restricted to this table on purpose. A user base class contributes its members
+                  * to the subclass body instead (see `ownAndInheritedMembers`), so writing
+                  * `extends` for one would declare them twice.
+                  *
+                  * The most derived base wins: `baseClasses` is the linearisation, so a
+                  * `js.TypeError` subclass matches `TypeError` before `Error`.
+                  */
+                def nativeJsSuperClass(sym: Symbol): Option[String] =
+                    sym.typeRef.baseClasses.iterator
+                        .filter(_ != sym)
+                        .flatMap(b => nativeJsBases.get(b.fullName))
+                        .nextOption()
+
                 /** Members declared by one class, under the export rules of that class. */
                 def declaredMembers(owner: Symbol): List[TsMember] = {
                     val exportAll = isJsObjectSubtype(owner) ||
@@ -484,15 +521,39 @@ object ExportCollector {
                 }
 
                 def classMembers(sym: Symbol, ctorDoc: Option[TsDoc]): List[TsMember] = {
-                    val ctor = sym.primaryConstructor match
-                        case c if !c.exists || c.flags.is(Flags.Private) => Nil
-                        case c                                           =>
+                    // Every public constructor, primary and secondary, becomes one overload of a
+                    // single Ctor member. Reading only the primary made every secondary invisible,
+                    // so `new Ctors(head, tail)` was a TypeScript error against a class that
+                    // accepts it at runtime.
+                    // `declarations`, not `declaredMethods`: the latter excludes constructors
+                    // entirely, so it sees no secondary at all. The primary is put first
+                    // explicitly rather than relying on declaration order.
+                    val ctorSymbols =
+                        (sym.primaryConstructor +: sym.declarations.filter(
+                          _.isClassConstructor
+                        )).distinct
+                            .filter(c => c.exists && !c.flags.is(Flags.Private))
+                    val ctor = ctorSymbols.flatMap(c => methodOverload(sym, c)) match
+                        case Nil       => Nil
+                        case overloads =>
                             // no source fallback here: the only comment preceding a primary
                             // constructor is the class's own, which is emitted separately
-                            val doc = c.docstring.flatMap(DocConverter.convert).orElse(ctorDoc)
-                            methodOverload(sym, c)
-                                .map(o => TsMember.Ctor(List(o.params), doc))
-                                .toList
+                            val written = ctorSymbols.head.docstring
+                                .flatMap(DocConverter.convert)
+                                .orElse(ctorDoc)
+                            // A constructor carrying Scala's `@deprecated` must say so in the
+                            // .d.ts, the same as any other member. It does not go through `docOf`
+                            // (see above), so the tag has to be folded in here - without it a
+                            // deprecated constructor shipped looking supported, and `Emulator`'s
+                            // was the documented way to build one.
+                            val doc = deprecationOf(ctorSymbols.head) match
+                                case Some(tag)
+                                    if !written.exists(
+                                      _.lines.exists(_.startsWith("@deprecated"))
+                                    ) =>
+                                    Some(TsDoc(written.map(_.lines).getOrElse(Nil) :+ tag))
+                                case _ => written
+                            List(TsMember.Ctor(overloads.map(_.params), doc))
 
                     val statics = {
                         val mod = sym.companionModule
@@ -541,6 +602,7 @@ object ExportCollector {
                         decls += TsDecl.Cls(
                           canonical,
                           classTypeParams(sym),
+                          nativeJsSuperClass(sym),
                           classMembers(sym, ctorDoc),
                           clsDoc,
                           deprecatedAliases = aliases

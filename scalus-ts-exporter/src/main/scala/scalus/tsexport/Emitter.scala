@@ -91,9 +91,10 @@ object Emitter {
         members.flatMap(renderMember(_, indent, inputPos))
 
     private def renderDecl(d: TsDecl): List[String] = d match
-        case TsDecl.Cls(name, typeParams, members, doc, _) =>
+        case TsDecl.Cls(name, typeParams, superClass, members, doc, _) =>
+            val extendsClause = superClass.fold("")(s => s" extends $s")
             docLines(doc, "") ++
-                (s"export class $name${renderTypeParams(typeParams)} {" ::
+                (s"export class $name${renderTypeParams(typeParams)}$extendsClause {" ::
                     renderBody(members, "  ") ::: List("}"))
         case TsDecl.Iface(name, typeParams, members, doc, inputOnly) =>
             docLines(doc, "") ++
