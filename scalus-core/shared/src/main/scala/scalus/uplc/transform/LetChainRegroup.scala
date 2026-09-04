@@ -28,18 +28,34 @@ import scalus.uplc.transform.TermAnalysis.freeVars
   *
   * ==Why the threshold is five, not three==
   *
-  * Steps are not the whole fee. The `case (constr 0 [...])` encoding is about '''one byte larger'''
-  * than the applies it replaces (measured across the example corpus: 74 groups cost 65 bytes), and
-  * on mainnet a script byte costs 15 lovelace of reference-script fee in every transaction that
-  * uses the script, while a machine step costs 6.92 lovelace (`100 mem * 0.0577 + 16,000 cpu *
-  * 0.0000721`).
+  * Steps are not the whole fee: the encoding also changes the script's size, and the two pull in
+  * opposite directions below `N = 7`.
   *
-  * So a group pays for itself only when `(N - 2) * 6.92 > 15`, i.e. `N >= 5`. At `N = 3` the
-  * grouping saves 6.92 lovelace of execution and costs 15 lovelace of script size — a net loss on
-  * any validator executed once per transaction. [[MinRunSize]] is therefore 5.
+  * In the flat encoding an application chain is pure tags, `4N` bits. The case-constr form pays
+  * fixed framing first — `Case` tag 4, `Constr` tag 4, constructor index 8, field-list framing
+  * `N+1` (one bit per field plus a terminator), branch-list framing 2 — so `19 + N` bits. The
+  * difference is therefore
   *
-  * This is conservative for chains that run more than once per transaction (inside a loop, or a
-  * script spending several inputs), where the step saving multiplies but the byte is paid once.
+  * {{{
+  * Δbits = (19 + N) - 4N = 19 - 3N
+  * }}}
+  *
+  * which is '''larger''' below `N = 7` and smaller from `N = 7` up (verified against the encoder
+  * for N = 1..12). On mainnet a script byte costs 15 lovelace of reference-script fee in every
+  * transaction using the script, while a machine step costs 6.92 lovelace (`100 mem * 0.0577 +
+  * 16,000 cpu * 0.0000721`) per ''execution''. So the break-even depends on how often the chain
+  * runs: for a script executed once per transaction it sits just under `N = 4`; at `N = 3` the
+  * grouping loses about 12 lovelace, and only turns positive from roughly three executions per
+  * transaction.
+  *
+  * [[MinRunSize]] is 5 rather than 4 because the theoretical `N = 4` margin (+0.72 lovelace) does
+  * not survive measurement: flat is bit-packed, so a group's 7 theoretical bits round up to a whole
+  * byte in the encoded script. Measured over the ten example validators, a threshold of 4 nets +451
+  * lovelace but makes 2 of them worse, while 5 nets +458 and makes none worse.
+  *
+  * All of this is conservative for chains that run more than once per transaction (inside a loop,
+  * or a script spending several inputs), where the step saving multiplies but the bytes are paid
+  * once.
   *
   * ==Grouping rule==
   *
@@ -145,8 +161,9 @@ object LetChainRegroup:
 
     /** Smallest run of independent bindings worth grouping.
       *
-      * A run of `N` saves `N - 2` machine steps (6.92 lovelace each on mainnet) and costs about one
-      * script byte (15 lovelace per transaction), so grouping breaks even at `N = 5`.
+      * A run of `N` saves `N - 2` machine steps per execution and changes the script size by
+      * `19 - 3N` bits. Both matter to the fee; see the threshold discussion on [[LetChainRegroup]]
+      * for the arithmetic and the corpus measurement behind this value.
       */
     val MinRunSize: Int = 5
 

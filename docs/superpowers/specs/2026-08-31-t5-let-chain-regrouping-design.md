@@ -66,16 +66,41 @@ the plan under T5):
 
 So a group of N saves **N − 2 steps per execution of that chain**.
 
-**Steps are not the whole fee, and this sets the threshold.** On mainnet a
-machine step costs 6.92 lovelace (`100 × 0.0577 + 16,000 × 0.0000721`) while a
-script byte costs 15 lovelace of reference-script fee in every transaction that
-uses the script. Grouping therefore pays only when `(N − 2) × 6.92 > 15`, i.e.
-**N ≥ 5**. At N = 3 it saves 6.92 lovelace of execution and costs 15 lovelace of
-size — a net loss.
+**Steps are not the whole fee, and this sets the threshold.** The encoding also
+changes script size, and below N = 7 the two pull in opposite directions.
 
-`LetChainRegroup.MinRunSize` is 5 for that reason. Section 3.1 shows what the
-threshold is worth: it is not a rounding detail, it is the difference between the
-pass paying for itself and not.
+In the flat encoding an application chain is pure tags, `4N` bits. The
+case-constr form pays fixed framing first — `Case` tag 4, `Constr` tag 4,
+constructor index 8, field-list framing `N+1`, branch-list framing 2 — so
+`19 + N` bits:
+
+```
+Δbits = (19 + N) − 4N = 19 − 3N
+```
+
+Measured against the encoder for N = 1..12, which reproduces every row exactly:
+
+| N | Δ bits | steps saved | net @1 exec/tx | net @3 exec/tx |
+|---:|---:|---:|---:|---:|
+| 2 | +13 | 0 | −24.38 | −24.38 |
+| **3** | **+10** | **1** | **−11.83** | **+2.02** |
+| 4 | +7 | 2 | +0.72 | +28.42 |
+| 5 | +4 | 3 | +13.27 | +54.81 |
+| 6 | +1 | 4 | +25.82 | +81.21 |
+| **7** | **−2** | **5** | **+38.37** | **+107.60** |
+| 10 | −11 | 8 | +76.01 | +186.79 |
+
+(lovelace; mem 0.0577, steps 0.0000721, reference script 15/byte)
+
+So a machine step is worth 6.92 lovelace *per execution* while a byte costs 15
+lovelace *per transaction*, and the break-even depends on how often the chain
+runs. For a script executed once it sits just under N = 4. From N = 7 the
+encoding is smaller *and* faster, so no analysis is needed.
+
+`LetChainRegroup.MinRunSize` is **5**, not the theoretical 4, because the N = 4
+margin (+0.72) does not survive measurement — flat is bit-packed, so 7
+theoretical bits round up to a whole byte in the encoded script. Section 3.1 has
+the corpus comparison.
 
 ## 3. Measured evidence
 
@@ -135,7 +160,14 @@ the N ≥ 5 threshold:
 | threshold | steps saved | bytes added | net fee | validators made worse |
 |---|---:|---:|---:|---:|
 | 3 | 151 | +65 | +68 lovelace | **6 of 10** |
+| 4 | 115 | +23 | +451 lovelace | 2 of 10 |
 | **5** | **77** | **+5** | **+458 lovelace** | **0 of 10** |
+
+Threshold 4 is where the model and the measurement part company: the per-group
+cost is 7 bits in theory but rounds up to a whole byte in a bit-packed script, so
+`payment_splitter` paid 1.5 bytes per group and regressed by 17 lovelace, and
+`linear_vesting` by 1.2. Threshold 5 nets more in total *and* leaves every
+validator no worse off, which is the property worth having for a default.
 
 At a threshold of 3 the pass is a net loss on `htlc`, `two_party_escrow`,
 `escrow`, `editable_nft`, `upgradeable_proxy` and `payment_splitter`: each pays
