@@ -9,6 +9,14 @@ rules) on top of the generator delivered by
 > Every bundle-size figure in §3.6 is an ESTIMATE. Stage 0 (§5) exists to replace them with
 > measurements before anything here is committed to.
 
+> **SUPERSEDED ON THE PAYLOAD QUESTION (2026-08-30).** Stage 0 was run and measured; see §3 of
+> `2026-08-30-ts-emulator-provider-parity-design.md`. A split entry buys 0–7% — an entry holding
+> only `evaluateScript` still costs 2.90 MB of the 3.11 MB bundle, because the payload is the
+> Plutus VM's dependency cone, not the emulator — and publishing the linker output to make
+> subpaths work costs 55% more over the wire. The module split is **not** being done. The
+> mechanism findings below (moduleID in TASTy, `@JSExportStatic` module placement, hashed internal
+> chunk names) were all confirmed and remain valid if the question is ever reopened.
+
 ---
 
 
