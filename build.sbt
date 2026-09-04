@@ -42,7 +42,7 @@ val scala3LtsVersion = "3.3.8"
 // downstream projects pinned to 3.3.7 keep a published scalus-plugin_3.3.7. `publishOnlyLts` keeps
 // the (compiler-version-independent) `_3` library artifacts published from the current LTS only.
 val scala3LtsPrevVersion = "3.3.7"
-val scala3NextVersion = "3.8.4"
+val scala3NextVersion = "3.9.0"
 ThisBuild / scalaVersion := scala3LtsVersion
 ThisBuild / organization := "org.scalus"
 ThisBuild / organizationName := "Scalus"
