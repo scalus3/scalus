@@ -2,7 +2,7 @@ package scalus.uplc.eval
 
 import org.scalatest.funsuite.AnyFunSuite
 import scalus.uplc.builtin.platform
-import scalus.cardano.ledger.{CardanoInfo, MajorProtocolVersion, SlotConfig}
+import scalus.cardano.ledger.{CardanoInfo, JsSlotConfig, MajorProtocolVersion}
 
 import scala.scalajs.js
 import scala.scalajs.js.JSConverters.*
@@ -31,7 +31,7 @@ class JScalusTest extends AnyFunSuite {
                 .toJSArray
 
         // Evaluate Plutus scripts
-        val redeemers = JScalus.evalPlutusScripts(tx, utxo, SlotConfig.mainnet, costModels)
+        val redeemers = JScalus.evalPlutusScripts(tx, utxo, JsSlotConfig.mainnet, costModels)
 
         // Verify results
         assert(redeemers.length == 2, "Should have 2 redeemers evaluated")
@@ -39,7 +39,7 @@ class JScalusTest extends AnyFunSuite {
         val redeemersWithProtocolVersion = JScalus.evalPlutusScripts(
           tx,
           utxo,
-          SlotConfig.mainnet,
+          JsSlotConfig.mainnet,
           costModels,
           MajorProtocolVersion.vanRossemPV.version
         )

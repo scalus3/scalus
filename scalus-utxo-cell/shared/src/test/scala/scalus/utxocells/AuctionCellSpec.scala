@@ -128,7 +128,7 @@ class AuctionCellSpec extends AnyFunSuite {
 
     // Auction end time: slot 100 in mainnet config
     private val auctionEndTime: PosixTime = BigInt(
-      testEnv.slotConfig.slotToTime(100).toLong
+      testEnv.slotConfig.slotToTime(100)
     )
 
     private def createEmulator(): Emulator = Emulator(

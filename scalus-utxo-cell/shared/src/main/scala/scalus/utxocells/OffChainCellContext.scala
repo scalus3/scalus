@@ -108,12 +108,12 @@ class OffChainCellTxInfo(
     }
 
     override def requireValidAfter(time: onchain.PosixTime): Unit = {
-        val slot = env.slotConfig.timeToSlot(time.toLong).toLong
+        val slot = env.slotConfig.timeToSlot(time.toLong)
         steps += TransactionBuilderStep.ValidityStartSlot(slot)
     }
 
     override def requireValidBefore(time: onchain.PosixTime): Unit = {
-        val slot = env.slotConfig.timeToSlot(time.toLong).toLong
+        val slot = env.slotConfig.timeToSlot(time.toLong)
         steps += TransactionBuilderStep.ValidityEndSlot(slot)
     }
 }

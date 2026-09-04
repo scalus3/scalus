@@ -1,12 +1,13 @@
 package scalus.cardano.ledger
 
-import java.time.Instant
-
 /** Slot and epoch configuration for a Cardano network.
   *
   * Encodes the linear (post-Byron) era as an anchor point: slot `zeroSlot` starts at `zeroTime`
   * (POSIX milliseconds) and falls at the beginning of epoch `zeroEpoch`; slots are `slotLength`
   * milliseconds long and epochs are `epochLength` slots long.
+  *
+  * The `java.time.Instant` conversions live in [[SlotConfigPlatform]], which JavaScript does not
+  * have; the arithmetic below is the same on every platform, and `SlotConfigParityTest` pins it.
   */
 case class SlotConfig(
     zeroTime: Long,
@@ -14,14 +15,12 @@ case class SlotConfig(
     slotLength: Long,
     epochLength: Long = SlotConfig.DefaultEpochLength,
     zeroEpoch: Long = 0
-) {
+) extends SlotConfigPlatform {
     def this(zeroTime: Long, zeroSlot: Long, slotLength: Long) =
         this(zeroTime, zeroSlot, slotLength, SlotConfig.DefaultEpochLength, 0)
 
     def slotToTime(slot: Long): Long = zeroTime + (slot - zeroSlot) * slotLength
     def timeToSlot(time: Long): Long = zeroSlot + ((time - zeroTime) / slotLength)
-    def slotToInstant(slot: Long): Instant = Instant.ofEpochMilli(slotToTime(slot))
-    def instantToSlot(instant: Instant): Long = timeToSlot(instant.toEpochMilli)
 
     /** Epoch containing the given slot. Slots before `zeroSlot` are clamped to `zeroEpoch`. */
     def epochOf(slot: Long): Long =
