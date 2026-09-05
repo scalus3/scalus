@@ -16,12 +16,12 @@ package scalus
   * The active compiler version is injected by build.sbt (`-Dscalus.test.scalaVersion`). It can't be
   * read from `scala.util.Properties.versionNumberString`, which reports the 2.13 standard-library
   * version (`2.13.x`) on the Scala 3.3 LTS rather than the compiler version. When the property is
-  * absent (e.g. an ejected project, which pins the 3.3.x LTS) it defaults to `"3.3.7"`.
+  * absent (e.g. an ejected project, which pins the 3.3.x LTS) it defaults to `"3.3.8"`.
   */
 object ScalaCompilerVersion {
 
-    /** The compiler version building the tests, e.g. `"3.3.7"` or `"3.8.4"`. */
-    val version: String = sys.props.getOrElse("scalus.test.scalaVersion", "3.3.7")
+    /** The compiler version building the tests, e.g. `"3.3.8"` or `"3.9.0"`. */
+    val version: String = sys.props.getOrElse("scalus.test.scalaVersion", "3.3.8")
 
     private val (major, minor) = {
         val parts = version.split("[.\\-]").iterator.flatMap(_.toIntOption)
@@ -32,6 +32,10 @@ object ScalaCompilerVersion {
       */
     val hasLeanDesugaring: Boolean = major > 3 || (major == 3 && minor >= 8)
 
-    /** The baseline for the active compiler: `pre38` on the 3.3.x LTS, `since38` on 3.8.x+. */
+    /** The baseline for the active compiler: `pre38` on the 3.3.x LTS, `since38` on 3.8.x+.
+      *
+      * Verified on Scala 3.9.0 (the next LTS): every pinned budget and script size matched the
+      * `since38` baseline unchanged.
+      */
     def baseline[T](pre38: T, since38: T): T = if hasLeanDesugaring then since38 else pre38
 }

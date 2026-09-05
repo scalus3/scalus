@@ -231,64 +231,44 @@ object Example {
 }
 ```
 
-## Upgrading Scala Version
+## Supported Scala versions
 
-### From 3.3.x to 3.7.x
+The versions live in `build.sbt` as `supportedScalaVersions` (cross-built and tested everywhere)
+and `pluginScalaVersions` (the versions a `scalus-plugin_<version>` is published for):
 
-The codebase is currently on Scala 3.3.7 but has been prepared for upgrade to 3.7.4. When upgrading,
-apply the following changes:
+| Version | Role |
+|---------|------|
+| 3.3.8   | Default. The only build that publishes the `_3` library artifacts. |
+| 3.8.4   | Cross-built and tested. |
+| 3.9.0   | Cross-built and tested. The next LTS line. |
+| 3.3.7   | Compiler plugin only. Downstream projects are still pinned to it. |
 
-#### 1. Update build.sbt
+Each of those gets its own `scalus-plugin_<version>` artifact, because a Scala 3 compiler plugin has
+to match the compiler exactly (`CrossVersion.full`). 3.3.7 is the plugin-only case: `scalus-core`
+cross-builds there too, but only so the 3.3.7 plugin has something to be tested against, and its CI
+job is the cheaper `scalus.compiler.*` canary rather than a full run.
 
-```scala
-ThisBuild / scalaVersion := "3.7.4"
-```
+The `_3` library artifacts share a single coordinate across all of Scala 3, so exactly one build may
+publish them, and it has to be the **oldest** supported compiler: a 3.3.x compiler refuses TASTy
+emitted by 3.8.x/3.9.x, while newer compilers read 3.3.x TASTy without trouble. `publishOnlyLts`
+enforces that. A Scala 3.9.0 project therefore consumes the 3.3.8-built artifact, and does not need
+one built by its own compiler.
 
-#### 2. Compiler Plugin: `init` → `initialize`
+Build and test one version locally with `sbt ci-jvm-3_3_8`, `sbt ci-jvm-3_8_4`,
+`sbt ci-jvm-3_9_0` or `sbt ci-jvm-3_3_7`. The CI-JVM workflow runs one job per version, named
+after it.
 
-In `scalus-plugin/src/main/scala/scalus/compiler/plugin/Plugin.scala`, change:
+### Adding or bumping a version
 
-```scala
-// Before (Scala 3.3.x)
-override def init(options: List[String]): List[PluginPhase] = { ... }
-
-// After (Scala 3.7.x)
-override def initialize(options: List[String])(using Context): List[PluginPhase] = { ... }
-```
-
-#### 3. Update Test Expectations
-
-Scala 3.7.4 generates more efficient code, so benchmark tests will have smaller budget values:
-
-- `ClausifyTest`: Update `ExUnits` values (memory/steps are ~1-2% smaller)
-- `PreimageExampleTest`: Update `flatSize` (268 vs 285 bytes)
-
-#### 4. Known Issue: KnightsTest Variable Capture Bug
-
-**Status**: Needs investigation
-
-With Scala 3.7.4, `KnightsTest` fails with:
-
-```
-Variable tile-XXXXXX@-1 not found in environment
-```
-
-This indicates a variable capture issue in the compiler plugin where variables used in closures
-(particularly in extension methods with tuple pattern matching like `val (x, y) = tile`) are not
-properly tracked in the environment during UPLC generation.
-
-**Root Cause**: The de Bruijn index `-1` indicates the variable was treated as a free variable
-during lowering, meaning it wasn't found in the scope. This is likely related to how Scala 3.7.4
-handles symbol IDs differently than 3.3.x.
-
-**Workaround**: Temporarily mark `KnightsTest` as `@org.scalatest.Ignore` until the issue is fixed.
-
-**Investigation Areas**:
-
-- `scalus-plugin/src/main/scala/scalus/compiler/plugin/VariableKey.scala` - variable key tracking
-- `scalus-plugin/src/main/scala/scalus/compiler/plugin/SIRCompiler.scala` - environment management
-- `scalus-plugin/src/main/scala/scalus/compiler/plugin/PatternMatchingCompiler.scala` - pattern
-  compilation
-
-See commit `4b377e845` for the variable shadowing fix that introduced `VariableKey`.
-```
+1. Edit the `scala3*Version` val in `build.sbt`. The build refuses to load if the `ci-jvm-*` aliases
+   no longer spell out `pluginScalaVersions`, so this step cannot be half-done.
+2. Rename the matching `ci-jvm-<version>` alias and update its `++` argument.
+3. Rename the matrix entry in `.github/workflows/ci-jvm.yml`. The job name is the status-check name,
+   so the repository's required checks have to be updated to match.
+4. Version-specific compiler-plugin sources live in `scalus-plugin/src/main/scala-3.3` and
+   `scala-3.8`; the selector in `build.sbt` picks `scala-3.8` for 3.5 and later. A new version needs
+   a new directory only if the `StandardPlugin` registration hook changes again.
+5. Budgets and compiled script sizes differ between compiler generations.
+   `ScalaCompilerVersion.baseline` picks `pre38` on the 3.3.x LTS and `since38` on 3.8 and later. If
+   a new version desugars differently again, the affected pins in `scalus-examples` need a third arm
+   rather than a silent re-pin.

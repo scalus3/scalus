@@ -38,11 +38,24 @@ val jsoniterScalaVersion = "2.40.1"
 // LTS is the default build version; the next series is used to cross-build the
 // compiler plugin (which depends on the unstable scala3-compiler internal API).
 val scala3LtsVersion = "3.3.8"
-// Previous LTS patch. The compiler plugin (and scalus-core, to test it) still cross-build here so
-// downstream projects pinned to 3.3.7 keep a published scalus-plugin_3.3.7. `publishOnlyLts` keeps
-// the (compiler-version-independent) `_3` library artifacts published from the current LTS only.
-val scala3LtsPrevVersion = "3.3.7"
 val scala3NextVersion = "3.8.4"
+// Next LTS, released 2026-09-03.
+val scala3NextLtsVersion = "3.9.0"
+// Previous LTS patch, supported for the compiler plugin only. Downstream projects are still pinned
+// to 3.3.7 (hydrozoa, for one), and a compiler plugin has to match the compiler exactly, so
+// scalus-plugin_3.3.7 keeps being published. Nothing else needs to be built here: 3.3.7 and 3.3.8
+// are the same TASTy version, so a 3.3.7 compiler reads the 3.3.8-built `_3` library artifacts
+// (verified against the published scalus_3:1.1.1). scalus-core cross-builds here only so the
+// plugin has something to be tested against.
+val scala3LtsPrevVersion = "3.3.7"
+
+// The versions the whole build cross-builds and tests.
+val supportedScalaVersions = Seq(scala3LtsVersion, scala3NextVersion, scala3NextLtsVersion)
+// The versions that get a published `scalus-plugin_<version>`; the plugin uses CrossVersion.full,
+// so each is a distinct artifact. The `_3` library artifacts instead share one coordinate across
+// all of Scala 3, so exactly one build may publish them: `publishOnlyLts` picks scala3LtsVersion,
+// the oldest compiler that can produce TASTy every supported compiler reads.
+val pluginScalaVersions = scala3LtsPrevVersion +: supportedScalaVersions
 ThisBuild / scalaVersion := scala3LtsVersion
 ThisBuild / organization := "org.scalus"
 ThisBuild / organizationName := "Scalus"
@@ -134,17 +147,20 @@ lazy val commonScalacOptions = Seq(
 // Published JVM artifacts pin the emitted bytecode so the (newer) build JDK doesn't raise the
 // runtime floor, and so shared source can't reference an API newer than that floor. The 3.3 LTS
 // line targets JDK 11 (cardano-client-lib's floor – the LTS artifacts are what JDK 11 consumers
-// use); Scala 3.8.x cannot emit below JDK 17 (its compiler requires 17), so those variants target
-// 17. Compile-scoped (test code may still use newer APIs); JVM only – -release is rejected on JS/Native.
+// use); Scala 3.8.x and 3.9.x cannot emit below JDK 17 (their compilers require 17), so those
+// variants target 17. Compile-scoped (test code may still use newer APIs); JVM only – -release is
+// rejected on JS/Native.
 val jvmReleaseTarget = Compile / scalacOptions ++= {
     if (scalaVersion.value.startsWith("3.3.")) Seq("-release", "11") else Seq("-release", "17")
 }
 
-// Library artifacts use the binary `_3` (and `_sjs1_3` / `_native0.5_3`) suffix, so the 3.3 LTS
-// and 3.8.x cross-builds publish to the SAME coordinates and overwrite each other – the 3.8.x
-// build (JDK 17) would clobber the JDK 11 LTS one. Publish only the LTS build (it is Scala-3
-// binary-compatible, so 3.8.x consumers can use it); 3.8.x stays cross-built for CI but unpublished.
-// The compiler plugin is exempt: it uses CrossVersion.full, so its 3.8.x variants are distinct artifacts.
+// Library artifacts use the binary `_3` (and `_sjs1_3` / `_native0.5_3`) suffix, so every
+// supported cross-build publishes to the SAME coordinates and they overwrite each other. Exactly
+// one build may publish them, and it has to be the OLDEST supported compiler: a 3.3.x compiler
+// refuses TASTy emitted by 3.8.x/3.9.x, while newer compilers read 3.3.x TASTy fine. Publishing
+// from the LTS also keeps the JDK 11 bytecode floor (see jvmReleaseTarget). The newer lines stay
+// cross-built for CI but unpublished. The compiler plugin is exempt: it uses CrossVersion.full, so
+// each supported version is a distinct artifact and all of them are published.
 val publishOnlyLts = publish / skip := (scalaVersion.value != scala3LtsVersion)
 
 val fs2Version = "3.12.2"
@@ -313,11 +329,11 @@ lazy val scalusPlugin = project
     .settings(
       name := "scalus-plugin",
       crossVersion := CrossVersion.full,
-      // A Scala 3 compiler plugin must match the compiler version of every version we support.
-      // Includes the previous LTS (3.3.7) so downstream projects on 3.3.7 get a published plugin.
-      crossScalaVersions := Seq(scala3LtsPrevVersion, scala3LtsVersion, scala3NextVersion),
+      // A Scala 3 compiler plugin must match the compiler version exactly, so every supported
+      // version gets its own published artifact – including the plugin-only 3.3.7.
+      crossScalaVersions := pluginScalaVersions,
       scalacOptions ++= commonScalacOptions,
-      // Plugin links scala3-compiler; the 3.8.x line is JDK-17 bytecode, the 3.3 LTS line is JDK 11.
+      // Plugin links scala3-compiler; the 3.8.x/3.9.x lines are JDK-17 bytecode, 3.3 LTS is JDK 11.
       jvmReleaseTarget,
 //      scalacOptions += "-Wunused:all",
       // Manually set a fixed version to avoid recompilation on every commit
@@ -408,9 +424,10 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       name := "scalus",
       publishOnlyLts,
       scalaVersion := scalaVersion.value,
-      // Includes the previous LTS (3.3.7) so the 3.3.7 plugin canary can build core + run
-      // scalus.compiler.* against it. publishOnlyLts still publishes the `_3` artifact from the LTS.
-      crossScalaVersions := Seq(scala3LtsPrevVersion, scala3LtsVersion, scala3NextVersion),
+      // Cross-built on every version the plugin is published for, so each plugin variant is
+      // exercised against core – 3.3.7 included, which is why core and not just the plugin lists it.
+      // publishOnlyLts still publishes the `_3` artifact from scala3LtsVersion only.
+      crossScalaVersions := pluginScalaVersions,
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
       // scalacOptions += "-P:scalus:debugLevel=1",
@@ -651,9 +668,10 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
       )
     )
     .nativeSettings(
-      // Scala Native 0.5.12 supports 3.8.4, so Native tracks the same versions as JVM/JS.
-      // Run the next-version native tests with `++3.8.4 scalusNative/test`.
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      // Scala Native 0.5.12 supports both 3.8.4 and 3.9.0 (`nscplugin_3.9.0` and
+      // `scala3lib_native0.5_3:3.9.0+0.5.12` are published), so Native tracks the same versions as
+      // JVM/JS. Run the next-version native tests with `++3.8.4 scalusNative/test` (or `++3.9.0`).
+      crossScalaVersions := supportedScalaVersions,
       // Each native test group runs as its own statically-linked binary with its own
       // immix-GC heap. Running them in parallel exhausted RAM on 16GB CI runners and the
       // OOM-killer took down the job (SIGKILL/137). Serialize so only one native test
@@ -763,7 +781,7 @@ lazy val scalusTestkit = crossProject(JSPlatform, JVMPlatform)
       name := "scalus-testkit",
       publishOnlyLts,
       scalaVersion := scalaVersion.value,
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for Arbitrary[Certificate] = autoDerived
 
@@ -853,7 +871,7 @@ lazy val scalusStreamingFs2 = crossProject(JSPlatform, JVMPlatform)
     .settings(
       name := "scalus-streaming-fs2",
       publishOnlyLts,
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
       libraryDependencies += "co.fs2" %%% "fs2-core" % fs2Version,
       libraryDependencies += "org.scalatest" %%% "scalatest" % scalatestVersion % "test",
@@ -867,7 +885,7 @@ lazy val scalusExamples = crossProject(JSPlatform, JVMPlatform)
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .enablePlugins(ScalusSbtPlugin)
     .settings(
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      crossScalaVersions := supportedScalaVersions,
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
       publish / skip := true,
@@ -923,7 +941,7 @@ lazy val scalusDesignPatterns = project
     .disablePlugins(MimaPlugin) // disable Migration Manager for Scala
     .settings(
       name := "scalus-design-patterns",
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      crossScalaVersions := supportedScalaVersions,
       PluginDependency,
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
@@ -940,7 +958,7 @@ lazy val `scalus-bloxbean-cardano-client-lib` = project
     .in(file("bloxbean-cardano-client-lib"))
     .dependsOn(scalus.jvm, scalusCardanoLedger.jvm)
     .settings(
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      crossScalaVersions := supportedScalaVersions,
       publishOnlyLts,
       scalacOptions ++= commonScalacOptions,
       jvmReleaseTarget,
@@ -1076,7 +1094,7 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
           "scalus.cardano.node.SubmitError.rule"
         )
       ),
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      crossScalaVersions := supportedScalaVersions,
       scalacOptions ++= commonScalacOptions,
       scalacOptions += "-Xmax-inlines:100", // needed for upickle derivation of CostModel
       libraryDependencies ++= Seq(
@@ -1325,7 +1343,7 @@ lazy val scalusEthereumKzgCeremony = project
     .dependsOn(scalus.jvm)
     .disablePlugins(MimaPlugin)
     .settings(
-      crossScalaVersions := Seq(scala3LtsVersion, scala3NextVersion),
+      crossScalaVersions := supportedScalaVersions,
       name := "scalus-ethereum-kzg-ceremony",
       scalacOptions ++= commonScalacOptions,
       libraryDependencies += "com.github.plokhotnyuk.jsoniter-scala" %% "jsoniter-scala-core" % jsoniterScalaVersion,
@@ -1419,31 +1437,50 @@ addCommandAlias(
   "ci",
   "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;Test/compile;scalusCardanoLedgerIt/Test/compile;Test/nativeLink;test;mima"
 )
+// Task list shared by every cross-version CI job. We must NOT use the `jvm` aggregate here:
+// modules that don't list the cross version (scalusUplcJitCompiler, scalusUtxoCell, bench) fall
+// back to the default LTS and then fail to read the cross-version TASTy of scalus-core they depend
+// on. So target only the modules that list every supported version, and whose dependency closure
+// is entirely cross-capable.
+val crossVersionCiTasks = {
+    // The ci-jvm-* alias names and their `++` arguments spell the versions out, so guard against
+    // them drifting from the vals above. A stale `++` argument matches no project's
+    // crossScalaVersions, so sbt silently keeps the default version and the job reports green for
+    // a version it never built.
+    val spelledOutInAliases = Seq("3.3.7", "3.3.8", "3.8.4", "3.9.0")
+    if (spelledOutInAliases != pluginScalaVersions)
+        sys.error(
+          s"The ci-jvm-* aliases build ${spelledOutInAliases.mkString(", ")}, but " +
+              s"pluginScalaVersions is ${pluginScalaVersions.mkString(", ")}. Rename the aliases " +
+              "in build.sbt and the matrix entries in .github/workflows/ci-jvm.yml to match."
+        )
+    "clean;scalusPlugin/Test/compile;scalusJVM/Test/compile;scalusCardanoLedgerJVM/Test/compile;" +
+        "scalusTestkitJVM/Test/compile;scalusExamplesJVM/Test/compile;scalusDesignPatterns/Test/compile;" +
+        "scalus-bloxbean-cardano-client-lib/Test/compile;scalusEthereumKzgCeremony/Test/compile;" +
+        "scalusJVM/test;scalusExamplesJVM/test"
+}
+
+// One CI job per supported compiler version; the alias name carries the version, so a version bump
+// renames the alias here and its matrix entry in .github/workflows/ci-jvm.yml. Keep the `++`
+// arguments in sync with scala3LtsVersion / scala3NextVersion / scala3NextLtsVersion above.
 addCommandAlias(
-  "ci-jvm",
-  // Full build/test on the default LTS. Includes format/mima checks (version-independent, so they
-  // run only here). Runs in parallel with `ci-jvm-next` as separate CI-JVM matrix jobs.
-  "clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;scalusCardanoLedgerIt/Test/compile;jvm/test;mima"
+  "ci-jvm-3_3_8",
+  // The default LTS, and the only build that publishes the `_3` library artifacts. Carries the
+  // format and MiMa checks too: they are version-independent, so they run in this job only.
+  "++3.3.8;clean;docs/clean;scalafmtCheckAll;scalafmtSbtCheck;jvm/Test/compile;" +
+      "scalusCardanoLedgerIt/Test/compile;jvm/test;mima"
 )
 addCommandAlias(
-  "ci-jvm-lts-prev",
-  // Previous-LTS (3.3.7) canary: prove the plugin builds against the 3.3.7 compiler and still emits
-  // correct contracts, via the scalus.compiler.* compile-and-evaluate suite. Cheaper than a full
-  // re-test – 3.3.7 and 3.3.8 share the `pre38` desugaring generation (verified byte-identical).
+  "ci-jvm-3_3_7",
+  // Plugin-only version: prove the plugin builds against the 3.3.7 compiler and still emits correct
+  // contracts, via the scalus.compiler.* compile-and-evaluate suite. Cheaper than a full re-test –
+  // 3.3.7 and 3.3.8 share the `pre38` desugaring generation (verified byte-identical).
   "++3.3.7;clean;scalusPlugin/Test/compile;scalusJVM/testOnly scalus.compiler.*"
 )
-addCommandAlias(
-  "ci-jvm-next",
-  // Cross-build/test on Scala 3.8.4 (scala3NextVersion). Requires JDK 17+ – the `ci` nix devshell
-  // pins JDK 21. We must NOT use the `jvm` aggregate here: modules that don't list 3.8.4
-  // (scalusUplcJitCompiler, scalusUtxoCell, bench) fall back to the LTS and then fail to read the
-  // 3.8.4 TASTy of scalus-core they depend on. So target only the modules that list 3.8.4 and whose
-  // dependency closure is entirely 3.8.4-capable.
-  "++3.8.4;clean;scalusPlugin/Test/compile;scalusJVM/Test/compile;scalusCardanoLedgerJVM/Test/compile;" +
-      "scalusTestkitJVM/Test/compile;scalusExamplesJVM/Test/compile;scalusDesignPatterns/Test/compile;" +
-      "scalus-bloxbean-cardano-client-lib/Test/compile;scalusEthereumKzgCeremony/Test/compile;" +
-      "scalusJVM/test;scalusExamplesJVM/test"
-)
+addCommandAlias("ci-jvm-3_8_4", s"++3.8.4;$crossVersionCiTasks")
+addCommandAlias("ci-jvm-3_9_0", s"++3.9.0;$crossVersionCiTasks")
+// Convenience name for the default-version job.
+addCommandAlias("ci-jvm", "ci-jvm-3_3_8")
 addCommandAlias(
   "ci-js",
   "clean;js/Test/compile;js/test;scalusTsExporter/test;scalusCardanoLedgerJS/checkDtsUpToDate;scalusCardanoLedgerJS/runNpmTests"

@@ -15,12 +15,14 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # Full build/test on the default LTS (incl. format + mima checks).
-          - { name: lts, task: ci-jvm }
-          # Cross-build/test on Scala 3.8.4. Runs in parallel with `lts`.
-          - { name: next, task: ci-jvm-next }
-          # Previous-LTS (3.3.7) plugin canary: plugin compile + scalus.compiler.* suite.
-          - { name: lts-prev, task: ci-jvm-lts-prev }
+          # One job per supported compiler version. 3.3.8 is the default LTS and the version the
+          # `_3` library artifacts are published from, so it also carries the format + MiMa checks.
+          - { name: "3.3.8", task: ci-jvm-3_3_8 }
+          # 3.3.7 is supported for the compiler plugin only, so its job is the cheaper canary:
+          # plugin compile plus the scalus.compiler.* compile-and-evaluate suite.
+          - { name: "3.3.7", task: ci-jvm-3_3_7 }
+          - { name: "3.8.4", task: ci-jvm-3_8_4 }
+          - { name: "3.9.0", task: ci-jvm-3_9_0 }
     permissions:
       contents: read
       id-token: write

@@ -38,6 +38,10 @@
 
 ### Changed
 
+- Scala **3.9.0**, the next LTS, is now supported: it is cross-built and tested alongside 3.3.8 and
+  3.8.4, and gets its own `scalus-plugin_3.9.0`. The plugin continues to be published for 3.3.7 as
+  well, so projects pinned to that patch keep working. The `_3` library artifacts are still built by
+  3.3.8 and are readable by every supported compiler, so consumers need no change.
 - PlutusV1/V2 programs declare the UPLC version their term needs. Since van Rossem became the
   default target, the lowering emits `case` for PlutusV1/V2 validators that pattern-match on `Data`
   (it gates `constr`/`case` on the protocol version, not the ledger language), but the program was

@@ -31,7 +31,7 @@ addSbtPlugin("org.scalus" % "scalus-sbt-plugin" % "<scalus-version>")
 lazy val myProject = (project in file("."))
     .enablePlugins(ScalusSbtPlugin)
     .settings(
-      scalaVersion := "3.3.7",
+      scalaVersion := "3.3.8",
       addCompilerPlugin("org.scalus" % "scalus-plugin" % "<scalus-version>" cross CrossVersion.full),
       libraryDependencies ++= Seq(
         "org.scalus" %% "scalus" % "<scalus-version>",
@@ -152,7 +152,7 @@ or toolchain change affected each `compiledCode` and `hash`.
 
 `sbt blueprintCheck` fails when the pinned files no longer match freshly generated ones – use
 it in release pipelines to catch forgotten pins. If your project cross-builds several Scala
-versions, set `blueprintScalaVersion := Some("3.3.7")` so pins are only written (and checked)
+versions, set `blueprintScalaVersion := Some("3.3.8")` so pins are only written (and checked)
 under your primary Scala baseline; other versions still embed their own blueprints in their
 JARs.
 

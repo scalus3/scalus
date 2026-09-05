@@ -195,7 +195,7 @@
         ci =
           let
             # JDK 21: Scala 3.8+ requires JDK 17+ to run the compiler (3.3 LTS still
-            # supports JDK 8+). ci-jvm cross-builds on 3.8.4, so the CI shell must be >= 17.
+            # supports JDK 8+). ci-jvm cross-builds on 3.8.4/3.9.0, so the CI shell must be >= 17.
             jdk = pkgs.openjdk21;
             sbt = pkgs.sbt.override { jre = jdk; };
 
