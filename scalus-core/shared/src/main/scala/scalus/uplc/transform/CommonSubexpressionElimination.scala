@@ -60,7 +60,7 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
         // Track which variable name each path segment introduces (for scope checking)
         val pathIdToVar = mutable.HashMap.empty[Int, String]
 
-        val counts = mutable.HashMap.empty[TermKey, mutable.ArrayBuffer[(Path, Int)]]
+        val counts = mutable.LinkedHashMap.empty[TermKey, mutable.ArrayBuffer[(Path, Int)]]
         // Track which path IDs correspond to conditional evaluation boundaries
         // (Case branches and Delay nodes). These are positions where the expression
         // may not be evaluated depending on which branch is taken. LamAbs are excluded
@@ -360,7 +360,7 @@ object CommonSubexpressionElimination {
             case Force(inner, _)       => structuralHash(inner) * 31 + 4
             case Delay(inner, _)       => structuralHash(inner) * 31 + 5
             case Const(c, _)           => c.hashCode * 31 + 6
-            case Builtin(bn, _)        => bn.hashCode * 31 + 7
+            case Builtin(bn, _)        => bn.ordinal * 31 + 7
             case Error(_)              => 8
             case Constr(tag, args, _) =>
                 args.foldLeft(tag.hashCode * 31 + 9)((h, a) => h * 31 + structuralHash(a))

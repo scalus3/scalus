@@ -72,7 +72,7 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
 
         // Map from TemplateKey -> list of (path, leaf) occurrences
         val templateOccurrences =
-            mutable.HashMap.empty[TermKey, mutable.ArrayBuffer[(Path, Term)]]
+            mutable.LinkedHashMap.empty[TermKey, mutable.ArrayBuffer[(Path, Term)]]
 
         def addOccurrence(templateKey: TermKey, path: Path, leaf: Term): Unit = {
             val occs = templateOccurrences.getOrElseUpdate(templateKey, mutable.ArrayBuffer.empty)
