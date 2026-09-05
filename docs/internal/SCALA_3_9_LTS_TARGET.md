@@ -170,10 +170,13 @@ yet (404 as of 2026-09-05). That is exactly what this branch adds to the release
 `ci-release` runs `+publishSigned`, so it now walks three cross versions.
 `publishOnlyLts` sets `publish / skip` for the library modules on 3.8.4 and
 3.9.0, and sbt's `publishTask` is a `taskDyn` that short-circuits before
-packaging when skip is set, so the extra cost should be roughly one extra
-compiler-plugin build. The release job's `timeout-minutes: 90` (a tag release
-already needs "well over 40") is worth watching on the next tag rather than
-assumed safe.
+packaging when skip is set, so the extra cost is roughly one extra
+compiler-plugin build.
+
+Measured on the merge commit: the snapshot Release job took **12m16s** with four
+cross versions, against the "~10 min" the workflow comment budgeted for three. So
+the fourth version costs about two minutes, and the `timeout-minutes: 90` a tag
+release runs under keeps plenty of headroom. Nothing to change.
 
 ## Deliberately not done: the JDK 17 floor
 
