@@ -171,6 +171,20 @@ class UplcVersionTest extends AnyFunSuite {
         assert(Program((1, 1, 0), term).flatEncoded.nonEmpty)
     }
 
+    test("the flat decoder refuses constr/case in a program below 1.1.0") {
+        // The encoder will not produce such bytes, so forge them: encode as 1.1.0, then rewrite
+        // the version header. The three version numbers are the first three flat Naturals, one
+        // byte each here, so the second byte is the minor version.
+        val valid = Program((1, 1, 0), Term.Constr(Word64(0), Nil)).flatEncoded
+        assert(valid.take(3).toSeq == Seq[Byte](1, 1, 0), "unexpected version header layout")
+        val forged = valid.clone()
+        forged(1) = 0
+        val e = intercept[IllegalArgumentException](Program.fromFlatEncoded(forged))
+        assert(e.getMessage.contains("1,1,0"), e.getMessage)
+        // and the unforged bytes still round-trip
+        assert(Program.fromFlatEncoded(valid).version == (1, 1, 0))
+    }
+
     test("a 1.1.0 PlutusV1 text envelope is readable") {
         val program = PlutusV1
             .compile((d: Data) => (_: Data) => (_: Data) => UplcVersionFixture.check(d))(using
