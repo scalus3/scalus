@@ -525,7 +525,8 @@ lazy val scalus = crossProject(JSPlatform, JVMPlatform, NativePlatform)
         ),
         // Options gained the `letChainRegroup` flag (T5 let-chain regrouping), which changes the
         // arity of the generated apply/copy/constructor. It is declared LAST in the case class so
-        // no positional accessor (_N, copy$default$N) shifts - these four are the whole cost.
+        // no positional accessor (_N, copy$default$N) shifts - the four problems MiMa reports are
+        // this/copy and the two apply overloads, covered by the three filters below.
         // Source-compatible: the field has a default, and callers use named arguments or copy().
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.this"),
         ProblemFilters.exclude[DirectMissingMethodProblem]("scalus.compiler.Options.copy"),

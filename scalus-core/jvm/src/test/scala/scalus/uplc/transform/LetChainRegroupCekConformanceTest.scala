@@ -121,7 +121,16 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
             Gen.frequency(
               (flat.size, anyOf(flat)),
               (4, genChain(env, depth - 1)),
-              (1, genName.flatMap(n => genExpr(n :: env, depth - 1).map(LamAbs(n, _))))
+              (1, genName.flatMap(n => genExpr(n :: env, depth - 1).map(LamAbs(n, _)))),
+              // a chain in FUNCTION position: CaseConstrApply flattens the whole left spine, so
+              // this is the shape where a grouped outermost run could swallow the outer argument
+              (
+                2,
+                for
+                    ch <- genChain(env, depth - 1)
+                    a <- genLeaf(env)
+                yield Apply(ch, a)
+              )
             )
 
     /** `Gen.oneOf` over a list of generators (the built-in overload takes a list of values). */
@@ -167,6 +176,30 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
         val terms = Gen.listOfN(200, genProgram).pureApply(Gen.Parameters.default, Seed(20260901))
         val changed = terms.count(t => t ~!=~ LetChainRegroup(t))
         assert(changed >= 20, s"only $changed/200 generated terms were regrouped")
+    }
+
+    /** A grouped chain sitting in the FUNCTION position of an enclosing `Apply` must not merge with
+      * that application's own argument.
+      *
+      * `CaseConstrApply` flattens the whole left spine, so grouping the outermost run would put the
+      * outer argument into the same `constr` as the chain's bindings — and `Case` evaluates every
+      * field before entering the branch. That moves the outer argument ahead of the chain body,
+      * which is observable: here the body fails, so the argument is never reached in the original
+      * and diverges in the regrouped form.
+      */
+    test("a chain in function position does not swallow the outer argument") {
+        val omega = Apply(
+          LamAbs("x", Apply(vr"x", vr"x")),
+          LamAbs("x", Apply(vr"x", vr"x"))
+        )
+        val chain = (1 to 5).foldRight(Error(): Term) { (i, body) =>
+            Apply(LamAbs(s"v$i", body), Const(Constant.Integer(BigInt(i))))
+        }
+        val t = Apply(chain, omega)
+        val (before, beforeBudget) = run(CaseConstrApply(t))
+        val (after, afterBudget) = run(CaseConstrApply(LetChainRegroup(t)))
+        assert(agree(before, after), s"$before vs $after")
+        assert(afterBudget.fitsWithin(beforeBudget), s"$beforeBudget -> $afterBudget")
     }
 
     /** Pins the cost model the whole design rests on: a run of five collapses five `Apply` + five

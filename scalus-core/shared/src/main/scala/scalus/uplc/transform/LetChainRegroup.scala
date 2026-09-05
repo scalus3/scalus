@@ -80,6 +80,12 @@ import scalus.uplc.transform.TermAnalysis.freeVars
   * either: in the input it sits under those binders, so a free occurrence of one of them refers to
   * the let, which is exactly what the dependency test rejects.
   *
+  * That argument covers ordering '''within''' the chain. It does not by itself cover a chain in the
+  * function position of an enclosing `Apply`, where [[CaseConstrApply]] would otherwise merge the
+  * enclosing arguments into the same `constr` and hoist them ahead of the chain body; `rebuild`
+  * leaves the outermost run nested in that case, which keeps the two forms identical. See
+  * [[rebuild]].
+  *
   * @param logger
   *   Logger for tracking regrouping operations
   * @param minRunSize
@@ -104,16 +110,21 @@ class LetChainRegroup(
         applyAnn: UplcAnnotation
     )
 
-    private def go(term: Term): Term = term match
+    /** @param inFunctionPosition
+      *   this term is the function of an enclosing `Apply`, so its outermost run must stay nested —
+      *   see [[rebuild]]
+      */
+    private def go(term: Term, inFunctionPosition: Boolean = false): Term = term match
         case Apply(LamAbs(_, _, _), _, _) =>
             val (chain, body) = collectChain(term)
-            rebuild(runs(chain.map(b => b.copy(rhs = go(b.rhs)))), go(body))
-        case Apply(f, arg, ann)                        => Apply(go(f), go(arg), ann)
-        case LamAbs(name, body, ann)                   => LamAbs(name, go(body), ann)
-        case Force(t, ann)                             => Force(go(t), ann)
-        case Delay(t, ann)                             => Delay(go(t), ann)
-        case Constr(tag, args, ann)                    => Constr(tag, args.map(go), ann)
-        case Case(scrutinee, cases, ann)               => Case(go(scrutinee), cases.map(go), ann)
+            val optimised = chain.map(b => b.copy(rhs = go(b.rhs)))
+            rebuild(runs(optimised), go(body), suppressOutermost = inFunctionPosition)
+        case Apply(f, arg, ann)          => Apply(go(f, inFunctionPosition = true), go(arg), ann)
+        case LamAbs(name, body, ann)     => LamAbs(name, go(body), ann)
+        case Force(t, ann)               => Force(go(t), ann)
+        case Delay(t, ann)               => Delay(go(t), ann)
+        case Constr(tag, args, ann)      => Constr(tag, args.map(go(_)), ann)
+        case Case(scrutinee, cases, ann) => Case(go(scrutinee), cases.map(go(_)), ann)
         case _: Var | _: Const | _: Builtin | _: Error => term
 
     /** Peels a maximal chain of nested lets, outermost first. */
@@ -128,33 +139,56 @@ class LetChainRegroup(
         val out = List.newBuilder[List[Binding]]
         var current = List.newBuilder[Binding]
         var bound = Set.empty[String]
-        var empty = true
         for b <- chain do
-            if !empty && (bound.contains(b.name) || (b.rhs.freeVars & bound).nonEmpty) then
+            if bound.nonEmpty && (bound.contains(b.name) || (b.rhs.freeVars & bound).nonEmpty) then
                 out += current.result()
                 current = List.newBuilder[Binding]
                 bound = Set.empty
             current += b
             bound += b.name
-            empty = false
-        if !empty then out += current.result()
+        if bound.nonEmpty then out += current.result()
         out.result()
     }
 
-    /** Rebuilds the chain, flattening profitable runs and leaving shorter ones nested. */
-    private def rebuild(groups: List[List[Binding]], body: Term): Term =
-        groups.foldRight(body) { (group, inner) =>
-            if group.sizeIs < minRunSize then
-                group.foldRight(inner) { (b, acc) =>
-                    Apply(LamAbs(b.name, acc, b.lamAnn), b.rhs, b.applyAnn)
-                }
-            else
-                logger.log(
-                  s"LetChainRegroup: grouped ${group.size} bindings (saves ${group.size - 2} steps): ${group.map(_.name).mkString(", ")}"
-                )
-                val lambdas = group.foldRight(inner)((b, acc) => LamAbs(b.name, acc, b.lamAnn))
-                group.foldLeft(lambdas)((f, b) => Apply(f, b.rhs, b.applyAnn))
+    /** Rebuilds the chain, flattening profitable runs and leaving shorter ones nested.
+      *
+      * `suppressOutermost` keeps the outermost run nested even when it is long enough to group.
+      * That is required when the chain sits in the function position of an enclosing `Apply`:
+      * [[CaseConstrApply]] flattens the whole left spine, so a grouped outermost run would pull the
+      * enclosing application's own arguments into the same `constr` — and `case` evaluates every
+      * field before entering the branch, moving those arguments ahead of the chain body. With the
+      * run left nested the spine is exactly the one the unoptimized term presents, so the two
+      * encode identically. Only the outermost run is reachable from that spine; every deeper run
+      * sits inside a lambda body, where `applyToList` cannot reach it.
+      */
+    private def rebuild(
+        groups: List[List[Binding]],
+        body: Term,
+        suppressOutermost: Boolean
+    ): Term = {
+        def nest(group: List[Binding], inner: Term): Term =
+            group.foldRight(inner) { (b, acc) =>
+                Apply(LamAbs(b.name, acc, b.lamAnn), b.rhs, b.applyAnn)
+            }
+
+        def flatten(group: List[Binding], inner: Term): Term = {
+            logger.log(
+              s"LetChainRegroup: grouped ${group.size} bindings (saves ${group.size - 2} steps): ${group.map(_.name).mkString(", ")}"
+            )
+            val lambdas = group.foldRight(inner)((b, acc) => LamAbs(b.name, acc, b.lamAnn))
+            group.foldLeft(lambdas)((f, b) => Apply(f, b.rhs, b.applyAnn))
         }
+
+        def emit(group: List[Binding], inner: Term, suppressed: Boolean): Term =
+            if suppressed || group.sizeIs < minRunSize then nest(group, inner)
+            else flatten(group, inner)
+
+        groups match
+            case Nil => body
+            case outermost :: rest =>
+                val inner = rest.foldRight(body)((g, acc) => emit(g, acc, suppressed = false))
+                emit(outermost, inner, suppressed = suppressOutermost)
+    }
 }
 
 object LetChainRegroup:
