@@ -134,6 +134,27 @@ private given Options = Options.release.copy(
 private given Options = Options.plomin
 ```
 
+**The Scalus marker.** `Options.release` marks the compiled program as Scalus-generated, so
+explorers and analytics tools can attribute it (the same idea as Aiken's and plu-ts's markers).
+The marker is `[(error) (con integer 3)]`, placed on the first `(error)` node of the optimised
+program – `3` is Scalus's compiler id in [CIP-171](https://cips.cardano.org/cip/CIP-0171).
+An `(error)` node is only reached when the script is about to fail, so on every successful run
+the marker is never evaluated: it costs no execution budget, only two or three bytes of script
+size. A program with no `(error)` node at all (a computation that cannot fail) is left unmarked.
+
+The marker is part of the script bytes, so it changes the script hash. Use
+`Options.releaseUntagged` to compile without it – for example, to reproduce the hash of a
+contract deployed from a version of Scalus that did not add one.
+
+```scala
+private given Options = Options.releaseUntagged
+```
+
+Scalus 1.0 and 1.1 used a different marker, `[(lam _ program) (con string "S")]` wrapped around
+the whole program. It was evaluated on every run and cost 300 memory and 48,000 CPU steps, which
+is why it was replaced. Tooling that recognises Scalus scripts should accept both shapes:
+contracts compiled with those versions are deployed on mainnet.
+
 ## Using Compiled Contracts
 
 ### Access Script and Address

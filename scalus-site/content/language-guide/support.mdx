@@ -30,6 +30,13 @@ Below is a comprehensive list of what Scala features are currently supported in 
 * `throw` expressions but no `try-catch` expressions
 * built-in functions and operators
 * simple data types: case classes and enums
+* functions stored in data types: a case class, enum, `List` or `Option` may hold a function
+  value (Aiken forbids this; Plinth allows it). Such a value has no `Data` form, so it cannot be a
+  datum or redeemer, and it needs UPLC 1.1.0 – PlutusV3, or PlutusV1/V2 from protocol version 11
+  (van Rossem) on. One known gap: choosing between two constructors of a function-holding enum at
+  runtime (`if c then Run(f) else Skip`, or a `match` returning different constructors) does not
+  lower yet; build the value through one constructor, or dispatch on the condition after
+  matching instead
 * `inline` vals, functions and macros in general
 * implicit conversions
 * opaque types (non top-level) and type aliases
