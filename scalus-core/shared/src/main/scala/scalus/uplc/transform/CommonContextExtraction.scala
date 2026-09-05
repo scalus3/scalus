@@ -176,8 +176,11 @@ class CommonContextExtraction(logger: Logger = new Log()) extends Optimizer {
 
         if candidates.isEmpty then return term
 
-        // Sort by template size descending, then by name for determinism
-        val sortedCandidates = candidates.sortBy(c => (-c.templateSize, c.key.toString))
+        // Sort by template size descending, then by name. Ties keep first-occurrence order (the map
+        // above is insertion-ordered). The key is computed once per candidate: `sortBy` would
+        // re-evaluate it on every comparison, and `key.toString` renders the whole term.
+        val sortedCandidates =
+            candidates.map(c => ((-c.templateSize, c.key.toString), c)).sortBy(_._1).map(_._2)
 
         // Collect all existing names to avoid collisions
         val existingNames = collectNames(term)

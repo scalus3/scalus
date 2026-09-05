@@ -282,7 +282,8 @@ comparison covers every pass without knowing where the containers are.
 57 lines, identical in both JVMs. The legacy backends cannot lower the example validators at all
 – they leave `UniversalDataConversion.fromData`/`toData` as free variables, because that
 intrinsic module is resolved only by the V3 lowering – so they get the two samples that use raw
-builtins and pure ADTs. The whole test takes about 15 s: the in-process compile of the corpus plus
+builtins and pure ADTs (tracked as scalus3/scalus#366). The whole test takes about 15 s: the in-process
+compile of the corpus plus
 one child JVM doing the same.
 
 ### 8.2 What the flag cannot catch, and the grep for it

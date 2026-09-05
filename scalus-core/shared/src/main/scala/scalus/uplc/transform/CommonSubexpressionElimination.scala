@@ -165,8 +165,11 @@ class CommonSubexpressionElimination(logger: Logger = new Log()) extends Optimiz
 
         if candidates.isEmpty then return term
 
-        // Sort by size descending, then by name for determinism
-        val sortedCandidates = candidates.sortBy(c => (-c.size, c.key.toString))
+        // Sort by size descending, then by name. Ties keep first-occurrence order (the map above is
+        // insertion-ordered). The key is computed once per candidate: `sortBy` would re-evaluate
+        // it on every comparison, and `key.toString` renders the whole term.
+        val sortedCandidates =
+            candidates.map(c => ((-c.size, c.key.toString), c)).sortBy(_._1).map(_._2)
 
         // Collect all existing names to avoid collisions
         val existingNames = collectNames(term)
