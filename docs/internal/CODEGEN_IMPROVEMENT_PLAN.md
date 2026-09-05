@@ -403,6 +403,15 @@ tracks T10, T12, T16.
   level rather than contiguous run, reordering only value-form right-hand
   sides — worth ~2 extra steps per group merged).
 
+- **Cost model, and a correction that reaches `CaseConstrApply` too:**
+  `docs/internal/CASE_CONSTR_COST_MODEL.md`. The encoding costs `19 - 3N` bits
+  (larger below N=7, smaller above) while saving `N-2` steps, so its worth
+  depends on executions per transaction. `CaseConstrApply`'s global
+  `args.size > 2` is right for hot sites (T2 self-calls) and loses ~12 lovelace
+  per cold site per transaction; the fix is the once-entered proxy from T18, not
+  a new global constant. Unmeasured: `CaseConstrApply` at threshold 4 across the
+  corpus.
+
 - **Attribution note.** T5 is the *regrouping*; the `case (constr 0 [...])`
   application encoding it feeds is separate and older. That encoding is
   Alexander Nemish's, published 2025-01-02 20:01 UTC, with the analysis

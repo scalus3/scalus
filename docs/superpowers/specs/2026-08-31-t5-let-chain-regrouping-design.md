@@ -102,6 +102,11 @@ margin (+0.72) does not survive measurement — flat is bit-packed, so 7
 theoretical bits round up to a whole byte in the encoded script. Section 3.1 has
 the corpus comparison.
 
+The full cost model — size derivation, the fee break-even in executions per
+transaction, the rounding argument, and the decision rule for all arities — lives
+in `docs/internal/CASE_CONSTR_COST_MODEL.md`, which is the canonical source. It
+applies to `CaseConstrApply` as much as to this pass.
+
 ## 3. Measured evidence
 
 Method: compile each validator with its production `Options`, undo
