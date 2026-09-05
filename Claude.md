@@ -76,8 +76,7 @@ Scala Source → SIR (via compiler plugin) → UPLC (via SIR compiler) → Plutu
 
 | Module                         | Purpose                           | sbt Project                         |
 |--------------------------------|-----------------------------------|-------------------------------------|
-| `scalus-plugin/`               | Scala 3 compiler plugin           | `scalusPlugin`                      |
-| `scalus-plugin-tests/`         | Plugin test suite                 | `scalusPluginTests`                 |
+| `scalus-plugin/`               | Scala 3 compiler plugin and its tests | `scalusPlugin`                  |
 | `scalus-uplc-jit-compiler/`    | Experimental UPLC JIT compiler    | `scalusUplcJitCompiler`             |
 | `scalus-design-patterns/`      | Design pattern examples           | `scalusDesignPatterns`              |
 | `bloxbean-cardano-client-lib/` | Bloxbean CCL integration          | `scalus-bloxbean-cardano-client-lib`|
