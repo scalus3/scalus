@@ -413,16 +413,20 @@ where the spec says to fall back to next-best.
 
 **Two concrete defects found while surveying:**
 
-1. **Reproducibility hazard.** `enum DefaultFun extends Enum[DefaultFun]`
-   (`DefaultFun.scala:45`), so `bn.hashCode` is `java.lang.Enum` identity hash, which
-   varies per JVM run. `TermKey.structuralHash` uses it (`CSE:363`), so iteration order
-   of `counts` (`CSE:139`) and `templateOccurrences` (`CCE:147`) varies per run. The
-   subsequent `sortBy((-size, key.toString))` is stable, and `key.toString` is
-   `showShort` **truncated to 60 chars** (`Term.scala:372`). Two same-size candidates
-   sharing a 60-char prefix could therefore be extracted in run-dependent order and
-   produce a different script hash. Not observed; worth verifying by compiling the same
-   SIR in two JVMs and diffing `flatEncoded`. This matters independently of any tuning
-   work, and it is a **precondition** for the pinned-config workflow.
+1. **Reproducibility hazard – CONFIRMED and FIXED (2026-09-05).** `enum DefaultFun extends
+   Enum[DefaultFun]` (`DefaultFun.scala:45`), so `bn.hashCode` was the `java.lang.Enum` identity
+   hash. `TermKey.structuralHash` used it (`CSE:363`), so the iteration order of `counts`
+   (`CSE:63`) and `templateOccurrences` (`CCE:75`) followed identity hashes, and the stable
+   `sortBy((-size, key.toString))` kept that order for candidates whose 60-char `showShort`
+   prefixes coincide. A 12-line validator (two field-access chains over two parameters in one
+   scope, each used twice) compiled to two different scripts in different JVM runs; the 22
+   example validators never moved because their tied chains sit in different scopes. Fixed by
+   `LinkedHashMap` for both candidate maps plus `bn.ordinal` in the hash, guarded by a cross-JVM
+   test (`CseDeterminismCrossJvmTest`, child JVMs under `-XX:hashCode=2` and `3`). Note that
+   HotSpot's default identity hashing is deterministic for a fixed program in a fixed
+   environment, so plain reruns cannot detect this class of bug; sweep `-XX:hashCode=N`.
+   Full record: `docs/internal/UPLC_OPTIMIZER_DETERMINISM.md`. The pinned-config precondition
+   is met.
 
 2. **One dead pass.** `AbbreviateErrorTraces.scala` exists and has no non-test caller.
    It is a free knob. (`BooleanOptimizer.scala` was in the same state during this
