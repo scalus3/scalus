@@ -1,7 +1,7 @@
 # UPLC optimizer determinism – the `DefaultFun.hashCode` hazard, confirmed and fixed
 
 **Status:** FIXED. 2026-09-05. Three-line change in `CommonSubexpressionElimination.scala` and
-`CommonContextExtraction.scala`, guarded by four tests. No example validator's script hash moved.
+`CommonContextExtraction.scala`, guarded by five tests. No example validator's script hash moved.
 
 **Origin:** `docs/internal/PGO_SGD_OPTIMIZATION_RESEARCH.md` §5 (branch
 `worktree-pgo-sgd-research`) listed this as an unverified "reproducibility hazard" and a
@@ -9,7 +9,8 @@ precondition for any pinned-configuration workflow.
 
 **Guards:** `scalus-core/shared/src/test/scala/scalus/uplc/transform/CseDeterminismTest.scala`,
 `scalus-core/jvm/src/test/scala/scalus/uplc/transform/CseDeterminismCrossJvmTest.scala`,
-`scalus-examples/jvm/src/test/scala/scalus/examples/CseTieOrderDeterminismTest.scala`.
+`scalus-examples/jvm/src/test/scala/scalus/examples/CseTieOrderDeterminismTest.scala`,
+`scalus-examples/jvm/src/test/scala/scalus/examples/PipelineDeterminismCrossJvmTest.scala` (§8).
 
 ---
 
@@ -256,3 +257,67 @@ unlock flag. Modes 1 and 4 also vary between runs of the same mode.
 - If CCE is ever enabled by default, re-measure the example suite: 14 of its same-bind tie
   groups are in CCE, and with the fix their order is first-occurrence, which is not necessarily
   the order the current pinned ExUnits were measured under (they were measured with CCE off).
+
+---
+
+## 8. Whole-pipeline coverage and the audit for everything else
+
+Added the same day, after the question "could we check determinism for all transformations?".
+
+### 8.1 The corpus test
+
+`scalus-examples/jvm/src/test/scala/scalus/examples/PipelineDeterminismCrossJvmTest.scala`
+compiles 24 programs – the 22 example validators, `SameScopeFieldChains`, and a pure-ADT
+`LegacyBackendSample` – in-process and in one child JVM under `-XX:hashCode=2`, and compares the
+CBOR hex of every program. Because the flag perturbs every identity-keyed container at once, one
+comparison covers every pass without knowing where the containers are.
+
+| configuration | programs | what it exercises |
+|---|---|---|
+| `release` (`Options.releaseUntagged`) | 24 | linker, MutualRecursionElimination, BooleanOptimizer, StaticArgumentTransformation, `SirToUplcV3Lowering`, `V3Optimizer` |
+| `cce` (`cseIterations = 4, cceEnabled = true`) | 24 | CCE and the extra CSE rounds production leaves off |
+| `v2` (V3 lowering targeting `Language.PlutusV2`) | 5 | `V1V2Optimizer` |
+| `scott`, `sop` | 2 each | `ScottEncodingLowering`, `SumOfProductsLowering` |
+
+57 lines, identical in both JVMs. The legacy backends cannot lower the example validators at all
+– they leave `UniversalDataConversion.fromData`/`toData` as free variables, because that
+intrinsic module is resolved only by the V3 lowering – so they get the two samples that use raw
+builtins and pure ADTs. The whole test takes about 15 s: the in-process compile of the corpus plus
+one child JVM doing the same.
+
+### 8.2 What the flag cannot catch, and the grep for it
+
+Identity hashes are the only realistic drift source in a single-threaded, non-random compiler,
+but not the only conceivable one. `grep` over `scalus-core` compiler/uplc main code and
+`scalus-plugin` for `Random`, `nanoTime`, `currentTimeMillis`, `UUID`, `listFiles`,
+`Files.list`/`walk`, `Thread`, `.par`, `Future`, `identityHashCode`, `getenv`, `getProperty`:
+
+| hit | verdict |
+|---|---|
+| `Plugin.scala:291`, `SIRCompiler.scala:366` `currentTimeMillis` | timing log lines only |
+| `LoweringContext` `scalus.disable.helper.cache`, `SCALUS_TRACE_LETREC` | diagnostic knobs, off by default |
+| `LoweringContext:291` `ThreadLocal` | diagnostic current-function name |
+| `Cek.scala` `getProperty` | evaluator diagnostics, not compilation |
+| `SIRType.scala:465` `identityHashCode` | `showDebug` only |
+| `SIRType.scala:454` `System.identityHashCode(ref)` in `TypeProxy.hashCode` | **the same class as the `DefaultFun` hazard**: any recursive `SIRType` has an identity-dependent hash. Every `SIRType`-keyed container was checked: `SIRUnify.parentTypes` (`get`/`updated` only), `SIRUnify.topLevelTypes` (`exists`, and a `toList` that only feeds a maximum), the proxy `Set`s in `IntrinsicResolver` and `SumUplcConstrOps` (cycle detection, `contains`). All `Map[SIRType.TypeVar, …]` keys are structural. The grep found no `SIRType`-keyed container iterated into output (it would miss a `groupBy` on an accessor with another name, or a `LoweredValueRepresentation` key wrapping a type); the corpus test watches this empirically. |
+
+No randomness, time, or threading reaches the compile path.
+
+### 8.3 The compiler plugin
+
+SIR is generated at scalac time, one stage before everything above, and dotty `Symbol`s are a
+natural identity-hashed key. Audit of `scalus-plugin`:
+
+| site | verdict |
+|---|---|
+| `SIRTypeEnv.vars`, `forwardRefs`; `typeVars`, `resolvedClasses`; `Macros.generateBuiltinsMap`; `EqNonStructuralMethods` | `Symbol`-keyed, lookups only, never iterated |
+| `Plugin.scala:245` blueprint-modules manifest | `Set[String]`, `.toSeq.sorted` before writing |
+| `CompilationError.scala:171` missing constructors | `Set[Symbol]`, sorted by name before rendering |
+| `SIRTyper.binderIdBases` | `IdentityHashMap` used as a lookup for counter-assigned ids |
+| `groupBy` sites | keyed by `String` |
+| `SIRPreprocessor:136`, `PatternMatchingCompiler:1999` | `Set`s used for `contains` |
+
+The grep found no `Symbol`-keyed container reaching the emitted SIR in iteration order (it checked
+the iteration methods on the named maps above, not every `Map[Symbol` in the plugin), so a plugin-level
+cross-JVM compile test is not warranted on this evidence. It would cost a scalac start per
+child JVM; revisit if the plugin ever iterates over symbols to emit bindings.
