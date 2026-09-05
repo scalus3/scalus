@@ -394,9 +394,10 @@ tracks T10, T12, T16.
   function-first and `Constr` fields left to right, so effect order is
   preserved). Threshold `MinRunSize = 5`, set by measurement: a run of N saves
   N-2 steps (6.92 lovelace each) but costs ~1 script byte (15 lovelace/tx), so
-  N=3 loses money. At N>=3 the pass saves 151 steps for +65 bytes over the ten
-  example validators and is fee-negative on six of them; at N>=5 it saves 77
-  steps for +5 bytes, +458 lovelace, and none regress. Design and full numbers:
+  N=3 loses money. Over the ten example validators: at N>=3 the pass saves 151
+  steps for +64 bytes and is fee-negative on seven of them; at N>=5 it saves 77
+  steps for no extra bytes at all, +533 lovelace, and none regress. Design and
+  full numbers:
   `docs/superpowers/specs/2026-08-31-t5-let-chain-regrouping-design.md`.
   Still open: flipping the default (needs the ExUnits repin on both compiler
   generations), and the topological-levelling extension (group by dependency

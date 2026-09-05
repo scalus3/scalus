@@ -95,9 +95,18 @@ it, depending on where the surrounding encoding happens to sit. Taking both case
 
 **N ≥ 5 is profitable under either rounding. N = 4 changes sign. N = 3 is negative
 under either.** That is the real content of the threshold, and it is confirmed by
-measurement: over the ten example validators, a threshold of 4 nets +451 lovelace but
-makes 2 of them worse (`payment_splitter` paid 1.5 bytes per group and lost 17
-lovelace), while 5 nets +458 and makes none worse.
+measurement over the ten example validators (rebased onto master `853b589ec`, after the
+CSE/CCE determinism fix changed the surrounding encoding):
+
+| threshold | steps saved | bytes added | net fee | validators made worse |
+|---|---:|---:|---:|---:|
+| 3 | 151 | +64 | +85 lovelace | 7 of 10 |
+| 4 | 115 | +19 | +511 lovelace | 1 of 10 |
+| **5** | **77** | **+0** | **+533 lovelace** | **0 of 10** |
+
+At 5 the groups are byte-free across the whole corpus — `betting` even shrinks by a
+byte. `payment_splitter` is the one that still regresses at 4, paying 1.5 bytes per
+group for 17 lovelace of loss.
 
 `LetChainRegroup.MinRunSize = 5` is therefore not conservatism — it is the first arity
 whose margin exceeds one byte of granularity.

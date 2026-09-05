@@ -50,8 +50,9 @@ import scalus.uplc.transform.TermAnalysis.freeVars
   *
   * [[MinRunSize]] is 5 rather than 4 because the theoretical `N = 4` margin (+0.72 lovelace) does
   * not survive measurement: flat is bit-packed, so a group's 7 theoretical bits round up to a whole
-  * byte in the encoded script. Measured over the ten example validators, a threshold of 4 nets +451
-  * lovelace but makes 2 of them worse, while 5 nets +458 and makes none worse.
+  * byte in the encoded script. Measured over the ten example validators: a threshold of 4 nets +511
+  * lovelace for +19 bytes and still makes one of them worse, while 5 nets +533 for no extra bytes
+  * at all and makes none worse.
   *
   * All of this is conservative for chains that run more than once per transaction (inside a loop,
   * or a script spending several inputs), where the step saving multiplies but the bytes are paid

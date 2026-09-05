@@ -162,17 +162,21 @@ steps), and `full_unlock` moves 23,422 → 23,322 mem (1 step).
 Measuring script size then showed the model was **incomplete**, and the fix is
 the N ≥ 5 threshold:
 
+Measured on master `853b589ec` (rebased after the CSE/CCE determinism fix, which
+shifted the surrounding encoding and made the groups cheaper than the first
+measurement suggested):
+
 | threshold | steps saved | bytes added | net fee | validators made worse |
 |---|---:|---:|---:|---:|
-| 3 | 151 | +65 | +68 lovelace | **6 of 10** |
-| 4 | 115 | +23 | +451 lovelace | 2 of 10 |
-| **5** | **77** | **+5** | **+458 lovelace** | **0 of 10** |
+| 3 | 151 | +64 | +85 lovelace | **7 of 10** |
+| 4 | 115 | +19 | +511 lovelace | 1 of 10 |
+| **5** | **77** | **+0** | **+533 lovelace** | **0 of 10** |
 
 Threshold 4 is where the model and the measurement part company: the per-group
 cost is 7 bits in theory but rounds up to a whole byte in a bit-packed script, so
-`payment_splitter` paid 1.5 bytes per group and regressed by 17 lovelace, and
-`linear_vesting` by 1.2. Threshold 5 nets more in total *and* leaves every
-validator no worse off, which is the property worth having for a default.
+`payment_splitter` pays 1.5 bytes per group and regresses by 17 lovelace.
+Threshold 5 nets more in total, costs no bytes at all across the corpus, *and*
+leaves every validator no worse off — the property worth having for a default.
 
 At a threshold of 3 the pass is a net loss on `htlc`, `two_party_escrow`,
 `escrow`, `editable_nft`, `upgradeable_proxy` and `payment_splitter`: each pays
@@ -185,9 +189,9 @@ qualify, and none regress:
 
 | validator | groups | steps | bytes | net lovelace/tx |
 |---|---:|---:|---:|---:|
-| linked_list | 10 | 38 | +3 | +218 |
-| betting | 5 | 23 | +0 | +159 |
-| auction | 3 | 12 | +2 | +53 |
+| linked_list | 10 | 38 | +1 | +248 |
+| betting | 5 | 23 | **−1** | +174 |
+| auction | 3 | 12 | +0 | +83 |
 | escrow | 1 | 4 | +0 | +28 |
 | the other six | 0 | 0 | 0 | 0 |
 
