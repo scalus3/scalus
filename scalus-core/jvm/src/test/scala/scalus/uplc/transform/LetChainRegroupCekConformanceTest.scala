@@ -7,11 +7,10 @@ import org.scalatest.funsuite.AnyFunSuite
 import org.scalatestplus.scalacheck.ScalaCheckPropertyChecks
 import scalus.*
 import scalus.cardano.ledger.{ExUnits, Word64}
-import scalus.uplc.Constant.given
 import scalus.uplc.DefaultFun.*
 import scalus.uplc.Term.*
 import scalus.uplc.TermDSL.given
-import scalus.uplc.eval.{OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
+import scalus.uplc.eval.{Log, MachineError, OutOfExBudgetError, PlutusVM, RestrictingBudgetSpender}
 
 import scala.language.implicitConversions
 
@@ -23,9 +22,9 @@ import scala.language.implicitConversions
   *
   * ==Two properties==
   *
-  *   - '''Semantics''': the pass preserves the result exactly. Unlike eta-reduction it does not
-  *     change the shape of anything, so results are compared with `~=~`, not "compatible modulo the
-  *     transformation".
+  *   - '''Semantics''': ground results, failure classes and trace logs agree. Returned delays are
+  *     forced and lambdas are applied to a fixed set of probes: their unevaluated bodies may
+  *     legitimately change shape. These bounded observations are not a proof of equivalence.
   *   - '''Budget''': `CaseConstrApply(LetChainRegroup(t))` never costs more than
   *     `CaseConstrApply(t)` — the real before/after, since [[LetChainRegroup]] always runs
   *     immediately before [[CaseConstrApply]] in [[V3Optimizer]].
@@ -43,26 +42,63 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
     private val budgetLimit = ExUnits(memory = 1_000_000L, steps = 500_000_000L)
 
     private enum Outcome:
-        case Ok(result: Term)
-        case Failed
-        case OutOfBudget
+        case Ok(result: Term, logs: List[String])
+        case Failed(errorClass: Class[?], logs: List[String])
+        case OutOfBudget(logs: List[String])
 
-    private def normalized(t: Term): Term = DeBruijn.fromDeBruijnTerm(DeBruijn.deBruijnTerm(t))
-
-    private def run(t: Term): (Outcome, ExUnits) =
+    private def run(t: Term): (Outcome, ExUnits) = {
         val spender = new RestrictingBudgetSpender(budgetLimit)
-        try
-            val r = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(t), spender)
-            (Outcome.Ok(normalized(r)), spender.getSpentBudget)
-        catch
-            case _: OutOfExBudgetError          => (Outcome.OutOfBudget, spender.getSpentBudget)
-            case scala.util.control.NonFatal(_) => (Outcome.Failed, spender.getSpentBudget)
+        val logger = new Log()
+        val outcome =
+            try
+                val r = vm.evaluateDeBruijnedTerm(DeBruijn.deBruijnTerm(t), spender, logger)
+                Outcome.Ok(r, logger.getLogs.toList)
+            catch
+                case _: OutOfExBudgetError => Outcome.OutOfBudget(logger.getLogs.toList)
+                // Unexpected host exceptions must fail the test rather than masquerade as UPLC failure.
+                case e: MachineError => Outcome.Failed(e.getClass, logger.getLogs.toList)
+        (outcome, spender.getSpentBudget)
+    }
 
-    private def agree(a: Outcome, b: Outcome): Boolean = (a, b) match
-        case (Outcome.Ok(r1), Outcome.Ok(r2))           => r1 ~=~ r2
-        case (Outcome.Failed, Outcome.Failed)           => true
-        case (Outcome.OutOfBudget, Outcome.OutOfBudget) => true
-        case _                                          => false
+    private val probes: List[Term] = List(
+      Const(Constant.Integer(BigInt(0))),
+      Const(Constant.Integer(BigInt(1))),
+      Const(Constant.Bool(true)),
+      Const(Constant.Bool(false)),
+      Const(Constant.Unit)
+    )
+
+    private def agree(a: Outcome, b: Outcome, depth: Int = 8): Boolean = (a, b) match
+        case (Outcome.Ok(r1, l1), Outcome.Ok(r2, l2)) =>
+            l1 == l2 && agreeValues(r1, r2, depth)
+        case (Outcome.Failed(e1, l1), Outcome.Failed(e2, l2))   => e1 == e2 && l1 == l2
+        case (Outcome.OutOfBudget(l1), Outcome.OutOfBudget(l2)) => l1 == l2
+        case _                                                  => false
+
+    private def agreeValues(a: Term, b: Term, depth: Int): Boolean = {
+        def observe(x: Term, y: Term): Boolean = {
+            assert(depth > 0, "closure observation depth exhausted")
+            agree(run(x)._1, run(y)._1, depth - 1)
+        }
+        (a, b) match
+            case (_: Delay, _: Delay) => observe(Force(a), Force(b))
+            case (_: LamAbs, _: LamAbs) =>
+                probes.forall(arg => observe(Apply(a, arg), Apply(b, arg)))
+            case (Constr(t1, xs, _), Constr(t2, ys, _)) =>
+                t1 == t2 && xs.size == ys.size &&
+                xs.zip(ys).forall((x, y) => agreeValues(x, y, depth))
+            case _ => a ~=~ b
+    }
+
+    private def trace(label: String, value: Term): Term =
+        Apply(Apply(Force(Builtin(Trace)), Const(Constant.String(label))), value)
+
+    private def fiveLets(rhs: List[Term], body: Term): Term = {
+        require(rhs.size == 5)
+        rhs.zipWithIndex.foldRight(body) { case ((value, i), acc) =>
+            Apply(LamAbs(s"v$i", acc), value)
+        }
+    }
 
     // ------------------------------------------------------------------
     // Generators
@@ -98,7 +134,7 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
           leaf,
           leaf,
           leaf,
-          leaf,
+          leaf.map(t => trace("rhs", t)),
           Gen.const(Error()),
           leaf.map(t => Delay(t)),
           leaf.map(t => Force(Delay(t))),
@@ -121,6 +157,7 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
             Gen.frequency(
               (flat.size, anyOf(flat)),
               (4, genChain(env, depth - 1)),
+              (1, genChain(env, depth - 1).map(Delay(_))),
               (1, genName.flatMap(n => genExpr(n :: env, depth - 1).map(LamAbs(n, _)))),
               // a chain in FUNCTION position: CaseConstrApply flattens the whole left spine, so
               // this is the shape where a grouped outermost run could swallow the outer argument
@@ -157,7 +194,7 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
     // Properties
     // ------------------------------------------------------------------
 
-    test("regrouping preserves the result exactly") {
+    test("regrouping preserves observed results and trace logs") {
         forAll(genProgram) { (t: Term) =>
             val regrouped = LetChainRegroup(t)
             val (before, _) = run(t)
@@ -167,6 +204,54 @@ class LetChainRegroupCekConformanceTest extends AnyFunSuite with ScalaCheckPrope
               s"\noriginal:  ${t.showHighlighted}\nregrouped: ${regrouped.showHighlighted}\n$before vs $after"
             )
         }
+    }
+
+    test("returned delays, lambdas and constructor fields are compared by observation") {
+        val chain = fiveLets(probes, vr"v0")
+        val fixtures = List(
+          Delay(chain),
+          LamAbs("p", fiveLets(probes, vr"p")),
+          Constr(Word64.Zero, List(Delay(chain), LamAbs("p", chain)))
+        )
+        for fixture <- fixtures do
+            val regrouped = LetChainRegroup(fixture)
+            assert(fixture ~!=~ regrouped)
+            assert(agree(run(fixture)._1, run(regrouped)._1))
+            assert(agree(run(CaseConstrApply(fixture))._1, run(CaseConstrApply(regrouped))._1))
+        // Different behavior must still be rejected, even when both results are closures.
+        assert(!agree(run(Delay(probes.head))._1, run(Delay(probes(1)))._1))
+        assert(!agree(run(LamAbs("p", vr"p"))._1, run(LamAbs("p", probes.head))._1))
+    }
+
+    test("independent effectful bindings retain trace order and stop at the first failure") {
+        for failureAt <- List(None, Some(0), Some(1), Some(4)) do
+            val rhs = (0 until 5).map { i =>
+                if failureAt.contains(i) then Error()
+                else trace(s"rhs$i", probes.head)
+            }.toList
+            val chain = fiveLets(rhs, trace("body", probes.head))
+            val regrouped = LetChainRegroup(chain)
+            assert(chain ~!=~ regrouped)
+            val expectedLogs = (0 until failureAt.getOrElse(5)).map(i => s"rhs$i").toList ++
+                (if failureAt.isEmpty then List("body") else Nil)
+            for encode <- List[Term => Term](identity, CaseConstrApply.apply) do
+                val before = run(encode(chain))._1
+                val after = run(encode(regrouped))._1
+                before match
+                    case Outcome.Ok(_, logs) =>
+                        assert(failureAt.isEmpty)
+                        assert(logs == expectedLogs)
+                    case Outcome.Failed(_, logs) =>
+                        assert(failureAt.nonEmpty)
+                        assert(logs == expectedLogs)
+                    case other => fail(s"unexpected outcome: $other")
+                assert(agree(before, after), s"$before vs $after")
+    }
+
+    test("the oracle rejects an extra trace before failure") {
+        val quiet = run(Error())._1
+        val noisy = run(Force(trace("unexpected", Delay(Error()))))._1
+        assert(!agree(quiet, noisy))
     }
 
     /** Guards the two properties above against vacuity: a generator that never produced a groupable
