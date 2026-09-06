@@ -343,7 +343,8 @@ section 2 would otherwise credit the wrong project.
 The technique — applying an N-argument function as `(case (constr 0 [a1..aN]) f)`
 instead of `(apply .. (apply f a1) .. aN)`, cheaper for N >= 3 because `Case` and
 `Constr` cost two machine steps at any arity — was published by Alexander Nemish
-on 2025-01-02 at 20:01 UTC ([@atlanter](https://x.com/atlanter)):
+on 2025-01-02 at 20:01 UTC
+([@atlanter](https://x.com/atlanter/status/1874909022056505670)):
 
 > I've discovered an interesting optimization in Plutus V3 using Sums Of
 > Products. In UPLC you call a function with 2 arguments like this:
