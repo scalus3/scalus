@@ -163,7 +163,7 @@ val jvmReleaseTarget = Compile / scalacOptions ++= {
 // each supported version is a distinct artifact and all of them are published.
 val publishOnlyLts = publish / skip := (scalaVersion.value != scala3LtsVersion)
 
-val fs2Version = "3.12.2"
+val fs2Version = "3.14.0"
 
 // Compilation profiling options for analyzing compilation time
 lazy val profilingScalacOptions = Seq(
