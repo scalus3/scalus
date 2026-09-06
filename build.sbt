@@ -37,7 +37,7 @@ val jsoniterScalaVersion = "2.40.1"
 //ThisBuild / scalaVersion := "3.7.3-RC1-bin-SNAPSHOT"
 // LTS is the default build version; the next series is used to cross-build the
 // compiler plugin (which depends on the unstable scala3-compiler internal API).
-val scala3LtsVersion = "3.3.8"
+val scala3LtsVersion = "3.9.0"
 val scala3NextVersion = "3.8.4"
 // Next LTS, released 2026-09-03.
 val scala3NextLtsVersion = "3.9.0"
