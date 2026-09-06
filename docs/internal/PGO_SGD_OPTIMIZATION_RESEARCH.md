@@ -184,7 +184,7 @@ Which passes admit a closed form:
 | Per-site inline | Yes | `-3·n_bind` steps vs `(u-1)·bytes(c)`, per-site inequality |
 | Per-candidate CSE | Yes | saves `(sum_i count_i - count_at_binding)` evals of `e`, costs lam+apply+var |
 | Forced-builtin extraction | Yes | per use, 2 Force steps -> 1 Var step, one lam/apply once |
-| Case-constr-apply | Yes, parameter-free | saves Apply steps per call, apply whenever legal |
+| Case-constr-apply | Yes, but **not** parameter-free | `(N-2)` steps/exec vs `19-3N` bits; see `CASE_CONSTR_COST_MODEL.md` |
 | Eta-reduce | Not a decision | strictly removes steps and bytes when legal |
 | Strict-if | Yes, input-dependent | saves Delay+Force per taken branch, pays `E[cost of untaken branch]` |
 | Common-context extraction | Yes, CSE shape | |
@@ -242,6 +242,32 @@ dropped, and `UplcPipeline.scala:75-81` fills position-less optimizer-created no
 their neighbours, so hoisted CSE lets inherit someone else's line. There are no node ids.
 Threading a stable site id from SIR through lowering into UPLC annotations is the
 enabling step for everything in this section.
+
+**Measured 2026-09-06, and it is cheaper than this section assumed.** Per-site counts do
+not need new IR plumbing to *obtain* — only to survive a recompile. Writing a unique
+synthetic `ScalusSourcePos` into each candidate node's `UplcAnnotation`, then reading
+`ProfilingData.bySourceLocation`, yields exact per-site execution counts today. The
+positions are write-only labels, never read back as source locations, and annotations do
+not affect flat encoding, budget or evaluation, so the measurement cannot perturb what it
+measures. Hooking `ScalusTest.runWithDebug` this way measured every path the example
+suites already assert on with no per-suite fixture work.
+
+What that produced, over 184 case-constr application sites in nine validators (eight
+`scalus-examples` plus the binocular oracle): **five in six sites never fire more than
+once**, and **one in three never fires at all** on a given path. The one genuinely hot
+site in the corpus fires 316 times; the busiest in the small examples fires 6. A static
+approximation ("hot if it sits under a lambda") called 92% of the oracle's sites hot
+against a measured 13% — it degrades precisely on large contracts, where the fee matters
+most, because deep helper chains put nearly everything under some lambda.
+
+Two consequences for the plan. First, step 4 (per-pass profile gating) can be prototyped
+and *validated* before step 3 lands, using this labelling trick as scaffolding. Step 3
+remains necessary for production use, where the mapping must survive recompilation and be
+addressable by the optimizer rather than by a test harness. Second, the distribution
+justifies the effort: with 83% of sites cold, a profile-blind pass that assumes hotness is
+wrong most of the time, and the "best in the common path, compact in the rare path"
+behaviour this section proposes is worth more than the knob-tuning single digits in the
+verdict.
 
 ---
 
