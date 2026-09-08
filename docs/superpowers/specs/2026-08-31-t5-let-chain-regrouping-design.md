@@ -320,6 +320,14 @@ Phase 4:  withCce |> letChainRegroup.apply |> caseConstr.apply
   LCA placement rebinds per call (7 steps/call versus FBE's 2), an active
   regression. `V1V2Optimizer` also uses FBE and has no CSE at all. Revisit only
   as a measured phase 3.
+
+  T18 was designed on 2026-09-08 in
+  `2026-09-08-t18-let-sinking-design.md`, which supersedes two claims made
+  here: it needs no `TermPaths` extraction (a single descent finds the sink
+  point, because the binder moves along one root-to-node path), and the
+  measured candidate count is 33 sinkable bindings with a pure right-hand side
+  across ten validators — none of them on `linear_vesting`, whose candidates
+  the prelude `inline` workaround has since removed.
 - **Aiken-style reordering** to grow groups (see section 4, step 2).
 - **Impure sinking**, which needs the plan's T6 `relaxedEvaluationOrder`.
 

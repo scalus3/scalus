@@ -929,6 +929,19 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
 - **Validate:** multi-branch validators (spend/mint dispatch) where each
   branch uses a disjoint helper set; assert the unused branch's ExUnits do
   not change when a helper is added to another branch.
+- **Designed 2026-09-08:**
+  `docs/superpowers/specs/2026-09-08-t18-let-sinking-design.md`. Re-measured
+  over ten example validators: **33 sinkable bindings with a pure right-hand
+  side**, 2-6 per validator, 3 machine steps each, saved only on the paths
+  that skip the branch. `linear_vesting` — the validator this section's
+  evidence was measured on — now has **zero** candidates, because the
+  prelude `inline` workaround above removed them; T18's remaining value is
+  for user code plus not having to keep writing that workaround. A further
+  75 bindings spread over two or more branches and would need duplication,
+  which costs bytes; those stay out of scope. The design also retires this
+  section's assumption that T18 needs the `TermPaths` extraction first: the
+  binder moves along one root-to-node path, so a single descent computes the
+  sink point without a global occurrence table.
 - **Related, now fixed:** the same investigation root-caused a second,
   independent cost - `List.contains` never resolved to its data-repr
   intrinsic for lazily-decoded ledger lists. That is T17 above, landed on
