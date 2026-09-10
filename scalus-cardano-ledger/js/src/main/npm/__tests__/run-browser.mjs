@@ -35,6 +35,11 @@ try {
         let stderr = "";
         child = spawn(chrome, [
             "--headless", "--disable-gpu", "--no-first-run", "--no-default-browser-check",
+            // Nix's Chromium points CHROME_DEVEL_SANDBOX at a store path that only NixOS makes
+            // setuid-root. Anywhere else - GitHub's runners included - Chrome finds the helper,
+            // sees the wrong mode and aborts rather than run unsandboxed. The page under test is
+            // our own bundle, served from 127.0.0.1, so drop the sandbox instead of the test.
+            "--no-sandbox",
             `--user-data-dir=${profile}`, "--dump-dom", "--virtual-time-budget=10000", url,
         ], { stdio: ["ignore", "pipe", "pipe"] });
         const timeout = setTimeout(() => finish(new Error("Browser test timed out")), 30000);

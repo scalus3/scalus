@@ -46,6 +46,8 @@ node_modules
 log.uplc.*
 test-logs-archive/
 /scalus-cardano-ledger/js/src/main/npm/scalus.js.map
+# Built by `npm run build:browser-tests` on every browser-test run
+/scalus-cardano-ledger/js/src/main/npm/shared-tests-bundle.js
 scalus-examples/jvm/src/test/resources/scalus/examples/AikenMpfData/build/
 scalus-examples/jvm/src/test/resources/scalus/examples/AikenMpfData/artifacts/
 scalus-examples/jvm/src/test/resources/scalus/examples/AikenMpfData/aiken.lock

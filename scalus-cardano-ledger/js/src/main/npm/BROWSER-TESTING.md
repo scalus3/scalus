@@ -26,6 +26,11 @@ nix develop .#ci --command npm --prefix scalus-cardano-ledger/js/src/main/npm ru
 Chromium is included only on Linux; on macOS, use an installed Chrome application
 or set `CHROME_BIN` explicitly.
 
+The runner passes `--no-sandbox`. Nix's Chromium expects its SUID sandbox helper to
+be setuid-root, which holds on NixOS but not on a plain Linux host such as a GitHub
+runner, where Chrome aborts instead of starting. The page under test is our own
+bundle served from 127.0.0.1.
+
 ## Interactive debugging
 
 Run `npm run build:browser-tests`, serve this directory over HTTP, and open either:
