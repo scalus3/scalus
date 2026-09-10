@@ -67,6 +67,25 @@ val compiled = PlutusV3.compile(MyValidator.validate)
 val withTraces = compiled.withErrorTraces
 ```
 
+## BigInt Comparison Evaluation Order
+
+Compiled `BigInt` comparisons `left > right` and `left >= right` evaluate the
+right operand first. Scalus uses the same direct lowering as Aiken: `left > right`
+becomes `lessThanInteger(right, left)`, and `left >= right` becomes
+`lessThanEqualsInteger(right, left)`.
+
+This differs from Scala's left-to-right evaluation on the JVM. It matters when
+operand expressions emit traces or fail. To evaluate the left expression first,
+bind both operands explicitly before comparing:
+
+```scala
+val left = computeLeft()
+val right = computeRight()
+left > right
+```
+
+The comparison result is unchanged for operands that evaluate successfully.
+
 ## Complete Example
 
 ```scala

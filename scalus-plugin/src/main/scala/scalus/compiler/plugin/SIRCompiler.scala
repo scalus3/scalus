@@ -2203,6 +2203,9 @@ final class SIRCompiler(
                   AnnotationsDecl.fromSourcePosition(lhs.sourcePos union rhs.sourcePos)
                 )
             case nme.GT =>
+                // Match Aiken's direct lowering: x > y becomes lessThanInteger(y, x).
+                // This evaluates rhs before lhs (also for >= below), unlike Scala on the JVM.
+                // Explicit val bindings preserve source order when operands trace or can fail.
                 SIR.Apply(
                   SIR.Apply(
                     SIRBuiltins.lessThanInteger,
