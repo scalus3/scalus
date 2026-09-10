@@ -1,58 +1,38 @@
-# Browser Testing for Scalus
+# Browser testing
 
-This document describes how to run Scalus tests in a browser environment.
+Install the npm dependencies with `npm ci` (Node 20+). Tests use the generated
+`scalus.js`; rebuild it from the repository root with
+`sbtn scalusCardanoLedgerJS/prepareNpmPackage` after changing Scala code.
 
-## Prerequisites
+## Automated regression check
 
-- Node.js installed
-- npm dependencies installed (`npm install`)
+Run `npm run test:browser`. This builds the shared harness, starts a temporary
+localhost server, launches headless Chrome, and fails unless
+`__tests__/browser-smoke.html` reports success. The page exercises shared evaluator
+tests and a typed Emulator credential query. The runner removes its browser profile
+and stops the server afterward.
 
-## Build the Browser Test Bundle
+Chrome defaults to the standard macOS application path or `google-chrome` on Linux.
+Set `CHROME_BIN` to use another Chrome/Chromium executable. The Linux Nix `#ci`
+shell includes Chromium and sets `CHROME_BIN` to its pinned executable. CI-JS runs
+the browser check inside that shell, without using the runner's installed Chrome.
 
-First, build the shared tests bundle for browser use:
-
-```bash
-npm run build:browser-tests
-```
-
-This creates `shared-tests-bundle.js` which contains all the test logic.
-
-## Run a Local Server
-
-Start a local HTTP server using npx serve:
+From the repository root, run the same browser check with:
 
 ```bash
-npx serve .
+nix develop .#ci --command npm --prefix scalus-cardano-ledger/js/src/main/npm run test:browser
 ```
 
-This will start a server at `http://localhost:3000` (or another port if 3000 is busy).
+Chromium is included only on Linux; on macOS, use an installed Chrome application
+or set `CHROME_BIN` explicitly.
 
-## Open the Test Page
+## Interactive debugging
 
-Open your browser and navigate to:
+Run `npm run build:browser-tests`, serve this directory over HTTP, and open either:
 
-```
-http://localhost:3000/test-browser.html
-```
+- `__tests__/browser-smoke.html`: the same automatically executed checks used by CI.
+- `test-browser.html`: the existing interactive runner with shared and legacy test
+  buttons and detailed results.
 
-## Running Tests
-
-1. Click **"Run All Tests"** to run both the shared test suite and legacy manual tests
-2. Click **"Run Shared Tests Only"** to run only the TypeScript test suite
-3. Click **"Run Legacy Tests Only"** to run the original manual tests
-
-## Test Results
-
-- Green entries indicate passing tests
-- Red entries indicate failing tests
-- Open the browser console (F12) for detailed output and debugging information
-
-## Rebuilding After Changes
-
-If you modify the test files in `__tests__/`, rebuild the browser bundle:
-
-```bash
-npm run build:browser-tests
-```
-
-Then refresh the browser page to run the updated tests.
+Rebuild the shared harness and refresh the page after changing shared TypeScript
+tests. See [README.md](README.md) for package usage.

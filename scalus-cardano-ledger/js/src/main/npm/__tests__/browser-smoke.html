@@ -1,0 +1,26 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Scalus browser package smoke test</title>
+<pre id="result">Running</pre>
+<script src="../shared-tests-bundle.js"></script>
+<script type="module">
+  const result = document.querySelector("#result");
+  try {
+    const lib = await import("../scalus.js");
+    const tests = window.runAllSharedTests(lib.Scalus, lib.SlotConfig);
+    if (tests.some(t => !t.passed)) throw new Error(JSON.stringify(tests));
+    const emulator = lib.Emulator.create(lib.CardanoInfo.preview());
+    const hash = "11".repeat(28);
+    const key = "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6";
+    const script = "addr_test1wqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg0tyy26";
+    emulator.addUtxo(new lib.Utxo("00".repeat(32), 0, key, lib.Value.ada(5n)));
+    emulator.addUtxo(new lib.Utxo("00".repeat(32), 1, script, lib.Value.ada(5n)));
+    const found = emulator.getUtxos({paymentCredential: hash, paymentCredentialType: "key"});
+    if (found.length !== 1 || found[0].address !== key) throw new Error("Typed credential query failed");
+    result.textContent = `PASS: ${tests.length} shared tests and typed Emulator query`;
+    document.documentElement.dataset.status = "passed";
+  } catch (error) {
+    result.textContent = String(error?.stack ?? error);
+    document.documentElement.dataset.status = "failed";
+  }
+</script>

@@ -1206,7 +1206,9 @@ lazy val scalusCardanoLedger = crossProject(JSPlatform, JVMPlatform)
             entry.getAbsolutePath,
             "--bundle",
             "--format=esm",
-            "--platform=node",
+            // Select noble's browser/Web Crypto implementation, keeping node:crypto out of
+            // the published bundle. Hashing and signature verification also work in Node.
+            "--platform=browser",
             "--minify",
             "--legal-comments=none",
             s"--outfile=${outFile.getAbsolutePath}"

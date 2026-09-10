@@ -22,7 +22,11 @@ jobs:
         with:
           use-flakehub: false
       - name: Build and test in Nix devshell
-        run: nix develop .#ci --accept-flake-config --command bash -c "sbt ci-js"
+        run: |
+          nix develop .#ci --accept-flake-config --command bash -c '
+            sbt ci-js &&
+            npm --prefix scalus-cardano-ledger/js/src/main/npm run test:browser
+          '
       - name: Report test results
         uses: sarisia/actions-status-discord@v1
         if: failure()

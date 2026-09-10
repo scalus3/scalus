@@ -6,6 +6,9 @@
 
 - Add optional `paymentCredentialType: "key" | "script"` to Emulator UTxO queries.
   It requires `paymentCredential`; omit the type to match either credential kind.
+- Bundle browser-compatible crypto without mandatory Node built-in imports. The npm
+  package now declares Node 20 or newer; browsers require no Node crypto polyfill.
+  Optional filesystem operations remain limited to Node CommonJS hosts.
 - Preserve `@TsType` optionality even for unmappable Scala types, and parenthesize
   function and verbatim types when composing TypeScript unions.
 

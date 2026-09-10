@@ -373,6 +373,14 @@ load it directly, with no bundler and no import map:
 </script>
 ```
 
+The same bundle runs in Node 20+ and browsers without a Node crypto polyfill. Optional
+filesystem operations require a Node CommonJS host; evaluation, hashing, signature
+verification and the Emulator do not require filesystem access.
+
+Run `npm run test:browser` for the automated Chromium regression check used in CI.
+It runs the shared evaluator tests and a typed credential query against the bundle.
+See [BROWSER-TESTING.md](BROWSER-TESTING.md) for browser setup and interactive tests.
+
 ## TypeScript Definitions
 
 `scalus.d.ts` is generated from the Scala sources by `scalus-ts-exporter`
