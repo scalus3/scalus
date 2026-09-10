@@ -180,6 +180,13 @@
 
 ### Fixed
 
+- Constructor-pattern fallbacks no longer repeat wildcard guards that have already failed.
+  This preserves trace order and avoids duplicate execution costs; affected scripts may change
+  size, execution budgets, and hashes after recompilation.
+- Unsupported aliases on alternative patterns, such as `x @ ("a" | "b")`, now produce a
+  positioned diagnostic instead of a misleading forward-reference error or compiler crash.
+  Remove the alias and refer to a `val` holding the scrutinee as a workaround.
+
 - `Eq[DCert]` and `Eq[ScriptPurpose]` (Plutus V1) compared every field to itself: the inner
   pattern binder shadowed the outer one, so any two values with the same constructor were equal
   off-chain. On-chain the lowering replaces `Eq` with structural `equalsData`, which hid it
