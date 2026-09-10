@@ -75,15 +75,13 @@ private def convertFlatToTree[T <: AnyRef](
         It was Base64 encoded before, but it's 33% larger than the original bytes.
         We could fit two bytes in one character, but then it's not a valid UTF-16 string.
 
-        We split the bytes into chunks of 65000 bytes, because the maximum size of a String literal is 65535 bytes.
-        https://stackoverflow.com/questions/816142/strings-maximum-length-in-java-calling-length-method
-        https://asm.ow2.io/javadoc/org/objectweb/asm/ByteVector.html#putUTF8(java.lang.String)
-
-        But for some reason, it's not possible to create a string literal with 65535 bytes.
-        45000 is a safe value that works.
+        JVM string constants are limited to 65535 bytes of modified UTF-8. Each Latin-1
+        character takes at most two bytes there (including NUL), so chunks of 32767
+        bytes fit even when every encoded byte is 0xff or 0x00.
      */
+    val chunkSize = 32767
     val strings = (
-      for bytes <- bytes.grouped(45000)
+      for bytes <- bytes.grouped(chunkSize)
       yield
           val str = new String(bytes, StandardCharsets.ISO_8859_1)
           Literal(Constant(str)).withSpan(span): Tree
@@ -93,7 +91,7 @@ private def convertFlatToTree[T <: AnyRef](
         strings.reduce((lhs, rhs) => lhs.select(nme.Plus).appliedTo(rhs).withSpan(span))
     if debug then
         // save the SIR to a file for debugging purposes
-        val groupedBytes = bytes.grouped(45000).toList
+        val groupedBytes = bytes.grouped(chunkSize).toList
         val strings = groupedBytes.map { b =>
             Literal(Constant(new String(b, StandardCharsets.ISO_8859_1))).withSpan(span)
         }
