@@ -4,6 +4,8 @@
 
 ### JavaScript SDK
 
+- Add optional `paymentCredentialType: "key" | "script"` to Emulator UTxO queries.
+  It requires `paymentCredential`; omit the type to match either credential kind.
 - Preserve `@TsType` optionality even for unmappable Scala types, and parenthesize
   function and verbatim types when composing TypeScript unions.
 

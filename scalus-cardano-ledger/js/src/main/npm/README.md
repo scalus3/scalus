@@ -113,7 +113,9 @@ drops.
 ```typescript
 emulator.getUtxos();                                  // everything
 emulator.getUtxos({ address: alice });                // one address
-emulator.getUtxos({ paymentCredential: keyHashHex }); // any address with this payment part
+emulator.getUtxos({ paymentCredential: keyHashHex }); // either credential kind
+emulator.getUtxos({ paymentCredential: keyHashHex, paymentCredentialType: "key" });
+emulator.getUtxos({ paymentCredential: scriptHashHex, paymentCredentialType: "script" });
 emulator.getUtxos({ unit: policyId + assetNameHex }); // holders of one asset
 emulator.getUtxos({ minLovelace: 5_000_000n, limit: 10 });
 emulator.getUtxos({ outRefs: [{ txHash, outputIndex: 0 }] });

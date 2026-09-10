@@ -346,11 +346,8 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
       * than an exception. TypeScript callers already get this from `UtxoFilter`'s excess-property
       * check; the throw is what gives untyped callers the same guarantee.
       *
-      * `paymentCredential` has no key/script discriminator on the JS side: it is a bare hex hash.
-      * It is translated as "matches as a key-hash payment part, or matches as a script-hash payment
-      * part", combined with `||`. That is the only translation covering the field's own contract
-      * ("matches every address with this payment part") without knowing in advance which kind of
-      * credential the hash names.
+      * `paymentCredentialType` narrows a hash to key or script credentials. Without a type, the
+      * hash matches either kind. A type without a hash is rejected.
       *
       * @throws IllegalArgumentException
       *   if `filter` carries any field other than the ones `JsUtxoFilter` declares.
@@ -363,11 +360,27 @@ class JEmulator @deprecated("use Emulator.create", "1.2.0") (
                   s"known fields are ${JEmulator.utxoFilterFields.toSeq.sorted.mkString(", ")}"
             )
 
+        val credentialType = filter.paymentCredentialType.toOption
+        credentialType.foreach { _ =>
+            require(
+              filter.paymentCredential.isDefined,
+              "paymentCredentialType requires paymentCredential"
+            )
+        }
+
         val sources: List[UtxoSource] = List(
           filter.address.toOption.map(a => UtxoSource.FromAddress(Address.fromString(a))),
           filter.paymentCredential.toOption.map { hex =>
-              UtxoSource.FromPaymentCredential(Credential.KeyHash(AddrKeyHash.fromHex(hex))) ||
-              UtxoSource.FromPaymentCredential(Credential.ScriptHash(ScriptHash.fromHex(hex)))
+              credentialType match
+                  case Some(kind) =>
+                      UtxoSource.FromPaymentCredential(JEmulator.parseCredential(kind, hex))
+                  case None =>
+                      UtxoSource.FromPaymentCredential(
+                        Credential.KeyHash(AddrKeyHash.fromHex(hex))
+                      ) ||
+                      UtxoSource.FromPaymentCredential(
+                        Credential.ScriptHash(ScriptHash.fromHex(hex))
+                      )
           },
           filter.txHash.toOption.map(hex =>
               UtxoSource.FromTransaction(TransactionHash.fromHex(hex))
@@ -838,6 +851,12 @@ trait JsUtxoFilter extends js.Object {
       */
     val paymentCredential: js.UndefOr[String] = js.undefined
 
+    /** Restricts paymentCredential to key or script credentials. Requires paymentCredential;
+      * omitted means either kind. Other filters still AND together.
+      */
+    @TsType("\"key\" | \"script\"")
+    val paymentCredentialType: js.UndefOr[String] = js.undefined
+
     /** `"lovelace"`, or a policy id and asset name concatenated as hex. */
     val unit: js.UndefOr[String] = js.undefined
 
@@ -862,6 +881,7 @@ object JEmulator {
         Set(
           "address",
           "paymentCredential",
+          "paymentCredentialType",
           "unit",
           "outRefs",
           "txHash",
