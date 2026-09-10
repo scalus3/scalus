@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+### JavaScript SDK
+
+- Preserve `@TsType` optionality even for unmappable Scala types, and parenthesize
+  function and verbatim types when composing TypeScript unions.
+
+
 ### Performance
 
 - `List.sort` is a stable natural merge sort instead of a head-pivot quicksort. Quicksort is

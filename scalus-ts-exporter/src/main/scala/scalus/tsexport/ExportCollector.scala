@@ -243,7 +243,14 @@ object ExportCollector {
                     overrideTs: Option[TsType]
                 ): Option[TsType] =
                     overrideTs match
-                        case Some(t) => Some(t)
+                        case Some(t) =>
+                            // A narrowed @TsType must not turn an optional JS field into a
+                            // required one. Preserve UndefOr independently of its value type.
+                            val optional = mapper.includesUndefined(tpe)
+                            Some(
+                              if optional then TsType.Union(List(t, TsType.Named("undefined")))
+                              else t
+                            )
                         case None =>
                             mapper.map(tpe, ctx) match
                                 case Right(t) => Some(t)

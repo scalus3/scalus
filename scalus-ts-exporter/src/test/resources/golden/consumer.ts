@@ -102,3 +102,9 @@ export {
   rect, rw, ol, tv, ca, cn, dbl, circle, ck, cd, cs, sb, dp, both,
   boom, boomMessage, boomDetail, boomIsError, boomStack, boomType,
 };
+
+// @TsType preserves optionality even when its Scala value type cannot be mapped.
+const optionalConfig: Config = { flag: true };
+const callback: ((a: string) => void) | undefined = new Kitchen().optionalCallback();
+// @ts-expect-error the optional callback itself may be undefined
+const requiredCallback: (a: string) => void = new Kitchen().optionalCallback();

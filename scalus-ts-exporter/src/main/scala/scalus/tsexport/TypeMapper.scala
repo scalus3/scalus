@@ -53,6 +53,23 @@ class TypeMapper[Q <: Quotes & Singleton](using val quotes: Q)(
             case _                            => mapSimple(dealiased, context)
     }
 
+    /** Detect optionality without mapping the value type: @TsType may override an unmappable type.
+      */
+    def includesUndefined(tpe: TypeRepr): Boolean = tpe.dealias match
+        case AnnotatedType(t, _) => includesUndefined(t)
+        case ByNameType(t)       => includesUndefined(t)
+        case OrType(a, b)        => isUndefinedBranch(a) || isUndefinedBranch(b)
+        case AppliedType(base, args) =>
+            base.typeSymbol.fullName match
+                case "scala.scalajs.js.UndefOr" => true
+                case "scala.scalajs.js.$bar" | "scala.scalajs.js.|" =>
+                    args.exists(isUndefinedBranch)
+                case _ => false
+        case _ => false
+
+    private def isUndefinedBranch(tpe: TypeRepr): Boolean =
+        tpe.dealias.typeSymbol.fullName == "scala.Unit" || includesUndefined(tpe)
+
     private def flattenOr(tpe: TypeRepr): List[TypeRepr] = tpe match
         case OrType(a, b) => flattenOr(a.dealias) ++ flattenOr(b.dealias)
         case other        => List(other)
