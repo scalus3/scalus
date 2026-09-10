@@ -966,7 +966,7 @@ object ProductCaseClassRepresentation {
         private def fieldsMatchDefaultReprs(tp: SIRType, pos: SIRPosition)(using
             lctx: LoweringContext
         ): Boolean = {
-            val (constrDecl, typeArgs, typeParams): (
+            val resolved: (
                 scalus.compiler.sir.ConstrDecl,
                 scala.List[SIRType],
                 scala.List[SIRType.TypeVar]
@@ -984,6 +984,7 @@ object ProductCaseClassRepresentation {
                 case SIRType.Annotated(inner, _) =>
                     return fieldsMatchDefaultReprs(inner, pos)
                 case _ => return false
+            val (constrDecl, typeArgs, typeParams) = resolved
             val typeSubst: Map[SIRType.TypeVar, SIRType] =
                 typeParams.zip(typeArgs.map(lctx.resolveTypeVarIfNeeded)).toMap
             fieldReprs.zip(constrDecl.params).forall { case (fr, param) =>

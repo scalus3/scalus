@@ -1,6 +1,6 @@
 package scalus.uplc
 
-import scalus.uplc.Term.{Apply, Case, Const, Constr, Delay, Error, Force, LamAbs}
+import scalus.uplc.Term.{Apply, Case, Const, Constr, Delay, Force, LamAbs}
 
 /** Marker injected into a compiled UPLC program to identify it as Scalus-generated.
   *

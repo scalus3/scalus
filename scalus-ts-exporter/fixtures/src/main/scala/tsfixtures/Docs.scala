@@ -19,7 +19,6 @@ class Rect(
 
 /** The doc below belongs to `a` alone; `b` must not inherit it. */
 @JSExportTopLevel("OneLiners")
-@JSExportAll
 class OneLiners {
     // format: off
     /** Doc for a. */

@@ -5,6 +5,9 @@ import scalus.*
 import scalus.cardano.ledger.MajorProtocolVersion
 import scalus.compiler.Options
 import scalus.compiler.sir.*
+// Explicit: it outranks the `scalus.compiler.sir.*` wildcard, which would otherwise bind the
+// bare name to the deprecated alias at the old location.
+import scalus.compiler.sir.transform.StaticArgumentTransformation
 import scalus.compiler.sir.SirDSL.*
 import scalus.uplc.{Constant, Term}
 import scalus.uplc.eval.{PlutusVM, Result}

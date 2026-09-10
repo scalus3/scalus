@@ -178,7 +178,7 @@ private[stream] abstract class BaseMailbox[A](onCancel: () => Unit) extends Mail
                     val handle = cancelToken.onCancel(() => abortPull(p))
                     // Deregister once the pull resolves, so a long-lived token does not accumulate
                     // one stale closure per event delivered.
-                    p.future.onComplete(_ => handle.cancel())(ExecutionContext.parasitic)
+                    p.future.onComplete(_ => handle.cancel())(using ExecutionContext.parasitic)
                 p.future
     }
 

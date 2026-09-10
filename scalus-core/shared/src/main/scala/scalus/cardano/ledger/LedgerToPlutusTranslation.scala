@@ -413,7 +413,7 @@ object LedgerToPlutusTranslation {
         }
         prelude.List.from(
           ledgerOrderedWithdrawals(withdrawals)
-              .sorted(plutusOrder)
+              .sorted(using plutusOrder)
               .map((cred, coin) => v1.StakingCredential.StakingHash(cred) -> coin)
         )
     }
