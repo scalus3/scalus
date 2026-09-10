@@ -5,7 +5,8 @@ import scalus.compiler.sir.TargetLoweringBackend
 import scalus.compiler.{compile, Options}
 import scalus.uplc.*
 import scalus.uplc.Term.asTerm
-import scalus.uplc.eval.PlutusVM
+import scalus.uplc.builtin.Builtins
+import scalus.uplc.eval.{PlutusVM, Result}
 import scalus.toUplc
 
 import scala.language.implicitConversions
@@ -24,6 +25,48 @@ class PatternMatchWildcardRowOrderingTest extends AnyFunSuite {
       optimizeUplc = true,
       debug = false
     )
+
+    test("failed wildcard guards run once when a constructor branch falls through") {
+        import scalus.cardano.onchain.plutus.prelude.Option
+        given Options = Options(
+          targetLoweringBackend = TargetLoweringBackend.SirToUplcV3Lowering,
+          optimizeUplc = false
+        )
+        val compiled = compile { (x: Option[BigInt], first: Boolean, last: Boolean) =>
+            x match
+                case Option.Some(v) if v > BigInt(10)    => BigInt(1)
+                case _ if Builtins.trace("first")(first) => BigInt(2)
+                case Option.Some(v) if v > BigInt(20)    => BigInt(3)
+                case _ if Builtins.trace("last")(last)   => BigInt(4)
+                case _                                   => BigInt(5)
+        }
+        val uplc = compiled.toUplc()
+        val some5 = compile { Option.Some(BigInt(5)) }.toUplc()
+        val some15 = compile { Option.Some(BigInt(15)) }.toUplc()
+        val none = compile { Option.None: Option[BigInt] }.toUplc()
+
+        def check(
+            arg: Term,
+            first: Boolean,
+            last: Boolean,
+            expected: Int,
+            traces: List[String]
+        ): Unit = {
+            (uplc $ arg $ first.asTerm $ last.asTerm).evaluateDebug match
+                case Result.Success(value, _, _, logs) =>
+                    assert(value == BigInt(expected).asTerm)
+                    // Debug logs append execution budgets to each trace message.
+                    assert(logs.map(_.takeWhile(_ != ':')).toList == traces)
+                case Result.Failure(error, _, _, _) => fail(error)
+        }
+
+        for arg <- List(some5, none) do {
+            check(arg, false, false, 5, List("first", "last"))
+            check(arg, false, true, 4, List("first", "last"))
+            check(arg, true, false, 2, List("first"))
+        }
+        check(some15, false, false, 1, Nil)
+    }
 
     test("guarded wildcard row between constructor cases keeps first-match priority") {
         import scalus.cardano.onchain.plutus.prelude.*
