@@ -198,8 +198,8 @@ class ScalusPhase(debugLevel: Int) extends PluginPhase {
       *
       * The manifest at `META-INF/scalus/blueprint-modules` stores one entry per line in the format
       * `className\tsourcePath`. On each incremental recompilation the entries for the current
-      * source file are replaced, so stale entries from deleted or changed files are pruned
-      * automatically.
+      * source file are replaced. The sbt plugin prunes entries for deleted files against the
+      * surviving class files after compilation, when all generated classes are available.
       */
     private def collectBlueprintModules(tree: Tree)(using Context): Unit = {
         val contractSym =

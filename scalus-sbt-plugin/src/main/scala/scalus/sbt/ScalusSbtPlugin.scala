@@ -201,7 +201,7 @@ object ScalusSbtPlugin extends AutoPlugin {
 
         val (contractName, network, blockfrostKey, mnemonicStr) = parseDeployArgs(args)
 
-        val classNames = readManifestClassNames(classesDir)
+        val classNames = BlueprintLayout.readManifestClassNames(classesDir)
         if (classNames.isEmpty) sys.error("No Contract implementations found. Run `compile` first.")
         val className = resolveContractClass(contractName, classNames)
 
@@ -293,6 +293,8 @@ object ScalusSbtPlugin extends AutoPlugin {
         val aggregateFile = resourceRoot / "plutus.json"
         val header =
             s"scheme=${BlueprintLayout.Scheme};scala=$scalaVer;version=$projectVersion;name=$projectName"
+        // Prune before fingerprinting, so the cache describes the manifest we actually use.
+        val classNames = BlueprintLayout.readManifestClassNames(classesDir).sorted
         val classFiles = BlueprintLayout.listFilesRecursively(classesDir)
         val fp = BlueprintLayout.fingerprint(header, classesDir, classFiles)
         val fpFile = cacheDir / "fingerprint"
@@ -302,9 +304,11 @@ object ScalusSbtPlugin extends AutoPlugin {
                 log.debug("Blueprints are up to date; skipping generation")
                 cached
             case None =>
-                val classNames = readManifestClassNames(classesDir).sorted
                 if (classNames.isEmpty) {
                     log.warn("No Contract implementations found")
+                    BlueprintLayout.pruneStale(outDir, Set.empty[java.io.File])
+                    IO.delete(aggregateFile)
+                    writeCachedOutputs(fpFile, fp, resourceRoot, Seq.empty)
                     Seq.empty
                 } else {
                     IO.createDirectory(outDir)
@@ -454,16 +458,6 @@ object ScalusSbtPlugin extends AutoPlugin {
                         ): Option[String] = None
                     }
             }
-    }
-
-    private def readManifestClassNames(classesDir: java.io.File): Seq[String] = {
-        val manifest = classesDir / "META-INF" / "scalus" / "blueprint-modules"
-        if (!manifest.exists()) Seq.empty
-        else
-            IO.readLines(manifest)
-                .filter(_.nonEmpty)
-                .map(_.split('\t').head)
-                .distinct
     }
 
     private def resolveContractClass(

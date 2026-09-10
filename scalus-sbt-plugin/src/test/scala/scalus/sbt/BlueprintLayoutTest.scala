@@ -31,6 +31,34 @@ class BlueprintLayoutTest extends AnyFunSuite {
         )
     }
 
+    test("manifest pruning follows surviving module classes and preserves source metadata") {
+        val dir = tempDir()
+        val live = "example.Live$\t/missing-checkout/Live.scala"
+        val stale = "example.Deleted$\tsrc/Deleted.scala"
+        write(dir, "example/Live$.class", "class")
+        // A companion forwarder alone cannot supply MODULE$ for blueprint discovery.
+        write(dir, "example/Deleted.class", "forwarder")
+        val manifest = write(dir, "META-INF/scalus/blueprint-modules", s"$live\n$stale\n")
+
+        assert(BlueprintLayout.readManifestClassNames(dir) == Seq("example.Live$"))
+        assert(new String(Files.readAllBytes(manifest.toPath), "UTF-8") == live + "\n")
+        val prunedFingerprint = BlueprintLayout.fingerprint(
+          "test", dir, BlueprintLayout.listFilesRecursively(dir)
+        )
+        assert(BlueprintLayout.readManifestClassNames(dir) == Seq("example.Live$"))
+        assert(BlueprintLayout.fingerprint("test", dir, BlueprintLayout.listFilesRecursively(dir)) == prunedFingerprint)
+
+        Files.delete(new File(dir, "example/Live$.class").toPath)
+        assert(BlueprintLayout.readManifestClassNames(dir).isEmpty)
+        assert(new String(Files.readAllBytes(manifest.toPath), "UTF-8").trim.isEmpty)
+    }
+
+    test("reading an absent manifest is a no-op") {
+        val dir = tempDir()
+        assert(BlueprintLayout.readManifestClassNames(dir).isEmpty)
+        assert(!new File(dir, "META-INF").exists())
+    }
+
     test("contractRelativePath handles classes without a package") {
         assert(BlueprintLayout.contractRelativePath("RootContract$") == "RootContract.json")
         assert(BlueprintLayout.contractRelativePath("RootContract") == "RootContract.json")

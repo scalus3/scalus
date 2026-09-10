@@ -16,6 +16,26 @@ object BlueprintLayout {
       */
     val Scheme: Int = 1
 
+    /** Read contract names after compilation and remove manifest entries whose module class no
+      * longer exists. Source paths are preserved as metadata; they need not exist on this machine.
+      */
+    def readManifestClassNames(classesDir: File): Seq[String] = {
+        val manifest = new File(classesDir, "META-INF/scalus/blueprint-modules")
+        if (!manifest.isFile) Seq.empty
+        else {
+            val source = scala.io.Source.fromFile(manifest, "UTF-8")
+            val entries = try source.getLines().filter(_.nonEmpty).toVector
+            finally source.close()
+            def className(entry: String): String = entry.takeWhile(_ != '\t')
+            val retained = entries.filter { entry =>
+                new File(classesDir, className(entry).replace('.', '/') + ".class").isFile
+            }
+            if (retained != entries)
+                Files.write(manifest.toPath, (retained.mkString("\n") + "\n").getBytes("UTF-8"))
+            retained.map(className).distinct
+        }
+    }
+
     /** Derives the package-nested output path for a Contract's blueprint:
       * `scalus.examples.auction.AuctionContract$` ->
       * `scalus/examples/auction/AuctionContract.json`. Nesting by package prevents same-simple-name
