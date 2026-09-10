@@ -160,3 +160,11 @@ export const surface = {
     seen,
     currentSlot,
 };
+
+
+// Optional discriminator keeps the existing hash-only query valid.
+const anyCredential: import("../scalus.js").UtxoFilter = { paymentCredential: "11".repeat(28) };
+const keyCredential: import("../scalus.js").UtxoFilter = { paymentCredential: "11".repeat(28), paymentCredentialType: "key" };
+const scriptCredential: import("../scalus.js").UtxoFilter = { paymentCredential: "11".repeat(28), paymentCredentialType: "script" };
+// @ts-expect-error credential kinds use the declared lower-case literals
+const invalidCredential: import("../scalus.js").UtxoFilter = { paymentCredentialType: "Key" };

@@ -229,6 +229,16 @@ class ExportCollectorTest extends AnyFunSuite {
         val ct = k.members.collectFirst { case m: TsMember.Method if m.name == "credType" => m }.get
         assert(ct.overloads.head.ret == TsType.Verbatim("\"key\" | \"script\""))
         val conf = decl("Config").asInstanceOf[TsDecl.Iface]
+        val credential = conf.members.collectFirst {
+            case p: TsMember.Property if p.name == "credentialType" => p
+        }.get
+        for name <- List("opaque", "callback") do
+            assert(conf.members.exists {
+                case p: TsMember.Property => p.name == name && p.optional
+                case _                    => false
+            })
+        assert(credential.optional)
+        assert(credential.tpe == TsType.Verbatim("\"key\" | \"script\""))
         assert(conf.members.exists {
             case p: TsMember.Property =>
                 p.name == "nested" && p.optional && p.tpe == TsType.Arr(TsType.Named("Inner"))

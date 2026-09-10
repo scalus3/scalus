@@ -71,6 +71,8 @@ class Kitchen extends js.Object {
     def overloaded(a: Double, b: String): String = b
     @TsType("\"key\" | \"script\"")
     def credType(): String = "key"
+    @TsType("(a: string) => void")
+    def optionalCallback(): js.UndefOr[js.Function1[String, Unit]] = js.undefined
     def config(c: Conf): Conf = c
     @TsIgnore
     def scalaOnly(i: java.time.Instant): java.time.Instant = i
@@ -83,6 +85,12 @@ trait Conf extends js.Object {
     /** Nested reference chases transitively. */
     val nested: js.UndefOr[js.Array[Inner]]
     val flag: Boolean
+    @TsType("\"key\" | \"script\"")
+    val credentialType: js.UndefOr[String]
+    @TsType("string")
+    val opaque: js.UndefOr[java.time.Instant]
+    @TsType("(a: string) => void")
+    val callback: js.UndefOr[js.Function1[String, Unit]]
 }
 
 trait Inner extends js.Object {

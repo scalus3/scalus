@@ -4,6 +4,7 @@
 import { describe, test, expect } from "vitest";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { build } from "esbuild";
 
 describe("scalus.js bundle", () => {
     // This is the file `prepareNpmPackage` writes: esbuild's `--outfile` is this exact path, and
@@ -37,9 +38,22 @@ describe("scalus.js bundle", () => {
         expect(bundle).not.toMatch(/\bscribe\./);
     });
 
+    test("can be bundled for a browser without Node polyfills", async () => {
+        const result = await build({
+            entryPoints: [bundlePath],
+            bundle: true,
+            platform: "browser",
+            format: "esm",
+            write: false,
+            metafile: true,
+        });
+        expect(result.outputFiles[0]!.text).not.toContain("node:crypto");
+        expect(Object.values(result.metafile!.outputs).flatMap(o => o.imports)).toEqual([]);
+    });
+
     test("should be smaller than 2.75MB", () => {
-        // 2,812,916 bytes as of this commit. The pre-Task-7 baseline was 2,591,052; the difference
-        // is `ProtocolParams.fromBlockfrostJson`/`toBlockfrostJson` re-linking upickle and ujson,
+        // About 2.69 MiB; the 2.75 MiB cap leaves roughly 60 KiB of headroom.
+        // The pre-Task-7 baseline was 2,591,052 bytes; the difference is `ProtocolParams.fromBlockfrostJson`/`toBlockfrostJson` re-linking upickle and ujson,
         // which is a deliberate, recorded trade (the jsoniter port that would have recovered
         // ~142 KB broke scalus-native and was reverted). The limit guards the next regression, not
         // that one.

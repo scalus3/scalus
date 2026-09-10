@@ -237,7 +237,7 @@
               "-Dsbt.supershell=false" # Disable supershell for cleaner CI logs
             ];
           in
-          pkgs.mkShell {
+          pkgs.mkShell ({
             JAVA_HOME = "${jdk}";
             JAVA_OPTS = builtins.concatStringsSep " " ciCommonJvmOpts;
             SBT_OPTS = builtins.concatStringsSep " " ciSbtJvmOpts;
@@ -256,7 +256,7 @@
               libsodium
               secp256k1
               blst
-            ];
+            ] ++ pkgs.lib.optionals pkgs.stdenv.isLinux [ pkgs.chromium ];
             shellHook = ''
               unlink plutus-conformance 2>/dev/null || true
               ln -s ${plutus}/plutus-conformance plutus-conformance
@@ -267,7 +267,10 @@
               # For Scala Native tests, provide blst path separately (used by build.sbt)
               export BLST_NATIVE_LIB_PATH="${pkgs.blst}/lib"
             '';
-          };
+          } // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {
+            # Use the browser pinned by flake.lock, independently of the host PATH.
+            CHROME_BIN = "${pkgs.chromium}/bin/chromium";
+          });
         ci-secp =
           let
             jdk = pkgs.openjdk11;

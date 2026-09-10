@@ -289,34 +289,45 @@ trait NodeJsPlatformSpecific extends PlatformSpecific {
             // Ensure result is non-negative
             if result < 0 then result + modulus else result
 
+    /** Filesystem access is optional and only available in a Node CommonJS host. Keeping the load
+      * indirect prevents browser bundlers from treating fs as a mandatory dependency.
+      */
+    private def fileSystem: js.Dynamic = {
+        if js.typeOf(js.Dynamic.global.require) != "function" then
+            throw new UnsupportedOperationException(
+              "Filesystem operations require Node.js CommonJS"
+            )
+        js.Dynamic.global.require.call(js.undefined, "fs")
+    }
+
     override def readFile(path: String): Array[Byte] = {
-        val fs = js.Dynamic.global.require("fs")
+        val fs = fileSystem
         val buffer = fs.readFileSync(path).asInstanceOf[Uint8Array]
         new Int8Array(buffer.buffer, buffer.byteOffset, buffer.length).toArray
     }
 
     override def writeFile(path: String, bytes: Array[Byte]): Unit = {
-        val fs = js.Dynamic.global.require("fs")
+        val fs = fileSystem
         val int8Array = new Int8Array(bytes.toJSArray)
         val uint8Array = new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
         fs.writeFileSync(path, uint8Array)
     }
 
     override def appendFile(path: String, bytes: Array[Byte]): Unit = {
-        val fs = js.Dynamic.global.require("fs")
+        val fs = fileSystem
         val int8Array = new Int8Array(bytes.toJSArray)
         val uint8Array = new Uint8Array(int8Array.buffer, int8Array.byteOffset, int8Array.length)
         fs.appendFileSync(path, uint8Array)
     }
 
     override def createDirectories(path: String): Unit = {
-        val fs = js.Dynamic.global.require("fs")
+        val fs = fileSystem
         fs.mkdirSync(path, js.Dynamic.literal(recursive = true))
         ()
     }
 
     override def fileExists(path: String): Boolean = {
-        val fs = js.Dynamic.global.require("fs")
+        val fs = fileSystem
         fs.existsSync(path).asInstanceOf[Boolean]
     }
 }

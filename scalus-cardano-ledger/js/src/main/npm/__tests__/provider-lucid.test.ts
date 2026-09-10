@@ -120,13 +120,14 @@ class EmulatorProvider implements Provider {
         };
     }
 
-    /** `UtxoFilter.paymentCredential` is the query a wallet makes; the address form is the same
-     * filter with a different field. Note the emulator matches a credential by hash alone, so a
-     * key and a script credential with the same hash would not be told apart. */
+    /** Keep the key/script discriminator when querying by credential. */
     private filterFor(addressOrCredential: string | Credential) {
         return typeof addressOrCredential === "string"
             ? { address: addressOrCredential }
-            : { paymentCredential: addressOrCredential.hash };
+            : {
+                  paymentCredential: addressOrCredential.hash,
+                  paymentCredentialType: addressOrCredential.type === "Key" ? "key" as const : "script" as const,
+              };
     }
 
     async getUtxos(addressOrCredential: string | Credential): Promise<LucidUTxO[]> {
@@ -415,5 +416,20 @@ describe("Emulator as a lucid-evolution Provider: spending a Plutus script UTxO"
             .reduce((sum, u) => sum + u.value.coin, 0n);
         expect(total).toBeGreaterThan(2_000_000_000n);
         expect(total).toBeLessThan(2_050_000_000n);
+    });
+});
+
+
+describe("Lucid credential queries", () => {
+    test("keeps key and script credentials with the same hash separate", async () => {
+        const emulator = Emulator.create(CardanoInfo.preview());
+        const provider = new EmulatorProvider(emulator);
+        const hash = "11".repeat(28);
+        const key = "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6";
+        const script = "addr_test1wqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg0tyy26";
+        emulator.addUtxo(new Utxo("00".repeat(32), 0, key, Value.ada(5n)));
+        emulator.addUtxo(new Utxo("00".repeat(32), 1, script, Value.ada(5n)));
+        expect((await provider.getUtxos({ type: "Key", hash })).map(u => u.address)).toEqual([key]);
+        expect((await provider.getUtxosWithUnit({ type: "Script", hash }, "lovelace")).map(u => u.address)).toEqual([script]);
     });
 });

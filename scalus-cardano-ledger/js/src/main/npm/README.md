@@ -113,7 +113,9 @@ drops.
 ```typescript
 emulator.getUtxos();                                  // everything
 emulator.getUtxos({ address: alice });                // one address
-emulator.getUtxos({ paymentCredential: keyHashHex }); // any address with this payment part
+emulator.getUtxos({ paymentCredential: keyHashHex }); // either credential kind
+emulator.getUtxos({ paymentCredential: keyHashHex, paymentCredentialType: "key" });
+emulator.getUtxos({ paymentCredential: scriptHashHex, paymentCredentialType: "script" });
 emulator.getUtxos({ unit: policyId + assetNameHex }); // holders of one asset
 emulator.getUtxos({ minLovelace: 5_000_000n, limit: 10 });
 emulator.getUtxos({ outRefs: [{ txHash, outputIndex: 0 }] });
@@ -370,6 +372,14 @@ load it directly, with no bundler and no import map:
     console.log(result.isSuccess, result.budget.steps);
 </script>
 ```
+
+The same bundle runs in Node 20+ and browsers without a Node crypto polyfill. Optional
+filesystem operations require a Node CommonJS host; evaluation, hashing, signature
+verification and the Emulator do not require filesystem access.
+
+Run `npm run test:browser` for the automated Chromium regression check used in CI.
+It runs the shared evaluator tests and a typed credential query against the bundle.
+See [BROWSER-TESTING.md](BROWSER-TESTING.md) for browser setup and interactive tests.
 
 ## TypeScript Definitions
 

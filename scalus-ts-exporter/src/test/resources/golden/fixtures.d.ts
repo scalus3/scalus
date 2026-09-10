@@ -65,6 +65,9 @@ export interface Config {
   /** Nested reference chases transitively. */
   readonly nested?: Inner[];
   readonly flag: boolean;
+  readonly credentialType?: "key" | "script";
+  readonly opaque?: string;
+  readonly callback?: (a: string) => void;
 }
 
 /** An exported js.Object singleton: every public member is exported. */
@@ -211,6 +214,7 @@ export class Kitchen {
   overloaded(a: number): number;
   overloaded(a: number, b: string): string;
   credType(): "key" | "script";
+  optionalCallback(): ((a: string) => void) | undefined;
   config(c: Config): Config;
 }
 

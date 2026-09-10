@@ -14,19 +14,26 @@ object Emitter {
       *   handed and do `getAllUtxos().map(...).push(...)`.
       */
     private def render(t: TsType, readonlyArrays: Boolean): String = t match
-        case TsType.Named(n)  => n
-        case TsType.Union(ms) => ms.map(render(_, readonlyArrays)).mkString(" | ")
-        // `&` binds tighter than `|`, so only union and function members need parentheses
+        case TsType.Named(n) => n
+        case TsType.Union(ms) =>
+            ms.map {
+                case m @ (TsType.Func(_, _) | TsType.Verbatim(_)) =>
+                    s"(${render(m, readonlyArrays)})"
+                case m => render(m, readonlyArrays)
+            }.mkString(" | ")
+        // `&` binds tighter than `|`; verbatim precedence is unknown, so group it too.
         case TsType.Intersect(ms) =>
             ms.map {
-                case m @ (TsType.Union(_) | TsType.Func(_, _)) =>
+                case m @ (TsType.Union(_) | TsType.Func(_, _) | TsType.Verbatim(_)) =>
                     s"(${render(m, readonlyArrays)})"
                 case m => render(m, readonlyArrays)
             }.mkString(" & ")
         case TsType.Arr(elem) =>
             val inner = render(elem, readonlyArrays)
             val parenthesized = elem match
-                case TsType.Union(_) | TsType.Func(_, _) | TsType.Intersect(_) => s"($inner)"
+                case TsType.Union(_) | TsType.Func(_, _) | TsType.Intersect(_) |
+                    TsType.Verbatim(_) =>
+                    s"($inner)"
                 // `readonly (readonly T[])[]`: the inner `readonly` needs the parentheses
                 case TsType.Arr(_) if readonlyArrays => s"($inner)"
                 case _                               => inner

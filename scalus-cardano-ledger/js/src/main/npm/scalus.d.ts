@@ -837,6 +837,11 @@ export interface UtxoFilter {
    * stake part. This is the query a wallet wants.
    */
   readonly paymentCredential?: string;
+  /**
+   * Restricts paymentCredential to key or script credentials. Requires paymentCredential;
+   * omitted means either kind. Other filters still AND together.
+   */
+  readonly paymentCredentialType?: "key" | "script";
   /** `"lovelace"`, or a policy id and asset name concatenated as hex. */
   readonly unit?: string;
   /**

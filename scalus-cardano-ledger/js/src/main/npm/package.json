@@ -1,7 +1,7 @@
 {
   "name": "scalus",
-  "version": "1.1.1",
-  "description": "Scalus – Cardano on-chain / off-chain toolkit compiled with Scala.js",
+  "version": "1.2.0",
+  "description": "Scalus \u2013 Cardano on-chain / off-chain toolkit compiled with Scala.js",
   "type": "module",
   "files": [
     "scalus.js",
@@ -32,7 +32,8 @@
     "typecheck": "tsc --noEmit --strict --target es2020 --moduleResolution bundler --module esnext scalus.d.ts __tests__/scalus-dts.consumer.ts",
     "typecheck:providers": "tsc --noEmit --strict --skipLibCheck --target es2020 --moduleResolution bundler --module esnext scalus.d.ts __tests__/provider-mesh.test.ts __tests__/provider-lucid.test.ts __tests__/collision.test.ts __tests__/object-api-guards.test.ts",
     "test:watch": "vitest",
-    "build:browser-tests": "esbuild __tests__/shared-tests.ts --bundle --outfile=shared-tests-bundle.js --format=iife --global-name=SharedTests"
+    "build:browser-tests": "esbuild __tests__/shared-tests.ts --bundle --outfile=shared-tests-bundle.js --format=iife --global-name=SharedTests",
+    "test:browser": "npm run build:browser-tests && node __tests__/run-browser.mjs"
   },
   "devDependencies": {
     "@lucid-evolution/lucid": "^0.6.2",
@@ -49,5 +50,8 @@
     "url": "https://github.com/scalus3/scalus.git"
   },
   "homepage": "https://scalus.org",
-  "license": "Apache-2.0"
+  "license": "Apache-2.0",
+  "engines": {
+    "node": ">=20"
+  }
 }

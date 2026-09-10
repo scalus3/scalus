@@ -86,3 +86,38 @@ describe("Utxo.fromCbor rejects a map that is not exactly one UTxO", () => {
         expect(Utxo.fromCbor(utxo.toCbor()).toObject()).toEqual(utxo.toObject());
     });
 });
+
+
+describe("typed payment credential queries", () => {
+    const hash = "11".repeat(28);
+    // Enterprise addresses with the same hash and different credential kinds.
+    const keyAddress = "addr_test1vqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zygxrcya6";
+    const scriptAddress = "addr_test1wqg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg0tyy26";
+
+    test("distinguishes key and script credentials before applying the limit", () => {
+        const emulator = Emulator.create(CardanoInfo.preview());
+        emulator.addUtxo(new Utxo("00".repeat(32), 0, scriptAddress, Value.ada(10n)));
+        emulator.addUtxo(new Utxo("00".repeat(32), 1, keyAddress, Value.ada(20n)));
+        emulator.addUtxo(new Utxo("00".repeat(32), 2, keyAddress, Value.ada(30n)));
+        expect(emulator.getUtxos({ paymentCredential: hash }).length).toBe(3);
+        expect(emulator.getUtxos({ paymentCredential: hash, paymentCredentialType: "key" }).map(u => u.outputIndex).sort()).toEqual([1, 2]);
+        // Pick the opposite kind from the unfiltered first result: applying limit before
+        // credential filtering must then return the wrong kind or no result, regardless of order.
+        const first = emulator.getUtxos({ paymentCredential: hash, limit: 1 })[0]!;
+        const opposite = first.address === keyAddress ? "script" : "key";
+        const limited = emulator.getUtxos({ paymentCredential: hash, paymentCredentialType: opposite, limit: 1 });
+        expect(limited).toHaveLength(1);
+        expect(limited[0]!.address).toBe(opposite === "key" ? keyAddress : scriptAddress);
+        expect(emulator.getUtxos({ paymentCredential: hash, paymentCredentialType: "script" }).map(u => u.outputIndex)).toEqual([0]);
+        expect(emulator.getUtxos({ paymentCredential: hash, paymentCredentialType: "key", limit: 1 }).map(u => u.address)).toEqual([keyAddress]);
+        expect(emulator.getUtxos({ paymentCredential: hash, paymentCredentialType: "key", minLovelace: 25_000_000n }).map(u => u.outputIndex)).toEqual([2]);
+        expect(emulator.getUtxos({ paymentCredential: hash, paymentCredentialType: "key", address: scriptAddress })).toEqual([]);
+        expect(emulator.getUtxos({ paymentCredential: hash, paymentCredentialType: "key", outRefs: [] })).toEqual([]);
+    });
+
+    test("rejects an unknown type or a type without a credential hash", () => {
+        const emulator = seeded();
+        expect(() => emulator.getUtxos({ paymentCredentialType: "key" })).toThrow(/requires paymentCredential/);
+        expect(() => emulator.getUtxos({ paymentCredential: hash, paymentCredentialType: "Key" } as unknown as UtxoFilter)).toThrow(/credentialType must be "key" or "script"/);
+    });
+});

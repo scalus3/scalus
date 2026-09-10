@@ -8,6 +8,17 @@ class EmitterTest extends AnyFunSuite {
     private val num = Named("number")
     private val str = Named("string")
 
+    test("function and verbatim union members preserve precedence") {
+        assert(
+          Emitter.render(Union(List(Verbatim("(a: string) => void"), Named("undefined")))) ==
+              "((a: string) => void) | undefined"
+        )
+        assert(
+          Emitter.render(Union(List(Func(Nil, Named("void")), Named("undefined")))) ==
+              "(() => void) | undefined"
+        )
+    }
+
     test("input positions render readonly arrays, output positions do not") {
         // a caller holding a ReadonlyArray must be able to pass it; what we hand BACK stays
         // mutable, because consumers do getAllUtxos().map(...).push(...)
