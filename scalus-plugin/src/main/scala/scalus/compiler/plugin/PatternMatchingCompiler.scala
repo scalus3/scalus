@@ -14,7 +14,7 @@ import scalus.compiler.plugin.SirParsedCase.{ActionRef, BindingNameInfo, Grouped
 import scalus.compiler.sir.*
 
 import scala.annotation.{tailrec, unused}
-import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.{ListBuffer, LongMap}
 
 class PatternMatchingContext(
     val globalPrefix: String,
@@ -639,6 +639,25 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         isUnchecked: Boolean = false
     ): AnnotatedSIR = {
         if env.debug then println(s"compileMatch: ${tree.show}")
+        // Reject aliases before compiling case bodies, where their missing bindings would
+        // otherwise produce an unrelated forward-reference error.
+        val aliasError = "Aliases on alternative patterns are not supported in Scalus scripts. " +
+            "Remove the alias and refer to a val holding the scrutinee instead."
+        var unsupportedAlias = false
+        def isAlternative(pattern: Tree): Boolean = pattern match
+            case Alternative(_)  => true
+            case Typed(inner, _) => isAlternative(inner)
+            case _               => false
+        val checkAliases = new tpd.TreeTraverser {
+            override def traverse(pattern: Tree)(using Context): Unit = pattern match
+                case Bind(_, inner) if isAlternative(inner) =>
+                    report.error(aliasError, pattern.srcPos)
+                    unsupportedAlias = true
+                case _ => traverseChildren(pattern)
+        }
+        tree.cases.foreach(c => checkAliases.traverse(c.pat))
+        if unsupportedAlias then return SIR.Error(aliasError, compiler.mkAnns(tree.srcPos, env))
+
         // The start column disambiguates multiple (possibly nested) matches on the same source
         // line - each match gets its own name counter, so a line-only prefix produced identical
         // generated names across them (audit M5).
@@ -1295,7 +1314,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                 Some(SirCaseDecisionTree.Reference(nextIndex))
             }
 
-        val constEntries = withConstants.map { case (_, (const, rows)) =>
+        val constEntries = withConstants.map { case (_, (const, rows, _)) =>
             val newGroup = SirParsedCase.GroupedTuples(
               group.columnBindings,
               group.activeColumns - col,
@@ -1310,24 +1329,27 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
         SirCaseDecisionTree.ConstantChoice(columnName, tp, constEntries, optNextSubtree, pos)
     }
 
-    /** Collect rows with specialized pattern in the given column according to checkPattern function
-      * and splitStrategy. Return - Map[Key, (Value, List[Rows with this key])] and List of rest
-      * rows (i,e. default specialized) Key and Value are extracted from pattern by checkPattern
-      * function.
+    /** Collect rows with a specialized pattern in the given column. Return a map from each key to
+      * its value, rows, and number of copied default rows, together with the remaining/default
+      * rows. Keys and values are extracted by checkPattern.
       *
       * With DuplicateRows, a default row (non-matching pattern in this column) is duplicated into
       * every group at its source position, so first-match-wins is preserved: each group copies the
       * default rows it has not seen yet before appending its next specialized row, and a group
       * created later is seeded with all default rows collected so far. The returned rest is the
-      * full list of default rows — the default branch must see them too. Trailing default rows are
-      * not copied into groups: every group's subtree falls through to the rest.
+      * full list of default rows — the default branch must see them too. Each group also records
+      * how many default rows it already contains, so its fallback can skip them instead of
+      * evaluating previously failed guards again. Trailing defaults are shared via the fallback.
       */
     private def collectSpecialized[P <: SirParsedCase.Pattern, K, V](
         rows: List[SirParsedCase.GroupedTupleRow],
         colIndex: Int,
         checkPattern: SirParsedCase.Pattern => Option[(P, K, V)],
         splitStrategy: SirCaseDecisionTree.SplitStrategy
-    ): (Map[K, (V, List[SirParsedCase.GroupedTupleRow])], List[SirParsedCase.GroupedTupleRow]) = {
+    ): (
+        Map[K, (V, List[SirParsedCase.GroupedTupleRow], Int)],
+        List[SirParsedCase.GroupedTupleRow]
+    ) = {
         var groupedRows: Map[K, (V, ListBuffer[SirParsedCase.GroupedTupleRow])] = Map.empty
         val defaultRows: ListBuffer[SirParsedCase.GroupedTupleRow] = ListBuffer.empty
         var copiedDefaults: Map[K, Int] = Map.empty
@@ -1360,7 +1382,7 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
             if !done then cursor = cursor.tail
         }
         val grouped = groupedRows.map { case (k, (v, buf)) =>
-            (k, (v, buf.toList))
+            (k, (v, buf.toList, copiedDefaults(k)))
         }
         splitStrategy match {
             case SirCaseDecisionTree.SplitStrategy.DuplicateRows =>
@@ -1404,26 +1426,36 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
           SirCaseDecisionTree.SplitStrategy.DuplicateRows
         )
 
-        val optNextSubtree =
-            if tail.isEmpty then optNextDecisionTree
-            else
-                val newGroup = SirParsedCase.GroupedTuples(
-                  group.columnBindings,
-                  group.activeColumns - colIndex,
-                  tail
-                )
-                val nextSubtree = buildGroupedTuplesDecisionTree(
-                  ctx,
-                  newGroup,
-                  tail.head.pos,
-                  optNextDecisionTree
-                )
-                val nextIndex = ctx.decisionTreeRefs.length
-                ctx.decisionTreeRefs = ctx.decisionTreeRefs.appended(nextSubtree)
-                Some(SirCaseDecisionTree.Reference(nextIndex))
+        // Share continuations between constructor groups that consumed the same default rows.
+        // The default branch starts at zero; a specialized branch skips its copied prefix.
+        val continuations = LongMap.empty[Option[SirCaseDecisionTree.Reference]]
+        def continuation(skippedDefaults: Long): Option[SirCaseDecisionTree.Reference] =
+            continuations.getOrElseUpdate(
+              skippedDefaults, {
+                  val remaining = tail.drop(skippedDefaults.toInt)
+                  if remaining.isEmpty then optNextDecisionTree
+                  else
+                      val newGroup = SirParsedCase.GroupedTuples(
+                        group.columnBindings,
+                        group.activeColumns - colIndex,
+                        remaining
+                      )
+                      val nextSubtree = buildGroupedTuplesDecisionTree(
+                        ctx,
+                        newGroup,
+                        remaining.head.pos,
+                        optNextDecisionTree
+                      )
+                      val nextIndex = ctx.decisionTreeRefs.length
+                      ctx.decisionTreeRefs = ctx.decisionTreeRefs.appended(nextSubtree)
+                      Some(SirCaseDecisionTree.Reference(nextIndex))
+              }
+            )
+
+        val optNextSubtree = continuation(0)
 
         val filledConstructorEntries = constructorCases.map {
-            case (constrName, ((sirCaseClass, freeTypeParams), rows)) =>
+            case (constrName, ((sirCaseClass, freeTypeParams), rows, copiedDefaults)) =>
                 if ctx.env.debug then
                     println(
                       s"buildSpecializedConstr: constrName=${constrName}, sirCaseClass=${sirCaseClass.show} nRows=${rows.length}"
@@ -1440,7 +1472,12 @@ class PatternMatchingCompiler(val compiler: SIRCompiler)(using Context) {
                     case head :: _ => head.pos
                     case Nil       => ctx.topLevelPos
                 val subtree =
-                    buildGroupedTuplesDecisionTree(ctx, newGroup, constrPos, optNextSubtree)
+                    buildGroupedTuplesDecisionTree(
+                      ctx,
+                      newGroup,
+                      constrPos,
+                      continuation(copiedDefaults)
+                    )
                 val newGroupBindings = newGroup.columnBindings.drop(group.columnBindings.size)
                 val entry = SirCaseDecisionTree.ConstructorEntry(
                   sirCaseClass,
