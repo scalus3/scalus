@@ -198,6 +198,13 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                 result
             case None => term
 
+    /** Only a returned lambda or delay can contain a body deferred by function-spine traversal.
+      * Finish it before retaining it underneath another expression.
+      */
+    private def finishDeferred(term: Term, constants: Map[String, Const]): Term = term match
+        case _: LamAbs | _: Delay => go(term, constants)
+        case _                    => term
+
     /** Main optimization pass that recursively optimizes the term tree.
       *
       * Performs a bottom-up traversal applying:
@@ -228,27 +235,39 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                     logger.log(s"Inlining identity function: $name")
                     inlinedArg
                 case LamAbs(name, originalBody, lamAnn) =>
-                    val body = inlinedArg match
-                        case c: Const =>
-                            go(originalBody, constants.updated(name, c), deferLambdaBody)
-                        case _ => go(originalBody, constants - name, deferLambdaBody)
-                    val occInfo = analyzeOccurrence(body, name)
+                    val bodyConstants = inlinedArg match
+                        case c: Const => constants.updated(name, c)
+                        case _        => constants - name
+                    val body = go(originalBody, bodyConstants, deferLambdaBody)
+                    val initialOcc = analyzeOccurrence(body, name)
+                    // Retained bindings enclose their body rather than returning it as the
+                    // function spine. Finish deferred values and reprice any removed uses.
+                    val finalBody =
+                        if deferLambdaBody && initialOcc != OccurrenceInfo.Zero &&
+                            !shouldInline(inlinedArg, initialOcc)
+                        then finishDeferred(body, bodyConstants)
+                        else body
+                    val occInfo =
+                        if finalBody eq body then initialOcc else analyzeOccurrence(finalBody, name)
                     if occInfo == OccurrenceInfo.Zero && inlinedArg.isPure then
                         logger.log(s"Eliminating dead code: $name")
-                        body
+                        finalBody
                     else if shouldInline(inlinedArg, occInfo) then
                         logger.log(s"Inlining $name with ${inlinedArg.show}")
-                        go(substitute(body, name, inlinedArg), constants, deferLambdaBody)
+                        go(substitute(finalBody, name, inlinedArg), constants, deferLambdaBody)
                     else
                         tryPartialEval(
-                          Apply(LamAbs(name, body, lamAnn), inlinedArg, ann),
+                          Apply(LamAbs(name, finalBody, lamAnn), inlinedArg, ann),
                           constants
                         )
                 case _ =>
-                    tryPartialEval(Apply(inlinedF, inlinedArg, ann), constants)
+                    tryPartialEval(
+                      Apply(finishDeferred(inlinedF, constants), inlinedArg, ann),
+                      constants
+                    )
 
         case _: LamAbs if deferLambdaBody => term
-        case LamAbs(name, body, ann) => LamAbs(name, go(body, constants - name), ann)
+        case LamAbs(name, body, ann)      => LamAbs(name, go(body, constants - name), ann)
         case Force(Delay(t, _), _) =>
             logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
             go(t, constants, deferLambdaBody)
@@ -258,7 +277,9 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                     logger.log(s"Eliminating Force(Delay(t)) after optimization")
                     inner
                 case optimized =>
-                    tryPartialEval(Force(optimized, ann), constants)
+                    val inner =
+                        if deferLambdaBody then finishDeferred(optimized, constants) else optimized
+                    tryPartialEval(Force(inner, ann), constants)
         case Delay(t, ann)          => Delay(go(t, constants, deferLambdaBody), ann)
         case Constr(tag, args, ann) => Constr(tag, args.map(go(_, constants)), ann)
 

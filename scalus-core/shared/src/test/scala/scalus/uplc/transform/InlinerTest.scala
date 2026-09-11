@@ -287,6 +287,34 @@ class InlinerTest extends AnyFunSuite {
         assert(Inliner(shadowed) == expected)
     }
 
+    test("retained function bindings finish deferred lambda bodies") {
+        val value = ("a" * 128).asTerm
+        val body = Constr(Word64.Zero, List(vr"x", vr"x", AddInteger $ 1 $ 2))
+        val folded = Constr(Word64.Zero, List(vr"x", vr"x", 3))
+        val term = LamAbs("x", LamAbs("y", body)) $ value $ 0
+        val expected = LamAbs("x", LamAbs("y", folded)) $ value $ 0
+        assert(Inliner(term) == expected)
+        assert(Inliner(term).evaluate α_== term.evaluate)
+
+        val delayed = LamAbs("x", Delay(LamAbs("y", body))) $ value $ 0
+        val expectedDelayed = LamAbs("x", Delay(LamAbs("y", folded))) $ value $ 0
+        assert(Inliner(delayed) == expectedDelayed)
+    }
+
+    test("finished deferred bodies reprice their remaining constant uses") {
+        val value = Data.I(42).asTerm
+        val body = Constr(Word64.Zero, List.fill(3)(UnIData $ vr"x"))
+        val term = LamAbs("x", LamAbs("y", body)) $ value $ 0
+        assert(Inliner(term) == Constr(Word64.Zero, List.fill(3)(42.asTerm)))
+    }
+
+    test("non-lambda function expressions finish deferred lambda bodies") {
+        val lambda = LamAbs("y", AddInteger $ 1 $ 2)
+        val folded = LamAbs("y", 3.asTerm)
+        assert(Inliner(Delay(lambda) $ 0) == (Delay(folded) $ 0))
+        assert(Inliner(Force(lambda) $ 0) == (Force(folded) $ 0))
+    }
+
     test("the sharing fee estimate charges the measured extra CEK work for a one-node value") {
         val value = Data.I(0).asTerm
         val params = scalus.cardano.ledger.CardanoInfo.mainnet.protocolParams
