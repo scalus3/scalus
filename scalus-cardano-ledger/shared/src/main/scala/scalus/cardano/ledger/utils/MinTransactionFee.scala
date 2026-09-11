@@ -68,7 +68,7 @@ object MinTransactionFee {
 
                 length + scripLength
             }
-            RefScriptFee.fee(refScriptsSize, protocolParams)
+            new RefScriptFee(protocolParams).calculate(refScriptsSize)
         }
     }
 

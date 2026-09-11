@@ -17,7 +17,7 @@ class HtlcCapeTest extends AnyFunSuite with ScalusTest {
     private val protocolParams = summon[CardanoInfo].protocolParams
     private val scriptSize = program.cborByteString.size
     // Price it as the transaction's only reference script, using the repository's parameter snapshot.
-    private val referenceScriptFee = RefScriptFee.fee(scriptSize, protocolParams).value
+    private val referenceScriptFee = new RefScriptFee().calculate(scriptSize).value
 
     test(s"Script size: $scriptSize bytes") {
         assert(scriptSize == 569)

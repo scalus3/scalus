@@ -18,18 +18,20 @@ class RefScriptFeeTest extends AnyFunSuite {
         // three full tiers: 15, 18, 21.6 lovelace/byte
         val threeTiers = 25600L * 15 + 25600L * 18 + (BigDecimal(25600) * BigDecimal("21.6")).toLong
         assert(RefScriptFee.fee(3 * 25600, 15L) == Coin(threeTiers))
+        // One byte in the third tier costs 21.6 lovelace; round down only the final total.
+        assert(RefScriptFee.fee(2 * 25600 + 1, 15L) == Coin(844821))
     }
 
-    test("ProtocolParams overload uses minFeeRefScriptCostPerByte") {
-        val params = CardanoInfo.mainnet.protocolParams
-        assert(params.minFeeRefScriptCostPerByte == 15L)
-        // pinned value from docs/internal/UNROLLING_REF_SCRIPT_FEE_TRADEOFF.md (1,109 B script)
-        assert(RefScriptFee.fee(1109, params) == Coin(16635))
-        assert(RefScriptFee.fee(1109, params) == RefScriptFee.fee(1109, 15L))
+    test("constructor uses the supplied protocol parameters") {
+        val params = CardanoInfo.mainnet.protocolParams.copy(minFeeRefScriptCostPerByte = 7L)
+        val calculator = new RefScriptFee(params)
+        assert(calculator.calculate(1109) == Coin(7763))
+        assert(calculator.calculate(25601) == Coin(179208))
     }
 
-    test("constants") {
-        assert(RefScriptFee.sizeIncrement == 25600)
-        assert(RefScriptFee.multiplier == NonNegativeInterval(12, 10))
+    test("contextual constructor uses CardanoInfo") {
+        given CardanoInfo = CardanoInfo.mainnet
+        val calculator = new RefScriptFee()
+        assert(calculator.calculate(1109) == Coin(16635))
     }
 }

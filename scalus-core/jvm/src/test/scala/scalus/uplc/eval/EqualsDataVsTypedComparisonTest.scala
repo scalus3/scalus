@@ -24,10 +24,11 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
     private given Options = Options.release.copy(noWarn = true)
     private val params = CardanoInfo.mainnet.protocolParams
     private val prices = params.executionUnitPrices
+    private val referenceScriptFee = new RefScriptFee(params)
 
     /** Total tx fee contribution = exUnits fee + reference script fee */
     private def totalFee(budget: ExUnits, scriptSizeBytes: Int): Coin =
-        Coin(budget.fee(prices).value + RefScriptFee.fee(scriptSizeBytes, params).value)
+        Coin(budget.fee(prices).value + referenceScriptFee.calculate(scriptSizeBytes).value)
 
     /** Print a comparison line with all metrics */
     private def formatLine(
@@ -36,7 +37,7 @@ class EqualsDataVsTypedComparisonTest extends AnyFunSuite with ScalaCheckPropert
         scriptSizeBytes: Int
     ): String = {
         val exFee = budget.fee(prices)
-        val rsFee = RefScriptFee.fee(scriptSizeBytes, params)
+        val rsFee = referenceScriptFee.calculate(scriptSizeBytes)
         val total = Coin(exFee.value + rsFee.value)
         f"$label%-18s mem=${budget.memory}%6d  cpu=${budget.steps}%9d  exFee=${exFee.value}%4d  script=${scriptSizeBytes}%4dB  refScriptFee=${rsFee.value}%5d  txFee=${total.value}%5d"
     }
