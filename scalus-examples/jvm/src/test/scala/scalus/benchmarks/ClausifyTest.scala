@@ -47,8 +47,8 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 30_946_389, steps = 8_989_485_267L),
-                  since38 = ExUnits(memory = 30_440_469, steps = 8_808_690_403L)
+                  pre38 = ExUnits(memory = 31_290_337, steps = 8_992_712_599L),
+                  since38 = ExUnits(memory = 30_784_417, steps = 8_811_917_735L)
                 )
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 75014277L, steps = 22595514040L)
@@ -83,8 +83,8 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 38_735_065, steps = 11_215_317_059L),
-                  since38 = ExUnits(memory = 38_206_825, steps = 11_026_545_951L)
+                  pre38 = ExUnits(memory = 39_176_085, steps = 11_226_210_839L),
+                  since38 = ExUnits(memory = 38_647_845, steps = 11_037_439_731L)
                 )
             else
                 options.targetLoweringBackend match {
@@ -122,8 +122,8 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 104_054_622, steps = 30_032_331_361L),
-                  since38 = ExUnits(memory = 102_866_082, steps = 29_607_596_368L)
+                  pre38 = ExUnits(memory = 105_256_146, steps = 30_069_454_177L),
+                  since38 = ExUnits(memory = 104_067_606, steps = 29_644_719_184L)
                 )
             else if options.targetLoweringBackend == TargetLoweringBackend.SirToUplcV3Lowering
             then ExUnits(memory = 248968345L, steps = 74900219564L)
@@ -1097,8 +1097,8 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 136_374_755, steps = 38_763_708_327L),
-                  since38 = ExUnits(memory = 135_186_215, steps = 38_338_973_334L)
+                  pre38 = ExUnits(memory = 137_519_579, steps = 38_791_759_143L),
+                  since38 = ExUnits(memory = 136_331_039, steps = 38_367_024_150L)
                 )
             else ExUnits(memory = 344589971L, steps = 100725854354L)
         // val scalusBudget = ExUnits(memory = 214968623L, steps = 37733187149L)
@@ -1127,8 +1127,8 @@ class ClausifyTest extends AnyFunSuite, ScalusTest:
         val scalusBudget =
             if options.targetProtocolVersion >= MajorProtocolVersion.vanRossemPV then
                 ScalaCompilerVersion.baseline(
-                  pre38 = ExUnits(memory = 503_189_547, steps = 144_597_896_099L),
-                  since38 = ExUnits(memory = 498_487_467, steps = 142_917_567_363L)
+                  pre38 = ExUnits(memory = 509_071_183, steps = 144_779_180_223L),
+                  since38 = ExUnits(memory = 504_369_103, steps = 143_098_851_487L)
                 )
             else ExUnits(memory = 1205574641L, steps = 363306861308L)
         // val scalusBudget = ExUnits(memory = 736503639L, steps = 127163562591L)

@@ -30,7 +30,7 @@ class FibonacciCapeTest extends AnyFunSuite with ScalusTest {
     private val openSuite = CapeTestSuite.load("/cape/fibonacci/cape-tests.json")
 
     test(s"Base script size: ${baseProgram.cborByteString.length} bytes") {
-        assert(baseProgram.cborByteString.length == 42)
+        assert(baseProgram.cborByteString.length == 43)
     }
 
     test(s"Open script size: ${openProgram.cborByteString.length} bytes") {

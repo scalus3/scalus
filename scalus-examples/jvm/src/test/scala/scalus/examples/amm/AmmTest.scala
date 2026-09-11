@@ -169,10 +169,10 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         assert(provider.submit(depositTx).await().isRight, "deposit should succeed")
         assertScriptBudget(
           depositTx,
-          ExUnits(memory = 124331, steps = 52_694_994),
+          ExUnits(memory = 119051, steps = 50_745_771),
           ScalaCompilerVersion.baseline(
-            pre38 = Coin(445799L),
-            since38 = Coin(443555L)
+            pre38 = Coin(443550L),
+            since38 = Coin(441174L)
           )
         )
     }
@@ -187,10 +187,10 @@ class AmmTest extends AnyFunSuite, ScalusTest, ScalaCheckPropertyChecks {
         assert(provider.submit(redeemTx).await().isRight, "redeem should succeed")
         assertScriptBudget(
           redeemTx,
-          ExUnits(memory = 115096, steps = 50_040_774),
+          ExUnits(memory = 109816, steps = 48_091_551),
           ScalaCompilerVersion.baseline(
-            pre38 = Coin(444854L),
-            since38 = Coin(442610L)
+            pre38 = Coin(442605L),
+            since38 = Coin(440229L)
           )
         )
     }
