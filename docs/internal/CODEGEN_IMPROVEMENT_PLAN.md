@@ -948,6 +948,47 @@ flexible case on builtin Bool/Integer/Data, Agda-certified passes
   master in `2e0fdf779`; the linear_vesting and htlc numbers quoted in
   `docs/internal/CAPE_COMPETITIVE_ANALYSIS.md` are measured with it.
 
+### T19. Partial evaluation based on emitted traces and semantic failures (FUTURE WORK)
+
+- **Problem (2026-09-11):** `PartialEvaluator.tryEval` rejects any closed term
+  containing a `Trace` builtin, even in an untaken branch. For example,
+  `if false then traceAndFail("init of empty list") else constantEmptyList`
+  cannot fold as a whole, although evaluating it emits no logs. This occurs
+  when simplifying `List.singleton(1).init`.
+- **What:** replace the syntactic `containsTrace` gate with a check of logs
+  actually emitted by bounded CEK evaluation. Keep `RestrictingBudgetSpender`
+  and pass a fresh `Log` instead of `NoLogger` to `evaluateDeBruijnedTerm`;
+  this provides the equivalent of checking `Result.logs` without switching
+  to a debug evaluator that only counts budget rather than restricting it.
+  Preserve the closed-term requirement and existing serializability check.
+
+  | Evaluation outcome | Rewrite |
+  |---|---|
+  | Success with a serializable constant and no emitted logs | Replace with the constant |
+  | Proven UPLC semantic failure and no emitted logs | Replace with `(error)` at the same expression site |
+  | Compile-time budget exhaustion | Leave unchanged; exhaustion does not prove semantic failure |
+  | Internal, unsupported or unclassified evaluator exception | Leave unchanged |
+  | Any emitted logs, including an empty-string log | Leave unchanged |
+  | Success with a non-constant or non-serializable result | Leave unchanged |
+
+- **Failure classification:** explicitly identify evaluator failures that
+  represent UPLC semantic errors. Do not turn the current broad
+  `catch case _: Exception` into an error rewrite. Preserve source annotations
+  on the replacement. The contract preserves success/failure and emitted
+  trace logs; it does not preserve the original runtime exception class,
+  diagnostic text or execution budget. Keep an error inside its original
+  lambda, delay or branch rather than propagating it into an enclosing term
+  that might never execute it.
+- **Validate:** untaken trace branches fold; executed traces prevent folding
+  on both success and failure; trace-free semantic failures become `(error)`;
+  budget exhaustion and internal exceptions leave terms unchanged. Include
+  an untaken failing branch, a delayed failing body, and the singleton-list
+  `init` example. Compare CEK success/failure and logs before and after, and
+  record the resulting budget and script-size changes.
+- **Scope:** future work only. Constant propagation through retained bindings
+  remains useful independently; this task improves what the partial evaluator
+  can conclude once an evaluation candidate is closed.
+
 ## 7. Further research recommendations
 
 1. **Machine-step attribution.** The profiling CEK attributes builtin costs
