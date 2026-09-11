@@ -7,6 +7,8 @@ import scalus.uplc.Constant.given
 import scalus.uplc.transform.TermAnalysis.freeVars
 import DefaultFun.*
 import org.scalatest.funsuite.AnyFunSuite
+import org.scalatest.concurrent.TimeLimits.failAfter
+import org.scalatest.time.SpanSugar.*
 import scalus.cardano.ledger.Word64
 import scalus.uplc.eval.PlutusVM
 import scalus.uplc.builtin.Data
@@ -254,6 +256,35 @@ class InlinerTest extends AnyFunSuite {
         val expected =
             λ(x => λ(y => Constr(Word64.Zero, List(42, x, x, x, y, y, y))) $ second) $ first
         assert(Inliner(term) == expected)
+    }
+
+    test("retained constant chains complete without exponential body traversal") {
+        val value = ("a" * 128).asTerm
+        def chain(exposeLambda: Boolean): Term =
+            (0 until 27).foldLeft(vr"free": Term) { (body, i) =>
+                val name = s"constant$i"
+                val ref = Var(NamedDeBruijn(name))
+                val lambda = LamAbs(name, Constr(Word64.Zero, List(ref, ref, body)))
+                val function = if exposeLambda then Force(Delay(lambda)) else lambda
+                function $ value
+            }
+        val term = chain(exposeLambda = false)
+        // Deliberately generous: this is a runaway-traversal guard, not a benchmark.
+        failAfter(30.seconds) {
+            assert(Inliner(term) == term)
+            assert(Inliner(chain(exposeLambda = true)) == term)
+        }
+    }
+
+    test("constant propagation handles newly exposed lambdas and shadowing") {
+        val value = Data.I(42).asTerm
+        val body = Constr(Word64.Zero, List(UnIData $ vr"x", vr"x", vr"x", vr"x"))
+        val expected = LamAbs("x", Constr(Word64.Zero, List(42, vr"x", vr"x", vr"x"))) $ value
+        val exposed = Force(Delay(LamAbs("x", body))) $ value
+        assert(Inliner(exposed) == expected)
+        assert(Inliner(exposed).evaluate α_== exposed.evaluate)
+        val shadowed = LamAbs("x", LamAbs("x", body)) $ Data.I(7).asTerm $ value
+        assert(Inliner(shadowed) == expected)
     }
 
     test("the sharing fee estimate charges the measured extra CEK work for a one-node value") {

@@ -210,11 +210,17 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
       * @see
       *   [[TermAnalysis.isPure]] for purity analysis used in dead code elimination
       */
-    private def go(term: Term, constants: Map[String, Const] = Map.empty): Term = term match
+    private def go(
+        term: Term,
+        constants: Map[String, Const] = Map.empty,
+        deferLambdaBody: Boolean = false
+    ): Term = term match
         case _: Var => term
 
         case Apply(f, arg, ann) =>
-            val inlinedF = go(f, constants)
+            // Optimize the function spine first. Its lambda body needs the argument's
+            // constant environment, so descending now would traverse retained let chains twice.
+            val inlinedF = go(f, constants, deferLambdaBody = true)
             val inlinedArg = go(arg, constants)
             inlinedF match
                 // Inline identity functions
@@ -223,15 +229,16 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                     inlinedArg
                 case LamAbs(name, originalBody, lamAnn) =>
                     val body = inlinedArg match
-                        case c: Const => go(originalBody, constants.updated(name, c))
-                        case _        => originalBody
+                        case c: Const =>
+                            go(originalBody, constants.updated(name, c), deferLambdaBody)
+                        case _ => go(originalBody, constants - name, deferLambdaBody)
                     val occInfo = analyzeOccurrence(body, name)
                     if occInfo == OccurrenceInfo.Zero && inlinedArg.isPure then
                         logger.log(s"Eliminating dead code: $name")
-                        go(body, constants - name)
+                        body
                     else if shouldInline(inlinedArg, occInfo) then
                         logger.log(s"Inlining $name with ${inlinedArg.show}")
-                        go(substitute(body, name, inlinedArg), constants)
+                        go(substitute(body, name, inlinedArg), constants, deferLambdaBody)
                     else
                         tryPartialEval(
                           Apply(LamAbs(name, body, lamAnn), inlinedArg, ann),
@@ -240,18 +247,19 @@ class Inliner(logger: Logger = new Log()) extends Optimizer:
                 case _ =>
                     tryPartialEval(Apply(inlinedF, inlinedArg, ann), constants)
 
+        case _: LamAbs if deferLambdaBody => term
         case LamAbs(name, body, ann) => LamAbs(name, go(body, constants - name), ann)
         case Force(Delay(t, _), _) =>
             logger.log(s"Eliminating Force(Delay(t)), t: ${t.showHighlighted}")
-            go(t, constants)
+            go(t, constants, deferLambdaBody)
         case Force(t, ann) =>
-            go(t, constants) match
+            go(t, constants, deferLambdaBody) match
                 case Delay(inner, _) =>
                     logger.log(s"Eliminating Force(Delay(t)) after optimization")
                     inner
                 case optimized =>
                     tryPartialEval(Force(optimized, ann), constants)
-        case Delay(t, ann)          => Delay(go(t, constants), ann)
+        case Delay(t, ann)          => Delay(go(t, constants, deferLambdaBody), ann)
         case Constr(tag, args, ann) => Constr(tag, args.map(go(_, constants)), ann)
 
         case Case(scrutinee, cases, ann) =>
