@@ -1,9 +1,11 @@
 package scalus.examples.cape
 
+import scalus.cardano.ledger.{ExUnitPrices, ExUnits, NonNegativeInterval, RefScriptFee}
+
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.*
 
-/** Ranks every submission per scenario by the total fee its metrics imply at mainnet prices.
+/** Ranks every submission per scenario by the total fee its metrics imply at CAPE's fixed prices.
   *
   * Total fee is what a script actually costs to use on-chain, and it is what CAPE's own
   * `metrics.json` reports (`lib/Cape/Protocol/Parameters.hs`):
@@ -38,21 +40,13 @@ import scala.jdk.CollectionConverters.*
     val subs = capeRepo.resolve("submissions")
     var scalusBehind = false
 
-    /** CAPE's execution fee: one ceiling over the summed units. */
-    def executionFee(mem: Long, cpu: Long): Long =
-        (BigDecimal(mem) * BigDecimal("0.0577") + BigDecimal(cpu) * BigDecimal("0.0000721"))
-            .setScale(0, BigDecimal.RoundingMode.CEILING)
-            .toLong
-
-    /** CAPE's Conway tiered reference-script fee: 15 lovelace/byte, 25 KiB tiers, 1.2x per tier. */
-    def referenceScriptFee(size: Long): Long = {
-        val tierSize = 25L * 1024
-        @annotation.tailrec
-        def go(acc: BigDecimal, price: BigDecimal, remaining: Long): BigDecimal =
-            if remaining < tierSize then acc + price * remaining
-            else go(acc + price * tierSize, price * BigDecimal("1.2"), remaining - tierSize)
-        go(BigDecimal(0), BigDecimal(15), size).setScale(0, BigDecimal.RoundingMode.FLOOR).toLong
-    }
+    // CAPE's benchmark price snapshot (lib/Cape/Protocol/Parameters.hs), deliberately fixed
+    // for comparable rankings rather than following CardanoInfo's current mainnet parameters.
+    val executionPrices = ExUnitPrices(
+      priceMemory = NonNegativeInterval(577, 10000),
+      priceSteps = NonNegativeInterval(721, 10000000)
+    )
+    val referenceScriptCostPerByte = 15L
 
     final case class Row(name: String, total: Long, exec: Long, ref: Long, mem: Long, cpu: Long)
 
@@ -78,8 +72,8 @@ import scala.jdk.CollectionConverters.*
                 val mem = evs.map(_("memory_units").num.toLong).sum
                 val cpu = evs.map(_("cpu_units").num.toLong).sum
                 val size = m("measurements")("script_size_bytes").num.toLong
-                val exec = executionFee(mem, cpu)
-                val ref = referenceScriptFee(size)
+                val exec = ExUnits(mem, cpu).fee(executionPrices).value
+                val ref = RefScriptFee.fee(Math.toIntExact(size), referenceScriptCostPerByte).value
                 Row(
                   name = mf.getParent.getFileName.toString,
                   total = exec + ref,
