@@ -34,4 +34,31 @@ class RefScriptFeeTest extends AnyFunSuite {
         val calculator = new RefScriptFee()
         assert(calculator.calculate(1109) == Coin(16635))
     }
+
+    test("large reference scripts use exact intermediates and floor only the total") {
+        assert(RefScriptFee.fee(204800, 15L) == Coin(6335648))
+        assert(RefScriptFee.fee(460800, 15L) == Coin(49196799))
+        assert(RefScriptFee.fee(460801, 15L) == Coin(49197199))
+        assert(RefScriptFee.fee(512000, 15L) == Coin(71688191))
+    }
+
+    test("large base prices remain valid when the final fee fits Coin") {
+        assert(RefScriptFee.fee(1, Long.MaxValue) == Coin(Long.MaxValue))
+        // The unused next tier must not overflow at an exact boundary.
+        assert(
+          RefScriptFee.fee(25600, Long.MaxValue / 25600) ==
+              Coin((Long.MaxValue / 25600) * 25600)
+        )
+    }
+
+    test("fees outside Coin range fail explicitly") {
+        val error = intercept[ArithmeticException](RefScriptFee.fee(2, Long.MaxValue))
+        assert(error.getMessage.contains("Coin range"))
+    }
+
+    test("negative arguments are rejected and zero price is free") {
+        intercept[IllegalArgumentException](RefScriptFee.fee(-1, 15L))
+        intercept[IllegalArgumentException](RefScriptFee.fee(0, -1L))
+        assert(RefScriptFee.fee(Int.MaxValue, 0L) == Coin(0))
+    }
 }
