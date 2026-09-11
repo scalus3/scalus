@@ -218,6 +218,12 @@ class CommonContextExtractionTest
         assert(decompose(λ("x")(vr"x")).isEmpty)
     }
 
+    test("decompose: Delay keeps its body deferred but can be a whole leaf") {
+        val delayed = Delay(Force(Builtin(HeadList)) $ vr"xs")
+        assert(decompose(delayed).isEmpty)
+        assert(decompose(Force(delayed)).toList == List((Force(holeSentinel), delayed)))
+    }
+
     // ========================================================================
     // matchTemplate tests
     // ========================================================================
@@ -447,6 +453,53 @@ class CommonContextExtractionTest
     // ========================================================================
     // Semantic preservation
     // ========================================================================
+
+    test("CCE still extracts common contexts within a Delay body") {
+        val chains = (1 to 6).toList.map(n => AddInteger $ (MultiplyInteger $ n $ 2) $ 1)
+        val term = Delay(Constr(Word64.Zero, chains))
+        val optimized = CommonContextExtraction(term)
+        assert(optimized.isInstanceOf[Delay])
+        assert(optimized ~!=~ term)
+        assert(Force(optimized).evaluate α_== Force(term).evaluate)
+    }
+
+    test("CCE preserves an unselected delayed branch that would fail") {
+        val term = λ(c =>
+            λ(xs =>
+                λ(d =>
+                    λ(bs => {
+                        def branch(leaf: Term): Term =
+                            Force(Force(Builtin(IfThenElse)) $ c $ Delay(leaf) $ Delay(0.asTerm))
+                        Constr(
+                          Word64.Zero,
+                          List(
+                            branch(Force(Builtin(HeadList)) $ xs),
+                            branch(UnIData $ d),
+                            branch(LengthOfByteString $ bs)
+                          )
+                        )
+                    })
+                )
+            )
+        )
+        val optimized = CommonContextExtraction(term)
+        def run(t: Term, condition: Boolean, elements: List[Constant]): Term =
+            (t $ condition $ Const(Constant.List(DefaultUni.Integer, elements)) $
+                Const(Constant.Data(scalus.uplc.builtin.Data.I(1))) $
+                scalus.uplc.builtin.ByteString.empty).evaluate
+
+        // The false branch returns zero without evaluating headList([]).
+        val expected = Constr(Word64.Zero, List.fill(3)(0.asTerm)).evaluate
+        assert(run(term, false, Nil) α_== expected)
+        assert(run(optimized, false, Nil) α_== expected)
+        // Selecting the same branch must still evaluate its body, including failure.
+        assert(Try(run(term, true, Nil)).isFailure)
+        assert(Try(run(optimized, true, Nil)).isFailure)
+        assert(
+          run(optimized, true, List(Constant.Integer(7))) α_==
+              run(term, true, List(Constant.Integer(7)))
+        )
+    }
 
     test("CCE preserves semantics of closed terms with common context") {
         // add(mul(x, 2), 1) applied to different x values

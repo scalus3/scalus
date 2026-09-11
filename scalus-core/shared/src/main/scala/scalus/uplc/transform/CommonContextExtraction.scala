@@ -565,7 +565,9 @@ object CommonContextExtraction {
       *
       * For each non-leaf child position, yields `(template, leaf)` where `template` is the original
       * term with HOLE at that position, and `leaf` is the replaced subtree. Recurses into children
-      * to find deeper hole positions. Skips LamAbs bodies (scope issues with bound variable).
+      * to find deeper hole positions. Skips LamAbs bodies (bound variable scope) and Delay bodies
+      * (deferred evaluation). A whole delayed value can still be a leaf: `Force(Delay(x))` yields
+      * `(Force(HOLE), Delay(x))`, never `(Force(Delay(HOLE)), x)`.
       *
       * Examples:
       *   - `Apply(f, x)` yields `(Apply(HOLE, x), f)` and `(Apply(f, HOLE), x)`; then recurses into
@@ -612,15 +614,12 @@ object CommonContextExtraction {
                 }
                 holeAtInner ++ deeperInInner
 
-            case Delay(inner, ann) =>
-                // Hole at inner position
-                val holeAtInner = Iterator.single((Delay(holeSentinel, ann), inner))
-                // Deeper decompositions in inner
-                val deeperInInner = decomposeImpl(inner, depth + 1).map {
-                    case (innerTemplate, leaf) =>
-                        (Delay(innerTemplate, ann), leaf)
-                }
-                holeAtInner ++ deeperInInner
+            case _: Delay =>
+                // Extracted leaves become strict function arguments. For example, replacing
+                // delay(headList(xs)) with (λx -> delay(x))(headList(xs)) evaluates the
+                // head before the delay is forced, so an unselected branch can now fail.
+                // The collect pass still visits the body to find contexts within this delay.
+                Iterator.empty
 
             case Constr(tag, args, ann) =>
                 // Hole at each arg position
